@@ -77,6 +77,7 @@ import { AuthorizationServersService } from "./authorization/authorization-serve
 import { AuthorizeService } from "./authorization/authorize/authorize.service.js";
 import { ChainedAsService } from "./authorization/chained-as/chained-as.service.js";
 import { ChainedAsVpService } from "./authorization/chained-as-vp/chained-as-vp.service.js";
+import { DPOP_PROOF_FRESHNESS } from "./authorization/shared/dpop.util.js";
 import { DeferredCredentialService } from "./deferred-credential.service.js";
 import { DeferredCredentialRequestDto } from "./dto/deferred-credential-request.dto.js";
 import { NotificationRequestDto } from "./dto/notification-request.dto.js";
@@ -1326,6 +1327,7 @@ export class Oid4vciService {
             },
             resourceServer: issuerMetadata.credentialIssuer.credential_issuer,
             allowedAuthenticationSchemes,
+            dpop: DPOP_PROOF_FRESHNESS,
         });
 
         return tokenPayload as OAuth2TokenPayload;
@@ -1660,32 +1662,36 @@ export class Oid4vciService {
                     "Attestation proof does not contain any attested keys",
                 );
             }
-            if (attestedKeys.length !== 1) {
+            if (
+                attestedKeys.length > Math.max(issuanceConfig.batchSize ?? 1, 1)
+            ) {
                 throw new CredentialRequestException(
                     "invalid_proof",
-                    "Attestation proof must contain exactly one attested key",
+                    "Attestation proof contains more attested keys than the supported batch size",
                 );
             }
 
-            const cnf = attestedKeys[0] as Jwk;
-            const cred = await this.credentialsService.getCredential(
-                credentialConfigurationId,
-                cnf,
-                session,
-                claimsResult?.claims,
-                issuanceSetId,
-            );
+            // OID4VCI 1.0 Appendix F.3: one credential per attested key.
+            for (const cnf of attestedKeys) {
+                const cred = await this.credentialsService.getCredential(
+                    credentialConfigurationId,
+                    cnf,
+                    session,
+                    claimsResult?.claims,
+                    issuanceSetId,
+                );
 
-            credentials.push({ credential: cred });
+                credentials.push({ credential: cred });
 
-            this.auditLogger.logCredentialIssuance(
-                logContext,
-                credentialConfigurationId,
-                {
-                    credentialSize: cred.length,
-                    proofVerified: true,
-                },
-            );
+                this.auditLogger.logCredentialIssuance(
+                    logContext,
+                    credentialConfigurationId,
+                    {
+                        credentialSize: cred.length,
+                        proofVerified: true,
+                    },
+                );
+            }
         }
 
         return credentials;
@@ -2200,6 +2206,7 @@ export class Oid4vciService {
             },
             resourceServer: issuerMetadata.credentialIssuer.credential_issuer,
             allowedAuthenticationSchemes,
+            dpop: DPOP_PROOF_FRESHNESS,
         });
 
         const session = await this.sessionService.getBy({

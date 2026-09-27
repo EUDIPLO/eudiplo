@@ -62,6 +62,7 @@ export class AuthorizeController {
     async par(
         @Param("tenantId") tenantId: string,
         @Body() body: AuthorizeQueries,
+        @Req() req: Request,
         @Headers("oauth-client-attestation") clientAttestationJwt?: string,
         @Headers("oauth-client-attestation-pop")
         clientAttestationPopJwt?: string,
@@ -74,6 +75,7 @@ export class AuthorizeController {
         return this.authorizeService.handlePar(
             tenantId,
             body,
+            req,
             clientAttestation,
         );
     }

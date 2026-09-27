@@ -40,6 +40,7 @@ import {
     CredentialRequestException,
     DeferredCredentialException,
 } from "./exceptions/index.js";
+import { DPOP_PROOF_FRESHNESS } from "./authorization/shared/dpop.util.js";
 import { getHeadersFromRequest } from "./util.js";
 
 /**
@@ -340,6 +341,7 @@ export class DeferredCredentialService {
             },
             resourceServer: issuerMetadata.credentialIssuer.credential_issuer,
             allowedAuthenticationSchemes,
+            dpop: DPOP_PROOF_FRESHNESS,
         });
 
         // Find the deferred transaction

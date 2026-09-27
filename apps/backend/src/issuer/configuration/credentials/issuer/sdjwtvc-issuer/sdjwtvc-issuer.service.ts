@@ -15,6 +15,7 @@ import {
     SdJwtTrustFormat,
 } from "../../entities/credential.entity.js";
 import { buildDisclosureFrame } from "../../utils/index.js";
+import { roundedCredentialValidity } from "../credential-time.util.js";
 
 export interface SdJwtVcIssueOptions {
     credentialConfiguration: CredentialConfig;
@@ -82,12 +83,11 @@ export class SdjwtvcIssuerService {
             );
         }
 
-        const iat = Math.round(Date.now() / 1000);
+        const { issuedAt: iat, expiresAt } = roundedCredentialValidity(
+            credentialConfiguration.lifeTime ?? 0,
+        );
         // Set expiration time if lifeTime is defined
-        let exp: number | undefined;
-        if (credentialConfiguration.lifeTime) {
-            exp = iat + credentialConfiguration.lifeTime;
-        }
+        const exp = credentialConfiguration.lifeTime ? expiresAt : undefined;
 
         // If key binding is enabled, include the JWK in the cnf
         let cnf: { jwk: Jwk } | undefined;

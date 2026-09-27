@@ -129,6 +129,24 @@ export class Session {
     @Column("varchar", { nullable: true })
     authorization_code?: string;
     /**
+     * Expiration timestamp of the authorization code issued by the authorization endpoint.
+     * Not set for pre-authorized codes.
+     */
+    @Column({ nullable: true })
+    authorization_code_expires_at?: Date;
+    /**
+     * JWK thumbprint of the DPoP key the session's tokens are bound to.
+     * Set from the PAR request (DPoP header or `dpop_jkt`) or at token issuance.
+     */
+    @Column("varchar", { nullable: true })
+    dpop_jkt?: string;
+    /**
+     * JWK thumbprint of the client instance key (client attestation `cnf`)
+     * the refresh token is bound to.
+     */
+    @Column("varchar", { nullable: true })
+    client_key_jkt?: string;
+    /**
      * Refresh token for the session - used to obtain a new access token.
      */
     @Column("varchar", { nullable: true })
@@ -144,6 +162,12 @@ export class Session {
      */
     @Column("varchar", { nullable: true })
     request_uri?: string;
+    /**
+     * Expiration timestamp of the PAR request_uri. Set to the time of use once
+     * the request_uri was redeemed, making it single-use.
+     */
+    @Column({ nullable: true })
+    request_uri_expires_at?: Date;
     /**
      * Authorization queries associated with the session.
      * Encrypted at rest.

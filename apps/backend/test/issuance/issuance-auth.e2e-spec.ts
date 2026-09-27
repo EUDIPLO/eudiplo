@@ -163,8 +163,11 @@ describe("Issuance - Authorization Code Flow", () => {
 
         // exp need to be defined
         expect(claims.exp).toBeDefined();
-        // lifetime should be 1 week (604800 seconds)
-        expect(claims.exp - claims.iat).toBe(604800);
+        // lifetime should be 1 week (604800 seconds); time claims are rounded to the hour
+        expect(claims.iat % 3600).toBe(0);
+        expect(claims.exp % 3600).toBe(0);
+        expect(claims.exp - claims.iat).toBeGreaterThanOrEqual(604800);
+        expect(claims.exp - claims.iat).toBeLessThanOrEqual(604800 + 3600);
         // status should be defined
         expect(claims.status).toBeDefined();
         // check that a key is present in the cnf

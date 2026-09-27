@@ -51,19 +51,30 @@ const ISSUER_HAIP_MODULES: readonly string[] = (() => {
 })();
 
 const FAPI2_SECURITY_PROFILE_FINAL_PREFIX = "fapi2-security-profile-final";
-const EXPLICITLY_SKIPPED_ISSUER_MODULES = new Set<string>([
-    "oid4vci-1_0-issuer-happy-flow-additional-requests",
-    "oid4vci-1_0-issuer-happy-flow-multiple-clients",
-    // Temporary: tracked by #893, re-enable once batch issuance is fixed.
-    "oid4vci-1_0-issuer-batch-issuance",
+// Module -> reason. Keep reasons specific so skipped coverage stays visible in reports.
+const EXPLICITLY_SKIPPED_ISSUER_MODULES = new Map<string, string>([
+    // The built-in AS has no end-user login/consent step.
+    [
+        "fapi2-security-profile-final-user-rejects-authentication",
+        "requires interactive user rejection",
+    ],
+    [
+        "fapi2-security-profile-final-par-ensure-reused-request-uri-prior-to-auth-completion-succeeds",
+        "requires an interactive login page",
+    ],
+    // Passing requires redirecting errors to an unregistered redirect_uri (open redirect).
+    [
+        "fapi2-security-profile-final-ensure-unsigned-authorization-request-without-using-par-fails",
+        "error page needs manual screenshot upload",
+    ],
 ]);
-const SKIPPED_ISSUER_MODULES = new Set(
-    ISSUER_HAIP_MODULES.filter(
-        (moduleName) =>
-            moduleName.startsWith(FAPI2_SECURITY_PROFILE_FINAL_PREFIX) ||
-            EXPLICITLY_SKIPPED_ISSUER_MODULES.has(moduleName),
-    ),
-);
+// The suite redeems the same issuer_state with a second client; offers are single-use by design.
+const ISSUER_INITIATED_SKIPPED_MODULES = new Map<string, string>([
+    [
+        "oid4vci-1_0-issuer-happy-flow-multiple-clients",
+        "second client reuses a single-use credential offer",
+    ],
+]);
 
 const normalizeCertEntryToPem = (certEntry: string): string => {
     const trimmed = certEntry.trim();
@@ -422,6 +433,16 @@ describe("OIDF - oid4vci-1_0-issuer-haip-test-plan", () => {
             cert: readFileSync(resolve(__dirname, "../cert.pem")),
             minVersion: "TLSv1.2" as const,
             maxVersion: "TLSv1.3" as const,
+            // FAPI2 SP 5.2.2 permitted TLS 1.2 suites, plus TLS 1.3 defaults.
+            ciphers: [
+                "TLS_AES_128_GCM_SHA256",
+                "TLS_AES_256_GCM_SHA384",
+                "TLS_CHACHA20_POLY1305_SHA256",
+                "ECDHE-ECDSA-AES128-GCM-SHA256",
+                "ECDHE-ECDSA-AES256-GCM-SHA384",
+                "ECDHE-RSA-AES128-GCM-SHA256",
+                "ECDHE-RSA-AES256-GCM-SHA384",
+            ].join(":"),
             honorCipherOrder: true,
         };
 
@@ -521,11 +542,19 @@ describe("OIDF - oid4vci-1_0-issuer-haip-test-plan", () => {
         credentialConfigurationIdForVariant?: (
             variant: IssuerVariant,
         ) => string;
+        waitOptions?: NonNullable<Parameters<OIDFSuite["waitForFinished"]>[1]>;
     };
 
     const DEFAULT_ISSUER_MODULE_CASE: Omit<IssuerModuleCase, "moduleName"> = {
         expectedResults: ["PASSED"],
         triggerOffer: true,
+    };
+
+    // Modules that sleep until the code / request_uri lifetime (60s) elapsed.
+    const EXPIRY_WAIT_OPTIONS = {
+        maxAttempts: 1000,
+        noProgressAttempts: 600,
+        waitingNoProgressAttempts: 600,
     };
 
     const ISSUER_MODULE_CASE_OVERRIDES: Record<
@@ -538,6 +567,11 @@ describe("OIDF - oid4vci-1_0-issuer-haip-test-plan", () => {
         "oid4vci-1_0-issuer-metadata-test-signed": {
             triggerOffer: false,
         },
+        "fapi2-security-profile-final-ensure-token-endpoint-fails-with-expired-auth-code":
+            { waitOptions: EXPIRY_WAIT_OPTIONS },
+        "fapi2-security-profile-final-par-attempt-to-use-expired-request_uri": {
+            waitOptions: EXPIRY_WAIT_OPTIONS,
+        },
     };
 
     const buildIssuerModuleCase = (moduleName: string): IssuerModuleCase => {
@@ -548,11 +582,13 @@ describe("OIDF - oid4vci-1_0-issuer-haip-test-plan", () => {
             ...DEFAULT_ISSUER_MODULE_CASE,
         };
 
-        if (normalizedName.includes("metadata")) {
+        // FAPI2 WARNINGs cover optional checks (e.g. DPoP jti replay, token revocation on code reuse).
+        if (
+            normalizedName.includes("metadata") ||
+            normalizedName.startsWith(FAPI2_SECURITY_PROFILE_FINAL_PREFIX)
+        ) {
             baseCase.triggerOffer = false;
             baseCase.expectedResults = ["PASSED", "WARNING"];
-        } else if (normalizedName.startsWith("fapi2-security-profile")) {
-            baseCase.triggerOffer = false;
         }
         return {
             ...baseCase,
@@ -569,9 +605,21 @@ describe("OIDF - oid4vci-1_0-issuer-haip-test-plan", () => {
         | { kind: "ok"; result: string; status: string; durationMs: number }
         | { kind: "error"; error: Error; durationMs: number };
 
-    const buildSkipReason = (moduleName: string): string | undefined => {
-        if (SKIPPED_ISSUER_MODULES.has(moduleName)) {
-            return "fapi2 security profile test";
+    const buildSkipReason = (
+        moduleName: string,
+        variant: IssuerVariant,
+    ): string | undefined => {
+        const explicitReason =
+            EXPLICITLY_SKIPPED_ISSUER_MODULES.get(moduleName);
+        if (explicitReason) {
+            return explicitReason;
+        }
+        if (
+            variant.vci_authorization_code_flow_variant ===
+                "issuer_initiated" &&
+            ISSUER_INITIATED_SKIPPED_MODULES.has(moduleName)
+        ) {
+            return ISSUER_INITIATED_SKIPPED_MODULES.get(moduleName);
         }
         if (
             MODULE_FILTERS.length > 0 &&
@@ -615,7 +663,10 @@ describe("OIDF - oid4vci-1_0-issuer-haip-test-plan", () => {
                 );
             }
 
-            const logResult = await oidfSuite.waitForFinished(testInstance.id);
+            const logResult = await oidfSuite.waitForFinished(
+                testInstance.id,
+                moduleCase.waitOptions,
+            );
             const durationMs = Date.now() - startedAt;
             console.log(
                 `Module finished (${variantLabel}/${moduleName}) in ${durationMs}ms → result=${logResult.result} status=${logResult.status}`,
@@ -684,7 +735,7 @@ describe("OIDF - oid4vci-1_0-issuer-haip-test-plan", () => {
 
                 for (const moduleName of ISSUER_HAIP_MODULES) {
                     const moduleCase = buildIssuerModuleCase(moduleName);
-                    if (buildSkipReason(moduleName)) {
+                    if (buildSkipReason(moduleName, variant)) {
                         continue;
                     }
                     outcomes.set(
@@ -697,11 +748,11 @@ describe("OIDF - oid4vci-1_0-issuer-haip-test-plan", () => {
                         ),
                     );
                 }
-            }, 600_000);
+            }, 3_600_000);
 
             for (const moduleName of ISSUER_HAIP_MODULES) {
                 const moduleCase = buildIssuerModuleCase(moduleName);
-                const skipReason = buildSkipReason(moduleName);
+                const skipReason = buildSkipReason(moduleName, variant);
                 if (skipReason) {
                     test.skip(`${moduleName} (${skipReason})`, () => {});
                     continue;

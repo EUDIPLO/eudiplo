@@ -645,7 +645,11 @@ export class OIDFSuite {
 
     async waitForFinished(
         testInstanceId: string,
-        options: { maxAttempts?: number; noProgressAttempts?: number } = {},
+        options: {
+            maxAttempts?: number;
+            noProgressAttempts?: number;
+            waitingNoProgressAttempts?: number;
+        } = {},
     ): Promise<TestResult> {
         // Terminal statuses: once the runner enters one of these it will not
         // transition further, so polling is pointless. INTERRUPTED in
@@ -676,9 +680,11 @@ export class OIDFSuite {
             this.getPositiveNumberEnv("OIDF_WAIT_NO_PROGRESS_ATTEMPTS") ??
             120;
         const waitingNoProgressAttempts =
+            options.waitingNoProgressAttempts ??
             this.getPositiveNumberEnv(
                 "OIDF_WAIT_NO_PROGRESS_ATTEMPTS_WAITING",
-            ) ?? Math.min(noProgressAttempts, 40);
+            ) ??
+            Math.min(noProgressAttempts, 40);
         const pollIntervalMs =
             this.getPositiveNumberEnv("OIDF_WAIT_POLL_INTERVAL_MS") ?? 300;
         let attempts = 0;

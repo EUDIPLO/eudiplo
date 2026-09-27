@@ -49,3 +49,4 @@ export { AddOutcomeToSession1779000000000 } from "./1779000000000-AddOutcomeToSe
 export { AddIssuanceSetIdToDeferredTransaction1780000000000 } from "./1780000000000-AddIssuanceSetIdToDeferredTransaction.js";
 
 export { AddConfigImportRun1781000000000 } from "./1781000000000-AddConfigImportRun.js";
+export { AddOauthBindingsToSession1782000000000 } from "./1782000000000-AddOauthBindingsToSession.js";

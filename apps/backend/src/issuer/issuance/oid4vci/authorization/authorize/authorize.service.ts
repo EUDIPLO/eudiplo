@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { ConflictException, Injectable, Logger } from "@nestjs/common";
+import {
+    BadRequestException,
+    ConflictException,
+    HttpStatus,
+    Injectable,
+    Logger,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
@@ -11,10 +17,12 @@ import {
     Oauth2AuthorizationServer,
     PreAuthorizedCodeGrantIdentifier,
     preAuthorizedCodeGrantIdentifier,
+    pushedAuthorizationRequestUriPrefix,
     type RefreshTokenGrantIdentifier,
     refreshTokenGrantIdentifier,
 } from "@openid4vc/oauth2";
 import type { Request } from "express";
+import { calculateJwkThumbprint, decodeJwt, type JWK } from "jose";
 import { Repository } from "typeorm";
 import { v4 } from "uuid";
 import { CryptoService } from "../../../../../crypto/crypto.service.js";
@@ -31,9 +39,15 @@ import {
     buildAuthorizationServerMetadata,
     buildWalletAttestationMetadata,
     DEFAULT_DPOP_SIGNING_ALG_VALUES_SUPPORTED,
+    DPOP_PROOF_FRESHNESS,
     resolveWalletAttestationPolicy,
+    verifyPkceCodeChallenge,
 } from "../shared/index.js";
 import { AuthorizeQueries } from "./dto/authorize-request.dto.js";
+
+/** FAPI 2.0 SP 5.3.2.1: authorization codes live at most 60 seconds. */
+const AUTHORIZATION_CODE_LIFETIME_SECONDS = 60;
+const PAR_REQUEST_URI_LIFETIME_SECONDS = 60;
 
 interface ParsedAccessTokenAuthorizationCodeRequestGrant {
     grantType: AuthorizationCodeGrantIdentifier;
@@ -96,7 +110,8 @@ export class AuthorizeService {
         | "invalid_request"
         | "invalid_client"
         | "invalid_grant"
-        | "invalid_tx_code" {
+        | "invalid_tx_code"
+        | "invalid_dpop_proof" {
         if (!errorCode) {
             return "invalid_request";
         }
@@ -105,7 +120,8 @@ export class AuthorizeService {
             errorCode === "invalid_grant" ||
             errorCode === "invalid_client" ||
             errorCode === "invalid_request" ||
-            errorCode === "invalid_tx_code"
+            errorCode === "invalid_tx_code" ||
+            errorCode === "invalid_dpop_proof"
         ) {
             return errorCode;
         }
@@ -138,9 +154,17 @@ export class AuthorizeService {
 
         const candidate = error as {
             error_description?: unknown;
+            errorResponse?: { error_description?: unknown };
             message?: unknown;
             cause?: { message?: unknown };
         };
+
+        if (
+            typeof candidate.errorResponse?.error_description === "string" &&
+            candidate.errorResponse.error_description.trim().length > 0
+        ) {
+            return candidate.errorResponse.error_description;
+        }
 
         if (
             typeof candidate.error_description === "string" &&
@@ -373,8 +397,8 @@ export class AuthorizeService {
                 walletAttestationPolicy.walletAttestationRequired,
             ),
             additionalMetadata: {
-                // TODO: verify this on the server
                 require_pushed_authorization_requests: true,
+                authorization_response_iss_parameter_supported: true,
                 interactive_authorization_endpoint: `${authServer}/authorize/interactive`,
                 status_list_aggregation_endpoint: statusListAggregationEndpoint,
                 challenge_endpoint: `${authServer}/authorize/challenge`,
@@ -413,6 +437,7 @@ export class AuthorizeService {
     async handlePar(
         tenantId: string,
         body: AuthorizeQueries,
+        req: Request,
         clientAttestation?: {
             clientAttestationJwt: string;
             clientAttestationPopJwt: string;
@@ -444,15 +469,45 @@ export class AuthorizeService {
             );
         }
 
-        const request_uri = `urn:${randomUUID()}`;
+        this.assertValidParRequest(body);
+
+        const url = `${this.configService.getOrThrow<string>("PUBLIC_URL")}${req.url}`;
+        const { dpop } = await this.getAuthorizationServer(tenantId)
+            .verifyPushedAuthorizationRequest({
+                authorizationRequest: body,
+                authorizationServerMetadata,
+                request: {
+                    method: req.method as HttpMethod,
+                    url,
+                    headers: getHeadersFromRequest(req),
+                },
+                dpop: {
+                    required: false,
+                    jwt: req.header("dpop"),
+                    jwkThumbprint: body.dpop_jkt,
+                    allowedSigningAlgs:
+                        authorizationServerMetadata.dpop_signing_alg_values_supported,
+                    ...DPOP_PROOF_FRESHNESS,
+                },
+            })
+            .catch((err) => {
+                throw this.toTokenErrorException(err);
+            });
+
+        const request_uri = `${pushedAuthorizationRequestUriPrefix}${randomUUID()}`;
+        const parValues = {
+            request_uri,
+            request_uri_expires_at: new Date(
+                Date.now() + PAR_REQUEST_URI_LIFETIME_SECONDS * 1000,
+            ),
+            auth_queries: body,
+            dpop_jkt: dpop?.jwkThumbprint,
+        };
 
         if (body.issuer_state) {
             const updateResult = await this.sessionService.add(
                 body.issuer_state,
-                {
-                    request_uri,
-                    auth_queries: body,
-                },
+                parValues,
             );
 
             // Some PAR requests do not have a pre-existing issuer_state session.
@@ -461,60 +516,155 @@ export class AuthorizeService {
                 await this.sessionService.create({
                     id: v4(),
                     tenantId,
-                    request_uri,
-                    auth_queries: body,
+                    ...parValues,
                 });
             }
         } else {
             await this.sessionService.create({
                 id: v4(),
                 tenantId,
-                request_uri,
-                auth_queries: body,
+                ...parValues,
             });
         }
 
-        return { expires_in: 500, request_uri };
+        return { expires_in: PAR_REQUEST_URI_LIFETIME_SECONDS, request_uri };
     }
 
-    sendAuthorizationResponse(values: AuthorizeQueries, tenantId: string) {
-        if (values.request_uri) {
-            return this.sessionService
-                .getBy({ request_uri: values.request_uri })
-                .then(async (session) => {
-                    const code = await this.setAuthCode(session.id);
-                    const iss = this.getAuthzIssuer(tenantId);
-                    return `${session.auth_queries!.redirect_uri}?code=${code}&state=${session.auth_queries!.state}&iss=${iss}`;
-                })
-                .catch(async () => {
-                    //if not found, this means the flow is initiated by the wallet and not the issuer which is also fine.
-                    if (!values.redirect_uri) {
-                        throw new ConflictException(
-                            "redirect_uri not found for request_uri authorization response",
-                        );
-                    }
+    /**
+     * Enforce the FAPI 2.0 / HAIP requirements on the pushed authorization request.
+     */
+    private assertValidParRequest(body: AuthorizeQueries): void {
+        if (body.request_uri) {
+            throw new TokenErrorException(
+                "invalid_request",
+                "The request_uri parameter must not be sent to the PAR endpoint",
+            );
+        }
+        if (body.response_type !== "code") {
+            throw new TokenErrorException(
+                "unsupported_response_type",
+                "Only response_type 'code' is supported",
+            );
+        }
+        if (!body.client_id) {
+            throw new TokenErrorException(
+                "invalid_request",
+                "Missing required parameter: client_id",
+            );
+        }
+        if (!body.redirect_uri) {
+            throw new TokenErrorException(
+                "invalid_request",
+                "Missing required parameter: redirect_uri",
+            );
+        }
+        if (!body.code_challenge) {
+            throw new TokenErrorException(
+                "invalid_request",
+                "Missing required parameter: code_challenge",
+            );
+        }
+        if (body.code_challenge_method !== "S256") {
+            throw new TokenErrorException(
+                "invalid_request",
+                "Only code_challenge_method 'S256' is supported",
+            );
+        }
+    }
 
-                    const code = v4();
-                    const iss = this.getAuthzIssuer(tenantId);
-                    await this.sessionService.create({
-                        id: v4(),
-                        tenantId,
-                        authorization_code: code,
-                        request_uri: values.request_uri,
-                    });
+    private toTokenErrorException(err: unknown): TokenErrorException {
+        if (err instanceof TokenErrorException) {
+            return err;
+        }
+        const errorCode = (err as { errorResponse?: { error?: string } })
+            ?.errorResponse?.error;
+        return new TokenErrorException(
+            this.mapToTokenErrorCode(errorCode),
+            this.extractTokenErrorDescription(err),
+        );
+    }
 
-                    const params = new URLSearchParams({ code, iss });
-                    if (values.state) {
-                        params.set("state", values.state);
-                    }
+    /**
+     * Build the redirect back to the client, preserving any query component of
+     * the registered redirect_uri (RFC 6749 Section 3.1.2).
+     */
+    private buildAuthorizationResponseUrl(
+        redirectUri: string,
+        params: Record<string, string | undefined>,
+    ): string {
+        const url = new URL(redirectUri);
+        for (const [key, value] of Object.entries(params)) {
+            if (value !== undefined) {
+                url.searchParams.set(key, value);
+            }
+        }
+        return url.toString();
+    }
 
-                    return `${values.redirect_uri}?${params.toString()}`;
-                });
-        } else {
+    async sendAuthorizationResponse(
+        values: AuthorizeQueries,
+        tenantId: string,
+    ): Promise<string> {
+        if (!values.request_uri) {
             throw new ConflictException(
                 "request_uri not found or not provided in the request",
             );
         }
+
+        const session = await this.sessionService
+            .getBy({ request_uri: values.request_uri, tenantId })
+            .catch(() => {
+                throw new BadRequestException({
+                    error: "invalid_request_uri",
+                    error_description: "Unknown request_uri",
+                });
+            });
+
+        const authQueries = session.auth_queries;
+        if (!authQueries?.redirect_uri) {
+            throw new BadRequestException({
+                error: "invalid_request_uri",
+                error_description: "request_uri has no redirect_uri bound",
+            });
+        }
+
+        const iss = this.getAuthzIssuer(tenantId);
+        const redirectError = (error: string, description: string) =>
+            this.buildAuthorizationResponseUrl(authQueries.redirect_uri!, {
+                error,
+                error_description: description,
+                state: authQueries.state,
+                iss,
+            });
+
+        if (values.client_id !== authQueries.client_id) {
+            return redirectError(
+                "invalid_request",
+                "client_id does not match the pushed authorization request",
+            );
+        }
+
+        if (
+            !session.request_uri_expires_at ||
+            session.request_uri_expires_at.getTime() <= Date.now()
+        ) {
+            return redirectError(
+                "invalid_request_uri",
+                "request_uri is expired or was already used",
+            );
+        }
+
+        // Expire the request_uri on use so it cannot be redeemed twice (RFC 9126 Section 7.3).
+        await this.sessionService.add(session.id, {
+            request_uri_expires_at: new Date(),
+        });
+
+        const code = await this.setAuthCode(session.id);
+        return this.buildAuthorizationResponseUrl(authQueries.redirect_uri, {
+            code,
+            state: authQueries.state,
+            iss,
+        });
     }
 
     /**
@@ -564,6 +714,7 @@ export class AuthorizeService {
             session = await this.sessionService
                 .getBy({
                     refresh_token: parsedAccessTokenRequest.grant.refreshToken,
+                    tenantId,
                 })
                 .catch(() => {
                     throw new TokenErrorException(
@@ -580,6 +731,7 @@ export class AuthorizeService {
             session = await this.sessionService
                 .getBy({
                     authorization_code,
+                    tenantId,
                 })
                 .catch(() => {
                     throw new TokenErrorException(
@@ -614,13 +766,73 @@ export class AuthorizeService {
         );
 
         // Verify wallet attestation if required or provided
-        await this.walletAttestationService.verifyWalletAttestation(
-            tenantId,
-            parsedAccessTokenRequest.clientAttestation,
-            authorizationServerMetadata.issuer,
-            walletAttestationPolicy.walletAttestationRequired,
-            walletAttestationPolicy.walletProviderTrustLists,
+        await this.walletAttestationService
+            .verifyWalletAttestation(
+                tenantId,
+                parsedAccessTokenRequest.clientAttestation,
+                authorizationServerMetadata.issuer,
+                walletAttestationPolicy.walletAttestationRequired,
+                walletAttestationPolicy.walletProviderTrustLists,
+            )
+            .catch((err) => {
+                throw new TokenErrorException(
+                    "invalid_client",
+                    err instanceof Error
+                        ? err.message
+                        : "Client attestation validation failed",
+                    HttpStatus.UNAUTHORIZED,
+                );
+            });
+
+        const clientKeyJkt = await this.getClientInstanceKeyThumbprint(
+            parsedAccessTokenRequest.clientAttestation?.clientAttestationJwt,
         );
+        if (
+            parsedAccessTokenRequest.grant.grantType ===
+                refreshTokenGrantIdentifier &&
+            session.client_key_jkt &&
+            session.client_key_jkt !== clientKeyJkt
+        ) {
+            // OAuth2-ATCA 10.3: refresh tokens are bound to the client instance key.
+            throw new TokenErrorException(
+                "invalid_grant",
+                "The refresh_token is bound to a different client instance",
+            );
+        }
+
+        if (
+            parsedAccessTokenRequest.grant.grantType ===
+                authorizationCodeGrantIdentifier ||
+            parsedAccessTokenRequest.grant.grantType ===
+                refreshTokenGrantIdentifier
+        ) {
+            this.assertAuthorizationCodeBoundToClient(
+                session.auth_queries,
+                body?.client_id,
+                parsedAccessTokenRequest.clientAttestation
+                    ?.clientAttestationJwt,
+            );
+        }
+
+        if (
+            parsedAccessTokenRequest.grant.grantType ===
+            authorizationCodeGrantIdentifier
+        ) {
+            if (session.auth_queries?.code_challenge) {
+                try {
+                    verifyPkceCodeChallenge(
+                        session.auth_queries.code_challenge,
+                        session.auth_queries.code_challenge_method,
+                        body?.code_verifier,
+                    );
+                } catch {
+                    throw new TokenErrorException(
+                        "invalid_grant",
+                        "PKCE verification failed",
+                    );
+                }
+            }
+        }
 
         let dpopValue;
 
@@ -703,7 +915,6 @@ export class AuthorizeService {
             parsedAccessTokenRequest.grant.grantType ===
             authorizationCodeGrantIdentifier
         ) {
-            //TODO: handle response
             const { dpop } = await this.getAuthorizationServer(
                 tenantId,
                 session.id,
@@ -713,6 +924,7 @@ export class AuthorizeService {
                     accessTokenRequest:
                         parsedAccessTokenRequest.accessTokenRequest,
                     expectedCode: session.authorization_code as string,
+                    codeExpiresAt: session.authorization_code_expires_at,
                     request: {
                         method: req.method as HttpMethod,
                         url,
@@ -723,16 +935,13 @@ export class AuthorizeService {
                         allowedSigningAlgs:
                             authorizationServerMetadata.dpop_signing_alg_values_supported,
                         jwt: parsedAccessTokenRequest.dpop?.jwt,
+                        expectedJwkThumbprint: session.dpop_jkt,
+                        ...DPOP_PROOF_FRESHNESS,
                     },
                     authorizationServerMetadata,
                 })
                 .catch((err) => {
-                    // Map verification errors to OAuth 2.0 error codes
-                    const errorCode = this.mapToTokenErrorCode(err.error);
-                    throw new TokenErrorException(
-                        errorCode,
-                        this.extractTokenErrorDescription(err),
-                    );
+                    throw this.toTokenErrorException(err);
                 });
             dpopValue = dpop;
         }
@@ -742,7 +951,10 @@ export class AuthorizeService {
             refreshTokenGrantIdentifier
         ) {
             // For refresh_token grant, verify the token with the stored refresh_token
-            await this.getAuthorizationServer(tenantId, session.id)
+            const { dpop } = await this.getAuthorizationServer(
+                tenantId,
+                session.id,
+            )
                 .verifyRefreshTokenAccessTokenRequest({
                     grant: parsedAccessTokenRequest.grant as ParsedAccessTokenRefreshTokenRequestGrant,
                     accessTokenRequest:
@@ -753,20 +965,32 @@ export class AuthorizeService {
                         url,
                         headers: getHeadersFromRequest(req),
                     },
+                    // RFC 9449 Section 5: refresh tokens of public clients stay bound to the DPoP key;
+                    // attested clients are bound via client authentication and may use a new key.
+                    dpop: {
+                        required:
+                            issuanceConfig.dPopRequired || !!session.dpop_jkt,
+                        allowedSigningAlgs:
+                            authorizationServerMetadata.dpop_signing_alg_values_supported,
+                        jwt: parsedAccessTokenRequest.dpop?.jwt,
+                        expectedJwkThumbprint: parsedAccessTokenRequest
+                            .clientAttestation?.clientAttestationJwt
+                            ? undefined
+                            : session.dpop_jkt,
+                        ...DPOP_PROOF_FRESHNESS,
+                    },
                     authorizationServerMetadata,
                     refreshTokenExpiresAt: session.refresh_token_expires_at,
                 })
                 .catch((err) => {
-                    // Map verification errors to OAuth 2.0 error codes
-                    const errorCode = this.mapToTokenErrorCode(err.error);
-                    throw new TokenErrorException(
-                        errorCode,
-                        this.extractTokenErrorDescription(err),
-                    );
+                    throw this.toTokenErrorException(err);
                 });
-            // Note: dpopValue remains undefined for refresh_token grant
-            // as DPoP is typically not required for refresh token requests
+            dpopValue = dpop;
         }
+
+        const isRefreshGrant =
+            parsedAccessTokenRequest.grant.grantType ===
+            refreshTokenGrantIdentifier;
 
         // Use pinned key from issuance config, or fall back to first available key
         const signingKeyId =
@@ -806,7 +1030,8 @@ export class AuthorizeService {
                 authorizationServer: authorizationServerMetadata.issuer,
                 clientId: req.body.client_id,
                 dpop: dpopValue,
-                refreshToken: refreshTokenConfig.enabled,
+                // FAPI 2.0 SP 5.3.2.1: no refresh token rotation.
+                refreshToken: refreshTokenConfig.enabled && !isRefreshGrant,
                 additionalAccessTokenPayload: authorizationDetails
                     ? { authorization_details: authorizationDetails }
                     : undefined,
@@ -823,26 +1048,83 @@ export class AuthorizeService {
                 );
             });
 
-        // Store the refresh_token in the session if it was generated
-        if (tokenResponse.refresh_token) {
+        if (!isRefreshGrant) {
             // Calculate refresh token expiration based on configured lifetime
             let refreshTokenExpiresAt: Date | undefined;
-            if (refreshTokenConfig.expiresInSeconds) {
-                const now = new Date();
+            if (
+                tokenResponse.refresh_token &&
+                refreshTokenConfig.expiresInSeconds
+            ) {
                 refreshTokenExpiresAt = new Date(
-                    now.getTime() +
-                        (refreshTokenConfig.expiresInSeconds || 0) * 1000,
+                    Date.now() + refreshTokenConfig.expiresInSeconds * 1000,
                 );
             }
 
             await this.sessionService.add(session.id, {
                 consumed: true, // Mark the session as consumed to prevent reuse
-                refresh_token: tokenResponse.refresh_token,
-                refresh_token_expires_at: refreshTokenExpiresAt,
+                dpop_jkt: dpopValue?.jwkThumbprint ?? session.dpop_jkt,
+                client_key_jkt: clientKeyJkt,
+                ...(tokenResponse.refresh_token
+                    ? {
+                          refresh_token: tokenResponse.refresh_token,
+                          refresh_token_expires_at: refreshTokenExpiresAt,
+                      }
+                    : {}),
             });
         }
 
         return tokenResponse;
+    }
+
+    /**Thumbprint of the client instance key (`cnf.jwk`) from an already verified client attestation.
+     */
+    private async getClientInstanceKeyThumbprint(
+        clientAttestationJwt: string | undefined,
+    ): Promise<string | undefined> {
+        if (!clientAttestationJwt) {
+            return undefined;
+        }
+        const jwk = (decodeJwt(clientAttestationJwt).cnf as { jwk?: JWK })?.jwk;
+        return jwk ? calculateJwkThumbprint(jwk, "sha256") : undefined;
+    }
+
+    /**
+     *
+     * Ensure the authorization code is redeemed by the client it was issued to
+     * (RFC 6749 Section 4.1.3).
+     */
+    private assertAuthorizationCodeBoundToClient(
+        authQueries: AuthorizeQueries | undefined,
+        requestClientId: string | undefined,
+        clientAttestationJwt: string | undefined,
+    ): void {
+        const attestedClientId = clientAttestationJwt
+            ? (decodeJwt(clientAttestationJwt).sub as string | undefined)
+            : undefined;
+
+        if (
+            requestClientId &&
+            attestedClientId &&
+            requestClientId !== attestedClientId
+        ) {
+            throw new TokenErrorException(
+                "invalid_client",
+                "client_id does not match the client attestation",
+            );
+        }
+
+        const expectedClientId = authQueries?.client_id;
+        const presentedClientId = attestedClientId ?? requestClientId;
+        if (
+            expectedClientId &&
+            presentedClientId &&
+            presentedClientId !== expectedClientId
+        ) {
+            throw new TokenErrorException(
+                "invalid_grant",
+                "The authorization code was issued to another client",
+            );
+        }
     }
 
     /**
@@ -854,6 +1136,9 @@ export class AuthorizeService {
         const code = randomUUID();
         await this.sessionService.add(issuer_state, {
             authorization_code: code,
+            authorization_code_expires_at: new Date(
+                Date.now() + AUTHORIZATION_CODE_LIFETIME_SECONDS * 1000,
+            ),
         });
         return code;
     }

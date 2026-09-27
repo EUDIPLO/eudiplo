@@ -2,6 +2,14 @@ import { createHash } from "node:crypto";
 import { decodeProtectedHeader } from "jose";
 
 /**
+ * Freshness window for DPoP proofs (RFC 9449 Section 11.1), based on `iat`.
+ */
+export const DPOP_PROOF_FRESHNESS = {
+    maxProofAgeSeconds: 300,
+    allowedClockSkewSeconds: 60,
+} as const;
+
+/**
  * Extract DPoP JWK thumbprint from DPoP JWT.
  * Returns undefined if parsing fails or DPoP is not provided.
  */

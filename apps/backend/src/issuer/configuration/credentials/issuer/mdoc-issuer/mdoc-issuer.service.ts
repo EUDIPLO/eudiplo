@@ -17,6 +17,7 @@ import { mdocContext } from "../../../../../verifier/presentations/mdoc-context.
 import { StatusListService } from "../../../../status-list/status-list.service.js";
 import { CredentialConfig } from "../../entities/credential.entity.js";
 import { buildClaimsByNamespace } from "../../utils/index.js";
+import { roundedCredentialValidity } from "../credential-time.util.js";
 
 export interface MdocIssueOptions {
     credentialConfiguration: CredentialConfig;
@@ -124,18 +125,13 @@ export class MdocIssuerService {
         );
 
         // Set validity dates
-        const signed = new Date();
-        const validFrom = new Date(signed);
-        const validUntil = new Date(signed);
-
         // Use lifeTime from config or default to 1 year
-        if (credentialConfiguration.lifeTime) {
-            validUntil.setSeconds(
-                validUntil.getSeconds() + credentialConfiguration.lifeTime,
-            );
-        } else {
-            validUntil.setFullYear(validUntil.getFullYear() + 1);
-        }
+        const { issuedAt, expiresAt } = roundedCredentialValidity(
+            credentialConfiguration.lifeTime ?? 365 * 24 * 60 * 60,
+        );
+        const signed = new Date(issuedAt * 1000);
+        const validFrom = new Date(signed);
+        const validUntil = new Date(expiresAt * 1000);
 
         // If status management is enabled, create an entry and map it to mDOC status format.
         let status: StatusOptions | undefined;

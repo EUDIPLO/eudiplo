@@ -1,0 +1,13 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index a8b076140dd2211d7b3fde9a9a81df956aef6660..eed6d3988f23efe46267094942bc6de9d7889d26 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -730,7 +730,7 @@ async function verifyDpopJwt(options) {
+ 		}
+ 		if (options.request.method !== payload.htm) throw new Oauth2Error(`Dpop jwt contains htm value '${payload.htm}', but expected htm value '${options.request.method}'`);
+ 		const expectedHtu = htuFromRequestUrl(options.request.url);
+-		if (expectedHtu !== payload.htu) throw new Oauth2Error(`Dpop jwt contains htu value '${payload.htu}', but expected htu value '${expectedHtu}'.`);
++		if (expectedHtu !== htuFromRequestUrl(payload.htu)) throw new Oauth2Error(`Dpop jwt contains htu value '${payload.htu}', but expected htu value '${expectedHtu}'.`);
+ 		const now = options.now ?? /* @__PURE__ */ new Date();
+ 		if (options.maxProofAgeSeconds !== void 0) {
+ 			if (options.maxProofAgeSeconds < 0) throw new Oauth2Error(`maxProofAgeSeconds must be greater than or equal to 0, received '${options.maxProofAgeSeconds}'.`);

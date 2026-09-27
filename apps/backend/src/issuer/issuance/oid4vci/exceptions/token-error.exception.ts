@@ -25,7 +25,11 @@ export type TokenErrorCode =
     | "invalid_scope"
     // OID4VCI Section 6.3: returned when the Client provides the wrong
     // Transaction Code in the Pre-Authorized Code Flow.
-    | "invalid_tx_code";
+    | "invalid_tx_code"
+    // RFC 9449 Section 5 / 7.1: invalid DPoP proof at token or PAR endpoint.
+    | "invalid_dpop_proof"
+    // RFC 9126 Section 2.3: PAR endpoint uses authorization error codes.
+    | "unsupported_response_type";
 
 /**
  * Exception for OAuth 2.0 Token Error responses.
@@ -52,16 +56,33 @@ export type TokenErrorCode =
  *   exceeds the scope granted by the resource owner.
  */
 export class TokenErrorException extends HttpException {
-    constructor(error: TokenErrorCode, errorDescription?: string) {
+    constructor(
+        error: TokenErrorCode,
+        errorDescription?: string,
+        status: HttpStatus = HttpStatus.BAD_REQUEST,
+    ) {
         const response: {
             error: TokenErrorCode;
             error_description?: string;
         } = {
             error,
         };
-        if (errorDescription) {
-            response.error_description = errorDescription;
+        const sanitized = errorDescription
+            ? sanitizeErrorDescription(errorDescription)
+            : undefined;
+        if (sanitized) {
+            response.error_description = sanitized;
         }
-        super(response, HttpStatus.BAD_REQUEST);
+        super(response, status);
     }
+}
+
+/**
+ * RFC 6749 Section 5.2: `error_description` MUST only contain %x20-21 / %x23-5B / %x5D-7E.
+ */
+function sanitizeErrorDescription(description: string): string {
+    return description
+        .replaceAll(/[^\x20-\x21\x23-\x5B\x5D-\x7E]+/g, " ")
+        .replaceAll(/\s+/g, " ")
+        .trim();
 }
