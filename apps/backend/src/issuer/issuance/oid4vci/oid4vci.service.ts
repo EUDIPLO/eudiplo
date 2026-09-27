@@ -59,6 +59,7 @@ import { CredentialsService } from "../../configuration/credentials/credentials.
 import { AuthorizationIdentity } from "../../configuration/credentials/dto/authorization-identity.js";
 import { ClaimsWebhookResult } from "../../configuration/credentials/dto/claims-webhook-result.js";
 import { CredentialProofType } from "../../configuration/credentials/entities/credential.entity.js";
+import { InvalidClaimsException } from "../../configuration/credentials/exceptions/invalid-claims.exception.js";
 import { ManagedAuthorizationServerConfig } from "../../configuration/issuance/dto/authorization-server-config.dto.js";
 import {
     IssuerProvidedAttestation,
@@ -1766,6 +1767,13 @@ export class Oid4vciService {
     private mapToCredentialRequestException(error: unknown): never {
         if (error instanceof CredentialRequestException) {
             throw error;
+        }
+
+        if (error instanceof InvalidClaimsException) {
+            throw new CredentialRequestException(
+                "credential_request_denied",
+                error.message,
+            );
         }
 
         if (

@@ -180,10 +180,29 @@ function mergeLeafSchema(existing: JsonSchema, next: JsonSchema): JsonSchema {
     if (existing.properties && Object.keys(existing.properties).length > 0) {
         merged.properties = existing.properties;
     }
+    // An explicit `additionalProperties` from the field's constraints wins over the strict default
+    if (
+        !Object.prototype.hasOwnProperty.call(next, "additionalProperties") &&
+        Object.prototype.hasOwnProperty.call(existing, "additionalProperties")
+    ) {
+        merged.additionalProperties = existing.additionalProperties;
+    }
     if (Array.isArray(existing.required) && existing.required.length > 0) {
         merged.required = existing.required;
     }
-    return merged;
+    return stripNonObjectKeywords(merged);
+}
+
+function stripNonObjectKeywords(schema: JsonSchema): JsonSchema {
+    const type = typeof schema.type === "string" ? schema.type : undefined;
+    if (!type || type === "object") {
+        return schema;
+    }
+
+    delete schema.properties;
+    delete schema.additionalProperties;
+    delete schema.required;
+    return schema;
 }
 
 function buildLeafSchema(field: ClaimFieldDefinition): JsonSchema {
@@ -223,6 +242,9 @@ function ensureSchemaNode(
         if (isArrayPathSegment(segment)) {
             if (cursor.type !== "array") {
                 cursor.type = "array";
+                delete cursor.properties;
+                delete cursor.additionalProperties;
+                delete cursor.required;
             }
 
             if (
@@ -233,10 +255,11 @@ function ensureSchemaNode(
                 cursor.items = {
                     type: "object",
                     properties: {},
+                    additionalProperties: false,
                 };
             }
 
-            cursor = cursor.items as JsonSchema;
+            cursor = markObjectStrict(cursor.items as JsonSchema);
             continue;
         }
 
@@ -247,13 +270,25 @@ function ensureSchemaNode(
             cursor.properties[key] = {
                 type: "object",
                 properties: {},
+                additionalProperties: false,
             };
         }
 
-        cursor = cursor.properties[key];
+        cursor = markObjectStrict(cursor.properties[key]);
     }
 
     return cursor;
+}
+
+// Objects with declared child claims reject unknown properties unless the field opted into free-form
+function markObjectStrict(node: JsonSchema): JsonSchema {
+    if (
+        node.type === "object" &&
+        !Object.prototype.hasOwnProperty.call(node, "additionalProperties")
+    ) {
+        node.additionalProperties = false;
+    }
+    return node;
 }
 
 function ensureFrameNode(
@@ -295,6 +330,10 @@ function mergeArrayLeafSchema(
     if (parent.type !== "array") {
         parent.type = "array";
     }
+
+    delete parent.properties;
+    delete parent.additionalProperties;
+    delete parent.required;
 
     const existingItems =
         parent.items &&
@@ -412,6 +451,7 @@ export function buildJsonSchema(fields: ClaimFieldDefinition[]): JsonSchema {
         $schema: JSON_SCHEMA_DRAFT_2020_12,
         type: "object",
         properties: {},
+        additionalProperties: false,
     };
 
     for (const field of flattenFields(fields)) {

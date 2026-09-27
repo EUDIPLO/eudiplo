@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import type { Jwk } from "@openid4vc/oauth2";
 import type { CredentialConfigurationSupported } from "@openid4vc/openid4vci";
+import type { ErrorObject } from "ajv";
 import { Ajv2020 as Ajv } from "ajv/dist/2020.js";
 import { In, Repository } from "typeorm";
 import { CryptoImplementationService } from "../../../crypto/key/crypto-implementation/crypto-implementation.service.js";
@@ -21,6 +22,7 @@ import {
     CredentialProofType,
     IssuerMetadataCredentialConfig,
 } from "./entities/credential.entity.js";
+import { InvalidClaimsException } from "./exceptions/invalid-claims.exception.js";
 import { MdocIssuerService } from "./issuer/mdoc-issuer/mdoc-issuer.service.js";
 import { SdjwtvcIssuerService } from "./issuer/sdjwtvc-issuer/sdjwtvc-issuer.service.js";
 import {
@@ -366,34 +368,39 @@ export class CredentialsService {
         claims: Record<string, unknown>,
         tenantId: string,
     ) {
-        // AJV instance with draft 2020-12 meta-schema support.
-        // removeAdditional:"all" ensures only schema-declared properties remain on the claims object.
+        return this.credentialConfigRepo
+            .findOneByOrFail({ id: credentialConfigurationId, tenantId })
+            .then((credentialConfiguration) =>
+                this.validateClaims(credentialConfiguration, claims),
+            );
+    }
+
+    /**
+     * Validates claims against the schema derived from the credential configuration fields.
+     * Configurations without fields are not validated.
+     * @throws InvalidClaimsException with a message that names claim paths but never claim values
+     */
+    private validateClaims(
+        credentialConfiguration: CredentialConfig,
+        claims: Record<string, unknown>,
+    ): void {
+        const schema = buildJsonSchema(credentialConfiguration.fields as any);
+        if (Object.keys(schema.properties ?? {}).length === 0) {
+            return;
+        }
+
         const ajv = new Ajv({
             allErrors: true,
             strict: true,
-            removeAdditional: "all", // strip properties not defined in the schema
-            useDefaults: true, // optionally apply default values from schema
+            useDefaults: true,
+            validateSchema: false,
         });
-        //fetch the credential configuration
-        return this.credentialConfigRepo
-            .findOneByOrFail({ id: credentialConfigurationId, tenantId })
-            .then((credentialConfiguration) => {
-                //if a schema is defined, validate the claims against it
-                const schema = buildJsonSchema(
-                    credentialConfiguration.fields as any,
-                );
-                if (schema && Object.keys(schema.properties ?? {}).length > 0) {
-                    const validate = ajv.compile(schema as any);
-                    const valid = validate(claims); // claims mutated: unknown props removed, defaults applied
-                    if (!valid) {
-                        throw new ConflictException(
-                            `Claims do not conform to the schema for credential configuration with id ${credentialConfigurationId}: ${ajv.errorsText(
-                                validate.errors,
-                            )}`,
-                        );
-                    }
-                }
-            });
+        const validate = ajv.compile(schema as any);
+        if (!validate(claims)) {
+            throw new InvalidClaimsException(
+                `Claims do not conform to the schema for credential configuration with id ${credentialConfiguration.id}: ${formatClaimErrors(validate.errors)}`,
+            );
+        }
     }
 
     /**
@@ -607,6 +614,8 @@ export class CredentialsService {
             }
         }
 
+        this.validateClaims(credentialConfiguration, usedClaims);
+
         // Load issuance config to check for federation settings
         let federationEntityId: string | undefined;
         try {
@@ -681,4 +690,26 @@ export class CredentialsService {
         credentialConfig.vct.vct = `${host}/issuers/${tenantId}/credentials-metadata/vct/${credentialConfig.id}`;
         return credentialConfig.vct;
     }
+}
+
+function joinClaimPath(instancePath: string, property: unknown): string {
+    return `${instancePath}/${String(property)}`;
+}
+
+/**
+ * Formats validation errors as claim paths and rule descriptions only, so the message can be
+ * logged and returned without exposing claim values.
+ */
+function formatClaimErrors(errors: ErrorObject[] | null | undefined): string {
+    return (errors ?? [])
+        .map((error) => {
+            if (error.keyword === "required") {
+                return `${joinClaimPath(error.instancePath, error.params.missingProperty)}: missing required claim`;
+            }
+            if (error.keyword === "additionalProperties") {
+                return `${joinClaimPath(error.instancePath, error.params.additionalProperty)}: unexpected claim`;
+            }
+            return `${error.instancePath || "/"}: ${error.message}`;
+        })
+        .join("; ");
 }

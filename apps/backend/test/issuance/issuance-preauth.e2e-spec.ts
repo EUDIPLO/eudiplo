@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { readFileSync } from "node:fs";
 import { INestApplication } from "@nestjs/common";
 import {
     clientAuthenticationAnonymous,
@@ -8,6 +9,7 @@ import {
 import {
     createKeyAttestationJwt,
     Openid4vciClient,
+    type Openid4vciRetrieveCredentialsError,
 } from "@openid4vc/openid4vci";
 import { digest } from "@owf/crypto";
 import { X509Certificate } from "@peculiar/x509";
@@ -18,6 +20,7 @@ import request from "supertest";
 import { App } from "supertest/types";
 import { Agent, setGlobalDispatcher } from "undici";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
+import { buildClaims } from "../../src/issuer/configuration/credentials/utils/derive.js";
 import { IssuanceDto } from "../../src/issuer/configuration/issuance/dto/issuance.dto.js";
 import {
     callbacks,
@@ -842,6 +845,80 @@ describe("Issuance - Pre-authorized Code Flow", () => {
         expect(nock.isDone()).toBe(true);
     });
 
+    test("rejects webhook claims that miss a required claim", async () => {
+        nock("http://localhost:8787")
+            .post("/request", () => true)
+            .reply(200, { citizen: {} });
+
+        const offerResponse = await createWebhookOffer("citizen");
+
+        expect(await getCredentialErrorResponse(offerResponse)).toMatchObject({
+            error: "credential_request_denied",
+            error_description: expect.stringContaining(
+                "/town: missing required claim",
+            ),
+        });
+    });
+
+    test("rejects webhook claims with an unexpected claim", async () => {
+        nock("http://localhost:8787")
+            .post("/request", () => true)
+            .reply(200, { citizen: { town: "Köln", nickname: "Kölsche" } });
+
+        const offerResponse = await createWebhookOffer("citizen");
+        const errorResponse = await getCredentialErrorResponse(offerResponse);
+
+        expect(errorResponse).toMatchObject({
+            error: "credential_request_denied",
+            error_description: expect.stringContaining(
+                "/nickname: unexpected claim",
+            ),
+        });
+        expect(errorResponse?.error_description).not.toContain("Kölsche");
+    });
+
+    test("rejects webhook claims with an invalid nested claim", async () => {
+        const fixture = JSON.parse(
+            readFileSync(
+                new URL(
+                    "../fixtures/haip/issuance/credentials/pid-no-key.json",
+                    import.meta.url,
+                ),
+                "utf-8",
+            ),
+        );
+        const claims = buildClaims(fixture.spec.fields) as Record<string, any>;
+        claims.address.street_address = 42;
+        nock("http://localhost:8787")
+            .post("/request", () => true)
+            .reply(200, { "pid-no-key": claims });
+
+        const offerResponse = await createWebhookOffer("pid-no-key");
+
+        expect(await getCredentialErrorResponse(offerResponse)).toMatchObject({
+            error: "credential_request_denied",
+            error_description: expect.stringContaining(
+                "/address/street_address: must be string",
+            ),
+        });
+    });
+
+    test("rejects inline claims with a wrong type when creating the offer", async () => {
+        await request(app.getHttpServer())
+            .post("/issuer/offer")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                flow: "pre_authorized_code",
+                response_type: "uri",
+                credentialConfigurationIds: ["citizen"],
+                credentialClaims: {
+                    citizen: { type: "inline", claims: { town: 5 } },
+                },
+            })
+            .expect(409);
+    });
+
     test("pre-authorized flow defaults to built-in authorization server", async () => {
         const offerResponse = await request(app.getHttpServer())
             .post("/issuer/offer")
@@ -893,7 +970,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
         );
     });
 
-    async function getClaims(offerResponse: any): Promise<Record<string, any>> {
+    async function retrieveCredentials(offerResponse: any) {
         const holderKeyPair = await generateKeyPair("ES256", {
             extractable: true,
         });
@@ -938,7 +1015,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
             nonce: nonceResponse.c_nonce,
         });
 
-        const credentialResponse = await client.retrieveCredentials({
+        return client.retrieveCredentials({
             accessToken: accessTokenResponse.access_token,
             credentialConfigurationId:
                 credentialOffer.credential_configuration_ids[0],
@@ -947,9 +1024,45 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                 jwt: [proofJwt],
             },
         });
+    }
+
+    async function getClaims(offerResponse: any): Promise<Record<string, any>> {
+        const credentialResponse = await retrieveCredentials(offerResponse);
         const credential = (
             credentialResponse.credentialResponse.credentials?.[0] as any
         ).credential;
         return sdjwt.getClaims(credential) as Promise<Record<string, any>>;
+    }
+
+    async function getCredentialErrorResponse(offerResponse: any) {
+        const error = await retrieveCredentials(offerResponse).then(
+            () => {
+                throw new Error("Expected the credential request to fail");
+            },
+            (error: Openid4vciRetrieveCredentialsError) => error,
+        );
+        return error.response.credentialErrorResponseResult?.data;
+    }
+
+    function createWebhookOffer(credentialConfigurationId: string) {
+        return request(app.getHttpServer())
+            .post("/issuer/offer")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                flow: "pre_authorized_code",
+                response_type: "uri",
+                credentialConfigurationIds: [credentialConfigurationId],
+                credentialClaims: {
+                    [credentialConfigurationId]: {
+                        type: "webhook",
+                        webhook: {
+                            url: "http://localhost:8787/request",
+                            auth: { type: "none" },
+                        },
+                    },
+                },
+            })
+            .expect(201);
     }
 });

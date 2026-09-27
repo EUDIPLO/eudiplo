@@ -197,6 +197,38 @@ when saved.
 
 This structure improves readability in config files and enables grouped rendering in form-based UIs.
 
+### Claim Validation
+
+When a configuration defines `fields`, EUDIPLO derives a schema from them and validates the final
+claims right before the credential is signed. This applies to every claim source: static
+defaults, inline claims passed with the offer, claims webhooks and attribute providers.
+
+A credential is not issued if the claims:
+
+- miss a claim marked as `mandatory`,
+- contain a claim with a different `type`,
+- contain a claim that is not defined in `fields` (at the top level or inside an object that
+  defines `children`), or
+- contain an invalid nested structure.
+
+The wallet receives a `credential_request_denied` error whose description lists the affected claim
+paths, for example `/address/street_address: must be string`. Claim values are never included.
+
+Objects that need additional dynamic properties can opt out of the unknown-claim check with
+`additionalProperties` in their `constraints`. An `object` field without `children` accepts any
+properties.
+
+```json
+{
+    "path": ["metadata"],
+    "type": "object",
+    "constraints": { "additionalProperties": true },
+    "children": [{ "path": ["source"], "type": "string" }]
+}
+```
+
+Configurations without `fields` are not validated.
+
 ### Attribute Provider
 
 For dynamic claim retrieval, configure an Attribute Provider that is called during issuance:
