@@ -10,6 +10,11 @@ export function createDoctorCommand(
     return new Command("doctor")
         .description("Run deployment diagnostics")
         .option("--instance <name>", "select a configured instance")
+        .option("--all", "run the checks for every configured instance")
+        .option(
+            "--strict",
+            "treat warnings as failures (skipped checks never fail)",
+        )
         .action(async (options) => {
             const { config } = await loadCliState(context);
             setExitCode(

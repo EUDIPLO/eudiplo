@@ -1,3 +1,4 @@
+import type { CertificateReader } from "./services/tls-expiry.js";
 export type DeploymentTarget = "compose" | "external" | "kubernetes";
 type CliInstallationMethod = "npm" | "standalone";
 
@@ -31,6 +32,8 @@ export interface CommandContext {
     stdout: Pick<NodeJS.WriteStream, "write">;
     stderr: Pick<NodeJS.WriteStream, "write">;
     fetch: typeof fetch;
+    /** Reads a peer certificate; injectable so tests never open sockets. */
+    readCertificate?: CertificateReader;
 }
 
 export interface DriverCommandOptions {
@@ -41,7 +44,7 @@ export interface DriverCommandOptions {
     context: CommandContext;
 }
 
-export type CheckStatus = "pass" | "warn" | "fail";
+export type CheckStatus = "pass" | "warn" | "fail" | "skip";
 
 export interface DoctorCheck {
     name: string;

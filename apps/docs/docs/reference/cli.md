@@ -151,6 +151,8 @@ These commands work with both `compose` and `external` instances without requiri
 ```bash
 # Check instance health and connectivity
 eudiplo doctor --instance production
+eudiplo doctor --all       # every configured instance
+eudiplo doctor --strict    # warnings count as failures
 
 # Check deployment status
 eudiplo status --instance production
@@ -173,7 +175,11 @@ eudiplo version     # CLI version + update check
 
 **What they do:**
 
-- `doctor` — Checks public URL, API reachability, `/health`, optional client connectivity, and authentication env vars
+- `doctor` — Runs production-readiness checks and prints one line per check with a summary. Each check reports `PASS`, `WARN`, `FAIL` or `SKIP`; `SKIP` means the check could not run here (for example no client URL, or an HTTP-only instance), and skipped checks never fail the command. `--all` checks every configured instance, `--strict` turns warnings into failures. Exit code is 1 when anything failed
+
+  Checks: public URL (HTTPS), API reachability, `/health`, TLS certificate expiry (warns within 30 days), authentication configuration, CLI/backend version compatibility, KMS provider health, client connectivity, plus deployment-specific checks. For Compose instances those are the container runtime, whether its Compose provider works, the presence of the Compose files, and the state and health of the project's containers; for Kubernetes, `kubectl`, cluster scope, namespace, workloads and service endpoints
+
+  The version and KMS checks call authenticated endpoints, so they need `EUDIPLO_CLIENT_ID` and `EUDIPLO_CLIENT_SECRET`. Without them both checks are skipped rather than failed. Tokens, credentials and raw provider error text are never printed
 - `open` — Opens the instance's web client, or the management API docs with `--docs`. When no browser is available (SSH, containers, CI, non-interactive shells) it prints the URL instead. Inside WSL it uses `wslview` when installed, and `$BROWSER` is honoured when set to a plain command
 - `config validate` — Parses local CLI config, validates instance targets and HTTP(S) URLs
 - `config path` — Prints the resolved CLI config file path

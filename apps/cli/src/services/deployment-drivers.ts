@@ -27,6 +27,10 @@ import {
     buildComposeRestartArgs,
     parseServiceList,
 } from "./compose-args.js";
+import {
+    parseContainerStates,
+    summarizeContainerStates,
+} from "./container-state.js";
 import type { KubernetesScope } from "./kubectl.js";
 import {
     buildCanIArgs,
@@ -70,6 +74,12 @@ export const drivers: Record<DeploymentTarget, DeploymentDriver> = {
                     ? `${runtime.name} found at ${runtime.command}`
                     : "Docker or Podman was not found in a supported install location.",
             });
+            if (runtime) {
+                checks.push(await composeProviderCheck(runtime, context));
+                checks.push(
+                    await composeServicesCheck(runtime, instance, context),
+                );
+            }
             for (const composeFile of getComposeFiles(instance)) {
                 let found = true;
                 try {
@@ -859,6 +869,107 @@ async function resolveComposeService(
     }
     assertKnownService(service, parseServiceList(listed.stdout));
     return service;
+}
+
+/**
+ * `podman compose` delegates to an external provider, and a broken or
+ * missing provider only shows up when a command is run. Asking the runtime
+ * for its compose version surfaces that here instead.
+ */
+async function composeProviderCheck(
+    runtime: ComposeRuntime,
+    context: CommandContext,
+): Promise<DoctorCheck> {
+    const version = await captureRuntime(
+        runtime.command,
+        ["compose", "version"],
+        context,
+    );
+    if (version.code !== 0) {
+        return {
+            name: "compose provider",
+            status: "fail",
+            message: `${runtime.name} compose is not usable: ${firstLine(version.stderr) || `exit code ${version.code}`}`,
+        };
+    }
+    return {
+        name: "compose provider",
+        status: "pass",
+        message: firstLine(version.stdout) || `${runtime.name} compose works`,
+    };
+}
+
+async function composeServicesCheck(
+    runtime: ComposeRuntime,
+    instance: InstanceConfig,
+    context: CommandContext,
+): Promise<DoctorCheck> {
+    if (!instance.projectName) {
+        return {
+            name: "service containers",
+            status: "skip",
+            message:
+                "This instance has no Compose project name, so its containers cannot be identified.",
+        };
+    }
+    const listed = await captureRuntime(
+        runtime.command,
+        [
+            "ps",
+            "--all",
+            "--filter",
+            `label=com.docker.compose.project=${instance.projectName}`,
+            "--format",
+            "json",
+        ],
+        context,
+    );
+    if (listed.code !== 0) {
+        return {
+            name: "service containers",
+            status: "warn",
+            message: `Containers could not be listed: ${firstLine(listed.stderr) || `exit code ${listed.code}`}`,
+        };
+    }
+    try {
+        return summarizeContainerStates(
+            parseContainerStates(listed.stdout),
+            instance.projectName,
+        );
+    } catch {
+        return {
+            name: "service containers",
+            status: "warn",
+            message: `The container list returned by ${runtime.name} could not be read.`,
+        };
+    }
+}
+
+function captureRuntime(
+    command: string,
+    args: string[],
+    context: CommandContext,
+): Promise<CapturedCommand> {
+    return new Promise((resolveProcess) => {
+        const child = spawn(command, args, {
+            env: context.env,
+            stdio: ["ignore", "pipe", "pipe"],
+        });
+        let stdout = "";
+        let stderr = "";
+        child.stdout?.on("data", (chunk) => {
+            stdout += String(chunk);
+        });
+        child.stderr?.on("data", (chunk) => {
+            stderr += String(chunk);
+        });
+        child.on("error", (error) =>
+            resolveProcess({ code: 1, stdout, stderr: error.message }),
+        );
+        child.on("close", (code) =>
+            resolveProcess({ code: code ?? 1, stdout, stderr }),
+        );
+    });
 }
 
 export async function resolveComposeRuntime(

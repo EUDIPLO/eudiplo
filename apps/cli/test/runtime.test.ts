@@ -1390,6 +1390,7 @@ async function createContext(
         installationMethod?: CommandContext["installationMethod"];
         interactive?: boolean;
         prompt?: CommandContext["prompt"];
+        readCertificate?: CommandContext["readCertificate"];
     } = {},
 ) {
     const cwd = await mkdtemp(join(tmpdir(), "eudiplo-cli-work-"));
@@ -1405,6 +1406,14 @@ async function createContext(
         installationMethod: options.installationMethod,
         interactive: options.interactive,
         prompt: options.prompt,
+        // Never open a real TLS socket from the test suite.
+        readCertificate:
+            options.readCertificate ??
+            (async () => ({
+                subject: "eudiplo.example.com",
+                issuer: "Test CA",
+                validTo: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+            })),
         stdout: {
             write(chunk: string | Uint8Array) {
                 output.stdout += String(chunk);

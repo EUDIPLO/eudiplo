@@ -137,6 +137,8 @@ These commands work with both `compose` and `external` instances and do not requ
 
 ```bash
 eudiplo doctor --instance production
+eudiplo doctor --all
+eudiplo doctor --strict
 eudiplo status --instance production
 eudiplo open --instance production
 eudiplo config validate
@@ -147,7 +149,9 @@ eudiplo version
 
 `--version` and `-v` print the installed CLI version without network access. `version` also checks the npm registry and reports whether an update is available.
 
-`doctor` checks the configured public URL, API reachability, `/health`, optional client connectivity, and whether authentication environment variables are available.
+`doctor` checks the configured public URL, API reachability, `/health`, TLS certificate expiry, authentication, CLI/backend version compatibility, KMS provider health, optional client connectivity, and deployment-specific state such as the Compose runtime, its provider and the project's containers.
+
+Each check reports `PASS`, `WARN`, `FAIL` or `SKIP`. A skipped check could not run in this environment and never fails the command; `--strict` turns warnings into failures, and `--all` runs the checks for every configured instance. Set `EUDIPLO_CLIENT_ID` and `EUDIPLO_CLIENT_SECRET` to include the authenticated checks.
 
 `config validate` parses the local CLI config, validates instance targets and HTTP(S) URLs, verifies the default instance points to a configured instance, and prints the configured instances. It does not require Docker or contact the deployment.
 
