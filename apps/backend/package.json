@@ -131,7 +131,7 @@
         "@types/node": "^26.4.0",
         "@types/passport-jwt": "^4.0.1",
         "@types/supertest": "^7.2.1",
-        "@vitest/coverage-v8": "^4.1.11",
+        "@vitest/coverage-v8": "^5.0.1",
         "dotenv": "^18.0.1",
         "express": "^5.2.1",
         "nock": "^14.0.17",
