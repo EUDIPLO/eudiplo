@@ -15,20 +15,10 @@ import { TypeOrmSessionRetentionPolicies } from "./adapters/typeorm-session-rete
 import { ChangeSessionState } from "./application/change-session-state.js";
 import { CleanupSessions } from "./application/cleanup-sessions.js";
 import { CreateSession } from "./application/create-session.js";
-import { DeleteSession } from "./application/delete-session.js";
-import { GetIso18013Session } from "./application/get-iso18013-session.js";
-import { GetSessionByAuthorizationCode } from "./application/get-session-by-authorization-code.js";
-import { GetSessionByRefreshToken } from "./application/get-session-by-refresh-token.js";
-import { GetSessionByRequestUri } from "./application/get-session-by-request-uri.js";
-import { GetSessionForInternalFlow } from "./application/get-session-for-internal-flow.js";
-import { GetSessionForTenant } from "./application/get-session-for-tenant.js";
-import { GetSessionForWalletRequest } from "./application/get-session-for-wallet-request.js";
 import { InitializeSessionMetrics } from "./application/initialize-session-metrics.js";
-import { ListSessions } from "./application/list-sessions.js";
 import { RecordFailedTxCodeAttempt } from "./application/record-failed-tx-code-attempt.js";
 import { ResolveExternalAuthorizationSession } from "./application/resolve-external-authorization-session.js";
-import { UpdateSessionForTenant } from "./application/update-session-for-tenant.js";
-import { UpdateUnconsumedSession } from "./application/update-unconsumed-session.js";
+import { SessionStore } from "./application/session-store.js";
 import { SessionCleanupMode } from "./domain/session-retention.js";
 import { Session } from "./entities/session.entity.js";
 import { SessionLogEntry } from "./entities/session-log-entry.entity.js";
@@ -54,7 +44,7 @@ import { SessionConfigController } from "./session-config.controller.js";
 import { SessionConfigService } from "./session-config.service.js";
 import { SessionEventsController } from "./session-events.controller.js";
 import { SessionEventsService } from "./session-events.service.js";
-import { SESSION_SETTINGS } from "./session-settings.js";
+import { SESSION_SETTINGS, type SessionSettings } from "./session-settings.js";
 
 /**
  * SessionModule is responsible for managing user sessions.
@@ -76,58 +66,10 @@ import { SESSION_SETTINGS } from "./session-settings.js";
             ) => new CreateSession(sessions, metrics),
         },
         {
-            provide: UpdateSessionForTenant,
+            provide: SessionStore,
             inject: [SESSION_REPOSITORY],
             useFactory: (sessions: SessionRepository) =>
-                new UpdateSessionForTenant(sessions),
-        },
-        {
-            provide: UpdateUnconsumedSession,
-            inject: [SESSION_REPOSITORY],
-            useFactory: (sessions: SessionRepository) =>
-                new UpdateUnconsumedSession(sessions),
-        },
-        {
-            provide: GetSessionForWalletRequest,
-            inject: [SESSION_REPOSITORY],
-            useFactory: (sessions: SessionRepository) =>
-                new GetSessionForWalletRequest(sessions),
-        },
-        {
-            provide: GetSessionForInternalFlow,
-            inject: [SESSION_REPOSITORY],
-            useFactory: (sessions: SessionRepository) =>
-                new GetSessionForInternalFlow(sessions),
-        },
-        {
-            provide: GetIso18013Session,
-            inject: [SESSION_REPOSITORY],
-            useFactory: (sessions: SessionRepository) =>
-                new GetIso18013Session(sessions),
-        },
-        {
-            provide: GetSessionByAuthorizationCode,
-            inject: [SESSION_REPOSITORY],
-            useFactory: (sessions: SessionRepository) =>
-                new GetSessionByAuthorizationCode(sessions),
-        },
-        {
-            provide: GetSessionByRefreshToken,
-            inject: [SESSION_REPOSITORY],
-            useFactory: (sessions: SessionRepository) =>
-                new GetSessionByRefreshToken(sessions),
-        },
-        {
-            provide: GetSessionByRequestUri,
-            inject: [SESSION_REPOSITORY],
-            useFactory: (sessions: SessionRepository) =>
-                new GetSessionByRequestUri(sessions),
-        },
-        {
-            provide: GetSessionForTenant,
-            inject: [SESSION_REPOSITORY],
-            useFactory: (sessions: SessionRepository) =>
-                new GetSessionForTenant(sessions),
+                new SessionStore(sessions),
         },
         {
             provide: ResolveExternalAuthorizationSession,
@@ -142,18 +84,6 @@ import { SESSION_SETTINGS } from "./session-settings.js";
                 new RecordFailedTxCodeAttempt(sessions),
         },
         {
-            provide: ListSessions,
-            inject: [SESSION_REPOSITORY],
-            useFactory: (sessions: SessionRepository) =>
-                new ListSessions(sessions),
-        },
-        {
-            provide: DeleteSession,
-            inject: [SESSION_REPOSITORY],
-            useFactory: (sessions: SessionRepository) =>
-                new DeleteSession(sessions),
-        },
-        {
             provide: SESSION_RETENTION_POLICIES,
             useClass: TypeOrmSessionRetentionPolicies,
         },
@@ -163,19 +93,17 @@ import { SESSION_SETTINGS } from "./session-settings.js";
                 SESSION_REPOSITORY,
                 SESSION_RETENTION_POLICIES,
                 ChangeSessionState,
-                ConfigService,
+                SESSION_SETTINGS,
             ],
             useFactory: (
                 sessions: SessionRepository,
                 policies: SessionRetentionPolicies,
                 changeState: ChangeSessionState,
-                config: ConfigService,
+                settings: SessionSettings,
             ) =>
                 new CleanupSessions(sessions, policies, changeState, {
-                    ttlSeconds: config.getOrThrow<number>("SESSION_TTL"),
-                    cleanupMode: config.getOrThrow<SessionCleanupMode>(
-                        "SESSION_CLEANUP_MODE",
-                    ),
+                    ttlSeconds: settings.defaultTtlSeconds,
+                    cleanupMode: settings.defaultCleanupMode,
                 }),
         },
         {
@@ -235,21 +163,11 @@ import { SESSION_SETTINGS } from "./session-settings.js";
         { provide: SESSION_REPOSITORY, useClass: TypeOrmSessionRepository },
     ],
     exports: [
+        SessionStore,
+        CreateSession,
+        ChangeSessionState,
         ResolveExternalAuthorizationSession,
         RecordFailedTxCodeAttempt,
-        CleanupSessions,
-        ChangeSessionState,
-        GetSessionForTenant,
-        GetSessionByAuthorizationCode,
-        GetSessionByRefreshToken,
-        GetSessionByRequestUri,
-        GetSessionForWalletRequest,
-        GetSessionForInternalFlow,
-        GetIso18013Session,
-        CreateSession,
-        UpdateSessionForTenant,
-        UpdateUnconsumedSession,
-        SESSION_REPOSITORY,
         SessionConfigService,
         SessionEventsService,
         SessionLoggingModule,

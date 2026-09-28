@@ -1,5 +1,5 @@
 import type { CredentialOfferObject } from "@openid4vc/openid4vci";
-import type { SessionRepository } from "../../../../session/ports/session.repository.js";
+import type { SessionStore } from "../../../../session/application/session-store.js";
 
 export interface CredentialOfferSettings {
     allowMultipleConsumption: boolean;
@@ -15,7 +15,7 @@ export class CredentialOfferNotFound extends Error {
 export class RetrieveCredentialOffer {
     constructor(
         private readonly sessions: Pick<
-            SessionRepository,
+            SessionStore,
             "findCredentialOffer" | "consumeCredentialOffer"
         >,
         private readonly settings: CredentialOfferSettings,

@@ -1,5 +1,5 @@
 import type { CreateSession } from "../../../../session/application/create-session.js";
-import type { UpdateSessionForTenant } from "../../../../session/application/update-session-for-tenant.js";
+import type { SessionStore } from "../../../../session/application/session-store.js";
 import type { SessionOfferRequest } from "../../../../session/domain/session-data.js";
 import type { CredentialOfferProtocol } from "../ports/credential-offer-protocol.js";
 import { BuildCredentialOfferGrants } from "./build-credential-offer-grants.js";
@@ -7,7 +7,7 @@ import { BuildCredentialOfferGrants } from "./build-credential-offer-grants.js";
 export class CreateCredentialOffer {
     constructor(
         private readonly sessions: Pick<CreateSession, "execute">,
-        private readonly update: Pick<UpdateSessionForTenant, "execute">,
+        private readonly update: Pick<SessionStore, "updateForTenant">,
         private readonly protocol: CredentialOfferProtocol,
         private readonly newId: () => string,
     ) {}
@@ -55,7 +55,7 @@ export class CreateCredentialOffer {
             request.credentialConfigurationIds,
             grants,
         );
-        await this.update.execute(tenantId, id, {
+        await this.update.updateForTenant(tenantId, id, {
             offer: offer.object,
             offerUrl: offer.uri,
         });

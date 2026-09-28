@@ -49,7 +49,7 @@ describe("OID4VP state mismatch handling", () => {
                         logCredentialVerification: vi.fn(),
                         logFlowError,
                     },
-                    updateSessionForTenant: { execute: update },
+                    sessionStore: { updateForTenant: update },
                     processVerifiedPresentation:
                         new ProcessVerifiedPresentation(
                             new ParseAuthorizationResponse(),
@@ -57,7 +57,7 @@ describe("OID4VP state mismatch handling", () => {
                             { publish },
                         ),
                     failPresentationResponse: new FailPresentationResponse({
-                        execute: update,
+                        updateForTenant: update,
                     }),
                 },
             );
@@ -134,12 +134,12 @@ describe("OID4VP concurrent response handling", () => {
                 processVerifiedPresentation: new ProcessVerifiedPresentation(
                     new ParseAuthorizationResponse(),
                     new CompletePresentationResponse({
-                        execute: vi.fn().mockResolvedValue(false),
+                        updateIfUnconsumed: vi.fn().mockResolvedValue(false),
                     }),
                     { publish },
                 ),
                 failPresentationResponse: new FailPresentationResponse({
-                    execute: update,
+                    updateForTenant: update,
                 }),
             },
         );

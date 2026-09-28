@@ -49,7 +49,7 @@ describe("Iso18013Service.createOffer per-request webhook override", () => {
                 .mockResolvedValue({ x: "x", y: "y" }),
         };
         const createSession = { execute: sessionCreate };
-        const updateSessionForTenant = { execute: vi.fn() };
+        const sessionStore = { updateForTenant: vi.fn() };
         const webhookEndpointRepo = {
             findOneBy: vi.fn().mockResolvedValue({
                 url: "https://config.example/hook",
@@ -59,8 +59,7 @@ describe("Iso18013Service.createOffer per-request webhook override", () => {
         service = new Iso18013Service(
             presentationsService as any,
             createSession as any,
-            updateSessionForTenant as any,
-            { execute: vi.fn() } as any, // getIso18013Session
+            sessionStore as any,
             encryptionService as any,
             {} as any, // mdocverifierService
             {} as any, // webhookService

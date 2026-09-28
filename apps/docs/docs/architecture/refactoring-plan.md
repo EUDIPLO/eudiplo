@@ -15,7 +15,7 @@ This plan is not an instruction to execute tasks automatically. Pick one slice, 
 | --- | --- | --- | --- |
 | 1 | Target architecture documented | Done | Keep [backend-architecture.md](./backend-architecture.md) as the single placement reference. |
 | 2 | Boundary enforcement | Done | Layer checks plus a ratchet baseline for legacy debt. Remaining gap E5 under [enforcement gaps](#enforcement-gaps). |
-| 3–4 | Session repository and lifecycle | Done | Follow-ups S1–S3 below. |
+| 3–4 | Session repository and lifecycle | Done | Other features use `SessionStore` and session use cases; the repository port stays inside `SessionModule`. |
 | 5–6 | OID4VCI use cases, no Express | Partial | Split `Oid4vciProtocolMetadata`, finish deferred issuance, remove forwarding wrappers. Authorization services still orchestrate in legacy services. |
 | 7–9 | Issuer credential formats | Done | Registry dispatches to SD-JWT VC and mdoc issuers typed on the plain `CredentialConfiguration` model. |
 | 10–11 | Claims provider and publisher ports | Done | Unify claim-source selection between `IssueCredential` and `ConfiguredCredentialClaimsProvider`. |
@@ -55,7 +55,6 @@ Findings from the 2026-09-28 review that are not fixed yet. Items marked *pre-ex
 - **V1 — OID4VP replay check is not atomic** (*pre-existing*). `consumed` is read early and written after verification, so two concurrent responses can both complete and both trigger webhooks. Use a conditional update.
 - **V2 — Verifier terminal states bypass `ChangeSessionState`** (*pre-existing*). OID4VP and ISO 18013 set `Completed`/`Failed` through generic updates, so no SSE event or metric is emitted. `SessionUpdate` should not accept `status`.
 - **I1 — Credential nonce consumption race** (*pre-existing*). `ValidateAndConsumeCredentialNonces` ignores the result of `delete()`, so two concurrent requests can use one nonce.
-- **S1 — Whole `SESSION_REPOSITORY` exported.** Importers get privileged cross-tenant maintenance operations. Export use cases or a narrower port.
 - **C7 — Client API schema rename.** Swagger now names `ClientResponseDto` instead of `ClientEntity`. Regenerate `packages/eudiplo-sdk-core` and update `apps/client` in the same change.
 
 ### Cleanup
@@ -63,7 +62,6 @@ Findings from the 2026-09-28 review that are not fixed yet. Items marked *pre-ex
 - **O1** Split `Oid4vciProtocolMetadata` into authorization-server selection, an external AS metadata resolver (cache and federation check), a registration-certificate provider port, and a `BuildIssuerMetadata` use case. Replace its `BadRequestException`s with application errors.
 - **O2** Finish deferred issuance: all persistence through `DeferredTransactionRepository`, reuse the proof verifier and authorization-details use case, and unify resource-token verification for the credential, notification and deferred endpoints.
 - **O3** Remove forwarding wrappers in `Oid4vciService` and unused providers in `issuance.module.ts`.
-- **S2** Replace the seven near-identical `GetSession*` use cases with one lookup service, and build session retention settings once.
 
 ### Enforcement gaps
 

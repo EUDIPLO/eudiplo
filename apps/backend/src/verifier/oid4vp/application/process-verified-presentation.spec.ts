@@ -39,7 +39,7 @@ describe("presentation completion and publication", () => {
         });
         const useCase = new ProcessVerifiedPresentation(
             new ParseAuthorizationResponse(),
-            new CompletePresentationResponse({ execute: update }),
+            new CompletePresentationResponse({ updateIfUnconsumed: update }),
             { publish },
         );
         return { useCase, update, publish, writes };
@@ -114,14 +114,14 @@ describe("presentation completion and publication", () => {
     it.each([undefined, "invalid_signature"])(
         "persists failure and clears keys with code %s",
         async (code) => {
-            const execute = vi.fn();
-            await new FailPresentationResponse({ execute }).execute({
+            const updateForTenant = vi.fn();
+            await new FailPresentationResponse({ updateForTenant }).execute({
                 tenantId: "tenant",
                 sessionId: "session",
                 message: "failed",
                 code,
             });
-            expect(execute).toHaveBeenCalledWith("tenant", "session", {
+            expect(updateForTenant).toHaveBeenCalledWith("tenant", "session", {
                 status: "failed",
                 errorReason: "failed",
                 responseEncryptionPrivateJwk: null,
@@ -140,7 +140,7 @@ describe("presentation completion and publication", () => {
         const useCase = new ProcessVerifiedPresentation(
             new ParseAuthorizationResponse(),
             new CompletePresentationResponse({
-                execute: vi.fn().mockResolvedValue(false),
+                updateIfUnconsumed: vi.fn().mockResolvedValue(false),
             }),
             { publish },
         );

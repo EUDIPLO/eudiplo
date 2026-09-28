@@ -278,8 +278,8 @@ describe("session lifecycle module wiring", () => {
         const { CreateSession } = await import(
             "../../src/session/application/create-session.js"
         );
-        const { UpdateSessionForTenant } = await import(
-            "../../src/session/application/update-session-for-tenant.js"
+        const { SessionStore } = await import(
+            "../../src/session/application/session-store.js"
         );
         const { ResolveExternalAuthorizationSession } = await import(
             "../../src/session/application/resolve-external-authorization-session.js"
@@ -288,7 +288,7 @@ describe("session lifecycle module wiring", () => {
             "../../src/session/session.controller.js"
         );
         const createSession = app.get(CreateSession);
-        const updateSessionForTenant = app.get(UpdateSessionForTenant);
+        const sessionStore = app.get(SessionStore);
         const id = randomUUID();
         await createSession.execute({
             id,
@@ -297,20 +297,19 @@ describe("session lifecycle module wiring", () => {
             authorization_code: "module-code",
         });
         try {
-            const { GetSessionByAuthorizationCode } = await import(
-                "../../src/session/application/get-session-by-authorization-code.js"
-            );
             expect(
-                await app
-                    .get(GetSessionByAuthorizationCode)
-                    .execute("tenant-a", "module-code"),
+                await sessionStore.getByAuthorizationCode(
+                    "tenant-a",
+                    "module-code",
+                ),
             ).toMatchObject({ id });
             await expect(
-                app
-                    .get(GetSessionByAuthorizationCode)
-                    .execute("tenant-b", "module-code"),
+                sessionStore.getByAuthorizationCode("tenant-b", "module-code"),
             ).rejects.toThrow("Session not found");
-            await updateSessionForTenant.execute("tenant-a", id, {
+            await expect(
+                sessionStore.getByAuthorizationCode("tenant-a", undefined),
+            ).rejects.toThrow("Session not found");
+            await sessionStore.updateForTenant("tenant-a", id, {
                 requestObject: "request",
             });
             const token = { entity: { id: "tenant-a" } } as Parameters<
@@ -336,11 +335,8 @@ describe("session lifecycle module wiring", () => {
                     id,
                 );
             expect(bound.externalSubject).toBeNull();
-            const { GetSessionForTenant } = await import(
-                "../../src/session/application/get-session-for-tenant.js"
-            );
             expect(
-                await app.get(GetSessionForTenant).execute("tenant-a", id),
+                await sessionStore.getForTenant("tenant-a", id),
             ).toMatchObject({
                 externalIssuer: "issuer",
                 externalSubject: "subject",

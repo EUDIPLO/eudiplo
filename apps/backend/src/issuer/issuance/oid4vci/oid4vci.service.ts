@@ -24,8 +24,7 @@ import { Span, TraceService } from "nestjs-otel";
 import { v4 } from "uuid";
 import { TokenPayload } from "../../../auth/token.decorator.js";
 import { EncryptionService } from "../../../crypto/encryption/encryption.service.js";
-import { GetSessionForTenant } from "../../../session/application/get-session-for-tenant.js";
-import { UpdateSessionForTenant } from "../../../session/application/update-session-for-tenant.js";
+import { SessionStore } from "../../../session/application/session-store.js";
 import { SessionStatus } from "../../../session/domain/session-state.js";
 import { AuditLogContext } from "../../../session/logging/session-audit.service.js";
 import { SessionLoggerService } from "../../../session/logging/session-logger.service.js";
@@ -109,8 +108,7 @@ export class Oid4vciService {
         public readonly credentialsService: CredentialsService,
         @Inject(OID4VCI_SETTINGS)
         private readonly settings: Oid4vciSettings,
-        private readonly updateSessionForTenant: UpdateSessionForTenant,
-        private readonly getSessionForTenant: GetSessionForTenant,
+        private readonly sessionStore: SessionStore,
         private readonly handleCredentialNotification: HandleCredentialNotification,
         private readonly createCredentialOffer: CreateCredentialOffer,
         private readonly resolveAuthorizedCredentialConfiguration: ResolveAuthorizedCredentialConfiguration,
@@ -619,7 +617,7 @@ export class Oid4vciService {
                 id: notificationId,
                 credentialConfigurationId,
             });
-            await this.updateSessionForTenant.execute(
+            await this.sessionStore.updateForTenant(
                 session.tenantId,
                 session.id,
                 {
@@ -700,7 +698,7 @@ export class Oid4vciService {
             dpop: DPOP_PROOF_FRESHNESS,
         });
 
-        const session = await this.getSessionForTenant.execute(
+        const session = await this.sessionStore.getForTenant(
             tenantId,
             tokenPayload.sub,
         );

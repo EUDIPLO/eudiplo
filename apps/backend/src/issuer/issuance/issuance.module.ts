@@ -8,13 +8,8 @@ import { CryptoModule } from "../../crypto/crypto.module.js";
 import { RegistrarModule } from "../../registrar/registrar.module.js";
 import { ChangeSessionState } from "../../session/application/change-session-state.js";
 import { CreateSession } from "../../session/application/create-session.js";
-import { GetSessionForTenant } from "../../session/application/get-session-for-tenant.js";
 import { ResolveExternalAuthorizationSession } from "../../session/application/resolve-external-authorization-session.js";
-import { UpdateSessionForTenant } from "../../session/application/update-session-for-tenant.js";
-import {
-    SESSION_REPOSITORY,
-    type SessionRepository,
-} from "../../session/ports/session.repository.js";
+import { SessionStore } from "../../session/application/session-store.js";
 import { SessionModule } from "../../session/session.module.js";
 import { TrustModule } from "../../trust/trust.module.js";
 import { TrustStoreService } from "../../trust/trust-store.service.js";
@@ -136,8 +131,8 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
     providers: [
         {
             provide: RetrieveCredentialOffer,
-            inject: [SESSION_REPOSITORY, ConfigService],
-            useFactory: (sessions: SessionRepository, config: ConfigService) =>
+            inject: [SessionStore, ConfigService],
+            useFactory: (sessions: SessionStore, config: ConfigService) =>
                 new RetrieveCredentialOffer(sessions, {
                     allowMultipleConsumption: config.getOrThrow<boolean>(
                         "ISSUER_MULTI_CONSUMPTION",
@@ -146,8 +141,8 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
         },
         {
             provide: RecordCredentialNotification,
-            inject: [SESSION_REPOSITORY],
-            useFactory: (sessions: SessionRepository) =>
+            inject: [SessionStore],
+            useFactory: (sessions: SessionStore) =>
                 new RecordCredentialNotification(sessions),
         },
         BuildCredentialOfferGrants,
@@ -174,14 +169,10 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
         },
         {
             provide: CreateCredentialOffer,
-            inject: [
-                CreateSession,
-                UpdateSessionForTenant,
-                CREDENTIAL_OFFER_PROTOCOL,
-            ],
+            inject: [CreateSession, SessionStore, CREDENTIAL_OFFER_PROTOCOL],
             useFactory: (
                 sessions: CreateSession,
-                update: UpdateSessionForTenant,
+                update: SessionStore,
                 protocol: CredentialOfferProtocol,
             ) => new CreateCredentialOffer(sessions, update, protocol, v4),
         },
@@ -212,12 +203,12 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
             provide: CompleteDeferredCredential,
             inject: [
                 DEFERRED_TRANSACTION_REPOSITORY,
-                GetSessionForTenant,
+                SessionStore,
                 CredentialsServiceDeferredCredentialIssuer,
             ],
             useFactory: (
                 transactions: DeferredTransactionRepository,
-                sessions: GetSessionForTenant,
+                sessions: SessionStore,
                 issuer: CredentialsServiceDeferredCredentialIssuer,
             ) => new CompleteDeferredCredential(transactions, sessions, issuer),
         },
@@ -316,13 +307,13 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
             provide: ResolveCredentialSession,
             inject: [
                 CREDENTIAL_AUTHORIZATION_SOURCES,
-                GetSessionForTenant,
+                SessionStore,
                 ResolveExternalAuthorizationSession,
                 CREDENTIAL_CLAIMS_PROVIDER,
             ],
             useFactory: (
                 sources: CredentialAuthorizationSources,
-                sessions: GetSessionForTenant,
+                sessions: SessionStore,
                 externalSessions: ResolveExternalAuthorizationSession,
                 claims: CredentialClaimsProvider,
             ) =>

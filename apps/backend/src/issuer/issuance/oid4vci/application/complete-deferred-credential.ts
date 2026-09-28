@@ -1,5 +1,5 @@
 import type { Jwk } from "@openid4vc/oauth2";
-import type { GetSessionForTenant } from "../../../../session/application/get-session-for-tenant.js";
+import type { SessionStore } from "../../../../session/application/session-store.js";
 import type {
     DeferredCredentialIssuer,
     DeferredTransactionData,
@@ -18,7 +18,7 @@ export class CompleteDeferredCredential {
             DeferredTransactionRepository,
             "findPending" | "markReady"
         >,
-        private readonly sessions: Pick<GetSessionForTenant, "execute">,
+        private readonly sessions: Pick<SessionStore, "getForTenant">,
         private readonly issuer: DeferredCredentialIssuer,
     ) {}
 
@@ -31,7 +31,7 @@ export class CompleteDeferredCredential {
         );
         if (!transaction) return null;
 
-        const session = await this.sessions.execute(
+        const session = await this.sessions.getForTenant(
             transaction.tenantId,
             transaction.sessionId,
         );

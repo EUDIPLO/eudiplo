@@ -11,7 +11,7 @@ import { Repository } from "typeorm";
 import { v4 } from "uuid";
 import { CryptoService } from "../../../../../crypto/crypto.service.js";
 import { CreateSession } from "../../../../../session/application/create-session.js";
-import { UpdateSessionForTenant } from "../../../../../session/application/update-session-for-tenant.js";
+import { SessionStore } from "../../../../../session/application/session-store.js";
 import { Oid4vpService } from "../../../../../verifier/oid4vp/oid4vp.service.js";
 import { PresentationsService } from "../../../../../verifier/presentations/presentations.service.js";
 import { CredentialsService } from "../../../../configuration/credentials/credentials.service.js";
@@ -94,7 +94,7 @@ export class InteractiveAuthorizationService {
         private readonly configService: ConfigService,
         private readonly cryptoService: CryptoService,
         private readonly createSession: CreateSession,
-        private readonly updateSessionForTenant: UpdateSessionForTenant,
+        private readonly sessionStore: SessionStore,
         private readonly issuanceService: IssuanceService,
         private readonly credentialsService: CredentialsService,
         private readonly oid4vpService: Oid4vpService,
@@ -641,7 +641,7 @@ export class InteractiveAuthorizationService {
             // If there's an issuer_state, also update the main session
             if (authSession.issuerState) {
                 try {
-                    await this.updateSessionForTenant.execute(
+                    await this.sessionStore.updateForTenant(
                         authSession.tenantId,
                         authSession.issuerState,
                         {
@@ -891,7 +891,7 @@ export class InteractiveAuthorizationService {
         // If there's an issuer_state, also update the main session
         if (authSession.issuerState) {
             try {
-                await this.updateSessionForTenant.execute(
+                await this.sessionStore.updateForTenant(
                     authSession.tenantId,
                     authSession.issuerState,
                     {

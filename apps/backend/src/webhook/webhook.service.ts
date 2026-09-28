@@ -2,7 +2,7 @@ import { HttpService } from "@nestjs/axios";
 import { Injectable } from "@nestjs/common";
 import { PinoLogger } from "nestjs-pino";
 import { firstValueFrom } from "rxjs";
-import { UpdateSessionForTenant } from "../session/application/update-session-for-tenant.js";
+import { SessionStore } from "../session/application/session-store.js";
 import type {
     Notification,
     SessionData as Session,
@@ -50,7 +50,7 @@ export interface WebhookResponse {
 export class WebhookService {
     constructor(
         private readonly httpService: HttpService,
-        private readonly updateSessionForTenant: UpdateSessionForTenant,
+        private readonly sessionStore: SessionStore,
         private readonly outboundUrlPolicyService: OutboundUrlPolicyService,
         private readonly logger: PinoLogger,
     ) {
@@ -134,7 +134,7 @@ export class WebhookService {
                 if (webhookResponse.data?.redirectUri) {
                     // redirectUri is returned but no special handling needed here
                 } else if (webhookResponse.data && values.expectResponse) {
-                    await this.updateSessionForTenant.execute(
+                    await this.sessionStore.updateForTenant(
                         values.session.tenantId,
                         values.session.id,
                         {

@@ -12,8 +12,7 @@ import { Repository } from "typeorm";
 import { v4 } from "uuid";
 import { KeyChainService } from "../../../../../crypto/key/key-chain.service.js";
 import { CreateSession } from "../../../../../session/application/create-session.js";
-import { GetSessionForTenant } from "../../../../../session/application/get-session-for-tenant.js";
-import { UpdateSessionForTenant } from "../../../../../session/application/update-session-for-tenant.js";
+import { SessionStore } from "../../../../../session/application/session-store.js";
 import { SessionStatus } from "../../../../../session/domain/session-state.js";
 import { WalletAttestationService } from "../../../../../trust/wallet-attestation.service.js";
 import { Oid4vpService } from "../../../../../verifier/oid4vp/oid4vp.service.js";
@@ -51,8 +50,7 @@ export class ChainedAsVpService {
         private readonly configService: ConfigService,
         private readonly keyChainService: KeyChainService,
         private readonly createSession: CreateSession,
-        private readonly updateSessionForTenant: UpdateSessionForTenant,
-        private readonly getSessionForTenant: GetSessionForTenant,
+        private readonly sessionStore: SessionStore,
         private readonly issuanceService: IssuanceService,
         private readonly walletAttestationService: WalletAttestationService,
         private readonly traceService: TraceService,
@@ -125,7 +123,7 @@ export class ChainedAsVpService {
         let issuerState = request.issuer_state;
         if (issuerState) {
             try {
-                await this.getSessionForTenant.execute(tenantId, issuerState);
+                await this.sessionStore.getForTenant(tenantId, issuerState);
             } catch {
                 throw new BadRequestException("Invalid issuer_state");
             }
@@ -280,7 +278,7 @@ export class ChainedAsVpService {
             );
         }
 
-        const verifierSession = await this.getSessionForTenant.execute(
+        const verifierSession = await this.sessionStore.getForTenant(
             session.tenantId,
             session.id,
         );
@@ -300,7 +298,7 @@ export class ChainedAsVpService {
         }
 
         if (session.issuerState && verifierSession.credentials) {
-            await this.updateSessionForTenant.execute(
+            await this.sessionStore.updateForTenant(
                 session.tenantId,
                 session.issuerState,
                 {

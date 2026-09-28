@@ -4,8 +4,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { CryptoModule } from "../../crypto/crypto.module.js";
 import { WebhookEndpointEntity } from "../../issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
 import { RegistrarModule } from "../../registrar/registrar.module.js";
-import { UpdateSessionForTenant } from "../../session/application/update-session-for-tenant.js";
-import { UpdateUnconsumedSession } from "../../session/application/update-unconsumed-session.js";
+import { SessionStore } from "../../session/application/session-store.js";
 import { SessionModule } from "../../session/session.module.js";
 import {
     PRESENTATION_RESULT_PUBLISHER,
@@ -62,21 +61,21 @@ import { OID4VP_SETTINGS } from "./oid4vp-settings.js";
         },
         {
             provide: FailPresentationResponse,
-            inject: [UpdateSessionForTenant],
-            useFactory: (sessions: UpdateSessionForTenant) =>
+            inject: [SessionStore],
+            useFactory: (sessions: SessionStore) =>
                 new FailPresentationResponse(sessions),
         },
         {
             provide: CompletePresentationResponse,
-            inject: [UpdateUnconsumedSession],
-            useFactory: (update: UpdateUnconsumedSession) =>
-                new CompletePresentationResponse(update),
+            inject: [SessionStore],
+            useFactory: (sessions: SessionStore) =>
+                new CompletePresentationResponse(sessions),
         },
         {
             provide: RetrievePresentationRequest,
-            inject: [UpdateSessionForTenant],
-            useFactory: (updateSession: UpdateSessionForTenant) =>
-                new RetrievePresentationRequest(updateSession),
+            inject: [SessionStore],
+            useFactory: (sessions: SessionStore) =>
+                new RetrievePresentationRequest(sessions),
         },
     ],
     exports: [Oid4vpService],

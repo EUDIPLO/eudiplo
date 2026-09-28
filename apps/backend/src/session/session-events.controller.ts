@@ -17,7 +17,7 @@ import {
 } from "@nestjs/swagger";
 import { Observable, startWith } from "rxjs";
 import { JwtService } from "../auth/jwt.service.js";
-import { GetSessionForTenant } from "./application/get-session-for-tenant.js";
+import { SessionStore } from "./application/session-store.js";
 import { SessionEventsService } from "./session-events.service.js";
 
 /**
@@ -54,7 +54,7 @@ export class SessionEventsController {
 
     constructor(
         private readonly sessionEventsService: SessionEventsService,
-        private readonly getSessionForTenant: GetSessionForTenant,
+        private readonly sessionStore: SessionStore,
         private readonly jwtService: JwtService,
     ) {}
 
@@ -134,10 +134,7 @@ export class SessionEventsController {
 
         // Verify session exists and belongs to caller tenant.
         try {
-            const session = await this.getSessionForTenant.execute(
-                tenantId,
-                id,
-            );
+            const session = await this.sessionStore.getForTenant(tenantId, id);
 
             this.logger.debug(`Client subscribed to session ${id} events`);
 

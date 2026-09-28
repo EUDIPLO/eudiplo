@@ -1,9 +1,9 @@
-import type { UpdateSessionForTenant } from "../../../session/application/update-session-for-tenant.js";
+import type { SessionStore } from "../../../session/application/session-store.js";
 import { SessionStatus } from "../../../session/domain/session-state.js";
 
 export class FailPresentationResponse {
     constructor(
-        private readonly sessions: Pick<UpdateSessionForTenant, "execute">,
+        private readonly sessions: Pick<SessionStore, "updateForTenant">,
     ) {}
     async execute(input: {
         tenantId: string;
@@ -11,7 +11,7 @@ export class FailPresentationResponse {
         message: string;
         code?: string;
     }) {
-        await this.sessions.execute(input.tenantId, input.sessionId, {
+        await this.sessions.updateForTenant(input.tenantId, input.sessionId, {
             status: SessionStatus.Failed,
             errorReason: input.message,
             responseEncryptionPrivateJwk: null,

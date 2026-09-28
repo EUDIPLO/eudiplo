@@ -13,7 +13,9 @@ describe("RetrievePresentationRequest", () => {
     it("returns the cached JWT without regenerating it", async () => {
         const update = vi.fn();
         const generate = vi.fn();
-        const useCase = new RetrievePresentationRequest({ execute: update });
+        const useCase = new RetrievePresentationRequest({
+            updateForTenant: update,
+        });
 
         await expect(
             useCase.execute(
@@ -29,7 +31,9 @@ describe("RetrievePresentationRequest", () => {
 
     it("clears redirect state for a cached no-redirect request", async () => {
         const update = vi.fn().mockResolvedValue(1);
-        const useCase = new RetrievePresentationRequest({ execute: update });
+        const useCase = new RetrievePresentationRequest({
+            updateForTenant: update,
+        });
 
         await expect(
             useCase.execute(
@@ -51,7 +55,9 @@ describe("RetrievePresentationRequest", () => {
     it("generates once and persists the request object", async () => {
         const update = vi.fn().mockResolvedValue(1);
         const generate = vi.fn().mockResolvedValue("generated.jwt.value");
-        const useCase = new RetrievePresentationRequest({ execute: update });
+        const useCase = new RetrievePresentationRequest({
+            updateForTenant: update,
+        });
 
         await expect(
             useCase.execute(

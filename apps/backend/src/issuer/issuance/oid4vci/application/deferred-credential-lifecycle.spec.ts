@@ -41,7 +41,7 @@ describe("deferred credential lifecycle", () => {
         const issuer: DeferredCredentialIssuer = {
             issue: vi.fn(async () => "credential-jwt"),
         };
-        const sessions = { execute: vi.fn(async () => session) };
+        const sessions = { getForTenant: vi.fn(async () => session) };
 
         const result = await new CompleteDeferredCredential(
             repository,
@@ -81,7 +81,7 @@ describe("deferred credential lifecycle", () => {
         };
         const result = await new CompleteDeferredCredential(
             repository,
-            { execute: vi.fn() },
+            { getForTenant: vi.fn() },
             issuer,
         ).execute({
             tenantId: "tenant-1",

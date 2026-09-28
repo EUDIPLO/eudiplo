@@ -14,9 +14,7 @@ import { Secured } from "../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../auth/token.decorator.js";
 import { StatusUpdateDto } from "../issuer/status-list/dto/status-update.dto.js";
 import { StatusListService } from "../issuer/status-list/status-list.service.js";
-import { DeleteSession } from "./application/delete-session.js";
-import { GetSessionForTenant } from "./application/get-session-for-tenant.js";
-import { ListSessions } from "./application/list-sessions.js";
+import { SessionStore } from "./application/session-store.js";
 import type { SessionData } from "./domain/session-data.js";
 import { PaginatedSessionResponseDto } from "./dto/paginated-session-response.dto.js";
 import { SessionLogEntryResponseDto } from "./dto/session-log-entry-response.dto.js";
@@ -29,9 +27,7 @@ import { SessionLogStoreService } from "./logging/session-log-store.service.js";
 @Controller("session")
 export class SessionController {
     constructor(
-        private readonly listSessions: ListSessions,
-        private readonly deleteSessionUseCase: DeleteSession,
-        private readonly getSessionForTenant: GetSessionForTenant,
+        private readonly sessions: SessionStore,
         private readonly statusListService: StatusListService,
         private readonly logStoreService: SessionLogStoreService,
     ) {}
@@ -46,7 +42,7 @@ export class SessionController {
         @Token() token: TokenPayload,
         @Query() query: SessionQueryDto,
     ): Promise<PaginatedSessionResponseDto> {
-        return this.listSessions.execute(token.entity!.id, query);
+        return this.sessions.listForTenant(token.entity!.id, query);
     }
 
     /**
@@ -60,7 +56,7 @@ export class SessionController {
         @Param("id") id: string,
         @Token() token: TokenPayload,
     ): Promise<SessionData> {
-        return this.getSessionForTenant.execute(token.entity!.id, id);
+        return this.sessions.getForTenant(token.entity!.id, id);
     }
 
     /**
@@ -76,7 +72,7 @@ export class SessionController {
         @Param("id") id: string,
         @Token() user: TokenPayload,
     ): Promise<void> {
-        return this.deleteSessionUseCase.execute(user.entity!.id, id);
+        return this.sessions.deleteForTenant(user.entity!.id, id);
     }
 
     /**
@@ -91,7 +87,7 @@ export class SessionController {
         @Param("id") id: string,
         @Token() token: TokenPayload,
     ): Promise<SessionLogEntryResponseDto[]> {
-        await this.getSessionForTenant.execute(token.entity!.id, id);
+        await this.sessions.getForTenant(token.entity!.id, id);
         return this.logStoreService.findBySessionId(id);
     }
 

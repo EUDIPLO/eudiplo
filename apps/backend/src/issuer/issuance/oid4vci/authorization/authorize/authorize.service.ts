@@ -26,11 +26,8 @@ import { v4 } from "uuid";
 import { CryptoService } from "../../../../../crypto/crypto.service.js";
 import { KeyChainService } from "../../../../../crypto/key/key-chain.service.js";
 import { CreateSession } from "../../../../../session/application/create-session.js";
-import { GetSessionByAuthorizationCode } from "../../../../../session/application/get-session-by-authorization-code.js";
-import { GetSessionByRefreshToken } from "../../../../../session/application/get-session-by-refresh-token.js";
-import { GetSessionByRequestUri } from "../../../../../session/application/get-session-by-request-uri.js";
 import { RecordFailedTxCodeAttempt } from "../../../../../session/application/record-failed-tx-code-attempt.js";
-import { UpdateSessionForTenant } from "../../../../../session/application/update-session-for-tenant.js";
+import { SessionStore } from "../../../../../session/application/session-store.js";
 import { WalletAttestationService } from "../../../../../trust/wallet-attestation.service.js";
 import type { TrustListRef } from "../../../../../verifier/presentations/entities/presentation-config.entity.js";
 import { IssuanceService } from "../../../../configuration/issuance/issuance.service.js";
@@ -80,10 +77,7 @@ export class AuthorizeService {
         private readonly configService: ConfigService,
         private readonly cryptoService: CryptoService,
         private readonly createSession: CreateSession,
-        private readonly updateSessionForTenant: UpdateSessionForTenant,
-        private readonly getSessionByAuthorizationCode: GetSessionByAuthorizationCode,
-        private readonly getSessionByRefreshToken: GetSessionByRefreshToken,
-        private readonly getSessionByRequestUri: GetSessionByRequestUri,
+        private readonly sessionStore: SessionStore,
         private readonly recordFailedTxCodeAttempt: RecordFailedTxCodeAttempt,
         private readonly issuanceService: IssuanceService,
         private readonly walletAttestationService: WalletAttestationService,
@@ -517,7 +511,7 @@ export class AuthorizeService {
         };
 
         if (body.issuer_state) {
-            const updateResult = await this.updateSessionForTenant.execute(
+            const updateResult = await this.sessionStore.updateForTenant(
                 tenantId,
                 body.issuer_state,
                 parValues,
@@ -632,8 +626,8 @@ export class AuthorizeService {
             );
         }
 
-        const session = await this.getSessionByRequestUri
-            .execute(tenantId, values.request_uri)
+        const session = await this.sessionStore
+            .getByRequestUri(tenantId, values.request_uri)
             .catch(() => {
                 throw new BadRequestException({
                     error: "invalid_request_uri",
@@ -676,13 +670,9 @@ export class AuthorizeService {
         }
 
         // Expire the request_uri on use so it cannot be redeemed twice (RFC 9126 Section 7.3).
-        await this.updateSessionForTenant.execute(
-            session.tenantId,
-            session.id,
-            {
-                request_uri_expires_at: new Date(),
-            },
-        );
+        await this.sessionStore.updateForTenant(session.tenantId, session.id, {
+            request_uri_expires_at: new Date(),
+        });
 
         const code = await this.setAuthCode(tenantId, session.id);
         return this.buildAuthorizationResponseUrl(authQueries.redirect_uri, {
@@ -736,8 +726,11 @@ export class AuthorizeService {
             refreshTokenGrantIdentifier
         ) {
             // For refresh_token grant, look up by refresh_token
-            session = await this.getSessionByRefreshToken
-                .execute(tenantId, parsedAccessTokenRequest.grant.refreshToken)
+            session = await this.sessionStore
+                .getByRefreshToken(
+                    tenantId,
+                    parsedAccessTokenRequest.grant.refreshToken,
+                )
                 .catch(() => {
                     throw new TokenErrorException(
                         "invalid_grant",
@@ -750,8 +743,8 @@ export class AuthorizeService {
                 parsedAccessTokenRequest.accessTokenRequest[
                     "pre-authorized_code"
                 ] ?? parsedAccessTokenRequest.accessTokenRequest["code"];
-            session = await this.getSessionByAuthorizationCode
-                .execute(tenantId, authorization_code)
+            session = await this.sessionStore
+                .getByAuthorizationCode(tenantId, authorization_code)
                 .catch(() => {
                     throw new TokenErrorException(
                         "invalid_grant",
@@ -1081,7 +1074,7 @@ export class AuthorizeService {
                 );
             }
 
-            await this.updateSessionForTenant.execute(
+            await this.sessionStore.updateForTenant(
                 session.tenantId,
                 session.id,
                 {
@@ -1159,7 +1152,7 @@ export class AuthorizeService {
      */
     async setAuthCode(tenantId: string, issuer_state: string) {
         const code = randomUUID();
-        await this.updateSessionForTenant.execute(tenantId, issuer_state, {
+        await this.sessionStore.updateForTenant(tenantId, issuer_state, {
             authorization_code: code,
             authorization_code_expires_at: new Date(
                 Date.now() + AUTHORIZATION_CODE_LIFETIME_SECONDS * 1000,

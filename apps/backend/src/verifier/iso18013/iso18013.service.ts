@@ -26,8 +26,7 @@ import { KeyUsageType } from "../../crypto/key/types/key-usage-type.js";
 import { WebhookEndpointEntity } from "../../issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
 import { ServiceTypeIdentifier } from "../../issuer/trust-list/trustlist.service.js";
 import { CreateSession } from "../../session/application/create-session.js";
-import { GetIso18013Session } from "../../session/application/get-iso18013-session.js";
-import { UpdateSessionForTenant } from "../../session/application/update-session-for-tenant.js";
+import { SessionStore } from "../../session/application/session-store.js";
 import { SessionStatus } from "../../session/domain/session-state.js";
 import { SessionAuditService } from "../../session/logging/session-audit.service.js";
 import { revocationModeToPolicy } from "../../trust/revocation-policy.util.js";
@@ -74,8 +73,7 @@ export class Iso18013Service {
     constructor(
         private readonly presentationsService: PresentationsService,
         private readonly createSession: CreateSession,
-        private readonly updateSessionForTenant: UpdateSessionForTenant,
-        private readonly getIso18013Session: GetIso18013Session,
+        private readonly sessionStore: SessionStore,
         private readonly encryptionService: EncryptionService,
         private readonly mdocverifierService: MdocverifierService,
         @Inject(PRESENTATION_RESULT_PUBLISHER)
@@ -311,7 +309,7 @@ export class Iso18013Service {
     ): Promise<Record<string, unknown>> {
         let session;
         try {
-            session = await this.getIso18013Session.execute(sessionId);
+            session = await this.sessionStore.getIso18013(sessionId);
         } catch {
             throw new NotFoundException("ISO 18013-7 session not found");
         }
@@ -378,7 +376,7 @@ export class Iso18013Service {
         } catch (err: any) {
             const reason = `HPKE decryption failed: ${err?.message ?? err}`;
             this.logger.warn({ sessionId }, reason);
-            await this.updateSessionForTenant.execute(
+            await this.sessionStore.updateForTenant(
                 session.tenantId,
                 session.id,
                 {
@@ -486,7 +484,7 @@ export class Iso18013Service {
             const verboseReason =
                 verifyResult.failureReason ?? "mDOC verification failed";
 
-            await this.updateSessionForTenant.execute(
+            await this.sessionStore.updateForTenant(
                 session.tenantId,
                 session.id,
                 {
@@ -532,29 +530,25 @@ export class Iso18013Service {
 
         const responseCode = randomUUID();
 
-        await this.updateSessionForTenant.execute(
-            session.tenantId,
-            session.id,
-            {
-                credentials: credentials as any,
-                status: SessionStatus.Completed,
-                responseCode,
-                consumed: true,
-                consumedAt: new Date(),
-                outcome: {
-                    result: "success",
-                    credentials: [
-                        {
-                            id: mdocCred.id,
-                            format: "mso_mdoc",
-                            docType: verifyResult.docType,
-                            verified: true,
-                            trust: verifyResult.provenance,
-                        },
-                    ],
-                },
+        await this.sessionStore.updateForTenant(session.tenantId, session.id, {
+            credentials: credentials as any,
+            status: SessionStatus.Completed,
+            responseCode,
+            consumed: true,
+            consumedAt: new Date(),
+            outcome: {
+                result: "success",
+                credentials: [
+                    {
+                        id: mdocCred.id,
+                        format: "mso_mdoc",
+                        docType: verifyResult.docType,
+                        verified: true,
+                        trust: verifyResult.provenance,
+                    },
+                ],
             },
-        );
+        });
 
         const webhook =
             session.parsedWebhook ??

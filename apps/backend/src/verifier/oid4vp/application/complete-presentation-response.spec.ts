@@ -8,7 +8,9 @@ import {
 describe("CompletePresentationResponse", () => {
     it("persists completed status, replay protection, and outcome provenance", async () => {
         const update = vi.fn().mockResolvedValue(true);
-        const response = new CompletePresentationResponse({ execute: update });
+        const response = new CompletePresentationResponse({
+            updateIfUnconsumed: update,
+        });
         const consumedAt = new Date("2026-09-27T00:00:00.000Z");
 
         await response.execute({
@@ -38,7 +40,7 @@ describe("CompletePresentationResponse", () => {
 
     it("rejects a response that lost the race to complete the session", async () => {
         const response = new CompletePresentationResponse({
-            execute: vi.fn().mockResolvedValue(false),
+            updateIfUnconsumed: vi.fn().mockResolvedValue(false),
         });
 
         await expect(

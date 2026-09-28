@@ -1,5 +1,5 @@
-import type { GetSessionForTenant } from "../../../../session/application/get-session-for-tenant.js";
 import type { ResolveExternalAuthorizationSession } from "../../../../session/application/resolve-external-authorization-session.js";
+import type { SessionStore } from "../../../../session/application/session-store.js";
 import type { SessionData } from "../../../../session/domain/session-data.js";
 import type { AuthorizationIdentity } from "../../../configuration/credentials/domain/authorization-identity.js";
 import type {
@@ -24,7 +24,7 @@ export interface VerifiedCredentialToken extends Record<string, unknown> {
 export class ResolveCredentialSession {
     constructor(
         private readonly sources: CredentialAuthorizationSources,
-        private readonly sessions: Pick<GetSessionForTenant, "execute">,
+        private readonly sessions: Pick<SessionStore, "getForTenant">,
         private readonly externalSessions: Pick<
             ResolveExternalAuthorizationSession,
             "execute"
@@ -58,7 +58,7 @@ export class ResolveCredentialSession {
                 throw new CredentialSessionAuthorizationDenied(
                     "Chained AS token is missing issuer_state claim",
                 );
-            session = await this.sessions.execute(tenantId, issuerState);
+            session = await this.sessions.getForTenant(tenantId, issuerState);
             const upstream =
                 token.iss === issuers.chainedIssuer
                     ? await this.sources.upstreamIdentity(issuerState)
@@ -98,7 +98,7 @@ export class ResolveCredentialSession {
                 bindingValue,
             );
         } else {
-            session = await this.sessions.execute(tenantId, token.sub);
+            session = await this.sessions.getForTenant(tenantId, token.sub);
             if (token.sub !== session.id)
                 throw new CredentialSessionAuthorizationDenied(
                     "The access token is not associated with a valid session",

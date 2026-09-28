@@ -42,7 +42,7 @@ function fixture() {
         ids,
         useCase: new CreateCredentialOffer(
             { execute },
-            { execute: update },
+            { updateForTenant: update },
             protocol,
             ids,
         ),

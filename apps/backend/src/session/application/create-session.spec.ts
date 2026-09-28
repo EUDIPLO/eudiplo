@@ -1,9 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { NewSession, SessionData } from "../domain/session-data.js";
 import { CreateSession } from "./create-session.js";
-import { UpdateSessionForTenant } from "./update-session-for-tenant.js";
 
-describe("session write use cases", () => {
+describe("CreateSession", () => {
     it("records creation metrics from the persisted session", async () => {
         const created = {
             id: "session-1",
@@ -37,20 +36,5 @@ describe("session write use cases", () => {
             } as NewSession),
         ).rejects.toBe(failure);
         expect(recordCreated).not.toHaveBeenCalled();
-    });
-
-    it("forwards updates with explicit tenant scope and returns the affected-row count", async () => {
-        const updateForTenant = vi.fn().mockResolvedValue(1);
-        const useCase = new UpdateSessionForTenant({ updateForTenant });
-        const update = { requestObject: "request" };
-
-        await expect(
-            useCase.execute("tenant-1", "session-1", update),
-        ).resolves.toBe(1);
-        expect(updateForTenant).toHaveBeenCalledExactlyOnceWith(
-            "tenant-1",
-            "session-1",
-            update,
-        );
     });
 });

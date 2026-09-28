@@ -14,7 +14,7 @@ import { MetricService, TraceService } from "nestjs-otel";
 import { LessThan, Repository } from "typeorm";
 import { v4 } from "uuid";
 import { KeyChainService } from "../../../../../crypto/key/key-chain.service.js";
-import { GetSessionForTenant } from "../../../../../session/application/get-session-for-tenant.js";
+import { SessionStore } from "../../../../../session/application/session-store.js";
 import { FederationTrustService } from "../../../../../trust/federation-trust.service.js";
 import { FederationTrustSource } from "../../../../../trust/types.js";
 import { WalletAttestationService } from "../../../../../trust/wallet-attestation.service.js";
@@ -103,7 +103,7 @@ export class ChainedAsService {
         @Inject(OIDC_TOKEN_EXCHANGER)
         private readonly oidcTokenExchanger: OidcTokenExchanger,
         private readonly keyChainService: KeyChainService,
-        private readonly getSessionForTenant: GetSessionForTenant,
+        private readonly sessionStore: SessionStore,
         private readonly issuanceService: IssuanceService,
         private readonly federationTrustService: FederationTrustService,
         private readonly walletAttestationService: WalletAttestationService,
@@ -365,7 +365,7 @@ export class ChainedAsService {
         if (issuerState) {
             // Verify the issuer_state exists in our session store
             try {
-                await this.getSessionForTenant.execute(tenantId, issuerState);
+                await this.sessionStore.getForTenant(tenantId, issuerState);
             } catch {
                 throw new BadRequestException("Invalid issuer_state");
             }

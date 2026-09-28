@@ -20,7 +20,7 @@ function fixture() {
             token_claims: {},
         }),
     };
-    const sessions = { execute: vi.fn().mockResolvedValue(session) };
+    const sessions = { getForTenant: vi.fn().mockResolvedValue(session) };
     const external = { execute: vi.fn().mockResolvedValue(session) };
     const claims = {
         resolveClaims: vi
@@ -55,7 +55,10 @@ describe("ResolveCredentialSession", () => {
             isExternalAsToken: false,
             isChainedAsToken: false,
         });
-        expect(f.sessions.execute).toHaveBeenCalledWith("tenant", "session");
+        expect(f.sessions.getForTenant).toHaveBeenCalledWith(
+            "tenant",
+            "session",
+        );
         expect(f.external.execute).not.toHaveBeenCalled();
         expect(f.claims.resolveClaims).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -118,7 +121,7 @@ describe("ResolveCredentialSession", () => {
                 sub: "session",
             }),
         ).rejects.toThrow("missing issuer_state");
-        expect(f.sessions.execute).not.toHaveBeenCalled();
+        expect(f.sessions.getForTenant).not.toHaveBeenCalled();
     });
     it("binds external identities and requires a claims provider", async () => {
         const f = fixture();

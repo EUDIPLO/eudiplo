@@ -1,4 +1,4 @@
-import type { UpdateUnconsumedSession } from "../../../session/application/update-unconsumed-session.js";
+import type { SessionStore } from "../../../session/application/session-store.js";
 import { SessionStatus } from "../../../session/domain/session-state.js";
 
 export interface CompletePresentationResponseInput {
@@ -19,10 +19,7 @@ export class PresentationAlreadyConsumed extends Error {
 
 export class CompletePresentationResponse {
     constructor(
-        private readonly updateSession: Pick<
-            UpdateUnconsumedSession,
-            "execute"
-        >,
+        private readonly sessions: Pick<SessionStore, "updateIfUnconsumed">,
     ) {}
 
     /**
@@ -31,7 +28,7 @@ export class CompletePresentationResponse {
      * @throws PresentationAlreadyConsumed when another response won
      */
     async execute(input: CompletePresentationResponseInput): Promise<void> {
-        const completed = await this.updateSession.execute(
+        const completed = await this.sessions.updateIfUnconsumed(
             input.tenantId,
             input.sessionId,
             {

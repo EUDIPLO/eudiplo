@@ -100,8 +100,8 @@ describe("OID4VCI notification endpoint lookup", () => {
                         },
                     }),
                 },
-                getSessionForTenant: {
-                    execute: vi.fn().mockResolvedValue(session),
+                sessionStore: {
+                    getForTenant: vi.fn().mockResolvedValue(session),
                 },
                 traceService: { getSpan: () => undefined },
                 handleCredentialNotification: new HandleCredentialNotification(

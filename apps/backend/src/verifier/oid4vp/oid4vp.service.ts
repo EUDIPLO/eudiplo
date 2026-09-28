@@ -16,9 +16,7 @@ import { WebhookEndpointEntity } from "../../issuer/configuration/webhook-endpoi
 import { OfferResponse } from "../../issuer/issuance/oid4vci/dto/offer-request.dto.js";
 import { RegistrarService } from "../../registrar/registrar.service.js";
 import { CreateSession } from "../../session/application/create-session.js";
-import { GetSessionForInternalFlow } from "../../session/application/get-session-for-internal-flow.js";
-import { GetSessionForWalletRequest } from "../../session/application/get-session-for-wallet-request.js";
-import { UpdateSessionForTenant } from "../../session/application/update-session-for-tenant.js";
+import { SessionStore } from "../../session/application/session-store.js";
 import { SessionStatus } from "../../session/domain/session-state.js";
 import { AuditLogContext } from "../../session/logging/session-audit.service.js";
 import { SessionLoggerService } from "../../session/logging/session-logger.service.js";
@@ -56,9 +54,7 @@ export class Oid4vpService {
         private readonly registrarService: RegistrarService,
         private readonly presentationsService: PresentationsService,
         private readonly createSession: CreateSession,
-        private readonly updateSessionForTenant: UpdateSessionForTenant,
-        private readonly getSessionForWalletRequest: GetSessionForWalletRequest,
-        private readonly getSessionForInternalFlow: GetSessionForInternalFlow,
+        private readonly sessionStore: SessionStore,
         private readonly retrievePresentationRequest: RetrievePresentationRequest,
         private readonly parseAuthorizationResponse: ParseAuthorizationResponse,
         private readonly processVerifiedPresentation: ProcessVerifiedPresentation,
@@ -103,7 +99,7 @@ export class Oid4vpService {
      * compatibility with sessions created before the walletNonce migration.
      */
     private async resolveSessionByNonce(nonce: string) {
-        return this.getSessionForWalletRequest.execute(nonce);
+        return this.sessionStore.getForWalletRequest(nonce);
     }
 
     /**
@@ -154,7 +150,7 @@ export class Oid4vpService {
         origin: string,
         noRedirect = false,
     ): Promise<string> {
-        const session = await this.getSessionForInternalFlow.execute(sessionId);
+        const session = await this.sessionStore.getForInternalFlow(sessionId);
 
         // Add session context to span for trace correlation
         const span = this.traceService.getSpan();
@@ -166,7 +162,7 @@ export class Oid4vpService {
 
         // if noRedirect is true, we want to keep the redirectUri undefined in the session, as it will be used by the client to decide whether to redirect or not after receiving the response. If it's defined, the client will always redirect, even if it was instructed not to.
         if (noRedirect) {
-            await this.updateSessionForTenant.execute(
+            await this.sessionStore.updateForTenant(
                 session.tenantId,
                 session.id,
                 {
@@ -237,7 +233,7 @@ export class Oid4vpService {
                     );
             }
             const nonce = randomUUID();
-            await this.updateSessionForTenant.execute(
+            await this.sessionStore.updateForTenant(
                 session.tenantId,
                 session.id,
                 {
@@ -266,7 +262,7 @@ export class Oid4vpService {
 
             const { publicJwk: responseEncryptionPublicJwk, privateJwk } =
                 await this.encryptionService.generateEphemeralEncryptionKeyPair();
-            await this.updateSessionForTenant.execute(
+            await this.sessionStore.updateForTenant(
                 session.tenantId,
                 session.id,
                 {
@@ -502,22 +498,18 @@ export class Oid4vpService {
                     session.id,
                     origin,
                 );
-                this.updateSessionForTenant.execute(tenantId, values.session, {
+                this.sessionStore.updateForTenant(tenantId, values.session, {
                     requestObject: signedJwt,
                 });
             }
         } else {
-            await this.updateSessionForTenant.execute(
-                tenantId,
-                values.session,
-                {
-                    walletNonce,
-                    requestUrl: `openid4vp://?${queryString}`,
-                    expiresAt,
-                    useDcApi,
-                    clientId,
-                },
-            );
+            await this.sessionStore.updateForTenant(tenantId, values.session, {
+                walletNonce,
+                requestUrl: `openid4vp://?${queryString}`,
+                expiresAt,
+                useDcApi,
+                clientId,
+            });
         }
 
         return {
@@ -594,7 +586,7 @@ export class Oid4vpService {
             );
 
             // Update session with failed status
-            await this.updateSessionForTenant.execute(
+            await this.sessionStore.updateForTenant(
                 session.tenantId,
                 session.id,
                 {
