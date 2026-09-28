@@ -6,9 +6,13 @@ import {
     SupportedAuthenticationScheme,
 } from "@openid4vc/oauth2";
 import type { IssuerMetadataResult } from "@openid4vc/openid4vci";
-import { DPOP_PROOF_FRESHNESS } from "./authorization/shared/dpop.util.js";
+import { dpopProofVerification } from "./authorization/shared/dpop.util.js";
 import { Oid4vciSdkFactory } from "./oid4vci-sdk.factory.js";
 import { OID4VCI_SETTINGS, type Oid4vciSettings } from "./oid4vci-settings.js";
+import {
+    DPOP_PROOF_REPLAY_REGISTRY,
+    type DpopProofReplayRegistry,
+} from "./ports/dpop-proof-replay-registry.js";
 import type { Oid4vciRequestContext } from "./request-context.js";
 import { normalizeRequestHeaders } from "./util.js";
 
@@ -39,6 +43,8 @@ export class CredentialAccessTokenVerifier {
     constructor(
         private readonly sdk: Oid4vciSdkFactory,
         @Inject(OID4VCI_SETTINGS) private readonly settings: Oid4vciSettings,
+        @Inject(DPOP_PROOF_REPLAY_REGISTRY)
+        private readonly dpopProofs: DpopProofReplayRegistry,
     ) {}
 
     async verify(
@@ -71,7 +77,7 @@ export class CredentialAccessTokenVerifier {
                 resourceServer:
                     issuerMetadata.credentialIssuer.credential_issuer,
                 allowedAuthenticationSchemes,
-                dpop: DPOP_PROOF_FRESHNESS,
+                dpop: dpopProofVerification(this.dpopProofs),
             });
 
         return tokenPayload as CredentialAccessTokenPayload;

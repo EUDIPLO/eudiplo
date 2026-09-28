@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { INestApplication } from "@nestjs/common";
 import {
     clientAuthenticationAnonymous,
+    createDpopHeadersForRequest,
     Jwk,
     JwtSignerJwk,
 } from "@openid4vc/oauth2";
@@ -169,6 +170,98 @@ describe("Issuance - Pre-authorized Code Flow", () => {
         );
         expect(notificationObj).toBeDefined();
         expect(notificationObj.event).toBe("credential_accepted");
+    });
+
+    test("rejects a replayed DPoP proof at the credential endpoint", async () => {
+        const offerResponse = await request(app.getHttpServer())
+            .post("/issuer/offer")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                response_type: "uri",
+                credentialConfigurationIds: ["pid-no-key"],
+                flow: "pre_authorized_code",
+            })
+            .expect(201);
+
+        const holderKeyPair = await generateKeyPair("ES256", {
+            extractable: true,
+        });
+        const holderPrivateKeyJwk = await exportJWK(holderKeyPair.privateKey);
+        const holderPublicKeyJwk = await exportJWK(holderKeyPair.publicKey);
+        const signJwt = getSignJwtCallback([holderPrivateKeyJwk as Jwk]);
+        const holderSigner = {
+            method: "jwk",
+            alg: "ES256",
+            publicJwk: holderPublicKeyJwk,
+        } as JwtSignerJwk;
+
+        const client = new Openid4vciClient({
+            callbacks: {
+                ...callbacks,
+                clientAuthentication: clientAuthenticationAnonymous(),
+                signJwt,
+            },
+        });
+        const credentialOffer = await client.resolveCredentialOffer(
+            offerResponse.body.uri,
+        );
+        const issuerMetadata = await client.resolveIssuerMetadata(
+            credentialOffer.credential_issuer,
+        );
+        const { accessTokenResponse } =
+            await client.retrievePreAuthorizedCodeAccessTokenFromOffer({
+                credentialOffer,
+                issuerMetadata,
+                dpop: { signer: holderSigner },
+            });
+        expect(accessTokenResponse.token_type).toBe("DPoP");
+        const accessToken = accessTokenResponse.access_token;
+
+        const credentialEndpoint =
+            issuerMetadata.credentialIssuer.credential_endpoint;
+        const { DPoP: dpopProof } = await createDpopHeadersForRequest({
+            request: { method: "POST", url: credentialEndpoint },
+            signer: holderSigner,
+            accessToken,
+            callbacks: { ...callbacks, signJwt },
+        });
+
+        // Each request carries a fresh key proof, so only the DPoP proof repeats.
+        const credentialRequest = async () => {
+            const { c_nonce } = await client.requestNonce({ issuerMetadata });
+            const { jwt } = await client.createCredentialRequestJwtProof({
+                issuerMetadata,
+                signer: holderSigner,
+                clientId,
+                issuedAt: new Date(),
+                credentialConfigurationId:
+                    credentialOffer.credential_configuration_ids[0],
+                nonce: c_nonce,
+            });
+            return request(app.getHttpServer())
+                .post(new URL(credentialEndpoint).pathname)
+                .trustLocalhost()
+                .set("Authorization", `DPoP ${accessToken}`)
+                .set("DPoP", dpopProof)
+                .send({
+                    credential_configuration_id:
+                        credentialOffer.credential_configuration_ids[0],
+                    proofs: { jwt: [jwt] },
+                });
+        };
+
+        const first = await credentialRequest();
+        expect(first.status).toBe(200);
+        expect(first.body.credentials).toHaveLength(1);
+
+        const replay = await credentialRequest();
+        expect(replay.status).toBe(401);
+        expect(replay.headers["www-authenticate"]).toContain("DPoP");
+        expect(replay.body).toMatchObject({
+            error: "invalid_token",
+            error_description: expect.stringContaining("has already been used"),
+        });
     });
 
     test("rejects a pre-authorized code after the session lifetime", async () => {

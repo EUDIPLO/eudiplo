@@ -23,11 +23,16 @@ function setup(internalUrl?: string) {
     const sdk = {
         resourceServer: vi.fn(() => ({ verifyResourceRequest })),
     } as unknown as Oid4vciSdkFactory;
-    const verifier = new CredentialAccessTokenVerifier(sdk, {
-        publicUrl: "https://issuer.example",
-        internalUrl,
-    });
-    return { verifier, verifyResourceRequest };
+    const dpopProofs = { register: vi.fn().mockResolvedValue(true) };
+    const verifier = new CredentialAccessTokenVerifier(
+        sdk,
+        {
+            publicUrl: "https://issuer.example",
+            internalUrl,
+        },
+        dpopProofs,
+    );
+    return { verifier, verifyResourceRequest, dpopProofs };
 }
 
 describe("CredentialAccessTokenVerifier", () => {
@@ -87,6 +92,49 @@ describe("CredentialAccessTokenVerifier", () => {
                     SupportedAuthenticationScheme.DPoP,
                 ],
             }),
+        );
+    });
+
+    it("verifies DPoP proofs as fresh and single use", async () => {
+        const { verifier, verifyResourceRequest, dpopProofs } = setup();
+        const metadata = {
+            authorizationServers: [builtIn],
+            credentialIssuer: {
+                credential_issuer: "https://issuer.example/issuers/acme",
+            },
+        } as unknown as IssuerMetadataResult;
+
+        await verifier.verify(
+            {
+                method: "POST",
+                url: "/issuers/acme/vci/credential",
+                headers: { authorization: "DPoP token", dpop: "proof" },
+                contentType: "application/json",
+                body: {},
+            },
+            "acme",
+            metadata,
+            true,
+        );
+
+        const { dpop } = verifyResourceRequest.mock.calls[0][0];
+        expect(dpop).toEqual({
+            maxProofAgeSeconds: 300,
+            allowedClockSkewSeconds: 60,
+            assertJtiUniqueness: expect.any(Function),
+        });
+        dpopProofs.register.mockResolvedValueOnce(false);
+        await expect(
+            dpop.assertJtiUniqueness({
+                payload: { jti: "jti-1", iat: 1000 },
+                jwkThumbprint: "jkt-1",
+                now: new Date(1_000_000),
+            }),
+        ).resolves.toBe(false);
+        expect(dpopProofs.register).toHaveBeenCalledWith(
+            "jkt-1",
+            "jti-1",
+            new Date(1_360_000),
         );
     });
 });

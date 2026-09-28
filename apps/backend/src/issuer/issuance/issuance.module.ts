@@ -70,6 +70,7 @@ import { CredentialNonceModule } from "./oid4vci/credential-nonce.module.js";
 import { CredentialOfferReferenceController } from "./oid4vci/credential-offer-reference.controller.js";
 import { DeferredController } from "./oid4vci/deferred.controller.js";
 import { DeferredCredentialService } from "./oid4vci/deferred-credential.service.js";
+import { DpopProofModule } from "./oid4vci/dpop-proof.module.js";
 import { DeferredTransactionEntity } from "./oid4vci/entities/deferred-transaction.entity.js";
 import { Oid4vciMetadataController } from "./oid4vci/metadata/oid4vci-metadata.controller.js";
 import { NonceService } from "./oid4vci/nonce.service.js";
@@ -138,6 +139,7 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
         StatusListModule,
         AuthorizationModule,
         CredentialNonceModule,
+        DpopProofModule,
         RegistrarModule,
         TypeOrmModule.forFeature([DeferredTransactionEntity]),
     ],

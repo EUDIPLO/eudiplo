@@ -1,6 +1,7 @@
 import { HttpException } from "@nestjs/common";
 import {
     Oauth2AuthorizationServer,
+    Oauth2Error,
     Oauth2ServerErrorResponseError,
 } from "@openid4vc/oauth2";
 import { calculateJwkThumbprint } from "jose";
@@ -136,6 +137,7 @@ function createHarness(issuanceConfig: Record<string, unknown> = {}) {
         getPublicKey: vi.fn().mockResolvedValue({ kty: "EC", kid: "kid-1" }),
     };
     const nonces = { save: vi.fn().mockResolvedValue(undefined) };
+    const dpopProofs = { register: vi.fn().mockResolvedValue(true) };
     const issuance = {
         getIssuanceConfiguration: vi.fn().mockResolvedValue({
             authorizationServers: [],
@@ -183,6 +185,7 @@ function createHarness(issuanceConfig: Record<string, unknown> = {}) {
             configuration,
             metadata,
             clientAttestation,
+            dpopProofs,
         ),
         new ExchangeAccessToken(
             servers,
@@ -193,6 +196,7 @@ function createHarness(issuanceConfig: Record<string, unknown> = {}) {
             clientAttestation,
             new KeyChainAccessTokenSigningKeys(keyChain as never),
             settings,
+            dpopProofs,
         ),
         settings,
     );
@@ -240,6 +244,7 @@ function createHarness(issuanceConfig: Record<string, unknown> = {}) {
         walletAttestation,
         keyChain,
         nonces,
+        dpopProofs,
         issuance,
         sessionConfig,
     };
@@ -732,6 +737,7 @@ describe("Built-in authorization server token endpoint", () => {
                         jwt: undefined,
                         maxProofAgeSeconds: 300,
                         allowedClockSkewSeconds: 60,
+                        assertJtiUniqueness: expect.any(Function),
                     },
                     request: expect.objectContaining({
                         method: "POST",
@@ -739,6 +745,42 @@ describe("Built-in authorization server token endpoint", () => {
                     }),
                 }),
             );
+        });
+
+        it("rejects replayed DPoP proofs through the replay registry", async () => {
+            await token(preAuth());
+            const { assertJtiUniqueness } =
+                h.oauth.verifyPreAuthorizedCodeAccessTokenRequest.mock
+                    .calls[0][0].dpop;
+            h.dpopProofs.register.mockResolvedValueOnce(false);
+            await expect(
+                assertJtiUniqueness({
+                    payload: { jti: "jti-1", iat: 1000 },
+                    jwkThumbprint: "jkt-1",
+                    now: new Date(1_100_000),
+                }),
+            ).resolves.toBe(false);
+            // Tracked until the proof leaves the freshness window.
+            expect(h.dpopProofs.register).toHaveBeenCalledWith(
+                "jkt-1",
+                "jti-1",
+                new Date((1000 + 300 + 60) * 1000),
+            );
+        });
+
+        it("answers a replayed DPoP proof like any other invalid proof", async () => {
+            h.oauth.verifyPreAuthorizedCodeAccessTokenRequest.mockRejectedValue(
+                new Oauth2Error(
+                    "Dpop jwt with jti value 'jti-1' has already been used.",
+                ),
+            );
+            expect(await token(preAuth())).toEqual(
+                tokenError(
+                    "invalid_request",
+                    "Dpop jwt with jti value 'jti-1' has already been used.",
+                ),
+            );
+            expect(h.recordFailedTxCodeAttempt.execute).not.toHaveBeenCalled();
         });
 
         it("expires the pre-authorized code with the tenant's session lifetime", async () => {
@@ -1015,6 +1057,7 @@ describe("Built-in authorization server token endpoint", () => {
                         expectedJwkThumbprint: "par-jkt",
                         maxProofAgeSeconds: 300,
                         allowedClockSkewSeconds: 60,
+                        assertJtiUniqueness: expect.any(Function),
                     },
                 }),
             );
@@ -1281,8 +1324,27 @@ describe("Built-in authorization server PAR endpoint", () => {
                     allowedSigningAlgs: ["ES256", "ES384", "ES512"],
                     maxProofAgeSeconds: 300,
                     allowedClockSkewSeconds: 60,
+                    assertJtiUniqueness: expect.any(Function),
                 },
             }),
+        );
+    });
+
+    it("registers the DPoP proof jti with the replay registry", async () => {
+        await par(validPar, { dpop: "proof" });
+        const { assertJtiUniqueness } =
+            h.oauth.verifyPushedAuthorizationRequest.mock.calls[0][0].dpop;
+        await expect(
+            assertJtiUniqueness({
+                payload: { jti: "jti-2", iat: 2000 },
+                jwkThumbprint: "jkt-2",
+                now: new Date(2_000_000),
+            }),
+        ).resolves.toBe(true);
+        expect(h.dpopProofs.register).toHaveBeenCalledWith(
+            "jkt-2",
+            "jti-2",
+            new Date(2_360_000),
         );
     });
 

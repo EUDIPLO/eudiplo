@@ -19,8 +19,13 @@ import { ConfigurationModule } from "../../../configuration/configuration.module
 import { IssuanceService } from "../../../configuration/issuance/issuance.service.js";
 import { StatusListConfigService } from "../../../status-list/status-list-config.service.js";
 import { CredentialNonceModule } from "../credential-nonce.module.js";
+import { DpopProofModule } from "../dpop-proof.module.js";
 import { InteractiveAuthSessionEntity } from "../entities/interactive-auth-session.entity.js";
 import { OID4VCI_SETTINGS, type Oid4vciSettings } from "../oid4vci-settings.js";
+import {
+    DPOP_PROOF_REPLAY_REGISTRY,
+    type DpopProofReplayRegistry,
+} from "../ports/dpop-proof-replay-registry.js";
 import {
     ConfiguredBuiltInAuthorizationServerConfiguration,
     CryptoOAuthAuthorizationServerFactory,
@@ -142,6 +147,7 @@ export const builtInAuthorizationServerProviders = [
             CLIENT_ATTESTATION_VERIFIER,
             ACCESS_TOKEN_SIGNING_KEYS,
             OID4VCI_SETTINGS,
+            DPOP_PROOF_REPLAY_REGISTRY,
         ],
         useFactory: (
             servers: OAuthAuthorizationServerFactory,
@@ -152,6 +158,7 @@ export const builtInAuthorizationServerProviders = [
             clientAttestation: ClientAttestationVerifier,
             signingKeys: AccessTokenSigningKeys,
             settings: Oid4vciSettings,
+            dpopProofs: DpopProofReplayRegistry,
         ) =>
             new ExchangeAccessToken(
                 servers,
@@ -162,6 +169,7 @@ export const builtInAuthorizationServerProviders = [
                 clientAttestation,
                 signingKeys,
                 settings,
+                dpopProofs,
             ),
     },
     {
@@ -173,6 +181,7 @@ export const builtInAuthorizationServerProviders = [
             BUILT_IN_AUTHORIZATION_SERVER_CONFIGURATION,
             BuildBuiltInAuthorizationServerMetadata,
             CLIENT_ATTESTATION_VERIFIER,
+            DPOP_PROOF_REPLAY_REGISTRY,
         ],
         useFactory: (
             servers: OAuthAuthorizationServerFactory,
@@ -181,6 +190,7 @@ export const builtInAuthorizationServerProviders = [
             configuration: BuiltInAuthorizationServerConfiguration,
             metadata: BuildBuiltInAuthorizationServerMetadata,
             clientAttestation: ClientAttestationVerifier,
+            dpopProofs: DpopProofReplayRegistry,
         ) =>
             new PushAuthorizationRequest(
                 servers,
@@ -189,6 +199,7 @@ export const builtInAuthorizationServerProviders = [
                 configuration,
                 metadata,
                 clientAttestation,
+                dpopProofs,
             ),
     },
     {
@@ -220,6 +231,7 @@ export const builtInAuthorizationServerProviders = [
         PresentationsModule,
         SessionModule,
         CredentialNonceModule,
+        DpopProofModule,
         HttpModule,
         TrustModule,
         TypeOrmModule.forFeature([

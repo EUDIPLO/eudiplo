@@ -13,6 +13,7 @@ import type { RecordFailedTxCodeAttempt } from "../../../../../session/applicati
 import type { SessionStore } from "../../../../../session/application/session-store.js";
 import type { SessionData } from "../../../../../session/domain/session-data.js";
 import type { Oid4vciSettings } from "../../oid4vci-settings.js";
+import type { DpopProofReplayRegistry } from "../../ports/dpop-proof-replay-registry.js";
 import { OAuthError } from "../domain/oauth-error.js";
 import { checkPkce } from "../domain/pkce.js";
 import {
@@ -38,7 +39,7 @@ import type { AccessTokenSigningKeys } from "../ports/access-token-signing-keys.
 import type { BuiltInAuthorizationServerConfiguration } from "../ports/built-in-authorization-server-configuration.js";
 import type { ClientAttestationVerifier } from "../ports/client-attestation-verifier.js";
 import type { OAuthAuthorizationServerFactory } from "../ports/oauth-authorization-server-factory.js";
-import { DPOP_PROOF_FRESHNESS } from "../shared/dpop.util.js";
+import { dpopProofVerification } from "../shared/dpop.util.js";
 import type { BuildBuiltInAuthorizationServerMetadata } from "./build-built-in-authorization-server-metadata.js";
 
 interface AuthorizationCodeGrant {
@@ -97,6 +98,7 @@ export class ExchangeAccessToken {
         private readonly clientAttestation: ClientAttestationVerifier,
         private readonly signingKeys: AccessTokenSigningKeys,
         private readonly settings: Oid4vciSettings,
+        private readonly dpopProofs: DpopProofReplayRegistry,
     ) {}
 
     async execute({ tenantId, body, request }: AccessTokenRequest) {
@@ -213,6 +215,7 @@ export class ExchangeAccessToken {
         const server = this.servers.forTenant(tenantId, session.id);
         const allowedSigningAlgs =
             authorizationServerMetadata.dpop_signing_alg_values_supported;
+        const dpopProofChecks = dpopProofVerification(this.dpopProofs);
         let dpop: VerifyAccessTokenRequestReturn["dpop"];
 
         if (grantType === preAuthorizedCodeGrantIdentifier) {
@@ -242,7 +245,7 @@ export class ExchangeAccessToken {
                         required: issuanceConfig.dPopRequired,
                         allowedSigningAlgs,
                         jwt: parsed.dpop?.jwt,
-                        ...DPOP_PROOF_FRESHNESS,
+                        ...dpopProofChecks,
                     },
                     authorizationServerMetadata,
                     expectedPreAuthorizedCode: session.authorization_code!,
@@ -276,7 +279,7 @@ export class ExchangeAccessToken {
                         allowedSigningAlgs,
                         jwt: parsed.dpop?.jwt,
                         expectedJwkThumbprint: session.dpop_jkt,
-                        ...DPOP_PROOF_FRESHNESS,
+                        ...dpopProofChecks,
                     },
                     authorizationServerMetadata,
                 })
@@ -302,7 +305,7 @@ export class ExchangeAccessToken {
                         expectedJwkThumbprint: clientAttestationJwt
                             ? undefined
                             : session.dpop_jkt,
-                        ...DPOP_PROOF_FRESHNESS,
+                        ...dpopProofChecks,
                     },
                     authorizationServerMetadata,
                     refreshTokenExpiresAt: session.refresh_token_expires_at,

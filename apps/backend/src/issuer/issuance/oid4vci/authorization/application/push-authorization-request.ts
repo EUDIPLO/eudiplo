@@ -7,6 +7,7 @@ import { v4 } from "uuid";
 import type { CreateSession } from "../../../../../session/application/create-session.js";
 import type { SessionStore } from "../../../../../session/application/session-store.js";
 import type { SessionAuthorization } from "../../../../../session/domain/session-data.js";
+import type { DpopProofReplayRegistry } from "../../ports/dpop-proof-replay-registry.js";
 import { OAuthError } from "../domain/oauth-error.js";
 import {
     assertValidPushedAuthorizationRequest,
@@ -21,7 +22,7 @@ import type {
     ClientAttestationVerifier,
 } from "../ports/client-attestation-verifier.js";
 import type { OAuthAuthorizationServerFactory } from "../ports/oauth-authorization-server-factory.js";
-import { DPOP_PROOF_FRESHNESS } from "../shared/dpop.util.js";
+import { dpopProofVerification } from "../shared/dpop.util.js";
 import type { BuildBuiltInAuthorizationServerMetadata } from "./build-built-in-authorization-server-metadata.js";
 
 export interface PushedAuthorizationRequest {
@@ -49,6 +50,7 @@ export class PushAuthorizationRequest {
             "execute"
         >,
         private readonly clientAttestation: ClientAttestationVerifier,
+        private readonly dpopProofs: DpopProofReplayRegistry,
     ) {}
 
     async execute({
@@ -102,7 +104,7 @@ export class PushAuthorizationRequest {
                     jwkThumbprint: body.dpop_jkt,
                     allowedSigningAlgs:
                         authorizationServerMetadata.dpop_signing_alg_values_supported,
-                    ...DPOP_PROOF_FRESHNESS,
+                    ...dpopProofVerification(this.dpopProofs),
                 },
             })
             .catch((err) => {

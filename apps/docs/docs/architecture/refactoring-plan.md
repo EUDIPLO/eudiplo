@@ -62,7 +62,6 @@ Findings from the 2026-09-28 review that are not fixed yet. Items marked *pre-ex
 
 - **T1 — Federation trust is not anchored** (*pre-existing*). Tracked in [#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046): full trust-chain resolution, signature and anchor validation, and resolving credential keys through federation instead of the credential's own certificate.
 - **T2 — Federation fetches bypass the outbound URL policy** (*pre-existing*). Traversal is now bounded (10 hints per entity, 32 resolutions per evaluation, 5 s timeout). To be handled with the resolver work in [#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046): apply `OutboundUrlPolicyService` to federation fetches and stop disabling TLS verification outside `NODE_ENV=production` in `TrustModule`.
-- **D1 — DPoP proof `jti` is not tracked** (*pre-existing*). No endpoint passes `assertJtiUniqueness` to the OAuth library, so a captured DPoP proof can be replayed against the same method and URL within the freshness window (300 s plus 60 s skew). The damage is limited because codes, `request_uri`s and nonces are single use, but resource requests are not. Track used `jti` values per key thumbprint until the proof expires, for example in the nonce table or a cache.
 - **I2 — Explicit authorization-server selection stores a URL** (*pre-existing*). When an offer names `authorization_server`, the session's `authorizationServerId` receives the resolved issuer URL instead of the configured id (`SelectAuthorizationServer`). Decide which value consumers expect.
 
 ### Cleanup
@@ -78,7 +77,7 @@ Findings from the 2026-09-28 review that are not fixed yet. Items marked *pre-ex
 
 Take them in this order unless a finding above is more urgent.
 
-1. **Open findings D1, I2 and O4.** Each is small and has a clear test.
+1. **Open findings I2 and O4.** Each is small and has a clear test.
 2. **Enforcement E5**, so the `shared/` isolation check covers aliases and re-exports.
 3. **Verifier decomposition.** Done: presentation configuration CRUD, registration certificates and metadata import (`verifier/presentations/configuration/`), `TrustedAuthoritiesService`, the DCQL claim policy, one verifier format contract used by OID4VP and ISO 18013, and the `VerifyPresentationResponse` use case (characterized in `oid4vp/presentation-verification.spec.ts`). Remaining:
    1. `Oid4vpService` shrinks to HTTP mapping: extract request creation and response decryption into use cases.

@@ -205,8 +205,9 @@ The DPoP proof is a signed JWT included in the `DPoP` HTTP header:
 3. Verify `htu` matches the request URL
 4. Verify `iat` is recent: at most 300 seconds old, with 60 seconds of allowed clock skew (token, PAR, credential, notification and deferred endpoints)
 5. At resource endpoints, verify `ath` matches the access token and the proof key matches the token's `cnf.jkt`
+6. Verify the proof is used only once: each `jti` is recorded per key thumbprint in the `dpop_proof_jti` table until the proof leaves the freshness window (`iat` + 300 s + 60 s skew). The composite primary key decides between concurrent requests, also across backend instances; expired entries are removed every 10 minutes.
 
-`jti` values are not yet tracked, so a captured proof can be replayed against the same endpoint and URL within the freshness window; see finding D1 in the [refactoring plan](./refactoring-plan.md#security-and-behavior).
+A replayed proof is rejected like any other invalid proof: the token and PAR endpoints answer `400 invalid_request`, and the credential endpoint answers `401 invalid_token` with a `WWW-Authenticate: DPoP` header.
 
 **Configuration:**
 

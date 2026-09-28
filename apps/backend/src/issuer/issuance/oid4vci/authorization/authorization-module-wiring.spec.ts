@@ -11,6 +11,7 @@ import { WalletAttestationService } from "../../../../trust/wallet-attestation.s
 import { IssuanceService } from "../../../configuration/issuance/issuance.service.js";
 import { StatusListConfigService } from "../../../status-list/status-list-config.service.js";
 import { OID4VCI_SETTINGS } from "../oid4vci-settings.js";
+import { DPOP_PROOF_REPLAY_REGISTRY } from "../ports/dpop-proof-replay-registry.js";
 import { AuthorizePushedRequest } from "./application/authorize-pushed-request.js";
 import { BuildBuiltInAuthorizationServerMetadata } from "./application/build-built-in-authorization-server-metadata.js";
 import { ExchangeAccessToken } from "./application/exchange-access-token.js";
@@ -19,6 +20,7 @@ import { builtInAuthorizationServerProviders } from "./authorization.module.js";
 
 describe("AuthorizationModule wiring", () => {
     it("constructs the built-in authorization server use cases from their ports", async () => {
+        const dpopProofs = { register: vi.fn() };
         const moduleRef = await Test.createTestingModule({
             providers: [
                 ...builtInAuthorizationServerProviders,
@@ -62,6 +64,7 @@ describe("AuthorizationModule wiring", () => {
                 { provide: SessionStore, useValue: {} },
                 { provide: RecordFailedTxCodeAttempt, useValue: {} },
                 { provide: CreateSession, useValue: {} },
+                { provide: DPOP_PROOF_REPLAY_REGISTRY, useValue: dpopProofs },
             ],
         }).compile();
 
@@ -74,6 +77,15 @@ describe("AuthorizationModule wiring", () => {
         );
         expect(moduleRef.get(PushAuthorizationRequest)).toBeInstanceOf(
             PushAuthorizationRequest,
+        );
+        // Both endpoints that verify DPoP proofs track their jti.
+        expect(moduleRef.get(ExchangeAccessToken)).toHaveProperty(
+            "dpopProofs",
+            dpopProofs,
+        );
+        expect(moduleRef.get(PushAuthorizationRequest)).toHaveProperty(
+            "dpopProofs",
+            dpopProofs,
         );
         expect(moduleRef.get(AuthorizePushedRequest)).toBeInstanceOf(
             AuthorizePushedRequest,
