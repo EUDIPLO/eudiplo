@@ -84,8 +84,6 @@ describe("OIDF", () => {
         response_mode?: string;
     };
 
-    const PUBLIC_DOMAIN =
-        import.meta.env.VITE_DOMAIN ?? "host.testcontainers.internal:3000";
     const OIDF_URL = import.meta.env.VITE_OIDF_URL ?? "https://localhost:8443";
     const OIDF_DEMO_TOKEN = import.meta.env.VITE_OIDF_DEMO_TOKEN;
     const ENFORCE_MODULE_COVERAGE_GUARD =
@@ -425,8 +423,8 @@ describe("OIDF", () => {
         const tmpFolder = resolve(__dirname, "../../../../tmp");
         configService.set("FOLDER", tmpFolder);
         configService.set("CONFIG_FOLDER", configFolder);
-        configService.set("PUBLIC_URL", `https://${PUBLIC_DOMAIN}`);
-        configService.set("INTERNAL_URL", "https://localhost:3000");
+        // PUBLIC_URL and INTERNAL_URL are provided via vitest.oidf.config.ts:
+        // typed settings read them at compile time, before this point.
         configService.set("CONFIG_IMPORT_MODE", "create");
         configService.set("LOG_LEVEL", "debug");
 

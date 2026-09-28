@@ -1,6 +1,15 @@
 import swc from "unplugin-swc";
 import { defineConfig } from "vitest/config";
 
+/**
+ * Public and internal URLs must be known before the Nest application is
+ * compiled: typed capability settings (e.g. OID4VCI/OID4VP URLs) read them once
+ * at module initialization, so overriding them via ConfigService.set() later
+ * has no effect.
+ */
+const PUBLIC_DOMAIN =
+    process.env.VITE_DOMAIN ?? "host.testcontainers.internal:3000";
+
 export default defineConfig({
     test: {
         include: ["**/oidf/*.e2e-spec.ts"],
@@ -15,6 +24,8 @@ export default defineConfig({
                 "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             DB_SYNCHRONIZE: "true",
             DB_MIGRATIONS_RUN: "false",
+            PUBLIC_URL: `https://${PUBLIC_DOMAIN}`,
+            INTERNAL_URL: "https://localhost:3000",
         },
     },
     plugins: [swc.vite()],

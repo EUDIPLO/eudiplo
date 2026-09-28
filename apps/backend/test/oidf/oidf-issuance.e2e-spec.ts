@@ -458,8 +458,8 @@ describe("OIDF - oid4vci-1_0-issuer-haip-test-plan", () => {
         const tmpFolder = resolve(__dirname, "../../../../tmp");
         configService.set("FOLDER", tmpFolder);
         configService.set("CONFIG_FOLDER", configFolder);
-        configService.set("PUBLIC_URL", `https://${PUBLIC_DOMAIN}`);
-        configService.set("INTERNAL_URL", "https://localhost:3000");
+        // PUBLIC_URL and INTERNAL_URL are provided via vitest.oidf.config.ts:
+        // typed settings read them at compile time, before this point.
         configService.set("CONFIG_IMPORT_MODE", "create");
         configService.set("LOG_LEVEL", "debug");
 
