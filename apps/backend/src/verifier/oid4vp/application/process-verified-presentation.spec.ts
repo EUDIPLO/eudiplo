@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SessionData } from "../../../session/domain/session-data.js";
-import { CompletePresentationResponse } from "./complete-presentation-response.js";
+import {
+    CompletePresentationResponse,
+    PresentationAlreadyConsumed,
+} from "./complete-presentation-response.js";
 import { FailPresentationResponse } from "./fail-presentation-response.js";
 import { ParseAuthorizationResponse } from "./parse-authorization-response.js";
 import { ProcessVerifiedPresentation } from "./process-verified-presentation.js";
@@ -28,6 +31,7 @@ describe("presentation completion and publication", () => {
         const writes: unknown[] = [];
         const update = vi.fn().mockImplementation(async (...args) => {
             writes.push(args);
+            return true;
         });
         const publish = vi.fn().mockImplementation(async () => {
             expect(update).toHaveBeenCalledOnce();
@@ -130,4 +134,20 @@ describe("presentation completion and publication", () => {
             });
         },
     );
+
+    it("does not publish when another response already completed the session", async () => {
+        const publish = vi.fn();
+        const useCase = new ProcessVerifiedPresentation(
+            new ParseAuthorizationResponse(),
+            new CompletePresentationResponse({
+                execute: vi.fn().mockResolvedValue(false),
+            }),
+            { publish },
+        );
+
+        await expect(useCase.execute(input)).rejects.toBeInstanceOf(
+            PresentationAlreadyConsumed,
+        );
+        expect(publish).not.toHaveBeenCalled();
+    });
 });

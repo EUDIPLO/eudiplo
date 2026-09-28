@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { CompletePresentationResponse } from "./application/complete-presentation-response.js";
 import { FailPresentationResponse } from "./application/fail-presentation-response.js";
 import { ParseAuthorizationResponse } from "./application/parse-authorization-response.js";
 import { ProcessVerifiedPresentation } from "./application/process-verified-presentation.js";
@@ -90,4 +91,68 @@ describe("OID4VP state mismatch handling", () => {
             );
         },
     );
+});
+
+describe("OID4VP concurrent response handling", () => {
+    it("rejects the losing response without marking the completed session failed", async () => {
+        const session = {
+            id: "session",
+            tenantId: "tenant",
+            walletNonce: "expected",
+            requestId: "presentation",
+            consumed: false,
+            responseEncryptionPrivateJwk: { kty: "oct", k: "secret" },
+        };
+        const update = vi.fn().mockResolvedValue(1);
+        const publish = vi.fn();
+        const service = Object.assign(
+            Object.create(Oid4vpService.prototype) as Oid4vpService,
+            {
+                resolveSessionByNonce: vi.fn().mockResolvedValue(session),
+                logger: { debug: vi.fn(), warn: vi.fn() },
+                traceService: { getSpan: () => undefined },
+                encryptionService: {
+                    decryptJweWithPrivateJwk: vi.fn().mockResolvedValue({
+                        vp_token: { credential: ["vp"] },
+                        state: "expected",
+                    }),
+                },
+                parseAuthorizationResponse: new ParseAuthorizationResponse(),
+                settings: { logDecryptedResponse: false },
+                presentationsService: {
+                    getPresentationConfig: vi.fn().mockResolvedValue({}),
+                    parseResponse: vi.fn().mockResolvedValue([]),
+                },
+                resolveWebhookFromEndpoint: vi
+                    .fn()
+                    .mockResolvedValue(undefined),
+                auditLogger: {
+                    logFlowStart: vi.fn(),
+                    logCredentialVerification: vi.fn(),
+                    logFlowError: vi.fn(),
+                },
+                processVerifiedPresentation: new ProcessVerifiedPresentation(
+                    new ParseAuthorizationResponse(),
+                    new CompletePresentationResponse({
+                        execute: vi.fn().mockResolvedValue(false),
+                    }),
+                    { publish },
+                ),
+                failPresentationResponse: new FailPresentationResponse({
+                    execute: update,
+                }),
+            },
+        );
+
+        const error = await service
+            .getResponse({ response: "encrypted" }, "expected")
+            .catch((error) => error);
+
+        expect(error.getStatus()).toBe(400);
+        expect(error.message).toBe(
+            "The presentation offer has already been used",
+        );
+        expect(update).not.toHaveBeenCalled();
+        expect(publish).not.toHaveBeenCalled();
+    });
 });

@@ -28,6 +28,7 @@ import { ListSessions } from "./application/list-sessions.js";
 import { RecordFailedTxCodeAttempt } from "./application/record-failed-tx-code-attempt.js";
 import { ResolveExternalAuthorizationSession } from "./application/resolve-external-authorization-session.js";
 import { UpdateSessionForTenant } from "./application/update-session-for-tenant.js";
+import { UpdateUnconsumedSession } from "./application/update-unconsumed-session.js";
 import { SessionCleanupMode } from "./domain/session-retention.js";
 import { Session } from "./entities/session.entity.js";
 import { SessionLogEntry } from "./entities/session-log-entry.entity.js";
@@ -79,6 +80,12 @@ import { SESSION_SETTINGS } from "./session-settings.js";
             inject: [SESSION_REPOSITORY],
             useFactory: (sessions: SessionRepository) =>
                 new UpdateSessionForTenant(sessions),
+        },
+        {
+            provide: UpdateUnconsumedSession,
+            inject: [SESSION_REPOSITORY],
+            useFactory: (sessions: SessionRepository) =>
+                new UpdateUnconsumedSession(sessions),
         },
         {
             provide: GetSessionForWalletRequest,
@@ -241,6 +248,7 @@ import { SESSION_SETTINGS } from "./session-settings.js";
         GetIso18013Session,
         CreateSession,
         UpdateSessionForTenant,
+        UpdateUnconsumedSession,
         SESSION_REPOSITORY,
         SessionConfigService,
         SessionEventsService,

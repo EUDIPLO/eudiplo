@@ -147,6 +147,48 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
             });
         });
 
+        it("applies an unconsumed update once, only within the tenant scope", async () => {
+            const completion = {
+                status: SessionStatus.Completed,
+                consumed: true,
+                responseCode: "first",
+            };
+            await expect(
+                adapter.updateUnconsumedForTenant(
+                    "tenant-b",
+                    sessionId,
+                    completion,
+                ),
+            ).resolves.toBe(false);
+
+            const results = await Promise.all(
+                Array.from({ length: 8 }, (_, index) =>
+                    adapter.updateUnconsumedForTenant("tenant-a", sessionId, {
+                        ...completion,
+                        responseCode: `response-${index}`,
+                    }),
+                ),
+            );
+            expect(results.filter(Boolean)).toHaveLength(1);
+            const winner = results.indexOf(true);
+
+            await expect(
+                adapter.updateUnconsumedForTenant(
+                    "tenant-a",
+                    sessionId,
+                    completion,
+                ),
+            ).resolves.toBe(false);
+            const stored = await getDataSource()
+                .getRepository(Session)
+                .findOneByOrFail({ id: sessionId });
+            expect(stored).toMatchObject({
+                consumed: true,
+                status: SessionStatus.Completed,
+                responseCode: `response-${winner}`,
+            });
+        });
+
         it("keeps token and PAR lookups tenant scoped and matches only the requested identifier", async () => {
             await adapter.updateForTenant("tenant-a", sessionId, {
                 authorization_code: "code",

@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { SessionStatus } from "../../../session/domain/session-state.js";
-import { CompletePresentationResponse } from "./complete-presentation-response.js";
+import {
+    CompletePresentationResponse,
+    PresentationAlreadyConsumed,
+} from "./complete-presentation-response.js";
 
 describe("CompletePresentationResponse", () => {
     it("persists completed status, replay protection, and outcome provenance", async () => {
-        const update = vi.fn().mockResolvedValue(undefined);
+        const update = vi.fn().mockResolvedValue(true);
         const response = new CompletePresentationResponse({ execute: update });
         const consumedAt = new Date("2026-09-27T00:00:00.000Z");
 
@@ -31,5 +34,20 @@ describe("CompletePresentationResponse", () => {
                 ],
             },
         });
+    });
+
+    it("rejects a response that lost the race to complete the session", async () => {
+        const response = new CompletePresentationResponse({
+            execute: vi.fn().mockResolvedValue(false),
+        });
+
+        await expect(
+            response.execute({
+                tenantId: "tenant-1",
+                sessionId: "session-1",
+                credentials: [],
+                responseCode: "response-code",
+            }),
+        ).rejects.toBeInstanceOf(PresentationAlreadyConsumed);
     });
 });

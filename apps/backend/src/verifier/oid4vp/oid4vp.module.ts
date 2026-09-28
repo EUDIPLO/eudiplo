@@ -5,6 +5,7 @@ import { CryptoModule } from "../../crypto/crypto.module.js";
 import { WebhookEndpointEntity } from "../../issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
 import { RegistrarModule } from "../../registrar/registrar.module.js";
 import { UpdateSessionForTenant } from "../../session/application/update-session-for-tenant.js";
+import { UpdateUnconsumedSession } from "../../session/application/update-unconsumed-session.js";
 import { SessionModule } from "../../session/session.module.js";
 import {
     PRESENTATION_RESULT_PUBLISHER,
@@ -67,8 +68,8 @@ import { OID4VP_SETTINGS } from "./oid4vp-settings.js";
         },
         {
             provide: CompletePresentationResponse,
-            inject: [UpdateSessionForTenant],
-            useFactory: (update: UpdateSessionForTenant) =>
+            inject: [UpdateUnconsumedSession],
+            useFactory: (update: UpdateUnconsumedSession) =>
                 new CompletePresentationResponse(update),
         },
         {

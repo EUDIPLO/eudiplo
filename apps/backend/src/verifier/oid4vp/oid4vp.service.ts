@@ -28,6 +28,7 @@ import { shortVerificationMessage } from "../presentations/credential/verificati
 import { AuthResponse } from "../presentations/dto/auth-response.dto.js";
 import { IncompletePresentationException } from "../presentations/exceptions/incomplete-presentation.exception.js";
 import { PresentationsService } from "../presentations/presentations.service.js";
+import { PresentationAlreadyConsumed } from "./application/complete-presentation-response.js";
 import { FailPresentationResponse } from "./application/fail-presentation-response.js";
 import {
     ParseAuthorizationResponse,
@@ -766,6 +767,12 @@ export class Oid4vpService {
 
             return {};
         } catch (error: any) {
+            // A concurrent response already completed this session: reject the
+            // replay without overwriting the completed session as failed.
+            if (error instanceof PresentationAlreadyConsumed) {
+                throw new BadRequestException(error.message);
+            }
+
             this.logger.warn(
                 {
                     sessionId: session.id,

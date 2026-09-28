@@ -55,6 +55,18 @@ export class TypeOrmSessionRepository implements SessionRepository {
         return result.affected ?? 0;
     }
 
+    async updateUnconsumedForTenant(
+        tenantId: string,
+        id: string,
+        update: SessionUpdate,
+    ): Promise<boolean> {
+        const result = await this.sessions.update(
+            { tenantId, id, consumed: false },
+            update as QueryDeepPartialEntity<Session>,
+        );
+        return (result.affected ?? 0) > 0;
+    }
+
     findForTenant(tenantId: string, id: string) {
         return this.findSession({ tenantId, id });
     }

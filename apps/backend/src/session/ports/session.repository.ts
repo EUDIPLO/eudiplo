@@ -31,6 +31,15 @@ export interface SessionRepository {
         id: string,
         update: SessionUpdate,
     ): Promise<number>;
+    /**
+     * Apply the update only while the session is not yet consumed. Exactly one
+     * of several concurrent callers wins; return whether this call did.
+     */
+    updateUnconsumedForTenant(
+        tenantId: string,
+        id: string,
+        update: SessionUpdate,
+    ): Promise<boolean>;
     findForTenant(tenantId: string, id: string): Promise<SessionData | null>;
     /** Internal flow correlation only; never use an untrusted management request ID. */
     findByIdForInternalFlow(id: string): Promise<SessionData | null>;
