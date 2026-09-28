@@ -79,7 +79,10 @@ export class ExchangeAccessToken {
         private readonly servers: OAuthAuthorizationServerFactory,
         private readonly sessions: Pick<
             SessionStore,
-            "getByAuthorizationCode" | "getByRefreshToken" | "updateForTenant"
+            | "getByAuthorizationCode"
+            | "getByRefreshToken"
+            | "updateForTenant"
+            | "updateIfUnconsumed"
         >,
         private readonly txCodeAttempts: Pick<
             RecordFailedTxCodeAttempt,
@@ -341,17 +344,29 @@ export class ExchangeAccessToken {
                       )
                     : undefined;
 
-            await this.sessions.updateForTenant(session.tenantId, session.id, {
-                consumed: true,
-                dpop_jkt: dpop?.jwkThumbprint ?? session.dpop_jkt,
-                client_key_jkt: clientKeyJkt,
-                ...(tokenResponse.refresh_token
-                    ? {
-                          refresh_token: tokenResponse.refresh_token,
-                          refresh_token_expires_at: refreshTokenExpiresAt,
-                      }
-                    : {}),
-            });
+            // Atomic single use: of concurrent requests for the same code,
+            // only the first may mark the session consumed and receive a token.
+            const redeemed = await this.sessions.updateIfUnconsumed(
+                session.tenantId,
+                session.id,
+                {
+                    consumed: true,
+                    dpop_jkt: dpop?.jwkThumbprint ?? session.dpop_jkt,
+                    client_key_jkt: clientKeyJkt,
+                    ...(tokenResponse.refresh_token
+                        ? {
+                              refresh_token: tokenResponse.refresh_token,
+                              refresh_token_expires_at: refreshTokenExpiresAt,
+                          }
+                        : {}),
+                },
+            );
+            if (!redeemed) {
+                throw new OAuthError(
+                    "invalid_grant",
+                    "The credential offer has already been used",
+                );
+            }
         }
 
         return tokenResponse;

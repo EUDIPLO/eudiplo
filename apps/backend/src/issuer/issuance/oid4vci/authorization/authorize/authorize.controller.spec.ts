@@ -120,6 +120,7 @@ function createHarness(issuanceConfig: Record<string, unknown> = {}) {
         getByRefreshToken: vi.fn(),
         getByRequestUri: vi.fn(),
         updateForTenant: vi.fn().mockResolvedValue(true),
+        updateIfUnconsumed: vi.fn().mockResolvedValue(true),
     };
     const createSession = { execute: vi.fn().mockResolvedValue(undefined) };
     const recordFailedTxCodeAttempt = { execute: vi.fn() };
@@ -804,7 +805,21 @@ describe("Built-in authorization server token endpoint", () => {
                     "Failed to create access token response",
                 ),
             );
-            expect(h.sessions.updateForTenant).not.toHaveBeenCalled();
+            expect(h.sessions.updateIfUnconsumed).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("concurrent redemption", () => {
+        it("rejects the request that loses the atomic single-use update", async () => {
+            h.sessions.updateIfUnconsumed.mockResolvedValue(false);
+            expect(
+                await token({ grant_type: "authorization_code", code: "c" }),
+            ).toEqual(
+                tokenError(
+                    "invalid_grant",
+                    "The credential offer has already been used",
+                ),
+            );
         });
     });
 
@@ -891,7 +906,7 @@ describe("Built-in authorization server token endpoint", () => {
                 },
             });
             const [tenant, id, update] =
-                h.sessions.updateForTenant.mock.calls[0];
+                h.sessions.updateIfUnconsumed.mock.calls[0];
             expect([tenant, id]).toEqual([TENANT, "session-1"]);
             expect(update).toEqual({
                 consumed: true,
@@ -960,7 +975,7 @@ describe("Built-in authorization server token endpoint", () => {
                     },
                 }),
             );
-            expect(h.sessions.updateForTenant).toHaveBeenCalledWith(
+            expect(h.sessions.updateIfUnconsumed).toHaveBeenCalledWith(
                 TENANT,
                 "session-1",
                 {
@@ -999,7 +1014,7 @@ describe("Built-in authorization server token endpoint", () => {
                     additionalAccessTokenResponsePayload: undefined,
                 }),
             );
-            expect(h.sessions.updateForTenant).not.toHaveBeenCalled();
+            expect(h.sessions.updateIfUnconsumed).not.toHaveBeenCalled();
         });
 
         it("lets attested clients refresh with a new DPoP key", async () => {
