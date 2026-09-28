@@ -20,7 +20,7 @@ export interface FederationTraversalLimits {
     maxResolutions: number;
 }
 
-export const DEFAULT_FEDERATION_TRAVERSAL_LIMITS: FederationTraversalLimits = {
+const DEFAULT_FEDERATION_TRAVERSAL_LIMITS: FederationTraversalLimits = {
     maxDepth: 8,
     maxHintsPerEntity: 10,
     maxResolutions: 32,
