@@ -6,6 +6,7 @@ import type { INestApplication } from "@nestjs/common";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { Test } from "@nestjs/testing";
+import { Oauth2ServerErrorResponseError } from "@openid4vc/oauth2";
 import { firstValueFrom, timeout } from "rxjs";
 import { DataSource } from "typeorm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -208,11 +209,14 @@ describe("session lifecycle module wiring", () => {
             authorization_code: id,
             credentialPayload: { tx_code: "1234" },
         });
-        const verification = vi.fn().mockRejectedValue({
-            error: "invalid_request",
-            error_description: "missing code",
-        });
-        const body = {
+        // Rejections use the real library error shape (code in errorResponse).
+        const verification = vi.fn().mockRejectedValue(
+            new Oauth2ServerErrorResponseError({
+                error: "invalid_request",
+                error_description: "Missing required 'tx_code' in request",
+            }),
+        );
+        const body: Record<string, string> = {
             grant_type: "urn:ietf:params:oauth:grant-type:pre-authorized_code",
             "pre-authorized_code": id,
         };
@@ -221,7 +225,11 @@ describe("session lifecycle module wiring", () => {
             "forTenant",
         ).mockReturnValue({
             parseAccessTokenRequest: () => ({
-                grant: { grantType: body.grant_type },
+                grant: {
+                    grantType: body.grant_type,
+                    preAuthorizedCode: id,
+                    txCode: body.tx_code,
+                },
                 accessTokenRequest: body,
             }),
             verifyPreAuthorizedCodeAccessTokenRequest: verification,
@@ -254,12 +262,18 @@ describe("session lifecycle module wiring", () => {
             expect(
                 (await repository.findOneByOrFail({ id })).txCodeFailedAttempts,
             ).toBe(0);
-            verification.mockRejectedValue({
-                error: "invalid_tx_code",
-                error_description: "wrong code",
-            });
+            body.tx_code = "9999";
+            verification.mockRejectedValue(
+                new Oauth2ServerErrorResponseError({
+                    error: "invalid_grant",
+                    error_description: "Invalid 'tx_code' provided",
+                }),
+            );
             await expect(attempt()).rejects.toMatchObject({
-                response: { error: "invalid_tx_code" },
+                response: {
+                    error: "invalid_grant",
+                    error_description: "Invalid 'tx_code' provided",
+                },
                 status: 400,
             });
             await expect(attempt()).rejects.toMatchObject({

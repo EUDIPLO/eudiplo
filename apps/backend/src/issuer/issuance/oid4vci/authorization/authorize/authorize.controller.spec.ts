@@ -1,5 +1,8 @@
 import { HttpException } from "@nestjs/common";
-import { Oauth2AuthorizationServer } from "@openid4vc/oauth2";
+import {
+    Oauth2AuthorizationServer,
+    Oauth2ServerErrorResponseError,
+} from "@openid4vc/oauth2";
 import { calculateJwkThumbprint } from "jose";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionData } from "../../../../../session/domain/session-data.js";
@@ -652,23 +655,24 @@ describe("Built-in authorization server token endpoint", () => {
             );
         });
 
-        it("counts a wrong tx_code and returns invalid_tx_code", async () => {
+        // Errors are thrown in the exact shape of the real OAuth library.
+        const libraryError = (error: string, description: string) =>
+            new Oauth2ServerErrorResponseError({
+                error,
+                error_description: description,
+            });
+
+        it("counts a wrong tx_code and returns invalid_grant", async () => {
             h.sessions.getByAuthorizationCode.mockResolvedValue(withTxCode());
             h.oauth.verifyPreAuthorizedCodeAccessTokenRequest.mockRejectedValue(
-                {
-                    error: "invalid_tx_code",
-                    errorResponse: {
-                        error: "invalid_grant",
-                        error_description: "Invalid transaction code",
-                    },
-                },
+                libraryError("invalid_grant", "Invalid 'tx_code' provided"),
             );
             h.recordFailedTxCodeAttempt.execute.mockResolvedValue({
                 failedAttempts: 1,
                 locked: false,
             });
             expect(await token(preAuth("9999"))).toEqual(
-                tokenError("invalid_tx_code", "Invalid transaction code"),
+                tokenError("invalid_grant", "Invalid 'tx_code' provided"),
             );
             expect(h.recordFailedTxCodeAttempt.execute).toHaveBeenCalledWith(
                 TENANT,
@@ -680,7 +684,7 @@ describe("Built-in authorization server token endpoint", () => {
         it("locks the code when the attempt reaches the limit", async () => {
             h.sessions.getByAuthorizationCode.mockResolvedValue(withTxCode(4));
             h.oauth.verifyPreAuthorizedCodeAccessTokenRequest.mockRejectedValue(
-                { error: "invalid_tx_code", message: "wrong" },
+                libraryError("invalid_grant", "Invalid 'tx_code' provided"),
             );
             h.recordFailedTxCodeAttempt.execute.mockResolvedValue({
                 failedAttempts: 5,
@@ -695,30 +699,42 @@ describe("Built-in authorization server token endpoint", () => {
         });
 
         it.each([
-            ["invalid_grant", "invalid_grant"],
-            ["invalid_request", "invalid_request"],
-            ["invalid_client", "invalid_client"],
-            ["invalid_dpop_proof", "invalid_dpop_proof"],
-            ["wrong_transaction", "invalid_tx_code"],
-            ["expired pre-authorized", "invalid_grant"],
-            ["pre_authorized_mismatch", "invalid_grant"],
-            ["something_else", "invalid_request"],
-            [undefined, "invalid_request"],
-        ])("maps library error %s to %s", async (libraryError, expected) => {
+            ["invalid_dpop_proof", "Invalid DPoP proof"],
+            ["invalid_client", "Invalid client attestation"],
+            ["invalid_request", "Missing required 'tx_code' in request"],
+        ])(
+            "does not count a %s failure as a tx_code attempt",
+            async (code, description) => {
+                h.sessions.getByAuthorizationCode.mockResolvedValue(
+                    withTxCode(),
+                );
+                h.oauth.verifyPreAuthorizedCodeAccessTokenRequest.mockRejectedValue(
+                    libraryError(code, description),
+                );
+                expect(await token(preAuth("9999"))).toEqual(
+                    tokenError(code, description),
+                );
+                expect(
+                    h.recordFailedTxCodeAttempt.execute,
+                ).not.toHaveBeenCalled();
+            },
+        );
+
+        it("does not count invalid_grant when no tx_code is expected", async () => {
             h.sessions.getByAuthorizationCode.mockResolvedValue(session());
             h.oauth.verifyPreAuthorizedCodeAccessTokenRequest.mockRejectedValue(
-                { error: libraryError, message: "library message" },
+                libraryError(
+                    "invalid_grant",
+                    "Invalid 'pre-authorized_code' provided",
+                ),
             );
-            h.recordFailedTxCodeAttempt.execute.mockResolvedValue({
-                failedAttempts: 1,
-                locked: false,
-            });
             expect(await token(preAuth())).toEqual(
-                tokenError(expected, "library message"),
+                tokenError(
+                    "invalid_grant",
+                    "Invalid 'pre-authorized_code' provided",
+                ),
             );
-            expect(h.recordFailedTxCodeAttempt.execute).toHaveBeenCalledTimes(
-                expected === "invalid_tx_code" ? 1 : 0,
-            );
+            expect(h.recordFailedTxCodeAttempt.execute).not.toHaveBeenCalled();
         });
     });
 

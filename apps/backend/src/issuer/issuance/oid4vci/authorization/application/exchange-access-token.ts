@@ -230,6 +230,7 @@ export class ExchangeAccessToken {
                         tenantId,
                         session,
                         maxAttempts,
+                        (parsed.grant as PreAuthorizedCodeGrant).txCode,
                     );
                 }));
         }
@@ -386,16 +387,33 @@ export class ExchangeAccessToken {
     /**
      * Map a failed pre-authorized code verification. A wrong `tx_code` is
      * counted and locks the code once the configured limit is reached.
+     *
+     * The OAuth library reports its error code in `errorResponse.error` and
+     * signals a wrong transaction code as `invalid_grant` (OID4VCI 1.0,
+     * Section 6.3), so a wrong `tx_code` is recognized by comparing it with the
+     * expected value. DPoP and client attestation are checked by the library
+     * before the codes and report different error codes, so they are not
+     * counted.
      */
     private async preAuthorizedCodeError(
         err: any,
         tenantId: string,
         session: SessionData,
         maxAttempts: number,
+        providedTxCode: string | undefined,
     ): Promise<OAuthError> {
-        const errorCode = toTokenErrorCode(err.error);
+        const errorCode = toTokenErrorCode(
+            err?.errorResponse?.error ?? err?.error,
+        );
+        const expectedTxCode = session.credentialPayload?.tx_code;
+        const wrongTxCode =
+            errorCode === "invalid_tx_code" ||
+            (errorCode === "invalid_grant" &&
+                !!expectedTxCode &&
+                !!providedTxCode &&
+                providedTxCode !== expectedTxCode);
         let logDetail: string | undefined;
-        if (errorCode === "invalid_tx_code") {
+        if (wrongTxCode) {
             const { failedAttempts, locked } =
                 await this.txCodeAttempts.execute(
                     tenantId,

@@ -169,6 +169,69 @@ describe("Issuance - Pre-authorized Code Flow", () => {
         expect(notificationObj.event).toBe("credential_accepted");
     });
 
+    test("locks the pre-authorized code after repeated wrong tx_code attempts", async () => {
+        const offerResponse = await request(app.getHttpServer())
+            .post("/issuer/offer")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                response_type: "uri",
+                credentialConfigurationIds: ["pid-no-key"],
+                flow: "pre_authorized_code",
+                tx_code: "1234",
+            })
+            .expect(201);
+
+        const client = new Openid4vciClient({
+            callbacks: {
+                ...callbacks,
+                clientAuthentication: clientAuthenticationAnonymous(),
+            },
+        });
+        const credentialOffer = await client.resolveCredentialOffer(
+            offerResponse.body.uri,
+        );
+        const issuerMetadata = await client.resolveIssuerMetadata(
+            credentialOffer.credential_issuer,
+        );
+        const tokenError = (txCode: string) =>
+            client
+                .retrievePreAuthorizedCodeAccessTokenFromOffer({
+                    credentialOffer,
+                    issuerMetadata,
+                    txCode,
+                })
+                .then(
+                    () => undefined,
+                    (error) => error.errorResponse,
+                );
+
+        const lockedDescription =
+            "Too many failed tx_code attempts. The pre-authorized code has been invalidated.";
+        const responses: Array<{ error?: string; error_description?: string }> =
+            [];
+        // The default limit is 5 attempts; stop as soon as the code is locked.
+        for (let attempt = 0; attempt < 10; attempt++) {
+            const response = await tokenError("0000");
+            responses.push(response);
+            if (response?.error_description === lockedDescription) break;
+        }
+
+        expect(responses.at(-1)).toMatchObject({
+            error: "invalid_grant",
+            error_description: lockedDescription,
+        });
+        expect(responses.length).toBeLessThan(10);
+        for (const response of responses.slice(0, -1)) {
+            expect(response).toMatchObject({ error: "invalid_grant" });
+        }
+        // Once locked, even the correct transaction code is rejected.
+        await expect(tokenError("1234")).resolves.toMatchObject({
+            error: "invalid_grant",
+            error_description: lockedDescription,
+        });
+    });
+
     test("pre authorized code flow with attestation proof type", async () => {
         const trust = await configureTrustedAttestationProvider(app, authToken);
         try {
