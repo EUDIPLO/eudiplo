@@ -264,6 +264,26 @@ describe("Issuance - Pre-authorized Code Flow", () => {
         });
     });
 
+    test.each([
+        [
+            "notification",
+            { notification_id: "n", event: "credential_accepted" },
+        ],
+        ["deferred_credential", { transaction_id: "t" }],
+    ])(
+        "answers an invalid access token at the %s endpoint with 401",
+        async (endpoint, body) => {
+            const response = await request(app.getHttpServer())
+                .post(`/issuers/root/vci/${endpoint}`)
+                .trustLocalhost()
+                .set("Authorization", "Bearer not-a-valid-token")
+                .send(body);
+            expect(response.status).toBe(401);
+            expect(response.body).toMatchObject({ error: "invalid_token" });
+            expect(response.headers["www-authenticate"]).toBeDefined();
+        },
+    );
+
     test("rejects a pre-authorized code after the session lifetime", async () => {
         const offerResponse = await request(app.getHttpServer())
             .post("/issuer/offer")

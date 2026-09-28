@@ -78,44 +78,8 @@ export class Oid4vciController {
                     throw err;
                 }
 
-                // Preserve OAuth2 resource auth semantics (e.g. DPoP scheme
-                // validation) so conformance tests can assert 401 +
-                // WWW-Authenticate correctly.
-                const resourceAuthError = err as
-                    | {
-                          message?: string;
-                          wwwAuthenticateHeaders?: Array<{
-                              scheme?: string;
-                          }>;
-                      }
-                    | undefined;
-
-                if (
-                    Array.isArray(resourceAuthError?.wwwAuthenticateHeaders) &&
-                    resourceAuthError.wwwAuthenticateHeaders.length > 0
-                ) {
-                    const wwwAuthenticateValue =
-                        resourceAuthError.wwwAuthenticateHeaders
-                            .map((header) => header.scheme)
-                            .filter((scheme): scheme is string =>
-                                Boolean(scheme),
-                            )
-                            .join(", ");
-
-                    if (wwwAuthenticateValue) {
-                        res.setHeader("WWW-Authenticate", wwwAuthenticateValue);
-                    }
-
-                    throw new HttpException(
-                        {
-                            error: "invalid_token",
-                            error_description:
-                                resourceAuthError.message ??
-                                "Access token validation failed",
-                        },
-                        HttpStatus.UNAUTHORIZED,
-                    );
-                }
+                const resourceAuthError = toResourceAuthError(err, res);
+                if (resourceAuthError) throw resourceAuthError;
 
                 // Wrap other errors according to OID4VCI spec Section 8.3.1.2
                 throw new CredentialRequestException(
@@ -193,18 +157,23 @@ export class Oid4vciController {
         @Req() req: Request,
         @Body() body: DeferredCredentialRequestDto,
         @Param("tenantId") tenantId: string,
+        @Res({ passthrough: true }) res: Response,
     ): Promise<CredentialResponse> {
-        return this.oid4vciService.getDeferredCredential(
-            {
-                body: req.body,
-                contentType: req.headers["content-type"] ?? "",
-                headers: req.headers,
-                method: req.method,
-                url: req.url,
-            },
-            body,
-            tenantId,
-        );
+        return this.oid4vciService
+            .getDeferredCredential(
+                {
+                    body: req.body,
+                    contentType: req.headers["content-type"] ?? "",
+                    headers: req.headers,
+                    method: req.method,
+                    url: req.url,
+                },
+                body,
+                tenantId,
+            )
+            .catch((err) => {
+                throw toResourceAuthError(err, res) ?? err;
+            });
     }
 
     /**
@@ -217,18 +186,23 @@ export class Oid4vciController {
         @Body() body: NotificationRequestDto,
         @Req() req: Request,
         @Param("tenantId") tenantId: string,
+        @Res({ passthrough: true }) res: Response,
     ) {
-        return this.oid4vciService.handleNotification(
-            {
-                body: req.body,
-                contentType: req.headers["content-type"] ?? "",
-                headers: req.headers,
-                method: req.method,
-                url: req.url,
-            },
-            body,
-            tenantId,
-        );
+        return this.oid4vciService
+            .handleNotification(
+                {
+                    body: req.body,
+                    contentType: req.headers["content-type"] ?? "",
+                    headers: req.headers,
+                    method: req.method,
+                    url: req.url,
+                },
+                body,
+                tenantId,
+            )
+            .catch((err) => {
+                throw toResourceAuthError(err, res) ?? err;
+            });
     }
 
     @Post("nonce")
@@ -240,4 +214,42 @@ export class Oid4vciController {
             c_nonce: nonce,
         }));
     }
+}
+
+/**
+ * Map an access-token or DPoP failure of a protected resource request to
+ * RFC 6750 / RFC 9449 semantics: 401 `invalid_token` with `WWW-Authenticate`.
+ * Returns undefined for other errors.
+ */
+function toResourceAuthError(
+    err: unknown,
+    res: Response,
+): HttpException | undefined {
+    const resourceAuthError = err as
+        | {
+              message?: string;
+              wwwAuthenticateHeaders?: Array<{ scheme?: string }>;
+          }
+        | undefined;
+    if (
+        !Array.isArray(resourceAuthError?.wwwAuthenticateHeaders) ||
+        resourceAuthError.wwwAuthenticateHeaders.length === 0
+    ) {
+        return undefined;
+    }
+    const wwwAuthenticateValue = resourceAuthError.wwwAuthenticateHeaders
+        .map((header) => header.scheme)
+        .filter((scheme): scheme is string => Boolean(scheme))
+        .join(", ");
+    if (wwwAuthenticateValue) {
+        res.setHeader("WWW-Authenticate", wwwAuthenticateValue);
+    }
+    return new HttpException(
+        {
+            error: "invalid_token",
+            error_description:
+                resourceAuthError.message ?? "Access token validation failed",
+        },
+        HttpStatus.UNAUTHORIZED,
+    );
 }
