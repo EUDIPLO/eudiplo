@@ -39,7 +39,10 @@ describe("presentation completion and publication", () => {
         });
         const useCase = new ProcessVerifiedPresentation(
             new ParseAuthorizationResponse(),
-            new CompletePresentationResponse({ updateIfUnconsumed: update }),
+            new CompletePresentationResponse(
+                { updateIfUnconsumed: update },
+                { announce: vi.fn() },
+            ),
             { publish },
         );
         return { useCase, update, publish, writes };
@@ -114,13 +117,26 @@ describe("presentation completion and publication", () => {
     it.each([undefined, "invalid_signature"])(
         "persists failure and clears keys with code %s",
         async (code) => {
-            const updateForTenant = vi.fn();
-            await new FailPresentationResponse({ updateForTenant }).execute({
+            const updateForTenant = vi.fn().mockResolvedValue(1);
+            const announce = vi.fn();
+            await new FailPresentationResponse(
+                { updateForTenant },
+                { announce },
+            ).execute({
                 tenantId: "tenant",
                 sessionId: "session",
+                requestId: "presentation",
                 message: "failed",
                 code,
             });
+            expect(announce).toHaveBeenCalledExactlyOnceWith(
+                {
+                    id: "session",
+                    tenantId: "tenant",
+                    requestId: "presentation",
+                },
+                "failed",
+            );
             expect(updateForTenant).toHaveBeenCalledWith("tenant", "session", {
                 status: "failed",
                 errorReason: "failed",
@@ -135,13 +151,23 @@ describe("presentation completion and publication", () => {
         },
     );
 
+    it("does not announce a failure when no session was updated", async () => {
+        const announce = vi.fn();
+        await new FailPresentationResponse(
+            { updateForTenant: vi.fn().mockResolvedValue(0) },
+            { announce },
+        ).execute({ tenantId: "tenant", sessionId: "gone", message: "failed" });
+        expect(announce).not.toHaveBeenCalled();
+    });
+
     it("does not publish when another response already completed the session", async () => {
         const publish = vi.fn();
         const useCase = new ProcessVerifiedPresentation(
             new ParseAuthorizationResponse(),
-            new CompletePresentationResponse({
-                updateIfUnconsumed: vi.fn().mockResolvedValue(false),
-            }),
+            new CompletePresentationResponse(
+                { updateIfUnconsumed: vi.fn().mockResolvedValue(false) },
+                { announce: vi.fn() },
+            ),
             { publish },
         );
 

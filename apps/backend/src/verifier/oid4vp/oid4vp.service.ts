@@ -20,6 +20,7 @@ import { CredentialFormat } from "../../issuer/configuration/credentials/entitie
 import { WebhookEndpointEntity } from "../../issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
 import { OfferResponse } from "../../issuer/issuance/oid4vci/dto/offer-request.dto.js";
 import { RegistrarService } from "../../registrar/registrar.service.js";
+import { ChangeSessionState } from "../../session/application/change-session-state.js";
 import { CreateSession } from "../../session/application/create-session.js";
 import { SessionStore } from "../../session/application/session-store.js";
 import type { SessionData } from "../../session/domain/session-data.js";
@@ -88,6 +89,7 @@ export class Oid4vpService {
         private readonly webhookEndpointRepo: Repository<WebhookEndpointEntity>,
         private readonly cryptoImplementationService: CryptoImplementationService,
         private readonly traceService: TraceService,
+        private readonly changeSessionState: ChangeSessionState,
     ) {}
 
     private async resolveWebhookFromEndpoint(
@@ -608,7 +610,7 @@ export class Oid4vpService {
             );
 
             // Update session with failed status
-            await this.sessionStore.updateForTenant(
+            const updated = await this.sessionStore.updateForTenant(
                 session.tenantId,
                 session.id,
                 {
@@ -617,6 +619,9 @@ export class Oid4vpService {
                     responseEncryptionPrivateJwk: null,
                 },
             );
+            if (updated > 0) {
+                this.changeSessionState.announce(session, SessionStatus.Failed);
+            }
 
             // Return redirect_uri with error if configured
             // and propagate HTTP 400 while preserving response body shape.
@@ -830,6 +835,7 @@ export class Oid4vpService {
             await this.failPresentationResponse.execute({
                 tenantId: session.tenantId,
                 sessionId: session.id,
+                requestId: session.requestId,
                 message: errorMessage,
                 code: structured?.code,
             });

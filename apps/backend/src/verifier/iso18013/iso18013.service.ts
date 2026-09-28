@@ -24,8 +24,13 @@ import { CertService } from "../../crypto/key/cert/cert.service.js";
 import { KeyChainService } from "../../crypto/key/key-chain.service.js";
 import { KeyUsageType } from "../../crypto/key/types/key-usage-type.js";
 import { WebhookEndpointEntity } from "../../issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
+import { ChangeSessionState } from "../../session/application/change-session-state.js";
 import { CreateSession } from "../../session/application/create-session.js";
 import { SessionStore } from "../../session/application/session-store.js";
+import type {
+    SessionData,
+    SessionUpdate,
+} from "../../session/domain/session-data.js";
 import { SessionStatus } from "../../session/domain/session-state.js";
 import { SessionAuditService } from "../../session/logging/session-audit.service.js";
 import {
@@ -86,7 +91,23 @@ export class Iso18013Service {
         @InjectPinoLogger(Iso18013Service.name)
         private readonly logger: PinoLogger,
         private readonly trustedAuthoritiesService: TrustedAuthoritiesService,
+        private readonly changeSessionState: ChangeSessionState,
     ) {}
+
+    /** Persists a failed outcome and announces the terminal transition. */
+    private async failSession(
+        session: SessionData,
+        update: Omit<SessionUpdate, "status">,
+    ): Promise<void> {
+        const updated = await this.sessionStore.updateForTenant(
+            session.tenantId,
+            session.id,
+            { ...update, status: SessionStatus.Failed },
+        );
+        if (updated > 0) {
+            this.changeSessionState.announce(session, SessionStatus.Failed);
+        }
+    }
 
     private async resolveWebhookFromEndpoint(
         webhookEndpointId: string | null | undefined,
@@ -377,14 +398,9 @@ export class Iso18013Service {
         } catch (err: any) {
             const reason = `HPKE decryption failed: ${err?.message ?? err}`;
             this.logger.warn({ sessionId }, reason);
-            await this.sessionStore.updateForTenant(
-                session.tenantId,
-                session.id,
-                {
-                    status: SessionStatus.Failed,
-                    errorReason: reason,
-                },
-            );
+            await this.failSession(session, {
+                errorReason: reason,
+            });
             this.auditLogService.logFlowError(logContext, err as Error, {
                 stage: "hpke_decryption",
             });
@@ -464,30 +480,25 @@ export class Iso18013Service {
             const verboseReason =
                 verifyResult.failure.reason ?? "mDOC verification failed";
 
-            await this.sessionStore.updateForTenant(
-                session.tenantId,
-                session.id,
-                {
-                    status: SessionStatus.Failed,
-                    errorReason: shortMessage,
-                    failureCode: errorCode,
-                    outcome: {
-                        result: "failed",
-                        error: errorCode,
-                        message: shortMessage,
-                        credentials: [
-                            {
-                                id: mdocCred.id,
-                                format: "mso_mdoc",
-                                docType: verifyResult.docType,
-                                verified: false,
-                                error: errorCode,
-                                message: shortMessage,
-                            },
-                        ],
-                    },
+            await this.failSession(session, {
+                errorReason: shortMessage,
+                failureCode: errorCode,
+                outcome: {
+                    result: "failed",
+                    error: errorCode,
+                    message: shortMessage,
+                    credentials: [
+                        {
+                            id: mdocCred.id,
+                            format: "mso_mdoc",
+                            docType: verifyResult.docType,
+                            verified: false,
+                            error: errorCode,
+                            message: shortMessage,
+                        },
+                    ],
                 },
-            );
+            });
             this.auditLogService.logFlowError(
                 logContext,
                 new Error(verboseReason),
@@ -510,25 +521,37 @@ export class Iso18013Service {
 
         const responseCode = randomUUID();
 
-        await this.sessionStore.updateForTenant(session.tenantId, session.id, {
-            credentials: credentials as any,
-            status: SessionStatus.Completed,
-            responseCode,
-            consumed: true,
-            consumedAt: new Date(),
-            outcome: {
-                result: "success",
-                credentials: [
-                    {
-                        id: mdocCred.id,
-                        format: "mso_mdoc",
-                        docType: verifyResult.docType,
-                        verified: true,
-                        trust: verifyResult.provenance,
-                    },
-                ],
+        // Complete atomically with the single-use flag so a concurrent
+        // response cannot also complete (and announce) the session.
+        const completed = await this.sessionStore.updateIfUnconsumed(
+            session.tenantId,
+            session.id,
+            {
+                credentials: credentials as any,
+                status: SessionStatus.Completed,
+                responseCode,
+                consumed: true,
+                consumedAt: new Date(),
+                outcome: {
+                    result: "success",
+                    credentials: [
+                        {
+                            id: mdocCred.id,
+                            format: "mso_mdoc",
+                            docType: verifyResult.docType,
+                            verified: true,
+                            trust: verifyResult.provenance,
+                        },
+                    ],
+                },
             },
-        });
+        );
+        if (!completed) {
+            throw new BadRequestException(
+                "The presentation offer has already been used",
+            );
+        }
+        this.changeSessionState.announce(session, SessionStatus.Completed);
 
         const webhook =
             session.parsedWebhook ??

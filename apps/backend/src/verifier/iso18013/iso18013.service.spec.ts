@@ -70,6 +70,7 @@ describe("Iso18013Service.createOffer per-request webhook override", () => {
             webhookEndpointRepo as any,
             {} as any, // logger
             {} as any, // trustedAuthoritiesService
+            {} as any, // changeSessionState
         );
     });
 

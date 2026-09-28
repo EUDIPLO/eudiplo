@@ -8,18 +8,29 @@ import {
 describe("CompletePresentationResponse", () => {
     it("persists completed status, replay protection, and outcome provenance", async () => {
         const update = vi.fn().mockResolvedValue(true);
-        const response = new CompletePresentationResponse({
-            updateIfUnconsumed: update,
-        });
+        const announce = vi.fn();
+        const response = new CompletePresentationResponse(
+            { updateIfUnconsumed: update },
+            { announce },
+        );
         const consumedAt = new Date("2026-09-27T00:00:00.000Z");
 
         await response.execute({
             tenantId: "tenant-1",
             sessionId: "session-1",
+            requestId: "presentation-1",
             credentials: [{ id: "credential-1" }, { value: "credential-2" }],
             responseCode: "response-code",
             consumedAt,
         });
+        expect(announce).toHaveBeenCalledExactlyOnceWith(
+            {
+                id: "session-1",
+                tenantId: "tenant-1",
+                requestId: "presentation-1",
+            },
+            SessionStatus.Completed,
+        );
 
         expect(update).toHaveBeenCalledWith("tenant-1", "session-1", {
             credentials: [{ id: "credential-1" }, { value: "credential-2" }],
@@ -38,10 +49,12 @@ describe("CompletePresentationResponse", () => {
         });
     });
 
-    it("rejects a response that lost the race to complete the session", async () => {
-        const response = new CompletePresentationResponse({
-            updateIfUnconsumed: vi.fn().mockResolvedValue(false),
-        });
+    it("rejects a response that lost the race without announcing it", async () => {
+        const announce = vi.fn();
+        const response = new CompletePresentationResponse(
+            { updateIfUnconsumed: vi.fn().mockResolvedValue(false) },
+            { announce },
+        );
 
         await expect(
             response.execute({
@@ -51,5 +64,6 @@ describe("CompletePresentationResponse", () => {
                 responseCode: "response-code",
             }),
         ).rejects.toBeInstanceOf(PresentationAlreadyConsumed);
+        expect(announce).not.toHaveBeenCalled();
     });
 });

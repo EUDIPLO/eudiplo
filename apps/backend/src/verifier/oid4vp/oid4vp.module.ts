@@ -4,6 +4,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { CryptoModule } from "../../crypto/crypto.module.js";
 import { WebhookEndpointEntity } from "../../issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
 import { RegistrarModule } from "../../registrar/registrar.module.js";
+import { ChangeSessionState } from "../../session/application/change-session-state.js";
 import { SessionStore } from "../../session/application/session-store.js";
 import { SessionModule } from "../../session/session.module.js";
 import {
@@ -61,15 +62,15 @@ import { OID4VP_SETTINGS } from "./oid4vp-settings.js";
         },
         {
             provide: FailPresentationResponse,
-            inject: [SessionStore],
-            useFactory: (sessions: SessionStore) =>
-                new FailPresentationResponse(sessions),
+            inject: [SessionStore, ChangeSessionState],
+            useFactory: (sessions: SessionStore, state: ChangeSessionState) =>
+                new FailPresentationResponse(sessions, state),
         },
         {
             provide: CompletePresentationResponse,
-            inject: [SessionStore],
-            useFactory: (sessions: SessionStore) =>
-                new CompletePresentationResponse(sessions),
+            inject: [SessionStore, ChangeSessionState],
+            useFactory: (sessions: SessionStore, state: ChangeSessionState) =>
+                new CompletePresentationResponse(sessions, state),
         },
         {
             provide: RetrievePresentationRequest,

@@ -38,6 +38,7 @@ export class ProcessVerifiedPresentation {
         await this.complete.execute({
             tenantId: session.tenantId,
             sessionId: session.id,
+            requestId: session.requestId,
             credentials: input.credentials ?? [],
             responseCode: input.responseCode,
         });

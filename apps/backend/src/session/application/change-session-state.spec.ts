@@ -72,4 +72,19 @@ describe("ChangeSessionState", () => {
         expect(events.publishStatusChanged).toHaveBeenCalledTimes(2);
         expect(metrics.recordStateChange).toHaveBeenCalledTimes(2);
     });
+
+    it("announces an already-persisted transition without writing", () => {
+        const { repository, events, metrics, useCase } = setup();
+        useCase.announce(session, SessionStatus.Failed);
+        expect(repository.changeState).not.toHaveBeenCalled();
+        expect(events.publishStatusChanged).toHaveBeenCalledExactlyOnceWith({
+            sessionId: "id",
+            status: SessionStatus.Failed,
+            updatedAt: expect.any(Date),
+        });
+        expect(metrics.recordStateChange).toHaveBeenCalledExactlyOnceWith(
+            session,
+            SessionStatus.Failed,
+        );
+    });
 });

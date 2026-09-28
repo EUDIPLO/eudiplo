@@ -19,6 +19,7 @@ describe("OID4VP state mismatch handling", () => {
                 responseEncryptionPrivateJwk: { kty: "oct", k: "secret" },
             };
             const update = vi.fn().mockResolvedValue(1);
+            const announce = vi.fn();
             const logFlowError = vi.fn();
             const complete = vi.fn();
             const publish = vi.fn();
@@ -56,9 +57,10 @@ describe("OID4VP state mismatch handling", () => {
                             { execute: complete },
                             { publish },
                         ),
-                    failPresentationResponse: new FailPresentationResponse({
-                        updateForTenant: update,
-                    }),
+                    failPresentationResponse: new FailPresentationResponse(
+                        { updateForTenant: update },
+                        { announce },
+                    ),
                 },
             );
             const error = await service
@@ -76,6 +78,14 @@ describe("OID4VP state mismatch handling", () => {
                     responseEncryptionPrivateJwk: null,
                     outcome: { result: "failed", message: reason },
                 },
+            );
+            expect(announce).toHaveBeenCalledExactlyOnceWith(
+                {
+                    id: "session",
+                    tenantId: "tenant",
+                    requestId: "presentation",
+                },
+                "failed",
             );
             expect(logFlowError).toHaveBeenCalledOnce();
             expect(complete).not.toHaveBeenCalled();
@@ -104,6 +114,7 @@ describe("OID4VP concurrent response handling", () => {
             responseEncryptionPrivateJwk: { kty: "oct", k: "secret" },
         };
         const update = vi.fn().mockResolvedValue(1);
+        const announce = vi.fn();
         const publish = vi.fn();
         const service = Object.assign(
             Object.create(Oid4vpService.prototype) as Oid4vpService,
@@ -133,14 +144,20 @@ describe("OID4VP concurrent response handling", () => {
                 },
                 processVerifiedPresentation: new ProcessVerifiedPresentation(
                     new ParseAuthorizationResponse(),
-                    new CompletePresentationResponse({
-                        updateIfUnconsumed: vi.fn().mockResolvedValue(false),
-                    }),
+                    new CompletePresentationResponse(
+                        {
+                            updateIfUnconsumed: vi
+                                .fn()
+                                .mockResolvedValue(false),
+                        },
+                        { announce },
+                    ),
                     { publish },
                 ),
-                failPresentationResponse: new FailPresentationResponse({
-                    updateForTenant: update,
-                }),
+                failPresentationResponse: new FailPresentationResponse(
+                    { updateForTenant: update },
+                    { announce },
+                ),
             },
         );
 
@@ -153,6 +170,7 @@ describe("OID4VP concurrent response handling", () => {
             "The presentation offer has already been used",
         );
         expect(update).not.toHaveBeenCalled();
+        expect(announce).not.toHaveBeenCalled();
         expect(publish).not.toHaveBeenCalled();
     });
 });

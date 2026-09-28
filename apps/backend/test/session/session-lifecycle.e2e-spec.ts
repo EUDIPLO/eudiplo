@@ -424,6 +424,88 @@ describe("session lifecycle module wiring", () => {
         }
     });
 
+    it("announces presentation completion once for concurrent responses and announces failures", async () => {
+        const { CompletePresentationResponse } = await import(
+            "../../src/verifier/oid4vp/application/complete-presentation-response.js"
+        );
+        const { FailPresentationResponse } = await import(
+            "../../src/verifier/oid4vp/application/fail-presentation-response.js"
+        );
+        const repository = db.getRepository(entities.Session);
+        const completedId = randomUUID();
+        const failedId = randomUUID();
+        await repository.save(
+            [completedId, failedId].map((id) => ({
+                id,
+                tenantId: "tenant-a",
+                requestId: "presentation",
+                responseEncryptionPrivateJwk: {
+                    kty: "oct",
+                    k: "private-material",
+                },
+            })),
+        );
+        const emitted: { sessionId: string; status: string }[] = [];
+        const listener = (event: { sessionId: string; status: string }) => {
+            if ([completedId, failedId].includes(event.sessionId)) {
+                emitted.push(event);
+            }
+        };
+        const emitter = app.get(EventEmitter2);
+        emitter.on(eventPort.SESSION_STATUS_CHANGED, listener);
+        try {
+            const complete = app.get(CompletePresentationResponse, {
+                strict: false,
+            });
+            const results = await Promise.allSettled(
+                ["first", "second"].map((responseCode) =>
+                    complete.execute({
+                        tenantId: "tenant-a",
+                        sessionId: completedId,
+                        requestId: "presentation",
+                        credentials: [],
+                        responseCode,
+                    }),
+                ),
+            );
+            expect(
+                results.filter((result) => result.status === "fulfilled"),
+            ).toHaveLength(1);
+            await app.get(FailPresentationResponse, { strict: false }).execute({
+                tenantId: "tenant-a",
+                sessionId: failedId,
+                requestId: "presentation",
+                message: "invalid",
+            });
+            expect(emitted).toEqual([
+                expect.objectContaining({
+                    sessionId: completedId,
+                    status: "completed",
+                }),
+                expect.objectContaining({
+                    sessionId: failedId,
+                    status: "failed",
+                }),
+            ]);
+            expect(
+                await repository.findOneByOrFail({ id: completedId }),
+            ).toMatchObject({
+                status: "completed",
+                consumed: true,
+                responseEncryptionPrivateJwk: null,
+            });
+            expect(
+                await repository.findOneByOrFail({ id: failedId }),
+            ).toMatchObject({
+                status: "failed",
+                responseEncryptionPrivateJwk: null,
+            });
+        } finally {
+            emitter.off(eventPort.SESSION_STATUS_CHANGED, listener);
+            await repository.delete([completedId, failedId]);
+        }
+    });
+
     it("registers the maintenance interval and expires overdue presentations via the use case", async () => {
         expect(
             app.get(SchedulerRegistry).doesExist("interval", "tidyUpSessions"),
