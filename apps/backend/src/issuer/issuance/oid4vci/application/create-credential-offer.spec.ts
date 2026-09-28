@@ -11,11 +11,13 @@ function fixture() {
     const update = vi.fn().mockImplementation(async () => {
         events.push("update");
     });
-    const protocol = {
-        selectAuthorizationServer: vi.fn().mockResolvedValue({
+    const selectAuthorizationServer = {
+        execute: vi.fn().mockResolvedValue({
             issuer: "https://as.example",
             sessionServerId: "selected",
         }),
+    };
+    const protocol = {
         validateClaims: vi.fn().mockImplementation(async () => {
             events.push("validate");
         }),
@@ -43,6 +45,7 @@ function fixture() {
         useCase: new CreateCredentialOffer(
             { execute },
             { updateForTenant: update },
+            selectAuthorizationServer,
             protocol,
             ids,
         ),

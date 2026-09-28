@@ -1,36 +1,19 @@
 import type { TraceService } from "nestjs-otel";
 import type { CredentialsService } from "../../../configuration/credentials/credentials.service.js";
+import type { BuildIssuerMetadata } from "../application/build-issuer-metadata.js";
 import { InvalidCredentialOffer } from "../domain/credential-offer-errors.js";
+import type { Oid4vciSdkFactory } from "../oid4vci-sdk.factory.js";
 import type { Oid4vciSettings } from "../oid4vci-settings.js";
 import type { CredentialOfferProtocol } from "../ports/credential-offer-protocol.js";
-import type { Oid4vciProtocolMetadata } from "./oid4vci-protocol-metadata.js";
 
 export class OpenIdCredentialOfferProtocol implements CredentialOfferProtocol {
     constructor(
-        private readonly metadata: Oid4vciProtocolMetadata,
+        private readonly sdk: Oid4vciSdkFactory,
+        private readonly buildIssuerMetadata: BuildIssuerMetadata,
         private readonly credentials: CredentialsService,
         private readonly trace: TraceService,
         private readonly settings: Oid4vciSettings,
     ) {}
-    async selectAuthorizationServer(tenantId: string, selected?: string) {
-        const selection =
-            await this.metadata.resolveAuthorizationServerSelection(
-                tenantId,
-                selected,
-            );
-        return {
-            issuer:
-                selection ??
-                (await this.metadata.getAuthorizationServer(tenantId)),
-            sessionServerId:
-                selection ??
-                (
-                    await this.metadata.getSelectedAuthorizationServerConfig(
-                        tenantId,
-                    )
-                )?.id,
-        };
-    }
     validateClaims(
         tenantId: string,
         configurationId: string,
@@ -53,8 +36,8 @@ export class OpenIdCredentialOfferProtocol implements CredentialOfferProtocol {
             "oid4vci.flow": session.credentialPayload!.flow,
             "oid4vci.credentialConfigurationIds": configurationIds.join(","),
         });
-        const issuer = this.metadata.getIssuer(session.tenantId, session.id);
-        const issuerMetadata = await this.metadata.issuerMetadata(
+        const issuer = this.sdk.issuer(session.tenantId, session.id);
+        const issuerMetadata = await this.buildIssuerMetadata.execute(
             session.tenantId,
             issuer,
         );

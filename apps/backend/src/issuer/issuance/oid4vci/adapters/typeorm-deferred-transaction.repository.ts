@@ -1,5 +1,5 @@
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { LessThan, Repository } from "typeorm";
 import { DeferredTransactionStatus } from "../domain/deferred-transaction-status.js";
 import { DeferredTransactionEntity } from "../entities/deferred-transaction.entity.js";
 import type {
@@ -14,6 +14,10 @@ export class TypeOrmDeferredTransactionRepository
         @InjectRepository(DeferredTransactionEntity)
         private readonly repository: Repository<DeferredTransactionEntity>,
     ) {}
+
+    async create(transaction: DeferredTransactionData): Promise<void> {
+        await this.repository.save(this.repository.create(transaction));
+    }
 
     async findPending(tenantId: string, transactionId: string) {
         return this.findByStatus(
@@ -59,6 +63,32 @@ export class TypeOrmDeferredTransactionRepository
                 throw new Error("Deferred transaction disappeared");
             return transaction;
         });
+    }
+
+    async markRetrieved(
+        tenantId: string,
+        transactionId: string,
+    ): Promise<boolean> {
+        const result = await this.repository.update(
+            {
+                tenantId,
+                transactionId,
+                status: DeferredTransactionStatus.Ready,
+            },
+            { status: DeferredTransactionStatus.Retrieved },
+        );
+        return (result.affected ?? 0) > 0;
+    }
+
+    async markExpired(tenantId: string, transactionId: string): Promise<void> {
+        await this.repository.update(
+            { tenantId, transactionId },
+            { status: DeferredTransactionStatus.Expired },
+        );
+    }
+
+    async deleteExpired(now: Date): Promise<void> {
+        await this.repository.delete({ expiresAt: LessThan(now) });
     }
 
     private async findByStatus(

@@ -3,25 +3,30 @@ import { decodeJwt } from "jose";
 import type { TrustStoreService } from "../../../../trust/trust-store.service.js";
 import type { TrustListRef } from "../../../../trust/types.js";
 import type { X509ValidationService } from "../../../../trust/x509-validation.service.js";
+import type { BuildIssuerMetadata } from "../application/build-issuer-metadata.js";
 import {
     validateAttestationProofTrust,
     validateJwtProofAttestationTrust,
 } from "../attestation-proof-trust.util.js";
+import type { Oid4vciSdkFactory } from "../oid4vci-sdk.factory.js";
 import type {
     CredentialProofVerifier,
     IssuanceProofType,
 } from "../ports/credential-proof-verifier.js";
-import type { Oid4vciProtocolMetadata } from "./oid4vci-protocol-metadata.js";
 
 export class OpenIdCredentialProofVerifier implements CredentialProofVerifier {
     constructor(
-        private readonly metadata: Oid4vciProtocolMetadata,
+        private readonly sdk: Oid4vciSdkFactory,
+        private readonly buildIssuerMetadata: BuildIssuerMetadata,
         private readonly trustStoreService: TrustStoreService,
         private readonly x509ValidationService: X509ValidationService,
     ) {}
     async prepare(tenantId: string, trustLists: TrustListRef[]) {
-        const issuer = this.metadata.getIssuer(tenantId);
-        const issuerMetadata = await this.metadata.issuerMetadata(tenantId);
+        const issuer = this.sdk.issuer(tenantId);
+        const issuerMetadata = await this.buildIssuerMetadata.execute(
+            tenantId,
+            issuer,
+        );
         const trust = {
             tenantId,
             trustStoreService: this.trustStoreService,

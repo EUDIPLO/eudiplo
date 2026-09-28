@@ -1,51 +1,266 @@
-import type { AuthorizationServerMetadata } from "@openid4vc/oauth2";
+import {
+    BadRequestException,
+    ConflictException,
+    HttpException,
+} from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
+import { SessionNotFound } from "../../../session/application/session-errors.js";
 import { HandleCredentialNotification } from "./application/handle-credential-notification.js";
+import {
+    CredentialAuthorizationError,
+    ResolveAuthorizedCredentialConfiguration,
+} from "./application/resolve-authorized-credential-configuration.js";
+import { ResolveCredentialProofs } from "./application/resolve-credential-proofs.js";
+import { CredentialSessionAuthorizationDenied } from "./application/resolve-credential-session.js";
+import {
+    AuthorizationServerMetadataUnavailable,
+    AuthorizationServerNotConfigured,
+} from "./domain/authorization-server-errors.js";
+import { InvalidCredentialOffer } from "./domain/credential-offer-errors.js";
+import { InvalidCredentialProof } from "./domain/credential-proof-errors.js";
+import { CredentialRequestException } from "./exceptions/index.js";
 import { Oid4vciService } from "./oid4vci.service.js";
+import type { Oid4vciRequestContext } from "./request-context.js";
 
-describe("Oid4vciService internal JWKS resolution", () => {
-    it("uses INTERNAL_URL only for the built-in authorization server", () => {
-        const service = Object.assign(
-            Object.create(Oid4vciService.prototype) as Oid4vciService,
-            {
-                settings: { internalUrl: "http://127.0.0.1:3000/" },
-                authzService: {
-                    getAuthzIssuer: vi.fn(
-                        (tenantId: string) =>
-                            `https://issuer.example/issuers/${tenantId}`,
+const issuerMetadata = {
+    authorizationServers: [],
+    credentialIssuer: { credential_issuer: "https://issuer.example" },
+};
+
+function service(overrides: Record<string, unknown>): Oid4vciService {
+    return Object.assign(
+        Object.create(Oid4vciService.prototype) as Oid4vciService,
+        {
+            logger: { debug: vi.fn(), warn: vi.fn() },
+            traceService: { getSpan: () => undefined },
+            sdk: { issuer: vi.fn() },
+            buildIssuerMetadata: {
+                execute: vi.fn().mockResolvedValue(issuerMetadata),
+            },
+            ...overrides,
+        },
+    );
+}
+
+async function rejection(promise: Promise<unknown>): Promise<unknown> {
+    try {
+        await promise;
+    } catch (error) {
+        return error;
+    }
+    throw new Error("expected a rejection");
+}
+
+function protocolError(error: unknown) {
+    expect(error).toBeInstanceOf(CredentialRequestException);
+    return (error as HttpException).getResponse();
+}
+
+describe("Oid4vciService credential request error mapping", () => {
+    const request: Oid4vciRequestContext = {
+        method: "POST",
+        url: "/issuers/tenant/vci/credential",
+        headers: { authorization: "DPoP access-token" },
+        contentType: "application/json",
+        body: { credential_configuration_id: "pid", proofs: {} },
+    };
+
+    function setup(overrides: {
+        resolveSession?: () => Promise<unknown>;
+        issue?: () => Promise<unknown>;
+        authorizationDetails?: unknown;
+    }) {
+        const session = {
+            id: "session",
+            tenantId: "tenant",
+            notifications: [],
+        };
+        return service({
+            sdk: {
+                issuer: () => ({
+                    getKnownCredentialConfigurationsSupported: () => ({
+                        pid: {},
+                    }),
+                    parseCredentialRequest: () => ({
+                        proofs: { jwt: ["proof-jwt"] },
+                        credentialConfigurationId: "pid",
+                    }),
+                    createCredentialResponse: () => ({
+                        credentialResponse: {},
+                    }),
+                }),
+            },
+            issuanceService: {
+                getIssuanceConfiguration: vi.fn().mockResolvedValue({}),
+            },
+            resolveCredentialProofs: new ResolveCredentialProofs(),
+            accessTokens: {
+                verify: vi.fn().mockResolvedValue({
+                    iss: "https://issuer.example",
+                    sub: "session",
+                    authorization_details: overrides.authorizationDetails,
+                }),
+            },
+            subjectKeyService: {
+                deriveIssuanceSetId: vi.fn().mockResolvedValue("set"),
+            },
+            resolveAuthorizedCredentialConfiguration:
+                new ResolveAuthorizedCredentialConfiguration(),
+            credentialsService: {
+                getSupportedProofTypesForCredentialConfig: vi
+                    .fn()
+                    .mockResolvedValue(["jwt"]),
+            },
+            resolveCredentialSession: {
+                execute:
+                    overrides.resolveSession ??
+                    vi.fn().mockResolvedValue({
+                        session,
+                        claimsResult: { claims: {} },
+                        isExternalAsToken: false,
+                        isChainedAsToken: false,
+                    }),
+            },
+            auditLogger: {
+                logFlowStart: vi.fn(),
+                logFlowError: vi.fn(),
+                logFlowComplete: vi.fn(),
+                logCredentialIssuance: vi.fn(),
+            },
+            nonceService: { validateAndConsume: vi.fn() },
+            issueCredentialsFromProofs: {
+                execute:
+                    overrides.issue ??
+                    vi.fn().mockResolvedValue([{ credential: "credential" }]),
+            },
+            sessionStore: { updateForTenant: vi.fn() },
+        });
+    }
+
+    it("issues a credential when every step succeeds", async () => {
+        await expect(
+            setup({}).getCredential(request, "tenant"),
+        ).resolves.toEqual({ credentialResponse: {} });
+    });
+
+    it("maps InvalidCredentialProof to invalid_proof", async () => {
+        const error = await rejection(
+            setup({
+                issue: () =>
+                    Promise.reject(
+                        new InvalidCredentialProof("holder key rejected"),
                     ),
-                },
-            },
+            }).getCredential(request, "tenant"),
         );
-        const authorizationServers = [
-            {
-                issuer: "https://issuer.example/issuers/acme",
-                jwks_uri:
-                    "https://issuer.example/.well-known/jwks.json/issuers/acme",
-            },
-            {
-                issuer: "https://external.example",
-                jwks_uri: "https://external.example/jwks",
-            },
-        ] as AuthorizationServerMetadata[];
+        expect(protocolError(error)).toEqual({
+            error: "invalid_proof",
+            error_description: "holder key rejected",
+        });
+    });
 
-        const resolvedAuthorizationServers = service[
-            "getAuthorizationServersForResourceVerification"
-        ]("acme", authorizationServers);
+    it("maps CredentialAuthorizationError to its own error code", async () => {
+        const error = await rejection(
+            setup({
+                authorizationDetails: [
+                    {
+                        type: "openid_credential",
+                        credential_configuration_id: "other",
+                    },
+                ],
+            }).getCredential(request, "tenant"),
+        );
+        const expected = new CredentialAuthorizationError(
+            "invalid_credential_request",
+            "Access token is not authorized for credential_configuration_id 'pid'",
+        );
+        expect(protocolError(error)).toEqual({
+            error: expected.code,
+            error_description: expected.message,
+        });
+    });
 
-        expect(resolvedAuthorizationServers).toEqual([
-            {
-                issuer: "https://issuer.example/issuers/acme",
-                jwks_uri:
-                    "http://127.0.0.1:3000/.well-known/jwks.json/issuers/acme",
-            },
-            {
-                issuer: "https://external.example",
-                jwks_uri: "https://external.example/jwks",
-            },
-        ]);
-        expect(authorizationServers[0].jwks_uri).toBe(
-            "https://issuer.example/.well-known/jwks.json/issuers/acme",
+    it("maps CredentialSessionAuthorizationDenied to credential_request_denied", async () => {
+        const error = await rejection(
+            setup({
+                resolveSession: () =>
+                    Promise.reject(
+                        new CredentialSessionAuthorizationDenied(
+                            "The access token is not associated with a valid session",
+                        ),
+                    ),
+            }).getCredential(request, "tenant"),
+        );
+        expect(protocolError(error)).toEqual({
+            error: "credential_request_denied",
+            error_description:
+                "The access token is not associated with a valid session",
+        });
+    });
+
+    it("propagates SessionNotFound unchanged for the controller to wrap", async () => {
+        const notFound = new SessionNotFound();
+        const error = await rejection(
+            setup({
+                resolveSession: () => Promise.reject(notFound),
+            }).getCredential(request, "tenant"),
+        );
+        expect(error).toBe(notFound);
+    });
+});
+
+describe("Oid4vciService authorization server errors", () => {
+    it("maps offer errors to 409 and 400", async () => {
+        const offer = (error: Error) =>
+            rejection(
+                service({
+                    createCredentialOffer: {
+                        execute: vi.fn().mockRejectedValue(error),
+                    },
+                }).createOffer("tenant", {} as never),
+            );
+
+        expect(await offer(new InvalidCredentialOffer())).toBeInstanceOf(
+            ConflictException,
+        );
+        const notConfigured = await offer(
+            new AuthorizationServerNotConfigured(
+                "No enabled authorization server configured",
+            ),
+        );
+        expect(notConfigured).toBeInstanceOf(BadRequestException);
+        expect((notConfigured as Error).message).toBe(
+            "No enabled authorization server configured",
+        );
+    });
+
+    it("maps metadata resolution errors on the notification endpoint to 400", async () => {
+        const error = await rejection(
+            service({
+                issuanceService: {
+                    getIssuanceConfiguration: vi.fn().mockResolvedValue({}),
+                },
+                buildIssuerMetadata: {
+                    execute: vi
+                        .fn()
+                        .mockRejectedValue(
+                            new AuthorizationServerMetadataUnavailable(),
+                        ),
+                },
+            }).handleNotification(
+                {
+                    method: "POST",
+                    url: "/notification",
+                    headers: {},
+                    contentType: "application/json",
+                    body: {},
+                },
+                { notification_id: "n", event: "credential_accepted" },
+                "tenant",
+            ),
+        );
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect((error as Error).message).toBe(
+            "Failed to fetch authorization server metadata",
         );
     });
 });
@@ -79,47 +294,31 @@ describe("OID4VCI notification endpoint lookup", () => {
             if (lookupError) throw lookupError;
             return lookupError === null ? null : endpoint;
         });
-        const service = Object.assign(
-            Object.create(Oid4vciService.prototype) as Oid4vciService,
-            {
-                issuanceService: {
-                    getIssuanceConfiguration: vi.fn().mockResolvedValue({}),
-                },
-                settings: { publicUrl: "https://issuer.example" },
-                metadata: {
-                    getIssuer: vi.fn(),
-                    getResourceServer: () => ({
-                        verifyResourceRequest: vi.fn().mockResolvedValue({
-                            tokenPayload: { sub: "session" },
-                        }),
-                    }),
-                    issuerMetadata: vi.fn().mockResolvedValue({
-                        authorizationServers: [],
-                        credentialIssuer: {
-                            credential_issuer: "https://issuer.example",
-                        },
-                    }),
-                },
-                sessionStore: {
-                    getForTenant: vi.fn().mockResolvedValue(session),
-                },
-                traceService: { getSpan: () => undefined },
-                handleCredentialNotification: new HandleCredentialNotification(
-                    {
-                        execute: vi.fn(async () => {
-                            order.push("record");
-                            return notification;
-                        }),
-                    },
-                    { findForTenant: lookup },
-                    { publish },
-                    { execute: changeState },
-                ),
-                auditLogger: { logError },
+        const oid4vci = service({
+            issuanceService: {
+                getIssuanceConfiguration: vi.fn().mockResolvedValue({}),
             },
-        );
+            accessTokens: {
+                verify: vi.fn().mockResolvedValue({ sub: "session" }),
+            },
+            sessionStore: {
+                getForTenant: vi.fn().mockResolvedValue(session),
+            },
+            handleCredentialNotification: new HandleCredentialNotification(
+                {
+                    execute: vi.fn(async () => {
+                        order.push("record");
+                        return notification;
+                    }),
+                },
+                { findForTenant: lookup },
+                { publish },
+                { execute: changeState },
+            ),
+            auditLogger: { logError },
+        });
         const execute = () =>
-            service.handleNotification(
+            oid4vci.handleNotification(
                 {
                     method: "POST",
                     url: "/notification",

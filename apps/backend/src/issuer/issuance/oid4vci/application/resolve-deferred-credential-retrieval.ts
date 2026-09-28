@@ -15,6 +15,8 @@ export type DeferredCredentialRetrieval =
     | { kind: "failed"; message: string }
     | { kind: "expired"; message: string }
     | { kind: "retrieved"; message: string }
+    /** Ready without a stored credential, or an unknown status. */
+    | { kind: "unavailable"; message: string }
     | { kind: "ready"; credential: string };
 
 export class ResolveDeferredCredentialRetrieval {
@@ -49,7 +51,7 @@ export class ResolveDeferredCredentialRetrieval {
             case DeferredTransactionStatus.Ready:
                 if (!input.credential) {
                     return {
-                        kind: "retrieved",
+                        kind: "unavailable",
                         message:
                             "Credential is marked as ready but not available",
                     };
@@ -57,7 +59,7 @@ export class ResolveDeferredCredentialRetrieval {
                 return { kind: "ready", credential: input.credential };
             default:
                 return {
-                    kind: "retrieved",
+                    kind: "unavailable",
                     message: "Unknown transaction status",
                 };
         }

@@ -5,12 +5,13 @@ import { KeyChainService } from "../../../../crypto/key/key-chain.service.js";
 import { KeyUsageType } from "../../../../crypto/key/types/key-usage-type.js";
 import { MediaType } from "../../../../shared/utils/media-type/media-type.enum.js";
 import { IssuanceService } from "../../../configuration/issuance/issuance.service.js";
-import { Oid4vciProtocolMetadata } from "../adapters/oid4vci-protocol-metadata.js";
+import { BuildIssuerMetadata } from "../application/build-issuer-metadata.js";
 import { AuthorizationServersService } from "../authorization/authorization-servers/authorization-servers.service.js";
 import { AuthorizeService } from "../authorization/authorize/authorize.service.js";
 import { ChainedAsService } from "../authorization/chained-as/chained-as.service.js";
 import { ChainedAsVpService } from "../authorization/chained-as-vp/chained-as-vp.service.js";
 import { WellKnownException } from "../exceptions/index.js";
+import { Oid4vciSdkFactory } from "../oid4vci-sdk.factory.js";
 import { CredentialIssuerMetadataDto } from "./dto/credential-issuer-metadata.dto.js";
 import { EC_Public, JwksResponseDto } from "./dto/jwks-response.dto.js";
 
@@ -21,12 +22,13 @@ import { EC_Public, JwksResponseDto } from "./dto/jwks-response.dto.js";
 export class WellKnownService {
     /**
      * Constructor for WellKnownService.
-     * @param oid4vciService
+     * @param buildIssuerMetadata
      * @param certService
      * @param authorizeService
      */
     constructor(
-        private readonly oid4vciService: Oid4vciProtocolMetadata,
+        private readonly buildIssuerMetadata: BuildIssuerMetadata,
+        private readonly sdk: Oid4vciSdkFactory,
         private readonly certService: CertService,
         public readonly keyChainService: KeyChainService,
         private readonly authorizeService: AuthorizeService,
@@ -49,7 +51,10 @@ export class WellKnownService {
     async getIssuerMetadata(tenantId: string, contentType: MediaType) {
         try {
             const metadata = (
-                await this.oid4vciService.issuerMetadata(tenantId)
+                await this.buildIssuerMetadata.execute(
+                    tenantId,
+                    this.sdk.issuer(tenantId),
+                )
             ).credentialIssuer as unknown as CredentialIssuerMetadataDto;
 
             if (contentType === MediaType.APPLICATION_JWT) {

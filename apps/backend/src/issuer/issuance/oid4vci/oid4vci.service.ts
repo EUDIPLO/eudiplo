@@ -1,28 +1,21 @@
 import {
     BadRequestException,
     ConflictException,
-    Inject,
     Injectable,
     Logger,
     NotFoundException,
 } from "@nestjs/common";
-import {
-    AuthorizationServerMetadata,
-    type HttpMethod,
-    type Jwk,
-    SupportedAuthenticationScheme,
-} from "@openid4vc/oauth2";
 import {
     CreateCredentialResponseReturn,
     type CredentialRequest,
     type CredentialResponse,
     DeferredCredentialResponse,
     type IssuerMetadataResult,
+    type Openid4vciIssuer,
     ParseCredentialRequestReturn,
 } from "@openid4vc/openid4vci";
 import { Span, TraceService } from "nestjs-otel";
 import { v4 } from "uuid";
-import { TokenPayload } from "../../../auth/token.decorator.js";
 import { EncryptionService } from "../../../crypto/encryption/encryption.service.js";
 import { SessionStore } from "../../../session/application/session-store.js";
 import { SessionStatus } from "../../../session/domain/session-state.js";
@@ -31,11 +24,10 @@ import { SessionLoggerService } from "../../../session/logging/session-logger.se
 import { CredentialsService } from "../../configuration/credentials/credentials.service.js";
 import { CredentialClaimsResolutionError } from "../../configuration/credentials/domain/credential-claims.js";
 import { CredentialProofType } from "../../configuration/credentials/entities/credential.entity.js";
-import type { IssuanceConfiguration as IssuanceConfig } from "../../configuration/issuance/domain/issuance-configuration.js";
 import { IssuanceService } from "../../configuration/issuance/issuance.service.js";
 import { SubjectKeyService } from "../../status-list/subject-key.service.js";
 import { addLegacyCredentialResponseEncryptionAlg } from "./adapters/credential-request-compat.js";
-import { Oid4vciProtocolMetadata } from "./adapters/oid4vci-protocol-metadata.js";
+import { BuildIssuerMetadata } from "./application/build-issuer-metadata.js";
 import { CreateCredentialOffer } from "./application/create-credential-offer.js";
 import { HandleCredentialNotification } from "./application/handle-credential-notification.js";
 import { IssueCredentialsFromProofs } from "./application/issue-credentials-from-proofs.js";
@@ -52,9 +44,12 @@ import {
     CredentialSessionAuthorizationDenied,
     ResolveCredentialSession,
 } from "./application/resolve-credential-session.js";
-import { AuthorizeService } from "./authorization/authorize/authorize.service.js";
-import { DPOP_PROOF_FRESHNESS } from "./authorization/shared/dpop.util.js";
+import {
+    type CredentialAccessTokenPayload,
+    CredentialAccessTokenVerifier,
+} from "./credential-access-token.verifier.js";
 import { DeferredCredentialService } from "./deferred-credential.service.js";
+import { AuthorizationServerError } from "./domain/authorization-server-errors.js";
 import { InvalidCredentialOffer } from "./domain/credential-offer-errors.js";
 import { InvalidCredentialProof } from "./domain/credential-proof-errors.js";
 import { DeferredCredentialRequestDto } from "./dto/deferred-credential-request.dto.js";
@@ -62,29 +57,8 @@ import { NotificationRequestDto } from "./dto/notification-request.dto.js";
 import { OfferRequestDto, OfferResponse } from "./dto/offer-request.dto.js";
 import { CredentialRequestException } from "./exceptions/index.js";
 import { NonceService } from "./nonce.service.js";
-import { OID4VCI_SETTINGS, type Oid4vciSettings } from "./oid4vci-settings.js";
-import type { DeferredTransactionData } from "./ports/deferred-transaction.repository.js";
+import { Oid4vciSdkFactory } from "./oid4vci-sdk.factory.js";
 import type { Oid4vciRequestContext } from "./request-context.js";
-import { normalizeRequestHeaders } from "./util.js";
-
-/**
- * Type alias for the OAuth2 access token payload returned by resource server verification.
- * This is distinct from the internal TokenPayload used for authenticated API requests.
- */
-type OAuth2TokenPayload = {
-    [x: string]: unknown;
-    iss: string;
-    exp: number;
-    iat: number;
-    aud: string | string[];
-    sub: string;
-    jti: string;
-    client_id?: string;
-    scope?: string;
-    nbf?: number;
-    nonce?: string;
-    cnf?: { jwk?: Jwk };
-};
 
 type SupportedCredentialProofType = "jwt" | "attestation";
 
@@ -93,9 +67,6 @@ interface ParsedCredentialProofs {
     values: string[];
 }
 
-const _AS_METADATA_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const _AS_METADATA_STALE_TTL_MS = 60 * 60 * 1000; // 1 hour stale grace window
-
 /**
  * Service for handling OID4VCI (OpenID 4 Verifiable Credential Issuance) operations.
  */
@@ -103,11 +74,10 @@ const _AS_METADATA_STALE_TTL_MS = 60 * 60 * 1000; // 1 hour stale grace window
 export class Oid4vciService {
     private readonly logger = new Logger(Oid4vciService.name);
     constructor(
-        private readonly metadata: Oid4vciProtocolMetadata,
-        private readonly authzService: AuthorizeService,
-        public readonly credentialsService: CredentialsService,
-        @Inject(OID4VCI_SETTINGS)
-        private readonly settings: Oid4vciSettings,
+        private readonly sdk: Oid4vciSdkFactory,
+        private readonly buildIssuerMetadata: BuildIssuerMetadata,
+        private readonly accessTokens: CredentialAccessTokenVerifier,
+        private readonly credentialsService: CredentialsService,
         private readonly sessionStore: SessionStore,
         private readonly handleCredentialNotification: HandleCredentialNotification,
         private readonly createCredentialOffer: CreateCredentialOffer,
@@ -125,107 +95,43 @@ export class Oid4vciService {
     ) {}
 
     /**
-     * Create a credential offer for a specific user and tenant.
-     * @param body The request body containing the offer details.
-     * @param user The user for whom the offer is being created.
+     * Create a credential offer for a tenant.
      * @param tenantId The ID of the tenant.
+     * @param body The request body containing the offer details.
      * @returns The created credential offer.
      */
     @Span("oid4vci.createOffer")
     async createOffer(
+        tenantId: string,
         body: OfferRequestDto,
-        user: TokenPayload,
-        _tenantId: string,
     ): Promise<OfferResponse> {
         try {
-            return await this.createCredentialOffer.execute(
-                user.entity!.id,
-                body,
-            );
+            return await this.createCredentialOffer.execute(tenantId, body);
         } catch (error) {
             if (error instanceof InvalidCredentialOffer)
                 throw new ConflictException(error.message);
-            throw error;
+            throw toHttpError(error);
         }
     }
 
     /**
-     * Create a nonce an store it in the session entity
-     * @param session
-     * @returns
+     * Build the issuer metadata; authorization-server problems become 400.
      */
-    async nonceRequest(tenantId: string) {
-        return this.nonceService.issue(tenantId);
-    }
-
-    /**
-     * Verify the resource access token from the request.
-     * Supports both DPoP and Bearer authentication schemes based on configuration.
-     */
-    private async verifyResourceAccessToken(
-        req: Oid4vciRequestContext,
+    private async issuerMetadata(
         tenantId: string,
-        issuerMetadata: IssuerMetadataResult,
-        issuanceConfig: Awaited<
-            ReturnType<IssuanceService["getIssuanceConfiguration"]>
-        >,
-    ): Promise<OAuth2TokenPayload> {
-        const resourceServer = this.metadata.getResourceServer(tenantId);
-        const headers = normalizeRequestHeaders(req.headers);
-
-        const allowedAuthenticationSchemes = [
-            SupportedAuthenticationScheme.DPoP,
-        ];
-
-        if (!issuanceConfig.dPopRequired) {
-            allowedAuthenticationSchemes.push(
-                SupportedAuthenticationScheme.Bearer,
-            );
+        issuer: Openid4vciIssuer,
+    ): Promise<IssuerMetadataResult> {
+        try {
+            return await this.buildIssuerMetadata.execute(tenantId, issuer);
+        } catch (error) {
+            throw toHttpError(error);
         }
-
-        const { tokenPayload } = await resourceServer.verifyResourceRequest({
-            authorizationServers:
-                this.getAuthorizationServersForResourceVerification(
-                    tenantId,
-                    issuerMetadata.authorizationServers,
-                ),
-            request: {
-                url: `${this.settings.publicUrl}${req.url}`,
-                method: req.method as HttpMethod,
-                headers,
-            },
-            resourceServer: issuerMetadata.credentialIssuer.credential_issuer,
-            allowedAuthenticationSchemes,
-            dpop: DPOP_PROOF_FRESHNESS,
-        });
-
-        return tokenPayload as OAuth2TokenPayload;
-    }
-
-    private getAuthorizationServersForResourceVerification(
-        tenantId: string,
-        authorizationServers: AuthorizationServerMetadata[],
-    ): AuthorizationServerMetadata[] {
-        const internalUrl = this.settings.internalUrl;
-        if (!internalUrl) {
-            return authorizationServers;
-        }
-
-        const builtInIssuer = this.authzService.getAuthzIssuer(tenantId);
-        const jwksUri = `${internalUrl.replace(/\/$/, "")}/.well-known/jwks.json/issuers/${tenantId}`;
-
-        return authorizationServers.map((authorizationServer) =>
-            authorizationServer.issuer === builtInIssuer
-                ? { ...authorizationServer, jwks_uri: jwksUri }
-                : authorizationServer,
-        );
     }
 
     private async resolveSessionAndClaims(
-        tokenPayload: OAuth2TokenPayload,
+        tokenPayload: CredentialAccessTokenPayload,
         tenantId: string,
         credentialConfigurationId: string,
-        _issuanceConfig: IssuanceConfig,
     ) {
         try {
             return await this.resolveCredentialSession.execute(
@@ -337,11 +243,8 @@ export class Oid4vciService {
         req: Oid4vciRequestContext,
         tenantId: string,
     ): Promise<CreateCredentialResponseReturn | DeferredCredentialResponse> {
-        const issuer = this.metadata.getIssuer(tenantId);
-        const issuerMetadata = await this.metadata.issuerMetadata(
-            tenantId,
-            issuer,
-        );
+        const issuer = this.sdk.issuer(tenantId);
+        const issuerMetadata = await this.issuerMetadata(tenantId, issuer);
         const issuanceConfig =
             await this.issuanceService.getIssuanceConfiguration(tenantId);
 
@@ -477,11 +380,11 @@ export class Oid4vciService {
         );
 
         // Verify access token
-        const tokenPayload = await this.verifyResourceAccessToken(
+        const tokenPayload = await this.accessTokens.verify(
             req,
             tenantId,
             issuerMetadata,
-            issuanceConfig,
+            issuanceConfig.dPopRequired,
         );
         const issuanceSetId = await this.deriveIssuanceSetId(req);
 
@@ -526,7 +429,6 @@ export class Oid4vciService {
                 tokenPayload,
                 tenantId,
                 credentialConfigurationId,
-                issuanceConfig,
             );
 
         this.logger.debug(
@@ -574,7 +476,6 @@ export class Oid4vciService {
                         session,
                         tenantId,
                         interval: claimsResult.interval,
-                        issuerMetadata,
                         issuanceSetId,
                     },
                 );
@@ -669,34 +570,16 @@ export class Oid4vciService {
             );
         }
 
-        const issuer = this.metadata.getIssuer(tenantId);
-        const resourceServer = this.metadata.getResourceServer(tenantId);
-        const issuerMetadata = await this.metadata.issuerMetadata(
+        const issuerMetadata = await this.issuerMetadata(
             tenantId,
-            issuer,
+            this.sdk.issuer(tenantId),
         );
-        const headers = normalizeRequestHeaders(req.headers);
-
-        const allowedAuthenticationSchemes: SupportedAuthenticationScheme[] = [
-            SupportedAuthenticationScheme.DPoP,
-        ];
-        if (!issuanceConfig.dPopRequired) {
-            allowedAuthenticationSchemes.push(
-                SupportedAuthenticationScheme.Bearer,
-            );
-        }
-
-        const { tokenPayload } = await resourceServer.verifyResourceRequest({
-            authorizationServers: issuerMetadata.authorizationServers,
-            request: {
-                url: `${this.settings.publicUrl}${req.url}`,
-                method: req.method as HttpMethod,
-                headers,
-            },
-            resourceServer: issuerMetadata.credentialIssuer.credential_issuer,
-            allowedAuthenticationSchemes,
-            dpop: DPOP_PROOF_FRESHNESS,
-        });
+        const tokenPayload = await this.accessTokens.verify(
+            req,
+            tenantId,
+            issuerMetadata,
+            issuanceConfig.dPopRequired,
+        );
 
         const session = await this.sessionStore.getForTenant(
             tenantId,
@@ -769,10 +652,9 @@ export class Oid4vciService {
             "session.tenantId": tenantId,
         });
 
-        const issuer = this.metadata.getIssuer(tenantId);
-        const issuerMetadata = await this.metadata.issuerMetadata(
+        const issuerMetadata = await this.issuerMetadata(
             tenantId,
-            issuer,
+            this.sdk.issuer(tenantId),
         );
         return this.deferredCredentialService.getDeferredCredential(
             req,
@@ -781,42 +663,11 @@ export class Oid4vciService {
             issuerMetadata,
         );
     }
+}
 
-    /**
-     * Mark a deferred transaction as ready with the issued credential.
-     * @param tenantId The tenant ID
-     * @param transactionId The transaction ID
-     * @param claims The claims to include in the credential
-     * @returns The updated deferred transaction
-     */
-    async completeDeferredTransaction(
-        tenantId: string,
-        transactionId: string,
-        claims: Record<string, unknown>,
-    ): Promise<DeferredTransactionData | null> {
-        return this.deferredCredentialService.completeDeferredTransaction(
-            tenantId,
-            transactionId,
-            claims,
-        );
-    }
-
-    /**
-     * Mark a deferred transaction as failed.
-     * @param tenantId The tenant ID
-     * @param transactionId The transaction ID
-     * @param errorMessage Optional error message
-     * @returns The updated deferred transaction
-     */
-    async failDeferredTransaction(
-        tenantId: string,
-        transactionId: string,
-        errorMessage?: string,
-    ): Promise<DeferredTransactionData | null> {
-        return this.deferredCredentialService.failDeferredTransaction(
-            tenantId,
-            transactionId,
-            errorMessage,
-        );
-    }
+/** Authorization-server configuration and discovery problems are client errors. */
+function toHttpError(error: unknown): unknown {
+    return error instanceof AuthorizationServerError
+        ? new BadRequestException(error.message)
+        : error;
 }

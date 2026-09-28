@@ -56,8 +56,33 @@ describe("ResolveDeferredCredentialRetrieval", () => {
                 now,
             }),
         ).toEqual({
-            kind: "retrieved",
+            kind: "unavailable",
             message: "Credential is marked as ready but not available",
+        });
+    });
+
+    it("distinguishes already retrieved from unknown statuses", () => {
+        expect(
+            useCase.execute({
+                status: DeferredTransactionStatus.Retrieved,
+                interval: 5,
+                expiresAt,
+                now,
+            }),
+        ).toEqual({
+            kind: "retrieved",
+            message: "The credential has already been retrieved",
+        });
+        expect(
+            useCase.execute({
+                status: "archived" as DeferredTransactionStatus,
+                interval: 5,
+                expiresAt,
+                now,
+            }),
+        ).toEqual({
+            kind: "unavailable",
+            message: "Unknown transaction status",
         });
     });
 });

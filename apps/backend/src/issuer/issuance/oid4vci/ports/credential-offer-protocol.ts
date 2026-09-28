@@ -3,10 +3,6 @@ import type { SessionData } from "../../../../session/domain/session-data.js";
 import type { CredentialOfferGrants } from "../domain/credential-offer-grants.js";
 
 export interface CredentialOfferProtocol {
-    selectAuthorizationServer(
-        tenantId: string,
-        selected?: string,
-    ): Promise<{ issuer: string; sessionServerId?: string }>;
     validateClaims(
         tenantId: string,
         configurationId: string,

@@ -21,6 +21,7 @@ export interface DeferredTransactionData {
 }
 
 export interface DeferredTransactionRepository {
+    create(transaction: DeferredTransactionData): Promise<void>;
     findPending(
         tenantId: string,
         transactionId: string,
@@ -39,6 +40,13 @@ export interface DeferredTransactionRepository {
         transactionId: string,
         errorMessage: string,
     ): Promise<DeferredTransactionData>;
+    /**
+     * Moves a ready transaction to `retrieved`. Returns false when it was not
+     * ready anymore, for example because a concurrent request retrieved it.
+     */
+    markRetrieved(tenantId: string, transactionId: string): Promise<boolean>;
+    markExpired(tenantId: string, transactionId: string): Promise<void>;
+    deleteExpired(now: Date): Promise<void>;
 }
 
 export interface DeferredCredentialIssuer {

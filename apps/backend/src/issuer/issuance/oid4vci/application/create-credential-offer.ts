@@ -3,11 +3,16 @@ import type { SessionStore } from "../../../../session/application/session-store
 import type { SessionOfferRequest } from "../../../../session/domain/session-data.js";
 import type { CredentialOfferProtocol } from "../ports/credential-offer-protocol.js";
 import { BuildCredentialOfferGrants } from "./build-credential-offer-grants.js";
+import type { SelectAuthorizationServer } from "./select-authorization-server.js";
 
 export class CreateCredentialOffer {
     constructor(
         private readonly sessions: Pick<CreateSession, "execute">,
         private readonly update: Pick<SessionStore, "updateForTenant">,
+        private readonly authorizationServers: Pick<
+            SelectAuthorizationServer,
+            "execute"
+        >,
         private readonly protocol: CredentialOfferProtocol,
         private readonly newId: () => string,
     ) {}
@@ -16,7 +21,7 @@ export class CreateCredentialOffer {
         request: SessionOfferRequest,
     ): Promise<{ session: string; uri: string }> {
         const id = this.newId();
-        const selection = await this.protocol.selectAuthorizationServer(
+        const selection = await this.authorizationServers.execute(
             tenantId,
             request.authorization_server,
         );

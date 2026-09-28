@@ -20,6 +20,7 @@ import type { Request, Response } from "express";
 import { DeferredCredentialRequestDto } from "./dto/deferred-credential-request.dto.js";
 import { NotificationRequestDto } from "./dto/notification-request.dto.js";
 import { CredentialRequestException } from "./exceptions/index.js";
+import { NonceService } from "./nonce.service.js";
 import { Oid4vciService } from "./oid4vci.service.js";
 import type { Oid4vciRequestContext } from "./request-context.js";
 
@@ -30,7 +31,10 @@ import type { Oid4vciRequestContext } from "./request-context.js";
 @ApiParam({ name: "tenantId", required: true })
 @Controller("issuers/:tenantId/vci")
 export class Oid4vciController {
-    constructor(private readonly oid4vciService: Oid4vciService) {}
+    constructor(
+        private readonly oid4vciService: Oid4vciService,
+        private readonly nonceService: NonceService,
+    ) {}
 
     /**
      * Endpoint to issue credentials
@@ -232,7 +236,7 @@ export class Oid4vciController {
     @Header("Cache-Control", "no-store")
     nonce(@Param("tenantId") tenantId: string) {
         //TODO: maybe also add it into the header, see https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-nonce-response
-        return this.oid4vciService.nonceRequest(tenantId).then((nonce) => ({
+        return this.nonceService.issue(tenantId).then((nonce) => ({
             c_nonce: nonce,
         }));
     }

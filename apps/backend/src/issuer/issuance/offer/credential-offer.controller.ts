@@ -79,12 +79,9 @@ export class CredentialOfferController {
             }
         }
 
-        // For now, we'll just pass the body to the service as before
-        // You can modify the service later to accept user information if needed
         const values = await this.oid4vciService.createOffer(
-            body,
-            user,
             user.entity!.id,
+            body,
         );
 
         res.send(values);

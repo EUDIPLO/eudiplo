@@ -35,9 +35,6 @@
     "crypto/key/kms/adapters/vault-kms.adapter.ts": [
         "http-exception"
     ],
-    "issuer/issuance/oid4vci/adapters/oid4vci-protocol-metadata.ts": [
-        "http-exception"
-    ],
     "issuer/issuance/oid4vci/authorization/authorization-servers/authorization-servers.service.ts": [
         "config",
         "http-exception",
@@ -68,10 +65,6 @@
     ],
     "issuer/issuance/oid4vci/authorization/shared/pkce.util.ts": [
         "http-exception"
-    ],
-    "issuer/issuance/oid4vci/deferred-credential.service.ts": [
-        "config",
-        "typeorm"
     ],
     "issuer/issuance/oid4vci/exceptions/credential-request.exception.ts": [
         "http-exception"

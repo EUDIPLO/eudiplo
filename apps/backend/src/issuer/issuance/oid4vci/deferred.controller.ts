@@ -11,18 +11,22 @@ import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Role } from "../../../auth/roles/role.enum.js";
 import { Secured } from "../../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../../auth/token.decorator.js";
+import { CompleteDeferredCredential } from "./application/complete-deferred-credential.js";
+import { FailDeferredCredential } from "./application/fail-deferred-credential.js";
 import {
     CompleteDeferredDto,
     DeferredOperationResponse,
     FailDeferredDto,
 } from "./dto/complete-deferred.dto.js";
-import { Oid4vciService } from "./oid4vci.service.js";
 
 @ApiTags("Issuer")
 @Secured([Role.IssuanceOffer])
 @Controller("issuer/deferred")
 export class DeferredController {
-    constructor(private readonly oid4vciService: Oid4vciService) {}
+    constructor(
+        private readonly completeDeferredCredential: CompleteDeferredCredential,
+        private readonly failDeferredCredential: FailDeferredCredential,
+    ) {}
 
     /**
      * Complete a deferred credential transaction by providing the claims.
@@ -70,12 +74,11 @@ export class DeferredController {
         @Body() body: CompleteDeferredDto,
         @Token() user: TokenPayload,
     ): Promise<DeferredOperationResponse> {
-        const transaction =
-            await this.oid4vciService.completeDeferredTransaction(
-                user.entity!.id,
-                transactionId,
-                body.claims,
-            );
+        const transaction = await this.completeDeferredCredential.execute({
+            tenantId: user.entity!.id,
+            transactionId,
+            claims: body.claims,
+        });
 
         if (!transaction) {
             throw new NotFoundException(
@@ -132,7 +135,7 @@ export class DeferredController {
         @Body() body: FailDeferredDto,
         @Token() user: TokenPayload,
     ): Promise<DeferredOperationResponse> {
-        const transaction = await this.oid4vciService.failDeferredTransaction(
+        const transaction = await this.failDeferredCredential.execute(
             user.entity!.id,
             transactionId,
             body.error,
