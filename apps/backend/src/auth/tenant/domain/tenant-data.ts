@@ -1,4 +1,5 @@
 import type { SessionCleanupMode } from "../../../session/domain/session-retention.js";
+import { NotFoundError } from "../../../shared/domain/not-found-error.js";
 import type { ClientData } from "../../client/domain/client-data.js";
 
 export interface TenantData {
@@ -20,7 +21,7 @@ export interface TenantData {
     clients?: ClientData[];
 }
 export type TenantUpdate = Partial<Omit<TenantData, "id" | "clients">>;
-export class TenantNotFound extends Error {
+export class TenantNotFound extends NotFoundError {
     constructor(readonly tenantId: string) {
         super(`Tenant '${tenantId}' not found`);
         this.name = "TenantNotFound";

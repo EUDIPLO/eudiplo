@@ -1,5 +1,6 @@
 import type { SchemaURIMeta } from "@owf/eudi-attestation-schema";
 import type { z } from "zod";
+import { NotFoundError } from "../../../../shared/domain/not-found-error.js";
 import type { CredentialConfigCreateSchema } from "../schemas/credential-config.schema.js";
 export type CredentialConfiguration = Omit<
     z.output<typeof CredentialConfigCreateSchema>,
@@ -32,7 +33,7 @@ export type CredentialConfiguration = Omit<
         }>;
     } | null;
 };
-export class CredentialConfigurationNotFound extends Error {
+export class CredentialConfigurationNotFound extends NotFoundError {
     constructor(
         readonly tenantId: string,
         readonly configurationId: string,

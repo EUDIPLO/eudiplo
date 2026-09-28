@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import { NotFoundError } from "../../../../shared/domain/not-found-error.js";
 import type { IssuanceConfigSchema } from "../schemas/issuance.schema.js";
 
 type ConfigInput = z.output<typeof IssuanceConfigSchema>;
@@ -30,7 +31,7 @@ export type IssuanceConfiguration = Omit<
         expiresAt?: number;
     } | null;
 };
-export class IssuanceConfigurationNotFound extends Error {
+export class IssuanceConfigurationNotFound extends NotFoundError {
     constructor(readonly tenantId: string) {
         super(`Issuance configuration for tenant '${tenantId}' not found`);
         this.name = "IssuanceConfigurationNotFound";

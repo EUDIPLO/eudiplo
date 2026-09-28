@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { Request, Response } from "express";
 import { EntityNotFoundError } from "typeorm";
+import { NotFoundError } from "./shared/domain/not-found-error.js";
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -23,7 +24,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
         let status: number;
         if (exception instanceof HttpException) {
             status = exception.getStatus();
-        } else if (exception instanceof EntityNotFoundError) {
+        } else if (
+            exception instanceof EntityNotFoundError ||
+            exception instanceof NotFoundError
+        ) {
             status = HttpStatus.NOT_FOUND;
         } else {
             status = HttpStatus.INTERNAL_SERVER_ERROR;
