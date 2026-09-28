@@ -127,6 +127,7 @@ export class WebhookService {
                 },
                 {
                     headers,
+                    lookup: this.outboundUrlPolicyService.safeLookup as never,
                 },
             ),
         ).then(
@@ -188,6 +189,7 @@ export class WebhookService {
                 },
                 {
                     headers,
+                    lookup: this.outboundUrlPolicyService.safeLookup as never,
                 },
             ),
         ).then(
@@ -258,7 +260,10 @@ export class WebhookService {
         }
 
         return firstValueFrom(
-            this.httpService.post(values.webhook.url, payload, { headers }),
+            this.httpService.post(values.webhook.url, payload, {
+                headers,
+                lookup: this.outboundUrlPolicyService.safeLookup as never,
+            }),
         ).then(
             (webhookResponse) => {
                 return webhookResponse.data;

@@ -1,15 +1,18 @@
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
 
-/** Fetches externally hosted issuer/schema metadata under an SSRF-safe policy. */
+/**
+ * Fetches externally hosted issuer/schema metadata under the shared outbound
+ * URL policy (`OUTBOUND_URL_*` settings). Every redirect hop is checked, and
+ * the connected address is validated at connect time.
+ */
 @Injectable()
 export class MetadataFetchService {
     private readonly timeoutMs = 5000;
     private readonly maxRedirects = 3;
+    private readonly maxResponseBytes = 5 * 1024 * 1024;
 
-    constructor(private readonly configService: ConfigService) {}
+    constructor(private readonly outboundUrlPolicy: OutboundUrlPolicyService) {}
 
     async fetch(metadataUrl: string): Promise<string | object> {
         let currentUrl = metadataUrl;
@@ -19,21 +22,23 @@ export class MetadataFetchService {
             redirectCount <= this.maxRedirects;
             redirectCount++
         ) {
-            await this.assertSafeUrl(currentUrl);
+            this.assertNoUserinfo(currentUrl);
 
-            const response = await fetch(currentUrl, {
-                method: "GET",
-                headers: { accept: "application/json" },
-                redirect: "manual",
-                signal: AbortSignal.timeout(this.timeoutMs),
-            }).catch((error) => {
-                throw new BadRequestException(
-                    `Failed to fetch issuer metadata from ${currentUrl}: ${error instanceof Error ? error.message : "unknown error"}`,
-                );
-            });
+            const response = await this.outboundUrlPolicy
+                .get(currentUrl, {
+                    timeoutMs: this.timeoutMs,
+                    maxBytes: this.maxResponseBytes,
+                    headers: { accept: "application/json" },
+                })
+                .catch((error) => {
+                    if (error instanceof BadRequestException) throw error;
+                    throw new BadRequestException(
+                        `Failed to fetch issuer metadata from ${currentUrl}: ${error instanceof Error ? error.message : "unknown error"}`,
+                    );
+                });
 
             if (response.status >= 300 && response.status < 400) {
-                const location = response.headers.get("location");
+                const location = response.location;
                 if (!location) {
                     throw new BadRequestException(
                         `Issuer metadata response from ${currentUrl} returned a redirect without a location header`,
@@ -43,13 +48,13 @@ export class MetadataFetchService {
                 continue;
             }
 
-            if (!response.ok) {
+            if (response.status < 200 || response.status >= 300) {
                 throw new BadRequestException(
                     `Failed to fetch issuer metadata from ${currentUrl}: HTTP ${response.status}`,
                 );
             }
 
-            const text = await response.text();
+            const text = response.body;
             try {
                 return JSON.parse(text);
             } catch {
@@ -99,83 +104,17 @@ export class MetadataFetchService {
         return `${parsedUrl.origin}${wellKnownPrefix}${issuerPath}`;
     }
 
-    private async assertSafeUrl(inputUrl: string): Promise<void> {
-        const parsedUrl = new URL(inputUrl);
+    private assertNoUserinfo(inputUrl: string): void {
+        let parsedUrl: URL;
+        try {
+            parsedUrl = new URL(inputUrl);
+        } catch {
+            throw new BadRequestException("issuerUrl must be a valid URL");
+        }
         if (parsedUrl.username || parsedUrl.password) {
             throw new BadRequestException(
                 "issuerUrl must not include userinfo credentials",
             );
         }
-
-        if (this.configService.get<string>("NODE_ENV") !== "production") {
-            return;
-        }
-
-        const hostname = parsedUrl.hostname.toLowerCase();
-        if (
-            hostname === "localhost" ||
-            hostname.endsWith(".localhost") ||
-            hostname.endsWith(".local")
-        ) {
-            throw new BadRequestException(
-                "issuerUrl must resolve to a public host",
-            );
-        }
-
-        const resolvedAddresses = isIP(hostname)
-            ? [hostname]
-            : (
-                  await lookup(hostname, { all: true, verbatim: true }).catch(
-                      () => {
-                          throw new BadRequestException(
-                              "issuerUrl host could not be resolved",
-                          );
-                      },
-                  )
-              ).map((entry) => entry.address);
-
-        if (
-            resolvedAddresses.length === 0 ||
-            resolvedAddresses.some((address) => this.isPrivateIp(address))
-        ) {
-            throw new BadRequestException(
-                "issuerUrl must resolve to a public host",
-            );
-        }
-    }
-
-    private isPrivateIp(address: string): boolean {
-        const normalizedAddress =
-            address.startsWith("::ffff:") && isIP(address.slice(7)) === 4
-                ? address.slice(7)
-                : address;
-        const family = isIP(normalizedAddress);
-
-        if (family === 4) {
-            const [first, second] = normalizedAddress.split(".").map(Number);
-            return (
-                first === 0 ||
-                first === 10 ||
-                first === 127 ||
-                (first === 100 && second >= 64 && second <= 127) ||
-                (first === 169 && second === 254) ||
-                (first === 172 && second >= 16 && second <= 31) ||
-                (first === 192 && second === 168) ||
-                (first === 198 && (second === 18 || second === 19))
-            );
-        }
-
-        if (family === 6) {
-            const normalized = normalizedAddress.toLowerCase();
-            return (
-                normalized === "::" ||
-                normalized === "::1" ||
-                normalized.startsWith("fc") ||
-                normalized.startsWith("fd") ||
-                /^fe[89ab]/.test(normalized)
-            );
-        }
-
-        return true;
     }
 }

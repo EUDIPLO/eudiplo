@@ -6,6 +6,7 @@ import { AuditLogModule } from "../../audit-log/audit-log.module.js";
 import { TrustListModule } from "../../issuer/trust-list/trustlist.module.js";
 import { RegistrarModule } from "../../registrar/registrar.module.js";
 import { TrustModule } from "../../trust/trust.module.js";
+import { WebhookModule } from "../../webhook/webhook.module.js";
 import { ResolverModule } from "../resolver/resolver.module.js";
 import { MdocCredentialVerifierFormat } from "./adapters/mdoc-credential-verifier-format.js";
 import { SdJwtCredentialVerifierFormat } from "./adapters/sd-jwt-credential-verifier-format.js";
@@ -49,6 +50,7 @@ export const verifyPresentationResponseProvider: Provider = {
         TrustListModule,
         TrustModule,
         RegistrarModule,
+        WebhookModule,
     ],
     controllers: [PresentationManagementController],
     providers: [

@@ -1,11 +1,130 @@
+import { type LookupAddress, lookup as lookupCallback } from "node:dns";
 import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { isIP, type LookupFunction } from "node:net";
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+
+/** Response of {@link OutboundUrlPolicyService.get}; redirects are not followed. */
+export interface OutboundResponse {
+    status: number;
+    location?: string;
+    body: string;
+}
 
 @Injectable()
 export class OutboundUrlPolicyService {
     constructor(private readonly configService: ConfigService) {}
+
+    /**
+     * `dns.lookup` replacement for outbound connections. It validates the
+     * addresses that are actually connected to, so a hostname cannot pass
+     * {@link assertSafeUrl} with a public address and then resolve to a private
+     * one for the connection (DNS rebinding).
+     */
+    readonly safeLookup: LookupFunction = (hostname, options, callback) => {
+        lookupCallback(
+            hostname,
+            { ...options, all: true },
+            (error, addresses: LookupAddress[]) => {
+                if (error) return callback(error, "", 0);
+                if (
+                    !this.allowPrivateNetwork() &&
+                    (addresses.length === 0 ||
+                        addresses.some(({ address }) =>
+                            this.isPrivateIp(address),
+                        ))
+                ) {
+                    return callback(
+                        new Error(
+                            "Outbound URL target resolves to a private or loopback IP",
+                        ),
+                        "",
+                        0,
+                    );
+                }
+                if (options.all) return callback(null, addresses);
+                return callback(
+                    null,
+                    addresses[0].address,
+                    addresses[0].family,
+                );
+            },
+        );
+    };
+
+    /**
+     * GET a URL that passed {@link assertSafeUrl}, validating the connected
+     * address, bounding time and response size, and not following redirects.
+     */
+    async get(
+        url: string,
+        options: {
+            timeoutMs: number;
+            maxBytes: number;
+            headers?: Record<string, string>;
+        },
+    ): Promise<OutboundResponse> {
+        await this.assertSafeUrl(url);
+        const target = new URL(url);
+        const send = target.protocol === "https:" ? httpsRequest : httpRequest;
+        return new Promise<OutboundResponse>((resolve, reject) => {
+            // Settle once: an aborted oversized response must never resolve
+            // with truncated data.
+            let settled = false;
+            const fail = (error: Error) => {
+                if (settled) return;
+                settled = true;
+                request.destroy();
+                reject(error);
+            };
+            const request = send(
+                target,
+                {
+                    method: "GET",
+                    headers: options.headers,
+                    lookup: this.safeLookup,
+                    timeout: options.timeoutMs,
+                },
+                (response) => {
+                    const chunks: Buffer[] = [];
+                    let size = 0;
+                    response.on("data", (chunk: Buffer) => {
+                        size += chunk.length;
+                        if (size > options.maxBytes) {
+                            fail(
+                                new Error(
+                                    `Outbound response exceeds ${options.maxBytes} bytes`,
+                                ),
+                            );
+                            return;
+                        }
+                        chunks.push(chunk);
+                    });
+                    response.on("end", () => {
+                        if (settled) return;
+                        settled = true;
+                        resolve({
+                            status: response.statusCode ?? 0,
+                            location: response.headers.location,
+                            body: Buffer.concat(chunks).toString("utf8"),
+                        });
+                    });
+                    response.on("error", fail);
+                },
+            );
+            request.on("timeout", () =>
+                fail(
+                    new Error(
+                        `Outbound request timed out after ${options.timeoutMs} ms`,
+                    ),
+                ),
+            );
+            request.on("error", fail);
+            request.end();
+        });
+    }
 
     async assertSafeUrl(url: string): Promise<void> {
         let parsed: URL;
@@ -139,6 +258,8 @@ export class OutboundUrlPolicyService {
             const [a, b] = octets;
             if (a === 10) return true;
             if (a === 127) return true;
+            if (a === 100 && b >= 64 && b <= 127) return true; // carrier-grade NAT
+            if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking
             if (a === 169 && b === 254) return true;
             if (a === 172 && b >= 16 && b <= 31) return true;
             if (a === 192 && b === 168) return true;

@@ -16,13 +16,15 @@ export const ISSUER_VALIDATION_SCHEMA = Joi.object({
 
     OUTBOUND_URL_ALLOW_HTTP: Joi.boolean()
         .optional()
-        .description("Allow HTTP (non-TLS) for outbound webhook calls")
+        .description(
+            "Allow HTTP (non-TLS) for outbound calls (webhooks, attribute providers, issuer and schema metadata imports). Defaults to true outside production.",
+        )
         .meta({ group: "issuer", order: 20 }),
 
     OUTBOUND_URL_ALLOW_PRIVATE_NETWORK: Joi.boolean()
         .optional()
         .description(
-            "Allow outbound webhook calls to private, loopback, or link-local IP ranges",
+            "Allow outbound calls (webhooks, attribute providers, metadata imports) to private, loopback, or link-local IP ranges. The address actually connected to is checked as well (DNS rebinding protection). Defaults to true outside production.",
         )
         .meta({ group: "issuer", order: 30 }),
 
@@ -30,7 +32,7 @@ export const ISSUER_VALIDATION_SCHEMA = Joi.object({
         .allow("")
         .optional()
         .description(
-            "Comma-separated hostname allowlist for outbound webhook calls (supports exact host and subdomains)",
+            "Comma-separated hostname allowlist for outbound calls (webhooks, attribute providers, metadata imports; supports exact host and subdomains)",
         )
         .meta({ group: "issuer", order: 40 }),
     ISSUER_MULTI_CONSUMPTION: Joi.boolean()
