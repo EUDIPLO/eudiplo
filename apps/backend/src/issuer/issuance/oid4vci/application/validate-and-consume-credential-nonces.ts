@@ -57,7 +57,16 @@ export class ValidateAndConsumeCredentialNonces {
                 );
             }
 
-            await this.nonces.delete(tenantId, nonce);
+            // The delete is the atomic consumption step: a concurrent request
+            // that consumed the same nonce first leaves nothing to delete.
+            const consumed = await this.nonces.delete(tenantId, nonce);
+            if (!consumed) {
+                throw new CredentialNonceValidationError(
+                    "invalid_nonce",
+                    "The nonce in the key proof is invalid or has already been used",
+                    true,
+                );
+            }
         }
     }
 }

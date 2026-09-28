@@ -45,6 +45,29 @@ describe("ValidateAndConsumeCredentialNonces", () => {
         expect(remove).toHaveBeenCalledExactlyOnceWith("tenant-1", "n1");
     });
 
+    it("rejects a nonce that a concurrent request consumed first", async () => {
+        const useCase = new ValidateAndConsumeCredentialNonces({
+            find: vi.fn().mockResolvedValue({
+                expiresAt: new Date("2030-01-01T00:00:00.000Z"),
+            }),
+            delete: vi.fn().mockResolvedValue(false),
+        } as never);
+
+        await expect(
+            useCase.execute(
+                [proof({ nonce: "raced" })],
+                "jwt",
+                "tenant-1",
+                new Date("2029-01-01T00:00:00.000Z"),
+            ),
+        ).rejects.toMatchObject({
+            code: "invalid_nonce",
+            message:
+                "The nonce in the key proof is invalid or has already been used",
+            shouldAudit: true,
+        });
+    });
+
     it("deletes expired nonces before returning an auditable protocol error", async () => {
         const remove = vi.fn().mockResolvedValue(true);
         const useCase = new ValidateAndConsumeCredentialNonces({
