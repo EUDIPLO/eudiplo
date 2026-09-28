@@ -8,6 +8,19 @@ Apply these boundaries to new or explicitly migrated application/domain code. Ex
 
 Internal changes are permitted within the requested task, with all affected callers updated. Preserve public HTTP/protocol contracts, SDK/configuration formats, persisted data, and security behavior unless a behavior change is explicitly in scope. Architectural preference alone does not authorize an external breaking change.
 
+## Scope: where the layering applies
+
+Ports and adapters are a tool, not a goal. Apply them where they pay off, and keep everything else simple.
+
+| Area | Expected shape | Why |
+| --- | --- | --- |
+| Protocol and trust core: OID4VCI, OID4VP, authorization, credential formats, trust evaluation, sessions | Use cases in `application/`, rules in `domain/`, infrastructure behind `ports/` | Security-critical branching logic that must be testable without HTTP or a database; real extension points (formats, claims providers, trust sources, KMS, storage). |
+| Administrative CRUD: tenant, client, credential/issuance/presentation configuration, status-list configuration, registrar configuration, audit log, config import/export | A feature service with an injected TypeORM repository is fine | Read, validate and save have little logic. Extra layers add ceremony without making the code safer or easier to change. |
+
+Rules for the CRUD shape: keep DTO validation in the controller, keep tenant scoping on every query, throw `NotFoundError` subclasses or Nest HTTP exceptions, and do not put protocol logic there. When a CRUD service starts to carry real business rules, or becomes a dependency of the protocol core, extract a port for what the core needs.
+
+The migration is **done** when the protocol and trust core follows the target shape and the ratchet baseline contains no core-related legacy entries. Administrative CRUD does not need to be migrated.
+
 ## Architectural style
 
 EUDIPLO is a modular monolith using pragmatic hexagonal / ports-and-adapters principles.
