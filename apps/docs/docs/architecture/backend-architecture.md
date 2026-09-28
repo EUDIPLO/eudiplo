@@ -374,7 +374,7 @@ The checks use the installed TypeScript compiler API and Vitest, without introdu
 
 `apps/backend/test/architecture/architecture-baseline.json` lists existing debt per file and category, so it can only shrink:
 
-- Legacy files (no role above; migrations and generated code excluded): `express` everywhere. In the protocol core (`issuer/issuance/`, `verifier/`, `trust/`, `session/`) also `config` (`@nestjs/config`), `typeorm` (`typeorm`, `@nestjs/typeorm`) and `http-exception` (Nest `…Exception` from `@nestjs/common`). Administrative CRUD outside these paths may use them freely, see [Scope](#scope-where-the-layering-applies).
+- Legacy files (no role above; migrations and generated code excluded): `express` everywhere. In the protocol core (`issuer/issuance/`, `verifier/`, `trust/`, `session/`) also `config` (`@nestjs/config`), `typeorm` (`typeorm`, `@nestjs/typeorm`) and `http-exception` (Nest `…Exception` from `@nestjs/common`). Administrative CRUD outside these paths, and presentation configuration management in `verifier/presentations/configuration/`, may use them freely, see [Scope](#scope-where-the-layering-applies).
 - Adapters: `http-exception`, `adapter->controller`, `adapter->module`, `adapter->other-capability-adapter` (a capability is the first folder under `src/`).
 - Controllers: `controller->adapter`.
 

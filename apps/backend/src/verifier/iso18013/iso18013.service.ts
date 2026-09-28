@@ -40,6 +40,7 @@ import {
     type PresentationResultPublisher,
 } from "../../webhook/ports/presentation-result-publisher.js";
 import { WebhookConfig } from "../../webhook/webhook.dto.js";
+import { PresentationConfigService } from "../presentations/configuration/presentation-config.service.js";
 import { MdocverifierService } from "../presentations/credential/mdocverifier/mdocverifier.service.js";
 import { shortVerificationMessage } from "../presentations/credential/verification-failure.js";
 import {
@@ -47,7 +48,10 @@ import {
     TrustedAuthorityQueryOpenIdFederation,
     TrustedAuthorityType,
 } from "../presentations/entities/presentation-config.entity.js";
-import { PresentationsService } from "../presentations/presentations.service.js";
+import {
+    InvalidTrustedAuthoritiesError,
+    TrustedAuthoritiesService,
+} from "../presentations/trusted-authorities.service.js";
 import {
     buildDeviceRequestCbor,
     buildEncryptionInfo,
@@ -71,7 +75,7 @@ export interface Iso18013Offer {
 @Injectable()
 export class Iso18013Service {
     constructor(
-        private readonly presentationsService: PresentationsService,
+        private readonly presentationConfigService: PresentationConfigService,
         private readonly createSession: CreateSession,
         private readonly sessionStore: SessionStore,
         private readonly encryptionService: EncryptionService,
@@ -86,6 +90,7 @@ export class Iso18013Service {
         private readonly webhookEndpointRepo: Repository<WebhookEndpointEntity>,
         @InjectPinoLogger(Iso18013Service.name)
         private readonly logger: PinoLogger,
+        private readonly trustedAuthoritiesService: TrustedAuthoritiesService,
     ) {}
 
     private async resolveWebhookFromEndpoint(
@@ -125,10 +130,11 @@ export class Iso18013Service {
         skewSeconds?: number,
         webhook?: WebhookConfig,
     ): Promise<Iso18013Offer> {
-        const config = await this.presentationsService.getPresentationConfig(
-            requestId,
-            tenantId,
-        );
+        const config =
+            await this.presentationConfigService.getPresentationConfig(
+                requestId,
+                tenantId,
+            );
 
         const pubJwk =
             await this.encryptionService.getEncryptionPublicKey(tenantId);
@@ -390,10 +396,11 @@ export class Iso18013Service {
             throw new BadRequestException("HPKE decryption failed");
         }
 
-        const config = await this.presentationsService.getPresentationConfig(
-            session.requestId!,
-            session.tenantId,
-        );
+        const config =
+            await this.presentationConfigService.getPresentationConfig(
+                session.requestId!,
+                session.tenantId,
+            );
 
         const mdocCred = config.dcql_query.credentials.find(
             (c) => c.format === "mso_mdoc",
@@ -416,12 +423,18 @@ export class Iso18013Service {
                 auth.type === TrustedAuthorityType.OPENID_FEDERATION,
         );
 
-        const resolvedLoteAuthorities =
-            await this.presentationsService.resolveTrustListRefsForTenant(
+        const resolvedLoteAuthorities = await this.trustedAuthoritiesService
+            .resolveTrustListRefsForTenant(
                 loteAuthorities?.values,
                 session.tenantId,
                 tenantHost,
-            );
+            )
+            .catch((error: unknown) => {
+                if (error instanceof InvalidTrustedAuthoritiesError) {
+                    throw new BadRequestException(error.message);
+                }
+                throw error;
+            });
 
         const verifyOptions: VerifierOptions = {
             trustListSource: {

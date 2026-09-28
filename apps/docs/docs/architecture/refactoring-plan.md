@@ -20,9 +20,9 @@ This plan is not an instruction to execute tasks automatically. Pick one slice, 
 | 7–9 | Issuer credential formats | Done | Registry dispatches to SD-JWT VC and mdoc issuers typed on the plain `CredentialConfiguration` model. |
 | 10–11 | Claims provider and publisher ports | Done | Unify claim-source selection between `IssueCredential` and `ConfiguredCredentialClaimsProvider`. |
 | 12–13 | Trust retrieval and federation resolver | Partial | Federation trust is not cryptographically anchored (T1), traversal needs limits (T2). |
-| 14 | OID4VP use cases | Partial | Request retrieval, response parsing and completion extracted; `PresentationsService` (2300 lines) untouched. |
-| 15–16 | Verifier credential formats | Partial | Registry exists but formats have different `verify` signatures; ISO 18013 bypasses it. |
-| 17–18 | Configuration repositories, plain models | Done for tenant, credential, issuance, attribute-provider, webhook-endpoint | Presentation, status-list, registrar, key-chain and config-portability still use TypeORM in services. Credential configurations use one `CredentialConfigurationRepository` port owned by `CredentialConfigModule`. |
+| 14 | OID4VP use cases | Partial | Request retrieval, response parsing and completion extracted. `PresentationsService` (~710 lines, was 2320) now only verifies the `vp_token`; configuration CRUD, registration certificates, metadata import and trusted authorities are separate services, DCQL claim rules are pure domain functions. Verification orchestration is not yet a use case. |
+| 15–16 | Verifier credential formats | Partial | Registry exists but formats have different `verify` signatures; mdoc transcript and SD-JWT key-binding values are still built in `PresentationsService`; ISO 18013 bypasses the registry. |
+| 17–18 | Configuration repositories, plain models | Done for tenant, credential, issuance, attribute-provider, webhook-endpoint | Status-list, registrar, key-chain and config-portability still use TypeORM in services. Presentation configuration is administrative CRUD: `verifier/presentations/configuration/` keeps TypeORM in plain services and is excluded from the protocol-core ratchet. Credential configurations use one `CredentialConfigurationRepository` port owned by `CredentialConfigModule`. |
 | 19 | Client provider abstraction | Done in code | Regenerate the SDK (C7) and validate Keycloak mode against a live instance. |
 | 20 | Typed settings instead of `ConfigService` | Partial | Protocol-core files still importing `@nestjs/config` are listed in the ratchet baseline. Administrative CRUD may keep `ConfigService`. |
 | 21 | Modules as composition roots | Partial | Applied to migrated slices. |
@@ -37,12 +37,12 @@ These legacy services still mix orchestration with persistence, configuration, t
 
 | Area | Files | Notes |
 | --- | --- | --- |
-| Verification | `verifier/presentations/presentations.service.ts`, `verifier/oid4vp/oid4vp.service.ts`, `verifier/iso18013/iso18013.service.ts` | Largest remaining monolith. Decomposition proposal under [next slices](#next-slices). |
+| Verification | `verifier/presentations/presentations.service.ts`, `verifier/oid4vp/oid4vp.service.ts`, `verifier/iso18013/iso18013.service.ts` | `PresentationsService.parseResponse` still orchestrates verification with Nest exceptions; OID4VP and ISO 18013 build `VerifierOptions` separately. Remaining steps under [next slices](#next-slices). |
 | OID4VCI | `issuer/issuance/oid4vci/adapters/oid4vci-protocol-metadata.ts` (~1000 lines), `oid4vci.service.ts`, `deferred-credential.service.ts` | The metadata file was moved out of `Oid4vciService` without being decomposed. Deferred issuance writes through both the port and a raw TypeORM repository. |
 | Authorization | `issuer/issuance/oid4vci/authorization/**` | `authorize.service.ts`, `interactive-authorization.service.ts`, `chained-as.service.ts`, `authorization-servers.service.ts`. |
 | Other capabilities | `issuer/status-list/`, `crypto/key/`, `registrar/`, `platform/config-portability/`, `audit-log/`, `storage/files.service.ts` | Not yet in scope of any slice. |
 
-The ratchet baseline (`apps/backend/test/architecture/architecture-baseline.json`) tracks the size of the remaining core work: at the time of writing 38 files, with 8 protocol-core files importing `@nestjs/config`, 11 TypeORM, 29 files using Nest HTTP exceptions (protocol core and adapters), and 6 files importing Express.
+The ratchet baseline (`apps/backend/test/architecture/architecture-baseline.json`) tracks the size of the remaining core work: at the time of writing 37 files, with 7 protocol-core files importing `@nestjs/config`, 10 TypeORM, 28 files using Nest HTTP exceptions (protocol core and adapters), and 6 files importing Express.
 
 ## Open review findings
 
@@ -74,13 +74,10 @@ Take them in this order unless a finding above is more urgent.
 1. **Security findings T2, I1, V1.** Each is small and has a clear test.
 2. **Enforcement E5**, so the `shared/` isolation check covers aliases and re-exports.
 3. **OID4VCI O1–O3.**
-4. **Verifier decomposition**, in these steps:
-   1. Presentation configuration management behind a `PresentationConfigRepository` port.
-   2. Registration certificates behind a `RegistrationCertificateIssuer` port.
-   3. Schema metadata behind a `SchemaMetadataResolver` port.
-   4. DCQL claim policy as pure domain code (completeness, claim-set matching).
-   5. One `CredentialVerifierFormat.verify` signature, with mdoc transcript and SD-JWT key binding inside the adapters; ISO 18013 uses the registry.
-   6. `VerifyPresentationResponse` and `ProcessPresentationResponse` use cases; `Oid4vpService` shrinks to request creation and HTTP mapping.
+4. **Verifier decomposition.** Done: presentation configuration CRUD, registration certificates and metadata import (`verifier/presentations/configuration/`), `TrustedAuthoritiesService`, and the DCQL claim policy (`verifier/presentations/domain/dcql-claim-policy.ts`). Remaining:
+   1. One `CredentialVerifierFormat.verify(credential, context)` signature with a common result, with mdoc transcript and SD-JWT key binding inside the adapters; ISO 18013 uses the registry.
+   2. `VerifyPresentationResponse` use case in `verifier/presentations/application/` replacing `parseResponse`, with application errors that `Oid4vpService` maps to today's responses and session log error names (`presentations.service.spec.ts` characterizes them).
+   3. `Oid4vpService` shrinks to request creation and HTTP mapping.
 5. **Authorization services**: token, PAR and pre-authorized flows as use cases with OAuth-specific application errors and typed settings.
 6. **Contract tests (Task 23)** for storage, KMS and client providers.
 7. **T1** once the federation trust model is decided.

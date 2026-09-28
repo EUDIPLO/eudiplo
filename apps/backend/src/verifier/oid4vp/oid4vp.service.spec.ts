@@ -37,8 +37,10 @@ describe("OID4VP state mismatch handling", () => {
                     parseAuthorizationResponse:
                         new ParseAuthorizationResponse(),
                     settings: { logDecryptedResponse: false },
-                    presentationsService: {
+                    presentationConfigService: {
                         getPresentationConfig: vi.fn().mockResolvedValue({}),
+                    },
+                    presentationsService: {
                         parseResponse: vi.fn().mockResolvedValue([]),
                     },
                     resolveWebhookFromEndpoint: vi
@@ -119,8 +121,10 @@ describe("OID4VP concurrent response handling", () => {
                 },
                 parseAuthorizationResponse: new ParseAuthorizationResponse(),
                 settings: { logDecryptedResponse: false },
-                presentationsService: {
+                presentationConfigService: {
                     getPresentationConfig: vi.fn().mockResolvedValue({}),
+                },
+                presentationsService: {
                     parseResponse: vi.fn().mockResolvedValue([]),
                 },
                 resolveWebhookFromEndpoint: vi

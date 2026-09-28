@@ -33,7 +33,7 @@ import { StatusListService } from "../../issuer/status-list/status-list.service.
 import { TrustListService } from "../../issuer/trust-list/trustlist.service.js";
 import { RegistrarConfigService } from "../../registrar/registrar-config.service.js";
 import { FilesService } from "../../storage/files.service.js";
-import { PresentationsService } from "../../verifier/presentations/presentations.service.js";
+import { PresentationConfigService } from "../../verifier/presentations/configuration/presentation-config.service.js";
 import { ConfigBundleService } from "./config-bundle.service.js";
 import { ConfigBundleRepositories } from "./config-bundle-repositories.service.js";
 import { ConfigImportJournalService } from "./config-import-journal.service.js";
@@ -84,7 +84,7 @@ export class ConfigBundleApplyService {
         private readonly registrarConfigService: RegistrarConfigService,
         private readonly issuanceService: IssuanceService,
         private readonly credentialConfigService: CredentialConfigService,
-        private readonly presentationsService: PresentationsService,
+        private readonly presentationConfigService: PresentationConfigService,
         private readonly attributeProviderService: AttributeProviderService,
         private readonly webhookEndpointService: WebhookEndpointService,
         private readonly trustListService: TrustListService,
@@ -388,7 +388,7 @@ export class ConfigBundleApplyService {
                 await this.credentialConfigService.delete(tenantId, id);
                 return;
             case "PresentationConfig":
-                await this.presentationsService.deletePresentationConfig(
+                await this.presentationConfigService.deletePresentationConfig(
                     id,
                     tenantId,
                 );
@@ -513,7 +513,7 @@ export class ConfigBundleApplyService {
                 );
                 return;
             case "PresentationConfig":
-                await this.presentationsService.storePresentationConfig(
+                await this.presentationConfigService.storePresentationConfig(
                     tenantId,
                     { ...spec, id: resourceId(document) } as any,
                 );

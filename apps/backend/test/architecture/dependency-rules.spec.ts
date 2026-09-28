@@ -168,6 +168,8 @@ describe("architecture dependency rules", () => {
             "verifier/feature.service.ts": legacyImports,
             // Administrative CRUD: only Express is tracked.
             "feature/feature.service.ts": legacyImports,
+            "verifier/presentations/configuration/config.service.ts":
+                legacyImports,
             "feature/adapters/store.ts":
                 'import { ConflictException } from "@nestjs/common"; import "typeorm";',
             "feature/feature.module.ts":
@@ -184,6 +186,9 @@ describe("architecture dependency rules", () => {
                 "express",
                 "http-exception",
                 "typeorm",
+            ],
+            "verifier/presentations/configuration/config.service.ts": [
+                "express",
             ],
         });
     });

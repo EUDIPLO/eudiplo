@@ -267,10 +267,12 @@ const capabilityOf = (file: string) => file.split("/")[0];
 /**
  * Protocol and trust core, where the layered shape is required (see
  * "Scope: where the layering applies" in backend-architecture.md).
- * Administrative CRUD elsewhere may use TypeORM, ConfigService and HTTP
- * exceptions directly.
+ * Administrative CRUD elsewhere, including presentation configuration
+ * management in `verifier/presentations/configuration/`, may use TypeORM,
+ * ConfigService and HTTP exceptions directly.
  */
-const protocolCore = /^(issuer\/issuance|verifier|trust|session)\//;
+const protocolCore =
+    /^(issuer\/issuance|verifier(?!\/presentations\/configuration\/)|trust|session)\//;
 
 /**
  * Debt tracked by the ratchet baseline, per source file and category.

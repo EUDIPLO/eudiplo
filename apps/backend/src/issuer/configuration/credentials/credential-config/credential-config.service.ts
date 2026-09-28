@@ -20,7 +20,7 @@ import {
 } from "../../../../platform/config-import/config-import-orchestrator.service.js";
 import { loadConfigDto } from "../../../../shared/utils/config-file-loader.util.js";
 import { FilesService } from "../../../../storage/files.service.js";
-import { PresentationsService } from "../../../../verifier/presentations/presentations.service.js";
+import { PresentationConfigService } from "../../../../verifier/presentations/configuration/presentation-config.service.js";
 import type { CredentialConfiguration as CredentialConfig } from "../domain/credential-configuration.js";
 import { CredentialConfigCreate } from "../dto/credential-config-create.dto.js";
 import { CredentialConfigUpdate } from "../dto/credential-config-update.dto.js";
@@ -49,7 +49,7 @@ export class CredentialConfigService {
         private readonly filesService: FilesService,
         private readonly configImportService: ConfigImportService,
         private readonly configImportOrchestrator: ConfigImportOrchestratorService,
-        private readonly presentationsService: PresentationsService,
+        private readonly presentationConfigService: PresentationConfigService,
         private readonly tenantActionLogService: AuditLogService,
     ) {
         this.configImportOrchestrator.register(
@@ -229,7 +229,7 @@ export class CredentialConfigService {
                 ).presentationConfigId;
 
                 try {
-                    await this.presentationsService.getPresentationConfig(
+                    await this.presentationConfigService.getPresentationConfig(
                         presentationConfigId,
                         tenantId,
                     );

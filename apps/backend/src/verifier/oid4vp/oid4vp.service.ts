@@ -21,11 +21,14 @@ import { SessionStatus } from "../../session/domain/session-state.js";
 import { AuditLogContext } from "../../session/logging/session-audit.service.js";
 import { SessionLoggerService } from "../../session/logging/session-logger.service.js";
 import { DEFAULT_VERIFIER_SKEW_SECONDS } from "../../trust/types.js";
+import { PresentationConfigService } from "../presentations/configuration/presentation-config.service.js";
+import { RegistrationCertificateService } from "../presentations/configuration/registration-certificate.service.js";
 import { SdJwtVerificationError } from "../presentations/credential/sdjwtvcverifier/sdjwtvcverifier.service.js";
 import { shortVerificationMessage } from "../presentations/credential/verification-failure.js";
 import { AuthResponse } from "../presentations/dto/auth-response.dto.js";
 import { IncompletePresentationException } from "../presentations/exceptions/incomplete-presentation.exception.js";
 import { PresentationsService } from "../presentations/presentations.service.js";
+import { TrustedAuthoritiesService } from "../presentations/trusted-authorities.service.js";
 import { PresentationAlreadyConsumed } from "./application/complete-presentation-response.js";
 import { FailPresentationResponse } from "./application/fail-presentation-response.js";
 import {
@@ -53,6 +56,9 @@ export class Oid4vpService {
         private readonly encryptionService: EncryptionService,
         private readonly registrarService: RegistrarService,
         private readonly presentationsService: PresentationsService,
+        private readonly presentationConfigService: PresentationConfigService,
+        private readonly registrationCertificateService: RegistrationCertificateService,
+        private readonly trustedAuthoritiesService: TrustedAuthoritiesService,
         private readonly createSession: CreateSession,
         private readonly sessionStore: SessionStore,
         private readonly retrievePresentationRequest: RetrievePresentationRequest,
@@ -189,7 +195,7 @@ export class Oid4vpService {
             const tenantHost = `${host}/issuers/${session.tenantId}`;
 
             const presentationConfig =
-                await this.presentationsService.getPresentationConfig(
+                await this.presentationConfigService.getPresentationConfig(
                     session.requestId!,
                     session.tenantId,
                 );
@@ -206,7 +212,7 @@ export class Oid4vpService {
             // to the DCQL-compliant aki format (base64url Subject Key Identifier
             // strings). Wallets must receive string values per OID4VP 1.0 Final §6.
             dcql_query =
-                await this.presentationsService.transformDcqlTrustedAuthoritiesToAki(
+                await this.trustedAuthoritiesService.transformDcqlTrustedAuthoritiesToAki(
                     dcql_query,
                     session.tenantId,
                 );
@@ -226,7 +232,7 @@ export class Oid4vpService {
                 ))
             ) {
                 regCert =
-                    await this.presentationsService.getOrIssueRegistrationCertificate(
+                    await this.registrationCertificateService.getOrIssueRegistrationCertificate(
                         presentationConfig,
                         dcql_query,
                         session.requestId!,
@@ -401,7 +407,7 @@ export class Oid4vpService {
         origin: string,
     ): Promise<OfferResponse> {
         const presentationConfig =
-            await this.presentationsService.getPresentationConfig(
+            await this.presentationConfigService.getPresentationConfig(
                 requestId,
                 tenantId,
             );
@@ -670,7 +676,7 @@ export class Oid4vpService {
         };
 
         const presentationConfig =
-            await this.presentationsService.getPresentationConfig(
+            await this.presentationConfigService.getPresentationConfig(
                 session.requestId!,
                 session.tenantId,
             );

@@ -118,13 +118,8 @@
     "verifier/presentations/exceptions/incomplete-presentation.exception.ts": [
         "http-exception"
     ],
-    "verifier/presentations/metadata-fetch.service.ts": [
-        "config",
-        "http-exception"
-    ],
     "verifier/presentations/presentations.service.ts": [
-        "http-exception",
-        "typeorm"
+        "http-exception"
     ],
     "verifier/resolver/resolver.service.ts": [
         "http-exception"

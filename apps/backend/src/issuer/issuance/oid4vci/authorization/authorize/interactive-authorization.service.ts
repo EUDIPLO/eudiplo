@@ -13,7 +13,7 @@ import { CryptoService } from "../../../../../crypto/crypto.service.js";
 import { CreateSession } from "../../../../../session/application/create-session.js";
 import { SessionStore } from "../../../../../session/application/session-store.js";
 import { Oid4vpService } from "../../../../../verifier/oid4vp/oid4vp.service.js";
-import { PresentationsService } from "../../../../../verifier/presentations/presentations.service.js";
+import { PresentationConfigService } from "../../../../../verifier/presentations/configuration/presentation-config.service.js";
 import { CredentialsService } from "../../../../configuration/credentials/credentials.service.js";
 import {
     type IaeAction,
@@ -98,7 +98,7 @@ export class InteractiveAuthorizationService {
         private readonly issuanceService: IssuanceService,
         private readonly credentialsService: CredentialsService,
         private readonly oid4vpService: Oid4vpService,
-        private readonly presentationsService: PresentationsService,
+        private readonly presentationConfigService: PresentationConfigService,
         @InjectRepository(InteractiveAuthSessionEntity)
         private readonly authSessionRepository: Repository<InteractiveAuthSessionEntity>,
     ) {}
@@ -756,7 +756,7 @@ export class InteractiveAuthorizationService {
             // Fall back to first available presentation configuration
             if (!configId) {
                 const configs =
-                    await this.presentationsService.getPresentationConfigs(
+                    await this.presentationConfigService.getPresentationConfigs(
                         tenantId,
                     );
                 configId = configs[0]?.id;
