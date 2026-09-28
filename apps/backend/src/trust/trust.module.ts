@@ -1,6 +1,6 @@
 import * as https from "node:https";
 import { HttpModule } from "@nestjs/axios";
-import { Module } from "@nestjs/common";
+import { Module, type Provider } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CryptoModule } from "../crypto/crypto.module.js";
 import { TrustListModule } from "../issuer/trust-list/trustlist.module.js";
@@ -11,7 +11,10 @@ import { EvaluateFederationTrustChain } from "./application/evaluate-federation-
 import { CacheController } from "./cache.controller.js";
 import { FederationTrustService } from "./federation-trust.service.js";
 import { LoteParserService } from "./lote-parser.service.js";
-import { FEDERATION_RESOLVER } from "./ports/federation-resolver.js";
+import {
+    FEDERATION_RESOLVER,
+    type FederationResolver,
+} from "./ports/federation-resolver.js";
 import {
     TRUST_LIST_PROVIDER,
     type TrustListProvider,
@@ -23,6 +26,18 @@ import { TrustListJwtService } from "./trustlist-jwt.service.js";
 import { WalletAttestationService } from "./wallet-attestation.service.js";
 import { WALLET_ATTESTATION_SETTINGS } from "./wallet-attestation-settings.js";
 import { X509ValidationService } from "./x509-validation.service.js";
+
+/**
+ * `EvaluateFederationTrustChain` is framework-free and depends on the
+ * `FederationResolver` port, so it must be constructed explicitly: a bare
+ * class provider would be instantiated without its resolver.
+ */
+export const evaluateFederationTrustChainProvider: Provider = {
+    provide: EvaluateFederationTrustChain,
+    inject: [FEDERATION_RESOLVER],
+    useFactory: (resolver: FederationResolver) =>
+        new EvaluateFederationTrustChain(resolver),
+};
 
 @Module({
     imports: [
@@ -71,7 +86,7 @@ import { X509ValidationService } from "./x509-validation.service.js";
         StatusListVerifierService,
         WalletAttestationService,
         FederationTrustService,
-        EvaluateFederationTrustChain,
+        evaluateFederationTrustChainProvider,
         OpenIdFederationResolver,
         {
             provide: FEDERATION_RESOLVER,
