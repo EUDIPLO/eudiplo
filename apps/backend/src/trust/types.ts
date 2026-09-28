@@ -75,11 +75,15 @@ export function serviceTypeMatches(
     );
 }
 
-/** Well-known service type identifiers from ETSI TS 119 602 */
+/**
+ * Well-known service type identifiers from ETSI TS 119 602.
+ * These are identifier URIs defined by the standard, not endpoints that are
+ * fetched; they must stay `http://` to match trust list entries exactly.
+ */
 export const ServiceTypeIdentifiers = {
     EaaIssuance: "http://uri.etsi.org/19602/SvcType/EAA/Issuance",
     EaaRevocation: "http://uri.etsi.org/19602/SvcType/EAA/Revocation",
-    PIDIssuance: "http://uri.etsi.org/19602/SvcType/PID/Issuance",
+    PIDIssuance: "http://uri.etsi.org/19602/SvcType/PID/Issuance", // NOSONAR: ETSI identifier URI, not fetched
     WalletSolution: "http://uri.etsi.org/19602/SvcType/WalletSolution",
     WalletSolutionIssuance:
         "http://uri.etsi.org/19602/SvcType/WalletSolution/Issuance",
