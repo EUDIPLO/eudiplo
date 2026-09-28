@@ -2,11 +2,10 @@ import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { BitsPerStatus } from "@owf/token-status-list";
-import { Request } from "express";
 import { Repository } from "typeorm";
+import type { AuditLogRequestMeta } from "../../audit-log/audit-log.service.js";
 import { AuditLogService } from "../../audit-log/audit-log.service.js";
 import {
-    extractRequestMeta,
     getChangedFields,
     resolveAuditActor,
 } from "../../audit-log/audit-log-context.util.js";
@@ -113,7 +112,7 @@ export class StatusListConfigService {
         tenantId: string,
         config: UpdateStatusListConfigDto,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ): Promise<StatusListConfig> {
         const tenant = await this.tenantRepository.findOneByOrFail({
             id: tenantId,
@@ -147,7 +146,7 @@ export class StatusListConfigService {
                 ),
                 before,
                 after: this.sanitizeStatusListConfigForLog(updatedConfig),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 
@@ -162,7 +161,7 @@ export class StatusListConfigService {
     async resetConfig(
         tenantId: string,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ): Promise<void> {
         const tenant = await this.tenantRepository.findOneByOrFail({
             id: tenantId,
@@ -179,7 +178,7 @@ export class StatusListConfigService {
                 actionType: "status_list_config_reset",
                 actor: resolveAuditActor(actorToken),
                 before,
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
     }

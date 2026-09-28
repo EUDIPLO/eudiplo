@@ -5,12 +5,11 @@ import {
     Injectable,
     Logger,
 } from "@nestjs/common";
-import { Request } from "express";
 import { decodeJwt } from "jose";
 import { v4 } from "uuid";
+import type { AuditLogRequestMeta } from "../../../audit-log/audit-log.service.js";
 import { AuditLogService } from "../../../audit-log/audit-log.service.js";
 import {
-    extractRequestMeta,
     getChangedFields,
     resolveAuditActor,
 } from "../../../audit-log/audit-log-context.util.js";
@@ -265,7 +264,7 @@ export class IssuanceService {
         tenantId: string,
         value: Partial<IssuanceDto>,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ) {
         if (value.display) {
             value.display = await this.replaceUrl(value.display, tenantId);
@@ -381,7 +380,7 @@ export class IssuanceService {
                 ),
                 before,
                 after: this.sanitizeIssuanceConfigForLog(saved),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 

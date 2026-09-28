@@ -9,11 +9,10 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { UpDownCounter } from "@opentelemetry/api";
-import { Request } from "express";
 import { MetricService } from "nestjs-otel";
+import type { AuditLogRequestMeta } from "../../audit-log/audit-log.service.js";
 import { AuditLogService } from "../../audit-log/audit-log.service.js";
 import {
-    extractRequestMeta,
     getChangedFieldsForKeys,
     resolveAuditActor,
 } from "../../audit-log/audit-log-context.util.js";
@@ -237,7 +236,7 @@ export class TenantService implements OnApplicationBootstrap {
     async createTenant(
         data: CreateTenant,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ) {
         const tenant = await this.tenantRepository.save({
             ...data,
@@ -273,7 +272,7 @@ export class TenantService implements OnApplicationBootstrap {
                 actionType: "tenant_created",
                 actor: resolveAuditActor(actorToken),
                 after: this.sanitizeTenantForLog(tenant),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 
@@ -309,7 +308,7 @@ export class TenantService implements OnApplicationBootstrap {
         id: string,
         data: UpdateTenant,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ): Promise<TenantData> {
         const existing = await this.getTenant(id);
         await this.tenantRepository.update(id, data);
@@ -323,7 +322,7 @@ export class TenantService implements OnApplicationBootstrap {
                 changedFields: this.getChangedFields(existing, updated),
                 before: this.sanitizeTenantForLog(existing),
                 after: this.sanitizeTenantForLog(updated),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 
@@ -337,7 +336,7 @@ export class TenantService implements OnApplicationBootstrap {
     async deleteTenant(
         tenantId: string,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ) {
         const existingTenant = await this.tenantRepository.findById(tenantId);
 
@@ -354,7 +353,7 @@ export class TenantService implements OnApplicationBootstrap {
                 before: existingTenant
                     ? this.sanitizeTenantForLog(existingTenant)
                     : undefined,
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
     }

@@ -6,7 +6,6 @@ import {
     HttpCode,
     HttpStatus,
     Put,
-    Req,
 } from "@nestjs/common";
 import {
     ApiNoContentResponse,
@@ -14,7 +13,8 @@ import {
     ApiOperation,
     ApiTags,
 } from "@nestjs/swagger";
-import { Request } from "express";
+import type { AuditLogRequestMeta } from "../../audit-log/audit-log.service.js";
+import { AuditMeta } from "../../audit-log/audit-log-context.util.js";
 import { Role } from "../../auth/roles/role.enum.js";
 import { Secured } from "../../auth/secure.decorator.js";
 import { StatusListConfig } from "../../auth/tenant/entities/status-list-config.js";
@@ -72,13 +72,13 @@ export class StatusListConfigController {
     async updateConfig(
         @Token() token: TokenPayload,
         @Body() config: UpdateStatusListConfigDto,
-        @Req() req: Request,
+        @AuditMeta() requestMeta: AuditLogRequestMeta,
     ): Promise<StatusListConfig> {
         return this.statusListConfigService.updateConfig(
             token.entity!.id,
             config,
             token,
-            req,
+            requestMeta,
         );
     }
 
@@ -98,12 +98,12 @@ export class StatusListConfigController {
     })
     async resetConfig(
         @Token() token: TokenPayload,
-        @Req() req: Request,
+        @AuditMeta() requestMeta: AuditLogRequestMeta,
     ): Promise<void> {
         return this.statusListConfigService.resetConfig(
             token.entity!.id,
             token,
-            req,
+            requestMeta,
         );
     }
 }

@@ -1,6 +1,10 @@
-import { Request } from "express";
+import { createParamDecorator, type ExecutionContext } from "@nestjs/common";
+import type { Request } from "express";
 import { TokenPayload } from "../auth/token.decorator.js";
-import { AuditLogActor } from "./audit-log.service.js";
+import type {
+    AuditLogActor,
+    AuditLogRequestMeta,
+} from "./audit-log.service.js";
 
 export function resolveAuditActor(token: TokenPayload): AuditLogActor {
     const clientId = token.client?.clientId || token.authorizedParty;
@@ -31,7 +35,9 @@ export function resolveAuditActor(token: TokenPayload): AuditLogActor {
     return { type: "system" };
 }
 
-export function extractRequestMeta(req?: Request) {
+export function extractRequestMeta(
+    req?: Request,
+): AuditLogRequestMeta | undefined {
     if (!req) return undefined;
 
     return {
@@ -40,6 +46,15 @@ export function extractRequestMeta(req?: Request) {
             : undefined,
     };
 }
+
+/**
+ * Controller parameter decorator that extracts transport-neutral audit metadata
+ * so services receive {@link AuditLogRequestMeta} instead of the HTTP request.
+ */
+export const AuditMeta = createParamDecorator(
+    (_data: unknown, ctx: ExecutionContext) =>
+        extractRequestMeta(ctx.switchToHttp().getRequest<Request>()),
+);
 
 export function getChangedFields(
     before?: Record<string, unknown>,

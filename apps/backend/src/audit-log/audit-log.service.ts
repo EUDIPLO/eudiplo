@@ -15,7 +15,7 @@ export interface AuditLogActor {
     display?: string;
 }
 
-interface AuditLogRequestMeta {
+export interface AuditLogRequestMeta {
     requestId?: string;
 }
 

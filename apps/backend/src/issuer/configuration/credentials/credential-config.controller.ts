@@ -7,10 +7,10 @@ import {
     Param,
     Patch,
     Post,
-    Req,
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { Request } from "express";
+import type { AuditLogRequestMeta } from "../../../audit-log/audit-log.service.js";
+import { AuditMeta } from "../../../audit-log/audit-log-context.util.js";
 import { Role } from "../../../auth/roles/role.enum.js";
 import { Secured } from "../../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../../auth/token.decorator.js";
@@ -49,14 +49,14 @@ export class CredentialConfigController {
     storeCredentialConfiguration(
         @Body() config: CredentialConfigCreate,
         @Token() user: TokenPayload,
-        @Req() req: Request,
+        @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
         return this.credentialsService.store(
             user.entity!.id,
             config,
             false,
             user,
-            req,
+            requestMeta,
         );
     }
 
@@ -68,14 +68,14 @@ export class CredentialConfigController {
         @Param("id") id: string,
         @Body() config: CredentialConfigUpdate,
         @Token() user: TokenPayload,
-        @Req() req: Request,
+        @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
         return this.credentialsService.update(
             user.entity!.id,
             id,
             config,
             user,
-            req,
+            requestMeta,
         );
     }
 
@@ -89,8 +89,13 @@ export class CredentialConfigController {
     deleteIssuanceConfiguration(
         @Param("id") id: string,
         @Token() user: TokenPayload,
-        @Req() req: Request,
+        @AuditMeta() requestMeta: AuditLogRequestMeta,
     ): Promise<unknown> {
-        return this.credentialsService.delete(user.entity!.id, id, user, req);
+        return this.credentialsService.delete(
+            user.entity!.id,
+            id,
+            user,
+            requestMeta,
+        );
     }
 }

@@ -1,8 +1,7 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { Request } from "express";
+import type { AuditLogRequestMeta } from "../../../audit-log/audit-log.service.js";
 import { AuditLogService } from "../../../audit-log/audit-log.service.js";
 import {
-    extractRequestMeta,
     getChangedFields,
     resolveAuditActor,
 } from "../../../audit-log/audit-log-context.util.js";
@@ -83,7 +82,7 @@ export class WebhookEndpointService {
         tenantId: string,
         dto: CreateWebhookEndpoint,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ) {
         await this.outboundUrlPolicyService.assertSafeUrl(dto.url);
 
@@ -102,7 +101,7 @@ export class WebhookEndpointService {
                     this.sanitizeWebhookEndpointForLog(saved),
                 ),
                 after: this.sanitizeWebhookEndpointForLog(saved),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 
@@ -114,7 +113,7 @@ export class WebhookEndpointService {
         id: string,
         dto: UpdateWebhookEndpoint,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ) {
         const existing = await this.getById(tenantId, id);
 
@@ -140,7 +139,7 @@ export class WebhookEndpointService {
                 ),
                 before: this.sanitizeWebhookEndpointForLog(existing),
                 after: this.sanitizeWebhookEndpointForLog(saved),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 
@@ -151,7 +150,7 @@ export class WebhookEndpointService {
         tenantId: string,
         id: string,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ) {
         const existing = await this.getById(tenantId, id);
         const result = await this.repo.deleteForTenant(tenantId, id);
@@ -162,7 +161,7 @@ export class WebhookEndpointService {
                 actionType: "webhook_endpoint_deleted",
                 actor: resolveAuditActor(actorToken),
                 before: this.sanitizeWebhookEndpointForLog(existing),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 

@@ -7,7 +7,6 @@ import {
     Param,
     Patch,
     Post,
-    Req,
 } from "@nestjs/common";
 import {
     ApiBody,
@@ -16,7 +15,8 @@ import {
     ApiResponse,
     ApiTags,
 } from "@nestjs/swagger";
-import { Request } from "express";
+import type { AuditLogRequestMeta } from "../../audit-log/audit-log.service.js";
+import { AuditMeta } from "../../audit-log/audit-log-context.util.js";
 import { Role } from "../roles/role.enum.js";
 import { Secured } from "../secure.decorator.js";
 import { Token, TokenPayload } from "../token.decorator.js";
@@ -62,9 +62,9 @@ export class TenantController {
     initTenant(
         @Body() data: CreateTenantDto,
         @Token() token: TokenPayload,
-        @Req() req: Request,
+        @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return this.tenantService.createTenant(data, token, req);
+        return this.tenantService.createTenant(data, token, requestMeta);
     }
 
     /**
@@ -93,9 +93,9 @@ export class TenantController {
         @Param("id") id: string,
         @Body() data: UpdateTenantDto,
         @Token() token: TokenPayload,
-        @Req() req: Request,
+        @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return this.tenantService.updateTenant(id, data, token, req);
+        return this.tenantService.updateTenant(id, data, token, requestMeta);
     }
 
     /**
@@ -109,8 +109,8 @@ export class TenantController {
     deleteTenant(
         @Param("id") id: string,
         @Token() token: TokenPayload,
-        @Req() req: Request,
+        @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return this.tenantService.deleteTenant(id, token, req);
+        return this.tenantService.deleteTenant(id, token, requestMeta);
     }
 }

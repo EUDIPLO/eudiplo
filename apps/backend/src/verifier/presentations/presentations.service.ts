@@ -9,14 +9,13 @@ import { InjectRepository } from "@nestjs/typeorm";
 import * as eudiAttestationSchema from "@owf/eudi-attestation-schema";
 import { type AttestationFormat } from "@owf/eudi-attestation-schema";
 import * as x509 from "@peculiar/x509";
-import { Request } from "express";
 import { base64url, decodeJwt, decodeProtectedHeader } from "jose";
 import { Span, TraceService } from "nestjs-otel";
 import { PinoLogger } from "nestjs-pino";
 import { Repository } from "typeorm";
+import type { AuditLogRequestMeta } from "../../audit-log/audit-log.service.js";
 import { AuditLogService } from "../../audit-log/audit-log.service.js";
 import {
-    extractRequestMeta,
     getChangedFields,
     resolveAuditActor,
 } from "../../audit-log/audit-log-context.util.js";
@@ -468,7 +467,7 @@ export class PresentationsService {
         tenantId: string,
         vprequest: PresentationConfigCreateDto,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ) {
         const normalizedRequest =
             this.normalizeRegistrationCertFormFields(vprequest);
@@ -495,7 +494,7 @@ export class PresentationsService {
                     this.sanitizePresentationConfigForLog(saved),
                 ),
                 after: this.sanitizePresentationConfigForLog(saved),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 
@@ -514,7 +513,7 @@ export class PresentationsService {
         tenantId: string,
         vprequest: PresentationConfigUpdateDto,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ) {
         // Verify the config exists
         const existing = await this.getPresentationConfig(id, tenantId);
@@ -561,7 +560,7 @@ export class PresentationsService {
                 ),
                 before: this.sanitizePresentationConfigForLog(existing),
                 after: this.sanitizePresentationConfigForLog(saved),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 
@@ -945,7 +944,7 @@ export class PresentationsService {
         id: string,
         tenantId: string,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ) {
         const existing = await this.getPresentationConfig(id, tenantId);
         const result = await this.vpRequestRepository.delete({ id, tenantId });
@@ -956,7 +955,7 @@ export class PresentationsService {
                 actionType: "presentation_config_deleted",
                 actor: resolveAuditActor(actorToken),
                 before: this.sanitizePresentationConfigForLog(existing),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 

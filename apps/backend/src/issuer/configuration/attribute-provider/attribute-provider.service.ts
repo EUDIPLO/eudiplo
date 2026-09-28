@@ -1,8 +1,7 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { Request } from "express";
+import type { AuditLogRequestMeta } from "../../../audit-log/audit-log.service.js";
 import { AuditLogService } from "../../../audit-log/audit-log.service.js";
 import {
-    extractRequestMeta,
     getChangedFields,
     resolveAuditActor,
 } from "../../../audit-log/audit-log-context.util.js";
@@ -83,7 +82,7 @@ export class AttributeProviderService {
         tenantId: string,
         dto: CreateAttributeProvider,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ) {
         await this.outboundUrlPolicyService.assertSafeUrl(dto.url);
 
@@ -102,7 +101,7 @@ export class AttributeProviderService {
                     this.sanitizeAttributeProviderForLog(saved),
                 ),
                 after: this.sanitizeAttributeProviderForLog(saved),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 
@@ -114,7 +113,7 @@ export class AttributeProviderService {
         id: string,
         dto: UpdateAttributeProvider,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ) {
         const existing = await this.getById(tenantId, id);
 
@@ -140,7 +139,7 @@ export class AttributeProviderService {
                 ),
                 before: this.sanitizeAttributeProviderForLog(existing),
                 after: this.sanitizeAttributeProviderForLog(saved),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 
@@ -151,7 +150,7 @@ export class AttributeProviderService {
         tenantId: string,
         id: string,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ) {
         const existing = await this.getById(tenantId, id);
         const result = await this.repo.deleteForTenant(tenantId, id);
@@ -162,7 +161,7 @@ export class AttributeProviderService {
                 actionType: "attribute_provider_deleted",
                 actor: resolveAuditActor(actorToken),
                 before: this.sanitizeAttributeProviderForLog(existing),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 

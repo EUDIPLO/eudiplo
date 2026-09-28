@@ -7,10 +7,10 @@ import {
     Param,
     Patch,
     Post,
-    Req,
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { Request } from "express";
+import type { AuditLogRequestMeta } from "../../../audit-log/audit-log.service.js";
+import { AuditMeta } from "../../../audit-log/audit-log-context.util.js";
 import { Role } from "../../../auth/roles/role.enum.js";
 import { Secured } from "../../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../../auth/token.decorator.js";
@@ -59,9 +59,9 @@ export class AttributeProviderController {
     create(
         @Body() dto: CreateAttributeProviderDto,
         @Token() user: TokenPayload,
-        @Req() req: Request,
+        @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return this.service.create(user.entity!.id, dto, user, req);
+        return this.service.create(user.entity!.id, dto, user, requestMeta);
     }
 
     @Patch(":id")
@@ -77,9 +77,9 @@ export class AttributeProviderController {
         @Param("id") id: string,
         @Body() dto: UpdateAttributeProviderDto,
         @Token() user: TokenPayload,
-        @Req() req: Request,
+        @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return this.service.update(user.entity!.id, id, dto, user, req);
+        return this.service.update(user.entity!.id, id, dto, user, requestMeta);
     }
 
     @Delete(":id")
@@ -90,8 +90,8 @@ export class AttributeProviderController {
     delete(
         @Param("id") id: string,
         @Token() user: TokenPayload,
-        @Req() req: Request,
+        @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return this.service.delete(user.entity!.id, id, user, req);
+        return this.service.delete(user.entity!.id, id, user, requestMeta);
     }
 }

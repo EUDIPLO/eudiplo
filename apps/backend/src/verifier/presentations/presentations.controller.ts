@@ -7,10 +7,10 @@ import {
     Param,
     Patch,
     Post,
-    Req,
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { Request } from "express";
+import type { AuditLogRequestMeta } from "../../audit-log/audit-log.service.js";
+import { AuditMeta } from "../../audit-log/audit-log-context.util.js";
 import { Role } from "../../auth/roles/role.enum.js";
 import { Secured } from "../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../auth/token.decorator.js";
@@ -159,13 +159,13 @@ export class PresentationManagementController {
     storePresentationConfig(
         @Body() config: PresentationConfigCreateDto,
         @Token() user: TokenPayload,
-        @Req() req: Request,
+        @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
         return this.presentationsService.storePresentationConfig(
             user.entity!.id,
             config,
             user,
-            req,
+            requestMeta,
         );
     }
 
@@ -199,14 +199,14 @@ export class PresentationManagementController {
         @Param("id") id: string,
         @Body() config: PresentationConfigUpdateDto,
         @Token() user: TokenPayload,
-        @Req() req: Request,
+        @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
         return this.presentationsService.updatePresentationConfig(
             id,
             user.entity!.id,
             config,
             user,
-            req,
+            requestMeta,
         );
     }
 
@@ -225,13 +225,13 @@ export class PresentationManagementController {
     deleteConfiguration(
         @Param("id") id: string,
         @Token() user: TokenPayload,
-        @Req() req: Request,
+        @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
         return this.presentationsService.deletePresentationConfig(
             id,
             user.entity!.id,
             user,
-            req,
+            requestMeta,
         );
     }
 

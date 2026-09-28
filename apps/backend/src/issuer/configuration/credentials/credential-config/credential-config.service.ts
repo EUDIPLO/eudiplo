@@ -4,10 +4,9 @@ import {
     Injectable,
     Logger,
 } from "@nestjs/common";
-import { Request } from "express";
+import type { AuditLogRequestMeta } from "../../../../audit-log/audit-log.service.js";
 import { AuditLogService } from "../../../../audit-log/audit-log.service.js";
 import {
-    extractRequestMeta,
     getChangedFields,
     resolveAuditActor,
 } from "../../../../audit-log/audit-log-context.util.js";
@@ -258,7 +257,7 @@ export class CredentialConfigService {
         config: CredentialConfigCreate,
         skipValidation = false,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ) {
         await this.replaceImageReferences(tenantId, config);
         await this.validateAttestationKeyChain(tenantId, config.keyChainId);
@@ -280,7 +279,7 @@ export class CredentialConfigService {
                     this.sanitizeCredentialConfigForLog(saved),
                 ),
                 after: this.sanitizeCredentialConfigForLog(saved),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 
@@ -303,7 +302,7 @@ export class CredentialConfigService {
         id: string,
         config: CredentialConfigUpdate,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ) {
         await this.replaceImageReferences(tenantId, config);
         await this.validateIaeActions(tenantId, config);
@@ -331,7 +330,7 @@ export class CredentialConfigService {
                 ),
                 before: this.sanitizeCredentialConfigForLog(existing),
                 after: this.sanitizeCredentialConfigForLog(saved),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 
@@ -348,7 +347,7 @@ export class CredentialConfigService {
         tenantId: string,
         id: string,
         actorToken?: TokenPayload,
-        req?: Request,
+        requestMeta?: AuditLogRequestMeta,
     ) {
         const existing = await this.getById(tenantId, id);
         const result = await this.credentialConfigRepository.deleteForTenant(
@@ -362,7 +361,7 @@ export class CredentialConfigService {
                 actionType: "credential_config_deleted",
                 actor: resolveAuditActor(actorToken),
                 before: this.sanitizeCredentialConfigForLog(existing),
-                requestMeta: extractRequestMeta(req),
+                requestMeta,
             });
         }
 
