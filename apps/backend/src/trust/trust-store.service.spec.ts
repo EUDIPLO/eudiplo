@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { VerifiedLoteProvider } from "./adapters/verified-lote-provider.js";
+import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
 import { TrustStoreService } from "./trust-store.service.js";
 
 describe("TrustStoreService cache isolation", () => {
@@ -11,8 +13,12 @@ describe("TrustStoreService cache isolation", () => {
             {
                 cache: new Map(),
                 logger: { debug: vi.fn() },
-                trustListJwt: { fetchJwt, verifyTrustListJwt },
-                loteParser: { parse: () => ({ info: {}, entities: [] }) },
+                collectTrustedEntities: new CollectTrustedEntities(
+                    new VerifiedLoteProvider(
+                        { fetchJwt, verifyTrustListJwt },
+                        { parse: () => ({ info: {}, entities: [] }) },
+                    ),
+                ),
             },
         ) as TrustStoreService;
 
@@ -36,6 +42,55 @@ describe("TrustStoreService cache isolation", () => {
         expect(verifyTrustListJwt).toHaveBeenLastCalledWith(
             replacement.lotes[0],
             jwt,
+        );
+    });
+
+    it("uses the internal URL for managed trust-list references with public fallback", async () => {
+        const jwt = `e30.${Buffer.from(JSON.stringify({ LoTE: {} })).toString("base64url")}.c2ln`;
+        const fetchJwt = vi.fn().mockResolvedValue(jwt);
+        const createService = (settings: {
+            publicUrl: string;
+            internalUrl?: string;
+        }) =>
+            Object.assign(Object.create(TrustStoreService.prototype), {
+                cache: new Map(),
+                logger: { debug: vi.fn() },
+                settings,
+                collectTrustedEntities: new CollectTrustedEntities(
+                    new VerifiedLoteProvider(
+                        {
+                            fetchJwt,
+                            verifyTrustListJwt: vi
+                                .fn()
+                                .mockResolvedValue(undefined),
+                        },
+                        { parse: () => ({ info: {}, entities: [] }) },
+                    ),
+                ),
+                trustListService: {
+                    getVerifierX509Der: vi
+                        .fn()
+                        .mockResolvedValue("certificate"),
+                },
+            }) as TrustStoreService;
+        const source = {
+            tenantId: "tenant/one",
+            lotes: [{ trustListId: "list-1" }],
+        };
+
+        await createService({
+            publicUrl: "https://public.example",
+            internalUrl: "https://internal.example",
+        }).getTrustStore(source);
+        expect(fetchJwt).toHaveBeenLastCalledWith(
+            "https://internal.example/issuers/tenant%2Fone/trust-list/list-1",
+        );
+
+        await createService({
+            publicUrl: "https://public.example",
+        }).getTrustStore(source);
+        expect(fetchJwt).toHaveBeenLastCalledWith(
+            "https://public.example/issuers/tenant%2Fone/trust-list/list-1",
         );
     });
 });

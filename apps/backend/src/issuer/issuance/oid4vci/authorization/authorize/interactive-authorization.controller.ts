@@ -11,6 +11,7 @@ import {
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import type { Request, Response } from "express";
+import type { Oid4vciRequestContext } from "../../request-context.js";
 import {
     InteractiveAuthorizationCodeResponseDto,
     InteractiveAuthorizationErrorResponseDto,
@@ -105,11 +106,18 @@ Handles interactive authorization requests during credential issuance.
         @Headers("origin") origin?: string,
     ) {
         const requestOrigin = origin || req.headers.referer || "";
+        const requestContext: Oid4vciRequestContext = {
+            body: req.body,
+            contentType: req.headers["content-type"] ?? "",
+            headers: req.headers,
+            method: req.method,
+            url: req.url,
+        };
 
         const response =
             await this.interactiveAuthorizationService.handleRequest(
                 body,
-                req,
+                requestContext,
                 tenantId,
                 requestOrigin,
             );

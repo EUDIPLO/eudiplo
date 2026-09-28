@@ -12,9 +12,9 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { decodeJwt } from "jose";
 import { Repository } from "typeorm";
 import { ConfigImportService } from "../../../platform/config-import/config-import.service.js";
-import { ConfigImportOrchestratorService } from "../../../platform/config-import/config-import-orchestrator.service.js";
 import { allRoles, Role } from "../../roles/role.enum.js";
 import { ClientsProvider } from "../client.provider.js";
+import type { ClientData, CreatedClient } from "../domain/client-data.js";
 import { CreateClientDto } from "../dto/create-client.dto.js";
 import { UpdateClientDto } from "../dto/update-client.dto.js";
 import { ClientEntity } from "../entities/client.entity.js";
@@ -64,9 +64,8 @@ export class KeycloakClientsProvider
         @InjectRepository(ClientEntity)
         private readonly clientRepo: Repository<ClientEntity>,
         private readonly configImportService: ConfigImportService,
-        configImportOrchestrator: ConfigImportOrchestratorService,
     ) {
-        super(configImportOrchestrator);
+        super();
     }
 
     async onModuleInit() {
@@ -282,25 +281,28 @@ export class KeycloakClientsProvider
         }
     }
 
-    async getClients(tenantId: string): Promise<ClientEntity[]> {
-        return this.clientRepo.find({
+    async getClients(tenantId: string): Promise<ClientData[]> {
+        const clients = await this.clientRepo.find({
             where: { tenant: { id: tenantId } },
         });
+        return clients.map((client) => this.toClientData(client, tenantId));
     }
 
-    async getClient(tenantId: string, clientId: string) {
-        return this.clientRepo.findOneByOrFail({
+    async getClient(tenantId: string, clientId: string): Promise<ClientData> {
+        const client = await this.clientRepo.findOneByOrFail({
             clientId,
             tenant: { id: tenantId },
         });
+        return this.toClientData(client, tenantId);
     }
 
     /**
      * Get a client by its clientId only (without tenant context).
      * Used for JWT validation to fetch client restrictions.
      */
-    async getClientById(clientId: string): Promise<ClientEntity | null> {
-        return this.clientRepo.findOne({ where: { clientId } });
+    async getClientById(clientId: string): Promise<ClientData | null> {
+        const client = await this.clientRepo.findOne({ where: { clientId } });
+        return client ? this.toClientData(client) : null;
     }
 
     /**
@@ -341,7 +343,10 @@ export class KeycloakClientsProvider
         await this.kc.clients.update({ id: client.id }, { secret });
     }
 
-    async addClient(tenantId: string, dto: CreateClientDto) {
+    async addClient(
+        tenantId: string,
+        dto: CreateClientDto,
+    ): Promise<CreatedClient> {
         const clientPayload = {
             clientId: dto.clientId,
             description: dto.description,
@@ -474,6 +479,20 @@ export class KeycloakClientsProvider
         };
     }
 
+    private toClientData(
+        client: ClientEntity,
+        tenantId = client.tenantId,
+    ): ClientData {
+        return {
+            clientId: client.clientId,
+            tenantId,
+            description: client.description,
+            roles: client.roles,
+            allowedPresentationConfigs: client.allowedPresentationConfigs,
+            allowedIssuanceConfigs: client.allowedIssuanceConfigs,
+        };
+    }
+
     async updateClient(
         tenantId: string,
         clientId: string,
@@ -492,7 +511,10 @@ export class KeycloakClientsProvider
             });
             return this.addClient(tenantId, {
                 clientId,
-                description: updateClientDto.description ?? client.description,
+                description:
+                    updateClientDto.description ??
+                    client.description ??
+                    undefined,
                 roles: updateClientDto.roles ?? client.roles,
                 allowedPresentationConfigs:
                     updateClientDto.allowedPresentationConfigs ??
@@ -546,7 +568,10 @@ export class KeycloakClientsProvider
         await this.kc.clients.update(
             { id: kcClient.id },
             {
-                description: updateClientDto.description ?? client.description,
+                description:
+                    updateClientDto.description ??
+                    client.description ??
+                    undefined,
             },
         );
 

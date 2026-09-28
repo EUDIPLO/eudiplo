@@ -8,6 +8,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import {
     BadRequestException,
+    Inject,
     Injectable,
     NotFoundException,
 } from "@nestjs/common";
@@ -24,17 +25,22 @@ import { KeyChainService } from "../../crypto/key/key-chain.service.js";
 import { KeyUsageType } from "../../crypto/key/types/key-usage-type.js";
 import { WebhookEndpointEntity } from "../../issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
 import { ServiceTypeIdentifier } from "../../issuer/trust-list/trustlist.service.js";
-import { SessionStatus } from "../../session/entities/session.entity.js";
+import { CreateSession } from "../../session/application/create-session.js";
+import { GetIso18013Session } from "../../session/application/get-iso18013-session.js";
+import { UpdateSessionForTenant } from "../../session/application/update-session-for-tenant.js";
+import { SessionStatus } from "../../session/domain/session-state.js";
 import { SessionAuditService } from "../../session/logging/session-audit.service.js";
-import { SessionService } from "../../session/session.service.js";
 import { revocationModeToPolicy } from "../../trust/revocation-policy.util.js";
 import {
     DEFAULT_VERIFIER_SKEW_SECONDS,
     RevocationCheckMode,
     VerifierOptions,
 } from "../../trust/types.js";
+import {
+    PRESENTATION_RESULT_PUBLISHER,
+    type PresentationResultPublisher,
+} from "../../webhook/ports/presentation-result-publisher.js";
 import { WebhookConfig } from "../../webhook/webhook.dto.js";
-import { WebhookService } from "../../webhook/webhook.service.js";
 import { MdocverifierService } from "../presentations/credential/mdocverifier/mdocverifier.service.js";
 import { shortVerificationMessage } from "../presentations/credential/verification-failure.js";
 import {
@@ -67,10 +73,13 @@ export interface Iso18013Offer {
 export class Iso18013Service {
     constructor(
         private readonly presentationsService: PresentationsService,
-        private readonly sessionService: SessionService,
+        private readonly createSession: CreateSession,
+        private readonly updateSessionForTenant: UpdateSessionForTenant,
+        private readonly getIso18013Session: GetIso18013Session,
         private readonly encryptionService: EncryptionService,
         private readonly mdocverifierService: MdocverifierService,
-        private readonly webhookService: WebhookService,
+        @Inject(PRESENTATION_RESULT_PUBLISHER)
+        private readonly presentationResultPublisher: PresentationResultPublisher,
         private readonly auditLogService: SessionAuditService,
         private readonly configService: ConfigService,
         private readonly certService: CertService,
@@ -204,7 +213,7 @@ export class Iso18013Service {
         );
         const resolvedWebhook = webhook ?? endpointWebhook;
 
-        await this.sessionService.create({
+        await this.createSession.execute({
             id: sessionId,
             tenantId,
             requestId,
@@ -302,10 +311,7 @@ export class Iso18013Service {
     ): Promise<Record<string, unknown>> {
         let session;
         try {
-            session = await this.sessionService.getBy({
-                id: sessionId,
-                dcApiProtocol: "iso-18013-7",
-            });
+            session = await this.getIso18013Session.execute(sessionId);
         } catch {
             throw new NotFoundException("ISO 18013-7 session not found");
         }
@@ -372,10 +378,14 @@ export class Iso18013Service {
         } catch (err: any) {
             const reason = `HPKE decryption failed: ${err?.message ?? err}`;
             this.logger.warn({ sessionId }, reason);
-            await this.sessionService.add(session.id, {
-                status: SessionStatus.Failed,
-                errorReason: reason,
-            });
+            await this.updateSessionForTenant.execute(
+                session.tenantId,
+                session.id,
+                {
+                    status: SessionStatus.Failed,
+                    errorReason: reason,
+                },
+            );
             this.auditLogService.logFlowError(logContext, err as Error, {
                 stage: "hpke_decryption",
             });
@@ -476,26 +486,30 @@ export class Iso18013Service {
             const verboseReason =
                 verifyResult.failureReason ?? "mDOC verification failed";
 
-            await this.sessionService.add(session.id, {
-                status: SessionStatus.Failed,
-                errorReason: shortMessage,
-                failureCode: errorCode,
-                outcome: {
-                    result: "failed",
-                    error: errorCode,
-                    message: shortMessage,
-                    credentials: [
-                        {
-                            id: mdocCred.id,
-                            format: "mso_mdoc",
-                            docType: verifyResult.docType,
-                            verified: false,
-                            error: errorCode,
-                            message: shortMessage,
-                        },
-                    ],
+            await this.updateSessionForTenant.execute(
+                session.tenantId,
+                session.id,
+                {
+                    status: SessionStatus.Failed,
+                    errorReason: shortMessage,
+                    failureCode: errorCode,
+                    outcome: {
+                        result: "failed",
+                        error: errorCode,
+                        message: shortMessage,
+                        credentials: [
+                            {
+                                id: mdocCred.id,
+                                format: "mso_mdoc",
+                                docType: verifyResult.docType,
+                                verified: false,
+                                error: errorCode,
+                                message: shortMessage,
+                            },
+                        ],
+                    },
                 },
-            });
+            );
             this.auditLogService.logFlowError(
                 logContext,
                 new Error(verboseReason),
@@ -518,25 +532,29 @@ export class Iso18013Service {
 
         const responseCode = randomUUID();
 
-        await this.sessionService.add(session.id, {
-            credentials: credentials as any,
-            status: SessionStatus.Completed,
-            responseCode,
-            consumed: true,
-            consumedAt: new Date(),
-            outcome: {
-                result: "success",
-                credentials: [
-                    {
-                        id: mdocCred.id,
-                        format: "mso_mdoc",
-                        docType: verifyResult.docType,
-                        verified: true,
-                        trust: verifyResult.provenance,
-                    },
-                ],
+        await this.updateSessionForTenant.execute(
+            session.tenantId,
+            session.id,
+            {
+                credentials: credentials as any,
+                status: SessionStatus.Completed,
+                responseCode,
+                consumed: true,
+                consumedAt: new Date(),
+                outcome: {
+                    result: "success",
+                    credentials: [
+                        {
+                            id: mdocCred.id,
+                            format: "mso_mdoc",
+                            docType: verifyResult.docType,
+                            verified: true,
+                            trust: verifyResult.provenance,
+                        },
+                    ],
+                },
             },
-        });
+        );
 
         const webhook =
             session.parsedWebhook ??
@@ -545,12 +563,11 @@ export class Iso18013Service {
                 session.tenantId,
             ));
         if (webhook) {
-            const webhookResponse = await this.webhookService
-                .sendWebhook({
+            const webhookResponse = await this.presentationResultPublisher
+                .publish({
                     webhook,
                     session,
                     credentials,
-                    expectResponse: false,
                 })
                 .catch((err: any) => {
                     this.logger.warn(

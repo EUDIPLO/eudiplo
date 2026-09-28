@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
-import { CertService } from "./cert.service.js";
 import type { CertificateInfo } from "./cert.service.js";
+import { CertService } from "./cert.service.js";
 
 const CERT_WITH_DNS_SAN = `-----BEGIN CERTIFICATE-----
 MIIBbDCCARKgAwIBAgIJAOOoODRto2cKMAoGCCqGSM49BAMCMB8xHTAbBgNVBAMM

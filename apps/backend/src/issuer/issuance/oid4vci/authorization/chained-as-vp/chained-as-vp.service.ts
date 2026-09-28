@@ -11,8 +11,10 @@ import { TraceService } from "nestjs-otel";
 import { Repository } from "typeorm";
 import { v4 } from "uuid";
 import { KeyChainService } from "../../../../../crypto/key/key-chain.service.js";
-import { SessionStatus } from "../../../../../session/entities/session.entity.js";
-import { SessionService } from "../../../../../session/session.service.js";
+import { CreateSession } from "../../../../../session/application/create-session.js";
+import { GetSessionForTenant } from "../../../../../session/application/get-session-for-tenant.js";
+import { UpdateSessionForTenant } from "../../../../../session/application/update-session-for-tenant.js";
+import { SessionStatus } from "../../../../../session/domain/session-state.js";
 import { WalletAttestationService } from "../../../../../trust/wallet-attestation.service.js";
 import { Oid4vpService } from "../../../../../verifier/oid4vp/oid4vp.service.js";
 import type { ChainedAsConfig } from "../../../../configuration/issuance/dto/chained-as-config.dto.js";
@@ -48,7 +50,9 @@ export class ChainedAsVpService {
     constructor(
         private readonly configService: ConfigService,
         private readonly keyChainService: KeyChainService,
-        private readonly sessionService: SessionService,
+        private readonly createSession: CreateSession,
+        private readonly updateSessionForTenant: UpdateSessionForTenant,
+        private readonly getSessionForTenant: GetSessionForTenant,
         private readonly issuanceService: IssuanceService,
         private readonly walletAttestationService: WalletAttestationService,
         private readonly traceService: TraceService,
@@ -121,7 +125,7 @@ export class ChainedAsVpService {
         let issuerState = request.issuer_state;
         if (issuerState) {
             try {
-                await this.sessionService.get(issuerState);
+                await this.getSessionForTenant.execute(tenantId, issuerState);
             } catch {
                 throw new BadRequestException("Invalid issuer_state");
             }
@@ -219,7 +223,7 @@ export class ChainedAsVpService {
         const callbackUrl = `${this.getChainedAsVpBaseUrl(tenantId)}/vp-callback?cas=${encodeURIComponent(session.id)}`;
         const publicUrl = this.configService.getOrThrow<string>("PUBLIC_URL");
 
-        await this.sessionService.create({
+        await this.createSession.execute({
             id: session.id,
             tenantId,
             requestId: config.vp.presentationConfigId,
@@ -276,7 +280,10 @@ export class ChainedAsVpService {
             );
         }
 
-        const verifierSession = await this.sessionService.get(session.id);
+        const verifierSession = await this.getSessionForTenant.execute(
+            session.tenantId,
+            session.id,
+        );
         if (
             verifierSession.status !== SessionStatus.Completed ||
             !responseCode ||
@@ -293,9 +300,13 @@ export class ChainedAsVpService {
         }
 
         if (session.issuerState && verifierSession.credentials) {
-            await this.sessionService.add(session.issuerState, {
-                credentials: verifierSession.credentials as any,
-            });
+            await this.updateSessionForTenant.execute(
+                session.tenantId,
+                session.issuerState,
+                {
+                    credentials: verifierSession.credentials as any,
+                },
+            );
         }
 
         const authorizationCode = randomBytes(32).toString("base64url");

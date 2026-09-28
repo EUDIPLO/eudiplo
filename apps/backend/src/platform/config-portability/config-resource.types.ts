@@ -3,13 +3,14 @@ import type {
     ConfigMigrationIssue,
     ConfigResourceKind,
 } from "@eudiplo/config-format/config-format.js";
-export { CONFIG_RESOURCE_KINDS } from "@eudiplo/config-format/config-format.js";
+
 export type {
-    ConfigFile,
     ConfigDocument,
+    ConfigFile,
     ConfigMigrationIssue,
     ConfigResourceKind,
 } from "@eudiplo/config-format/config-format.js";
+export { CONFIG_RESOURCE_KINDS } from "@eudiplo/config-format/config-format.js";
 export type ConfigOwnership = "unmanaged" | "file-managed";
 export type ConfigImportMode = "disabled" | "create" | "upsert" | "replace";
 

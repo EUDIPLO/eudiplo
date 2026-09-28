@@ -40,7 +40,7 @@ export class TenantEntity {
      */
     @ApiProperty({ description: "Tenant status", example: "active" })
     @Column("varchar", { nullable: true })
-    status!: TenantStatus;
+    status!: TenantStatus | null;
 
     /**
      * Session storage configuration for this tenant.

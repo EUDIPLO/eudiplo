@@ -1,6 +1,6 @@
 import type { AuthorizationServerMetadata } from "@openid4vc/oauth2";
-import { of, throwError } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
+import { HandleCredentialNotification } from "./application/handle-credential-notification.js";
 import { Oid4vciService } from "./oid4vci.service.js";
 
 describe("Oid4vciService internal JWKS resolution", () => {
@@ -8,9 +8,7 @@ describe("Oid4vciService internal JWKS resolution", () => {
         const service = Object.assign(
             Object.create(Oid4vciService.prototype) as Oid4vciService,
             {
-                configService: {
-                    get: vi.fn(() => "http://127.0.0.1:3000/"),
-                },
+                settings: { internalUrl: "http://127.0.0.1:3000/" },
                 authzService: {
                     getAuthzIssuer: vi.fn(
                         (tenantId: string) =>
@@ -52,107 +50,134 @@ describe("Oid4vciService internal JWKS resolution", () => {
     });
 });
 
-describe("Oid4vciService authorization server metadata caching & deduplication", () => {
-    it("caches AS metadata and deduplicates concurrent in-flight requests", async () => {
-        const httpGetMock = vi.fn().mockReturnValue(
-            of({
-                data: {
-                    issuer: "https://as.example.org",
-                    token_endpoint: "https://as.example.org/token",
-                },
-            }),
-        );
-        const addCounterMock = vi.fn();
-        const metricServiceMock = {
-            getCounter: vi.fn(() => ({
-                add: addCounterMock,
-            })),
+describe("OID4VCI notification endpoint lookup", () => {
+    function setup(lookupError?: Error | null) {
+        const session = {
+            id: "session",
+            tenantId: "tenant",
+            webhookEndpointId: "endpoint",
         };
-
+        const endpoint = {
+            url: "https://webhook.example",
+            auth: { type: "none" },
+        };
+        const notification = {
+            id: "notification",
+            event: "credential_accepted",
+            credentialConfigurationId: "pid",
+        };
+        const order: string[] = [];
+        const publish = vi.fn(async () => {
+            order.push("publish");
+        });
+        const changeState = vi.fn(async () => {
+            order.push("state");
+        });
+        const logError = vi.fn();
+        const lookup = vi.fn(async () => {
+            order.push("lookup");
+            if (lookupError) throw lookupError;
+            return lookupError === null ? null : endpoint;
+        });
         const service = Object.assign(
             Object.create(Oid4vciService.prototype) as Oid4vciService,
             {
-                httpService: { get: httpGetMock },
-                asMetadataCache: new Map(),
-                inFlightAsMetadataRequests: new Map(),
-                logger: { debug: vi.fn(), warn: vi.fn() },
-                asMetadataHitsCounter: metricServiceMock.getCounter(),
-                asMetadataMissesCounter: metricServiceMock.getCounter(),
-                asMetadataStaleCounter: metricServiceMock.getCounter(),
-                asMetadataFetchesCounter: metricServiceMock.getCounter(),
+                issuanceService: {
+                    getIssuanceConfiguration: vi.fn().mockResolvedValue({}),
+                },
+                settings: { publicUrl: "https://issuer.example" },
+                metadata: {
+                    getIssuer: vi.fn(),
+                    getResourceServer: () => ({
+                        verifyResourceRequest: vi.fn().mockResolvedValue({
+                            tokenPayload: { sub: "session" },
+                        }),
+                    }),
+                    issuerMetadata: vi.fn().mockResolvedValue({
+                        authorizationServers: [],
+                        credentialIssuer: {
+                            credential_issuer: "https://issuer.example",
+                        },
+                    }),
+                },
+                getSessionForTenant: {
+                    execute: vi.fn().mockResolvedValue(session),
+                },
+                traceService: { getSpan: () => undefined },
+                handleCredentialNotification: new HandleCredentialNotification(
+                    {
+                        execute: vi.fn(async () => {
+                            order.push("record");
+                            return notification;
+                        }),
+                    },
+                    { findForTenant: lookup },
+                    { publish },
+                    { execute: changeState },
+                ),
+                auditLogger: { logError },
             },
         );
+        const execute = () =>
+            service.handleNotification(
+                {
+                    method: "POST",
+                    url: "/notification",
+                    headers: {},
+                    contentType: "application/json",
+                    body: {},
+                },
+                {
+                    notification_id: "notification",
+                    event: "credential_accepted",
+                },
+                "tenant",
+            );
+        return {
+            execute,
+            publish,
+            changeState,
+            logError,
+            lookup,
+            order,
+            session,
+            endpoint,
+            notification,
+        };
+    }
 
-        const [m1, m2, m3] = await Promise.all([
-            service["fetchAuthorizationServerMetadata"](
-                "https://as.example.org",
-            ),
-            service["fetchAuthorizationServerMetadata"](
-                "https://as.example.org",
-            ),
-            service["fetchAuthorizationServerMetadata"](
-                "https://as.example.org",
-            ),
-        ]);
-
-        expect(m1.issuer).toBe("https://as.example.org");
-        expect(m2.issuer).toBe("https://as.example.org");
-        expect(m3.issuer).toBe("https://as.example.org");
-        expect(httpGetMock).toHaveBeenCalledTimes(1);
-
-        // Next call hits cache
-        const m4 = await service["fetchAuthorizationServerMetadata"](
-            "https://as.example.org",
-        );
-        expect(m4.issuer).toBe("https://as.example.org");
-        expect(httpGetMock).toHaveBeenCalledTimes(1);
+    it("propagates storage failures without completing the session", async () => {
+        const failure = new Error("database unavailable");
+        const test = setup(failure);
+        await expect(test.execute()).rejects.toBe(failure);
+        expect(test.publish).not.toHaveBeenCalled();
+        expect(test.changeState).not.toHaveBeenCalled();
+        expect(test.logError).toHaveBeenCalledOnce();
     });
 
-    it("serves stale metadata if fresh fetch fails and stale entry exists", async () => {
-        const httpGetMock = vi
-            .fn()
-            .mockReturnValueOnce(
-                of({
-                    data: {
-                        issuer: "https://as.example.org",
-                        token_endpoint: "https://as.example.org/token",
-                    },
-                }),
-            )
-            .mockReturnValueOnce(
-                throwError(() => new Error("Upstream server error")),
-            );
-
-        const service = Object.assign(
-            Object.create(Oid4vciService.prototype) as Oid4vciService,
-            {
-                httpService: { get: httpGetMock },
-                asMetadataCache: new Map(),
-                inFlightAsMetadataRequests: new Map(),
-                logger: { debug: vi.fn(), warn: vi.fn() },
-            },
+    it("still completes when the configured endpoint no longer exists", async () => {
+        const test = setup(null);
+        await expect(test.execute()).resolves.toBeUndefined();
+        expect(test.lookup).toHaveBeenCalledExactlyOnceWith(
+            "tenant",
+            "endpoint",
         );
-
-        // First fetch -> populates cache
-        await service["fetchAuthorizationServerMetadata"](
-            "https://as.example.org",
+        expect(test.publish).not.toHaveBeenCalled();
+        expect(test.changeState).toHaveBeenCalledWith(
+            test.session,
+            "completed",
         );
+        expect(test.order).toEqual(["record", "lookup", "state"]);
+    });
 
-        // Force item in cache to be expired
-        const cachedItem = service["asMetadataCache"].get(
-            "https://as.example.org",
+    it("persists, publishes, and changes state in that order", async () => {
+        const test = setup();
+        await test.execute();
+        expect(test.publish).toHaveBeenCalledWith(
+            test.endpoint,
+            test.session,
+            test.notification,
         );
-        cachedItem.expiresAt = Date.now() - 1000;
-
-        // Second fetch -> fresh fetch fails, fallback to stale metadata
-        const stale = await service["fetchAuthorizationServerMetadata"](
-            "https://as.example.org",
-        );
-
-        expect(stale.issuer).toBe("https://as.example.org");
-        expect(httpGetMock).toHaveBeenCalledTimes(3);
-        expect(service["logger"].warn).toHaveBeenCalledWith(
-            expect.stringContaining("returning stale cached metadata"),
-        );
+        expect(test.order).toEqual(["record", "lookup", "publish", "state"]);
     });
 });

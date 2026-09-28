@@ -1,13 +1,11 @@
-import { Injectable } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+import { Inject, Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import {
-    SessionCleanupMode,
-    SessionStorageConfig,
-} from "../auth/tenant/entities/session-storage-config.js";
+import { SessionStorageConfig } from "../auth/tenant/entities/session-storage-config.js";
 import { TenantEntity } from "../auth/tenant/entities/tenant.entity.js";
+import { SessionCleanupMode } from "./domain/session-retention.js";
 import { UpdateSessionConfigDto } from "./dto/update-session-config.dto.js";
+import { SESSION_SETTINGS, type SessionSettings } from "./session-settings.js";
 
 /**
  * Service for managing session storage configuration per tenant.
@@ -17,26 +15,22 @@ export class SessionConfigService {
     constructor(
         @InjectRepository(TenantEntity)
         private readonly tenantRepository: Repository<TenantEntity>,
-        private readonly configService: ConfigService,
+        @Inject(SESSION_SETTINGS)
+        private readonly settings: SessionSettings,
     ) {}
 
     /**
      * Get the default TTL from environment configuration.
      */
     getDefaultTtlSeconds(): number {
-        return this.configService.getOrThrow<number>("SESSION_TTL");
+        return this.settings.defaultTtlSeconds;
     }
 
     /**
      * Get the default cleanup mode from environment configuration.
      */
     getDefaultCleanupMode(): SessionCleanupMode {
-        const mode = this.configService.getOrThrow<string>(
-            "SESSION_CLEANUP_MODE",
-        );
-        return mode === "anonymize"
-            ? SessionCleanupMode.Anonymize
-            : SessionCleanupMode.Full;
+        return this.settings.defaultCleanupMode;
     }
 
     /**

@@ -37,7 +37,7 @@ export class RegistrarService {
         return this.configSvc.isEnabledForTenant(tenantId);
     }
 
-    onTenantInit(tenant: TenantEntity): Promise<void> {
+    onTenantInit(tenant: Pick<TenantEntity, "id" | "name">): Promise<void> {
         return this.configSvc.onTenantInit(tenant);
     }
 

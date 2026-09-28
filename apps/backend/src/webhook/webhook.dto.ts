@@ -1,6 +1,8 @@
 import { ApiExtraModels, ApiProperty, getSchemaPath } from "@nestjs/swagger";
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
+import type { WebhookConfiguration } from "./domain/webhook-configuration.js";
+import { WebhookAuthType as AuthConfig } from "./domain/webhook-configuration.js";
 
 /**
  * Configuration for API key authentication in webhooks.
@@ -26,10 +28,7 @@ export class ApiKeyConfig extends createZodDto(ApiKeyConfigSchema) {
 /**
  * Enum for the type of authentication used in webhooks.
  */
-export enum AuthConfig {
-    API_KEY = "apiKey",
-    NONE = "none",
-}
+export { WebhookAuthType as AuthConfig } from "./domain/webhook-configuration.js";
 
 /**
  * Configuration for webhook authentication.
@@ -47,7 +46,7 @@ export class WebHookAuthConfigHeader extends createZodDto(
     /**
      * The type of authentication used for the webhook.
      */
-    type!: AuthConfig.API_KEY;
+    type!: typeof AuthConfig.API_KEY;
     /**
      * Configuration for API key authentication.
      * This is required if the type is 'apiKey'.
@@ -67,7 +66,7 @@ export class WebHookAuthConfigNone extends createZodDto(
     /**
      * The type of authentication used for the webhook.
      */
-    type!: AuthConfig.NONE;
+    type!: typeof AuthConfig.NONE;
 }
 
 export const WebHookAuthConfigSchema = z.discriminatedUnion("type", [
@@ -87,7 +86,10 @@ export const WebhookConfigSchema = z
  * Configuration for webhooks used in various services.
  */
 @ApiExtraModels(WebHookAuthConfigNone, WebHookAuthConfigHeader)
-export class WebhookConfig extends createZodDto(WebhookConfigSchema) {
+export class WebhookConfig
+    extends createZodDto(WebhookConfigSchema)
+    implements WebhookConfiguration
+{
     /**
      * The URL to which the webhook will send notifications.
      */

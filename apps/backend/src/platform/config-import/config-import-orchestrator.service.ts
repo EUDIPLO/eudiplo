@@ -53,7 +53,8 @@ interface PortableImportRunner {
  *    b. Run all import phases in order (CORE → CONFIGURATION → REFERENCES → FINAL)
  * 3. Continue with next tenant even if current tenant fails
  *
- * Services should register their import functions during construction.
+ * Composition modules should register importer functions while constructing
+ * capability providers, before application bootstrap.
  * The orchestrator automatically runs imports during onApplicationBootstrap.
  */
 @Injectable()

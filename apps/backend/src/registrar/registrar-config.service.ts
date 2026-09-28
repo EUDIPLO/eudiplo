@@ -132,7 +132,9 @@ export class RegistrarConfigService {
      * Called when a tenant is initialized — no-op with per-tenant config.
      */
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    async onTenantInit(_tenant: TenantEntity): Promise<void> {}
+    async onTenantInit(
+        _tenant: Pick<TenantEntity, "id" | "name">,
+    ): Promise<void> {}
 
     /**
      * Get the registrar configuration for a tenant.

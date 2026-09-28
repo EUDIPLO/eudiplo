@@ -42,10 +42,12 @@ export class Display {
     logo?: DisplayImage;
 }
 
-export enum CredentialFormat {
-    MSO_MDOC = "mso_mdoc",
-    SD_JWT_VC = "dc+sd-jwt",
-}
+export const CredentialFormat = {
+    MSO_MDOC: "mso_mdoc",
+    SD_JWT_VC: "dc+sd-jwt",
+} as const;
+export type CredentialFormat =
+    (typeof CredentialFormat)[keyof typeof CredentialFormat];
 
 /**
  * Determines how SD-JWT credentials are signed and trust is established.
@@ -53,15 +55,19 @@ export enum CredentialFormat {
  * - "federation": Include issuer entity ID in 'iss' claim (federation-based trust)
  * - "auto": Legacy mode kept for backward compatibility (treated like x5c)
  */
-export enum SdJwtTrustFormat {
-    X5C = "x5c",
-    FEDERATION = "federation",
-}
+export const SdJwtTrustFormat = {
+    X5C: "x5c",
+    FEDERATION: "federation",
+} as const;
+export type SdJwtTrustFormat =
+    (typeof SdJwtTrustFormat)[keyof typeof SdJwtTrustFormat];
 
-export enum CredentialProofType {
-    JWT = "jwt",
-    ATTESTATION = "attestation",
-}
+export const CredentialProofType = {
+    JWT: "jwt",
+    ATTESTATION: "attestation",
+} as const;
+export type CredentialProofType =
+    (typeof CredentialProofType)[keyof typeof CredentialProofType];
 
 export class IssuerMetadataCredentialConfig {
     format!: CredentialFormat;

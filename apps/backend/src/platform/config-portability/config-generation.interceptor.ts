@@ -1,4 +1,3 @@
-import { ConfigImportJournalService } from "./config-import-journal.service.js";
 import {
     CallHandler,
     ExecutionContext,
@@ -8,6 +7,7 @@ import {
 import type { Request } from "express";
 import { defer, lastValueFrom, type Observable } from "rxjs";
 import type { TokenPayload } from "../../auth/token.decorator.js";
+import { ConfigImportJournalService } from "./config-import-journal.service.js";
 import { ConfigOwnershipService } from "./config-ownership.service.js";
 import { ConfigResourceRouteService } from "./config-resource-route.service.js";
 

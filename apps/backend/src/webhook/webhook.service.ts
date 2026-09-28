@@ -2,8 +2,11 @@ import { HttpService } from "@nestjs/axios";
 import { Injectable } from "@nestjs/common";
 import { PinoLogger } from "nestjs-pino";
 import { firstValueFrom } from "rxjs";
-import { Notification, Session } from "../session/entities/session.entity.js";
-import { SessionService } from "../session/session.service.js";
+import { UpdateSessionForTenant } from "../session/application/update-session-for-tenant.js";
+import type {
+    Notification,
+    SessionData as Session,
+} from "../session/domain/session-data.js";
 import { OutboundUrlPolicyService } from "./outbound-url-policy.service.js";
 import { WebhookConfig } from "./webhook.dto.js";
 import { extractRawTokenFromSubmission } from "./webhook.utils.js";
@@ -47,7 +50,7 @@ export interface WebhookResponse {
 export class WebhookService {
     constructor(
         private readonly httpService: HttpService,
-        private readonly sessionService: SessionService,
+        private readonly updateSessionForTenant: UpdateSessionForTenant,
         private readonly outboundUrlPolicyService: OutboundUrlPolicyService,
         private readonly logger: PinoLogger,
     ) {
@@ -131,9 +134,13 @@ export class WebhookService {
                 if (webhookResponse.data?.redirectUri) {
                     // redirectUri is returned but no special handling needed here
                 } else if (webhookResponse.data && values.expectResponse) {
-                    await this.sessionService.add(values.session.id, {
-                        credentialPayload: values.session.credentialPayload,
-                    });
+                    await this.updateSessionForTenant.execute(
+                        values.session.tenantId,
+                        values.session.id,
+                        {
+                            credentialPayload: values.session.credentialPayload,
+                        },
+                    );
                 }
 
                 return webhookResponse.data;

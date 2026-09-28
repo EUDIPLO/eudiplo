@@ -3,11 +3,11 @@ import {
     BadRequestException,
     ConflictException,
     HttpStatus,
+    Inject,
     Injectable,
     Logger,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { InjectRepository } from "@nestjs/typeorm";
 import {
     type AuthorizationCodeGrantIdentifier,
     type AuthorizationServerMetadata,
@@ -21,20 +21,27 @@ import {
     type RefreshTokenGrantIdentifier,
     refreshTokenGrantIdentifier,
 } from "@openid4vc/oauth2";
-import type { Request } from "express";
 import { calculateJwkThumbprint, decodeJwt, type JWK } from "jose";
-import { Repository } from "typeorm";
 import { v4 } from "uuid";
 import { CryptoService } from "../../../../../crypto/crypto.service.js";
 import { KeyChainService } from "../../../../../crypto/key/key-chain.service.js";
-import { SessionService } from "../../../../../session/session.service.js";
+import { CreateSession } from "../../../../../session/application/create-session.js";
+import { GetSessionByAuthorizationCode } from "../../../../../session/application/get-session-by-authorization-code.js";
+import { GetSessionByRefreshToken } from "../../../../../session/application/get-session-by-refresh-token.js";
+import { GetSessionByRequestUri } from "../../../../../session/application/get-session-by-request-uri.js";
+import { RecordFailedTxCodeAttempt } from "../../../../../session/application/record-failed-tx-code-attempt.js";
+import { UpdateSessionForTenant } from "../../../../../session/application/update-session-for-tenant.js";
 import { WalletAttestationService } from "../../../../../trust/wallet-attestation.service.js";
 import type { TrustListRef } from "../../../../../verifier/presentations/entities/presentation-config.entity.js";
 import { IssuanceService } from "../../../../configuration/issuance/issuance.service.js";
 import { StatusListConfigService } from "../../../../status-list/status-list-config.service.js";
-import { NonceEntity } from "../../entities/nonces.entity.js";
 import { TokenErrorException } from "../../exceptions/index.js";
-import { getHeadersFromRequest } from "../../util.js";
+import {
+    CREDENTIAL_NONCE_REPOSITORY,
+    type CredentialNonceRepository,
+} from "../../ports/credential-nonce.repository.js";
+import type { Oid4vciRequestContext } from "../../request-context.js";
+import { normalizeRequestHeaders } from "../../util.js";
 import {
     buildAuthorizationServerMetadata,
     buildWalletAttestationMetadata,
@@ -72,12 +79,17 @@ export class AuthorizeService {
     constructor(
         private readonly configService: ConfigService,
         private readonly cryptoService: CryptoService,
-        private readonly sessionService: SessionService,
+        private readonly createSession: CreateSession,
+        private readonly updateSessionForTenant: UpdateSessionForTenant,
+        private readonly getSessionByAuthorizationCode: GetSessionByAuthorizationCode,
+        private readonly getSessionByRefreshToken: GetSessionByRefreshToken,
+        private readonly getSessionByRequestUri: GetSessionByRequestUri,
+        private readonly recordFailedTxCodeAttempt: RecordFailedTxCodeAttempt,
         private readonly issuanceService: IssuanceService,
         private readonly walletAttestationService: WalletAttestationService,
         private readonly keyChainService: KeyChainService,
-        @InjectRepository(NonceEntity)
-        private readonly nonceRepository: Repository<NonceEntity>,
+        @Inject(CREDENTIAL_NONCE_REPOSITORY)
+        private readonly nonceRepository: CredentialNonceRepository,
         private readonly statusListConfigService: StatusListConfigService,
     ) {}
 
@@ -437,7 +449,7 @@ export class AuthorizeService {
     async handlePar(
         tenantId: string,
         body: AuthorizeQueries,
-        req: Request,
+        req: Oid4vciRequestContext,
         clientAttestation?: {
             clientAttestationJwt: string;
             clientAttestationPopJwt: string;
@@ -479,11 +491,11 @@ export class AuthorizeService {
                 request: {
                     method: req.method as HttpMethod,
                     url,
-                    headers: getHeadersFromRequest(req),
+                    headers: normalizeRequestHeaders(req.headers),
                 },
                 dpop: {
                     required: false,
-                    jwt: req.header("dpop"),
+                    jwt: this.getHeader(req.headers, "dpop"),
                     jwkThumbprint: body.dpop_jkt,
                     allowedSigningAlgs:
                         authorizationServerMetadata.dpop_signing_alg_values_supported,
@@ -505,22 +517,23 @@ export class AuthorizeService {
         };
 
         if (body.issuer_state) {
-            const updateResult = await this.sessionService.add(
+            const updateResult = await this.updateSessionForTenant.execute(
+                tenantId,
                 body.issuer_state,
                 parValues,
             );
 
             // Some PAR requests do not have a pre-existing issuer_state session.
             // In that case we create a dedicated request_uri session for authorize.
-            if (!updateResult.affected) {
-                await this.sessionService.create({
+            if (!updateResult) {
+                await this.createSession.execute({
                     id: v4(),
                     tenantId,
                     ...parValues,
                 });
             }
         } else {
-            await this.sessionService.create({
+            await this.createSession.execute({
                 id: v4(),
                 tenantId,
                 ...parValues,
@@ -528,6 +541,14 @@ export class AuthorizeService {
         }
 
         return { expires_in: PAR_REQUEST_URI_LIFETIME_SECONDS, request_uri };
+    }
+
+    private getHeader(
+        headers: Readonly<Record<string, string | string[] | undefined>>,
+        name: string,
+    ): string | undefined {
+        const value = headers[name] ?? headers[name.toLowerCase()];
+        return Array.isArray(value) ? value[0] : value;
     }
 
     /**
@@ -611,8 +632,8 @@ export class AuthorizeService {
             );
         }
 
-        const session = await this.sessionService
-            .getBy({ request_uri: values.request_uri, tenantId })
+        const session = await this.getSessionByRequestUri
+            .execute(tenantId, values.request_uri)
             .catch(() => {
                 throw new BadRequestException({
                     error: "invalid_request_uri",
@@ -655,11 +676,15 @@ export class AuthorizeService {
         }
 
         // Expire the request_uri on use so it cannot be redeemed twice (RFC 9126 Section 7.3).
-        await this.sessionService.add(session.id, {
-            request_uri_expires_at: new Date(),
-        });
+        await this.updateSessionForTenant.execute(
+            session.tenantId,
+            session.id,
+            {
+                request_uri_expires_at: new Date(),
+            },
+        );
 
-        const code = await this.setAuthCode(session.id);
+        const code = await this.setAuthCode(tenantId, session.id);
         return this.buildAuthorizationResponseUrl(authQueries.redirect_uri, {
             code,
             state: authQueries.state,
@@ -677,7 +702,7 @@ export class AuthorizeService {
      */
     async validateTokenRequest(
         body: any,
-        req: Request,
+        req: Oid4vciRequestContext,
         tenantId: string,
     ): Promise<any> {
         const url = `${this.configService.getOrThrow<string>("PUBLIC_URL")}${req.url}`;
@@ -692,7 +717,7 @@ export class AuthorizeService {
                 request: {
                     method: req.method as HttpMethod,
                     url,
-                    headers: getHeadersFromRequest(req),
+                    headers: normalizeRequestHeaders(req.headers),
                 },
             });
         } catch (err: any) {
@@ -711,11 +736,8 @@ export class AuthorizeService {
             refreshTokenGrantIdentifier
         ) {
             // For refresh_token grant, look up by refresh_token
-            session = await this.sessionService
-                .getBy({
-                    refresh_token: parsedAccessTokenRequest.grant.refreshToken,
-                    tenantId,
-                })
+            session = await this.getSessionByRefreshToken
+                .execute(tenantId, parsedAccessTokenRequest.grant.refreshToken)
                 .catch(() => {
                     throw new TokenErrorException(
                         "invalid_grant",
@@ -728,11 +750,8 @@ export class AuthorizeService {
                 parsedAccessTokenRequest.accessTokenRequest[
                     "pre-authorized_code"
                 ] ?? parsedAccessTokenRequest.accessTokenRequest["code"];
-            session = await this.sessionService
-                .getBy({
-                    authorization_code,
-                    tenantId,
-                })
+            session = await this.getSessionByAuthorizationCode
+                .execute(tenantId, authorization_code)
                 .catch(() => {
                     throw new TokenErrorException(
                         "invalid_grant",
@@ -865,7 +884,7 @@ export class AuthorizeService {
                     request: {
                         method: req.method as HttpMethod,
                         url,
-                        headers: getHeadersFromRequest(req),
+                        headers: normalizeRequestHeaders(req.headers),
                     },
                     dpop: {
                         required: issuanceConfig.dPopRequired,
@@ -886,11 +905,13 @@ export class AuthorizeService {
                     if (errorCode === "invalid_tx_code") {
                         const maxAttempts =
                             issuanceConfig.txCodeMaxAttempts ?? 5;
-                        const failedAttempts =
-                            await this.sessionService.incrementTxCodeFailedAttempts(
+                        const { failedAttempts, locked } =
+                            await this.recordFailedTxCodeAttempt.execute(
+                                tenantId,
                                 session.id,
+                                maxAttempts,
                             );
-                        if (failedAttempts >= maxAttempts) {
+                        if (locked) {
                             this.logger.warn(
                                 `Session ${session.id} locked after ${failedAttempts} failed tx_code attempts`,
                             );
@@ -928,7 +949,7 @@ export class AuthorizeService {
                     request: {
                         method: req.method as HttpMethod,
                         url,
-                        headers: getHeadersFromRequest(req),
+                        headers: normalizeRequestHeaders(req.headers),
                     },
                     dpop: {
                         required: issuanceConfig.dPopRequired,
@@ -963,7 +984,7 @@ export class AuthorizeService {
                     request: {
                         method: req.method as HttpMethod,
                         url,
-                        headers: getHeadersFromRequest(req),
+                        headers: normalizeRequestHeaders(req.headers),
                     },
                     // RFC 9449 Section 5: refresh tokens of public clients stay bound to the DPoP key;
                     // attested clients are bound via client authentication and may use a new key.
@@ -1028,7 +1049,7 @@ export class AuthorizeService {
                 subject: session.id,
                 expiresInSeconds: accessTokenExpiresInSeconds,
                 authorizationServer: authorizationServerMetadata.issuer,
-                clientId: req.body.client_id,
+                clientId: body?.client_id,
                 dpop: dpopValue,
                 // FAPI 2.0 SP 5.3.2.1: no refresh token rotation.
                 refreshToken: refreshTokenConfig.enabled && !isRefreshGrant,
@@ -1060,17 +1081,21 @@ export class AuthorizeService {
                 );
             }
 
-            await this.sessionService.add(session.id, {
-                consumed: true, // Mark the session as consumed to prevent reuse
-                dpop_jkt: dpopValue?.jwkThumbprint ?? session.dpop_jkt,
-                client_key_jkt: clientKeyJkt,
-                ...(tokenResponse.refresh_token
-                    ? {
-                          refresh_token: tokenResponse.refresh_token,
-                          refresh_token_expires_at: refreshTokenExpiresAt,
-                      }
-                    : {}),
-            });
+            await this.updateSessionForTenant.execute(
+                session.tenantId,
+                session.id,
+                {
+                    consumed: true, // Mark the session as consumed to prevent reuse
+                    dpop_jkt: dpopValue?.jwkThumbprint ?? session.dpop_jkt,
+                    client_key_jkt: clientKeyJkt,
+                    ...(tokenResponse.refresh_token
+                        ? {
+                              refresh_token: tokenResponse.refresh_token,
+                              refresh_token_expires_at: refreshTokenExpiresAt,
+                          }
+                        : {}),
+                },
+            );
         }
 
         return tokenResponse;
@@ -1132,9 +1157,9 @@ export class AuthorizeService {
      * @param issuer_state
      * @returns
      */
-    async setAuthCode(issuer_state: string) {
+    async setAuthCode(tenantId: string, issuer_state: string) {
         const code = randomUUID();
-        await this.sessionService.add(issuer_state, {
+        await this.updateSessionForTenant.execute(tenantId, issuer_state, {
             authorization_code: code,
             authorization_code_expires_at: new Date(
                 Date.now() + AUTHORIZATION_CODE_LIFETIME_SECONDS * 1000,

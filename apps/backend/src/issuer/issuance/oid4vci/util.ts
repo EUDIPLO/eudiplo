@@ -1,11 +1,10 @@
-import type { Request } from "express";
-
 /**
- * Utility function to extract headers from an Express request
- * @param req
+ * Normalize protocol authentication headers without depending on a web framework.
  * @returns
  */
-export function getHeadersFromRequest(req: Request): globalThis.Headers {
+export function normalizeRequestHeaders(
+    requestHeaders: object,
+): globalThis.Headers {
     const headers = new Headers();
 
     const normalizeAuthorizationHeader = (value: string): string => {
@@ -32,16 +31,19 @@ export function getHeadersFromRequest(req: Request): globalThis.Headers {
         return `${normalizedScheme} ${credentials}`;
     };
 
-    for (const [key, value] of Object.entries(req.headers)) {
+    for (const [key, value] of Object.entries(requestHeaders)) {
         if (Array.isArray(value)) {
             for (const v of value) {
+                if (typeof v !== "string") {
+                    continue;
+                }
                 const normalizedValue =
                     key.toLowerCase() === "authorization"
                         ? normalizeAuthorizationHeader(v)
                         : v;
                 headers.append(key, normalizedValue);
             }
-        } else if (value !== undefined) {
+        } else if (typeof value === "string") {
             const normalizedValue =
                 key.toLowerCase() === "authorization"
                     ? normalizeAuthorizationHeader(value)

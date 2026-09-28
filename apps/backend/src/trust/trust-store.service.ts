@@ -1,10 +1,10 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import type { LoTE } from "@owf/eudi-lote";
-import { decodeJwt } from "jose";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { TrustListService } from "../issuer/trust-list/trustlist.service.js";
-import { LoteParserService } from "./lote-parser.service.js";
-import { TrustListJwtService } from "./trustlist-jwt.service.js";
+import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
+import {
+    TRUST_STORE_SETTINGS,
+    type TrustStoreSettings,
+} from "./trust-store-settings.js";
 import { TrustedEntity, TrustListSource } from "./types.js";
 
 /**
@@ -23,10 +23,10 @@ export class TrustStoreService {
     private readonly cache = new Map<string, BuiltTrustStore>();
 
     constructor(
-        private readonly trustListJwt: TrustListJwtService,
-        private readonly loteParser: LoteParserService,
+        private readonly collectTrustedEntities: CollectTrustedEntities,
         private readonly trustListService: TrustListService,
-        private readonly configService: ConfigService,
+        @Inject(TRUST_STORE_SETTINGS)
+        private readonly settings: TrustStoreSettings,
     ) {}
 
     async getTrustStore(
@@ -52,8 +52,7 @@ export class TrustStoreService {
                             id,
                         );
                     const baseUrl =
-                        this.configService.get<string>("INTERNAL_URL") ||
-                        this.configService.getOrThrow<string>("PUBLIC_URL");
+                        this.settings.internalUrl || this.settings.publicUrl;
                     return {
                         url: `${baseUrl.replace(/\/$/, "")}/issuers/${encodeURIComponent(source.tenantId)}/trust-list/${encodeURIComponent(id)}`,
                         verifierX509Der,
@@ -68,55 +67,12 @@ export class TrustStoreService {
             return cached;
         }
 
-        const entities: TrustedEntity[] = [];
-        let nextUpdate: string | undefined;
-
-        for (const ref of source.lotes) {
-            this.logger.debug(`Fetching trust list from: ${ref.url}`);
-            const jwt = await this.trustListJwt.fetchJwt(ref.url);
-            await this.trustListJwt.verifyTrustListJwt(ref, jwt); // hook
-            const decoded = decodeJwt<{ LoTE: LoTE }>(jwt);
-
-            this.logger.debug(
-                `Decoded LoTE from ${ref.url}: TrustedEntitiesList has ${decoded.LoTE.TrustedEntitiesList?.length ?? 0} raw entries`,
-            );
-
-            let parsed = this.loteParser.parse(decoded.LoTE);
-            this.logger.debug(
-                `Parsed ${parsed.entities.length} entities from ${ref.url}`,
-            );
-
-            if (source.acceptedServiceTypes) {
-                this.logger.debug(
-                    `Filtering by accepted service types: ${source.acceptedServiceTypes.join(", ")}`,
-                );
-                const beforeFilter = parsed.entities.length;
-                parsed = this.loteParser.filterByServiceTypes(
-                    parsed,
-                    source.acceptedServiceTypes,
-                );
-                this.logger.debug(
-                    `After filtering: ${parsed.entities.length} entities (was ${beforeFilter})`,
-                );
-            }
-
-            nextUpdate = nextUpdate ?? parsed.info.nextUpdate;
-
-            // Add entities preserving grouping
-            for (const entity of parsed.entities) {
-                entities.push(entity);
-            }
-        }
-
-        const store: BuiltTrustStore = {
-            fetchedAt: Date.now(),
-            nextUpdate,
-            entities,
-        };
+        const result = await this.collectTrustedEntities.execute(source);
+        const store: BuiltTrustStore = { fetchedAt: Date.now(), ...result };
         this.cache.set(cacheKey, store);
 
         this.logger.debug(
-            `Built trust store with ${entities.length} trusted entit${entities.length === 1 ? "y" : "ies"}`,
+            `Built trust store with ${store.entities.length} trusted entit${store.entities.length === 1 ? "y" : "ies"}`,
         );
         return store;
     }

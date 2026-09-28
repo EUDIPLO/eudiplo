@@ -5,12 +5,12 @@ import { KeyChainService } from "../../../../crypto/key/key-chain.service.js";
 import { KeyUsageType } from "../../../../crypto/key/types/key-usage-type.js";
 import { MediaType } from "../../../../shared/utils/media-type/media-type.enum.js";
 import { IssuanceService } from "../../../configuration/issuance/issuance.service.js";
+import { Oid4vciProtocolMetadata } from "../adapters/oid4vci-protocol-metadata.js";
 import { AuthorizationServersService } from "../authorization/authorization-servers/authorization-servers.service.js";
 import { AuthorizeService } from "../authorization/authorize/authorize.service.js";
 import { ChainedAsService } from "../authorization/chained-as/chained-as.service.js";
 import { ChainedAsVpService } from "../authorization/chained-as-vp/chained-as-vp.service.js";
 import { WellKnownException } from "../exceptions/index.js";
-import { Oid4vciService } from "../oid4vci.service.js";
 import { CredentialIssuerMetadataDto } from "./dto/credential-issuer-metadata.dto.js";
 import { EC_Public, JwksResponseDto } from "./dto/jwks-response.dto.js";
 
@@ -26,7 +26,7 @@ export class WellKnownService {
      * @param authorizeService
      */
     constructor(
-        private readonly oid4vciService: Oid4vciService,
+        private readonly oid4vciService: Oid4vciProtocolMetadata,
         private readonly certService: CertService,
         public readonly keyChainService: KeyChainService,
         private readonly authorizeService: AuthorizeService,

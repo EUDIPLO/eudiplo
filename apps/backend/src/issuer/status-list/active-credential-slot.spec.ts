@@ -1,6 +1,5 @@
 import "reflect-metadata";
 import { randomUUID } from "node:crypto";
-import { ConfigService } from "@nestjs/config";
 import { DataSource } from "typeorm";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ClientEntity } from "../../auth/client/entities/client.entity.js";
@@ -65,15 +64,6 @@ describe("StatusListService active-credential limit", () => {
         });
         await dataSource.initialize();
 
-        const configService = {
-            getOrThrow: vi.fn((key: string) => {
-                if (key === "PUBLIC_URL") {
-                    return "https://issuer.example";
-                }
-                throw new Error(`Unexpected config key: ${key}`);
-            }),
-        } as unknown as ConfigService;
-
         // Deterministic subject key: same iss+sub always yields the same value,
         // different sub yields a different one.
         const subjectKeyService = {
@@ -89,7 +79,11 @@ describe("StatusListService active-credential limit", () => {
         } as unknown as SubjectKeyService;
 
         service = new StatusListService(
-            configService,
+            {
+                publicUrl: "https://issuer.example",
+                statusCapacity: 4,
+                statusBits: 1,
+            },
             {} as never,
             {} as never,
             dataSource,

@@ -2,10 +2,12 @@ import { ApiPropertyOptional } from "@nestjs/swagger";
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 
-export enum IssuerRegistrationCertificateMode {
-    IMPORT = "import",
-    GENERATE = "generate",
-}
+export const IssuerRegistrationCertificateMode = {
+    IMPORT: "import",
+    GENERATE: "generate",
+} as const;
+export type IssuerRegistrationCertificateMode =
+    (typeof IssuerRegistrationCertificateMode)[keyof typeof IssuerRegistrationCertificateMode];
 
 const IssuerProvidedAttestationSchema = z
     .object({

@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { HttpService } from "@nestjs/axios";
 import {
     BadRequestException,
+    Inject,
     Injectable,
     Logger,
     NotFoundException,
@@ -11,16 +11,15 @@ import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { decodeJwt } from "jose";
 import { MetricService, TraceService } from "nestjs-otel";
-import { firstValueFrom } from "rxjs";
 import { LessThan, Repository } from "typeorm";
 import { v4 } from "uuid";
 import { KeyChainService } from "../../../../../crypto/key/key-chain.service.js";
-import { SessionService } from "../../../../../session/session.service.js";
+import { GetSessionForTenant } from "../../../../../session/application/get-session-for-tenant.js";
 import { FederationTrustService } from "../../../../../trust/federation-trust.service.js";
 import { FederationTrustSource } from "../../../../../trust/types.js";
 import { WalletAttestationService } from "../../../../../trust/wallet-attestation.service.js";
 import type { TrustListRef } from "../../../../../verifier/presentations/entities/presentation-config.entity.js";
-import { AuthorizationIdentity } from "../../../../configuration/credentials/dto/authorization-identity.js";
+import { AuthorizationIdentity } from "../../../../configuration/credentials/domain/authorization-identity.js";
 import type { ChainedAsConfig } from "../../../../configuration/issuance/dto/chained-as-config.dto.js";
 import { IssuanceService } from "../../../../configuration/issuance/issuance.service.js";
 import {
@@ -43,20 +42,15 @@ import {
     resolveTokenBinding,
     resolveWalletAttestationPolicy,
 } from "../shared/index.js";
-
-/**
- * Upstream OIDC discovery document structure.
- */
-interface OidcDiscoveryDocument {
-    issuer: string;
-    authorization_endpoint: string;
-    token_endpoint: string;
-    userinfo_endpoint?: string;
-    jwks_uri: string;
-    scopes_supported?: string[];
-    response_types_supported?: string[];
-    token_endpoint_auth_methods_supported?: string[];
-}
+import {
+    OIDC_DISCOVERY_RESOLVER,
+    type OidcDiscoveryDocument,
+    type OidcDiscoveryResolver,
+} from "./ports/oidc-discovery-resolver.js";
+import {
+    OIDC_TOKEN_EXCHANGER,
+    type OidcTokenExchanger,
+} from "./ports/oidc-token-exchanger.js";
 
 /**
  * Service implementing Chained Authorization Server functionality.
@@ -104,9 +98,12 @@ export class ChainedAsService {
 
     constructor(
         private readonly configService: ConfigService,
-        private readonly httpService: HttpService,
+        @Inject(OIDC_DISCOVERY_RESOLVER)
+        private readonly oidcDiscoveryResolver: OidcDiscoveryResolver,
+        @Inject(OIDC_TOKEN_EXCHANGER)
+        private readonly oidcTokenExchanger: OidcTokenExchanger,
         private readonly keyChainService: KeyChainService,
-        private readonly sessionService: SessionService,
+        private readonly getSessionForTenant: GetSessionForTenant,
         private readonly issuanceService: IssuanceService,
         private readonly federationTrustService: FederationTrustService,
         private readonly walletAttestationService: WalletAttestationService,
@@ -253,15 +250,10 @@ export class ChainedAsService {
         this.discoveryMissesCounter?.add(1, { issuer });
 
         const fetchPromise = (async (): Promise<OidcDiscoveryDocument> => {
-            const wellKnownUrl = `${issuer.replace(/\/$/, "")}/.well-known/openid-configuration`;
             this.discoveryFetchesCounter?.add(1, { issuer });
 
             try {
-                const response = await firstValueFrom(
-                    this.httpService.get<OidcDiscoveryDocument>(wellKnownUrl),
-                );
-
-                const doc = response.data;
+                const doc = await this.oidcDiscoveryResolver.resolve(issuer);
                 // Cache for 5 minutes
                 this.discoveryCache.set(issuer, {
                     doc,
@@ -274,12 +266,12 @@ export class ChainedAsService {
                 if (cached && now - cached.fetchedAt <= 60 * 60 * 1000) {
                     this.discoveryStaleCounter?.add(1, { issuer });
                     this.logger.warn(
-                        `Failed to fetch OIDC discovery from ${wellKnownUrl}, returning stale discovery document: ${String(error)}`,
+                        `Failed to fetch OIDC discovery from ${issuer}, returning stale discovery document: ${String(error)}`,
                     );
                     return cached.doc;
                 }
                 this.logger.error(
-                    `Failed to fetch OIDC discovery from ${wellKnownUrl}`,
+                    `Failed to fetch OIDC discovery from ${issuer}`,
                     error,
                 );
                 throw new BadRequestException(
@@ -373,7 +365,7 @@ export class ChainedAsService {
         if (issuerState) {
             // Verify the issuer_state exists in our session store
             try {
-                await this.sessionService.get(issuerState);
+                await this.getSessionForTenant.execute(tenantId, issuerState);
             } catch {
                 throw new BadRequestException("Invalid issuer_state");
             }
@@ -562,39 +554,25 @@ export class ChainedAsService {
         discovery: OidcDiscoveryDocument,
         callbackUrl: string,
     ): Promise<void> {
-        const tokenResponse = await firstValueFrom(
-            this.httpService.post(
-                discovery.token_endpoint,
-                new URLSearchParams({
-                    grant_type: "authorization_code",
-                    code,
-                    redirect_uri: callbackUrl,
-                    client_id: config.upstream!.clientId,
-                    client_secret: config.upstream!.clientSecret || "",
-                    code_verifier: session.upstreamCodeVerifier || "",
-                }).toString(),
-                {
-                    headers: {
-                        "Content-Type": "application/x-www-form-urlencoded",
-                    },
-                },
-            ),
-        );
+        const tokens = await this.oidcTokenExchanger.exchange({
+            tokenEndpoint: discovery.token_endpoint,
+            code,
+            redirectUri: callbackUrl,
+            clientId: config.upstream!.clientId,
+            clientSecret: config.upstream!.clientSecret,
+            codeVerifier: session.upstreamCodeVerifier,
+        });
 
-        const tokens = tokenResponse.data as {
-            access_token: string;
-            id_token?: string;
-        };
-
-        if (tokens.id_token) {
-            session.upstreamIdTokenClaims = decodeJwt(
-                tokens.id_token,
-            ) as Record<string, unknown>;
+        if (tokens.idToken) {
+            session.upstreamIdTokenClaims = decodeJwt(tokens.idToken) as Record<
+                string,
+                unknown
+            >;
         }
 
         try {
             session.upstreamAccessTokenClaims = decodeJwt(
-                tokens.access_token,
+                tokens.accessToken,
             ) as Record<string, unknown>;
         } catch {
             session.upstreamAccessTokenClaims = {};

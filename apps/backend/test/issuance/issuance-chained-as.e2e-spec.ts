@@ -21,8 +21,8 @@ import { AppModule } from "../../src/app.module.js";
 import { KeyChainImportDto } from "../../src/crypto/key/dto/key-chain-import.dto.js";
 import { CredentialConfigCreate } from "../../src/issuer/configuration/credentials/dto/credential-config-create.dto.js";
 import { IssuanceDto } from "../../src/issuer/configuration/issuance/dto/issuance.dto.js";
-import { SessionStatus } from "../../src/session/entities/session.entity.js";
-import { SessionService } from "../../src/session/session.service.js";
+import { UpdateSessionForTenant } from "../../src/session/application/update-session-for-tenant.js";
+import { SessionStatus } from "../../src/session/domain/session-state.js";
 import { PresentationConfigCreateDto } from "../../src/verifier/presentations/dto/presentation-config-create.dto.js";
 import { getToken, readConfig } from "../utils.js";
 
@@ -106,7 +106,7 @@ describe("Issuance - Chained AS Flow", () => {
     let authToken: string;
     let clientId: string;
     let clientSecret: string;
-    let sessionService: SessionService;
+    let updateSessionForTenant: UpdateSessionForTenant;
 
     beforeAll(async () => {
         // Delete the database
@@ -128,7 +128,7 @@ describe("Issuance - Chained AS Flow", () => {
 
         await app.init();
 
-        sessionService = app.get(SessionService);
+        updateSessionForTenant = app.get(UpdateSessionForTenant);
 
         authToken = await getToken(app, clientId, clientSecret, "haip");
 
@@ -361,7 +361,7 @@ describe("Issuance - Chained AS Flow", () => {
             "",
         );
 
-        await sessionService.add(chainedAsSessionId, {
+        await updateSessionForTenant.execute("haip", chainedAsSessionId, {
             status: SessionStatus.Completed,
             responseCode: "vp-response-code",
         });

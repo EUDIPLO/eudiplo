@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -14,34 +14,37 @@ import {
     type IssuerMetadataResult,
     Openid4vciIssuer,
 } from "@openid4vc/openid4vci";
-import type { Request } from "express";
 import { decodeJwt } from "jose";
 import { Span, TraceService } from "nestjs-otel";
 import { LessThan, Repository } from "typeorm";
 import { v4 } from "uuid";
 import { CryptoService } from "../../../crypto/crypto.service.js";
-import { Session } from "../../../session/entities/session.entity.js";
-import { SessionService } from "../../../session/session.service.js";
+import type { SessionData as Session } from "../../../session/domain/session-data.js";
 import { TrustStoreService } from "../../../trust/trust-store.service.js";
 import { X509ValidationService } from "../../../trust/x509-validation.service.js";
-import { CredentialsService } from "../../configuration/credentials/credentials.service.js";
 import { IssuanceService } from "../../configuration/issuance/issuance.service.js";
+import { CompleteDeferredCredential } from "./application/complete-deferred-credential.js";
+import { FailDeferredCredential } from "./application/fail-deferred-credential.js";
+import { ResolveDeferredCredentialRetrieval } from "./application/resolve-deferred-credential-retrieval.js";
 import {
     validateAttestationProofTrust,
     validateJwtProofAttestationTrust,
 } from "./attestation-proof-trust.util.js";
+import { DPOP_PROOF_FRESHNESS } from "./authorization/shared/dpop.util.js";
+import { DeferredTransactionStatus } from "./domain/deferred-transaction-status.js";
 import { DeferredCredentialRequestDto } from "./dto/deferred-credential-request.dto.js";
-import {
-    DeferredTransactionEntity,
-    DeferredTransactionStatus,
-} from "./entities/deferred-transaction.entity.js";
-import { NonceEntity } from "./entities/nonces.entity.js";
+import { DeferredTransactionEntity } from "./entities/deferred-transaction.entity.js";
 import {
     CredentialRequestException,
     DeferredCredentialException,
 } from "./exceptions/index.js";
-import { DPOP_PROOF_FRESHNESS } from "./authorization/shared/dpop.util.js";
-import { getHeadersFromRequest } from "./util.js";
+import {
+    CREDENTIAL_NONCE_REPOSITORY,
+    type CredentialNonceRepository,
+} from "./ports/credential-nonce.repository.js";
+import type { DeferredTransactionData } from "./ports/deferred-transaction.repository.js";
+import type { Oid4vciRequestContext } from "./request-context.js";
+import { normalizeRequestHeaders } from "./util.js";
 
 /**
  * Parameters for creating a deferred credential transaction.
@@ -75,16 +78,17 @@ export class DeferredCredentialService {
     constructor(
         private readonly cryptoService: CryptoService,
         private readonly configService: ConfigService,
-        private readonly sessionService: SessionService,
         private readonly issuanceService: IssuanceService,
-        private readonly credentialsService: CredentialsService,
         private readonly traceService: TraceService,
         private readonly trustStoreService: TrustStoreService,
         private readonly x509ValidationService: X509ValidationService,
-        @InjectRepository(NonceEntity)
-        private readonly nonceRepository: Repository<NonceEntity>,
+        @Inject(CREDENTIAL_NONCE_REPOSITORY)
+        private readonly nonceRepository: CredentialNonceRepository,
         @InjectRepository(DeferredTransactionEntity)
         private readonly deferredTransactionRepository: Repository<DeferredTransactionEntity>,
+        private readonly resolveDeferredCredentialRetrieval: ResolveDeferredCredentialRetrieval,
+        private readonly completeDeferredCredential: CompleteDeferredCredential,
+        private readonly failDeferredCredential: FailDeferredCredential,
     ) {}
 
     /**
@@ -205,11 +209,11 @@ export class DeferredCredentialService {
         }
 
         // Delete the nonce to prevent reuse
-        const nonceResult = await this.nonceRepository.delete({
-            nonce: expectedNonce,
+        const nonceDeleted = await this.nonceRepository.delete(
             tenantId,
-        });
-        if (nonceResult.affected === 0) {
+            expectedNonce,
+        );
+        if (!nonceDeleted) {
             throw new CredentialRequestException(
                 "invalid_nonce",
                 "The nonce in the key proof is invalid or has already been used",
@@ -311,7 +315,7 @@ export class DeferredCredentialService {
      */
     @Span("oid4vci.getDeferredCredentialInternal")
     async getDeferredCredential(
-        req: Request,
+        req: Oid4vciRequestContext,
         body: DeferredCredentialRequestDto,
         tenantId: string,
         issuerMetadata: IssuerMetadataResult,
@@ -319,7 +323,7 @@ export class DeferredCredentialService {
         const resourceServer = this.getResourceServer(tenantId);
         const issuanceConfig =
             await this.issuanceService.getIssuanceConfiguration(tenantId);
-        const headers = getHeadersFromRequest(req);
+        const headers = normalizeRequestHeaders(req.headers);
 
         const allowedAuthenticationSchemes = [
             SupportedAuthenticationScheme.DPoP,
@@ -378,8 +382,15 @@ export class DeferredCredentialService {
                 deferredTransaction.credentialConfigurationId,
         });
 
-        // Check if transaction has expired
-        if (new Date() > deferredTransaction.expiresAt) {
+        const retrieval = this.resolveDeferredCredentialRetrieval.execute({
+            status: deferredTransaction.status,
+            interval: deferredTransaction.interval,
+            expiresAt: deferredTransaction.expiresAt,
+            credential: deferredTransaction.credential,
+            errorMessage: deferredTransaction.errorMessage,
+        });
+
+        if (retrieval.kind === "expire") {
             await this.deferredTransactionRepository.update(
                 { transactionId: body.transaction_id },
                 { status: DeferredTransactionStatus.Expired },
@@ -390,42 +401,25 @@ export class DeferredCredentialService {
             );
         }
 
-        // Check the status of the deferred transaction
-        switch (deferredTransaction.status) {
-            case DeferredTransactionStatus.Pending:
+        switch (retrieval.kind) {
+            case "pending":
                 throw new DeferredCredentialException(
                     "issuance_pending",
                     "The credential issuance is still pending",
-                    deferredTransaction.interval,
+                    retrieval.interval,
                 );
-
-            case DeferredTransactionStatus.Failed:
+            case "failed":
                 throw new DeferredCredentialException(
                     "invalid_transaction_id",
-                    deferredTransaction.errorMessage ||
-                        "The credential issuance has failed",
+                    retrieval.message,
                 );
-
-            case DeferredTransactionStatus.Expired:
+            case "expired":
+            case "retrieved":
                 throw new DeferredCredentialException(
                     "invalid_transaction_id",
-                    "The transaction has expired",
+                    retrieval.message,
                 );
-
-            case DeferredTransactionStatus.Retrieved:
-                throw new DeferredCredentialException(
-                    "invalid_transaction_id",
-                    "The credential has already been retrieved",
-                );
-
-            case DeferredTransactionStatus.Ready:
-                if (!deferredTransaction.credential) {
-                    throw new DeferredCredentialException(
-                        "invalid_transaction_id",
-                        "Credential is marked as ready but not available",
-                    );
-                }
-
+            case "ready":
                 // Mark as retrieved
                 await this.deferredTransactionRepository.update(
                     { transactionId: body.transaction_id },
@@ -433,14 +427,8 @@ export class DeferredCredentialService {
                 );
 
                 return {
-                    credential: deferredTransaction.credential,
+                    credential: retrieval.credential,
                 } as CredentialResponse;
-
-            default:
-                throw new DeferredCredentialException(
-                    "invalid_transaction_id",
-                    "Unknown transaction status",
-                );
         }
     }
 
@@ -457,44 +445,12 @@ export class DeferredCredentialService {
         tenantId: string,
         transactionId: string,
         claims: Record<string, unknown>,
-    ): Promise<DeferredTransactionEntity | null> {
-        const transaction = await this.deferredTransactionRepository.findOneBy({
-            transactionId,
+    ): Promise<DeferredTransactionData | null> {
+        return this.completeDeferredCredential.execute({
             tenantId,
-            status: DeferredTransactionStatus.Pending,
-        });
-
-        if (!transaction) {
-            return null;
-        }
-
-        const session = await this.sessionService.get(transaction.sessionId);
-        if (!session) {
-            throw new ConflictException(
-                `Session ${transaction.sessionId} not found for deferred transaction ${transactionId}`,
-            );
-        }
-
-        const credential = await this.credentialsService.getCredential(
-            transaction.credentialConfigurationId,
-            transaction.holderCnf as Jwk,
-            session,
+            transactionId,
             claims,
-            transaction.issuanceSetId ?? undefined,
-        );
-
-        await this.deferredTransactionRepository.update(
-            { transactionId, tenantId },
-            {
-                status: DeferredTransactionStatus.Ready,
-                credential,
-            },
-        );
-
-        transaction.status = DeferredTransactionStatus.Ready;
-        transaction.credential = credential;
-
-        return transaction;
+        });
     }
 
     /**
@@ -509,29 +465,12 @@ export class DeferredCredentialService {
         tenantId: string,
         transactionId: string,
         errorMessage?: string,
-    ): Promise<DeferredTransactionEntity | null> {
-        const transaction = await this.deferredTransactionRepository.findOneBy({
-            transactionId,
+    ): Promise<DeferredTransactionData | null> {
+        return this.failDeferredCredential.execute(
             tenantId,
-        });
-
-        if (!transaction) {
-            return null;
-        }
-
-        await this.deferredTransactionRepository.update(
-            { transactionId, tenantId },
-            {
-                status: DeferredTransactionStatus.Failed,
-                errorMessage: errorMessage ?? "Transaction marked as failed",
-            },
+            transactionId,
+            errorMessage,
         );
-
-        transaction.status = DeferredTransactionStatus.Failed;
-        transaction.errorMessage =
-            errorMessage ?? "Transaction marked as failed";
-
-        return transaction;
     }
 
     /**

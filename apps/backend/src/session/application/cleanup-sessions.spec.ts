@@ -1,0 +1,158 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { SessionCleanupMode } from "../domain/session-retention.js";
+import type { SessionRepository } from "../ports/session.repository.js";
+import type { SessionRetentionPolicies } from "../ports/session-retention-policies.js";
+import { CleanupSessions } from "./cleanup-sessions.js";
+
+function setup() {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-02-01T12:00:00Z"));
+    const sessions = {
+        findExpiredPresentationsForMaintenance: vi
+            .fn<SessionRepository["findExpiredPresentationsForMaintenance"]>()
+            .mockResolvedValue([]),
+        deleteSessionsCreatedBefore: vi
+            .fn<SessionRepository["deleteSessionsCreatedBefore"]>()
+            .mockResolvedValue(0),
+        anonymizeSessionsCreatedBefore: vi
+            .fn<SessionRepository["anonymizeSessionsCreatedBefore"]>()
+            .mockResolvedValue(0),
+        deleteOrphanedSessionsCreatedBefore: vi
+            .fn<SessionRepository["deleteOrphanedSessionsCreatedBefore"]>()
+            .mockResolvedValue(0),
+    };
+    const policies = {
+        listForMaintenance: vi
+            .fn<SessionRetentionPolicies["listForMaintenance"]>()
+            .mockResolvedValue([]),
+    };
+    const changeState = { execute: vi.fn().mockResolvedValue(undefined) };
+    const cleanup = new CleanupSessions(sessions, policies, changeState, {
+        ttlSeconds: 3600,
+        cleanupMode: SessionCleanupMode.Full,
+    });
+    return { sessions, policies, changeState, cleanup };
+}
+
+describe("CleanupSessions", () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it("finishes expiry state changes before fetching retention policies and deleting data", async () => {
+        const { sessions, policies, changeState, cleanup } = setup();
+        const session = {
+            id: "expired",
+            tenantId: "tenant",
+            requestId: "presentation",
+        };
+        sessions.findExpiredPresentationsForMaintenance.mockResolvedValue([
+            session,
+        ]);
+        let finish!: () => void;
+        changeState.execute.mockReturnValue(
+            new Promise<void>((resolve) => {
+                finish = resolve;
+            }),
+        );
+        const pending = cleanup.execute();
+        await Promise.resolve();
+        expect(changeState.execute).toHaveBeenCalledWith(session, "expired");
+        expect(policies.listForMaintenance).not.toHaveBeenCalled();
+        finish();
+        await pending;
+        expect(policies.listForMaintenance).toHaveBeenCalledOnce();
+        expect(
+            sessions.findExpiredPresentationsForMaintenance,
+        ).toHaveBeenCalledWith(new Date("2026-02-01T12:00:00Z"));
+    });
+
+    it("inherits defaults per field, applies tenant overrides, then uses default TTL for orphans", async () => {
+        const { sessions, policies, cleanup } = setup();
+        policies.listForMaintenance.mockResolvedValue([
+            { tenantId: "default" },
+            {
+                tenantId: "anonymize",
+                ttlSeconds: 120,
+                cleanupMode: SessionCleanupMode.Anonymize,
+            },
+            { tenantId: "ttl-only", ttlSeconds: 600 },
+            {
+                tenantId: "mode-only",
+                cleanupMode: SessionCleanupMode.Anonymize,
+            },
+            { tenantId: "nulls", ttlSeconds: null, cleanupMode: null },
+        ]);
+        await cleanup.execute();
+        expect(sessions.deleteSessionsCreatedBefore.mock.calls).toEqual([
+            ["default", new Date("2026-02-01T11:00:00Z")],
+            ["ttl-only", new Date("2026-02-01T11:50:00Z")],
+            ["nulls", new Date("2026-02-01T11:00:00Z")],
+        ]);
+        expect(sessions.anonymizeSessionsCreatedBefore.mock.calls).toEqual([
+            ["anonymize", new Date("2026-02-01T11:58:00Z")],
+            ["mode-only", new Date("2026-02-01T11:00:00Z")],
+        ]);
+        expect(
+            sessions.deleteOrphanedSessionsCreatedBefore,
+        ).toHaveBeenCalledWith(
+            ["default", "anonymize", "ttl-only", "mode-only", "nulls"],
+            new Date("2026-02-01T11:00:00Z"),
+        );
+    });
+
+    it("skips all retention deletes when no tenants exist, but still checks expiry", async () => {
+        const { sessions, cleanup } = setup();
+        await cleanup.execute();
+        expect(
+            sessions.findExpiredPresentationsForMaintenance,
+        ).toHaveBeenCalledOnce();
+        expect(sessions.deleteSessionsCreatedBefore).not.toHaveBeenCalled();
+        expect(sessions.anonymizeSessionsCreatedBefore).not.toHaveBeenCalled();
+        expect(
+            sessions.deleteOrphanedSessionsCreatedBefore,
+        ).not.toHaveBeenCalled();
+    });
+
+    it("reloads tenant overrides on every run", async () => {
+        const { sessions, policies, cleanup } = setup();
+        policies.listForMaintenance
+            .mockResolvedValueOnce([{ tenantId: "a" }])
+            .mockResolvedValueOnce([
+                { tenantId: "a", cleanupMode: SessionCleanupMode.Anonymize },
+            ]);
+        await cleanup.execute();
+        await cleanup.execute();
+        expect(sessions.deleteSessionsCreatedBefore).toHaveBeenCalledOnce();
+        expect(sessions.anonymizeSessionsCreatedBefore).toHaveBeenCalledOnce();
+    });
+
+    it("does not proceed to retention if an expiry state change fails", async () => {
+        const { sessions, policies, changeState, cleanup } = setup();
+        const error = new Error("write failed");
+        sessions.findExpiredPresentationsForMaintenance.mockResolvedValue([
+            { id: "id", tenantId: "a" },
+        ]);
+        changeState.execute.mockRejectedValue(error);
+        await expect(cleanup.execute()).rejects.toBe(error);
+        expect(policies.listForMaintenance).not.toHaveBeenCalled();
+        expect(
+            sessions.deleteOrphanedSessionsCreatedBefore,
+        ).not.toHaveBeenCalled();
+    });
+
+    it("stops after a tenant cleanup failure without deleting orphaned sessions", async () => {
+        const { sessions, policies, cleanup } = setup();
+        policies.listForMaintenance.mockResolvedValue([
+            { tenantId: "a" },
+            { tenantId: "b" },
+        ]);
+        const error = new Error("delete failed");
+        sessions.deleteSessionsCreatedBefore.mockRejectedValue(error);
+        await expect(cleanup.execute()).rejects.toBe(error);
+        expect(sessions.deleteSessionsCreatedBefore).toHaveBeenCalledOnce();
+        expect(
+            sessions.deleteOrphanedSessionsCreatedBefore,
+        ).not.toHaveBeenCalled();
+    });
+});

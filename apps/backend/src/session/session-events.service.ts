@@ -1,17 +1,12 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { filter, map, Observable, Subject } from "rxjs";
-import { Session, SessionStatus } from "./entities/session.entity.js";
+import { SessionStatus } from "./domain/session-state.js";
 
-/**
- * Event payload emitted when a session status changes.
- */
-export interface SessionStatusChangedEvent {
-    sessionId: string;
-    status: SessionStatus;
-    updatedAt: Date;
-    session?: Session; // Full session data (only included for authenticated requests)
-}
+import {
+    SESSION_STATUS_CHANGED,
+    type SessionStatusChangedEvent,
+} from "./ports/session-event-publisher.js";
 
 /**
  * SSE message format sent to clients.
@@ -21,8 +16,6 @@ interface SessionEventMessage {
     status: SessionStatus;
     updatedAt: string;
 }
-
-export const SESSION_STATUS_CHANGED = "session.status.changed";
 
 /**
  * Service for managing session events and SSE streams.

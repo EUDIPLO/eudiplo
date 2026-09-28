@@ -1,9 +1,7 @@
 import { X509Certificate } from "node:crypto";
-import { HttpService } from "@nestjs/axios";
 import { Injectable, Logger, Optional } from "@nestjs/common";
-import { decodeJwt } from "jose";
 import { MetricService } from "nestjs-otel";
-import { firstValueFrom } from "rxjs";
+import { EvaluateFederationTrustChain } from "./application/evaluate-federation-trust-chain.js";
 import { FederationTrustMode, FederationTrustSource } from "./types.js";
 
 type FederationTrustEvaluation = {
@@ -19,12 +17,6 @@ type CachedEvaluation = {
 
 const FEDERATION_TRUST_STALE_TTL_MS = 60 * 60 * 1000; // 1 hour stale grace window
 const FEDERATION_TRUST_NEGATIVE_TTL_MS = 10 * 1000; // 10s negative cache for fetch failures
-
-type FederationEntityConfigurationPayload = {
-    sub?: string;
-    authority_hints?: string[];
-    metadata?: Record<string, unknown>;
-};
 
 @Injectable()
 export class FederationTrustService {
@@ -46,7 +38,7 @@ export class FederationTrustService {
     }
 
     constructor(
-        private readonly httpService: HttpService,
+        private readonly evaluateFederationTrustChain: EvaluateFederationTrustChain,
         @Optional() private readonly metricService?: MetricService,
     ) {
         this.trustHitsCounter = this.metricService?.getCounter(
@@ -193,16 +185,16 @@ export class FederationTrustService {
 
             this.trustFetchesCounter?.add(1, { entity: normalizedEntityId });
 
-            const entityConfig = await this.fetchEntityConfiguration(
-                normalizedEntityId,
-            ).catch((error: unknown) => {
+            let value: FederationTrustEvaluation;
+            try {
+                value = await this.evaluateFederationTrustChain.execute({
+                    entityId: normalizedEntityId,
+                    trustAnchors: [...anchorIds],
+                });
+            } catch (error) {
                 this.logger.warn(
                     `Failed to fetch federation entity configuration for ${normalizedEntityId}: ${String(error)}`,
                 );
-                return null;
-            });
-
-            if (!entityConfig) {
                 if (
                     cached &&
                     now - cached.fetchedAt <= FEDERATION_TRUST_STALE_TTL_MS
@@ -216,37 +208,13 @@ export class FederationTrustService {
                     return cached.value;
                 }
 
-                const value = {
+                value = {
                     trusted: false,
                     reason: "could not fetch federation entity configuration",
                 };
                 this.setNegativeCache(cacheKey, value);
                 return value;
             }
-
-            const hints = new Set(
-                (entityConfig.authority_hints ?? []).map((hint) =>
-                    hint.replace(/\/$/, ""),
-                ),
-            );
-
-            const hintMatch = [...anchorIds].some((anchor) =>
-                hints.has(anchor),
-            );
-            const subjectMatches =
-                !entityConfig.sub ||
-                entityConfig.sub.replace(/\/$/, "") === normalizedEntityId;
-
-            const trusted = subjectMatches && hintMatch;
-            const value = trusted
-                ? {
-                      trusted: true,
-                      reason: "entity authority_hints chain to configured trust anchor",
-                  }
-                : {
-                      trusted: false,
-                      reason: "entity did not chain to configured trust anchor",
-                  };
 
             this.setCache(cacheKey, source, value);
             return value;
@@ -314,62 +282,5 @@ export class FederationTrustService {
             );
             return null;
         }
-    }
-
-    private async fetchEntityConfiguration(
-        entityId: string,
-    ): Promise<FederationEntityConfigurationPayload> {
-        const wellKnownUrl = `${entityId.replace(/\/$/, "")}/.well-known/openid-federation`;
-
-        const response = await firstValueFrom(
-            this.httpService.get<string | Record<string, unknown>>(
-                wellKnownUrl,
-                {
-                    responseType: "text" as never,
-                },
-            ),
-        );
-
-        return this.parseEntityConfigurationResponse(response.data, entityId);
-    }
-
-    private parseEntityConfigurationResponse(
-        responseData: string | Record<string, unknown>,
-        entityId: string,
-    ): FederationEntityConfigurationPayload {
-        if (typeof responseData === "string") {
-            const trimmed = responseData.trim();
-            if (trimmed.startsWith("{")) {
-                return JSON.parse(
-                    trimmed,
-                ) as FederationEntityConfigurationPayload;
-            }
-
-            if (trimmed.split(".").length >= 2) {
-                return decodeJwt(
-                    trimmed,
-                ) as FederationEntityConfigurationPayload;
-            }
-        }
-
-        if (responseData && typeof responseData === "object") {
-            const maybeJwt = (responseData as Record<string, unknown>)[
-                "entity_configuration"
-            ];
-            if (
-                typeof maybeJwt === "string" &&
-                maybeJwt.split(".").length >= 2
-            ) {
-                return decodeJwt(
-                    maybeJwt,
-                ) as FederationEntityConfigurationPayload;
-            }
-
-            return responseData as FederationEntityConfigurationPayload;
-        }
-
-        throw new Error(
-            `Unsupported federation entity configuration response for ${entityId}`,
-        );
     }
 }

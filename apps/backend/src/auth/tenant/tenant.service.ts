@@ -8,11 +8,9 @@ import {
     OnApplicationBootstrap,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { InjectRepository } from "@nestjs/typeorm";
 import type { UpDownCounter } from "@opentelemetry/api";
 import { Request } from "express";
 import { MetricService } from "nestjs-otel";
-import { Repository } from "typeorm";
 import { AuditLogService } from "../../audit-log/audit-log.service.js";
 import {
     extractRequestMeta,
@@ -32,10 +30,13 @@ import {
 } from "../client/client.provider.js";
 import { Role } from "../roles/role.enum.js";
 import { TokenPayload } from "../token.decorator.js";
-import { TenantEntity } from "./entities/tenant.entity.js";
+import type { TenantData } from "./domain/tenant-data.js";
+import {
+    TENANT_REPOSITORY,
+    type TenantRepository,
+} from "./ports/tenant.repository.js";
 import type {
     CreateTenant,
-    ImportTenant,
     UpdateTenant,
 } from "./schemas/create-tenant.schema.js";
 import { ImportTenantSchema } from "./schemas/create-tenant.schema.js";
@@ -49,8 +50,8 @@ export class TenantService implements OnApplicationBootstrap {
         private readonly configService: ConfigService,
         private readonly encryptionService: EncryptionService,
         private readonly registrarService: RegistrarService,
-        @InjectRepository(TenantEntity)
-        private readonly tenantRepository: Repository<TenantEntity>,
+        @Inject(TENANT_REPOSITORY)
+        private readonly tenantRepository: TenantRepository,
         metricService: MetricService,
         private readonly filesService: FilesService,
         private readonly configImportOrchestrator: ConfigImportOrchestratorService,
@@ -85,10 +86,7 @@ export class TenantService implements OnApplicationBootstrap {
         const configPath = this.configService.getOrThrow("CONFIG_FOLDER");
 
         // Check if tenant already exists
-        const existing = await this.tenantRepository.findOneBy({
-            id: tenantId,
-            status: "active",
-        });
+        const existing = await this.tenantRepository.findActive(tenantId);
 
         if (existing) {
             const file = `${configPath}/${tenantId}/info.json`;
@@ -114,8 +112,8 @@ export class TenantService implements OnApplicationBootstrap {
                             );
                         }
                         await this.tenantRepository.update(
-                            { id: tenantId },
-                            validationResult.data as any,
+                            tenantId,
+                            validationResult.data,
                         );
                         await this.configOwnershipService.markApplied({
                             tenantId,
@@ -228,7 +226,7 @@ export class TenantService implements OnApplicationBootstrap {
      * @returns A list of all tenants
      */
     getAll() {
-        return this.tenantRepository.find();
+        return this.tenantRepository.list();
     }
 
     /**
@@ -237,13 +235,14 @@ export class TenantService implements OnApplicationBootstrap {
      * @returns The created tenant with optional client credentials (if roles were specified)
      */
     async createTenant(
-        data: ImportTenant | CreateTenant,
+        data: CreateTenant,
         actorToken?: TokenPayload,
         req?: Request,
     ) {
-        const tenant = (await this.tenantRepository.save(
-            data as any,
-        )) as TenantEntity;
+        const tenant = await this.tenantRepository.save({
+            ...data,
+            id: data.id,
+        });
         await this.setUpTenant(tenant);
 
         let clientCredentials:
@@ -286,26 +285,18 @@ export class TenantService implements OnApplicationBootstrap {
      * @param id The ID of the tenant to retrieve
      * @returns The tenant entity
      */
-    getTenant(id: string): Promise<TenantEntity> {
-        return this.tenantRepository.findOneOrFail({
-            where: { id },
-            relations: {
-                clients: true,
-            },
-        });
+    getTenant(id: string): Promise<TenantData> {
+        return this.tenantRepository.getWithClients(id);
     }
 
     /**
      * Sends an event to set up a tenant, allowing all other services to listen and react accordingly.
      * @param tenant
      */
-    async setUpTenant(tenant: TenantEntity) {
+    async setUpTenant(tenant: TenantData) {
         await this.encryptionService.onTenantInit(tenant.id);
         await this.registrarService.onTenantInit(tenant);
-        await this.tenantRepository.update(
-            { id: tenant.id },
-            { status: "active" },
-        );
+        await this.tenantRepository.update(tenant.id, { status: "active" });
     }
 
     /**
@@ -319,9 +310,9 @@ export class TenantService implements OnApplicationBootstrap {
         data: UpdateTenant,
         actorToken?: TokenPayload,
         req?: Request,
-    ): Promise<TenantEntity> {
+    ): Promise<TenantData> {
         const existing = await this.getTenant(id);
-        await this.tenantRepository.update({ id }, data as any);
+        await this.tenantRepository.update(id, data);
         const updated = await this.getTenant(id);
 
         if (actorToken) {
@@ -348,14 +339,12 @@ export class TenantService implements OnApplicationBootstrap {
         actorToken?: TokenPayload,
         req?: Request,
     ) {
-        const existingTenant = await this.tenantRepository.findOne({
-            where: { id: tenantId },
-        });
+        const existingTenant = await this.tenantRepository.findById(tenantId);
 
         //delete all files associated with the tenant
         await this.filesService.deleteByTenant(tenantId);
         //because of cascading, all related entities will be deleted.
-        await this.tenantRepository.delete({ id: tenantId });
+        await this.tenantRepository.delete(tenantId);
 
         if (actorToken) {
             await this.tenantActionLogService.record({
@@ -370,9 +359,7 @@ export class TenantService implements OnApplicationBootstrap {
         }
     }
 
-    private sanitizeTenantForLog(
-        tenant: TenantEntity,
-    ): Record<string, unknown> {
+    private sanitizeTenantForLog(tenant: TenantData): Record<string, unknown> {
         return {
             id: tenant.id,
             name: tenant.name,
@@ -383,10 +370,7 @@ export class TenantService implements OnApplicationBootstrap {
         };
     }
 
-    private getChangedFields(
-        before: TenantEntity,
-        after: TenantEntity,
-    ): string[] {
+    private getChangedFields(before: TenantData, after: TenantData): string[] {
         return getChangedFieldsForKeys(before, after, [
             "name",
             "description",

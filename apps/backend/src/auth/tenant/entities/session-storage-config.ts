@@ -1,19 +1,6 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 
-/**
- * Cleanup mode when sessions expire.
- */
-export enum SessionCleanupMode {
-    /**
-     * Delete the entire session record (default behavior).
-     */
-    Full = "full",
-    /**
-     * Keep session metadata but remove personal data
-     * (credentials, verification results, etc.).
-     */
-    Anonymize = "anonymize",
-}
+import { SessionCleanupMode } from "../../../session/domain/session-retention.js";
 
 /**
  * Configuration for session storage and cleanup behavior per tenant.

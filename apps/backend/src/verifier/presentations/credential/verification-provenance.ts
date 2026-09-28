@@ -1,4 +1,4 @@
-import { VerificationProvenance } from "../../../session/entities/session-outcome.js";
+import { VerificationProvenance } from "../../../session/domain/session-outcome.js";
 import { MatchedTrustedEntity } from "../../../trust/x509-validation.service.js";
 
 /**

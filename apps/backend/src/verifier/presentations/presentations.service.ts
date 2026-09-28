@@ -2,9 +2,9 @@ import { createHash, createVerify, X509Certificate } from "node:crypto";
 import {
     BadRequestException,
     ConflictException,
+    Inject,
     Injectable,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as eudiAttestationSchema from "@owf/eudi-attestation-schema";
 import { type AttestationFormat } from "@owf/eudi-attestation-schema";
@@ -31,19 +31,18 @@ import {
     ImportPhase,
 } from "../../platform/config-import/config-import-orchestrator.service.js";
 import { RegistrarService } from "../../registrar/registrar.service.js";
-import { Session } from "../../session/entities/session.entity.js";
+import type { SessionData as Session } from "../../session/domain/session-data.js";
 import { loadJsonFile } from "../../shared/utils/config-file-loader.util.js";
 import { revocationModeToPolicy } from "../../trust/revocation-policy.util.js";
 import {
     DEFAULT_VERIFIER_SKEW_SECONDS,
     VerifierOptions,
 } from "../../trust/types.js";
+import { CredentialVerifierFormatRegistry } from "./credential/credential-verifier-format-registry.js";
 import {
     MdocSessionDataDcApi,
     MdocSessionDataOid4vp,
-    MdocverifierService,
 } from "./credential/mdocverifier/mdocverifier.service.js";
-import { SdjwtvcverifierService } from "./credential/sdjwtvcverifier/sdjwtvcverifier.service.js";
 import type { VerificationFailureType } from "./credential/verification-failure.js";
 import { AuthResponse } from "./dto/auth-response.dto.js";
 import { PresentationConfigCreateDto } from "./dto/presentation-config-create.dto.js";
@@ -61,6 +60,10 @@ import {
 } from "./entities/presentation-config.entity.js";
 import { IncompletePresentationException } from "./exceptions/incomplete-presentation.exception.js";
 import { MetadataFetchService } from "./metadata-fetch.service.js";
+import {
+    PRESENTATION_SETTINGS,
+    type PresentationSettings,
+} from "./presentation-settings.js";
 
 type CredentialType = "dc+sd-jwt" | "mso_mdoc";
 
@@ -210,9 +213,9 @@ export class PresentationsService {
         private readonly vpRequestRepository: Repository<PresentationConfig>,
         private readonly configImportService: ConfigImportService,
         private readonly configImportOrchestrator: ConfigImportOrchestratorService,
-        private readonly sdjwtvcverifierService: SdjwtvcverifierService,
-        private readonly mdocverifierService: MdocverifierService,
-        private readonly configService: ConfigService,
+        private readonly credentialVerifierFormats: CredentialVerifierFormatRegistry,
+        @Inject(PRESENTATION_SETTINGS)
+        private readonly settings: PresentationSettings,
         private readonly registrarService: RegistrarService,
         private readonly trustListService: TrustListService,
         private readonly tenantActionLogService: AuditLogService,
@@ -674,7 +677,7 @@ export class PresentationsService {
 
         // Resolve `<TENANT_URL>` placeholders so registrar validation/issuance
         // sees the same DCQL the runtime path will see.
-        const host = this.configService.getOrThrow<string>("PUBLIC_URL");
+        const host = this.settings.publicUrl;
         const tenantHost = `${host}/issuers/${tenantId}`;
         const resolvedDcql = JSON.parse(
             JSON.stringify(presentationConfig.dcql_query).replaceAll(
@@ -843,7 +846,7 @@ export class PresentationsService {
         // sees the same DCQL the runtime path will see.
         let resolvedDcql: any;
         try {
-            const host = this.configService.getOrThrow<string>("PUBLIC_URL");
+            const host = this.settings.publicUrl;
             const tenantHost = `${host}/issuers/${next.tenantId}`;
             resolvedDcql = JSON.parse(
                 JSON.stringify(next.dcql_query).replaceAll(
@@ -1454,7 +1457,7 @@ export class PresentationsService {
         });
 
         const attestationIds = Object.keys(res.vp_token);
-        const host = this.configService.getOrThrow<string>("PUBLIC_URL");
+        const host = this.settings.publicUrl;
         const tenantHost = `${host}/issuers/${presentationConfig.tenantId}`;
 
         // Validate credential completeness - ensure all required credentials are present
@@ -2028,12 +2031,14 @@ export class PresentationsService {
             });
         }
 
-        const result = await this.mdocverifierService.verify(
-            options.cred,
-            sessionData,
-            options.verifyOptions,
-            options.dcqlCredential.claims?.map((claim) => claim.path),
-        );
+        const result = await this.credentialVerifierFormats
+            .resolve("mso_mdoc")
+            .verify(
+                options.cred,
+                sessionData,
+                options.verifyOptions,
+                options.dcqlCredential.claims?.map((claim) => claim.path),
+            );
 
         if (!result.verified) {
             this.throwMdocVerificationFailure(options.attId, result);
@@ -2067,12 +2072,14 @@ export class PresentationsService {
             let result;
 
             try {
-                result = await this.mdocverifierService.verify(
-                    options.cred,
-                    options.sessionData,
-                    options.verifyOptions,
-                    selectedClaims.map((claim) => claim.path),
-                );
+                result = await this.credentialVerifierFormats
+                    .resolve("mso_mdoc")
+                    .verify(
+                        options.cred,
+                        options.sessionData,
+                        options.verifyOptions,
+                        selectedClaims.map((claim) => claim.path),
+                    );
             } catch (error) {
                 lastVerificationFailure = {
                     failureType: "verification_error",
@@ -2133,17 +2140,19 @@ export class PresentationsService {
         hasClaimSets: boolean;
         requiredClaimKeys: string[];
     }): Promise<Record<string, unknown>> {
-        const result = await this.sdjwtvcverifierService.verify(options.cred, {
-            requiredClaimKeys: options.hasClaimSets
-                ? []
-                : options.requiredClaimKeys,
-            keyBindingNonce: options.session.vp_nonce!,
-            keyBindingAudience: this.resolveSdJwtKeyBindingAudience(
-                options.session,
-                options.requestObjectSessionData,
-            ),
-            ...options.verifyOptions,
-        });
+        const result = await this.credentialVerifierFormats
+            .resolve("dc+sd-jwt")
+            .verify(options.cred, {
+                requiredClaimKeys: options.hasClaimSets
+                    ? []
+                    : options.requiredClaimKeys,
+                keyBindingNonce: options.session.vp_nonce!,
+                keyBindingAudience: this.resolveSdJwtKeyBindingAudience(
+                    options.session,
+                    options.requestObjectSessionData,
+                ),
+                ...options.verifyOptions,
+            });
 
         if (options.hasClaimSets) {
             const matchingSelection = options.claimSelections.find(

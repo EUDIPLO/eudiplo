@@ -5,7 +5,7 @@ import { TenantService } from "./tenant.service.js";
 describe("TenantService updates", () => {
     let storedTenant: TenantEntity;
     let repository: {
-        findOneOrFail: ReturnType<typeof vi.fn>;
+        getWithClients: ReturnType<typeof vi.fn>;
         update: ReturnType<typeof vi.fn>;
     };
     let service: TenantService;
@@ -19,7 +19,7 @@ describe("TenantService updates", () => {
             clients: [],
         };
         repository = {
-            findOneOrFail: vi.fn(async () => ({ ...storedTenant })),
+            getWithClients: vi.fn(async () => ({ ...storedTenant })),
             update: vi.fn(async (_criteria, update) => {
                 Object.assign(storedTenant, update);
                 return { affected: 1 };
@@ -47,10 +47,9 @@ describe("TenantService updates", () => {
         });
 
         expect(updated.description).toBe("Existing description");
-        expect(repository.update).toHaveBeenCalledWith(
-            { id: "tenant" },
-            { name: "Renamed" },
-        );
+        expect(repository.update).toHaveBeenCalledWith("tenant", {
+            name: "Renamed",
+        });
     });
 
     test("replaces an existing description", async () => {
@@ -67,9 +66,8 @@ describe("TenantService updates", () => {
         });
 
         expect(updated.description).toBeNull();
-        expect(repository.update).toHaveBeenCalledWith(
-            { id: "tenant" },
-            { description: null },
-        );
+        expect(repository.update).toHaveBeenCalledWith("tenant", {
+            description: null,
+        });
     });
 });

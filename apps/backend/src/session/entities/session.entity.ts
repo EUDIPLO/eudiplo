@@ -1,8 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import {
-    CredentialOfferObject,
-    NotificationEvent,
-} from "@openid4vc/openid4vci";
+import { CredentialOfferObject } from "@openid4vc/openid4vci";
 import { VerificationResult } from "@sd-jwt/sd-jwt-vc";
 import { JWK } from "jose";
 import {
@@ -19,34 +16,9 @@ import { OfferRequestDto } from "../../issuer/issuance/oid4vci/dto/offer-request
 import { EncryptedJsonTransformer } from "../../platform/data-encryption/index.js";
 import { TransactionData } from "../../verifier/presentations/entities/presentation-config.entity.js";
 import { WebhookConfig } from "../../webhook/webhook.dto.js";
-import { SessionOutcome } from "./session-outcome.js";
-
-export enum SessionStatus {
-    Active = "active",
-    Fetched = "fetched",
-    Completed = "completed",
-    Expired = "expired",
-    Failed = "failed",
-}
-
-/**
- * Represents a session entity for managing user sessions in the application.
- */
-export type Notification = {
-    /**
-     * Unique identifier for the notification.
-     */
-    id: string;
-    /**
-     * The type of notification.
-     */
-    event?: NotificationEvent;
-
-    /**
-     * The credential ID associated with the notification.
-     */
-    credentialConfigurationId: string;
-};
+import type { Notification } from "../domain/session-data.js";
+import { SessionOutcome } from "../domain/session-outcome.js";
+import { SessionStatus } from "../domain/session-state.js";
 
 /**
  * Entity representing a user session in the application.

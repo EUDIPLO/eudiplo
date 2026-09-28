@@ -1,8 +1,8 @@
-import type { Repository } from "typeorm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionLoggerService } from "../../../session/logging/session-logger.service.js";
-import type { NonceEntity } from "./entities/nonces.entity.js";
+import { ValidateAndConsumeCredentialNonces } from "./application/validate-and-consume-credential-nonces.js";
 import { NonceService } from "./nonce.service.js";
+import type { CredentialNonceRepository } from "./ports/credential-nonce.repository.js";
 
 const proof = (payload: Record<string, unknown>): string => {
     const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
@@ -13,7 +13,7 @@ describe("NonceService", () => {
     const repository = {
         save: vi.fn(),
         delete: vi.fn(),
-        findOne: vi.fn(),
+        find: vi.fn(),
     };
     const auditLogger = { logFlowError: vi.fn() };
     const logContext = {
@@ -27,7 +27,10 @@ describe("NonceService", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         service = new NonceService(
-            repository as unknown as Repository<NonceEntity>,
+            repository as unknown as CredentialNonceRepository,
+            new ValidateAndConsumeCredentialNonces(
+                repository as unknown as CredentialNonceRepository,
+            ),
             auditLogger as unknown as SessionLoggerService,
         );
     });
@@ -60,7 +63,7 @@ describe("NonceService", () => {
     });
 
     it("rejects and logs an unknown nonce", async () => {
-        repository.findOne.mockResolvedValue(null);
+        repository.find.mockResolvedValue(null);
 
         await expect(
             service.validateAndConsume(
@@ -77,12 +80,12 @@ describe("NonceService", () => {
     });
 
     it("consumes duplicate proof nonces only once", async () => {
-        repository.findOne.mockResolvedValue({
+        repository.find.mockResolvedValue({
             nonce: "valid",
             tenantId: "tenant-id",
             expiresAt: new Date(Date.now() + 60_000),
         });
-        repository.delete.mockResolvedValue(undefined);
+        repository.delete.mockResolvedValue(true);
 
         await service.validateAndConsume(
             [proof({ nonce: "valid" }), proof({ nonce: "valid" })],
@@ -92,7 +95,7 @@ describe("NonceService", () => {
             "credential-id",
         );
 
-        expect(repository.findOne).toHaveBeenCalledOnce();
+        expect(repository.find).toHaveBeenCalledOnce();
         expect(repository.delete).toHaveBeenCalledOnce();
     });
 });

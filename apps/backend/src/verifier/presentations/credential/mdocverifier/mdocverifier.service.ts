@@ -11,7 +11,7 @@ import {
 import * as x509 from "@peculiar/x509";
 import { Span } from "nestjs-otel";
 import { PinoLogger } from "nestjs-pino";
-import { VerificationProvenance } from "../../../../session/entities/session-outcome.js";
+import { VerificationProvenance } from "../../../../session/domain/session-outcome.js";
 import {
     isStatusListUnavailableError,
     resolveRevocationPolicy,

@@ -5,16 +5,12 @@ import { z } from "zod";
 /**
  * Discriminator for IAE action types.
  */
-export enum IaeActionType {
-    /**
-     * Request a verifiable presentation via OpenID4VP.
-     */
-    OPENID4VP_PRESENTATION = "openid4vp_presentation",
-    /**
-     * Redirect to a web page for user interaction (e.g., form entry, payment).
-     */
-    REDIRECT_TO_WEB = "redirect_to_web",
-}
+export const IaeActionType = {
+    OPENID4VP_PRESENTATION: "openid4vp_presentation",
+
+    REDIRECT_TO_WEB: "redirect_to_web",
+} as const;
+export type IaeActionType = (typeof IaeActionType)[keyof typeof IaeActionType];
 
 const IaeActionOpenid4vpPresentationSchema = z
     .object({
@@ -45,7 +41,7 @@ export class IaeActionOpenid4vpPresentation extends createZodDto(
         enum: [IaeActionType.OPENID4VP_PRESENTATION],
         example: IaeActionType.OPENID4VP_PRESENTATION,
     })
-    declare type: IaeActionType.OPENID4VP_PRESENTATION;
+    declare type: typeof IaeActionType.OPENID4VP_PRESENTATION;
 
     @ApiProperty({
         description:
@@ -66,7 +62,7 @@ export class IaeActionRedirectToWeb extends createZodDto(
         enum: [IaeActionType.REDIRECT_TO_WEB],
         example: IaeActionType.REDIRECT_TO_WEB,
     })
-    declare type: IaeActionType.REDIRECT_TO_WEB;
+    declare type: typeof IaeActionType.REDIRECT_TO_WEB;
 
     @ApiProperty({
         description: "URL to redirect the user to for web-based interaction",

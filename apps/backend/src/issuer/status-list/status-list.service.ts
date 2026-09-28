@@ -1,13 +1,13 @@
 import { randomInt } from "node:crypto";
 import {
-    ConflictException,
     BadRequestException,
+    ConflictException,
+    Inject,
     Injectable,
     Logger,
     NotFoundException,
     ServiceUnavailableException,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { SignatureAlgorithm } from "@owf/cose";
 import {
@@ -37,7 +37,7 @@ import {
     ConfigImportOrchestratorService,
     ImportPhase,
 } from "../../platform/config-import/config-import-orchestrator.service.js";
-import { Session } from "../../session/entities/session.entity.js";
+import type { SessionData as Session } from "../../session/domain/session-data.js";
 import type { CredentialConfig } from "../configuration/credentials/entities/credential.entity.js";
 import { StatusListImportSchema } from "./dto/status-list.schema.js";
 import { StatusListImportDto } from "./dto/status-list-import.dto.js";
@@ -46,6 +46,10 @@ import { ActiveCredentialSlot } from "./entities/active-credential-slot.entity.j
 import { StatusListEntity } from "./entities/status-list.entity.js";
 import { StatusMapping } from "./entities/status-mapping.entity.js";
 import { StatusListConfigService } from "./status-list-config.service.js";
+import {
+    STATUS_LIST_SETTINGS,
+    type StatusListSettings,
+} from "./status-list-settings.js";
 import { SubjectKeyService } from "./subject-key.service.js";
 
 /**
@@ -81,7 +85,8 @@ export class StatusListService {
     private readonly retryDelayMs = 100;
 
     constructor(
-        private readonly configService: ConfigService,
+        @Inject(STATUS_LIST_SETTINGS)
+        private readonly settings: StatusListSettings,
         private readonly certService: CertService,
         public readonly keyChainService: KeyChainService,
         private readonly dataSource: DataSource,
@@ -136,8 +141,7 @@ export class StatusListService {
     private async getEffectiveCapacity(tenantId: string): Promise<number> {
         const tenant = await this.tenantRepository.findOneBy({ id: tenantId });
         return (
-            tenant?.statusListConfig?.capacity ??
-            this.configService.getOrThrow<number>("STATUS_CAPACITY")
+            tenant?.statusListConfig?.capacity ?? this.settings.statusCapacity
         );
     }
 
@@ -146,10 +150,7 @@ export class StatusListService {
      */
     private async getEffectiveBits(tenantId: string): Promise<BitsPerStatus> {
         const tenant = await this.tenantRepository.findOneBy({ id: tenantId });
-        return (
-            tenant?.statusListConfig?.bits ??
-            this.configService.getOrThrow<BitsPerStatus>("STATUS_BITS")
-        );
+        return tenant?.statusListConfig?.bits ?? this.settings.statusBits;
     }
 
     /**
@@ -168,7 +169,7 @@ export class StatusListService {
      * Build the URI for a status list.
      */
     private buildStatusListUri(tenantId: string, listId: string): string {
-        const baseUrl = this.configService.getOrThrow<string>("PUBLIC_URL");
+        const baseUrl = this.settings.publicUrl;
         return `${baseUrl}/issuers/${tenantId}/status-management/status-list/${listId}`;
     }
 
@@ -178,7 +179,7 @@ export class StatusListService {
      * See RFC draft-ietf-oauth-status-list Section 9.
      */
     private buildAggregationUri(tenantId: string): string {
-        const baseUrl = this.configService.getOrThrow<string>("PUBLIC_URL");
+        const baseUrl = this.settings.publicUrl;
         return `${baseUrl}/issuers/${tenantId}/status-management/status-list-aggregation`;
     }
 
@@ -257,7 +258,7 @@ export class StatusListService {
             ? this.buildAggregationUri(entry.tenantId)
             : undefined;
         const list = new StatusList(entry.elements, entry.bits, aggregationUri);
-        const iss = `${this.configService.getOrThrow<string>("PUBLIC_URL")}`;
+        const iss = this.settings.publicUrl;
         const sub = this.buildStatusListUri(entry.tenantId, entry.id);
         const ttl = effectiveConfig.ttl!;
         const now = Math.floor(Date.now() / 1000);

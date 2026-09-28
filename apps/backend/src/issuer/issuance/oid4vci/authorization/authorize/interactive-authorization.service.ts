@@ -7,11 +7,11 @@ import {
     Jwk,
     Oauth2ErrorCodes,
 } from "@openid4vc/oauth2";
-import type { Request } from "express";
 import { Repository } from "typeorm";
 import { v4 } from "uuid";
 import { CryptoService } from "../../../../../crypto/crypto.service.js";
-import { SessionService } from "../../../../../session/session.service.js";
+import { CreateSession } from "../../../../../session/application/create-session.js";
+import { UpdateSessionForTenant } from "../../../../../session/application/update-session-for-tenant.js";
 import { Oid4vpService } from "../../../../../verifier/oid4vp/oid4vp.service.js";
 import { PresentationsService } from "../../../../../verifier/presentations/presentations.service.js";
 import { CredentialsService } from "../../../../configuration/credentials/credentials.service.js";
@@ -25,6 +25,7 @@ import {
     InteractiveAuthSessionEntity,
     InteractiveAuthSessionStatus,
 } from "../../entities/interactive-auth-session.entity.js";
+import type { Oid4vciRequestContext } from "../../request-context.js";
 import {
     InteractionType,
     InteractiveAuthorizationRequestDto,
@@ -92,7 +93,8 @@ export class InteractiveAuthorizationService {
     constructor(
         private readonly configService: ConfigService,
         private readonly cryptoService: CryptoService,
-        private readonly sessionService: SessionService,
+        private readonly createSession: CreateSession,
+        private readonly updateSessionForTenant: UpdateSessionForTenant,
         private readonly issuanceService: IssuanceService,
         private readonly credentialsService: CredentialsService,
         private readonly oid4vpService: Oid4vpService,
@@ -129,7 +131,7 @@ export class InteractiveAuthorizationService {
      */
     parseRequest(
         body: InteractiveAuthorizationRequestDto,
-        req: Request,
+        req: Oid4vciRequestContext,
         tenantId: string,
     ): ParsedInteractiveAuthorizationRequest {
         // Check for client attestation headers
@@ -219,7 +221,7 @@ export class InteractiveAuthorizationService {
      */
     async handleRequest(
         body: InteractiveAuthorizationRequestDto,
-        req: Request,
+        req: Oid4vciRequestContext,
         tenantId: string,
         origin: string,
     ): Promise<InteractiveAuthorizationResponse> {
@@ -639,9 +641,13 @@ export class InteractiveAuthorizationService {
             // If there's an issuer_state, also update the main session
             if (authSession.issuerState) {
                 try {
-                    await this.sessionService.add(authSession.issuerState, {
-                        credentials: vpResponse,
-                    });
+                    await this.updateSessionForTenant.execute(
+                        authSession.tenantId,
+                        authSession.issuerState,
+                        {
+                            credentials: vpResponse,
+                        },
+                    );
                 } catch (error) {
                     this.logger.warn(
                         "Could not update main session with presentation data:",
@@ -800,7 +806,7 @@ export class InteractiveAuthorizationService {
             );
 
             // Store the session for later use
-            await this.sessionService.create({
+            await this.createSession.execute({
                 id: authSession,
                 tenantId,
                 requestId: presentationConfigId,
@@ -885,9 +891,13 @@ export class InteractiveAuthorizationService {
         // If there's an issuer_state, also update the main session
         if (authSession.issuerState) {
             try {
-                await this.sessionService.add(authSession.issuerState, {
-                    authorization_code: authorizationCode,
-                });
+                await this.updateSessionForTenant.execute(
+                    authSession.tenantId,
+                    authSession.issuerState,
+                    {
+                        authorization_code: authorizationCode,
+                    },
+                );
             } catch (error) {
                 this.logger.warn(
                     "Could not update main session with authorization code:",

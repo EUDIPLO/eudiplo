@@ -1,10 +1,10 @@
-import { Injectable } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+import { Inject, Injectable } from "@nestjs/common";
 import { SessionLogLevel } from "../entities/session-log-entry.entity.js";
+import { SessionLogStoreService } from "./session-log-store.service.js";
 import {
-    SessionLogStoreService,
-    SessionStoreMode,
-} from "./session-log-store.service.js";
+    SESSION_LOGGING_SETTINGS,
+    type SessionLoggingSettings,
+} from "./session-logging-settings.js";
 
 /**
  * Context for audit logging operations.
@@ -34,16 +34,12 @@ export class SessionAuditService {
     private readonly verbose: boolean;
 
     constructor(
-        private readonly configService: ConfigService,
+        @Inject(SESSION_LOGGING_SETTINGS)
+        private readonly settings: SessionLoggingSettings,
         private readonly logStore: SessionLogStoreService,
     ) {
-        this.isEnabled = this.configService.getOrThrow<boolean>(
-            "LOG_ENABLE_SESSION_LOGGER",
-        );
-        this.verbose =
-            this.configService.getOrThrow<SessionStoreMode>(
-                "LOG_SESSION_STORE",
-            ) === "verbose";
+        this.isEnabled = this.settings.enabled;
+        this.verbose = this.settings.storeMode === "verbose";
     }
 
     private persistLog(

@@ -1,7 +1,6 @@
 import {
     Body,
     Controller,
-    Get,
     Header,
     HttpCode,
     HttpException,
@@ -22,6 +21,7 @@ import { DeferredCredentialRequestDto } from "./dto/deferred-credential-request.
 import { NotificationRequestDto } from "./dto/notification-request.dto.js";
 import { CredentialRequestException } from "./exceptions/index.js";
 import { Oid4vciService } from "./oid4vci.service.js";
+import type { Oid4vciRequestContext } from "./request-context.js";
 
 /**
  * Controller for handling OID4VCI (OpenID for Verifiable Credential Issuance) requests.
@@ -31,20 +31,6 @@ import { Oid4vciService } from "./oid4vci.service.js";
 @Controller("issuers/:tenantId/vci")
 export class Oid4vciController {
     constructor(private readonly oid4vciService: Oid4vciService) {}
-
-    /**
-     * Credential offer endpoint for `credential_offer_uri` references.
-     */
-    @Get("credential-offers/:sessionId")
-    credentialOfferByReference(
-        @Param("tenantId") tenantId: string,
-        @Param("sessionId") sessionId: string,
-    ) {
-        return this.oid4vciService.getCredentialOfferByReference(
-            tenantId,
-            sessionId,
-        );
-    }
 
     /**
      * Endpoint to issue credentials
@@ -60,7 +46,8 @@ export class Oid4vciController {
         @Res({ passthrough: true }) res: Response,
         @Param("tenantId") tenantId: string,
     ): Promise<CredentialResponse | DeferredCredentialResponse | string> {
-        return this.oid4vciService.getCredential(req, tenantId).then(
+        const requestContext = await this.toRequestContext(req);
+        return this.oid4vciService.getCredential(requestContext, tenantId).then(
             (result) => {
                 // Check if this is a deferred response (has non-null transaction_id)
                 if ("transaction_id" in result && result.transaction_id) {
@@ -135,6 +122,56 @@ export class Oid4vciController {
         );
     }
 
+    private async toRequestContext(
+        req: Request,
+    ): Promise<Oid4vciRequestContext> {
+        const rawBody = req.body as
+            | Record<string, unknown>
+            | string
+            | undefined;
+        const contentType = (req.headers["content-type"] ?? "").toLowerCase();
+        const isJwtContentType =
+            contentType.startsWith("application/jwt") ||
+            contentType.startsWith(
+                "application/openid4vci-credential-request+jwt",
+            );
+
+        let body = rawBody;
+        if (isJwtContentType || typeof rawBody === "string") {
+            if (typeof rawBody !== "string") {
+                try {
+                    body = await new Promise<string>((resolve, reject) => {
+                        const chunks: Buffer[] = [];
+                        req.on("data", (chunk: Buffer) => chunks.push(chunk));
+                        req.on("end", () =>
+                            resolve(Buffer.concat(chunks).toString("utf8")),
+                        );
+                        req.on("error", reject);
+                    });
+                } catch {
+                    throw new CredentialRequestException(
+                        "invalid_encryption_parameters",
+                        "Failed to read encrypted credential request body",
+                    );
+                }
+                if (!body) {
+                    throw new CredentialRequestException(
+                        "invalid_encryption_parameters",
+                        "Encrypted credential request body is empty",
+                    );
+                }
+            }
+        }
+
+        return {
+            body,
+            contentType,
+            headers: req.headers,
+            method: req.method,
+            url: req.url,
+        };
+    }
+
     /**
      * Deferred Credential Endpoint
      *
@@ -153,7 +190,17 @@ export class Oid4vciController {
         @Body() body: DeferredCredentialRequestDto,
         @Param("tenantId") tenantId: string,
     ): Promise<CredentialResponse> {
-        return this.oid4vciService.getDeferredCredential(req, body, tenantId);
+        return this.oid4vciService.getDeferredCredential(
+            {
+                body: req.body,
+                contentType: req.headers["content-type"] ?? "",
+                headers: req.headers,
+                method: req.method,
+                url: req.url,
+            },
+            body,
+            tenantId,
+        );
     }
 
     /**
@@ -167,7 +214,17 @@ export class Oid4vciController {
         @Req() req: Request,
         @Param("tenantId") tenantId: string,
     ) {
-        return this.oid4vciService.handleNotification(req, body, tenantId);
+        return this.oid4vciService.handleNotification(
+            {
+                body: req.body,
+                contentType: req.headers["content-type"] ?? "",
+                headers: req.headers,
+                method: req.method,
+                url: req.url,
+            },
+            body,
+            tenantId,
+        );
     }
 
     @Post("nonce")

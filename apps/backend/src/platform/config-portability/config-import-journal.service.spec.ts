@@ -1,9 +1,9 @@
 import "reflect-metadata";
 import { DataSource } from "typeorm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AddConfigImportRun1781000000000 } from "../../database/migrations/1781000000000-AddConfigImportRun.js";
 import { ConfigImportJournalService } from "./config-import-journal.service.js";
 import { ConfigImportRunEntity } from "./entities/config-import-run.entity.js";
-import { AddConfigImportRun1781000000000 } from "../../database/migrations/1781000000000-AddConfigImportRun.js";
 
 describe("durable configuration journal", () => {
     let db: DataSource;

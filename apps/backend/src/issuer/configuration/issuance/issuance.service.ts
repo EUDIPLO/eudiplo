@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
+import {
+    BadRequestException,
+    Inject,
+    Injectable,
+    Logger,
+} from "@nestjs/common";
 import { Request } from "express";
 import { decodeJwt } from "jose";
-import { Repository } from "typeorm";
 import { v4 } from "uuid";
 import { AuditLogService } from "../../../audit-log/audit-log.service.js";
 import {
@@ -23,10 +26,14 @@ import { FilesService } from "../../../storage/files.service.js";
 import { normalizeTrustListRefs } from "../../../trust/types.js";
 import type { TrustListRef } from "../../../verifier/presentations/entities/presentation-config.entity.js";
 import { CredentialConfigService } from "../credentials/credential-config/credential-config.service.js";
+import type { IssuanceConfiguration as IssuanceConfig } from "./domain/issuance-configuration.js";
 import { DisplayInfo } from "./dto/display.dto.js";
 import { IssuanceDto } from "./dto/issuance.dto.js";
 import { IssuerProvidedAttestation } from "./dto/issuer-registration-certificate.dto.js";
-import { IssuanceConfig } from "./entities/issuance-config.entity.js";
+import {
+    ISSUANCE_CONFIG_REPOSITORY,
+    type IssuanceConfigRepository,
+} from "./ports/issuance-config.repository.js";
 import { IssuanceConfigSchema } from "./schemas/issuance.schema.js";
 /**
  * Service for managing issuance configurations.
@@ -42,8 +49,8 @@ export class IssuanceService {
      * @param credentialsConfigService
      */
     constructor(
-        @InjectRepository(IssuanceConfig)
-        private readonly issuanceConfigRepo: Repository<IssuanceConfig>,
+        @Inject(ISSUANCE_CONFIG_REPOSITORY)
+        private readonly issuanceConfigRepo: IssuanceConfigRepository,
         private readonly filesService: FilesService,
         private readonly credentialConfigService: CredentialConfigService,
         private readonly registrarService: RegistrarService,
@@ -78,7 +85,7 @@ export class IssuanceService {
                 },
                 deleteExisting: (tid) =>
                     this.issuanceConfigRepo
-                        .delete({ tenantId: tid })
+                        .deleteForTenant(tid)
                         .then(() => undefined),
                 loadData: (filePath) =>
                     loadConfigDto(filePath, IssuanceConfigSchema),
@@ -123,7 +130,7 @@ export class IssuanceService {
      * @returns
      */
     public getIssuanceConfiguration(tenantId: string) {
-        return this.issuanceConfigRepo.findOneByOrFail({ tenantId });
+        return this.issuanceConfigRepo.getForTenant(tenantId);
     }
 
     /**

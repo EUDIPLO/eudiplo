@@ -1,4 +1,3 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
 import {
     isConfigDocument,
     migrateDocument,
@@ -7,6 +6,7 @@ import {
     schemaUrl,
 } from "@eudiplo/config-format/config-format.js";
 import { validateConfigDocument } from "@eudiplo/config-format/config-validator.js";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { ConfigResourceRegistry } from "./config-resource.registry.js";
 import type {
     ConfigDocument,

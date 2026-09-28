@@ -3,7 +3,10 @@ import { ConfigService } from "@nestjs/config";
 import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { ConfigImportService } from "../../platform/config-import/config-import.service.js";
-import { ConfigImportOrchestratorService } from "../../platform/config-import/config-import-orchestrator.service.js";
+import {
+    ConfigImportOrchestratorService,
+    ImportPhase,
+} from "../../platform/config-import/config-import-orchestrator.service.js";
 import { InternalClientsProvider } from "./adapters/internal-clients.service.js";
 import { KeycloakClientsProvider } from "./adapters/keycloak-clients.service.js";
 import { ClientController } from "./client.controller.js";
@@ -28,19 +31,23 @@ import { ClientEntity } from "./entities/client.entity.js";
                 configImportOrchestrator: ConfigImportOrchestratorService,
             ): ClientsProvider => {
                 const useKeycloak = !!configService.get<string>("OIDC"); // if OIDC base/realm is configured, pick KC
-                return useKeycloak
+                const provider = useKeycloak
                     ? new KeycloakClientsProvider(
                           configService,
                           repo,
                           configImportService,
-                          configImportOrchestrator,
                       )
                     : new InternalClientsProvider(
                           configService,
                           repo,
                           configImportService,
-                          configImportOrchestrator,
                       );
+                configImportOrchestrator.register(
+                    "clients",
+                    ImportPhase.CORE,
+                    (tenantId) => provider.importForTenant(tenantId),
+                );
+                return provider;
             },
         },
     ],

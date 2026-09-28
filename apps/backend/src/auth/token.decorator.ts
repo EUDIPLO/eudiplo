@@ -1,7 +1,7 @@
 import { createParamDecorator, ExecutionContext } from "@nestjs/common";
-import { ClientEntity } from "./client/entities/client.entity.js";
+import type { ClientData } from "./client/domain/client-data.js";
 import { Role } from "./roles/role.enum.js";
-import { TenantEntity } from "./tenant/entities/tenant.entity.js";
+import type { TenantData } from "./tenant/domain/tenant-data.js";
 
 /**
  * Token decorator
@@ -20,7 +20,7 @@ export interface TokenPayload {
     /**
      * Tenant entity
      */
-    entity?: TenantEntity;
+    entity?: TenantData;
 
     /**
      * Role for the user
@@ -30,7 +30,7 @@ export interface TokenPayload {
     /**
      * Client entity (includes resource-level restrictions)
      */
-    client?: ClientEntity;
+    client?: ClientData;
 
     /**
      * Token subject claim.

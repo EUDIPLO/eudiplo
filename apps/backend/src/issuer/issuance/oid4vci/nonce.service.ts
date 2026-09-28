@@ -1,13 +1,16 @@
-import { Injectable } from "@nestjs/common";
-import { Cron, CronExpression } from "@nestjs/schedule";
-import { InjectRepository } from "@nestjs/typeorm";
-import { decodeJwt } from "jose";
-import { LessThan, Repository } from "typeorm";
+import { Inject, Injectable } from "@nestjs/common";
 import { v4 } from "uuid";
 import { AuditLogContext } from "../../../session/logging/session-audit.service.js";
 import { SessionLoggerService } from "../../../session/logging/session-logger.service.js";
-import { NonceEntity } from "./entities/nonces.entity.js";
+import {
+    CredentialNonceValidationError,
+    ValidateAndConsumeCredentialNonces,
+} from "./application/validate-and-consume-credential-nonces.js";
 import { CredentialRequestException } from "./exceptions/index.js";
+import {
+    CREDENTIAL_NONCE_REPOSITORY,
+    type CredentialNonceRepository,
+} from "./ports/credential-nonce.repository.js";
 
 type SupportedCredentialProofType = "jwt" | "attestation";
 
@@ -15,8 +18,9 @@ type SupportedCredentialProofType = "jwt" | "attestation";
 @Injectable()
 export class NonceService {
     constructor(
-        @InjectRepository(NonceEntity)
-        private readonly nonceRepository: Repository<NonceEntity>,
+        @Inject(CREDENTIAL_NONCE_REPOSITORY)
+        private readonly nonceRepository: CredentialNonceRepository,
+        private readonly validateAndConsumeCredentialNonces: ValidateAndConsumeCredentialNonces,
         private readonly auditLogger: SessionLoggerService,
     ) {}
 
@@ -30,13 +34,6 @@ export class NonceService {
         return nonce;
     }
 
-    @Cron(CronExpression.EVERY_10_MINUTES)
-    cleanup(): void {
-        void this.nonceRepository.delete({
-            expiresAt: LessThan(new Date()),
-        });
-    }
-
     /**
      * Validates all proof nonces and consumes them before credential issuance.
      * A nonce is tenant-scoped, time-limited, and single-use.
@@ -48,53 +45,26 @@ export class NonceService {
         logContext: AuditLogContext,
         credentialConfigurationId: string,
     ): Promise<void> {
-        const uniqueNonces = new Set<string>();
-        for (const proofValue of proofs) {
-            const payload = decodeJwt(proofValue);
-            if (!payload.nonce) {
-                throw new CredentialRequestException(
-                    "invalid_proof",
-                    `All ${proofType} key proofs must contain a nonce when the nonce endpoint is offered`,
-                );
+        try {
+            await this.validateAndConsumeCredentialNonces.execute(
+                proofs,
+                proofType,
+                tenantId,
+            );
+        } catch (error) {
+            if (!(error instanceof CredentialNonceValidationError)) {
+                throw error;
             }
-            uniqueNonces.add(payload.nonce as string);
-        }
-
-        for (const nonce of uniqueNonces) {
-            const nonceEntity = await this.nonceRepository.findOne({
-                where: { nonce, tenantId },
-            });
-
-            if (!nonceEntity) {
-                this.throwNonceError(
-                    "The nonce in the key proof is invalid or has already been used",
-                    logContext,
+            const protocolError = new CredentialRequestException(
+                error.code,
+                error.message,
+            );
+            if (error.shouldAudit) {
+                this.auditLogger.logFlowError(logContext, protocolError, {
                     credentialConfigurationId,
-                );
+                });
             }
-
-            if (nonceEntity.expiresAt < new Date()) {
-                await this.nonceRepository.delete({ nonce, tenantId });
-                this.throwNonceError(
-                    "The nonce in the key proof has expired",
-                    logContext,
-                    credentialConfigurationId,
-                );
-            }
-
-            await this.nonceRepository.delete({ nonce, tenantId });
+            throw protocolError;
         }
-    }
-
-    private throwNonceError(
-        message: string,
-        logContext: AuditLogContext,
-        credentialConfigurationId: string,
-    ): never {
-        const error = new CredentialRequestException("invalid_nonce", message);
-        this.auditLogger.logFlowError(logContext, error, {
-            credentialConfigurationId,
-        });
-        throw error;
     }
 }

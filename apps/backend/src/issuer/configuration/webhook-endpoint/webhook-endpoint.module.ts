@@ -1,8 +1,11 @@
 import { Module } from "@nestjs/common";
-import { TypeOrmModule } from "@nestjs/typeorm";
+import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
+import type { Repository } from "typeorm";
 import { AuditLogModule } from "../../../audit-log/audit-log.module.js";
 import { WebhookModule } from "../../../webhook/webhook.module.js";
+import { TypeOrmWebhookEndpointRepository } from "./adapters/typeorm-webhook-endpoint.repository.js";
 import { WebhookEndpointEntity } from "./entities/webhook-endpoint.entity.js";
+import { WEBHOOK_ENDPOINT_REPOSITORY } from "./ports/webhook-endpoint.repository.js";
 import { WebhookEndpointController } from "./webhook-endpoint.controller.js";
 import { WebhookEndpointService } from "./webhook-endpoint.service.js";
 
@@ -13,7 +16,15 @@ import { WebhookEndpointService } from "./webhook-endpoint.service.js";
         WebhookModule,
     ],
     controllers: [WebhookEndpointController],
-    providers: [WebhookEndpointService],
-    exports: [WebhookEndpointService],
+    providers: [
+        WebhookEndpointService,
+        {
+            provide: WEBHOOK_ENDPOINT_REPOSITORY,
+            inject: [getRepositoryToken(WebhookEndpointEntity)],
+            useFactory: (repository: Repository<WebhookEndpointEntity>) =>
+                new TypeOrmWebhookEndpointRepository(repository),
+        },
+    ],
+    exports: [WebhookEndpointService, WEBHOOK_ENDPOINT_REPOSITORY],
 })
 export class WebhookEndpointModule {}

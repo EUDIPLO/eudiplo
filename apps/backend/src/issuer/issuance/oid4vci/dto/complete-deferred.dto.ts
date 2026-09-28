@@ -1,7 +1,7 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
-import { DeferredTransactionStatus } from "../entities/deferred-transaction.entity.js";
+import { DeferredTransactionStatus } from "../domain/deferred-transaction-status.js";
 
 const CompleteDeferredSchema = z
     .object({

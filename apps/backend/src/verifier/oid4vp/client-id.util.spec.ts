@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CertificateInfo } from "../../crypto/key/cert/cert.service.js";
-import { ClientIdScheme } from "./dto/presentation-request.dto.js";
 import { createClientId } from "./client-id.util.js";
+import { ClientIdScheme } from "./dto/presentation-request.dto.js";
 
 const cert = {} as CertificateInfo;
 

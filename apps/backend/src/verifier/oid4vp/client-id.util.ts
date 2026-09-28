@@ -1,9 +1,9 @@
 import type {
-    CertService,
     CertificateInfo,
+    CertService,
 } from "../../crypto/key/cert/cert.service.js";
-import { ClientIdScheme } from "./dto/presentation-request.dto.js";
 import type { ClientIdSchemeValue } from "./dto/presentation-request.dto.js";
+import { ClientIdScheme } from "./dto/presentation-request.dto.js";
 
 type ClientIdCertService = Pick<CertService, "getCertDnsName" | "getCertHash">;
 

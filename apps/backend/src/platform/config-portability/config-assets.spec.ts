@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { ConfigBundleService } from "./config-bundle.service.js";
+
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 describe("configuration asset plans", () => {
     it.each(["upsert", "create"])(

@@ -1,4 +1,9 @@
-import type { TrustListRef } from "../verifier/presentations/entities/presentation-config.entity.js";
+export interface TrustListRef {
+    trustListId?: string;
+    url: string;
+    verifierKey?: Record<string, unknown>;
+    verifierX509Der?: string;
+}
 
 /**
  * Normalize trust-list input to structured references.

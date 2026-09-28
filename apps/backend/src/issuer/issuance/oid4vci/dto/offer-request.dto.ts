@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
+import type { SessionOfferRequest } from "../../../../session/domain/session-data.js";
 import {
     ResponseType,
     type ResponseTypeValue,
@@ -128,7 +129,10 @@ export type ClaimsSource =
     | AttributeProviderClaimsSource
     | WebhookClaimsSource;
 
-export class OfferRequestDto extends OfferRequestBase {
+export class OfferRequestDto
+    extends OfferRequestBase
+    implements SessionOfferRequest
+{
     @ApiProperty({
         examples: [
             {

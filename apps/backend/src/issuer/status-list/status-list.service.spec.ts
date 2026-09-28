@@ -1,5 +1,4 @@
 import "reflect-metadata";
-import { ConfigService } from "@nestjs/config";
 import { DataSource } from "typeorm";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ClientEntity } from "../../auth/client/entities/client.entity.js";
@@ -28,24 +27,14 @@ describe("StatusListService SQLite concurrency", () => {
         });
         await dataSource.initialize();
 
-        const configService = {
-            getOrThrow: vi.fn((key: string) => {
-                if (key === "PUBLIC_URL") {
-                    return "https://issuer.example";
-                }
-                if (key === "STATUS_CAPACITY") {
-                    return 4;
-                }
-                if (key === "STATUS_BITS") {
-                    return 1;
-                }
-                throw new Error(`Unexpected config key: ${key}`);
-            }),
-        } as unknown as ConfigService;
         const orchestrator = { register: vi.fn() };
 
         service = new StatusListService(
-            configService,
+            {
+                publicUrl: "https://issuer.example",
+                statusCapacity: 4,
+                statusBits: 1,
+            },
             {} as never,
             {} as never,
             dataSource,

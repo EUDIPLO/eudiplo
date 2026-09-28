@@ -1,15 +1,27 @@
 import * as https from "node:https";
 import { HttpModule } from "@nestjs/axios";
 import { Module } from "@nestjs/common";
-import { TrustListModule } from "../issuer/trust-list/trustlist.module.js";
+import { ConfigService } from "@nestjs/config";
 import { CryptoModule } from "../crypto/crypto.module.js";
+import { TrustListModule } from "../issuer/trust-list/trustlist.module.js";
+import { OpenIdFederationResolver } from "./adapters/openid-federation-resolver.js";
+import { VerifiedLoteProvider } from "./adapters/verified-lote-provider.js";
+import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
+import { EvaluateFederationTrustChain } from "./application/evaluate-federation-trust-chain.js";
 import { CacheController } from "./cache.controller.js";
 import { FederationTrustService } from "./federation-trust.service.js";
 import { LoteParserService } from "./lote-parser.service.js";
+import { FEDERATION_RESOLVER } from "./ports/federation-resolver.js";
+import {
+    TRUST_LIST_PROVIDER,
+    type TrustListProvider,
+} from "./ports/trust-list-provider.js";
 import { StatusListVerifierService } from "./status-list-verifier.service.js";
 import { TrustStoreService } from "./trust-store.service.js";
+import { TRUST_STORE_SETTINGS } from "./trust-store-settings.js";
 import { TrustListJwtService } from "./trustlist-jwt.service.js";
 import { WalletAttestationService } from "./wallet-attestation.service.js";
+import { WALLET_ATTESTATION_SETTINGS } from "./wallet-attestation-settings.js";
 import { X509ValidationService } from "./x509-validation.service.js";
 
 @Module({
@@ -27,10 +39,44 @@ import { X509ValidationService } from "./x509-validation.service.js";
         TrustListJwtService,
         LoteParserService,
         TrustStoreService,
+        {
+            provide: TRUST_LIST_PROVIDER,
+            inject: [TrustListJwtService, LoteParserService],
+            useFactory: (jwt: TrustListJwtService, parser: LoteParserService) =>
+                new VerifiedLoteProvider(jwt, parser),
+        },
+        {
+            provide: CollectTrustedEntities,
+            inject: [TRUST_LIST_PROVIDER],
+            useFactory: (lists: TrustListProvider) =>
+                new CollectTrustedEntities(lists),
+        },
+        {
+            provide: TRUST_STORE_SETTINGS,
+            inject: [ConfigService],
+            useFactory: (config: ConfigService) => ({
+                publicUrl: config.getOrThrow<string>("PUBLIC_URL"),
+                internalUrl: config.get<string>("INTERNAL_URL"),
+            }),
+        },
+        {
+            provide: WALLET_ATTESTATION_SETTINGS,
+            inject: [ConfigService],
+            useFactory: (config: ConfigService) => ({
+                cryptoToleranceSeconds:
+                    config.getOrThrow<number>("CRYPTO_TOLERANCE"),
+            }),
+        },
         X509ValidationService,
         StatusListVerifierService,
         WalletAttestationService,
         FederationTrustService,
+        EvaluateFederationTrustChain,
+        OpenIdFederationResolver,
+        {
+            provide: FEDERATION_RESOLVER,
+            useExisting: OpenIdFederationResolver,
+        },
     ],
     exports: [
         TrustStoreService,

@@ -7,7 +7,7 @@ describe("WalletAttestationService trust requirements", () => {
             Object.create(WalletAttestationService.prototype),
             {
                 getIssuer: () => ({ verifyWalletAttestation: vi.fn() }),
-                configService: { getOrThrow: () => 0 },
+                settings: { cryptoToleranceSeconds: 0 },
             },
         ) as WalletAttestationService;
     }

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, OmitType } from "@nestjs/swagger";
-import { ClientEntity } from "../../client/entities/client.entity.js";
+import { ClientResponseDto } from "../../client/dto/client-response.dto.js";
 import { TenantEntity } from "../entities/tenant.entity.js";
 
 export class TenantClientCredentialsDto {
@@ -23,7 +23,7 @@ export class TenantCreateResponseDto extends TenantBaseResponseDto {
 export class TenantResponseDto extends TenantBaseResponseDto {
     @ApiPropertyOptional({
         description: "Managed clients attached to the tenant",
-        type: [ClientEntity],
+        type: [ClientResponseDto],
     })
-    clients?: ClientEntity[];
+    clients?: ClientResponseDto[];
 }

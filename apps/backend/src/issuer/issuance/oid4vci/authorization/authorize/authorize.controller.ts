@@ -14,6 +14,7 @@ import {
 } from "@nestjs/common";
 import { ApiBody, ApiConsumes, ApiTags } from "@nestjs/swagger";
 import type { Request, Response } from "express";
+import type { Oid4vciRequestContext } from "../../request-context.js";
 import { AuthorizeService } from "./authorize.service.js";
 import { AuthorizeQueries } from "./dto/authorize-request.dto.js";
 import { ParResponseDto } from "./dto/par-response.dto.js";
@@ -72,10 +73,18 @@ export class AuthorizeController {
                 ? { clientAttestationJwt, clientAttestationPopJwt }
                 : undefined;
 
+        const requestContext: Oid4vciRequestContext = {
+            body: req.body,
+            contentType: req.headers["content-type"] ?? "",
+            headers: req.headers,
+            method: req.method,
+            url: req.url,
+        };
+
         return this.authorizeService.handlePar(
             tenantId,
             body,
-            req,
+            requestContext,
             clientAttestation,
         );
     }
@@ -95,7 +104,19 @@ export class AuthorizeController {
         @Req() req: Request,
         @Param("tenantId") tenantId: string,
     ): Promise<any> {
-        return this.authorizeService.validateTokenRequest(body, req, tenantId);
+        const requestContext: Oid4vciRequestContext = {
+            body: req.body,
+            contentType: req.headers["content-type"] ?? "",
+            headers: req.headers,
+            method: req.method,
+            url: req.url,
+        };
+
+        return this.authorizeService.validateTokenRequest(
+            body,
+            requestContext,
+            tenantId,
+        );
     }
 
     /**

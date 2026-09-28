@@ -16,10 +16,10 @@ import { Secured } from "../secure.decorator.js";
 import { requireTenantContext } from "../tenant-context.util.js";
 import { Token, TokenPayload } from "../token.decorator.js";
 import { CLIENTS_PROVIDER, ClientsProvider } from "./client.provider.js";
+import { ClientResponseDto } from "./dto/client-response.dto.js";
 import { ClientSecretResponseDto } from "./dto/client-secret-response.dto.js";
 import { CreateClientDto } from "./dto/create-client.dto.js";
 import { UpdateClientDto } from "./dto/update-client.dto.js";
-import { ClientEntity } from "./entities/client.entity.js";
 
 /**
  * Controller to manage clients.
@@ -38,7 +38,7 @@ export class ClientController {
      */
     @Secured([Role.Clients])
     @ApiOperation({ summary: "Get all clients for the current tenant" })
-    @ApiResponse({ status: 200, type: [ClientEntity] })
+    @ApiResponse({ status: 200, type: [ClientResponseDto] })
     @Get()
     getClients(@Token() user: TokenPayload) {
         const tenantId = requireTenantContext(user);
@@ -53,7 +53,7 @@ export class ClientController {
      */
     @Secured([Role.Clients])
     @ApiOperation({ summary: "Get a client by its id" })
-    @ApiResponse({ status: 200, type: ClientEntity })
+    @ApiResponse({ status: 200, type: ClientResponseDto })
     @ApiResponse({ status: 404, description: "Client not found" })
     @Get(":id")
     getClient(@Param("id") id: string, @Token() user: TokenPayload) {
@@ -97,7 +97,7 @@ export class ClientController {
     @Secured([Role.Clients])
     @ApiOperation({ summary: "Update a client by its id" })
     @ApiBody({ type: UpdateClientDto })
-    @ApiResponse({ status: 200, type: ClientEntity })
+    @ApiResponse({ status: 200, type: ClientResponseDto })
     @ApiResponse({ status: 404, description: "Client not found" })
     @Patch(":id")
     updateClient(
@@ -128,7 +128,7 @@ export class ClientController {
     @Secured([Role.Clients])
     @ApiOperation({ summary: "Create a new client" })
     @ApiBody({ type: CreateClientDto })
-    @ApiResponse({ status: 201, type: ClientEntity })
+    @ApiResponse({ status: 201, type: ClientResponseDto })
     @Post()
     createClient(
         @Body() createClientDto: CreateClientDto,

@@ -1,6 +1,10 @@
 import { X509Certificate } from "node:crypto";
-import { Injectable, Logger, UnauthorizedException } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
+import {
+    Inject,
+    Injectable,
+    Logger,
+    UnauthorizedException,
+} from "@nestjs/common";
 import { Openid4vciIssuer } from "@openid4vc/openid4vci";
 import * as x509 from "@peculiar/x509";
 import { decodeProtectedHeader, JWK } from "jose";
@@ -16,6 +20,10 @@ import {
     TrustListSource,
     walletSolutionServiceTypes,
 } from "./types.js";
+import {
+    WALLET_ATTESTATION_SETTINGS,
+    type WalletAttestationSettings,
+} from "./wallet-attestation-settings.js";
 import {
     MatchedTrustedEntity,
     X509ValidationService,
@@ -41,7 +49,8 @@ export class WalletAttestationService {
         private readonly trustStoreService: TrustStoreService,
         private readonly x509ValidationService: X509ValidationService,
         private readonly statusListVerifierService: StatusListVerifierService,
-        private readonly configService: ConfigService,
+        @Inject(WALLET_ATTESTATION_SETTINGS)
+        private readonly settings: WalletAttestationSettings,
     ) {}
 
     /**
@@ -95,8 +104,7 @@ export class WalletAttestationService {
                 clientAttestationJwt: clientAttestation.clientAttestationJwt,
                 clientAttestationPopJwt:
                     clientAttestation.clientAttestationPopJwt!,
-                allowedSkewInSeconds:
-                    this.configService.getOrThrow<number>("CRYPTO_TOLERANCE"),
+                allowedSkewInSeconds: this.settings.cryptoToleranceSeconds,
             });
 
             // Then validate the X.509 certificate against trust lists and get the matched entity

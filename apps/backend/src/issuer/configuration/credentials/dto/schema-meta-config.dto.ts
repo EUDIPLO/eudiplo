@@ -6,38 +6,46 @@ import { z } from "zod";
 /**
  * Attestation Level of Security (LoS) as defined in TS11.
  */
-export enum AttestationLoS {
-    HIGH = "iso_18045_high",
-    MODERATE = "iso_18045_moderate",
-    ENHANCED_BASIC = "iso_18045_enhanced-basic",
-    BASIC = "iso_18045_basic",
-}
+export const AttestationLoS = {
+    HIGH: "iso_18045_high",
+    MODERATE: "iso_18045_moderate",
+    ENHANCED_BASIC: "iso_18045_enhanced-basic",
+    BASIC: "iso_18045_basic",
+} as const;
+export type AttestationLoS =
+    (typeof AttestationLoS)[keyof typeof AttestationLoS];
 
 /**
  * Cryptographic binding type as defined in TS11.
  */
-export enum SchemaMetaBindingType {
-    CLAIM = "claim",
-    KEY = "key",
-    BIOMETRIC = "biometric",
-    NONE = "none",
-}
+export const SchemaMetaBindingType = {
+    CLAIM: "claim",
+    KEY: "key",
+    BIOMETRIC: "biometric",
+    NONE: "none",
+} as const;
+export type SchemaMetaBindingType =
+    (typeof SchemaMetaBindingType)[keyof typeof SchemaMetaBindingType];
 
 /**
  * Trust framework type for trusted authorities.
  */
-export enum SchemaMetaFrameworkType {
-    AKI = "aki",
-    ETSI_TL = "etsi_tl",
-    OPENID_FEDERATION = "openid_federation",
-    X509 = "x509",
-}
+export const SchemaMetaFrameworkType = {
+    AKI: "aki",
+    ETSI_TL: "etsi_tl",
+    OPENID_FEDERATION: "openid_federation",
+    X509: "x509",
+} as const;
+export type SchemaMetaFrameworkType =
+    (typeof SchemaMetaFrameworkType)[keyof typeof SchemaMetaFrameworkType];
 
-export enum SchemaMetadataPinMode {
-    KEEP_CURRENT = "keep_current",
-    UPDATE_TO_NEW_VERSION = "update_to_new_version",
-    REPLACE_ID = "replace_id",
-}
+export const SchemaMetadataPinMode = {
+    KEEP_CURRENT: "keep_current",
+    UPDATE_TO_NEW_VERSION: "update_to_new_version",
+    REPLACE_ID: "replace_id",
+} as const;
+export type SchemaMetadataPinMode =
+    (typeof SchemaMetadataPinMode)[keyof typeof SchemaMetadataPinMode];
 
 const SchemaUriEntrySchema = z
     .object({

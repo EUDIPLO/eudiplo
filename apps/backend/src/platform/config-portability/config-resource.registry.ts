@@ -1,8 +1,8 @@
-import { Injectable } from "@nestjs/common";
 import {
     CONFIG_FORMATS,
     schemaUrl,
 } from "@eudiplo/config-format/config-format.js";
+import { Injectable } from "@nestjs/common";
 import type { ConfigResourceKind } from "./config-resource.types.js";
 
 export interface ConfigResourceDefinition {

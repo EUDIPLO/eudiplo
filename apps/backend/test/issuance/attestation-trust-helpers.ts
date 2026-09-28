@@ -3,10 +3,11 @@
  * Used by issuance-preauth.e2e-spec.ts, issuance-deferred.e2e-spec.ts, and
  * wallet-attestation.e2e-spec.ts to avoid copy-paste drift.
  */
+
+import type { INestApplication } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { X509Certificate, X509CertificateGenerator } from "@peculiar/x509";
 import { decodeJwt, decodeProtectedHeader, importPKCS8, SignJWT } from "jose";
-import type { INestApplication } from "@nestjs/common";
 import nock from "nock";
 import request from "supertest";
 import type { App } from "supertest/types";

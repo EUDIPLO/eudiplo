@@ -14,6 +14,7 @@ import { Request } from "express";
 import { Role } from "../../../auth/roles/role.enum.js";
 import { Secured } from "../../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../../auth/token.decorator.js";
+import type { WebhookEndpointData } from "./domain/webhook-endpoint-data.js";
 import { CreateWebhookEndpointDto } from "./dto/create-webhook-endpoint.dto.js";
 import { UpdateWebhookEndpointDto } from "./dto/update-webhook-endpoint.dto.js";
 import { WebhookEndpointEntity } from "./entities/webhook-endpoint.entity.js";
@@ -41,7 +42,7 @@ export class WebhookEndpointController {
         description: "List of webhook endpoints",
         type: [WebhookEndpointEntity],
     })
-    getAll(@Token() user: TokenPayload): Promise<WebhookEndpointEntity[]> {
+    getAll(@Token() user: TokenPayload): Promise<WebhookEndpointData[]> {
         return this.service.getAll(user.entity!.id);
     }
 

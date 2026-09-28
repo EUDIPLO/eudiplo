@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import { schemaUrl } from "@eudiplo/config-format/config-format.js";
+import { describe, expect, it } from "vitest";
 import { ConfigDocumentValidationService } from "./config-document-validation.service.js";
 import { ConfigMigrationService } from "./config-migration.service.js";
 import { ConfigResourceRegistry } from "./config-resource.registry.js";

@@ -6,9 +6,9 @@ import { InjectRepository } from "@nestjs/typeorm";
 import * as bcrypt from "bcrypt";
 import { IsNull, Repository } from "typeorm";
 import { ConfigImportService } from "../../../platform/config-import/config-import.service.js";
-import { ConfigImportOrchestratorService } from "../../../platform/config-import/config-import-orchestrator.service.js";
 import { Role } from "../../roles/role.enum.js";
 import { ClientsProvider } from "../client.provider.js";
+import type { ClientData, CreatedClient } from "../domain/client-data.js";
 import { ClientEntity } from "../entities/client.entity.js";
 import type { CreateClient, UpdateClient } from "../schemas/client.schema.js";
 import { CreateClientSchema } from "../schemas/client.schema.js";
@@ -25,9 +25,8 @@ export class InternalClientsProvider
         @InjectRepository(ClientEntity)
         private readonly repo: Repository<ClientEntity>,
         private readonly configImportService: ConfigImportService,
-        configImportOrchestrator: ConfigImportOrchestratorService,
     ) {
-        super(configImportOrchestrator);
+        super();
     }
 
     async onApplicationBootstrap() {
@@ -95,47 +94,34 @@ export class InternalClientsProvider
         );
     }
 
-    getClients(tenantId: string) {
+    getClients(tenantId: string): Promise<ClientData[]> {
         return this.repo
             .find({ where: { tenant: { id: tenantId } } })
             .then((list) =>
-                list.map((e) => ({
-                    clientId: e.clientId,
-                    description: e.description,
-                    tenantId,
-                    roles: e.roles,
-                    allowedPresentationConfigs: e.allowedPresentationConfigs,
-                    allowedIssuanceConfigs: e.allowedIssuanceConfigs,
-                })),
+                list.map((client) => this.toClientData(client, tenantId)),
             );
     }
 
-    getClient(tenantId: string, clientId: string) {
+    getClient(tenantId: string, clientId: string): Promise<ClientData> {
         return this.repo
             .findOneByOrFail({ clientId, tenant: { id: tenantId } })
-            .then((e) => ({
-                clientId: e.clientId,
-                description: e.description,
-                tenantId,
-                roles: e.roles,
-                allowedPresentationConfigs: e.allowedPresentationConfigs,
-                allowedIssuanceConfigs: e.allowedIssuanceConfigs,
-            }));
+            .then((client) => this.toClientData(client, tenantId));
     }
 
     /**
      * Get a client by its clientId only (without tenant context).
      * Used for JWT validation to fetch client restrictions.
      */
-    async getClientById(clientId: string): Promise<ClientEntity | null> {
-        return this.repo.findOne({ where: { clientId } });
+    async getClientById(clientId: string): Promise<ClientData | null> {
+        const client = await this.repo.findOne({ where: { clientId } });
+        return client ? this.toClientData(client) : null;
     }
 
     async addClient(
         tenantId: string,
         dto: CreateClient,
         secret = dto.secret ?? randomBytes(32).toString("hex"),
-    ) {
+    ): Promise<CreatedClient> {
         // Hash the secret before storing
         const hashedSecret = await bcrypt.hash(secret, BCRYPT_ROUNDS);
         const entity = await this.repo.save({
@@ -150,6 +136,20 @@ export class InternalClientsProvider
             roles: entity.roles,
             // Return the plain secret only during creation (one-time view)
             clientSecret: secret,
+        };
+    }
+
+    private toClientData(
+        client: ClientEntity,
+        tenantId = client.tenantId,
+    ): ClientData {
+        return {
+            clientId: client.clientId,
+            description: client.description,
+            tenantId,
+            roles: client.roles,
+            allowedPresentationConfigs: client.allowedPresentationConfigs,
+            allowedIssuanceConfigs: client.allowedIssuanceConfigs,
         };
     }
 
@@ -208,12 +208,15 @@ export class InternalClientsProvider
         await this.repo.delete({ clientId, tenant: { id: tenantId } });
     }
 
-    async validateClientCredentials(clientId: string, clientSecret: string) {
+    async validateClientCredentials(
+        clientId: string,
+        clientSecret: string,
+    ): Promise<ClientData | null> {
         const client = await this.repo.findOne({ where: { clientId } });
         if (!client?.secret) {
             return null;
         }
         const isValid = await bcrypt.compare(clientSecret, client.secret);
-        return isValid ? client : null;
+        return isValid ? this.toClientData(client) : null;
     }
 }

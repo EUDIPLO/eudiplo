@@ -1,12 +1,8 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
-import { SessionStatus } from "../entities/session.entity.js";
-
-export type SessionSortBy = "id" | "status" | "createdAt" | "requestId";
-export type SessionSortOrder = "asc" | "desc";
-
-export type SessionType = "issuance" | "presentation";
+import type { SessionListQuery } from "../domain/session-list.js";
+import { SessionStatus } from "../domain/session-state.js";
 
 const SessionQuerySchema = z
     .object({
@@ -22,7 +18,10 @@ const SessionQuerySchema = z
 /**
  * Query parameters for filtering and paginating the session list.
  */
-export class SessionQueryDto extends createZodDto(SessionQuerySchema) {
+export class SessionQueryDto
+    extends createZodDto(SessionQuerySchema)
+    implements SessionListQuery
+{
     /**
      * Page number (1-based).
      */
@@ -60,7 +59,7 @@ export class SessionQueryDto extends createZodDto(SessionQuerySchema) {
         enum: ["issuance", "presentation"],
         description: "Filter by session type",
     })
-    type?: SessionType;
+    type?: SessionListQuery["type"];
 
     /**
      * Field to sort by.
@@ -69,7 +68,7 @@ export class SessionQueryDto extends createZodDto(SessionQuerySchema) {
         enum: ["id", "status", "createdAt", "requestId"],
         description: "Field to sort by",
     })
-    sortBy?: SessionSortBy;
+    sortBy?: SessionListQuery["sortBy"];
 
     /**
      * Sort order (asc or desc).
@@ -78,5 +77,5 @@ export class SessionQueryDto extends createZodDto(SessionQuerySchema) {
         enum: ["asc", "desc"],
         description: "Sort direction",
     })
-    sortOrder?: SessionSortOrder;
+    sortOrder?: SessionListQuery["sortOrder"];
 }

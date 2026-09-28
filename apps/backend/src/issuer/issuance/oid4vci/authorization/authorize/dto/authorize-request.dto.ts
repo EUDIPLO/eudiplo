@@ -1,5 +1,6 @@
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
+import type { SessionAuthorization } from "../../../../../../session/domain/session-data.js";
 
 const AuthorizeQueriesSchema = z
     .object({
@@ -21,7 +22,10 @@ const AuthorizeQueriesSchema = z
     })
     .strict();
 
-export class AuthorizeQueries extends createZodDto(AuthorizeQueriesSchema) {
+export class AuthorizeQueries
+    extends createZodDto(AuthorizeQueriesSchema)
+    implements SessionAuthorization
+{
     issuer_state?: string;
     response_type?: string;
     client_id?: string;

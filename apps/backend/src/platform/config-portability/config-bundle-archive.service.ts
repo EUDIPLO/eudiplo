@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
 import { ConfigBundleCodec } from "@eudiplo/config-format/config-bundle.js";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import type { ConfigBundle } from "./config-resource.types.js";
 @Injectable()
 export class ConfigBundleArchiveService {

@@ -1,7 +1,5 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Request } from "express";
-import { Repository } from "typeorm";
 import { AuditLogService } from "../../../audit-log/audit-log.service.js";
 import {
     extractRequestMeta,
@@ -16,8 +14,12 @@ import {
 } from "../../../platform/config-import/config-import-orchestrator.service.js";
 import { loadConfigDto } from "../../../shared/utils/config-file-loader.util.js";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
+import type { WebhookEndpointData } from "./domain/webhook-endpoint-data.js";
 import { CreateWebhookEndpointDto } from "./dto/create-webhook-endpoint.dto.js";
-import { WebhookEndpointEntity } from "./entities/webhook-endpoint.entity.js";
+import {
+    WEBHOOK_ENDPOINT_REPOSITORY,
+    type WebhookEndpointRepository,
+} from "./ports/webhook-endpoint.repository.js";
 import type {
     CreateWebhookEndpoint,
     UpdateWebhookEndpoint,
@@ -26,8 +28,8 @@ import type {
 @Injectable()
 export class WebhookEndpointService {
     constructor(
-        @InjectRepository(WebhookEndpointEntity)
-        private readonly repo: Repository<WebhookEndpointEntity>,
+        @Inject(WEBHOOK_ENDPOINT_REPOSITORY)
+        private readonly repo: WebhookEndpointRepository,
         private readonly configImportService: ConfigImportService,
         private readonly configImportOrchestrator: ConfigImportOrchestratorService,
         private readonly tenantActionLogService: AuditLogService,
@@ -54,7 +56,7 @@ export class WebhookEndpointService {
                         .catch(() => false),
                 deleteExisting: (tid, data) =>
                     this.repo
-                        .delete({ id: data.id, tenantId: tid })
+                        .deleteForTenant(tid, data.id)
                         .then(() => undefined),
                 loadData: (filePath) =>
                     loadConfigDto(filePath, CreateWebhookEndpointDto),
@@ -66,11 +68,11 @@ export class WebhookEndpointService {
     }
 
     getAll(tenantId: string) {
-        return this.repo.find({ where: { tenantId } });
+        return this.repo.listForTenant(tenantId);
     }
 
     async getById(tenantId: string, id: string) {
-        const entity = await this.repo.findOneBy({ id, tenantId });
+        const entity = await this.repo.findForTenant(tenantId, id);
         if (!entity) {
             throw new NotFoundException(`Webhook endpoint '${id}' not found`);
         }
@@ -85,10 +87,10 @@ export class WebhookEndpointService {
     ) {
         await this.outboundUrlPolicyService.assertSafeUrl(dto.url);
 
-        const saved = (await this.repo.save({
+        const saved = await this.repo.save({
             ...dto,
             tenantId,
-        } as any)) as WebhookEndpointEntity;
+        });
 
         if (actorToken) {
             await this.tenantActionLogService.record({
@@ -120,12 +122,12 @@ export class WebhookEndpointService {
             await this.outboundUrlPolicyService.assertSafeUrl(dto.url);
         }
 
-        const saved = (await this.repo.save({
+        const saved = await this.repo.save({
             ...existing,
             ...dto,
             id,
             tenantId,
-        } as any)) as WebhookEndpointEntity;
+        });
 
         if (actorToken) {
             await this.tenantActionLogService.record({
@@ -152,7 +154,7 @@ export class WebhookEndpointService {
         req?: Request,
     ) {
         const existing = await this.getById(tenantId, id);
-        const result = await this.repo.delete({ id, tenantId });
+        const result = await this.repo.deleteForTenant(tenantId, id);
 
         if (actorToken) {
             await this.tenantActionLogService.record({
@@ -168,7 +170,7 @@ export class WebhookEndpointService {
     }
 
     private sanitizeWebhookEndpointForLog(
-        endpoint: WebhookEndpointEntity,
+        endpoint: WebhookEndpointData,
     ): Record<string, unknown> {
         return {
             id: endpoint.id,

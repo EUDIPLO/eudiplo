@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Injectable, Logger, Optional } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { resourceId } from "@eudiplo/config-format/config-format.js";
 import { resolveConfigVariables } from "@eudiplo/config-format/config-values.js";
+import { Injectable, Logger, Optional } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { ConfigMigrationService } from "../config-portability/config-migration.service.js";
 import { ConfigOwnershipService } from "../config-portability/config-ownership.service.js";
 import { ConfigResourceRegistry } from "../config-portability/config-resource.registry.js";
