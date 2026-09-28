@@ -916,7 +916,10 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                     citizen: { type: "inline", claims: { town: 5 } },
                 },
             })
-            .expect(409);
+            .expect(409)
+            .expect((res) => {
+                expect(res.body.message).toContain("/town: must be string");
+            });
     });
 
     test("pre-authorized flow defaults to built-in authorization server", async () => {

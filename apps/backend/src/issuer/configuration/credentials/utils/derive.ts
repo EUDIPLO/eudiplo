@@ -182,27 +182,27 @@ function mergeLeafSchema(existing: JsonSchema, next: JsonSchema): JsonSchema {
     }
     // An explicit `additionalProperties` from the field's constraints wins over the strict default
     if (
-        !Object.prototype.hasOwnProperty.call(next, "additionalProperties") &&
-        Object.prototype.hasOwnProperty.call(existing, "additionalProperties")
+        !Object.hasOwn(next, "additionalProperties") &&
+        Object.hasOwn(existing, "additionalProperties")
     ) {
         merged.additionalProperties = existing.additionalProperties;
     }
     if (Array.isArray(existing.required) && existing.required.length > 0) {
         merged.required = existing.required;
     }
-    return stripNonObjectKeywords(merged);
+    stripNonObjectKeywords(merged);
+    return merged;
 }
 
-function stripNonObjectKeywords(schema: JsonSchema): JsonSchema {
+function stripNonObjectKeywords(schema: JsonSchema): void {
     const type = typeof schema.type === "string" ? schema.type : undefined;
     if (!type || type === "object") {
-        return schema;
+        return;
     }
 
     delete schema.properties;
     delete schema.additionalProperties;
     delete schema.required;
-    return schema;
 }
 
 function buildLeafSchema(field: ClaimFieldDefinition): JsonSchema {
@@ -284,7 +284,7 @@ function ensureSchemaNode(
 function markObjectStrict(node: JsonSchema): JsonSchema {
     if (
         node.type === "object" &&
-        !Object.prototype.hasOwnProperty.call(node, "additionalProperties")
+        !Object.hasOwn(node, "additionalProperties")
     ) {
         node.additionalProperties = false;
     }
