@@ -93,6 +93,11 @@ Important considerations:
 
 This prevents credential offer replay attacks where an intercepted offer could otherwise be reused.
 
+## Pre-Authorized Code Lifetime and Transaction Codes
+
+- A pre-authorized code expires with its session: it is accepted until the session's creation time plus the tenant's session time-to-live (`sessionConfig.ttlSeconds`, or the global `SESSION_TTL`, 24 hours by default). Later token requests fail with `invalid_grant` ("Expired 'pre-authorized_code' provided"). Lower the tenant's session TTL if offers should expire sooner.
+- A wrong `tx_code` is rejected with `invalid_grant` (OID4VCI 1.0, Section 6.3). After `txCodeMaxAttempts` failed attempts (default 5) the pre-authorized code is invalidated, and even the correct transaction code is rejected.
+
 ## Passing Claims
 
 EUDIPLO provides multiple methods to pass claims during issuance. Claims are resolved in the following priority order:

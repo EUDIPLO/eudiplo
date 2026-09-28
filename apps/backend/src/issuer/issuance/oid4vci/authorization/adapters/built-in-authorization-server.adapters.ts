@@ -1,6 +1,7 @@
 import { type Jwk, Oauth2AuthorizationServer } from "@openid4vc/oauth2";
 import type { CryptoService } from "../../../../../crypto/crypto.service.js";
 import type { KeyChainService } from "../../../../../crypto/key/key-chain.service.js";
+import type { SessionConfigService } from "../../../../../session/session-config.service.js";
 import type { TrustListRef } from "../../../../../trust/types.js";
 import type { WalletAttestationService } from "../../../../../trust/wallet-attestation.service.js";
 import type { IssuanceService } from "../../../../configuration/issuance/issuance.service.js";
@@ -33,6 +34,10 @@ export class ConfiguredBuiltInAuthorizationServerConfiguration
     constructor(
         private readonly issuance: IssuanceService,
         private readonly statusLists: StatusListConfigService,
+        private readonly sessionConfig: Pick<
+            SessionConfigService,
+            "getEffectiveTtlSeconds"
+        >,
     ) {}
 
     issuanceConfiguration(tenantId: string) {
@@ -42,6 +47,10 @@ export class ConfiguredBuiltInAuthorizationServerConfiguration
     async statusListAggregationEnabled(tenantId: string) {
         const config = await this.statusLists.getEffectiveConfig(tenantId);
         return !!config.enableAggregation;
+    }
+
+    sessionTtlSeconds(tenantId: string) {
+        return this.sessionConfig.getEffectiveTtlSeconds(tenantId);
     }
 }
 

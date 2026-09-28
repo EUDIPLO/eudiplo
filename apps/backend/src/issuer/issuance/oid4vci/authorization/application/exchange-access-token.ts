@@ -29,6 +29,7 @@ import {
     DEFAULT_TX_CODE_MAX_ATTEMPTS,
     findBuiltInAuthorizationServer,
     isTxCodeLocked,
+    preAuthorizedCodeExpiresAt,
     resolveRefreshTokenPolicy,
     TX_CODE_LOCKED_DESCRIPTION,
 } from "../domain/token-grant-rules.js";
@@ -246,11 +247,10 @@ export class ExchangeAccessToken {
                     authorizationServerMetadata,
                     expectedPreAuthorizedCode: session.authorization_code!,
                     expectedTxCode: session.credentialPayload?.tx_code,
-                    // No `preAuthorizedCodeExpiresAt`: issuance sessions carry
-                    // neither a pre-authorized code expiry nor a session expiry
-                    // (`expiresAt` is only set for presentations). The code
-                    // stays valid until it is redeemed once or the session is
-                    // removed by the tenant's session retention cleanup.
+                    preAuthorizedCodeExpiresAt: preAuthorizedCodeExpiresAt(
+                        session.createdAt,
+                        await this.configuration.sessionTtlSeconds(tenantId),
+                    ),
                 })
                 .catch(async (err) => {
                     throw await this.preAuthorizedCodeError(

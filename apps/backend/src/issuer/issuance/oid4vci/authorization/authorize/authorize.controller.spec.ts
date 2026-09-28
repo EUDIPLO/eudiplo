@@ -152,9 +152,13 @@ function createHarness(issuanceConfig: Record<string, unknown> = {}) {
     // Real use cases and controller; only the outbound ports are faked.
     const settings = { publicUrl: PUBLIC_URL };
     const servers = { forTenant: () => server };
+    const sessionConfig = {
+        getEffectiveTtlSeconds: vi.fn().mockResolvedValue(86400),
+    };
     const configuration = new ConfiguredBuiltInAuthorizationServerConfiguration(
         issuance as never,
         statusLists as never,
+        sessionConfig,
     );
     const clientAttestation = new WalletAttestationClientVerifier(
         walletAttestation as never,
@@ -237,6 +241,7 @@ function createHarness(issuanceConfig: Record<string, unknown> = {}) {
         keyChain,
         nonces,
         issuance,
+        sessionConfig,
     };
 }
 
@@ -736,12 +741,50 @@ describe("Built-in authorization server token endpoint", () => {
             );
         });
 
+        it("expires the pre-authorized code with the tenant's session lifetime", async () => {
+            const createdAt = new Date("2026-01-01T00:00:00.000Z");
+            h.sessions.getByAuthorizationCode.mockResolvedValue(
+                session({ createdAt }),
+            );
+            h.sessionConfig.getEffectiveTtlSeconds.mockResolvedValue(600);
+            await token(preAuth());
+            expect(h.sessionConfig.getEffectiveTtlSeconds).toHaveBeenCalledWith(
+                TENANT,
+            );
+            expect(
+                h.oauth.verifyPreAuthorizedCodeAccessTokenRequest,
+            ).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    preAuthorizedCodeExpiresAt: new Date(
+                        "2026-01-01T00:10:00.000Z",
+                    ),
+                }),
+            );
+        });
+
         // Errors are thrown in the exact shape of the real OAuth library.
         const libraryError = (error: string, description: string) =>
             new Oauth2ServerErrorResponseError({
                 error,
                 error_description: description,
             });
+
+        it("rejects an expired pre-authorized code without counting a tx_code attempt", async () => {
+            h.sessions.getByAuthorizationCode.mockResolvedValue(withTxCode());
+            h.oauth.verifyPreAuthorizedCodeAccessTokenRequest.mockRejectedValue(
+                libraryError(
+                    "invalid_grant",
+                    "Expired 'pre-authorized_code' provided",
+                ),
+            );
+            expect(await token(preAuth("1234"))).toEqual(
+                tokenError(
+                    "invalid_grant",
+                    "Expired 'pre-authorized_code' provided",
+                ),
+            );
+            expect(h.recordFailedTxCodeAttempt.execute).not.toHaveBeenCalled();
+        });
 
         it("rejects a stale DPoP proof reported by the library without counting it", async () => {
             h.sessions.getByAuthorizationCode.mockResolvedValue(withTxCode());
@@ -759,15 +802,6 @@ describe("Built-in authorization server token endpoint", () => {
             );
             expect(h.recordFailedTxCodeAttempt.execute).not.toHaveBeenCalled();
             expect(h.sessions.updateIfUnconsumed).not.toHaveBeenCalled();
-        });
-
-        it("passes no code expiry because issuance sessions have none", async () => {
-            h.sessions.getByAuthorizationCode.mockResolvedValue(session());
-            await token(preAuth());
-            expect(
-                h.oauth.verifyPreAuthorizedCodeAccessTokenRequest.mock
-                    .calls[0][0],
-            ).not.toHaveProperty("preAuthorizedCodeExpiresAt");
         });
 
         it("counts a wrong tx_code and returns invalid_grant", async () => {

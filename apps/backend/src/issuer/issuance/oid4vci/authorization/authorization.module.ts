@@ -10,6 +10,7 @@ import { CreateSession } from "../../../../session/application/create-session.js
 import { RecordFailedTxCodeAttempt } from "../../../../session/application/record-failed-tx-code-attempt.js";
 import { SessionStore } from "../../../../session/application/session-store.js";
 import { SessionModule } from "../../../../session/session.module.js";
+import { SessionConfigService } from "../../../../session/session-config.service.js";
 import { TrustModule } from "../../../../trust/trust.module.js";
 import { WalletAttestationService } from "../../../../trust/wallet-attestation.service.js";
 import { Oid4vpModule } from "../../../../verifier/oid4vp/oid4vp.module.js";
@@ -84,14 +85,20 @@ export const builtInAuthorizationServerProviders = [
     },
     {
         provide: BUILT_IN_AUTHORIZATION_SERVER_CONFIGURATION,
-        inject: [IssuanceService, StatusListConfigService],
+        inject: [
+            IssuanceService,
+            StatusListConfigService,
+            SessionConfigService,
+        ],
         useFactory: (
             issuance: IssuanceService,
             statusLists: StatusListConfigService,
+            sessionConfig: SessionConfigService,
         ) =>
             new ConfiguredBuiltInAuthorizationServerConfiguration(
                 issuance,
                 statusLists,
+                sessionConfig,
             ),
     },
     {

@@ -60,6 +60,15 @@ export class SessionConfigService {
     }
 
     /**
+     * Effective session time-to-live of a tenant in seconds: the tenant
+     * override if set, otherwise the global SESSION_TTL default.
+     */
+    async getEffectiveTtlSeconds(tenantId: string): Promise<number> {
+        const config = await this.getConfig(tenantId);
+        return config?.ttlSeconds ?? this.getDefaultTtlSeconds();
+    }
+
+    /**
      * Update the session storage configuration for a tenant.
      * @param tenantId The tenant ID
      * @param config The new session storage configuration

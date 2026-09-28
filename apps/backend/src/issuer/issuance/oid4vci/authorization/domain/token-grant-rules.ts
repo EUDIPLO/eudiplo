@@ -189,3 +189,16 @@ export function authorizationDetailsForToken(session: {
 
     return undefined;
 }
+
+/**
+ * A pre-authorized code is valid for the lifetime of its issuance session:
+ * from session creation for the tenant's session time-to-live. Session cleanup
+ * removes expired sessions only periodically, so the token endpoint enforces
+ * the bound itself.
+ */
+export function preAuthorizedCodeExpiresAt(
+    sessionCreatedAt: Date,
+    sessionTtlSeconds: number,
+): Date {
+    return new Date(sessionCreatedAt.getTime() + sessionTtlSeconds * 1000);
+}

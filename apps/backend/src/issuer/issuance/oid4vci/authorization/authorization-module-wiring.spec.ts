@@ -6,6 +6,7 @@ import { KeyChainService } from "../../../../crypto/key/key-chain.service.js";
 import { CreateSession } from "../../../../session/application/create-session.js";
 import { RecordFailedTxCodeAttempt } from "../../../../session/application/record-failed-tx-code-attempt.js";
 import { SessionStore } from "../../../../session/application/session-store.js";
+import { SessionConfigService } from "../../../../session/session-config.service.js";
 import { WalletAttestationService } from "../../../../trust/wallet-attestation.service.js";
 import { IssuanceService } from "../../../configuration/issuance/issuance.service.js";
 import { StatusListConfigService } from "../../../status-list/status-list-config.service.js";
@@ -46,6 +47,14 @@ describe("AuthorizationModule wiring", () => {
                         getEffectiveConfig: vi
                             .fn()
                             .mockResolvedValue({ enableAggregation: true }),
+                    },
+                },
+                {
+                    provide: SessionConfigService,
+                    useValue: {
+                        getEffectiveTtlSeconds: vi
+                            .fn()
+                            .mockResolvedValue(86400),
                     },
                 },
                 { provide: WalletAttestationService, useValue: {} },

@@ -18,10 +18,12 @@ import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import nock from "nock";
 import request from "supertest";
 import { App } from "supertest/types";
+import { DataSource } from "typeorm";
 import { Agent, setGlobalDispatcher } from "undici";
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { buildClaims } from "../../src/issuer/configuration/credentials/utils/derive.js";
 import { IssuanceDto } from "../../src/issuer/configuration/issuance/dto/issuance.dto.js";
+import { Session } from "../../src/session/entities/session.entity.js";
 import {
     callbacks,
     getSignJwtCallback,
@@ -167,6 +169,53 @@ describe("Issuance - Pre-authorized Code Flow", () => {
         );
         expect(notificationObj).toBeDefined();
         expect(notificationObj.event).toBe("credential_accepted");
+    });
+
+    test("rejects a pre-authorized code after the session lifetime", async () => {
+        const offerResponse = await request(app.getHttpServer())
+            .post("/issuer/offer")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                response_type: "uri",
+                credentialConfigurationIds: ["pid-no-key"],
+                flow: "pre_authorized_code",
+            })
+            .expect(201);
+
+        // Backdate the session beyond the default session TTL (24 h).
+        await app
+            .get(DataSource)
+            .getRepository(Session)
+            .update(offerResponse.body.session, {
+                createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+            });
+
+        const client = new Openid4vciClient({
+            callbacks: {
+                ...callbacks,
+                clientAuthentication: clientAuthenticationAnonymous(),
+            },
+        });
+        const credentialOffer = await client.resolveCredentialOffer(
+            offerResponse.body.uri,
+        );
+        const issuerMetadata = await client.resolveIssuerMetadata(
+            credentialOffer.credential_issuer,
+        );
+        const error = await client
+            .retrievePreAuthorizedCodeAccessTokenFromOffer({
+                credentialOffer,
+                issuerMetadata,
+            })
+            .then(
+                () => undefined,
+                (err) => err.errorResponse,
+            );
+        expect(error).toMatchObject({
+            error: "invalid_grant",
+            error_description: "Expired 'pre-authorized_code' provided",
+        });
     });
 
     test("locks the pre-authorized code after repeated wrong tx_code attempts", async () => {

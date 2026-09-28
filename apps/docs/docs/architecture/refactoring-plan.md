@@ -52,7 +52,6 @@ Findings from the 2026-09-28 review that are not fixed yet. Items marked *pre-ex
 
 - **T1 — Federation trust is not anchored** (*pre-existing*). Tracked in [#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046): full trust-chain resolution, signature and anchor validation, and resolving credential keys through federation instead of the credential's own certificate.
 - **T2 — Federation fetches bypass the outbound URL policy** (*pre-existing*). Traversal is now bounded (10 hints per entity, 32 resolutions per evaluation, 5 s timeout). To be handled with the resolver work in [#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046): apply `OutboundUrlPolicyService` to federation fetches and stop disabling TLS verification outside `NODE_ENV=production` in `TrustModule`.
-- **A3 — Pre-authorized codes do not expire** (*pre-existing*). Issuance sessions store no code or session expiry, so a pre-authorized code stays redeemable (once) until session retention removes the session. Add an offer lifetime and pass it as `preAuthorizedCodeExpiresAt`. DPoP proof freshness is enforced for this grant.
 - **I2 — Explicit authorization-server selection stores a URL** (*pre-existing*). When an offer names `authorization_server`, the session's `authorizationServerId` receives the resolved issuer URL instead of the configured id (`SelectAuthorizationServer`). Decide which value consumers expect.
 
 ### Cleanup
