@@ -26,62 +26,52 @@ Each verification session includes security fields defined by the OpenID4VP spec
 
 For technical background, see [OID4VP §13.3 (Security Considerations)](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-session-identifier-separati).
 
+## Session Status and Events
+
+A session moves through `active` → `fetched` → `completed`, `failed` or `expired`. Every status change of issuance and presentation sessions is published as a Server-Sent Event on `GET /session/:id/events` (used by the admin UI) and updates the session metrics. Terminal states also clear the session's response-encryption private key.
+
 ## Single-Use Validation
 
-All sessions enforce **single-use** semantics:
+Every one-time value is consumed with a single conditional database update, so concurrent requests cannot both succeed:
 
-- Once a credential is issued or a presentation is verified, the session is marked as completed
-- Subsequent attempts using the same session identifier are rejected with `invalid_grant` or `invalid_request`
-- This prevents replay attacks and credential duplication
+- Authorization and pre-authorized codes: the first token request marks the session consumed; later or concurrent requests get `invalid_grant`.
+- Pushed `request_uri`s: expired on first use; a second authorize call gets `invalid_request_uri`.
+- Credential proof nonces: deleted on use; a reused nonce gets `invalid_nonce`.
+- OID4VP and ISO 18013 responses: only the first response completes the session (and triggers the webhook); others get `400` "The presentation offer has already been used".
+- Credential offers by reference are consumed on first retrieval (unless `ISSUER_MULTI_CONSUMPTION` is enabled), and a ready deferred credential can be retrieved once, only with an access token of the session that requested it.
+
+A pre-authorized code is additionally only valid until the session's creation time plus the tenant's session TTL, and a transaction code (`tx_code`) locks the code after `txCodeMaxAttempts` wrong attempts (default 5). See [Credential Offers](../issuance/credential-offers.md#pre-authorized-code-lifetime-and-transaction-codes).
 
 ## Session Cleanup
 
-Sessions are automatically cleaned up after expiration or completion. EUDIPLO supports two cleanup modes:
+A maintenance job runs every `SESSION_TIDY_UP_INTERVAL` seconds (default: 1 hour). It marks overdue presentation sessions as `expired`, then applies each tenant's retention policy to sessions whose creation time is older than the tenant's TTL. Two cleanup modes exist:
 
-### Full Deletion
-
-Removes the session record entirely from the database:
-
-```typescript
-await this.sessionRepository.delete({ id: sessionId });
-```
-
-**Use when:** Ephemeral flows (e.g., one-time presentations) where no audit trail is required.
-
-### Anonymization
-
-Preserves the session record but removes PII and credential claims:
-
-```typescript
-await this.sessionRepository.update(sessionId, {
-    anonymizedAt: new Date(),
-    credentialClaims: null,
-    presentedCredentials: null,
-    // ... nullify all sensitive fields
-});
-```
-
-**Use when:** Audit compliance requires retention of flow metadata (timestamps, protocol details) but not credential data.
+| Mode | Effect | Use when |
+| --- | --- | --- |
+| `full` (default) | Deletes the session record. | No audit trail of the flow is required. |
+| `anonymize` | Keeps the record but clears `credentials`, `credentialPayload`, `auth_queries`, `offer`, `requestObject` and `responseEncryptionPrivateJwk`. | Flow metadata (timestamps, protocol details, status) must be retained, but not credential data. |
 
 ## Per-Tenant Configuration
 
-Session cleanup is configured per-tenant via the tenant configuration:
+Tenants override the global defaults through the session configuration API (`GET`, `PUT` and `DELETE /session-config`):
 
 ```json
 {
-    "sessionConfig": {
-        "cleanupMode": "anonymize",
-        "retentionDays": 90
-    }
+    "ttlSeconds": 3600,
+    "cleanupMode": "anonymize"
 }
 ```
 
-| Field           | Type                      | Default    | Description                                      |
-| --------------- | ------------------------- | ---------- | ------------------------------------------------ |
-| `cleanupMode`   | `"delete" \| "anonymize"` | `"delete"` | Whether to fully delete or anonymize sessions    |
-| `retentionDays` | `number`                  | `30`       | Days to retain completed sessions before cleanup |
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ttlSeconds` | `number` | `SESSION_TTL` (86400) | Session lifetime in seconds: retention period for cleanup and validity of pre-authorized codes. |
+| `cleanupMode` | `"full" \| "anonymize"` | `SESSION_CLEANUP_MODE` (`full`) | What cleanup does with sessions older than `ttlSeconds`. |
 
-**Note:** The cleanup cron runs hourly and processes sessions older than `retentionDays` since completion.
+Setting a field to `null` restores the global default.
+
+## Code Structure
+
+Session persistence is behind the `SessionRepository` port (`session/ports/`) with a TypeORM adapter covered by a shared SQLite/PostgreSQL contract test. Other features use `SessionStore` for lookups and updates (including the atomic single-use operations) and `ChangeSessionState` for status transitions with events and metrics. Cleanup and metric initialization are the `CleanupSessions` and `InitializeSessionMetrics` use cases, scheduled by `SessionMaintenanceJob`. See [Backend Architecture](./backend-architecture.md#reference-implementations).
 
 ## Session Logs
 

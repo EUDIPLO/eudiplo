@@ -70,24 +70,30 @@ The issuance architecture is organized into several modules within `apps/backend
 
 ```text
 issuer/
-  ├── configuration/         # Configuration entities and services
-  │   ├── credentials/       # Credential configuration (schema, display, fields)
-  │   ├── issuance/          # Issuance configuration (AS, DPoP, batch size)
-  │   ├── attribute-provider/# External claim sources
-  │   └── webhook-endpoint/  # Notification webhooks
-  ├── issuance/              # OID4VCI protocol implementation
-  │   └── oid4vci/           # OID4VCI endpoints and flows
-  │       ├── authorization/ # Authorization flows (auth code, pre-auth, chained AS)
-  │       ├── metadata/      # Metadata endpoints (.well-known/*)
-  │       ├── token/         # Token endpoint
-  │       ├── credential/    # Credential endpoint
-  │       ├── deferred/      # Deferred credential endpoint
-  │       ├── notification/  # Notification endpoint
-  │       └── offer/         # Credential offer endpoint
-  ├── status-list/           # OAuth Token Status List
-  ├── trust-list/            # Trust list management
-  └── lifecycle/             # Lifecycle endpoints (healthcheck, etc.)
+  ├── configuration/            # Administrative configuration (CRUD)
+  │   ├── credentials/          # Credential configuration, format registry and issuers (SD-JWT VC, mdoc),
+  │   │                         #   claims provider (application/, domain/, ports/, adapters/)
+  │   ├── issuance/             # Issuance configuration (authorization servers, DPoP, batch size)
+  │   ├── attribute-provider/   # External claim sources
+  │   └── webhook-endpoint/     # Notification webhooks
+  ├── issuance/
+  │   ├── offer/                # Credential offer management API
+  │   └── oid4vci/              # OID4VCI protocol
+  │       ├── application/      # Use cases: offers, credential requests, proofs, nonces,
+  │       │                     #   notifications, deferred issuance, issuer metadata
+  │       ├── domain/           # Rules and errors (authorization servers, registration certificates)
+  │       ├── ports/ adapters/  # Nonces, deferred transactions, AS metadata, registrar, publishers
+  │       ├── authorization/    # Built-in, chained, external and interactive authorization servers
+  │       │   ├── application/  # Token, PAR and authorize use cases
+  │       │   ├── domain/       # OAuthError, PKCE, grant and PAR rules
+  │       │   └── authorize/ chained-as/ chained-as-vp/ authorization-servers/
+  │       ├── well-known/ metadata/  # Metadata endpoints
+  │       └── oid4vci.service.ts     # Credential endpoint orchestration (being migrated)
+  ├── status-list/              # OAuth Token Status List
+  └── trust-list/               # Trust list management
 ```
+
+Where new code goes and which rules apply is described in [Backend Architecture](./backend-architecture.md#feature-folder-shape).
 
 ---
 

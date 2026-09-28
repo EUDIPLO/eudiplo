@@ -9,12 +9,20 @@ EUDIPLO supports **OpenID Federation** trust evaluation for credential verificat
 ## Key Features
 
 - **Federation Entity Configuration**: Fetch and validate entity configurations from federation endpoints
-- **Authority Chain Validation**: Verify authority_hints chain to configured trust anchors
+- **Authority Hints Traversal**: Follow `authority_hints` (bounded) until a configured trust anchor is reached
 - **Multiple Trust Modes**: Support for federation-only, LoTE-only, and hybrid trust strategies
 - **Caching**: Configurable TTL-based caching of federation trust decisions
 - **Backward Compatible**: Existing non-federated tenants remain unaffected
 - **Authorization Server Validation**: Evaluate upstream OIDC providers and chained AS configurations against federation policy
 - **Presentation Verification**: Support federation-based trust in credential verification flows
+
+## Current Limitations
+
+Federation support is not yet a full OpenID Federation trust-chain resolution. Until [#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046) is implemented, treat federation-only trust as **unauthenticated** and prefer hybrid mode with LoTE for production:
+
+- Entity Configurations and Subordinate Statements are not cryptographically verified against the trust anchor; only `sub` consistency and reachability of a configured anchor through `authority_hints` are checked.
+- For credential verification, the entity ID is taken from the credential's own leaf certificate (SAN/CN); the credential signing key is not bound to the entity's federation metadata.
+- Federation fetches do not yet use the outbound URL policy, and TLS certificate verification is disabled outside `NODE_ENV=production`.
 
 ## Trust Modes
 
@@ -158,74 +166,22 @@ POST /api/verifier/config
 
 ## Architecture
 
-### Federation Trust Service (`FederationTrustService`)
+All code is under `apps/backend/src/`.
 
-**Location**: `apps/backend/src/trust/federation-trust.service.ts`
+| Component | Location | Responsibility |
+| --- | --- | --- |
+| `FederationResolver` (port) | `trust/ports/federation-resolver.ts` | Fetch an entity configuration for an entity ID. |
+| `OpenIdFederationResolver` (adapter) | `trust/adapters/openid-federation-resolver.ts` | HTTP fetch of `/.well-known/openid-federation` (5 s timeout); parses JSON and JWT responses. |
+| `EvaluateFederationTrustChain` (use case) | `trust/application/evaluate-federation-trust-chain.ts` | Follows `authority_hints` to a configured trust anchor: depth 8, at most 10 hints per entity, at most 32 resolutions per evaluation, cycle detection. |
+| `FederationTrustService` | `trust/federation-trust.service.ts` | Trust modes, caching (positive, negative and stale fallback), metrics, and the entry points `evaluateEntityTrust`, `evaluateAuthorizationServerTrust` and `evaluateCertificateEntityTrust`. |
 
-**Core Methods**:
+Callers:
 
-- `getMode(source)`: Get configured trust mode
-- `isEnabled(source)`: Check if federation is enabled
-- `shouldUseFederation(source)`: Check if federation should be evaluated
-- `shouldUseLote(source)`: Check if LoTE should be evaluated
-- `evaluateEntityTrust(entityId, source)`: Main entity trust evaluation
-- `evaluateAuthorizationServerTrust(issuer, source)`: Evaluate auth server/issuer trust
-- `evaluateCertificateEntityTrust(x5c, source)`: Extract entity ID from certificate and evaluate
+- **Credential verification:** `CredentialChainValidationService` (`verifier/presentations/credential/`) runs federation evaluation according to the trust mode and falls back to LoTE in hybrid mode.
+- **Issuer metadata:** `BuildIssuerMetadata` resolves external authorization servers through `HttpExternalAuthorizationServerMetadataResolver` (`issuer/issuance/oid4vci/adapters/`), which checks the federation policy before fetching their metadata. An untrusted server fails with `AuthorizationServerNotTrusted` (HTTP 400) instead of being silently omitted.
+- **Chained authorization server:** `ChainedAsService` checks the upstream OIDC provider before fetching its discovery document.
 
-**Features**:
-
-- Entity configuration fetching from `/.well-known/openid-federation`
-- Authority hints chain validation
-- TTL-based caching with configurable expiration
-- Detailed trust decision reasons
-- Support for both JWT and JSON entity configurations
-
-### Credential Chain Validation
-
-**Modified**: `CredentialChainValidationService`
-
-**Integration Points**:
-
-1. Parse federation mode from validation policy
-2. Extract x5c certificate chain
-3. Run federation evaluation (if enabled)
-4. Fall back to LoTE if federation fails (hybrid mode)
-5. Log detailed trust path for both federation and LoTE
-
-**Supported Verification Types**:
-
-- SD-JWT VC verification
-- mDoc verification
-- Presentation verification (DCQL-based)
-
-### OID4VCI Authorization Server Validation
-
-**Modified**: `Oid4vciService`
-
-**Behavior**:
-
-- `issuerMetadata()`: Validate each configured auth server against federation policy
-- Only include auth servers that pass federation trust evaluation (federation-only mode)
-- Filter auth servers when generating credential issuer metadata
-- Provide detailed error messages when auth server validation fails
-
-### Chained Authorization Server (Upstream Provider)
-
-**Modified**: `ChainedAsService`
-
-**Behavior**:
-
-- `getUpstreamDiscovery()`: Validate upstream OIDC provider against federation policy
-- Check upstream issuer before fetching discovery configuration
-- Support tenant-specific federation configurations
-- Cache discovery results after validation
-
-**Validation Flow**:
-
-1. Load issuance configuration with federation settings
-2. Validate upstream issuer URL against federation anchors
-3. If validation passes, proceed with `.well-known/openid-configuration` fetch
-4. Cache discovery result
+[#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046) replaces the resolver contract with full trust-chain resolution; [#1047](https://github.com/openwallet-foundation/eudiplo/issues/1047) adds EUDIPLO's own Entity Configuration.
 
 ## Migration Guide
 
@@ -358,8 +314,9 @@ Migration: `1763000000000-AddFederationToIssuanceConfig`
 ### Network
 
 - Entity configuration fetches are synchronous during validation
-- Fetch timeout: 10 seconds (configurable via environment)
-- Retries: 1 attempt (no automatic retry)
+- Fetch timeout: 5 seconds per request (not configurable)
+- Traversal limits per evaluation: depth 8, 10 hints per entity, 32 resolutions
+- Retries: none; on fetch errors a cached result up to one hour old may be served
 
 ### Optimization Tips
 

@@ -4,10 +4,20 @@
 
 The backend is migrating incrementally toward the [target architecture](./backend-architecture.md). Work happens in bounded vertical slices; per-slice details live in commit messages and pull requests, not in this document.
 
-- **Last reviewed:** 2026-09-28, full review of the migration on branch `fix/refactor-backend`.
+- **Last reviewed:** 2026-09-28, full review of the migration in [#1081](https://github.com/openwallet-foundation/eudiplo/pull/1081).
 - **Enforced by:** `apps/backend/test/architecture/dependency-rules.spec.ts` and `apps/backend/src/platform/module-boundaries.spec.ts`. Both run with `pnpm --filter @eudiplo/backend test`. See [boundary enforcement](./backend-architecture.md#current-boundary-enforcement).
 
 This plan is not an instruction to execute tasks automatically. Pick one slice, agree on its scope, and complete it end to end.
+
+## How to continue the migration
+
+1. Pick the first open item under [Next slices](#next-slices) (or an open finding), and open an issue or draft PR that states its scope.
+2. Check the [scope rules](./backend-architecture.md#scope-where-the-layering-applies): only protocol and trust code gets the layered shape.
+3. Start from the matching [reference implementation](./backend-architecture.md#reference-implementations) and write characterization tests for the current behavior before moving code.
+4. Follow the [requirements for every slice](#requirements-for-every-slice), run the unit, boundary and affected E2E suites (`pnpm --filter @eudiplo/backend test:e2e:local`, see [E2E testing](../contributing/e2e-testing.md)), and regenerate the ratchet baseline when debt shrinks.
+5. Update the task table, known debt and findings below in the same pull request.
+
+The task prompt `.github/prompts/architecture-task.prompt.md` contains the same checklist for AI-assisted work.
 
 ## Task status
 
@@ -19,11 +29,11 @@ This plan is not an instruction to execute tasks automatically. Pick one slice, 
 | 5–6 | OID4VCI use cases, no Express | Partial | Issuer metadata, authorization-server selection and deferred issuance use ports. The built-in authorization server's token, PAR and authorization endpoints are use cases in `oid4vci/authorization/application/` with transport-neutral `OAuthError`s mapped by `AuthorizeController`. `Oid4vciService` still parses requests and maps protocol errors with Nest exceptions; the interactive, chained and OID4VP-backed authorization servers still orchestrate in legacy services. |
 | 7–9 | Issuer credential formats | Done | Registry dispatches to SD-JWT VC and mdoc issuers typed on the plain `CredentialConfiguration` model. |
 | 10–11 | Claims provider and publisher ports | Done | Unify claim-source selection between `IssueCredential` and `ConfiguredCredentialClaimsProvider`. |
-| 12–13 | Trust retrieval and federation resolver | Partial | Federation trust is not cryptographically anchored (T1), traversal needs limits (T2). |
+| 12–13 | Trust retrieval and federation resolver | Partial | `FederationResolver` port and bounded chain traversal exist. Full trust-chain resolution and verification (T1) and outbound request hardening (T2) are tracked in [#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046). |
 | 14 | OID4VP use cases | Partial | Request retrieval, response parsing, `vp_token` verification (`VerifyPresentationResponse`) and completion are use cases; `PresentationsService` is gone. `Oid4vpService` (~920 lines) still creates requests, decrypts responses and maps application errors to HTTP exceptions. |
 | 15–16 | Verifier credential formats | Done | One `CredentialVerifierFormat.verify(credential, context)` contract (`presentations/domain/`) with adapters in `presentations/adapters/`: mdoc builds its session transcript, SD-JWT VC its key-binding nonce and audience. OID4VP and ISO 18013 both resolve formats from the registry. Format-specific DCQL claim semantics (mdoc verifies each `claim_sets` option, SD-JWT VC matches once) live in the adapters. |
 | 17–18 | Configuration repositories, plain models | Done for tenant, credential, issuance, attribute-provider, webhook-endpoint | Status-list, registrar, key-chain and config-portability still use TypeORM in services. Presentation configuration is administrative CRUD: `verifier/presentations/configuration/` keeps TypeORM in plain services and is excluded from the protocol-core ratchet. Credential configurations use one `CredentialConfigurationRepository` port owned by `CredentialConfigModule`. |
-| 19 | Client provider abstraction | Done in code | Regenerate the SDK (C7) and validate Keycloak mode against a live instance. |
+| 19 | Client provider abstraction | Done in code | Validate Keycloak mode against a live instance. The public OpenAPI schema keeps its `ClientEntity` name, so the SDK is unchanged. |
 | 20 | Typed settings instead of `ConfigService` | Partial | Only `verifier/iso18013/iso18013.service.ts` still imports `@nestjs/config` in the protocol core. Administrative CRUD may keep `ConfigService`. |
 | 21 | Modules as composition roots | Partial | Applied to migrated slices. |
 | 22 | Application errors instead of HTTP exceptions | Partial | Applied to migrated slices; legacy services still throw Nest exceptions. |
@@ -52,6 +62,7 @@ Findings from the 2026-09-28 review that are not fixed yet. Items marked *pre-ex
 
 - **T1 — Federation trust is not anchored** (*pre-existing*). Tracked in [#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046): full trust-chain resolution, signature and anchor validation, and resolving credential keys through federation instead of the credential's own certificate.
 - **T2 — Federation fetches bypass the outbound URL policy** (*pre-existing*). Traversal is now bounded (10 hints per entity, 32 resolutions per evaluation, 5 s timeout). To be handled with the resolver work in [#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046): apply `OutboundUrlPolicyService` to federation fetches and stop disabling TLS verification outside `NODE_ENV=production` in `TrustModule`.
+- **D1 — DPoP proof `jti` is not tracked** (*pre-existing*). No endpoint passes `assertJtiUniqueness` to the OAuth library, so a captured DPoP proof can be replayed against the same method and URL within the freshness window (300 s plus 60 s skew). The damage is limited because codes, `request_uri`s and nonces are single use, but resource requests are not. Track used `jti` values per key thumbprint until the proof expires, for example in the nonce table or a cache.
 - **I2 — Explicit authorization-server selection stores a URL** (*pre-existing*). When an offer names `authorization_server`, the session's `authorizationServerId` receives the resolved issuer URL instead of the configured id (`SelectAuthorizationServer`). Decide which value consumers expect.
 
 ### Cleanup
@@ -67,7 +78,7 @@ Findings from the 2026-09-28 review that are not fixed yet. Items marked *pre-ex
 
 Take them in this order unless a finding above is more urgent.
 
-1. **Security findings T2, I1, V1.** Each is small and has a clear test.
+1. **Open findings D1, I2 and O4.** Each is small and has a clear test.
 2. **Enforcement E5**, so the `shared/` isolation check covers aliases and re-exports.
 3. **Verifier decomposition.** Done: presentation configuration CRUD, registration certificates and metadata import (`verifier/presentations/configuration/`), `TrustedAuthoritiesService`, the DCQL claim policy, one verifier format contract used by OID4VP and ISO 18013, and the `VerifyPresentationResponse` use case (characterized in `oid4vp/presentation-verification.spec.ts`). Remaining:
    1. `Oid4vpService` shrinks to HTTP mapping: extract request creation and response decryption into use cases.
@@ -77,7 +88,8 @@ Take them in this order unless a finding above is more urgent.
    1. One set of chained-AS use cases (PAR, authorize, token) shared by `ChainedAsService`, `ChainedAsVpService` and `AuthorizationServersService`, throwing `OAuthError` instead of Nest exceptions; they differ only in how the user is authenticated.
    2. `InteractiveAuthorizationService` as a use case that returns IAE responses; it currently maps `BadRequestException`s of its dependencies to `invalid_request`.
 5. **Contract tests (Task 23)** for storage, KMS and client providers.
-6. **T1** once the federation trust model is decided.
+6. **Federation (T1, T2)** as part of [#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046) (trust-chain resolution) and [#1047](https://github.com/openwallet-foundation/eudiplo/issues/1047) (own Entity Configuration).
+7. **Session status transitions (O5):** dedicated repository transitions so `SessionUpdate` no longer accepts `status`.
 
 ## Requirements for every slice
 

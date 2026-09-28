@@ -42,7 +42,7 @@ The backend and CLI bundle the snapshots. Import, validation and migration do no
 
 ## Add a format version
 
-1. Update the configuration schema and increment the resource's version in `apps/backend/src/shared/config-format/config-format.ts`.
+1. Update the configuration schema and increment the resource's version in `packages/eudiplo-config-format/src/config-format.ts`.
 2. Add a sequential migration in `CONFIG_MIGRATIONS` in that same module. Preserve resource identity and applicable metadata. Migration callbacks receive both `spec` and `metadata` and may return updated metadata. Report a `required-input` issue when user input is necessary. Missing or ambiguous migration steps block the upgrade.
 3. Generate the current API and compatibility schemas, then snapshot the changed resource:
 

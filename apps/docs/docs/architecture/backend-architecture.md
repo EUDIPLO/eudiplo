@@ -93,7 +93,24 @@ feature/
 - **Errors.** Application and domain code throw plain `Error` subclasses. A missing resource extends `NotFoundError` from `shared/domain/not-found-error.ts`, which `AllExceptionsFilter` maps to 404. Any other application error is mapped explicitly by the controller or protocol service that calls the use case.
 - **Wiring.** A framework-free class with constructor dependencies must be registered with a `useFactory` provider that lists its `inject` tokens. As a bare class provider without `@Injectable()`, Nest constructs it with `undefined` dependencies.
 - **Request data.** Services receive plain values, never the Express `Request`. For audit metadata, controllers use the `@AuditMeta()` parameter decorator and pass an `AuditLogRequestMeta`.
+- **Single use is a conditional update.** Codes, nonces, `request_uri`s and presentation responses are consumed with one conditional write (for example `SessionStore.updateIfUnconsumed` or `consumeRequestUri`) whose result decides who wins. Never read a flag and write it later: concurrent requests would both pass.
 - **Adapters are not a parking place.** `adapters/` is only checked for HTTP exceptions and imports of controllers, modules and other capabilities' adapters, so it must only hold code that implements a port. Moving orchestration there hides it from the checks.
+
+### Reference implementations
+
+Copy the patterns from these migrated areas when starting a new slice:
+
+| Pattern | Where to look |
+| --- | --- |
+| Repository port, TypeORM adapter, shared SQLite/PostgreSQL contract test | `session/ports/session.repository.ts`, `session/adapters/typeorm-session.repository.ts`, `apps/backend/test/session/session-repository.contract.ts` |
+| Application service for lookups and atomic single-use updates | `session/application/session-store.ts` |
+| Use case with events and metrics behind ports | `session/application/change-session-state.ts` |
+| Protocol use cases with a transport-neutral error mapped in the controller | `issuer/issuance/oid4vci/authorization/application/`, `domain/oauth-error.ts`, `authorize/authorize.controller.ts` |
+| Characterization tests written before refactoring | `issuer/issuance/oid4vci/authorization/authorize/authorize.controller.spec.ts`, `verifier/oid4vp/presentation-verification.spec.ts` |
+| Format registry and adapters | `issuer/configuration/credentials/` (issuance), `verifier/presentations/domain/credential-verifier-format.ts` and `verifier/presentations/adapters/` (verification) |
+| External metadata behind a port with cache and HTTP adapter | `issuer/issuance/oid4vci/ports/authorization-server-metadata.ts`, `adapters/http-external-authorization-server-metadata-resolver.ts` |
+| DI wiring test for factory-registered classes | `trust/trust-module-wiring.spec.ts`, `issuer/issuance/oid4vci/authorization/authorization-module-wiring.spec.ts` |
+| Administrative CRUD without extra layers | `verifier/presentations/configuration/presentation-config.service.ts` |
 
 ## Inbound adapters
 

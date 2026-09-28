@@ -5,8 +5,8 @@ description: Implement one EUDIPLO architecture-hardening task completely
 
 Only execute when the user explicitly requests implementation of a named task or bounded slice. A review or documentation merge does not authorize implementation. If no task is selected, ask which task to implement.
 
-Implement the requested task from
-[the architecture hardening backlog](../../apps/docs/docs/architecture/refactoring-plan.md).
+Implement the requested slice from the "Next slices" and "Open review findings" sections of
+[the refactoring plan](../../apps/docs/docs/architecture/refactoring-plan.md).
 
 Use
 [the target backend architecture](../../apps/docs/docs/architecture/backend-architecture.md)
@@ -18,6 +18,9 @@ Before changing code:
 2. Identify existing abstractions that already solve part of the problem.
 3. Identify obsolete abstractions or compatibility layers that should be removed.
 4. Determine the smallest coherent architectural boundary that can be completed in this task.
+5. Check whether the area is protocol/trust core or administrative CRUD ("Scope" in the architecture doc); CRUD does not need extra layers.
+6. Reuse the patterns listed under "Reference implementations" in the architecture doc.
+7. Write characterization tests for the current behavior first. Mock third-party libraries with their real error shapes (for example `Oauth2ServerErrorResponseError` with `errorResponse`), not invented ones.
 
 While implementing:
 
@@ -37,10 +40,12 @@ After implementing:
 1. Run the relevant unit tests.
 2. Run type checking.
 3. Run linting and the backend `format:check` script.
-4. Run architecture/boundary tests.
-5. Run focused integration tests where relevant.
-6. Fix regressions caused by the refactor.
-7. Summarize:
+4. Run architecture/boundary tests. If debt was removed, regenerate the ratchet baseline with `UPDATE_ARCHITECTURE_BASELINE=1 pnpm --filter @eudiplo/backend test` and check that it only shrank.
+5. Run the affected E2E suites (`pnpm --filter @eudiplo/backend test:e2e:local`, optionally with test file paths).
+6. Add a DI wiring test for classes registered with `useFactory`, and use conditional updates for anything single use.
+7. Fix regressions caused by the refactor.
+8. Update the task table, known debt and findings in `refactoring-plan.md`.
+9. Summarize:
    - architectural changes made
    - files/modules affected
    - tests executed

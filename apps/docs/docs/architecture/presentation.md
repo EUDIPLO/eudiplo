@@ -66,18 +66,22 @@ The presentation architecture is organized into several modules within `apps/bac
 
 ```text
 verifier/
-  ├── presentations/          # Presentation configuration entities
-  │   ├── dto/                # Request/response DTOs
-  │   └── entities/           # PresentationConfig entity
-  ├── oid4vp/                 # OID4VP protocol implementation
-  │   ├── request/            # Request generation (/request/{id})
-  │   ├── response/           # Response handling (direct_post.jwt)
-  │   ├── metadata/           # Metadata endpoints (.well-known/*)
-  │   └── dc-api/             # Digital Credentials API (browser-native)
+  ├── presentations/
+  │   ├── configuration/      # Presentation configuration CRUD, registration certificates,
+  │   │                       #   metadata import (administrative, plain services)
+  │   ├── application/        # VerifyPresentationResponse use case, verifier format registry
+  │   ├── domain/             # CredentialVerifierFormat contract, DCQL claim policy, trust options
+  │   ├── adapters/           # SD-JWT VC and mdoc verifier formats (key binding, session transcript)
+  │   ├── credential/         # Cryptographic verifiers and certificate chain validation
+  │   └── dto/ entities/      # API shapes and the PresentationConfig entity
+  ├── oid4vp/                 # OID4VP protocol: request objects, response handling
+  │   └── application/        # Response parsing, completion, failure use cases
   ├── verifier-offer/         # Presentation request creation API
   ├── iso18013/               # ISO 18013-7 (mDOC presentation via DC API)
-  └── resolver/               # Trust and status resolution
+  └── resolver/               # Key resolution for verification
 ```
+
+Adding a presentation format means implementing `CredentialVerifierFormat` and registering it; OID4VP and ISO 18013 resolve formats from the registry. Placement rules: [Backend Architecture](./backend-architecture.md#feature-folder-shape).
 
 ---
 
