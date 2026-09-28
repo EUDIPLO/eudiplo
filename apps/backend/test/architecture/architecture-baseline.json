@@ -1,0 +1,132 @@
+{
+    "all-exceptions.filter.ts": [
+        "express"
+    ],
+    "audit-log/audit-log-context.util.ts": [
+        "express"
+    ],
+    "auth/client/adapters/keycloak-clients.service.ts": [
+        "http-exception"
+    ],
+    "auth/user/adapters/internal-users.service.ts": [
+        "http-exception"
+    ],
+    "auth/user/adapters/keycloak-users.service.ts": [
+        "http-exception"
+    ],
+    "bootstrap.ts": [
+        "express"
+    ],
+    "core/interceptors/trace-id.interceptor.ts": [
+        "express"
+    ],
+    "crypto/key/kms/adapters/aws-kms.adapter.ts": [
+        "http-exception"
+    ],
+    "crypto/key/kms/adapters/csc-kms.adapter.ts": [
+        "http-exception"
+    ],
+    "crypto/key/kms/adapters/http-kms.adapter.ts": [
+        "http-exception"
+    ],
+    "crypto/key/kms/adapters/pkcs11-kms.adapter.ts": [
+        "http-exception"
+    ],
+    "crypto/key/kms/adapters/vault-kms.adapter.ts": [
+        "http-exception"
+    ],
+    "issuer/issuance/oid4vci/adapters/oid4vci-protocol-metadata.ts": [
+        "http-exception"
+    ],
+    "issuer/issuance/oid4vci/authorization/authorization-servers/authorization-servers.service.ts": [
+        "config",
+        "http-exception",
+        "typeorm"
+    ],
+    "issuer/issuance/oid4vci/authorization/authorize/authorize.service.ts": [
+        "config",
+        "http-exception"
+    ],
+    "issuer/issuance/oid4vci/authorization/authorize/interactive-authorization.service.ts": [
+        "config",
+        "http-exception",
+        "typeorm"
+    ],
+    "issuer/issuance/oid4vci/authorization/chained-as-vp/chained-as-vp.service.ts": [
+        "config",
+        "http-exception",
+        "typeorm"
+    ],
+    "issuer/issuance/oid4vci/authorization/chained-as/chained-as.service.ts": [
+        "config",
+        "http-exception",
+        "typeorm"
+    ],
+    "issuer/issuance/oid4vci/authorization/shared/chained-as-token.util.ts": [
+        "http-exception",
+        "typeorm"
+    ],
+    "issuer/issuance/oid4vci/authorization/shared/pkce.util.ts": [
+        "http-exception"
+    ],
+    "issuer/issuance/oid4vci/deferred-credential.service.ts": [
+        "config",
+        "typeorm"
+    ],
+    "issuer/issuance/oid4vci/exceptions/credential-request.exception.ts": [
+        "http-exception"
+    ],
+    "issuer/issuance/oid4vci/exceptions/deferred-credential.exception.ts": [
+        "http-exception"
+    ],
+    "issuer/issuance/oid4vci/exceptions/token-error.exception.ts": [
+        "http-exception"
+    ],
+    "issuer/issuance/oid4vci/exceptions/well-known.exception.ts": [
+        "http-exception"
+    ],
+    "issuer/issuance/oid4vci/oid4vci.service.ts": [
+        "http-exception"
+    ],
+    "platform/config-portability/config-generation.interceptor.ts": [
+        "express"
+    ],
+    "session/logging/session-log-store.service.ts": [
+        "typeorm"
+    ],
+    "session/session-config.service.ts": [
+        "typeorm"
+    ],
+    "shared/common/filters/validation-error.filter.ts": [
+        "express"
+    ],
+    "trust/wallet-attestation.service.ts": [
+        "http-exception"
+    ],
+    "verifier/iso18013/iso18013.service.ts": [
+        "config",
+        "http-exception",
+        "typeorm"
+    ],
+    "verifier/oid4vp/oid4vp.service.ts": [
+        "http-exception",
+        "typeorm"
+    ],
+    "verifier/presentations/credential/sdjwtvcverifier/sdjwtvcverifier.service.ts": [
+        "http-exception"
+    ],
+    "verifier/presentations/exceptions/incomplete-presentation.exception.ts": [
+        "http-exception"
+    ],
+    "verifier/presentations/metadata-fetch.service.ts": [
+        "config",
+        "http-exception"
+    ],
+    "verifier/presentations/presentations.service.ts": [
+        "http-exception",
+        "typeorm"
+    ],
+    "verifier/resolver/resolver.service.ts": [
+        "http-exception"
+    ]
+}

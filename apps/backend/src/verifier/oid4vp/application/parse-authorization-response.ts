@@ -1,7 +1,7 @@
 import {
-    type AuthResponse,
+    type AuthResponseData,
     AuthResponseSchema,
-} from "../../presentations/dto/auth-response.dto.js";
+} from "../../presentations/domain/auth-response.js";
 
 export class PresentationResponseValidationError extends Error {
     constructor(message: string) {
@@ -11,7 +11,7 @@ export class PresentationResponseValidationError extends Error {
 }
 
 export class ParseAuthorizationResponse {
-    execute(decrypted: unknown): AuthResponse {
+    execute(decrypted: unknown): AuthResponseData {
         const parsed = AuthResponseSchema.safeParse(decrypted);
         if (!parsed.success) {
             throw new PresentationResponseValidationError(
@@ -21,7 +21,7 @@ export class ParseAuthorizationResponse {
         return parsed.data;
     }
 
-    validateState(response: AuthResponse, expectedState: string): void {
+    validateState(response: AuthResponseData, expectedState: string): void {
         if (response.state && response.state !== expectedState) {
             throw new PresentationResponseValidationError(
                 "State mismatch: response state does not match expected value",

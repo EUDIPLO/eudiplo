@@ -93,7 +93,7 @@ feature/
 - **Errors.** Application and domain code throw plain `Error` subclasses. A missing resource extends `NotFoundError` from `shared/domain/not-found-error.ts`, which `AllExceptionsFilter` maps to 404. Any other application error is mapped explicitly by the controller or protocol service that calls the use case.
 - **Wiring.** A framework-free class with constructor dependencies must be registered with a `useFactory` provider that lists its `inject` tokens. As a bare class provider without `@Injectable()`, Nest constructs it with `undefined` dependencies.
 - **Request data.** Services receive plain values, never the Express `Request`. For audit metadata, controllers use the `@AuditMeta()` parameter decorator and pass an `AuditLogRequestMeta`.
-- **Adapters are not a parking place.** `adapters/` is not checked by the boundary tests, so it must only hold code that implements a port. Moving orchestration there hides it from the checks.
+- **Adapters are not a parking place.** `adapters/` is only checked for HTTP exceptions and imports of controllers, modules and other capabilities' adapters, so it must only hold code that implements a port. Moving orchestration there hides it from the checks.
 
 ## Inbound adapters
 
@@ -356,7 +356,7 @@ Adapters with multiple implementations should share contract test suites for the
 
 Add characterization and boundary tests with each migrated slice. Preserve tenant isolation, atomic offer consumption, replay/nonce/DPoP checks, cleanup of sensitive data, and SQLite/PostgreSQL semantics. Introduce application models, error mapping, typed settings, and DI wiring alongside the use case that needs them rather than postponing those dependencies.
 
-Unit tests belong beside source as `*.spec.ts`; E2E tests use `apps/backend/test/*.e2e-spec.ts`. `apps/backend/src/platform/module-boundaries.spec.ts` enforces shared-code isolation, legacy directory placement, and incremental layer boundaries. Its helpers and fixture tests live in `apps/backend/test/architecture/`.
+Unit tests belong beside source as `*.spec.ts`; E2E tests use `apps/backend/test/*.e2e-spec.ts`. `apps/backend/src/platform/module-boundaries.spec.ts` enforces shared-code isolation, legacy directory placement, layer boundaries and the ratchet baseline. Its helpers and fixture tests live in `apps/backend/test/architecture/`.
 
 ## Current boundary enforcement
 
@@ -367,12 +367,28 @@ The checks use the installed TypeScript compiler API and Vitest, without introdu
 - Core checks follow the transitive local import graph, including type-only imports, re-exports, dynamic imports, and TypeScript-resolved aliases / `.js` specifiers. Unclassified helpers do not hide infrastructure dependencies from a migrated consumer. Computed imports in core code are rejected because the target cannot be checked.
 - Application code may import only `Inject`, `Injectable`, and `Optional` from `@nestjs/common`; domain and port code may not depend on NestJS. Core code may not depend on the forbidden persistence, HTTP, filesystem, cloud, or identity-provider packages listed in the checker, or on local adapters/controllers/modules.
 - Domain code must not depend on application orchestration or application ports. Ports may use domain models but not application implementation classes.
+- Core code may not import validation, DTO or logging frameworks (`class-validator`, `class-transformer`, `nestjs-zod`, `nestjs-pino`). Plain zod schemas are allowed in `domain/`; DTOs wrap them with `createZodDto`.
 - Controllers are checked for direct TypeORM dependencies and repository contracts/adapters named `*.repository.ts`, including forwarded barrel exports. They should invoke application behavior instead.
-- A small migrated-file inventory prevents silently moving the migrated use cases, domain state model, or ports out of the enforced directories. Update it deliberately when renaming those contracts.
+
+### Ratchet baseline
+
+`apps/backend/test/architecture/architecture-baseline.json` lists existing debt per file and category, so it can only shrink:
+
+- Legacy files (no role above; migrations and generated code excluded): `express` everywhere. In the protocol core (`issuer/issuance/`, `verifier/`, `trust/`, `session/`) also `config` (`@nestjs/config`), `typeorm` (`typeorm`, `@nestjs/typeorm`) and `http-exception` (Nest `…Exception` from `@nestjs/common`). Administrative CRUD outside these paths may use them freely, see [Scope](#scope-where-the-layering-applies).
+- Adapters: `http-exception`, `adapter->controller`, `adapter->module`, `adapter->other-capability-adapter` (a capability is the first folder under `src/`).
+- Controllers: `controller->adapter`.
+
+The test fails when a file gains a category that is not in the baseline, and when the baseline lists a category the file no longer has. After removing debt, regenerate the file and commit it with the change:
+
+```bash
+UPDATE_ARCHITECTURE_BASELINE=1 pnpm --filter @eudiplo/backend test
+```
+
+Do not regenerate to accept new debt; move the dependency behind a port or into the controller/module instead.
 
 ### What the checks do not cover
 
-Files outside the core directories (legacy `*.service.ts`, `adapters/`, `*-settings.ts`) are not checked as sources. Legacy services therefore still mix orchestration with TypeORM, `ConfigService`, and HTTP exceptions; the [refactoring plan](./refactoring-plan.md#known-debt) lists the hotspots. The boundary checks also cannot prove runtime wiring or behavior, so keep adapter contract tests, DI wiring tests, and HTTP integration tests alongside them.
+Legacy files are only checked for the ratchet categories above, so they can still mix orchestration with persistence; the [refactoring plan](./refactoring-plan.md#known-debt) lists the hotspots. The boundary checks also cannot prove runtime wiring or behavior, so keep adapter contract tests, DI wiring tests, and HTTP integration tests alongside them.
 
 Use the enforced directories for newly extracted core code. Add any newly encountered infrastructure SDK to the package rules and test it with a fixture.
 

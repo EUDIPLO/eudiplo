@@ -33,6 +33,7 @@ Application/domain code must not directly depend on:
 - from `@nestjs/common`, anything except `Inject`, `Injectable`, `Optional` (so no HTTP exceptions, no `Logger`)
 - `nestjs-otel`, `@opentelemetry/*`
 - AWS/Azure SDK clients, Vault clients, Keycloak admin clients
+- `class-validator`, `class-transformer`, `nestjs-zod`, `nestjs-pino` (plain `zod` schemas are fine)
 - other infrastructure-specific SDKs
 
 These dependencies belong in adapters or composition/bootstrap code. The authoritative list is `forbiddenPackages` in `apps/backend/test/architecture/dependency-rules.ts`.

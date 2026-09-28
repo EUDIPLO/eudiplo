@@ -1,14 +1,5 @@
 import { createZodDto } from "nestjs-zod";
-import { z } from "zod";
-
-export const AuthResponseSchema = z
-    .object({
-        vp_token: z.record(z.string(), z.array(z.string())),
-        state: z.string().optional(),
-        iat: z.number().optional(),
-        exp: z.number().optional(),
-    })
-    .strict();
+import { AuthResponseSchema } from "../domain/auth-response.js";
 
 /**
  * AuthResponse DTO

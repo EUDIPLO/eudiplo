@@ -2,8 +2,10 @@ import { resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import {
+    architectureDebt,
     boundaryViolations,
     controllerPersistenceViolations,
+    ratchetViolations,
     readGraph,
 } from "./dependency-rules.js";
 
@@ -48,6 +50,10 @@ describe("architecture dependency rules", () => {
         'import { MetricService } from "nestjs-otel";',
         'import { metrics } from "@opentelemetry/api";',
         'import { BadRequestException as Failure } from "@nestjs/common";',
+        'import { IsString } from "class-validator";',
+        'import { plainToInstance } from "class-transformer";',
+        'import { createZodDto } from "nestjs-zod";',
+        'import { PinoLogger } from "nestjs-pino";',
         "const implementation = await import(selectedModule);",
     ])("rejects infrastructure dependency: %s", (source) => {
         expect(
@@ -148,5 +154,72 @@ describe("architecture dependency rules", () => {
                 root,
             ),
         ).toEqual([expect.stringContaining("unresolved local dependency")]);
+    });
+
+    it("records legacy framework debt and adapter HTTP exceptions", () => {
+        const legacyImports = [
+            'import { ConfigService } from "@nestjs/config";',
+            'import { InjectRepository } from "@nestjs/typeorm";',
+            'import type { Request } from "express";',
+            'import { Injectable, NotFoundException as Missing } from "@nestjs/common";',
+        ].join("\n");
+        const dependencies = graph({
+            // Protocol core: all legacy categories are tracked.
+            "verifier/feature.service.ts": legacyImports,
+            // Administrative CRUD: only Express is tracked.
+            "feature/feature.service.ts": legacyImports,
+            "feature/adapters/store.ts":
+                'import { ConflictException } from "@nestjs/common"; import "typeorm";',
+            "feature/feature.module.ts":
+                'import { ConfigModule } from "@nestjs/config";',
+            "feature/feature.controller.ts":
+                'import { BadRequestException } from "@nestjs/common";',
+            "database/migrations/1-init.ts": 'import "typeorm";',
+        });
+        expect(architectureDebt(dependencies, root)).toEqual({
+            "feature/adapters/store.ts": ["http-exception"],
+            "feature/feature.service.ts": ["express"],
+            "verifier/feature.service.ts": [
+                "config",
+                "express",
+                "http-exception",
+                "typeorm",
+            ],
+        });
+    });
+
+    it("records adapters reaching into controllers, modules, or other capabilities' adapters", () => {
+        const dependencies = graph({
+            "feature/adapters/store.ts": [
+                'import "../feature.controller.js";',
+                'import "../feature.module.js";',
+                'import "../../other/adapters/client.js";',
+                'import "../sub/adapters/helper.js";',
+            ].join("\n"),
+            "feature/feature.controller.ts": 'import "./adapters/store.js";',
+            "feature/feature.module.ts": 'import "./adapters/store.js";',
+            "feature/sub/adapters/helper.ts": "export {};",
+            "other/adapters/client.ts": "export {};",
+        });
+        expect(architectureDebt(dependencies, root)).toEqual({
+            "feature/adapters/store.ts": [
+                "adapter->controller",
+                "adapter->module",
+                "adapter->other-capability-adapter",
+            ],
+            "feature/feature.controller.ts": ["controller->adapter"],
+        });
+    });
+
+    it("fails on new debt and on stale baseline entries", () => {
+        expect(
+            ratchetViolations(
+                { "a.service.ts": ["config", "typeorm"] },
+                { "a.service.ts": ["config"], "b.service.ts": ["express"] },
+            ),
+        ).toEqual([
+            "a.service.ts: new typeorm dependency not in architecture-baseline.json",
+            "b.service.ts: express is gone, remove it from architecture-baseline.json",
+        ]);
     });
 });

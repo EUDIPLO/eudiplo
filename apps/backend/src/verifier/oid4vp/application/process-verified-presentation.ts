@@ -1,7 +1,7 @@
 import type { SessionData } from "../../../session/domain/session-data.js";
 import type { WebhookConfiguration } from "../../../webhook/domain/webhook-configuration.js";
 import type { PresentationResultPublisher } from "../../../webhook/ports/presentation-result-publisher.js";
-import type { AuthResponse } from "../../presentations/dto/auth-response.dto.js";
+import type { AuthResponseData } from "../../presentations/domain/auth-response.js";
 import type { CompletePresentationResponse } from "./complete-presentation-response.js";
 import type { ParseAuthorizationResponse } from "./parse-authorization-response.js";
 
@@ -19,7 +19,7 @@ export class ProcessVerifiedPresentation {
         private readonly publisher: PresentationResultPublisher,
     ) {}
     async execute(input: {
-        response: AuthResponse;
+        response: AuthResponseData;
         session: SessionData;
         credentials?: unknown[];
         responseCode: string;

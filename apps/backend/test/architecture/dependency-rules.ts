@@ -147,7 +147,7 @@ export function readGraph(
 }
 
 const forbiddenPackages =
-    /^(typeorm|@nestjs\/(typeorm|axios|config|schedule|event-emitter|swagger)|express|axios|undici|node-vault|nestjs-otel|@opentelemetry\/[^/]+|@aws-sdk\/[^/]+|@azure\/[^/]+|@keycloak\/keycloak-admin-client|(?:node:)?(?:fs|http|https))(\/|$)/;
+    /^(typeorm|@nestjs\/(typeorm|axios|config|schedule|event-emitter|swagger)|express|axios|undici|node-vault|nestjs-otel|@opentelemetry\/[^/]+|@aws-sdk\/[^/]+|@azure\/[^/]+|@keycloak\/keycloak-admin-client|class-validator|class-transformer|nestjs-zod|nestjs-pino|(?:node:)?(?:fs|http|https))(\/|$)/;
 const coreRoles: Role[] = ["application", "domain", "port"];
 
 /** Check the transitive closure so an unclassified helper/barrel cannot hide an adapter. */
@@ -259,4 +259,99 @@ export function controllerPersistenceViolations(
         walk(origin);
     }
     return [...result].sort();
+}
+
+/** First path segment under `src`, e.g. `issuer` for `issuer/issuance/oid4vci/adapters/x.ts`. */
+const capabilityOf = (file: string) => file.split("/")[0];
+
+/**
+ * Protocol and trust core, where the layered shape is required (see
+ * "Scope: where the layering applies" in backend-architecture.md).
+ * Administrative CRUD elsewhere may use TypeORM, ConfigService and HTTP
+ * exceptions directly.
+ */
+const protocolCore = /^(issuer\/issuance|verifier|trust|session)\//;
+
+/**
+ * Debt tracked by the ratchet baseline, per source file and category.
+ * Legacy files may not gain Express imports, legacy protocol-core files may not
+ * gain ConfigService, TypeORM or Nest HTTP exception imports, adapters may not
+ * throw Nest HTTP exceptions or reach into controllers, modules and other
+ * capabilities' adapters, and controllers may not import adapters.
+ * Migrations and generated code are not tracked.
+ */
+export function architectureDebt(
+    graph: Map<string, Dependency[]>,
+    root: string,
+): Record<string, string[]> {
+    const name = (file: string) => relative(root, file).replaceAll("\\", "/");
+    const debt: Record<string, string[]> = {};
+    for (const [file, dependencies] of graph) {
+        const origin = name(file);
+        if (/^database\/migrations\/|(^|\/)generated\//.test(origin)) continue;
+        const role = roleOf(origin);
+        const categories = new Set<string>();
+        for (const dep of dependencies) {
+            const target =
+                dep.target && graph.has(dep.target)
+                    ? name(dep.target)
+                    : undefined;
+            const httpException =
+                dep.specifier === "@nestjs/common" &&
+                dep.names.some((imported) => imported.endsWith("Exception"));
+            if (role === "legacy") {
+                if (/^express(\/|$)/.test(dep.specifier))
+                    categories.add("express");
+                if (!protocolCore.test(origin)) continue;
+                if (/^@nestjs\/config(\/|$)/.test(dep.specifier))
+                    categories.add("config");
+                if (/^(typeorm|@nestjs\/typeorm)(\/|$)/.test(dep.specifier))
+                    categories.add("typeorm");
+                if (httpException) categories.add("http-exception");
+            } else if (role === "adapter") {
+                if (httpException) categories.add("http-exception");
+                if (target && roleOf(target) === "controller")
+                    categories.add("adapter->controller");
+                if (target && roleOf(target) === "composition")
+                    categories.add("adapter->module");
+                if (
+                    target &&
+                    /(^|\/)adapters\//.test(target) &&
+                    capabilityOf(target) !== capabilityOf(origin)
+                )
+                    categories.add("adapter->other-capability-adapter");
+            } else if (
+                role === "controller" &&
+                target &&
+                /(^|\/)adapters\//.test(target)
+            ) {
+                categories.add("controller->adapter");
+            }
+        }
+        if (categories.size) debt[origin] = [...categories].sort();
+    }
+    return Object.fromEntries(
+        Object.entries(debt).sort(([a], [b]) => a.localeCompare(b)),
+    );
+}
+
+/** Compares current debt with the checked-in baseline in both directions. */
+export function ratchetViolations(
+    current: Record<string, string[]>,
+    baseline: Record<string, string[]>,
+): string[] {
+    const violations: string[] = [];
+    for (const [file, categories] of Object.entries(current))
+        for (const category of categories)
+            if (!baseline[file]?.includes(category))
+                violations.push(
+                    `${file}: new ${category} dependency not in architecture-baseline.json`,
+                );
+    for (const [file, categories] of Object.entries(baseline))
+        for (const category of categories)
+            if (!current[file]?.includes(category))
+                violations.push(
+                    `${file}: ${category} is gone, remove it from architecture-baseline.json`,
+                );
+    return violations;
 }

@@ -14,7 +14,7 @@ This plan is not an instruction to execute tasks automatically. Pick one slice, 
 | Task | Topic | Status | Remaining work |
 | --- | --- | --- | --- |
 | 1 | Target architecture documented | Done | Keep [backend-architecture.md](./backend-architecture.md) as the single placement reference. |
-| 2 | Boundary enforcement | Partial | Close the gaps listed under [enforcement gaps](#enforcement-gaps). |
+| 2 | Boundary enforcement | Done | Layer checks plus a ratchet baseline for legacy debt. Remaining gap E5 under [enforcement gaps](#enforcement-gaps). |
 | 3–4 | Session repository and lifecycle | Done | Follow-ups S1–S3 below. |
 | 5–6 | OID4VCI use cases, no Express | Partial | Split `Oid4vciProtocolMetadata`, finish deferred issuance, remove forwarding wrappers. Authorization services still orchestrate in legacy services. |
 | 7–9 | Issuer credential formats | Partial | Registry exists; format issuer services still take the TypeORM entity type. |
@@ -24,12 +24,12 @@ This plan is not an instruction to execute tasks automatically. Pick one slice, 
 | 15–16 | Verifier credential formats | Partial | Registry exists but formats have different `verify` signatures; ISO 18013 bypasses it. |
 | 17–18 | Configuration repositories, plain models | Done for tenant, credential, issuance, attribute-provider, webhook-endpoint | Presentation, status-list, registrar, key-chain and config-portability still use TypeORM in services. Merge the three credential-config ports. |
 | 19 | Client provider abstraction | Done in code | Regenerate the SDK (C7) and validate Keycloak mode against a live instance. |
-| 20 | Typed settings instead of `ConfigService` | Partial | About 50 non-module files still read `ConfigService`. |
+| 20 | Typed settings instead of `ConfigService` | Partial | Protocol-core files still importing `@nestjs/config` are listed in the ratchet baseline. Administrative CRUD may keep `ConfigService`. |
 | 21 | Modules as composition roots | Partial | Applied to migrated slices. |
 | 22 | Application errors instead of HTTP exceptions | Partial | Applied to migrated slices; legacy services still throw Nest exceptions. |
 | 23 | Adapter contract tests | Partial | Session and configuration repositories covered on SQLite and PostgreSQL. Storage, KMS, client providers and credential formats open. |
 | 24 | Pure application tests | Partial | Present for every extracted use case. |
-| 25 | Final dependency audit | Open | Replace with the ratchet baseline (E1) so the audit is data, not prose. |
+| 25 | Final dependency audit | Done | The ratchet baseline `apps/backend/test/architecture/architecture-baseline.json` is the audit. The migration is done when it has no protocol-core entries. |
 
 ## Known debt
 
@@ -42,7 +42,7 @@ These legacy services still mix orchestration with persistence, configuration, t
 | Authorization | `issuer/issuance/oid4vci/authorization/**` | `authorize.service.ts`, `interactive-authorization.service.ts`, `chained-as.service.ts`, `authorization-servers.service.ts`. |
 | Other capabilities | `issuer/status-list/`, `crypto/key/`, `registrar/`, `platform/config-portability/`, `audit-log/`, `storage/files.service.ts` | Not yet in scope of any slice. |
 
-Rough size of the remaining work: about 50 non-module files read `ConfigService`, and 27 services outside `adapters/` use `@InjectRepository`.
+The ratchet baseline (`apps/backend/test/architecture/architecture-baseline.json`) tracks the size of the remaining core work: at the time of writing 38 files, with 8 protocol-core files importing `@nestjs/config`, 11 TypeORM, 29 files using Nest HTTP exceptions (protocol core and adapters), and 6 files importing Express.
 
 ## Open review findings
 
@@ -69,10 +69,6 @@ Findings from the 2026-09-28 review that are not fixed yet. Items marked *pre-ex
 
 ### Enforcement gaps
 
-- **E1** Add a ratchet baseline: a checked-in list of legacy files that still import `@nestjs/config`, TypeORM, Express or Nest HTTP exceptions. The test fails on new entries and on stale ones.
-- **E2** Adapters may not import controllers, modules or another capability's adapters.
-- **E3** Controllers may not import `adapters/` and should stop importing entities.
-- **E4** Forbid `class-validator`, `class-transformer`, `nestjs-zod` and `nestjs-pino` in core code. Move `AuthResponseSchema` out of the OID4VP DTOs into the verifier domain.
 - **E5** Rewrite the `shared/` isolation check on the TypeScript import graph so aliases, re-exports and dynamic imports are covered.
 
 ## Next slices
@@ -80,7 +76,7 @@ Findings from the 2026-09-28 review that are not fixed yet. Items marked *pre-ex
 Take them in this order unless a finding above is more urgent.
 
 1. **Security findings T2, I1, V1.** Each is small and has a clear test.
-2. **Enforcement E1–E3**, so later slices cannot move code into unchecked places.
+2. **Enforcement E5**, so the `shared/` isolation check covers aliases and re-exports.
 3. **OID4VCI O1–O3.**
 4. **Verifier decomposition**, in these steps:
    1. Presentation configuration management behind a `PresentationConfigRepository` port.
