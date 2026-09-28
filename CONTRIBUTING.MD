@@ -117,6 +117,10 @@ See [.devcontainer/README.md](.devcontainer/README.md) for more details.
 
 ---
 
+## Backend Architecture
+
+See the [Backend Development guide](apps/docs/docs/contributing/backend.md), [target architecture](apps/docs/docs/architecture/backend-architecture.md), and [refactoring backlog](apps/docs/docs/architecture/refactoring-plan.md). The backlog is a plan for incremental work; select a bounded task before implementation.
+
 ## Code Quality
 
 This project uses [Biome](https://biomejs.dev/) for code formatting and linting:

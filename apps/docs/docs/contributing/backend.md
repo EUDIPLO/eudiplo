@@ -6,6 +6,12 @@ title: Backend Development
 
 The backend uses NestJS modules grouped by business capability. The structure is deliberately pragmatic: code that changes together stays together, while cross-cutting infrastructure has an explicit home.
 
+## Target Architecture and Refactoring
+
+The [target backend architecture](../architecture/backend-architecture.md) defines the intended application, domain, port, and adapter boundaries. Existing code is being migrated incrementally; the [architecture hardening backlog](../architecture/refactoring-plan.md) describes proposed work, not completed changes or an instruction to execute it.
+
+Follow the placement rules below and apply the target boundaries within each selected slice. Include the necessary models, error mapping, composition, and tests with that slice.
+
 ## Directory Map
 
 ```text
@@ -49,7 +55,7 @@ Within the application:
 - keep feature imports out of `shared/`;
 - export only the providers or submodules that consumers actually require.
 
-The boundary test in `apps/backend/src/platform/module-boundaries.spec.ts` protects the `shared/` dependency rule and prevents old catch-all directories from returning.
+The boundary test in `apps/backend/src/platform/module-boundaries.spec.ts` protects the `shared/` dependency rule, prevents old catch-all directories from returning, and enforces migrated application/domain/port boundaries. See [current enforcement and legacy exceptions](../architecture/backend-architecture.md#current-boundary-enforcement) before extracting a new use case.
 
 ## Feature Module Shape
 
