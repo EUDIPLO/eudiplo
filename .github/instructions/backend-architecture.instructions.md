@@ -28,17 +28,16 @@ Do not reorganize the whole backend into artificial global `domain/`, `applicati
 
 Application/domain code must not directly depend on:
 
-- `express`
-- `typeorm`
-- `@nestjs/typeorm`
-- `@nestjs/axios`
-- AWS SDK clients
-- Vault clients
-- Keycloak admin clients
-- direct filesystem persistence
+- `express`, `axios`, `undici`, `node:http(s)`, `node:fs`
+- `typeorm` and any `@nestjs/*` package except `@nestjs/common`
+- from `@nestjs/common`, anything except `Inject`, `Injectable`, `Optional` (so no HTTP exceptions, no `Logger`)
+- `nestjs-otel`, `@opentelemetry/*`
+- AWS/Azure SDK clients, Vault clients, Keycloak admin clients
 - other infrastructure-specific SDKs
 
-These dependencies belong in adapters or composition/bootstrap code.
+These dependencies belong in adapters or composition/bootstrap code. The authoritative list is `forbiddenPackages` in `apps/backend/test/architecture/dependency-rules.ts`.
+
+Code placement, error mapping and DI wiring rules: see "Feature folder shape" in the target architecture. In short: `adapters/` holds only port implementations (never park orchestration there), missing resources extend `NotFoundError` from `shared/domain/not-found-error.ts`, framework-free classes with dependencies are registered via `useFactory`, and services receive plain values instead of the Express `Request`.
 
 ## Controllers
 

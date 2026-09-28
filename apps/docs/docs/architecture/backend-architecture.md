@@ -2,7 +2,7 @@
 
 ## Status
 
-Target architecture for the EUDIPLO backend; this is not a description of completed migration. The [backlog](./refactoring-plan.md) is planning material, not an instruction to execute tasks automatically.
+Target architecture for the EUDIPLO backend. The migration is incremental: see the [refactoring plan](./refactoring-plan.md) for what is done, the known debt, and the next slices. The plan is not an instruction to execute tasks automatically.
 
 Apply these boundaries to new or explicitly migrated application/domain code. Existing services mix responsibilities; classify a component by its role rather than its `*.service.ts` suffix. Preserve the capability ownership and module rules in [Backend Development](../contributing/backend.md).
 
@@ -58,6 +58,29 @@ NestJS modules wire implementations to tokens. Minimal NestJS DI decorators may 
 | DTO | Inbound/outbound API shape with validation/Swagger metadata; map to application commands/results at the boundary. |
 
 Use local `application/`, `domain/`, `ports/`, or `adapters/` folders when they clarify an extracted boundary. Small features do not need empty layers or one class per method. Cross-capability consumers use explicit public contracts; avoid deep imports into another capability's implementation.
+
+### Feature folder shape
+
+This is the single reference for where backend code goes. A feature only creates the folders it needs.
+
+```text
+feature/
+├── feature.module.ts          # composition root: binds ports to adapters, typed settings
+├── feature.controller.ts      # inbound adapter: DTO parsing, HTTP/protocol error mapping
+├── feature-settings.ts        # typed capability settings + injection token
+├── dto/                       # API shapes (validation, Swagger)
+├── entities/                  # TypeORM entities (adapter role)
+├── application/               # use cases, application errors (checked)
+├── domain/                    # models, rules, domain errors (checked)
+├── ports/                     # outbound contracts + injection tokens (checked)
+├── adapters/                  # TypeORM repositories, HTTP/SDK clients, schedulers (*.job.ts)
+└── feature.service.ts         # legacy/mixed service still being migrated
+```
+
+- **Errors.** Application and domain code throw plain `Error` subclasses. A missing resource extends `NotFoundError` from `shared/domain/not-found-error.ts`, which `AllExceptionsFilter` maps to 404. Any other application error is mapped explicitly by the controller or protocol service that calls the use case.
+- **Wiring.** A framework-free class with constructor dependencies must be registered with a `useFactory` provider that lists its `inject` tokens. As a bare class provider without `@Injectable()`, Nest constructs it with `undefined` dependencies.
+- **Request data.** Services receive plain values, never the Express `Request`. For audit metadata, controllers use the `@AuditMeta()` parameter decorator and pass an `AuditLogRequestMeta`.
+- **Adapters are not a parking place.** `adapters/` is not checked by the boundary tests, so it must only hold code that implements a port. Moving orchestration there hides it from the checks.
 
 ## Inbound adapters
 
@@ -255,7 +278,7 @@ interface CredentialClaimsProvider {
 }
 ```
 
-HTTP webhooks are one adapter. Build on the existing attribute-provider configuration and `CredentialsService.getClaimsFromWebhook` flow; preserve configured claims, deferred results, validation, authentication, and outbound URL policy.
+HTTP webhooks are one adapter (`ConfiguredCredentialClaimsProvider` with a webhook remote-claims adapter). It builds on the existing attribute-provider configuration and preserves configured claims, deferred results, validation, authentication, and outbound URL policy.
 
 This allows future implementations such as:
 
@@ -292,7 +315,7 @@ CredentialTrustValidationFailed
 InvalidPresentation
 ```
 
-Inbound adapters translate these into protocol/transport errors.
+Inbound adapters translate these into protocol/transport errors. Not-found errors extend the shared `NotFoundError` base and are mapped to 404 centrally; see [Feature folder shape](#feature-folder-shape).
 
 ## Configuration
 
@@ -334,11 +357,11 @@ The checks use the installed TypeScript compiler API and Vitest, without introdu
 - Controllers are checked for direct TypeORM dependencies and repository contracts/adapters named `*.repository.ts`, including forwarded barrel exports. They should invoke application behavior instead.
 - A small migrated-file inventory prevents silently moving the migrated use cases, domain state model, or ports out of the enforced directories. Update it deliberately when renaming those contracts.
 
-### Explicit migration exceptions
+### What the checks do not cover
 
-Existing services outside the named core directories remain legacy/mixed components; the checks do not assert that these services already satisfy the target architecture. In particular, `SessionService` still handles creation, generic updates, individual lookups, and external-AS session binding (Task 3). Failed transaction-code counting and threshold evaluation use `RecordFailedTxCodeAttempt` with a tenant-scoped repository operation. Tenant listing and deletion use `ListSessions` and `DeleteSession` with plain summary models; state changes use `ChangeSessionState`; retention and initialization use `CleanupSessions` and `InitializeSessionMetrics`. Dedicated adapters own persistence, tenant-policy loading, scheduling, metrics, and event publication. Most of `Oid4vciService` still handles framework and persistence concerns (Tasks 5–6). Configuration services and client providers are addressed by Tasks 17–22. These exceptions allow incremental migration, not new infrastructure dependencies in a migrated core.
+Files outside the core directories (legacy `*.service.ts`, `adapters/`, `*-settings.ts`) are not checked as sources. Legacy services therefore still mix orchestration with TypeORM, `ConfigService`, and HTTP exceptions; the [refactoring plan](./refactoring-plan.md#known-debt) lists the hotspots. The boundary checks also cannot prove runtime wiring or behavior, so keep adapter contract tests, DI wiring tests, and HTTP integration tests alongside them.
 
-Use the enforced directories for newly extracted core code. Add any newly encountered infrastructure SDK to the package rules and test it with a fixture. These source checks do not prove runtime wiring or behavior; retain adapter contracts and HTTP integration tests alongside them.
+Use the enforced directories for newly extracted core code. Add any newly encountered infrastructure SDK to the package rules and test it with a fixture.
 
 ## Architectural principle
 

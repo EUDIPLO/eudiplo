@@ -8,7 +8,7 @@ The backend uses NestJS modules grouped by business capability. The structure is
 
 ## Target Architecture and Refactoring
 
-The [target backend architecture](../architecture/backend-architecture.md) defines the intended application, domain, port, and adapter boundaries. Existing code is being migrated incrementally; the [architecture hardening backlog](../architecture/refactoring-plan.md) describes proposed work, not completed changes or an instruction to execute it.
+The [target backend architecture](../architecture/backend-architecture.md) defines the intended application, domain, port, and adapter boundaries. Existing code is being migrated incrementally; the [refactoring plan](../architecture/refactoring-plan.md) tracks what is done and what comes next. It is not an instruction to execute tasks automatically.
 
 Follow the placement rules below and apply the target boundaries within each selected slice. Include the necessary models, error mapping, composition, and tests with that slice.
 
@@ -59,20 +59,7 @@ The boundary test in `apps/backend/src/platform/module-boundaries.spec.ts` prote
 
 ## Feature Module Shape
 
-A feature does not need every directory below, but should use consistent names:
-
-```text
-feature/
-├── feature.module.ts
-├── feature.controller.ts
-├── feature.service.ts
-├── feature.service.spec.ts
-├── dto/
-├── entities/
-└── feature-validation.schema.ts
-```
-
-Small, feature-specific helpers can stay next to the service that uses them. Extract a service when the behavior has its own dependencies, lifecycle, or focused tests. `NonceService` and `MetadataFetchService` are examples of this boundary.
+See [Feature folder shape](../architecture/backend-architecture.md#feature-folder-shape) for the folder layout, error mapping, and wiring rules. A feature does not need every folder: small, feature-specific helpers can stay next to the code that uses them. Extract a use case or service when the behavior has its own dependencies, lifecycle, or focused tests.
 
 ## Adding or Moving Backend Code
 
