@@ -6,7 +6,10 @@ import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
 import { ActiveCredentialSlot } from "./entities/active-credential-slot.entity.js";
 import { StatusListEntity } from "./entities/status-list.entity.js";
 import { StatusMapping } from "./entities/status-mapping.entity.js";
-import { StatusListService } from "./status-list.service.js";
+import {
+    MAX_STATUS_LIST_CAPACITY,
+    StatusListService,
+} from "./status-list.service.js";
 
 describe("StatusListService SQLite concurrency", () => {
     let dataSource: DataSource;
@@ -347,5 +350,17 @@ describe("StatusListService SQLite concurrency", () => {
             .getRepository(StatusListEntity)
             .findOneByOrFail({ id: "list-1", tenantId: "tenant-1" });
         expect(list.elements).toEqual([1, 1, 0, 0]);
+    });
+
+    test.each([
+        0,
+        -1,
+        1.5,
+        MAX_STATUS_LIST_CAPACITY + 1,
+        Number.MAX_SAFE_INTEGER,
+    ])("rejects capacity %s before allocating the list", async (capacity) => {
+        await expect(
+            service.createNewList("tenant-1", { capacity }),
+        ).rejects.toMatchObject({ status: 400 });
     });
 });

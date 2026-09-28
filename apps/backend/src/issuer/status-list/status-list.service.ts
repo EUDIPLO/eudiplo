@@ -78,6 +78,9 @@ interface AllocatedStatusEntry {
     uri: string;
 }
 
+/** Upper bound for status list capacity; each list is held in memory while it is created. */
+export const MAX_STATUS_LIST_CAPACITY = 1_000_000;
+
 @Injectable()
 export class StatusListService {
     private readonly logger = new Logger(StatusListService.name);
@@ -206,6 +209,17 @@ export class StatusListService {
     ): Promise<StatusListEntity> {
         const size =
             options?.capacity ?? (await this.getEffectiveCapacity(tenantId));
+        // The capacity comes from API input or tenant configuration and sizes
+        // in-memory arrays, so it must be bounded.
+        if (
+            !Number.isSafeInteger(size) ||
+            size < 1 ||
+            size > MAX_STATUS_LIST_CAPACITY
+        ) {
+            throw new BadRequestException(
+                `Status list capacity must be an integer between 1 and ${MAX_STATUS_LIST_CAPACITY}`,
+            );
+        }
         // create an empty array with the size
         const elements = new Array(size).fill(0).map(() => 0);
         // create a list of indexes and shuffle them using crypto-secure randomness

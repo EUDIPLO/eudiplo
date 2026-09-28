@@ -2,6 +2,9 @@ import Joi from "joi";
 
 export const STATUS_LIST_VALIDATION_SCHEMA = Joi.object({
     STATUS_CAPACITY: Joi.number()
+        .integer()
+        .min(1)
+        .max(1_000_000)
         .default(10000)
         .description(
             "The default capacity of the status list. Can be overridden per tenant.",
