@@ -1,10 +1,8 @@
 import * as x509 from "@peculiar/x509";
 import { base64url } from "jose";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import {
-    InvalidTrustedAuthoritiesError,
-    TrustedAuthoritiesService,
-} from "./trusted-authorities.service.js";
+import { InvalidTrustedAuthoritiesError } from "./ports/trust-list-ref-resolver.js";
+import { TrustedAuthoritiesService } from "./trusted-authorities.service.js";
 
 function createService(getVerifierX509Der = vi.fn()) {
     const logger = { setContext: vi.fn(), warn: vi.fn() };

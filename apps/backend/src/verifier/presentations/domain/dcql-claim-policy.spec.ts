@@ -3,11 +3,12 @@ import {
     claimSelections,
     claimSetNotSatisfied,
     findMissingCredentials,
-    findMissingMdocClaims,
     hasClaimPath,
     matchesClaimSelection,
     matchesMdocClaimSelection,
-    requiredClaimKeys,
+    missingClaimsViolation,
+    missingMdocClaims,
+    sdJwtRequiredClaimKeys,
     UnknownClaimSetReferenceError,
 } from "./dcql-claim-policy.js";
 
@@ -44,37 +45,29 @@ describe("findMissingCredentials", () => {
     });
 });
 
-describe("requiredClaimKeys", () => {
-    const claims = [{ path: ["address", "locality"] }, { path: ["age"] }];
-
+describe("sdJwtRequiredClaimKeys", () => {
     it("joins SD-JWT VC paths with dots", () => {
-        expect(requiredClaimKeys(claims, "dc+sd-jwt")).toEqual([
-            "address.locality",
-            "age",
-        ]);
-    });
-
-    it("drops the mdoc namespace", () => {
-        expect(requiredClaimKeys(claims, "mso_mdoc")).toEqual([
-            "locality",
-            "age",
-        ]);
+        expect(
+            sdJwtRequiredClaimKeys([
+                { path: ["address", "locality"] },
+                { path: ["age"] },
+            ]),
+        ).toEqual(["address.locality", "age"]);
     });
 
     it("returns no keys without claims", () => {
-        expect(requiredClaimKeys(undefined, "dc+sd-jwt")).toEqual([]);
+        expect(sdJwtRequiredClaimKeys(undefined)).toEqual([]);
     });
 });
 
-describe("findMissingMdocClaims", () => {
+describe("missing mdoc claims", () => {
     it("reports absent elements with their full path", () => {
-        expect(
-            findMissingMdocClaims(
-                "pid",
-                [{ path: ["ns", "given_name"] }, { path: ["ns", "age"] }],
-                { given_name: "Erika" },
-            ),
-        ).toEqual({
+        const missing = missingMdocClaims(
+            [{ path: ["ns", "given_name"] }, { path: ["ns", "age"] }],
+            { given_name: "Erika" },
+        );
+        expect(missing).toEqual(["ns.age"]);
+        expect(missingClaimsViolation("pid", missing)).toEqual({
             message: "Missing required claims for credential 'pid': ns.age",
             details: { missingClaims: { pid: ["ns.age"] } },
         });
@@ -82,11 +75,9 @@ describe("findMissingMdocClaims", () => {
 
     it("accepts present elements and empty claim queries", () => {
         expect(
-            findMissingMdocClaims("pid", [{ path: ["ns", "age"] }], {
-                age: 0,
-            }),
-        ).toBe(undefined);
-        expect(findMissingMdocClaims("pid", undefined, {})).toBe(undefined);
+            missingMdocClaims([{ path: ["ns", "age"] }], { age: 0 }),
+        ).toEqual([]);
+        expect(missingMdocClaims(undefined, {})).toEqual([]);
     });
 });
 

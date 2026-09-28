@@ -318,7 +318,7 @@ export class RegistrationCertificateService {
     }
 
     // -------------------------------------------------------------------------
-    // Fingerprint helpers (public – consumed by PresentationsService)
+    // Fingerprint helpers (public – consumed by PresentationRegistrationCertificateService)
     // -------------------------------------------------------------------------
 
     /**

@@ -1,5 +1,5 @@
 import { HttpModule } from "@nestjs/axios";
-import { Module } from "@nestjs/common";
+import { Module, type Provider } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AuditLogModule } from "../../audit-log/audit-log.module.js";
@@ -7,21 +7,38 @@ import { TrustListModule } from "../../issuer/trust-list/trustlist.module.js";
 import { RegistrarModule } from "../../registrar/registrar.module.js";
 import { TrustModule } from "../../trust/trust.module.js";
 import { ResolverModule } from "../resolver/resolver.module.js";
+import { MdocCredentialVerifierFormat } from "./adapters/mdoc-credential-verifier-format.js";
+import { SdJwtCredentialVerifierFormat } from "./adapters/sd-jwt-credential-verifier-format.js";
+import { CredentialVerifierFormatRegistry } from "./application/credential-verifier-format-registry.js";
+import { VerifyPresentationResponse } from "./application/verify-presentation-response.js";
 import { MetadataFetchService } from "./configuration/metadata-fetch.service.js";
 import { MetadataImportService } from "./configuration/metadata-import.service.js";
 import { PresentationConfigService } from "./configuration/presentation-config.service.js";
 import { PresentationRegistrationCertificateService } from "./configuration/presentation-registration-certificate.service.js";
 import { CredentialChainValidationService } from "./credential/credential-chain-validation.service.js";
-import { CredentialVerifierFormatRegistry } from "./credential/credential-verifier-format-registry.js";
-import { MdocCredentialVerifierFormat } from "./credential/mdocverifier/mdoc-credential-verifier-format.js";
 import { MdocverifierService } from "./credential/mdocverifier/mdocverifier.service.js";
-import { SdJwtCredentialVerifierFormat } from "./credential/sdjwtvcverifier/sd-jwt-credential-verifier-format.js";
 import { SdjwtvcverifierService } from "./credential/sdjwtvcverifier/sdjwtvcverifier.service.js";
 import { PresentationConfig } from "./entities/presentation-config.entity.js";
-import { PRESENTATION_SETTINGS } from "./presentation-settings.js";
+import {
+    PRESENTATION_SETTINGS,
+    type PresentationSettings,
+} from "./presentation-settings.js";
 import { PresentationManagementController } from "./presentations.controller.js";
-import { PresentationsService } from "./presentations.service.js";
 import { TrustedAuthoritiesService } from "./trusted-authorities.service.js";
+
+export const verifyPresentationResponseProvider: Provider = {
+    provide: VerifyPresentationResponse,
+    inject: [
+        CredentialVerifierFormatRegistry,
+        TrustedAuthoritiesService,
+        PRESENTATION_SETTINGS,
+    ],
+    useFactory: (
+        formats: CredentialVerifierFormatRegistry,
+        trustedAuthorities: TrustedAuthoritiesService,
+        settings: PresentationSettings,
+    ) => new VerifyPresentationResponse(formats, trustedAuthorities, settings),
+};
 
 @Module({
     imports: [
@@ -35,7 +52,6 @@ import { TrustedAuthoritiesService } from "./trusted-authorities.service.js";
     ],
     controllers: [PresentationManagementController],
     providers: [
-        PresentationsService,
         PresentationConfigService,
         PresentationRegistrationCertificateService,
         MetadataImportService,
@@ -62,16 +78,17 @@ import { TrustedAuthoritiesService } from "./trusted-authorities.service.js";
                 sdJwt: SdJwtCredentialVerifierFormat,
             ) => new CredentialVerifierFormatRegistry([mdoc, sdJwt]),
         },
+        verifyPresentationResponseProvider,
         CredentialChainValidationService,
         MetadataFetchService,
     ],
     exports: [
-        PresentationsService,
+        VerifyPresentationResponse,
+        CredentialVerifierFormatRegistry,
         PresentationConfigService,
         PresentationRegistrationCertificateService,
         TrustedAuthoritiesService,
         CredentialChainValidationService,
-        MdocverifierService,
     ],
 })
 export class PresentationsModule {}

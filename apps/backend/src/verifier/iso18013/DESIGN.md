@@ -221,7 +221,7 @@ signature error**.
 
 ### The fix
 
-`presentations.service.ts` now passes:
+The mdoc format adapter (`presentations/adapters/mdoc-credential-verifier-format.ts`) now passes:
 ```typescript
 session.useDcApi
   ? { protocol: "dc_api", nonce, origin: expected_origins[0], jwkThumbprint }
@@ -292,15 +292,17 @@ application fails to bootstrap with an `UnknownDependenciesException`.
 
 ## 8. Design decisions
 
-### 8.1 Verification in `Iso18013Service`, not `PresentationsService`
+### 8.1 Verification in `Iso18013Service`, not `VerifyPresentationResponse`
 
-`PresentationsService.parseResponse()` is designed for OID4VP where the `vp_token`
-arrives as a JSON object. For ISO 18013-7 the input is raw CBOR bytes after HPKE
-decryption.
+`VerifyPresentationResponse` (the OID4VP use case) is designed for a `vp_token`
+JSON object checked against a DCQL query. For ISO 18013-7 the input is raw CBOR
+bytes after HPKE decryption.
 
-`Iso18013Service` calls `MdocverifierService.verify()` directly, passing the
-DeviceResponse bytes as base64url. This avoids bending `parseResponse()` to a
-format outside its domain.
+`Iso18013Service` resolves the mdoc format from the
+`CredentialVerifierFormatRegistry` and verifies the DeviceResponse bytes
+(base64url) with an `iso-18013-7` binding that carries the pre-built
+DCAPIHandover transcript. It shares the mdoc adapter with OID4VP but keeps its
+own transcript and result handling.
 
 ### 8.2 Transcript built with the library's native handover
 

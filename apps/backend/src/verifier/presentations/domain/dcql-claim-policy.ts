@@ -96,26 +96,13 @@ export function findMissingCredentials(
 }
 
 /**
- * Converts DCQL claim queries to the claim keys the SD-JWT VC verifier checks.
- * SD-JWT VC paths are joined with dots (`["address", "locality"]` →
- * `"address.locality"`); for mdoc the namespace (first element) is dropped.
+ * Converts DCQL claim queries to the claim keys the SD-JWT VC verifier checks:
+ * paths joined with dots (`["address", "locality"]` → `"address.locality"`).
  */
-export function requiredClaimKeys(
+export function sdJwtRequiredClaimKeys(
     claims: DcqlClaimQuery[] | undefined,
-    format: VerifierCredentialFormat,
 ): string[] {
-    if (!claims || claims.length === 0) {
-        return [];
-    }
-
-    return claims.map((claim) => {
-        if (format === "mso_mdoc") {
-            return claim.path.length > 1
-                ? claim.path.slice(1).join(".")
-                : claim.path[0];
-        }
-        return claim.path.join(".");
-    });
+    return (claims ?? []).map((claim) => claim.path.join("."));
 }
 
 /**
@@ -130,18 +117,20 @@ export function mdocClaimName(path: string[]): string {
  * Returns the requested mdoc claims (as dotted full paths) that are absent
  * from the verified claims.
  */
-export function findMissingMdocClaims(
-    credentialId: string,
+export function missingMdocClaims(
     requestedClaims: DcqlClaimQuery[] | undefined,
     receivedClaims: Record<string, unknown>,
-): IncompletePresentation | undefined {
-    const missingClaims = (requestedClaims ?? [])
+): string[] {
+    return (requestedClaims ?? [])
         .filter((claim) => !(mdocClaimName(claim.path) in receivedClaims))
         .map((claim) => claim.path.join("."));
+}
 
-    if (missingClaims.length === 0) {
-        return undefined;
-    }
+/** The violation reported when requested claims (dotted paths) are not disclosed. */
+export function missingClaimsViolation(
+    credentialId: string,
+    missingClaims: string[],
+): IncompletePresentation {
     return {
         message: `Missing required claims for credential '${credentialId}': ${missingClaims.join(", ")}`,
         details: { missingClaims: { [credentialId]: missingClaims } },

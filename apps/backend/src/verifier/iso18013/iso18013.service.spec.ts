@@ -61,7 +61,7 @@ describe("Iso18013Service.createOffer per-request webhook override", () => {
             createSession as any,
             sessionStore as any,
             encryptionService as any,
-            {} as any, // mdocverifierService
+            {} as any, // credentialVerifierFormats
             {} as any, // webhookService
             {} as any, // auditLogService
             {} as any, // configService

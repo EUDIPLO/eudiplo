@@ -24,12 +24,10 @@ import { CertService } from "../../crypto/key/cert/cert.service.js";
 import { KeyChainService } from "../../crypto/key/key-chain.service.js";
 import { KeyUsageType } from "../../crypto/key/types/key-usage-type.js";
 import { WebhookEndpointEntity } from "../../issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
-import { ServiceTypeIdentifier } from "../../issuer/trust-list/trustlist.service.js";
 import { CreateSession } from "../../session/application/create-session.js";
 import { SessionStore } from "../../session/application/session-store.js";
 import { SessionStatus } from "../../session/domain/session-state.js";
 import { SessionAuditService } from "../../session/logging/session-audit.service.js";
-import { revocationModeToPolicy } from "../../trust/revocation-policy.util.js";
 import {
     DEFAULT_VERIFIER_SKEW_SECONDS,
     RevocationCheckMode,
@@ -40,18 +38,15 @@ import {
     type PresentationResultPublisher,
 } from "../../webhook/ports/presentation-result-publisher.js";
 import { WebhookConfig } from "../../webhook/webhook.dto.js";
+import { CredentialVerifierFormatRegistry } from "../presentations/application/credential-verifier-format-registry.js";
 import { PresentationConfigService } from "../presentations/configuration/presentation-config.service.js";
-import { MdocverifierService } from "../presentations/credential/mdocverifier/mdocverifier.service.js";
 import { shortVerificationMessage } from "../presentations/credential/verification-failure.js";
 import {
-    TrustedAuthorityQueryEtsiTl,
-    TrustedAuthorityQueryOpenIdFederation,
-    TrustedAuthorityType,
-} from "../presentations/entities/presentation-config.entity.js";
-import {
-    InvalidTrustedAuthoritiesError,
-    TrustedAuthoritiesService,
-} from "../presentations/trusted-authorities.service.js";
+    trustListAuthorities,
+    verifierTrustOptions,
+} from "../presentations/domain/verifier-trust-options.js";
+import { InvalidTrustedAuthoritiesError } from "../presentations/ports/trust-list-ref-resolver.js";
+import { TrustedAuthoritiesService } from "../presentations/trusted-authorities.service.js";
 import {
     buildDeviceRequestCbor,
     buildEncryptionInfo,
@@ -79,7 +74,7 @@ export class Iso18013Service {
         private readonly createSession: CreateSession,
         private readonly sessionStore: SessionStore,
         private readonly encryptionService: EncryptionService,
-        private readonly mdocverifierService: MdocverifierService,
+        private readonly credentialVerifierFormats: CredentialVerifierFormatRegistry,
         @Inject(PRESENTATION_RESULT_PUBLISHER)
         private readonly presentationResultPublisher: PresentationResultPublisher,
         private readonly auditLogService: SessionAuditService,
@@ -414,18 +409,9 @@ export class Iso18013Service {
         const host = this.configService.getOrThrow<string>("PUBLIC_URL");
         const tenantHost = `${host}/issuers/${session.tenantId}`;
 
-        const loteAuthorities = mdocCred.trusted_authorities?.find(
-            (auth): auth is TrustedAuthorityQueryEtsiTl =>
-                auth.type === TrustedAuthorityType.ETSI_TL,
-        );
-        const federationAuthorities = mdocCred.trusted_authorities?.find(
-            (auth): auth is TrustedAuthorityQueryOpenIdFederation =>
-                auth.type === TrustedAuthorityType.OPENID_FEDERATION,
-        );
-
         const resolvedLoteAuthorities = await this.trustedAuthoritiesService
             .resolveTrustListRefsForTenant(
-                loteAuthorities?.values,
+                trustListAuthorities(mdocCred.trusted_authorities),
                 session.tenantId,
                 tenantHost,
             )
@@ -436,49 +422,30 @@ export class Iso18013Service {
                 throw error;
             });
 
-        const verifyOptions: VerifierOptions = {
-            trustListSource: {
-                lotes: resolvedLoteAuthorities,
-                acceptedServiceTypes: [
-                    ServiceTypeIdentifier.EaaIssuance,
-                    ServiceTypeIdentifier.PIDIssuance,
-                ],
-            },
-            federationTrustSource: federationAuthorities?.values.length
-                ? {
-                      mode: "hybrid",
-                      trustAnchors: federationAuthorities.values.map(
-                          (value) => ({
-                              entityId: value,
-                              entityConfigurationUri: `${value.replace(/\/$/, "")}/.well-known/openid-federation`,
-                          }),
-                      ),
-                  }
-                : undefined,
-            policy: {
-                requireX5c: true,
-                revocation: revocationModeToPolicy(
-                    config.statusCheckMode ?? RevocationCheckMode.Strict,
-                ),
-            },
-            skewSeconds:
-                session.skewSeconds ??
-                config.skewSeconds ??
-                DEFAULT_VERIFIER_SKEW_SECONDS,
-        };
+        const verifyOptions: VerifierOptions = verifierTrustOptions({
+            trustLists: resolvedLoteAuthorities,
+            authorities: mdocCred.trusted_authorities,
+            statusCheckMode:
+                config.statusCheckMode ?? RevocationCheckMode.Strict,
+            skewSeconds: session.skewSeconds ?? config.skewSeconds,
+        });
 
         const deviceResponseB64 = deviceResponseCbor.toString("base64url");
 
-        // Verify the mDOC using the pre-built DCAPIHandover transcript
-        const verifyResult = await this.mdocverifierService.verify(
-            deviceResponseB64,
-            {
-                protocol: "iso-18013-7",
-                sessionTranscript: transcript.sessionTranscript,
-            },
-            verifyOptions,
-            mdocCred.claims?.map((c) => c.path),
-        );
+        // Verify the mDOC using the pre-built DCAPIHandover transcript. The
+        // requested elements are part of the DeviceRequest; a missing
+        // element is not rejected separately in this flow.
+        const verifyResult = await this.credentialVerifierFormats
+            .resolve("mso_mdoc")
+            .verify(deviceResponseB64, {
+                credentialId: mdocCred.id,
+                binding: {
+                    protocol: "iso-18013-7",
+                    sessionTranscript: transcript.sessionTranscript,
+                },
+                options: verifyOptions,
+                claims: mdocCred.claims,
+            });
 
         this.auditLogService.logCredentialVerification(
             logContext,
@@ -490,12 +457,12 @@ export class Iso18013Service {
             // Machine-readable code + short message for the caller/UI; the
             // verbose failureReason (certificate subjects, thumbprints,
             // configured lists) is kept to logs/audit only.
-            const errorCode = verifyResult.failureType ?? "verification_error";
+            const errorCode = verifyResult.failure.type ?? "verification_error";
             const shortMessage = shortVerificationMessage(
-                verifyResult.failureType,
+                verifyResult.failure.type,
             );
             const verboseReason =
-                verifyResult.failureReason ?? "mDOC verification failed";
+                verifyResult.failure.reason ?? "mDOC verification failed";
 
             await this.sessionStore.updateForTenant(
                 session.tenantId,

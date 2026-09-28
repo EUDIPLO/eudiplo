@@ -33,7 +33,7 @@ import { TrustList } from "./entities/trust-list.entity.js";
 import { TrustListVersion } from "./entities/trust-list-version.entity.js";
 import { TrustListCreateSchema } from "./schemas/trust-list.schema.js";
 
-export enum ServiceTypeIdentifier {
+enum ServiceTypeIdentifier {
     WalletIssuance = "http://uri.etsi.org/19602/SvcType/WalletSolution/Issuance",
     WalletRevocation = "http://uri.etsi.org/19602/SvcType/WalletSolution/Revocation",
     PIDIssuance = "http://uri.etsi.org/19602/SvcType/PID/Issuance",

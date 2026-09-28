@@ -108,7 +108,7 @@ abstract class TrustedAuthorityQuery {
     declare type: TrustedAuthorityType;
 }
 
-export class TrustedAuthorityQueryEtsiTl extends TrustedAuthorityQuery {
+class TrustedAuthorityQueryEtsiTl extends TrustedAuthorityQuery {
     @ApiProperty({
         enum: [TrustedAuthorityType.ETSI_TL],
         default: TrustedAuthorityType.ETSI_TL,
@@ -124,7 +124,7 @@ export class TrustedAuthorityQueryEtsiTl extends TrustedAuthorityQuery {
     values!: TrustListRef[];
 }
 
-export class TrustedAuthorityQueryOpenIdFederation extends TrustedAuthorityQuery {
+class TrustedAuthorityQueryOpenIdFederation extends TrustedAuthorityQuery {
     @ApiProperty({
         enum: [TrustedAuthorityType.OPENID_FEDERATION],
         default: TrustedAuthorityType.OPENID_FEDERATION,

@@ -7,14 +7,10 @@ import {
     TrustedAuthorityType,
     TrustListRef,
 } from "./entities/presentation-config.entity.js";
-
-/** A `trusted_authorities` entry of a presentation config is incomplete. */
-export class InvalidTrustedAuthoritiesError extends Error {
-    constructor(message: string) {
-        super(message);
-        this.name = "InvalidTrustedAuthoritiesError";
-    }
-}
+import {
+    InvalidTrustedAuthoritiesError,
+    type TrustListRefResolver,
+} from "./ports/trust-list-ref-resolver.js";
 
 /**
  * Resolves the `trusted_authorities` of a presentation config: into
@@ -22,7 +18,7 @@ export class InvalidTrustedAuthoritiesError extends Error {
  * for credential verification.
  */
 @Injectable()
-export class TrustedAuthoritiesService {
+export class TrustedAuthoritiesService implements TrustListRefResolver {
     constructor(
         private readonly trustListService: TrustListService,
         private readonly logger: PinoLogger,

@@ -40,9 +40,7 @@ describe("OID4VP state mismatch handling", () => {
                     presentationConfigService: {
                         getPresentationConfig: vi.fn().mockResolvedValue({}),
                     },
-                    presentationsService: {
-                        parseResponse: vi.fn().mockResolvedValue([]),
-                    },
+                    verifyPresentation: vi.fn().mockResolvedValue([]),
                     resolveWebhookFromEndpoint: vi
                         .fn()
                         .mockResolvedValue(undefined),
@@ -124,9 +122,7 @@ describe("OID4VP concurrent response handling", () => {
                 presentationConfigService: {
                     getPresentationConfig: vi.fn().mockResolvedValue({}),
                 },
-                presentationsService: {
-                    parseResponse: vi.fn().mockResolvedValue([]),
-                },
+                verifyPresentation: vi.fn().mockResolvedValue([]),
                 resolveWebhookFromEndpoint: vi
                     .fn()
                     .mockResolvedValue(undefined),

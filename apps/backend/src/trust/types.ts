@@ -79,6 +79,7 @@ export function serviceTypeMatches(
 export const ServiceTypeIdentifiers = {
     EaaIssuance: "http://uri.etsi.org/19602/SvcType/EAA/Issuance",
     EaaRevocation: "http://uri.etsi.org/19602/SvcType/EAA/Revocation",
+    PIDIssuance: "http://uri.etsi.org/19602/SvcType/PID/Issuance",
     WalletSolution: "http://uri.etsi.org/19602/SvcType/WalletSolution",
     WalletSolutionIssuance:
         "http://uri.etsi.org/19602/SvcType/WalletSolution/Issuance",

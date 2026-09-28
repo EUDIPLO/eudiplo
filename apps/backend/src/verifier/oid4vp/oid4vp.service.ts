@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { BadRequestException, Inject, Injectable } from "@nestjs/common";
+import {
+    BadRequestException,
+    ConflictException,
+    Inject,
+    Injectable,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { base64url } from "jose";
 import { Span, TraceService } from "nestjs-otel";
@@ -17,17 +22,28 @@ import { OfferResponse } from "../../issuer/issuance/oid4vci/dto/offer-request.d
 import { RegistrarService } from "../../registrar/registrar.service.js";
 import { CreateSession } from "../../session/application/create-session.js";
 import { SessionStore } from "../../session/application/session-store.js";
+import type { SessionData } from "../../session/domain/session-data.js";
 import { SessionStatus } from "../../session/domain/session-state.js";
 import { AuditLogContext } from "../../session/logging/session-audit.service.js";
 import { SessionLoggerService } from "../../session/logging/session-logger.service.js";
 import { DEFAULT_VERIFIER_SKEW_SECONDS } from "../../trust/types.js";
+import {
+    CredentialVerificationFailedError,
+    IncompletePresentationError,
+    type PresentationQuery,
+    UnknownPresentedCredentialError,
+    type VerifiedPresentation,
+    VerifyPresentationResponse,
+} from "../presentations/application/verify-presentation-response.js";
 import { PresentationConfigService } from "../presentations/configuration/presentation-config.service.js";
 import { PresentationRegistrationCertificateService } from "../presentations/configuration/presentation-registration-certificate.service.js";
 import { SdJwtVerificationError } from "../presentations/credential/sdjwtvcverifier/sdjwtvcverifier.service.js";
 import { shortVerificationMessage } from "../presentations/credential/verification-failure.js";
+import { UnsupportedCredentialVerifierFormat } from "../presentations/domain/credential-verifier-format.js";
+import { UnknownClaimSetReferenceError } from "../presentations/domain/dcql-claim-policy.js";
 import { AuthResponse } from "../presentations/dto/auth-response.dto.js";
 import { IncompletePresentationException } from "../presentations/exceptions/incomplete-presentation.exception.js";
-import { PresentationsService } from "../presentations/presentations.service.js";
+import { InvalidTrustedAuthoritiesError } from "../presentations/ports/trust-list-ref-resolver.js";
 import { TrustedAuthoritiesService } from "../presentations/trusted-authorities.service.js";
 import { PresentationAlreadyConsumed } from "./application/complete-presentation-response.js";
 import { FailPresentationResponse } from "./application/fail-presentation-response.js";
@@ -55,7 +71,7 @@ export class Oid4vpService {
         public readonly keyChainService: KeyChainService,
         private readonly encryptionService: EncryptionService,
         private readonly registrarService: RegistrarService,
-        private readonly presentationsService: PresentationsService,
+        private readonly verifyPresentationResponse: VerifyPresentationResponse,
         private readonly presentationConfigService: PresentationConfigService,
         private readonly registrationCertificateService: PresentationRegistrationCertificateService,
         private readonly trustedAuthoritiesService: TrustedAuthoritiesService,
@@ -695,7 +711,7 @@ export class Oid4vpService {
 
         try {
             //TODO: load required fields from the config
-            const credentials = await this.presentationsService.parseResponse(
+            const credentials = await this.verifyPresentation(
                 res,
                 presentationConfig,
                 session,
@@ -839,4 +855,65 @@ export class Oid4vpService {
             throw new BadRequestException({});
         }
     }
+
+    /**
+     * Verifies the credentials of the `vp_token` and maps verification errors
+     * to the HTTP exceptions the response handling above reports.
+     */
+    @Span("presentations.parseResponse")
+    private async verifyPresentation(
+        res: AuthResponse,
+        presentationConfig: PresentationQuery,
+        session: SessionData,
+    ): Promise<VerifiedPresentation> {
+        // Add session context to logs (Loki) and span attributes (Tempo).
+        // assign() requires nestjs-pino request scope; the @Span decorator may
+        // run the method in a separate AsyncLocalStorage context, so guard it.
+        try {
+            this.logger.assign({ sessionId: session.id });
+        } catch {
+            // Outside HTTP request scope: span attributes still carry it.
+        }
+        this.traceService.getSpan()?.setAttributes({
+            "session.id": session.id,
+            "session.tenantId": session.tenantId,
+            "session.requestId": session.requestId ?? "",
+        });
+
+        try {
+            return await this.verifyPresentationResponse.execute(
+                res,
+                presentationConfig,
+                session,
+            );
+        } catch (error) {
+            throw presentationVerificationException(error);
+        }
+    }
+}
+
+/** Maps presentation verification errors to the HTTP exceptions of the OID4VP API. */
+function presentationVerificationException(error: unknown): unknown {
+    if (error instanceof IncompletePresentationError) {
+        return new IncompletePresentationException(
+            error.message,
+            error.details,
+        );
+    }
+    if (error instanceof UnknownPresentedCredentialError) {
+        return new ConflictException(error.message);
+    }
+    if (error instanceof UnsupportedCredentialVerifierFormat) {
+        return new ConflictException(
+            `Unsupported credential type: ${error.format}`,
+        );
+    }
+    if (
+        error instanceof CredentialVerificationFailedError ||
+        error instanceof InvalidTrustedAuthoritiesError ||
+        error instanceof UnknownClaimSetReferenceError
+    ) {
+        return new BadRequestException(error.message);
+    }
+    return error;
 }
