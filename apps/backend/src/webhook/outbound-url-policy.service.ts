@@ -85,6 +85,10 @@ export class OutboundUrlPolicyService {
                     method: "GET",
                     headers: options.headers,
                     lookup: this.safeLookup,
+                    // No connection pooling: every request opens a fresh
+                    // connection, so the address check in safeLookup always
+                    // runs instead of reusing a socket from another request.
+                    agent: false,
                     timeout: options.timeoutMs,
                 },
                 (response) => {
