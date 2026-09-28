@@ -1,4 +1,4 @@
-export type CredentialProofType = "jwt" | "attestation";
+type CredentialProofType = "jwt" | "attestation";
 
 export interface ResolvedCredentialProofs {
     proofType: CredentialProofType;

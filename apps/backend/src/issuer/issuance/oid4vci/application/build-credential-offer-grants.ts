@@ -8,7 +8,7 @@ import type {
 } from "@openid4vc/openid4vci";
 import type { CredentialOfferGrants } from "../domain/credential-offer-grants.js";
 
-export type CredentialOfferFlow = "authorization_code" | "pre_authorized_code";
+type CredentialOfferFlow = "authorization_code" | "pre_authorized_code";
 
 export interface BuildCredentialOfferGrantsInput {
     flow: CredentialOfferFlow;

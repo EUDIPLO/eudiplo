@@ -10,7 +10,7 @@ export interface CredentialIssuanceContext {
     issuanceSetId?: string;
 }
 
-export interface CredentialIssuanceDefinition {
+interface CredentialIssuanceDefinition {
     id: string;
     tenantId?: string;
     tenant?: unknown;

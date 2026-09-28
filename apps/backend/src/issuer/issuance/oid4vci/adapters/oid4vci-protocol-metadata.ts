@@ -28,7 +28,10 @@ import { RegistrarService } from "../../../../registrar/registrar.service.js";
 import { FederationTrustService } from "../../../../trust/federation-trust.service.js";
 import { FederationTrustSource } from "../../../../trust/types.js";
 import { CredentialsService } from "../../../configuration/credentials/credentials.service.js";
-import type { IssuanceConfiguration as IssuanceConfig } from "../../../configuration/issuance/domain/issuance-configuration.js";
+import type {
+    IssuanceConfiguration as IssuanceConfig,
+    ManagedAuthorizationServerData,
+} from "../../../configuration/issuance/domain/issuance-configuration.js";
 import { ManagedAuthorizationServerConfig } from "../../../configuration/issuance/dto/authorization-server-config.dto.js";
 import {
     IssuerProvidedAttestation,
@@ -238,7 +241,7 @@ export class Oid4vciProtocolMetadata {
     async getSelectedAuthorizationServerConfig(
         tenantId: string,
         selectedAuthorizationServer?: string,
-    ) {
+    ): Promise<ManagedAuthorizationServerData | undefined> {
         const issuanceConfig =
             await this.issuanceService.getIssuanceConfiguration(tenantId);
 

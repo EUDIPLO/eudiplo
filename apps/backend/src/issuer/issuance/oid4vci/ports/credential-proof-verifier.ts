@@ -1,7 +1,7 @@
 import type { Jwk } from "@openid4vc/oauth2";
 import type { TrustListRef } from "../../../../trust/types.js";
 export type IssuanceProofType = "jwt" | "attestation";
-export interface PreparedCredentialProofVerifier {
+interface PreparedCredentialProofVerifier {
     verify(proof: string, type: IssuanceProofType): Promise<Jwk[]>;
 }
 export interface CredentialProofVerifier {

@@ -39,7 +39,7 @@ export interface SessionOfferRequest {
     >;
     webhookEndpointId?: string;
 }
-export interface SessionTransactionData {
+interface SessionTransactionData {
     type: string;
     credential_ids: string[];
     [key: string]: any;
@@ -50,7 +50,7 @@ export interface Notification {
     credentialConfigurationId: string;
 }
 /** Read-only tenant projection retained for the existing session detail response. */
-export interface SessionTenant {
+interface SessionTenant {
     id: string;
     name: string;
     description?: string | null;

@@ -76,5 +76,4 @@ export const UpdateTenantSchema = z
     .describe("Payload for partially updating tenant metadata.");
 
 export type CreateTenant = z.infer<typeof CreateTenantSchema>;
-export type ImportTenant = z.infer<typeof ImportTenantSchema>;
 export type UpdateTenant = z.infer<typeof UpdateTenantSchema>;

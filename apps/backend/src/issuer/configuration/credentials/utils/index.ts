@@ -1,5 +1,4 @@
 export {
-    buildClaims,
     buildClaimsByNamespace,
     buildClaimsMetadata,
     buildDisclosureFrame,

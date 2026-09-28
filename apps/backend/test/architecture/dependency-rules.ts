@@ -1,7 +1,7 @@
 import { relative, resolve } from "node:path";
 import ts from "typescript";
 
-export type Role =
+type Role =
     | "application"
     | "domain"
     | "port"
@@ -17,7 +17,7 @@ export interface Dependency {
 }
 
 /** Source dependencies, including erased types and barrel exports. */
-export function dependencies(source: ts.SourceFile): Dependency[] {
+function dependencies(source: ts.SourceFile): Dependency[] {
     const result: Dependency[] = [];
     const forwardedNames = new Set<string>();
     for (const statement of source.statements) {
@@ -106,7 +106,7 @@ export function dependencies(source: ts.SourceFile): Dependency[] {
     return result;
 }
 
-export function roleOf(file: string): Role {
+function roleOf(file: string): Role {
     if (/(^|\/)application\//.test(file)) return "application";
     if (/(^|\/)domain\//.test(file)) return "domain";
     if (/(^|\/)ports\//.test(file)) return "port";

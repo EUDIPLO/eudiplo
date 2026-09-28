@@ -16,7 +16,7 @@ import {
 import { Session } from "../../src/session/entities/session.entity.js";
 
 export const sessionEntities = [Session, TenantEntity, ClientEntity];
-export const offer: CredentialOfferObject = {
+const offer: CredentialOfferObject = {
     credential_issuer: "https://issuer.example/tenant-a",
     credential_configuration_ids: ["pid"],
 };

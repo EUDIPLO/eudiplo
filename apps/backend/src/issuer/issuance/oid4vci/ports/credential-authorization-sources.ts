@@ -1,12 +1,12 @@
 import type { AuthorizationIdentity } from "../../../configuration/credentials/domain/authorization-identity.js";
 
-export interface CredentialTokenIssuers {
+interface CredentialTokenIssuers {
     localIssuer: string;
     chainedIssuer: string;
     hasChainedAuthorizationServer: boolean;
     managedAuthorizationServerIssuers: ReadonlySet<string>;
 }
-export interface ExternalCredentialAuthorizationServer {
+interface ExternalCredentialAuthorizationServer {
     id: string;
     bindingClaim?: string;
 }
