@@ -158,4 +158,57 @@ describe("EvaluateFederationTrustChain", () => {
             }),
         ).toMatchObject({ trusted: true });
     });
+
+    it("bounds the total number of resolutions for a hostile fan-out", async () => {
+        // Every entity advertises many fresh, never-anchored superiors.
+        let counter = 0;
+        const resolveEntityConfiguration = vi.fn(async (entityId: string) => ({
+            sub: entityId,
+            authority_hints: Array.from(
+                { length: 50 },
+                () => `https://hint-${counter++}.example`,
+            ),
+        }));
+
+        const result = await new EvaluateFederationTrustChain({
+            resolveEntityConfiguration,
+        }).execute({
+            entityId: "https://leaf.example",
+            trustAnchors: ["https://anchor.example"],
+        });
+
+        expect(result.trusted).toBe(false);
+        expect(resolveEntityConfiguration).toHaveBeenCalledTimes(32);
+    });
+
+    it("follows only the first hints of an entity", async () => {
+        const resolveEntityConfiguration = vi.fn(async (entityId: string) =>
+            entityId === "https://leaf.example"
+                ? {
+                      sub: entityId,
+                      authority_hints: [
+                          "https://dead-end-1.example",
+                          "https://dead-end-2.example",
+                          "https://intermediate.example",
+                      ],
+                  }
+                : entityId === "https://intermediate.example"
+                  ? {
+                        sub: entityId,
+                        authority_hints: ["https://anchor.example"],
+                    }
+                  : { sub: entityId, authority_hints: [] },
+        );
+        const evaluate = (maxHintsPerEntity: number) =>
+            new EvaluateFederationTrustChain(
+                { resolveEntityConfiguration },
+                { maxDepth: 8, maxHintsPerEntity, maxResolutions: 32 },
+            ).execute({
+                entityId: "https://leaf.example",
+                trustAnchors: ["https://anchor.example"],
+            });
+
+        await expect(evaluate(2)).resolves.toMatchObject({ trusted: false });
+        await expect(evaluate(3)).resolves.toMatchObject({ trusted: true });
+    });
 });

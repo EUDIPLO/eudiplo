@@ -10,10 +10,27 @@ export interface EvaluateFederationTrustChainInput {
     trustAnchors: string[];
 }
 
-export class EvaluateFederationTrustChain {
-    private readonly maxDepth = 8;
+/** Bounds on how much remote traversal one evaluation may trigger. */
+export interface FederationTraversalLimits {
+    /** Maximum authority_hints hops from the leaf entity. */
+    maxDepth: number;
+    /** Only the first N authority_hints of each entity are followed. */
+    maxHintsPerEntity: number;
+    /** Maximum entity configurations resolved per evaluation. */
+    maxResolutions: number;
+}
 
-    constructor(private readonly resolver: FederationResolver) {}
+export const DEFAULT_FEDERATION_TRAVERSAL_LIMITS: FederationTraversalLimits = {
+    maxDepth: 8,
+    maxHintsPerEntity: 10,
+    maxResolutions: 32,
+};
+
+export class EvaluateFederationTrustChain {
+    constructor(
+        private readonly resolver: FederationResolver,
+        private readonly limits: FederationTraversalLimits = DEFAULT_FEDERATION_TRAVERSAL_LIMITS,
+    ) {}
 
     async execute(
         input: EvaluateFederationTrustChainInput,
@@ -28,12 +45,16 @@ export class EvaluateFederationTrustChain {
         ) => ({ trusted: false, reason });
         // Revisit an entity only when a shorter path leaves more depth available.
         const exploredDepth = new Map<string, number>();
+        const { maxDepth, maxHintsPerEntity, maxResolutions } = this.limits;
+        // Entity configurations are attacker-influenced input, so the total
+        // number of remote resolutions per evaluation is bounded.
+        let resolutions = 0;
         const visit = async (
             current: string,
             depth: number,
             path: Set<string>,
         ): Promise<FederationTrustChainResult> => {
-            if (depth > this.maxDepth)
+            if (depth > maxDepth)
                 return rejected(
                     "federation authority_hints chain exceeded maximum depth",
                 );
@@ -45,6 +66,11 @@ export class EvaluateFederationTrustChain {
             if ((exploredDepth.get(current) ?? Infinity) <= depth)
                 return rejected();
             exploredDepth.set(current, depth);
+            if (resolutions >= maxResolutions)
+                return rejected(
+                    "federation authority_hints traversal exceeded resolution limit",
+                );
+            resolutions++;
             const configuration =
                 await this.resolver.resolveEntityConfiguration(current);
             if (
@@ -55,14 +81,11 @@ export class EvaluateFederationTrustChain {
                     "federation entity subject does not match entity id",
                 );
             }
-            const hints = (configuration.authority_hints ?? []).map(
-                normalizeEntityId,
-            );
+            const hints = (configuration.authority_hints ?? [])
+                .slice(0, maxHintsPerEntity)
+                .map(normalizeEntityId);
             // A direct anchor must not be hidden by an earlier unrelated hint.
-            if (
-                depth < this.maxDepth &&
-                hints.some((hint) => anchors.has(hint))
-            )
+            if (depth < maxDepth && hints.some((hint) => anchors.has(hint)))
                 return trusted;
             const nextPath = new Set(path).add(current);
             let failure = rejected();

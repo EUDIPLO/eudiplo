@@ -13,6 +13,9 @@ import {
     type FederationResolver,
 } from "../ports/federation-resolver.js";
 
+/** A slow or unresponsive federation entity must not stall trust evaluation. */
+const FEDERATION_FETCH_TIMEOUT_MS = 5000;
+
 @Injectable()
 export class OpenIdFederationResolver implements FederationResolver {
     constructor(@Inject(HttpService) private readonly http: HttpService) {}
@@ -24,6 +27,7 @@ export class OpenIdFederationResolver implements FederationResolver {
         const response = await firstValueFrom(
             this.http.get<string | Record<string, unknown>>(url, {
                 responseType: "text" as never,
+                timeout: FEDERATION_FETCH_TIMEOUT_MS,
             }),
         );
         return this.parse(response.data, entityId);

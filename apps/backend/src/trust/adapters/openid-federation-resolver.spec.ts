@@ -23,7 +23,7 @@ describe("OpenIdFederationResolver", () => {
         ).resolves.toEqual({ sub: "https://entity.example" });
         expect(get).toHaveBeenCalledWith(
             "https://entity.example/.well-known/openid-federation",
-            { responseType: "text" },
+            { responseType: "text", timeout: 5000 },
         );
     });
 
