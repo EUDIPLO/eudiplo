@@ -1,7 +1,7 @@
 import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import type { PresentationConfig } from "../entities/presentation-config.entity.js";
-import { RegistrationCertificateService } from "./registration-certificate.service.js";
+import { PresentationRegistrationCertificateService } from "./presentation-registration-certificate.service.js";
 
 function createService(registrar: Record<string, unknown> = {}) {
     const repository = {
@@ -24,7 +24,7 @@ function createService(registrar: Record<string, unknown> = {}) {
         ...registrar,
     };
     const logger = { setContext: vi.fn(), warn: vi.fn() };
-    const service = new RegistrationCertificateService(
+    const service = new PresentationRegistrationCertificateService(
         repository as any,
         registrarService as any,
         { publicUrl: "https://eudiplo.example" },
@@ -53,7 +53,7 @@ const validCache = {
     source: "registrar" as const,
 };
 
-describe("RegistrationCertificateService.getOrIssueRegistrationCertificate", () => {
+describe("PresentationRegistrationCertificateService.getOrIssueRegistrationCertificate", () => {
     it("returns nothing without a spec or an enabled registrar", async () => {
         const { service, registrarService } = createService({
             isEnabledForTenant: vi.fn().mockResolvedValue(false),
@@ -131,7 +131,7 @@ describe("RegistrationCertificateService.getOrIssueRegistrationCertificate", () 
     });
 });
 
-describe("RegistrationCertificateService.reissue", () => {
+describe("PresentationRegistrationCertificateService.reissue", () => {
     it("rejects configs without a spec or without an enabled registrar", async () => {
         await expect(
             createService().service.reissue(
@@ -162,7 +162,7 @@ describe("RegistrationCertificateService.reissue", () => {
     });
 });
 
-describe("RegistrationCertificateService.scheduleRefresh", () => {
+describe("PresentationRegistrationCertificateService.scheduleRefresh", () => {
     it("stores a freshly resolved cache for the latest config", async () => {
         const { service, repository } = createService();
         repository.findOneBy.mockResolvedValue(config());

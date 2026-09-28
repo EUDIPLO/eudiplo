@@ -22,7 +22,7 @@ import { AuditLogContext } from "../../session/logging/session-audit.service.js"
 import { SessionLoggerService } from "../../session/logging/session-logger.service.js";
 import { DEFAULT_VERIFIER_SKEW_SECONDS } from "../../trust/types.js";
 import { PresentationConfigService } from "../presentations/configuration/presentation-config.service.js";
-import { RegistrationCertificateService } from "../presentations/configuration/registration-certificate.service.js";
+import { PresentationRegistrationCertificateService } from "../presentations/configuration/presentation-registration-certificate.service.js";
 import { SdJwtVerificationError } from "../presentations/credential/sdjwtvcverifier/sdjwtvcverifier.service.js";
 import { shortVerificationMessage } from "../presentations/credential/verification-failure.js";
 import { AuthResponse } from "../presentations/dto/auth-response.dto.js";
@@ -57,7 +57,7 @@ export class Oid4vpService {
         private readonly registrarService: RegistrarService,
         private readonly presentationsService: PresentationsService,
         private readonly presentationConfigService: PresentationConfigService,
-        private readonly registrationCertificateService: RegistrationCertificateService,
+        private readonly registrationCertificateService: PresentationRegistrationCertificateService,
         private readonly trustedAuthoritiesService: TrustedAuthoritiesService,
         private readonly createSession: CreateSession,
         private readonly sessionStore: SessionStore,

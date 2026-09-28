@@ -10,7 +10,7 @@ import { ResolverModule } from "../resolver/resolver.module.js";
 import { MetadataFetchService } from "./configuration/metadata-fetch.service.js";
 import { MetadataImportService } from "./configuration/metadata-import.service.js";
 import { PresentationConfigService } from "./configuration/presentation-config.service.js";
-import { RegistrationCertificateService } from "./configuration/registration-certificate.service.js";
+import { PresentationRegistrationCertificateService } from "./configuration/presentation-registration-certificate.service.js";
 import { CredentialChainValidationService } from "./credential/credential-chain-validation.service.js";
 import { CredentialVerifierFormatRegistry } from "./credential/credential-verifier-format-registry.js";
 import { MdocCredentialVerifierFormat } from "./credential/mdocverifier/mdoc-credential-verifier-format.js";
@@ -37,7 +37,7 @@ import { TrustedAuthoritiesService } from "./trusted-authorities.service.js";
     providers: [
         PresentationsService,
         PresentationConfigService,
-        RegistrationCertificateService,
+        PresentationRegistrationCertificateService,
         MetadataImportService,
         TrustedAuthoritiesService,
         {
@@ -68,7 +68,7 @@ import { TrustedAuthoritiesService } from "./trusted-authorities.service.js";
     exports: [
         PresentationsService,
         PresentationConfigService,
-        RegistrationCertificateService,
+        PresentationRegistrationCertificateService,
         TrustedAuthoritiesService,
         CredentialChainValidationService,
         MdocverifierService,

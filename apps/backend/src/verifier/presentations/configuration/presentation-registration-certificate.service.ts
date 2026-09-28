@@ -28,7 +28,7 @@ const CACHE_EXPIRY_SKEW_SECONDS = 60;
  * not expired.
  */
 @Injectable()
-export class RegistrationCertificateService {
+export class PresentationRegistrationCertificateService {
     constructor(
         @InjectRepository(PresentationConfig)
         private readonly repository: Repository<PresentationConfig>,
@@ -37,7 +37,7 @@ export class RegistrationCertificateService {
         private readonly settings: PresentationSettings,
         private readonly logger: PinoLogger,
     ) {
-        this.logger.setContext(RegistrationCertificateService.name);
+        this.logger.setContext(PresentationRegistrationCertificateService.name);
     }
 
     /**

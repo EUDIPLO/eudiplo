@@ -17,8 +17,8 @@ import { loadJsonFile } from "../../../shared/utils/config-file-loader.util.js";
 import { PresentationConfigCreateDto } from "../dto/presentation-config-create.dto.js";
 import { PresentationConfigUpdateDto } from "../dto/presentation-config-update.dto.js";
 import { PresentationConfig } from "../entities/presentation-config.entity.js";
+import { PresentationRegistrationCertificateService } from "./presentation-registration-certificate.service.js";
 import { normalizeRegistrationCertFormFields } from "./registration-cert-form-fields.js";
-import { RegistrationCertificateService } from "./registration-certificate.service.js";
 
 /**
  * Tenant-scoped CRUD for presentation configurations, including the
@@ -29,7 +29,7 @@ export class PresentationConfigService {
     constructor(
         @InjectRepository(PresentationConfig)
         private readonly repository: Repository<PresentationConfig>,
-        private readonly registrationCertificates: RegistrationCertificateService,
+        private readonly registrationCertificates: PresentationRegistrationCertificateService,
         private readonly configImportService: ConfigImportService,
         configImportOrchestrator: ConfigImportOrchestratorService,
         private readonly auditLogService: AuditLogService,
