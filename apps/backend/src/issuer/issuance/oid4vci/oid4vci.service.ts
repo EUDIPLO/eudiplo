@@ -466,8 +466,10 @@ export class Oid4vciService {
         try {
             // Check if the webhook indicated deferred issuance
             if (claimsResult?.deferred) {
-                return this.deferredCredentialService.createDeferredTransaction(
-                    {
+                // Deliberately not routed through the credential error mapper
+                // below; only authorization-server errors are translated.
+                return this.deferredCredentialService
+                    .createDeferredTransaction({
                         parsedCredentialRequest: {
                             proofs: parsedProofs.values,
                             proofType: parsedProofs.proofType,
@@ -477,8 +479,10 @@ export class Oid4vciService {
                         tenantId,
                         interval: claimsResult.interval,
                         issuanceSetId,
-                    },
-                );
+                    })
+                    .catch((error: unknown) => {
+                        throw toHttpError(error);
+                    });
             }
 
             // Validate and consume nonces
