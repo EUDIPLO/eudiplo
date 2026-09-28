@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { AddKeyUsageEntity1743000000000 } from "../src/database/migrations/1743000000000-AddKeyUsageEntity.js";
 import { FlattenKeyUsageType1746000000000 } from "../src/database/migrations/1746000000000-FlattenKeyUsageType.js";
 import { MigrateKeysToKeyChain1747000000000 } from "../src/database/migrations/1747000000000-MigrateKeysToKeyChain.js";
+import { describeWithContainers } from "./container-runtime.js";
 
 /**
  * Migration tests that verify migrations work correctly on both SQLite and PostgreSQL.
@@ -264,7 +265,7 @@ describe("Migration tests", () => {
             });
         });
 
-        describe("PostgreSQL", () => {
+        describeWithContainers("PostgreSQL", () => {
             let dataSource: DataSource;
             let postgresContainer: StartedPostgreSqlContainer;
 
@@ -507,7 +508,7 @@ describe("Migration tests", () => {
             });
         });
 
-        describe("PostgreSQL", () => {
+        describeWithContainers("PostgreSQL", () => {
             let dataSource: DataSource;
             let postgresContainer: StartedPostgreSqlContainer;
 
@@ -785,7 +786,7 @@ describe("Migration tests", () => {
             });
         });
 
-        describe("PostgreSQL", () => {
+        describeWithContainers("PostgreSQL", () => {
             let dataSource: DataSource;
             let postgresContainer: StartedPostgreSqlContainer;
 

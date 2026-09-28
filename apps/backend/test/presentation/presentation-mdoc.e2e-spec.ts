@@ -166,7 +166,7 @@ describe("Presentation - mDOC Credential", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test("present mso mdoc credential", async () => {

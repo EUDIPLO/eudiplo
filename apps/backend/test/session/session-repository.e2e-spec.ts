@@ -3,14 +3,15 @@ import {
     type StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
 import { DataSource } from "typeorm";
-import { afterAll, beforeAll, describe } from "vitest";
+import { afterAll, beforeAll } from "vitest";
+import { describeWithContainers } from "../container-runtime.js";
 import {
     initializeTestEncryption,
     sessionEntities,
     sessionRepositoryContract,
 } from "./session-repository.contract.js";
 
-describe("PostgreSQL session repository", () => {
+describeWithContainers("PostgreSQL session repository", () => {
     let db: DataSource;
     let container: StartedPostgreSqlContainer;
     beforeAll(async () => {

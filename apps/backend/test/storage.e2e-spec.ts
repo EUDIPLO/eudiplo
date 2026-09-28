@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { LocalFileStorage } from "../src/storage/adapters/local.storage.js";
 import { S3FileStorage } from "../src/storage/adapters/s3.storage.js";
 import type { FileStorage } from "../src/storage/storage.types.js";
+import { describeWithContainers } from "./container-runtime.js";
 
 /**
  * Shared test suite for FileStorage implementations.
@@ -168,7 +169,7 @@ describe("LocalFileStorage", () => {
     });
 });
 
-describe("S3FileStorage (RustFS)", () => {
+describeWithContainers("S3FileStorage (RustFS)", () => {
     let rustfsContainer: StartedTestContainer;
     let s3Client: S3Client;
     let s3Storage: S3FileStorage;

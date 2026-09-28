@@ -135,7 +135,7 @@ describe("Presentation - Webhook Integration", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test("webhook in config", async () => {

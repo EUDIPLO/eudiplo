@@ -3,8 +3,9 @@ import {
     StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
 import { DataSource, EntitySchema } from "typeorm";
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
 import { BaselineMigration1740000000000 } from "../src/database/migrations/1740000000000-BaselineMigration.js";
+import { describeWithContainers } from "./container-runtime.js";
 
 const ExampleEntity = new EntitySchema({
     name: "Example",
@@ -15,7 +16,7 @@ const ExampleEntity = new EntitySchema({
     },
 });
 
-describe("PostgreSQL baseline migration", () => {
+describeWithContainers("PostgreSQL baseline migration", () => {
     let container: StartedPostgreSqlContainer;
     let admin: DataSource;
     let dataSource: DataSource;

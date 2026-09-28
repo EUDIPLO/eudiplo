@@ -26,7 +26,7 @@ describe("Interactive Authorization Endpoint (IAE)", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     describe("Initial Request", () => {

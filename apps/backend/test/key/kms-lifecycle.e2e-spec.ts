@@ -45,7 +45,7 @@ describe("Key Chain — KMS provider lifecycle (e2e)", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test("should list at least one KMS provider", () => {

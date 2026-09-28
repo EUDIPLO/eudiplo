@@ -61,7 +61,7 @@ describe("Presentation - Direct Post Security (Section 13.3)", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     // ─── walletNonce / session ID separation ───────────────────────────

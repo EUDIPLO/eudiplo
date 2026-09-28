@@ -58,7 +58,7 @@ describe("Client Resource-Level Access Control (e2e)", () => {
     });
 
     afterAll(async () => {
-        await ctx.app.close();
+        await ctx?.app?.close();
     });
 
     async function createRestrictedClient(app: INestApplication<App>) {

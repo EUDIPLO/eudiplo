@@ -77,7 +77,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test("pre authorized code flow", async () => {

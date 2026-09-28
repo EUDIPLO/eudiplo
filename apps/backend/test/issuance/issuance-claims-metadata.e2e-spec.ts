@@ -28,7 +28,7 @@ describe("Issuance - Claims Metadata", () => {
 
     afterAll(async () => {
         if (app) {
-            await app.close();
+            await app?.close();
         }
     });
 

@@ -37,7 +37,7 @@ describe("Status List - Token Format Negotiation", () => {
 
     afterAll(async () => {
         if (app) {
-            await app.close();
+            await app?.close();
         }
     });
 

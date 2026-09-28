@@ -406,7 +406,7 @@ describe("Issuance - Wallet Attestation", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test.each(["issuer-default", "as-override"])(

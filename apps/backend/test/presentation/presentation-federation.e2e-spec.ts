@@ -106,7 +106,7 @@ describe("Presentation - OpenID Federation", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test("verifier processes SD-JWT when OpenID Federation trusted authority is configured", async () => {

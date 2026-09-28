@@ -82,7 +82,7 @@ describe("OpenAPI contract", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test.each([

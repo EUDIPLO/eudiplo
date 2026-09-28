@@ -25,7 +25,7 @@ describe("Authentication (e2e)", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test("should get OAuth2 token with valid client credentials in request body", async () => {

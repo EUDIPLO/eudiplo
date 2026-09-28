@@ -51,7 +51,7 @@ describe("Issuance - Refresh Token Flow", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test("refresh token is returned in pre-authorized code flow token response", async () => {

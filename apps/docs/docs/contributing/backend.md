@@ -70,7 +70,7 @@ Before opening a pull request:
 - add focused unit tests beside extracted services;
 - update imports, E2E utilities, generation scripts, and documentation paths;
 - run the backend format check, build, lint, and unit tests;
-- run relevant E2E tests when module wiring or protocol behavior changes.
+- run relevant E2E tests when module wiring or protocol behavior changes (see [Running E2E tests locally](./e2e-testing.md#running-e2e-tests-locally)).
 
 From the repository root, the main backend checks are:
 

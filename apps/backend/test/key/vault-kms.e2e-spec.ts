@@ -6,15 +6,16 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
 import request from "supertest";
 import { GenericContainer, StartedTestContainer, Wait } from "testcontainers";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, expect, test } from "vitest";
 import { AppModule } from "../../src/app.module.js";
 import { KeyChainType } from "../../src/crypto/key/dto/key-chain-create.dto.js";
 import { createAppValidationPipe } from "../../src/shared/common/zod/zod-schema.util.js";
+import { describeWithContainers } from "../container-runtime.js";
 import { getToken } from "../utils.js";
 
 const VAULT_DEV_ROOT_TOKEN = "test-root-token";
 
-describe("Key Chain — Vault KMS (e2e)", () => {
+describeWithContainers("Key Chain — Vault KMS (e2e)", () => {
     let vaultContainer: StartedTestContainer;
     let app: INestApplication;
     let authToken: string;

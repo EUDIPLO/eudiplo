@@ -13,6 +13,7 @@ import request from "supertest";
 import { App } from "supertest/types";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { AppModule } from "../src/app.module.js";
+import { describeWithContainers } from "./container-runtime.js";
 
 describe("Database SSL invalid CA path", () => {
     test("bootstrap fails early when DB_SSL_CA_PATH cannot be read", async () => {
@@ -45,7 +46,7 @@ describe("Database SSL invalid CA path", () => {
     });
 });
 
-describe("Database SSL with CA path (positive)", () => {
+describeWithContainers("Database SSL with CA path (positive)", () => {
     let app: INestApplication<App>;
     let container: StartedPostgreSqlContainer;
     let certDir: string;

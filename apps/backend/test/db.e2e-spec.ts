@@ -11,6 +11,7 @@ import request from "supertest";
 import { App } from "supertest/types";
 import { DataSource } from "typeorm";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
+import { describeWithContainers } from "./container-runtime.js";
 
 /**
  * Boots the full NestJS app on an empty database using migrations only, then
@@ -72,7 +73,7 @@ describe("Database boot & health", () => {
         });
     });
 
-    describe("Postgres", () => {
+    describeWithContainers("Postgres", () => {
         let app: INestApplication<App>;
         let postgresContainer: StartedPostgreSqlContainer;
         let databaseFolder: string;

@@ -46,7 +46,7 @@ describe("Issuance - OpenID Federation", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     async function updateIssuanceConfig(update: Partial<IssuanceDto>) {

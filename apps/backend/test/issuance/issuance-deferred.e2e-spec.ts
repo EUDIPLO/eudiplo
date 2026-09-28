@@ -103,7 +103,7 @@ describe("Issuance - Deferred Credential Flow", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test("deferred credential issuance with webhook returning deferred response", async () => {

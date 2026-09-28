@@ -135,7 +135,7 @@ describe("Presentation - SD-JWT Credential", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test("present sd jwt credential", async () => {

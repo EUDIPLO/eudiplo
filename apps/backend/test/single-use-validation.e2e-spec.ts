@@ -36,7 +36,7 @@ describe("Single-Use Validation (Issue #503) - OID4VCI", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test("should reject token exchange once offer is consumed", async () => {
@@ -181,7 +181,7 @@ describe("Single-Use Validation (Issue #503) - OID4VP", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test("should prevent presentation response after request is consumed", async () => {

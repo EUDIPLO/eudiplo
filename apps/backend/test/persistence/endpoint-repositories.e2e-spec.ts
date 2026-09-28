@@ -3,8 +3,9 @@ import {
     type StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
 import { DataSource } from "typeorm";
-import { afterAll, beforeAll, describe } from "vitest";
+import { afterAll, beforeAll } from "vitest";
 import { IssuanceConfig } from "../../src/issuer/configuration/issuance/entities/issuance-config.entity.js";
+import { describeWithContainers } from "../container-runtime.js";
 import {
     credentialEntities,
     credentialRepositoryContract,
@@ -13,7 +14,7 @@ import { endpointRepositoryContract } from "./endpoint-repository.contract.js";
 import { issuanceRepositoryContract } from "./issuance-repository.contract.js";
 import { tenantRepositoryContract } from "./tenant-repository.contract.js";
 
-describe("PostgreSQL configuration endpoint repositories", () => {
+describeWithContainers("PostgreSQL configuration endpoint repositories", () => {
     let db: DataSource;
     let container: StartedPostgreSqlContainer;
     beforeAll(async () => {

@@ -30,7 +30,7 @@ describe("Key Chain — Import (e2e)", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test("import a new key chain", async () => {

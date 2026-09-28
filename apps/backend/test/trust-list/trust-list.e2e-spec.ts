@@ -82,7 +82,7 @@ describe("Trust List e2e Tests", () => {
     });
 
     afterAll(async () => {
-        await ctx.app.close();
+        await ctx?.app?.close();
     });
 
     describe("CRUD Operations", () => {

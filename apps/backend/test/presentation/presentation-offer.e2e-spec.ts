@@ -39,7 +39,7 @@ describe("Presentation - Offer Creation", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test("create oid4vp offer", async () => {

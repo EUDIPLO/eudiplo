@@ -10,6 +10,14 @@ export default defineConfig({
         globals: true,
         root: fileURLToPath(new URL("..", import.meta.url)),
         fileParallelism: false,
+        // The first verifier offer / signed metadata request of a suite can
+        // take several seconds; the 5s default makes local runs flaky.
+        testTimeout: 15_000,
+        // Fails fast when port 3000 is taken and detects Docker for the
+        // Testcontainers suites.
+        globalSetup: ["./test/global-setup.ts"],
+        // Ignores apps/backend/.env so developer settings do not leak in.
+        setupFiles: ["./test/setup-e2e.ts"],
         coverage: {
             provider: "v8",
             reportsDirectory: "./coverage/e2e",

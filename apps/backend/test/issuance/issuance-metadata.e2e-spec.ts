@@ -26,7 +26,7 @@ describe("Issuance - Metadata", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test("get issuer metadata", async () => {

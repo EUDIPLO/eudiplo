@@ -236,7 +236,7 @@ describe("Issuance - Chained AS Flow", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     async function configureChainedAs(

@@ -332,7 +332,7 @@ describe("Presentation - Transaction Data", () => {
     });
 
     afterAll(async () => {
-        await app.close();
+        await app?.close();
     });
 
     test("should reject presentation config with invalid dcql credentials id", async () => {
