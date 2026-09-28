@@ -18,6 +18,7 @@ type SessionStoreRepository = Pick<
     | "findByRequestUri"
     | "updateForTenant"
     | "updateUnconsumedForTenant"
+    | "consumeRequestUri"
     | "listForTenant"
     | "deleteForTenant"
     | "findCredentialOffer"
@@ -102,6 +103,21 @@ export class SessionStore {
             tenantId,
             sessionId,
             update,
+        );
+    }
+
+    /** Single-use PAR request_uri: returns whether this call redeemed it. */
+    consumeRequestUri(
+        tenantId: string,
+        sessionId: string,
+        expiresAt: Date,
+        now: Date,
+    ): Promise<boolean> {
+        return this.sessions.consumeRequestUri(
+            tenantId,
+            sessionId,
+            expiresAt,
+            now,
         );
     }
 

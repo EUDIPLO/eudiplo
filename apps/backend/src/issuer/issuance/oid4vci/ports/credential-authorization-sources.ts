@@ -20,6 +20,7 @@ export interface CredentialAuthorizationSources {
         configuration?: ExternalCredentialAuthorizationServer;
     }>;
     upstreamIdentity(
+        tenantId: string,
         issuerState: string,
     ): Promise<AuthorizationIdentity | undefined>;
 }

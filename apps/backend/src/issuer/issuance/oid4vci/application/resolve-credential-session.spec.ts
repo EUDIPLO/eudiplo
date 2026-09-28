@@ -90,7 +90,10 @@ describe("ResolveCredentialSession", () => {
             sub: "token-sub",
             issuer_state: "session",
         });
-        expect(f.sources.upstreamIdentity).toHaveBeenCalledWith("session");
+        expect(f.sources.upstreamIdentity).toHaveBeenCalledWith(
+            "tenant",
+            "session",
+        );
         expect(f.claims.resolveClaims).toHaveBeenCalledWith(
             expect.objectContaining({
                 identity: { iss: "upstream", sub: "user", token_claims: {} },

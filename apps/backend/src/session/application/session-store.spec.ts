@@ -17,6 +17,7 @@ function createStore(overrides: Partial<SessionRepository> = {}) {
         findByRequestUri: vi.fn().mockResolvedValue(session),
         updateForTenant: vi.fn().mockResolvedValue(1),
         updateUnconsumedForTenant: vi.fn().mockResolvedValue(true),
+        consumeRequestUri: vi.fn().mockResolvedValue(true),
         listForTenant: vi.fn(),
         deleteForTenant: vi.fn().mockResolvedValue(undefined),
         findCredentialOffer: vi.fn(),
@@ -105,6 +106,17 @@ describe("SessionStore", () => {
             "tenant-1",
             "session-1",
             update,
+        );
+        const expiresAt = new Date("2026-01-01T12:01:00.000Z");
+        const now = new Date("2026-01-01T12:00:00.000Z");
+        await expect(
+            store.consumeRequestUri("tenant-1", "session-1", expiresAt, now),
+        ).resolves.toBe(true);
+        expect(repository.consumeRequestUri).toHaveBeenCalledWith(
+            "tenant-1",
+            "session-1",
+            expiresAt,
+            now,
         );
         await store.deleteForTenant("tenant-1", "session-1");
         expect(repository.deleteForTenant).toHaveBeenCalledWith(

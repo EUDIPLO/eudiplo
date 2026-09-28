@@ -217,6 +217,68 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
             ).toBeNull();
         });
 
+        it("consumes a request_uri once, only within the tenant scope and before it expires", async () => {
+            const now = new Date();
+            await adapter.updateForTenant("tenant-a", sessionId, {
+                request_uri: "uri",
+                request_uri_expires_at: new Date(now.getTime() + 60_000),
+            });
+            // Use the expiry as read back, like the authorization endpoint.
+            const { request_uri_expires_at: expiresAt } =
+                (await adapter.findByRequestUri("tenant-a", "uri"))!;
+
+            await expect(
+                adapter.consumeRequestUri(
+                    "tenant-b",
+                    sessionId,
+                    expiresAt!,
+                    now,
+                ),
+            ).resolves.toBe(false);
+            await expect(
+                adapter.consumeRequestUri(
+                    "tenant-a",
+                    sessionId,
+                    expiresAt!,
+                    new Date(expiresAt!.getTime() + 1),
+                ),
+            ).resolves.toBe(false);
+            await expect(
+                adapter.consumeRequestUri(
+                    "tenant-a",
+                    sessionId,
+                    new Date(expiresAt!.getTime() + 1_000),
+                    now,
+                ),
+            ).resolves.toBe(false);
+
+            // Concurrent callers with differing clocks: exactly one wins.
+            const results = await Promise.all(
+                Array.from({ length: 8 }, (_, index) =>
+                    adapter.consumeRequestUri(
+                        "tenant-a",
+                        sessionId,
+                        expiresAt!,
+                        new Date(now.getTime() + index * 1_000),
+                    ),
+                ),
+            );
+            expect(results.filter(Boolean)).toHaveLength(1);
+            const winner = results.indexOf(true);
+            const stored = await adapter.findByRequestUri("tenant-a", "uri");
+            expect(stored?.request_uri_expires_at?.getTime()).toBe(
+                now.getTime() + winner * 1_000,
+            );
+            await expect(
+                adapter.consumeRequestUri(
+                    "tenant-a",
+                    sessionId,
+                    expiresAt!,
+                    now,
+                ),
+            ).resolves.toBe(false);
+        });
+
         it("preserves wallet nonce precedence, legacy ID fallback, and ISO protocol restriction", async () => {
             const nonceMatch = randomUUID();
             await adapter.create({

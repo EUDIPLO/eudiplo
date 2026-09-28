@@ -28,7 +28,7 @@ export class AuthorizePushedRequest {
     constructor(
         private readonly sessions: Pick<
             SessionStore,
-            "getByRequestUri" | "updateForTenant"
+            "getByRequestUri" | "consumeRequestUri" | "updateForTenant"
         >,
         private readonly settings: Oid4vciSettings,
     ) {}
@@ -75,20 +75,24 @@ export class AuthorizePushedRequest {
             );
         }
 
-        if (
-            !session.request_uri_expires_at ||
-            session.request_uri_expires_at.getTime() <= Date.now()
-        ) {
+        // Expire the request_uri on use so it cannot be redeemed twice (RFC 9126
+        // Section 7.3). The conditional update lets exactly one of several
+        // concurrent requests win; the others are treated as already used.
+        const now = new Date();
+        const redeemed =
+            !!session.request_uri_expires_at &&
+            (await this.sessions.consumeRequestUri(
+                tenantId,
+                session.id,
+                session.request_uri_expires_at,
+                now,
+            ));
+        if (!redeemed) {
             return redirectError(
                 "invalid_request_uri",
                 "request_uri is expired or was already used",
             );
         }
-
-        // Expire the request_uri on use so it cannot be redeemed twice (RFC 9126 Section 7.3).
-        await this.sessions.updateForTenant(session.tenantId, session.id, {
-            request_uri_expires_at: new Date(),
-        });
 
         const code = randomUUID();
         await this.sessions.updateForTenant(tenantId, session.id, {

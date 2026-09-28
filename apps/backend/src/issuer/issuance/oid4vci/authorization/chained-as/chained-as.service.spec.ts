@@ -131,3 +131,45 @@ describe("ChainedAsService upstream discovery caching & deduplication", () => {
         );
     });
 });
+
+describe("ChainedAsService upstream identity lookup", () => {
+    const withRepository = (sessionRepository: object): ChainedAsService =>
+        Object.assign(Object.create(ChainedAsService.prototype), {
+            sessionRepository,
+        });
+
+    it("looks up the chained session within the issuance session's tenant", async () => {
+        const findByIssuerState = vi.fn().mockResolvedValue({
+            upstreamIdTokenClaims: { iss: "https://idp", sub: "user" },
+        });
+        const service = withRepository({ findByIssuerState });
+
+        const identity = await service.getUpstreamIdentityByIssuerState(
+            "tenant-1",
+            "issuer-state",
+        );
+
+        expect(findByIssuerState).toHaveBeenCalledWith(
+            "tenant-1",
+            "issuer-state",
+        );
+        expect(identity).toEqual({
+            iss: "https://idp",
+            sub: "user",
+            token_claims: { iss: "https://idp", sub: "user" },
+        });
+    });
+
+    it("returns undefined when the tenant has no chained session for the issuer state", async () => {
+        const service = withRepository({
+            findByIssuerState: vi.fn().mockResolvedValue(null),
+        });
+
+        await expect(
+            service.getUpstreamIdentityByIssuerState(
+                "tenant-2",
+                "issuer-state",
+            ),
+        ).resolves.toBeUndefined();
+    });
+});

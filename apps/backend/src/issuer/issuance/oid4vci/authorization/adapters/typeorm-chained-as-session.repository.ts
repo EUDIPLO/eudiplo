@@ -58,8 +58,8 @@ export class TypeOrmChainedAsSessionRepository
         return this.sessions.findOne({ where: { tenantId, refreshToken } });
     }
 
-    findByIssuerState(issuerState: string) {
-        return this.sessions.findOne({ where: { issuerState } });
+    findByIssuerState(tenantId: string, issuerState: string) {
+        return this.sessions.findOne({ where: { tenantId, issuerState } });
     }
 
     async deleteExpired(now: Date): Promise<number> {

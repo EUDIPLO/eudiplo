@@ -886,14 +886,18 @@ export class ChainedAsService {
      * Get upstream identity claims by issuer state.
      * Used to retrieve the upstream OIDC provider's claims for webhook calls.
      *
+     * @param tenantId Tenant of the issuance session
      * @param issuerState The issuer_state from the credential offer session
      * @returns Upstream identity with issuer, subject, and all token claims, or undefined if not found
      */
     async getUpstreamIdentityByIssuerState(
+        tenantId: string,
         issuerState: string,
     ): Promise<AuthorizationIdentity | undefined> {
-        const chainedSession =
-            await this.sessionRepository.findByIssuerState(issuerState);
+        const chainedSession = await this.sessionRepository.findByIssuerState(
+            tenantId,
+            issuerState,
+        );
 
         if (
             !chainedSession?.upstreamIdTokenClaims &&

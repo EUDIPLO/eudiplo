@@ -119,6 +119,10 @@ function createHarness(issuanceConfig: Record<string, unknown> = {}) {
         getByAuthorizationCode: vi.fn().mockResolvedValue(session()),
         getByRefreshToken: vi.fn(),
         getByRequestUri: vi.fn(),
+        consumeRequestUri: vi.fn(
+            async (_tenant: string, _id: string, expiresAt: Date, now: Date) =>
+                expiresAt.getTime() > now.getTime(),
+        ),
         updateForTenant: vi.fn().mockResolvedValue(true),
         updateIfUnconsumed: vi.fn().mockResolvedValue(true),
     };
@@ -587,6 +591,79 @@ describe("Built-in authorization server token endpoint", () => {
         });
     });
 
+    describe("redirect_uri", () => {
+        const bound = () =>
+            session({
+                auth_queries: {
+                    client_id: "client-a",
+                    redirect_uri: "https://wallet.example/cb?keep=1",
+                },
+            });
+        const codeRequest = (extra: Record<string, unknown> = {}) =>
+            token({
+                grant_type: "authorization_code",
+                code: "c",
+                client_id: "client-a",
+                ...extra,
+            });
+
+        it.each([
+            "https://attacker.example/cb",
+            "https://wallet.example/cb",
+            "https://wallet.example/cb?keep=1&x=2",
+        ])(
+            "rejects a redirect_uri (%j) that differs from the authorization request",
+            async (redirect_uri) => {
+                h.sessions.getByAuthorizationCode.mockResolvedValue(bound());
+                expect(await codeRequest({ redirect_uri })).toEqual(
+                    tokenError(
+                        "invalid_grant",
+                        "redirect_uri does not match the authorization request",
+                    ),
+                );
+                expect(
+                    h.oauth.verifyAuthorizationCodeAccessTokenRequest,
+                ).not.toHaveBeenCalled();
+                expect(h.sessions.updateIfUnconsumed).not.toHaveBeenCalled();
+            },
+        );
+
+        it("accepts the exact redirect_uri of the authorization request", async () => {
+            h.sessions.getByAuthorizationCode.mockResolvedValue(bound());
+            expect(
+                await codeRequest({
+                    redirect_uri: "https://wallet.example/cb?keep=1",
+                }),
+            ).toHaveProperty("value");
+        });
+
+        it("accepts a token request without redirect_uri (PKCE binds the code)", async () => {
+            h.sessions.getByAuthorizationCode.mockResolvedValue(bound());
+            expect(await codeRequest()).toHaveProperty("value");
+        });
+
+        it("ignores redirect_uri when the code has none bound", async () => {
+            h.sessions.getByAuthorizationCode.mockResolvedValue(
+                session({ auth_queries: { client_id: "client-a" } }),
+            );
+            expect(
+                await codeRequest({ redirect_uri: "https://any.example/cb" }),
+            ).toHaveProperty("value");
+        });
+
+        it("does not compare redirect_uri for pre-authorized codes", async () => {
+            h.sessions.getByAuthorizationCode.mockResolvedValue(bound());
+            expect(
+                await token({
+                    grant_type:
+                        "urn:ietf:params:oauth:grant-type:pre-authorized_code",
+                    "pre-authorized_code": "code-1",
+                    redirect_uri: "https://attacker.example/cb",
+                }),
+            ).toHaveProperty("value");
+        });
+    });
+
     describe("pre-authorized code and tx_code lockout", () => {
         const preAuth = (tx_code?: string) => ({
             grant_type: "urn:ietf:params:oauth:grant-type:pre-authorized_code",
@@ -643,10 +720,13 @@ describe("Built-in authorization server token endpoint", () => {
                     },
                     expectedPreAuthorizedCode: "code-1",
                     expectedTxCode: "1234",
+                    // DPoP proofs must be fresh, as for the other grants.
                     dpop: {
                         required: true,
                         allowedSigningAlgs: ["ES256", "ES384", "ES512"],
                         jwt: undefined,
+                        maxProofAgeSeconds: 300,
+                        allowedClockSkewSeconds: 60,
                     },
                     request: expect.objectContaining({
                         method: "POST",
@@ -662,6 +742,33 @@ describe("Built-in authorization server token endpoint", () => {
                 error,
                 error_description: description,
             });
+
+        it("rejects a stale DPoP proof reported by the library without counting it", async () => {
+            h.sessions.getByAuthorizationCode.mockResolvedValue(withTxCode());
+            h.oauth.verifyPreAuthorizedCodeAccessTokenRequest.mockRejectedValue(
+                libraryError(
+                    "invalid_dpop_proof",
+                    "DPoP proof 'iat' is too far in the past",
+                ),
+            );
+            expect(await token(preAuth("1234"))).toEqual(
+                tokenError(
+                    "invalid_dpop_proof",
+                    "DPoP proof 'iat' is too far in the past",
+                ),
+            );
+            expect(h.recordFailedTxCodeAttempt.execute).not.toHaveBeenCalled();
+            expect(h.sessions.updateIfUnconsumed).not.toHaveBeenCalled();
+        });
+
+        it("passes no code expiry because issuance sessions have none", async () => {
+            h.sessions.getByAuthorizationCode.mockResolvedValue(session());
+            await token(preAuth());
+            expect(
+                h.oauth.verifyPreAuthorizedCodeAccessTokenRequest.mock
+                    .calls[0][0],
+            ).not.toHaveProperty("preAuthorizedCodeExpiresAt");
+        });
 
         it("counts a wrong tx_code and returns invalid_grant", async () => {
             h.sessions.getByAuthorizationCode.mockResolvedValue(withTxCode());
@@ -1271,10 +1378,27 @@ describe("Built-in authorization server authorize endpoint", () => {
         expect(new URL(url).searchParams.get("error_description")).toBe(
             "request_uri is expired or was already used",
         );
+        expect(h.sessions.updateForTenant).not.toHaveBeenCalled();
+    });
+
+    it("redirects with an error when a concurrent request already used the request_uri", async () => {
+        h.sessions.getByRequestUri.mockResolvedValue(parSession());
+        h.sessions.consumeRequestUri.mockResolvedValue(false);
+        const url = await h.service.sendAuthorizationResponse(
+            { request_uri: "urn:r", client_id: "wallet-client" },
+            TENANT,
+        );
+        expect(url).toBe(
+            "https://wallet.example/cb?keep=1&error=invalid_request_uri&error_description=request_uri+is+expired+or+was+already+used&state=wallet-state&iss=https%3A%2F%2Fissuer.example%2Fissuers%2Ftenant-1",
+        );
+        expect(h.sessions.updateForTenant).not.toHaveBeenCalled();
     });
 
     it("expires the request_uri and redirects with a fresh code", async () => {
-        h.sessions.getByRequestUri.mockResolvedValue(parSession());
+        const parSessionExpiry = new Date(Date.now() + 60_000);
+        h.sessions.getByRequestUri.mockResolvedValue(
+            parSession({ request_uri_expires_at: parSessionExpiry }),
+        );
         const url = new URL(
             await h.service.sendAuthorizationResponse(
                 { request_uri: "urn:r", client_id: "wallet-client" },
@@ -1286,14 +1410,13 @@ describe("Built-in authorization server authorize endpoint", () => {
         expect(url.searchParams.get("keep")).toBe("1");
         expect(url.searchParams.get("state")).toBe("wallet-state");
         expect(url.searchParams.get("iss")).toBe(ISSUER);
-        expect(h.sessions.updateForTenant).toHaveBeenNthCalledWith(
-            1,
+        expect(h.sessions.consumeRequestUri).toHaveBeenCalledWith(
             TENANT,
             "session-1",
-            { request_uri_expires_at: expect.any(Date) },
+            parSessionExpiry,
+            expect.any(Date),
         );
-        expect(h.sessions.updateForTenant).toHaveBeenNthCalledWith(
-            2,
+        expect(h.sessions.updateForTenant).toHaveBeenCalledExactlyOnceWith(
             TENANT,
             "session-1",
             {

@@ -35,11 +35,11 @@ export interface ChainedAsSessionRepository {
         tenantId: string,
         refreshToken: string,
     ): Promise<ChainedAsSession | null>;
-    /**
-     * Session of an issuance session's `issuer_state`, across tenants: the
-     * issuer state is a random identifier of the tenant's issuance session.
-     */
-    findByIssuerState(issuerState: string): Promise<ChainedAsSession | null>;
+    /** Session of the tenant's issuance session with this `issuer_state`. */
+    findByIssuerState(
+        tenantId: string,
+        issuerState: string,
+    ): Promise<ChainedAsSession | null>;
     /** Delete sessions that expired before `now`; returns the number deleted. */
     deleteExpired(now: Date): Promise<number>;
 }

@@ -178,6 +178,25 @@ export class ExchangeAccessToken {
             );
         }
 
+        // RFC 6749 Section 4.1.3: a redirect_uri sent with the token request
+        // must equal the one bound by the pushed authorization request. It
+        // stays optional: OAuth 2.1 and FAPI 2.0 drop the requirement because
+        // PKCE, which PAR enforces here, already binds the code to the client
+        // that started the flow. Codes without a bound redirect_uri (e.g.
+        // interactive authorization) have nothing to compare against.
+        const boundRedirectUri = session.auth_queries?.redirect_uri;
+        if (
+            grantType === authorizationCodeGrantIdentifier &&
+            body?.redirect_uri !== undefined &&
+            boundRedirectUri !== undefined &&
+            body.redirect_uri !== boundRedirectUri
+        ) {
+            throw new OAuthError(
+                "invalid_grant",
+                "redirect_uri does not match the authorization request",
+            );
+        }
+
         if (
             grantType === authorizationCodeGrantIdentifier &&
             session.auth_queries?.code_challenge &&
@@ -222,10 +241,16 @@ export class ExchangeAccessToken {
                         required: issuanceConfig.dPopRequired,
                         allowedSigningAlgs,
                         jwt: parsed.dpop?.jwt,
+                        ...DPOP_PROOF_FRESHNESS,
                     },
                     authorizationServerMetadata,
                     expectedPreAuthorizedCode: session.authorization_code!,
                     expectedTxCode: session.credentialPayload?.tx_code,
+                    // No `preAuthorizedCodeExpiresAt`: issuance sessions carry
+                    // neither a pre-authorized code expiry nor a session expiry
+                    // (`expiresAt` is only set for presentations). The code
+                    // stays valid until it is redeemed once or the session is
+                    // removed by the tenant's session retention cleanup.
                 })
                 .catch(async (err) => {
                     throw await this.preAuthorizedCodeError(

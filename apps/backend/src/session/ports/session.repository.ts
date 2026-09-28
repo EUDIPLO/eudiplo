@@ -41,6 +41,17 @@ export interface SessionRepository {
         update: SessionUpdate,
     ): Promise<boolean>;
     findForTenant(tenantId: string, id: string): Promise<SessionData | null>;
+    /**
+     * Redeem a PAR `request_uri` once (RFC 9126 Section 7.3): set its expiry to
+     * `now` only while it still equals `expiresAt` and lies after `now`.
+     * Exactly one of several concurrent callers wins; return whether this call did.
+     */
+    consumeRequestUri(
+        tenantId: string,
+        id: string,
+        expiresAt: Date,
+        now: Date,
+    ): Promise<boolean>;
     /** Internal flow correlation only; never use an untrusted management request ID. */
     findByIdForInternalFlow(id: string): Promise<SessionData | null>;
     /** Wallet nonce first, then legacy session-ID fallback for existing wallet URLs. */

@@ -54,7 +54,10 @@ export class ResolveCredentialSession {
                 reference.sessionId,
             );
             const upstream = reference.viaChainedIssuer
-                ? await this.sources.upstreamIdentity(reference.sessionId)
+                ? await this.sources.upstreamIdentity(
+                      tenantId,
+                      reference.sessionId,
+                  )
                 : undefined;
             identity = upstream ?? {
                 iss: token.iss,

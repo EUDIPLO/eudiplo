@@ -50,7 +50,10 @@ export class ConfiguredCredentialAuthorizationSources
                 : undefined,
         };
     }
-    upstreamIdentity(issuerState: string) {
-        return this.chained.getUpstreamIdentityByIssuerState(issuerState);
+    upstreamIdentity(tenantId: string, issuerState: string) {
+        return this.chained.getUpstreamIdentityByIssuerState(
+            tenantId,
+            issuerState,
+        );
     }
 }

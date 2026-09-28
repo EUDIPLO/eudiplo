@@ -67,6 +67,22 @@ export class TypeOrmSessionRepository implements SessionRepository {
         return (result.affected ?? 0) > 0;
     }
 
+    async consumeRequestUri(
+        tenantId: string,
+        id: string,
+        expiresAt: Date,
+        now: Date,
+    ): Promise<boolean> {
+        if (expiresAt.getTime() <= now.getTime()) return false;
+        // Compare-and-set on the expiry read by the caller: the first update
+        // replaces it with `now`, so every later update matches no row.
+        const result = await this.sessions.update(
+            { tenantId, id, request_uri_expires_at: expiresAt },
+            { request_uri_expires_at: now },
+        );
+        return (result.affected ?? 0) > 0;
+    }
+
     findForTenant(tenantId: string, id: string) {
         return this.findSession({ tenantId, id });
     }
