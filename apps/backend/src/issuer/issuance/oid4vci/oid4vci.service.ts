@@ -28,6 +28,7 @@ import { IssuanceService } from "../../configuration/issuance/issuance.service.j
 import { SubjectKeyService } from "../../status-list/subject-key.service.js";
 import { addLegacyCredentialResponseEncryptionAlg } from "./adapters/credential-request-compat.js";
 import { BuildIssuerMetadata } from "./application/build-issuer-metadata.js";
+import { CredentialSessionAuthorizationDenied } from "./application/correlate-credential-token-session.js";
 import { CreateCredentialOffer } from "./application/create-credential-offer.js";
 import { HandleCredentialNotification } from "./application/handle-credential-notification.js";
 import { IssueCredentialsFromProofs } from "./application/issue-credentials-from-proofs.js";
@@ -40,10 +41,7 @@ import {
     CredentialProofResolutionError,
     ResolveCredentialProofs,
 } from "./application/resolve-credential-proofs.js";
-import {
-    CredentialSessionAuthorizationDenied,
-    ResolveCredentialSession,
-} from "./application/resolve-credential-session.js";
+import { ResolveCredentialSession } from "./application/resolve-credential-session.js";
 import {
     type CredentialAccessTokenPayload,
     CredentialAccessTokenVerifier,

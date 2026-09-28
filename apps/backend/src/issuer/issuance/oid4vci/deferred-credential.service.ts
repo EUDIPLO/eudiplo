@@ -10,6 +10,7 @@ import { Span, TraceService } from "nestjs-otel";
 import { v4 } from "uuid";
 import type { SessionData as Session } from "../../../session/domain/session-data.js";
 import { IssuanceService } from "../../configuration/issuance/issuance.service.js";
+import { CorrelateCredentialTokenSession } from "./application/correlate-credential-token-session.js";
 import {
     CredentialAuthorizationError,
     ResolveAuthorizedCredentialConfiguration,
@@ -79,6 +80,7 @@ export class DeferredCredentialService {
         private readonly transactions: DeferredTransactionRepository,
         private readonly resolveDeferredCredentialRetrieval: ResolveDeferredCredentialRetrieval,
         private readonly resolveAuthorizedCredentialConfiguration: ResolveAuthorizedCredentialConfiguration,
+        private readonly tokenSessions: CorrelateCredentialTokenSession,
     ) {}
 
     /**
@@ -223,7 +225,17 @@ export class DeferredCredentialService {
             tenantId,
             body.transaction_id,
         );
-        if (!transaction) {
+        // The token must belong to the session that created the transaction.
+        // A mismatch is reported like an unknown id so that transaction ids
+        // of other sessions cannot be probed.
+        if (
+            !transaction ||
+            !(await this.tokenSessions.belongsToSession(
+                tenantId,
+                tokenPayload,
+                transaction.sessionId,
+            ))
+        ) {
             throw new DeferredCredentialException(
                 "invalid_transaction_id",
                 "The transaction_id is invalid or has expired",

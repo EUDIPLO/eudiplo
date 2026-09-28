@@ -469,6 +469,128 @@ describe("Issuance - Deferred Credential Flow", () => {
         expect(result.body.error).toBe("invalid_transaction_id");
     });
 
+    test("deferred credential - access token of another session is rejected", async () => {
+        nock("http://localhost:8787")
+            .post("/deferred-foreign-session", () => true)
+            .reply(200, { deferred: true, interval: 2 });
+
+        const holderKeyPair = await generateKeyPair("ES256", {
+            extractable: true,
+        });
+        const holderPrivateKeyJwk = await exportJWK(holderKeyPair.privateKey);
+        const holderPublicKeyJwk = await exportJWK(holderKeyPair.publicKey);
+        const client = new Openid4vciClient({
+            callbacks: {
+                ...callbacks,
+                clientAuthentication: clientAuthenticationAnonymous(),
+                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+            },
+        });
+
+        const startSession = async (body: Record<string, unknown>) => {
+            const offerResponse = await request(app.getHttpServer())
+                .post("/issuer/offer")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    flow: "pre_authorized_code",
+                    response_type: "uri",
+                    ...body,
+                })
+                .expect(201);
+            const credentialOffer = await client.resolveCredentialOffer(
+                offerResponse.body.uri,
+            );
+            const issuerMetadata = await client.resolveIssuerMetadata(
+                credentialOffer.credential_issuer,
+            );
+            const { accessTokenResponse } =
+                await client.retrievePreAuthorizedCodeAccessTokenFromOffer({
+                    credentialOffer,
+                    issuerMetadata,
+                });
+            return {
+                credentialOffer,
+                issuerMetadata,
+                accessToken: accessTokenResponse.access_token,
+            };
+        };
+
+        // Session A creates a deferred transaction.
+        const sessionA = await startSession({
+            credentialConfigurationIds: ["citizen"],
+            credentialClaims: {
+                citizen: {
+                    type: "webhook",
+                    webhook: {
+                        url: "http://localhost:8787/deferred-foreign-session",
+                        auth: { type: "none" },
+                    },
+                },
+            },
+        });
+        const nonceResponse = await client.requestNonce({
+            issuerMetadata: sessionA.issuerMetadata,
+        });
+        const { jwt: proofJwt } = await client.createCredentialRequestJwtProof({
+            issuerMetadata: sessionA.issuerMetadata,
+            signer: {
+                method: "jwk",
+                alg: "ES256",
+                publicJwk: holderPublicKeyJwk,
+            } as JwtSignerJwk,
+            clientId,
+            issuedAt: new Date(),
+            credentialConfigurationId:
+                sessionA.credentialOffer.credential_configuration_ids[0],
+            nonce: nonceResponse.c_nonce,
+        });
+        const credentialResponse = await client.retrieveCredentials({
+            accessToken: sessionA.accessToken,
+            credentialConfigurationId:
+                sessionA.credentialOffer.credential_configuration_ids[0],
+            issuerMetadata: sessionA.issuerMetadata,
+            proofs: { jwt: [proofJwt] },
+        });
+        const transactionId =
+            credentialResponse.credentialResponse.transaction_id!;
+        expect(transactionId).toBeDefined();
+
+        // Session B's token must not reveal or touch A's transaction.
+        const sessionB = await startSession({
+            credentialConfigurationIds: ["pid-no-key"],
+        });
+        const foreign = await retrieveDeferredCredential(
+            app,
+            sessionB.issuerMetadata,
+            sessionB.accessToken,
+            transactionId,
+        );
+        const unknown = await retrieveDeferredCredential(
+            app,
+            sessionB.issuerMetadata,
+            sessionB.accessToken,
+            "00000000-0000-4000-8000-000000000000",
+        );
+        expect(foreign.statusCode).toBe(400);
+        expect(foreign.body).toEqual(unknown.body);
+        expect(foreign.body).toMatchObject({
+            error: "invalid_transaction_id",
+            error_description: "The transaction_id is invalid or has expired",
+        });
+
+        // Session A's token still sees the normal pending state.
+        const own = await retrieveDeferredCredential(
+            app,
+            sessionA.issuerMetadata,
+            sessionA.accessToken,
+            transactionId,
+        );
+        expect(own.statusCode).toBe(400);
+        expect(own.body.error).toBe("issuance_pending");
+        expect(nock.isDone()).toBe(true);
+    });
+
     test("deferred credential - transaction already retrieved", async () => {
         const pollingInterval = 2;
 

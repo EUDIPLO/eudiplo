@@ -30,6 +30,7 @@ function setup(
         stored?: DeferredTransactionData | null;
         markRetrieved?: boolean;
         authorizationDetails?: unknown;
+        belongsToSession?: boolean;
     } = {},
 ) {
     const transactions = {
@@ -51,6 +52,9 @@ function setup(
             authorization_details: options.authorizationDetails,
         })),
     };
+    const tokenSessions = {
+        belongsToSession: vi.fn(async () => options.belongsToSession ?? true),
+    };
     const service = new DeferredCredentialService(
         {
             getIssuanceConfiguration: vi.fn(async () => ({
@@ -65,8 +69,17 @@ function setup(
         transactions as never,
         new ResolveDeferredCredentialRetrieval(),
         new ResolveAuthorizedCredentialConfiguration(),
+        tokenSessions as never,
     );
-    return { service, transactions, prepare, verify, nonces, accessTokens };
+    return {
+        service,
+        transactions,
+        prepare,
+        verify,
+        nonces,
+        accessTokens,
+        tokenSessions,
+    };
 }
 
 async function protocolError(promise: Promise<unknown>) {
@@ -191,6 +204,37 @@ describe("DeferredCredentialService.getDeferredCredential", () => {
             true,
         );
         expect(transactions.markRetrieved).toHaveBeenCalledWith("tenant", "tx");
+    });
+
+    it("rejects a token of another session like an unknown transaction", async () => {
+        const unknown = setup({ stored: null });
+        const foreign = setup({ belongsToSession: false });
+        const expected = await protocolError(retrieve(unknown.service));
+        expect(await protocolError(retrieve(foreign.service))).toEqual(
+            expected,
+        );
+        expect(expected).toEqual({
+            error: "invalid_transaction_id",
+            error_description: "The transaction_id is invalid or has expired",
+        });
+        expect(foreign.tokenSessions.belongsToSession).toHaveBeenCalledWith(
+            "tenant",
+            expect.objectContaining({ sub: "session" }),
+            "session",
+        );
+        expect(foreign.transactions.markRetrieved).not.toHaveBeenCalled();
+        expect(foreign.transactions.markExpired).not.toHaveBeenCalled();
+    });
+
+    it("checks the session before handling an expired transaction", async () => {
+        const { service, transactions } = setup({
+            belongsToSession: false,
+            stored: { ...transaction, expiresAt: new Date(0) },
+        });
+        expect(await protocolError(retrieve(service))).toMatchObject({
+            error_description: "The transaction_id is invalid or has expired",
+        });
+        expect(transactions.markExpired).not.toHaveBeenCalled();
     });
 
     it("rejects a concurrent second retrieval", async () => {

@@ -47,6 +47,7 @@ import { TypeOrmDeferredTransactionRepository } from "./oid4vci/adapters/typeorm
 import { WebhookCredentialNotificationPublisher } from "./oid4vci/adapters/webhook-credential-notification-publisher.js";
 import { BuildIssuerMetadata } from "./oid4vci/application/build-issuer-metadata.js";
 import { CompleteDeferredCredential } from "./oid4vci/application/complete-deferred-credential.js";
+import { CorrelateCredentialTokenSession } from "./oid4vci/application/correlate-credential-token-session.js";
 import { CreateCredentialOffer } from "./oid4vci/application/create-credential-offer.js";
 import { FailDeferredCredential } from "./oid4vci/application/fail-deferred-credential.js";
 import { HandleCredentialNotification } from "./oid4vci/application/handle-credential-notification.js";
@@ -440,20 +441,31 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
                 ),
         },
         {
+            provide: CorrelateCredentialTokenSession,
+            inject: [CREDENTIAL_AUTHORIZATION_SOURCES, SessionStore],
+            useFactory: (
+                sources: CredentialAuthorizationSources,
+                sessions: SessionStore,
+            ) => new CorrelateCredentialTokenSession(sources, sessions),
+        },
+        {
             provide: ResolveCredentialSession,
             inject: [
+                CorrelateCredentialTokenSession,
                 CREDENTIAL_AUTHORIZATION_SOURCES,
                 SessionStore,
                 ResolveExternalAuthorizationSession,
                 CREDENTIAL_CLAIMS_PROVIDER,
             ],
             useFactory: (
+                correlation: CorrelateCredentialTokenSession,
                 sources: CredentialAuthorizationSources,
                 sessions: SessionStore,
                 externalSessions: ResolveExternalAuthorizationSession,
                 claims: CredentialClaimsProvider,
             ) =>
                 new ResolveCredentialSession(
+                    correlation,
                     sources,
                     sessions,
                     externalSessions,

@@ -7,23 +7,23 @@ import type {
     CredentialClaimsResult,
 } from "../../../configuration/credentials/domain/credential-claims.js";
 import type { CredentialAuthorizationSources } from "../ports/credential-authorization-sources.js";
-import { ClassifyAuthorizationServerToken } from "./classify-authorization-server-token.js";
-
-export class CredentialSessionAuthorizationDenied extends Error {
-    constructor(message: string) {
-        super(message);
-        this.name = "CredentialSessionAuthorizationDenied";
-    }
-}
-export interface VerifiedCredentialToken extends Record<string, unknown> {
-    iss: string;
-    sub: string;
-}
+import {
+    type CorrelateCredentialTokenSession,
+    CredentialSessionAuthorizationDenied,
+    type VerifiedCredentialToken,
+} from "./correlate-credential-token-session.js";
 
 /** Correlates already verified tokens with a tenant session and resolves its claim source. */
 export class ResolveCredentialSession {
     constructor(
-        private readonly sources: CredentialAuthorizationSources,
+        private readonly correlation: Pick<
+            CorrelateCredentialTokenSession,
+            "execute"
+        >,
+        private readonly sources: Pick<
+            CredentialAuthorizationSources,
+            "upstreamIdentity"
+        >,
         private readonly sessions: Pick<SessionStore, "getForTenant">,
         private readonly externalSessions: Pick<
             ResolveExternalAuthorizationSession,
@@ -41,64 +41,40 @@ export class ResolveCredentialSession {
         isExternalAsToken: boolean;
         isChainedAsToken: boolean;
     }> {
-        const issuers = await this.sources.tokenIssuers(tenantId);
-        const kind = new ClassifyAuthorizationServerToken().execute({
-            ...issuers,
-            tokenIssuer: token.iss,
-        });
+        const reference = await this.correlation.execute(tenantId, token);
         let session: SessionData;
         let identity: AuthorizationIdentity = {
             iss: token.iss,
             sub: token.sub,
             token_claims: token,
         };
-        if (kind === "chained") {
-            const issuerState = token.issuer_state as string | undefined;
-            if (!issuerState)
-                throw new CredentialSessionAuthorizationDenied(
-                    "Chained AS token is missing issuer_state claim",
-                );
-            session = await this.sessions.getForTenant(tenantId, issuerState);
-            const upstream =
-                token.iss === issuers.chainedIssuer
-                    ? await this.sources.upstreamIdentity(issuerState)
-                    : undefined;
+        if (reference.kind === "chained") {
+            session = await this.sessions.getForTenant(
+                tenantId,
+                reference.sessionId,
+            );
+            const upstream = reference.viaChainedIssuer
+                ? await this.sources.upstreamIdentity(reference.sessionId)
+                : undefined;
             identity = upstream ?? {
                 iss: token.iss,
                 sub: (token.upstream_sub as string) ?? token.sub,
                 token_claims: token,
             };
-        } else if (kind === "external") {
-            const server = await this.sources.externalServer(
-                tenantId,
-                token.iss,
-            );
-            if (!server.advertised)
-                throw new CredentialSessionAuthorizationDenied(
-                    `Token issuer '${token.iss}' is not a configured authorization server`,
-                );
-            if (!server.configuration)
-                throw new CredentialSessionAuthorizationDenied(
-                    `Token issuer '${token.iss}' is not a configured external authorization server`,
-                );
-            const bindingClaim = server.configuration.bindingClaim;
-            const bindingValue = token[bindingClaim ?? ""] as
-                | string
-                | undefined;
-            if (!bindingClaim || !bindingValue)
-                throw new CredentialSessionAuthorizationDenied(
-                    `External authorization server '${token.iss}' is missing the configured session-binding claim '${bindingClaim ?? "<unset>"}'`,
-                );
+        } else if (reference.kind === "external") {
             session = await this.externalSessions.execute(
                 tenantId,
                 token.iss,
                 token.sub,
-                server.configuration.id,
-                bindingClaim,
-                bindingValue,
+                reference.authorizationServerId,
+                reference.bindingClaim,
+                reference.sessionId,
             );
         } else {
-            session = await this.sessions.getForTenant(tenantId, token.sub);
+            session = await this.sessions.getForTenant(
+                tenantId,
+                reference.sessionId,
+            );
             if (token.sub !== session.id)
                 throw new CredentialSessionAuthorizationDenied(
                     "The access token is not associated with a valid session",
@@ -108,13 +84,13 @@ export class ResolveCredentialSession {
             credentialConfigurationId,
             session,
             identity,
-            ...(kind === "external" ? { requireProvider: true } : {}),
+            ...(reference.kind === "external" ? { requireProvider: true } : {}),
         });
         return {
             session,
             claimsResult,
-            isExternalAsToken: kind === "external",
-            isChainedAsToken: kind === "chained",
+            isExternalAsToken: reference.kind === "external",
+            isChainedAsToken: reference.kind === "chained",
         };
     }
 }

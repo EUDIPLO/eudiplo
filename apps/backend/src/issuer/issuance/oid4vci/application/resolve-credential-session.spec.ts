@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { CorrelateCredentialTokenSession } from "./correlate-credential-token-session.js";
 import { ResolveCredentialSession } from "./resolve-credential-session.js";
 
 function fixture() {
@@ -34,6 +35,7 @@ function fixture() {
         external,
         claims,
         useCase: new ResolveCredentialSession(
+            new CorrelateCredentialTokenSession(sources, sessions),
             sources,
             sessions,
             external,

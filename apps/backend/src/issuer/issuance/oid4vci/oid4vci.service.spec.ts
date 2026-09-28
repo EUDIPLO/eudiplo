@@ -5,13 +5,13 @@ import {
 } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { SessionNotFound } from "../../../session/application/session-errors.js";
+import { CredentialSessionAuthorizationDenied } from "./application/correlate-credential-token-session.js";
 import { HandleCredentialNotification } from "./application/handle-credential-notification.js";
 import {
     CredentialAuthorizationError,
     ResolveAuthorizedCredentialConfiguration,
 } from "./application/resolve-authorized-credential-configuration.js";
 import { ResolveCredentialProofs } from "./application/resolve-credential-proofs.js";
-import { CredentialSessionAuthorizationDenied } from "./application/resolve-credential-session.js";
 import {
     AuthorizationServerMetadataUnavailable,
     AuthorizationServerNotConfigured,
