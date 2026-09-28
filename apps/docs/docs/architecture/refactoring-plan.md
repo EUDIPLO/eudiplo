@@ -16,7 +16,7 @@ This plan is not an instruction to execute tasks automatically. Pick one slice, 
 | 1 | Target architecture documented | Done | Keep [backend-architecture.md](./backend-architecture.md) as the single placement reference. |
 | 2 | Boundary enforcement | Done | Layer checks plus a ratchet baseline for legacy debt. Remaining gap E5 under [enforcement gaps](#enforcement-gaps). |
 | 3–4 | Session repository and lifecycle | Done | Other features use `SessionStore` and session use cases; the repository port stays inside `SessionModule`. |
-| 5–6 | OID4VCI use cases, no Express | Partial | Issuer metadata, authorization-server selection and deferred issuance use ports. `Oid4vciService` still parses requests and maps protocol errors with Nest exceptions; authorization services still orchestrate in legacy services. |
+| 5–6 | OID4VCI use cases, no Express | Partial | Issuer metadata, authorization-server selection and deferred issuance use ports. The built-in authorization server's token, PAR and authorization endpoints are use cases in `oid4vci/authorization/application/` with transport-neutral `OAuthError`s mapped by `AuthorizeController`. `Oid4vciService` still parses requests and maps protocol errors with Nest exceptions; the interactive, chained and OID4VP-backed authorization servers still orchestrate in legacy services. |
 | 7–9 | Issuer credential formats | Done | Registry dispatches to SD-JWT VC and mdoc issuers typed on the plain `CredentialConfiguration` model. |
 | 10–11 | Claims provider and publisher ports | Done | Unify claim-source selection between `IssueCredential` and `ConfiguredCredentialClaimsProvider`. |
 | 12–13 | Trust retrieval and federation resolver | Partial | Federation trust is not cryptographically anchored (T1), traversal needs limits (T2). |
@@ -24,7 +24,7 @@ This plan is not an instruction to execute tasks automatically. Pick one slice, 
 | 15–16 | Verifier credential formats | Done | One `CredentialVerifierFormat.verify(credential, context)` contract (`presentations/domain/`) with adapters in `presentations/adapters/`: mdoc builds its session transcript, SD-JWT VC its key-binding nonce and audience. OID4VP and ISO 18013 both resolve formats from the registry. Format-specific DCQL claim semantics (mdoc verifies each `claim_sets` option, SD-JWT VC matches once) live in the adapters. |
 | 17–18 | Configuration repositories, plain models | Done for tenant, credential, issuance, attribute-provider, webhook-endpoint | Status-list, registrar, key-chain and config-portability still use TypeORM in services. Presentation configuration is administrative CRUD: `verifier/presentations/configuration/` keeps TypeORM in plain services and is excluded from the protocol-core ratchet. Credential configurations use one `CredentialConfigurationRepository` port owned by `CredentialConfigModule`. |
 | 19 | Client provider abstraction | Done in code | Regenerate the SDK (C7) and validate Keycloak mode against a live instance. |
-| 20 | Typed settings instead of `ConfigService` | Partial | Protocol-core files still importing `@nestjs/config` are listed in the ratchet baseline. Administrative CRUD may keep `ConfigService`. |
+| 20 | Typed settings instead of `ConfigService` | Partial | Only `verifier/iso18013/iso18013.service.ts` still imports `@nestjs/config` in the protocol core. Administrative CRUD may keep `ConfigService`. |
 | 21 | Modules as composition roots | Partial | Applied to migrated slices. |
 | 22 | Application errors instead of HTTP exceptions | Partial | Applied to migrated slices; legacy services still throw Nest exceptions. |
 | 23 | Adapter contract tests | Partial | Session and configuration repositories covered on SQLite and PostgreSQL. Storage, KMS, client providers and credential formats open. |
@@ -39,10 +39,10 @@ These legacy services still mix orchestration with persistence, configuration, t
 | --- | --- | --- |
 | Verification | `verifier/oid4vp/oid4vp.service.ts`, `verifier/iso18013/iso18013.service.ts` | Request creation, JWE decryption and HTTP error mapping in `Oid4vpService`; `Iso18013Service` orchestrates offer, decryption, verification and session updates with `ConfigService`, TypeORM and Nest exceptions. The format verifiers under `presentations/credential/` still throw `SdJwtVerificationError` (a `BadRequestException`). |
 | OID4VCI | `issuer/issuance/oid4vci/oid4vci.service.ts` (~670 lines) | Credential request parsing, decryption and protocol error mapping in one service; throws Nest exceptions. |
-| Authorization | `issuer/issuance/oid4vci/authorization/**` | `authorize.service.ts`, `interactive-authorization.service.ts`, `chained-as.service.ts`, `authorization-servers.service.ts`. |
+| Authorization | `issuer/issuance/oid4vci/authorization/**` | Settings and persistence go through `OID4VCI_SETTINGS` and the `ChainedAsSessionRepository` / `InteractiveAuthSessionRepository` ports. `interactive-authorization.service.ts` (~960 lines), `chained-as.service.ts` (~900), `authorization-servers.service.ts` and `chained-as-vp.service.ts` still orchestrate and throw Nest exceptions; the three chained variants duplicate PAR, authorize and token handling (`shared/chained-as-token.util.ts`). |
 | Other capabilities | `issuer/status-list/`, `crypto/key/`, `registrar/`, `platform/config-portability/`, `audit-log/`, `storage/files.service.ts` | Not yet in scope of any slice. |
 
-The ratchet baseline (`apps/backend/test/architecture/architecture-baseline.json`) tracks the size of the remaining core work: at the time of writing 34 files, with 6 protocol-core files importing `@nestjs/config`, 9 TypeORM, 26 files using Nest HTTP exceptions (protocol core and adapters), and 6 files importing Express.
+The ratchet baseline (`apps/backend/test/architecture/architecture-baseline.json`) tracks the size of the remaining core work: at the time of writing 33 files, with 1 protocol-core file(s) importing `@nestjs/config`, 4 TypeORM, 25 files using Nest HTTP exceptions (protocol core and adapters), and 6 files importing Express.
 
 ## Open review findings
 
@@ -54,6 +54,7 @@ Findings from the 2026-09-28 review that are not fixed yet. Items marked *pre-ex
 - **T2 — Federation fetches bypass the outbound URL policy.** Traversal is now bounded (10 hints per entity, 32 resolutions per evaluation, 5 s timeout), but federation fetches do not apply `OutboundUrlPolicyService`, and TLS verification is disabled outside `NODE_ENV=production` in `TrustModule`. Applying the policy needs a decision because it resolves hosts via DNS (the E2E fixtures use mocked hosts).
 - **V2 — Verifier terminal states bypass `ChangeSessionState`** (*pre-existing*). OID4VP and ISO 18013 set `Completed`/`Failed` through generic updates, so no SSE event or metric is emitted. `SessionUpdate` should not accept `status`.
 - **I3 — Deferred retrieval is not bound to the issuing session** (*pre-existing*). Any valid access token of the tenant whose `authorization_details` allow the configuration can poll any `transaction_id`; the random UUID is the only protection. Store the token identity (issuer and subject, or a session reference resolved like the credential endpoint does) on the transaction and compare it on retrieval. Needs a schema migration.
+- **I4 — Chained-AS session lookup by `issuer_state` is not tenant-scoped** (*pre-existing*). `ChainedAsSessionRepository.findByIssuerState` matches across tenants. The value is random, but the lookup should include the tenant from the route.
 - **I2 — Explicit authorization-server selection stores a URL** (*pre-existing*). When an offer names `authorization_server`, the session's `authorizationServerId` receives the resolved issuer URL instead of the configured id (`SelectAuthorizationServer`). Decide which value consumers expect.
 
 ### Cleanup
@@ -74,7 +75,9 @@ Take them in this order unless a finding above is more urgent.
    1. `Oid4vpService` shrinks to HTTP mapping: extract request creation and response decryption into use cases.
    2. `Iso18013Service`: response processing as a use case with application errors and typed settings.
    3. `SdJwtVerificationError` as a plain error mapped at the boundary.
-4. **Authorization services**: token, PAR and pre-authorized flows as use cases with OAuth-specific application errors and typed settings.
+4. **Authorization services.** Done for the built-in authorization server (`ExchangeAccessToken`, `PushAuthorizationRequest`, `AuthorizePushedRequest`, `BuildBuiltInAuthorizationServerMetadata`; `authorize.controller.spec.ts` characterizes every response). Remaining:
+   1. One set of chained-AS use cases (PAR, authorize, token) shared by `ChainedAsService`, `ChainedAsVpService` and `AuthorizationServersService`, throwing `OAuthError` instead of Nest exceptions; they differ only in how the user is authenticated.
+   2. `InteractiveAuthorizationService` as a use case that returns IAE responses; it currently maps `BadRequestException`s of its dependencies to `invalid_request`.
 5. **Contract tests (Task 23)** for storage, KMS and client providers.
 6. **T1** once the federation trust model is decided.
 

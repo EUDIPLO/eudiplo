@@ -1,11 +1,14 @@
 import {
     Body,
+    ConflictException,
     Controller,
     Get,
     Header,
     Headers,
     HttpCode,
     HttpStatus,
+    Inject,
+    Logger,
     Param,
     Post,
     Query,
@@ -13,20 +16,42 @@ import {
     Res,
 } from "@nestjs/common";
 import { ApiBody, ApiConsumes, ApiTags } from "@nestjs/swagger";
+import type { HttpMethod, RequestLike } from "@openid4vc/oauth2";
 import type { Request, Response } from "express";
-import type { Oid4vciRequestContext } from "../../request-context.js";
+import { tokenErrorResponse } from "../../exceptions/token-error.exception.js";
+import {
+    OID4VCI_SETTINGS,
+    type Oid4vciSettings,
+} from "../../oid4vci-settings.js";
+import { normalizeRequestHeaders } from "../../util.js";
+import {
+    AuthorizePushedRequest,
+    RequestUriMissing,
+} from "../application/authorize-pushed-request.js";
+import { ExchangeAccessToken } from "../application/exchange-access-token.js";
+import { PushAuthorizationRequest } from "../application/push-authorization-request.js";
+import { OAuthError } from "../domain/oauth-error.js";
 import { AuthorizeService } from "./authorize.service.js";
 import { AuthorizeQueries } from "./dto/authorize-request.dto.js";
 import { ParResponseDto } from "./dto/par-response.dto.js";
 
 /**
- * Controller for the OpenID4VCI authorization endpoints.
- * This controller handles the authorization requests, token requests.
+ * Controller for the OpenID4VCI authorization endpoints of the built-in
+ * authorization server: authorization, PAR, token and challenge.
+ * Maps application {@link OAuthError}s to OAuth error responses.
  */
 @ApiTags("OID4VCI")
 @Controller("issuers/:tenantId/authorize")
 export class AuthorizeController {
-    constructor(private readonly authorizeService: AuthorizeService) {}
+    private readonly logger = new Logger(AuthorizeController.name);
+
+    constructor(
+        private readonly authorizeService: AuthorizeService,
+        private readonly authorizePushedRequest: AuthorizePushedRequest,
+        private readonly pushAuthorizationRequest: PushAuthorizationRequest,
+        private readonly exchangeAccessToken: ExchangeAccessToken,
+        @Inject(OID4VCI_SETTINGS) private readonly settings: Oid4vciSettings,
+    ) {}
 
     /**
      * Endpoint to handle the Authorization Request.
@@ -39,11 +64,14 @@ export class AuthorizeController {
         @Res() res: Response,
         @Param("tenantId") tenantId: string,
     ) {
-        const redirectUrl =
-            await this.authorizeService.sendAuthorizationResponse(
-                queries,
-                tenantId,
-            );
+        const redirectUrl = await this.authorizePushedRequest
+            .execute(tenantId, queries)
+            .catch((error) => {
+                if (error instanceof RequestUriMissing) {
+                    throw new ConflictException(error.message);
+                }
+                throw this.toHttpError(error);
+            });
         res.redirect(redirectUrl);
     }
 
@@ -60,7 +88,7 @@ export class AuthorizeController {
     @Post("par")
     @HttpCode(HttpStatus.CREATED)
     @Header("Cache-Control", "no-store")
-    async par(
+    par(
         @Param("tenantId") tenantId: string,
         @Body() body: AuthorizeQueries,
         @Req() req: Request,
@@ -72,21 +100,19 @@ export class AuthorizeController {
             clientAttestationJwt && clientAttestationPopJwt
                 ? { clientAttestationJwt, clientAttestationPopJwt }
                 : undefined;
+        const dpop = req.headers.dpop;
 
-        const requestContext: Oid4vciRequestContext = {
-            body: req.body,
-            contentType: req.headers["content-type"] ?? "",
-            headers: req.headers,
-            method: req.method,
-            url: req.url,
-        };
-
-        return this.authorizeService.handlePar(
-            tenantId,
-            body,
-            requestContext,
-            clientAttestation,
-        );
+        return this.pushAuthorizationRequest
+            .execute({
+                tenantId,
+                body,
+                request: this.requestLike(req),
+                dpopJwt: Array.isArray(dpop) ? dpop[0] : dpop,
+                clientAttestation,
+            })
+            .catch((error) => {
+                throw this.toHttpError(error);
+            });
     }
 
     /**
@@ -104,19 +130,11 @@ export class AuthorizeController {
         @Req() req: Request,
         @Param("tenantId") tenantId: string,
     ): Promise<any> {
-        const requestContext: Oid4vciRequestContext = {
-            body: req.body,
-            contentType: req.headers["content-type"] ?? "",
-            headers: req.headers,
-            method: req.method,
-            url: req.url,
-        };
-
-        return this.authorizeService.validateTokenRequest(
-            body,
-            requestContext,
-            tenantId,
-        );
+        return this.exchangeAccessToken
+            .execute({ tenantId, body, request: this.requestLike(req) })
+            .catch((error) => {
+                throw this.toHttpError(error);
+            });
     }
 
     /**
@@ -131,5 +149,26 @@ export class AuthorizeController {
         @Param("tenantId") tenantId: string,
     ): Promise<{ attestation_challenge: string }> {
         return this.authorizeService.challengeRequest(tenantId);
+    }
+
+    /** The request as the client sent it, for DPoP `htu` and header checks. */
+    private requestLike(req: Request): RequestLike {
+        return {
+            method: req.method as HttpMethod,
+            url: `${this.settings.publicUrl}${req.url}`,
+            headers: normalizeRequestHeaders(req.headers),
+        };
+    }
+
+    private toHttpError(error: unknown): unknown {
+        if (!(error instanceof OAuthError)) {
+            return error;
+        }
+        if (error.logDetail && error.cause !== undefined) {
+            this.logger.error(error.logDetail, error.cause);
+        } else if (error.logDetail) {
+            this.logger.warn(error.logDetail);
+        }
+        return tokenErrorResponse(error);
     }
 }

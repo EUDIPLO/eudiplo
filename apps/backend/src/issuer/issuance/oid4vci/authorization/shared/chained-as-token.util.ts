@@ -1,11 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { BadRequestException, UnauthorizedException } from "@nestjs/common";
-import { Repository } from "typeorm";
-import { ChainedAsTokenRequestDto } from "./dto/chained-as.dto.js";
 import {
-    ChainedAsSessionEntity,
+    type ChainedAsSession,
     ChainedAsSessionStatus,
-} from "./entities/chained-as-session.entity.js";
+} from "../domain/chained-as-session.js";
+import type { ChainedAsSessionRepository } from "../ports/chained-as-session.repository.js";
+import { ChainedAsTokenRequestDto } from "./dto/chained-as.dto.js";
 import { verifyPkceCodeChallenge } from "./pkce.util.js";
 
 export interface RefreshTokenIssuanceConfig {
@@ -57,7 +57,7 @@ export function buildAccessTokenPayload({
 }: {
     issuer: string;
     audience: string;
-    session: ChainedAsSessionEntity;
+    session: ChainedAsSession;
     tokenLifetime: number;
     jti: string;
     dpopJkt?: string;
@@ -88,10 +88,13 @@ export function buildAccessTokenPayload({
 }
 
 export async function resolveSessionForTokenRequest(
-    sessionRepository: Repository<ChainedAsSessionEntity>,
+    sessionRepository: Pick<
+        ChainedAsSessionRepository,
+        "findByRefreshToken" | "findAuthorizedByCode"
+    >,
     tenantId: string,
     request: ChainedAsTokenRequestDto,
-): Promise<ChainedAsSessionEntity> {
+): Promise<ChainedAsSession> {
     if (request.grant_type === "refresh_token") {
         if (!request.refresh_token) {
             throw new BadRequestException(
@@ -99,9 +102,10 @@ export async function resolveSessionForTokenRequest(
             );
         }
 
-        const session = await sessionRepository.findOne({
-            where: { tenantId, refreshToken: request.refresh_token },
-        });
+        const session = await sessionRepository.findByRefreshToken(
+            tenantId,
+            request.refresh_token,
+        );
 
         if (!session) {
             throw new UnauthorizedException("Invalid or expired refresh_token");
@@ -123,13 +127,10 @@ export async function resolveSessionForTokenRequest(
         );
     }
 
-    const session = await sessionRepository.findOne({
-        where: {
-            tenantId,
-            authorizationCode: request.code,
-            status: ChainedAsSessionStatus.AUTHORIZED,
-        },
-    });
+    const session = await sessionRepository.findAuthorizedByCode(
+        tenantId,
+        request.code,
+    );
 
     if (!session) {
         throw new UnauthorizedException("Invalid authorization code");
@@ -139,8 +140,8 @@ export async function resolveSessionForTokenRequest(
 }
 
 export async function assertTokenRequestSessionValid(
-    sessionRepository: Repository<ChainedAsSessionEntity>,
-    session: ChainedAsSessionEntity,
+    sessionRepository: Pick<ChainedAsSessionRepository, "save">,
+    session: ChainedAsSession,
     request: ChainedAsTokenRequestDto,
 ): Promise<void> {
     if (
@@ -168,7 +169,7 @@ export async function assertTokenRequestSessionValid(
 
 export function resolveTokenBinding(
     requireDPoP: boolean | undefined,
-    session: ChainedAsSessionEntity,
+    session: ChainedAsSession,
     dpopJwt?: string,
 ): { tokenType: string; dpopJkt?: string } {
     if (dpopJwt) {
@@ -186,7 +187,7 @@ export function resolveTokenBinding(
 }
 
 export function issueRefreshTokenIfEnabled(
-    session: ChainedAsSessionEntity,
+    session: ChainedAsSession,
     issuanceConfig: RefreshTokenIssuanceConfig,
 ): string | undefined {
     if (!issuanceConfig.refreshTokenEnabled) {

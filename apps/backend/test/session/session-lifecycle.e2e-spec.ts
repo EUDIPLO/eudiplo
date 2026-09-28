@@ -184,8 +184,14 @@ describe("session lifecycle module wiring", () => {
     });
 
     it("preserves token errors and lockout around the real attempt counter", async () => {
-        const { AuthorizeService } = await import(
-            "../../src/issuer/issuance/oid4vci/authorization/authorize/authorize.service.js"
+        const { AuthorizeController } = await import(
+            "../../src/issuer/issuance/oid4vci/authorization/authorize/authorize.controller.js"
+        );
+        const { BuildBuiltInAuthorizationServerMetadata } = await import(
+            "../../src/issuer/issuance/oid4vci/authorization/application/build-built-in-authorization-server-metadata.js"
+        );
+        const { OAUTH_AUTHORIZATION_SERVER_FACTORY } = await import(
+            "../../src/issuer/issuance/oid4vci/authorization/ports/oauth-authorization-server-factory.js"
         );
         const { IssuanceService } = await import(
             "../../src/issuer/configuration/issuance/issuance.service.js"
@@ -193,7 +199,7 @@ describe("session lifecycle module wiring", () => {
         const { WalletAttestationService } = await import(
             "../../src/trust/wallet-attestation.service.js"
         );
-        const authorize = app.get(AuthorizeService);
+        const authorize = app.get(AuthorizeController);
         const id = randomUUID();
         const repository = db.getRepository(entities.Session);
         await repository.save({
@@ -210,14 +216,20 @@ describe("session lifecycle module wiring", () => {
             grant_type: "urn:ietf:params:oauth:grant-type:pre-authorized_code",
             "pre-authorized_code": id,
         };
-        vi.spyOn(authorize, "getAuthorizationServer").mockReturnValue({
+        vi.spyOn(
+            app.get(OAUTH_AUTHORIZATION_SERVER_FACTORY),
+            "forTenant",
+        ).mockReturnValue({
             parseAccessTokenRequest: () => ({
                 grant: { grantType: body.grant_type },
                 accessTokenRequest: body,
             }),
             verifyPreAuthorizedCodeAccessTokenRequest: verification,
         } as never);
-        vi.spyOn(authorize, "authzMetadata").mockResolvedValue({
+        vi.spyOn(
+            app.get(BuildBuiltInAuthorizationServerMetadata),
+            "execute",
+        ).mockResolvedValue({
             issuer: "https://issuer.example",
         } as never);
         vi.spyOn(
@@ -232,9 +244,8 @@ describe("session lifecycle module wiring", () => {
             method: "POST",
             url: "/token",
             headers: {},
-        } as Parameters<typeof authorize.validateTokenRequest>[1];
-        const attempt = () =>
-            authorize.validateTokenRequest(body, request, "tenant-a");
+        } as Parameters<typeof authorize.token>[1];
+        const attempt = () => authorize.token(body, request, "tenant-a");
         try {
             await expect(attempt()).rejects.toMatchObject({
                 response: { error: "invalid_request" },

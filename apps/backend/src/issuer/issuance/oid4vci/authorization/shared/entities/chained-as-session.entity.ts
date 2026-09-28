@@ -5,31 +5,17 @@ import {
     PrimaryColumn,
     UpdateDateColumn,
 } from "typeorm";
-
-/**
- * Status of a Chained AS session.
- */
-export enum ChainedAsSessionStatus {
-    /** Initial PAR request received, waiting for authorize */
-    PENDING_AUTHORIZE = "pending_authorize",
-    /** User redirected to upstream OIDC provider */
-    PENDING_UPSTREAM_CALLBACK = "pending_upstream_callback",
-    /** User redirected to an OID4VP verifier flow */
-    PENDING_VP_CALLBACK = "pending_vp_callback",
-    /** Upstream auth completed, token can be issued */
-    AUTHORIZED = "authorized",
-    /** Token has been issued */
-    TOKEN_ISSUED = "token_issued",
-    /** Session expired or cancelled */
-    EXPIRED = "expired",
-}
+import {
+    type ChainedAsSession,
+    ChainedAsSessionStatus,
+} from "../../domain/chained-as-session.js";
 
 /**
  * Entity for storing Chained AS session state.
  * Tracks the flow from PAR → authorize → upstream callback → token issuance.
  */
 @Entity("chained_as_session")
-export class ChainedAsSessionEntity {
+export class ChainedAsSessionEntity implements ChainedAsSession {
     /**
      * The session ID (used as request_uri parameter in PAR response).
      */

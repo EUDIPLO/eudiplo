@@ -9,35 +9,10 @@ import {
 } from "typeorm";
 import { TenantEntity } from "../../../../auth/tenant/entities/tenant.entity.js";
 import { EncryptedStringTransformer } from "../../../../platform/data-encryption/index.js";
-
-/**
- * Status of an interactive authorization session.
- */
-export enum InteractiveAuthSessionStatus {
-    /**
-     * Session created, waiting for interaction.
-     */
-    Pending = "pending",
-    /**
-     * OpenID4VP presentation received for current step.
-     */
-    /**
-     * Web authorization completed for current step.
-     */
-    /**
-     * All steps completed, ready to issue authorization code.
-     */
-    AllStepsCompleted = "all_steps_completed",
-    /**
-     * Authorization code issued.
-     */
-    /**
-     * Session expired.
-     */
-    /**
-     * Session cancelled or failed.
-     */
-}
+import {
+    type InteractiveAuthSession,
+    InteractiveAuthSessionStatus,
+} from "../authorization/domain/interactive-auth-session.js";
 
 /**
  * Entity for tracking interactive authorization sessions.
@@ -47,7 +22,7 @@ export enum InteractiveAuthSessionStatus {
  * This entity stores the session state between the initial request and follow-up.
  */
 @Entity("interactive_auth_session")
-export class InteractiveAuthSessionEntity {
+export class InteractiveAuthSessionEntity implements InteractiveAuthSession {
     /**
      * Auto-generated primary key.
      */

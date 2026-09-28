@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveWalletAttestationPolicy } from "./wallet-attestation-policy.util.js";
+import { resolveWalletAttestationPolicy } from "./wallet-attestation-policy.js";
 
 describe("resolveWalletAttestationPolicy", () => {
     it("uses authorization server wallet attestation settings before issuance defaults", () => {

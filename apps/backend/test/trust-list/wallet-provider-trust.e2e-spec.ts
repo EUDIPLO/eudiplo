@@ -16,7 +16,7 @@ import { KeyUsageType } from "../../src/crypto/key/types/key-usage-type.js";
 import type { BuiltInAuthorizationServerConfig } from "../../src/issuer/configuration/issuance/dto/authorization-server-config.dto.js";
 import { IssuanceService } from "../../src/issuer/configuration/issuance/issuance.service.js";
 import { validateAttestationProofTrust } from "../../src/issuer/issuance/oid4vci/attestation-proof-trust.util.js";
-import { resolveWalletAttestationPolicy } from "../../src/issuer/issuance/oid4vci/authorization/shared/wallet-attestation-policy.util.js";
+import { resolveWalletAttestationPolicy } from "../../src/issuer/issuance/oid4vci/authorization/domain/wallet-attestation-policy.js";
 import { TrustListService } from "../../src/issuer/trust-list/trustlist.service.js";
 import { TrustStoreService } from "../../src/trust/trust-store.service.js";
 import { walletSolutionServiceTypes } from "../../src/trust/types.js";

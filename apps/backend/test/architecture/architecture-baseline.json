@@ -36,32 +36,19 @@
         "http-exception"
     ],
     "issuer/issuance/oid4vci/authorization/authorization-servers/authorization-servers.service.ts": [
-        "config",
-        "http-exception",
-        "typeorm"
-    ],
-    "issuer/issuance/oid4vci/authorization/authorize/authorize.service.ts": [
-        "config",
         "http-exception"
     ],
     "issuer/issuance/oid4vci/authorization/authorize/interactive-authorization.service.ts": [
-        "config",
-        "http-exception",
-        "typeorm"
+        "http-exception"
     ],
     "issuer/issuance/oid4vci/authorization/chained-as-vp/chained-as-vp.service.ts": [
-        "config",
-        "http-exception",
-        "typeorm"
+        "http-exception"
     ],
     "issuer/issuance/oid4vci/authorization/chained-as/chained-as.service.ts": [
-        "config",
-        "http-exception",
-        "typeorm"
+        "http-exception"
     ],
     "issuer/issuance/oid4vci/authorization/shared/chained-as-token.util.ts": [
-        "http-exception",
-        "typeorm"
+        "http-exception"
     ],
     "issuer/issuance/oid4vci/authorization/shared/pkce.util.ts": [
         "http-exception"

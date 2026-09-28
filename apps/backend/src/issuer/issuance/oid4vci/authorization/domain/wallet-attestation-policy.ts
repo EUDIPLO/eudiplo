@@ -1,4 +1,4 @@
-import type { TrustListRef } from "../../../../../verifier/presentations/entities/presentation-config.entity.js";
+import type { TrustListRef } from "../../../../../trust/types.js";
 
 export interface WalletAttestationPolicyConfig {
     walletAttestationRequired?: boolean | null;

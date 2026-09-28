@@ -365,14 +365,6 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
         ResolveAuthorizedCredentialConfiguration,
         ResolveCredentialProofs,
         {
-            provide: OID4VCI_SETTINGS,
-            inject: [ConfigService],
-            useFactory: (config: ConfigService) => ({
-                publicUrl: config.getOrThrow<string>("PUBLIC_URL"),
-                internalUrl: config.get<string>("INTERNAL_URL"),
-            }),
-        },
-        {
             provide: CREDENTIAL_NOTIFICATION_PUBLISHER,
             useClass: WebhookCredentialNotificationPublisher,
         },

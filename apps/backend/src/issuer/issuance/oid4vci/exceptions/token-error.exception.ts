@@ -1,4 +1,8 @@
 import { HttpException, HttpStatus } from "@nestjs/common";
+import type {
+    OAuthError,
+    OAuthErrorCode,
+} from "../authorization/domain/oauth-error.js";
 
 /**
  * OAuth 2.0 Token Error Codes as defined in:
@@ -16,20 +20,7 @@ import { HttpException, HttpStatus } from "@nestjs/common";
  * - `invalid_client`:
  *   - The Client tried to send a Token Request with a Pre-Authorized Code without a Client ID but the Authorization Server does not support anonymous access.
  */
-export type TokenErrorCode =
-    | "invalid_request"
-    | "invalid_client"
-    | "invalid_grant"
-    | "unauthorized_client"
-    | "unsupported_grant_type"
-    | "invalid_scope"
-    // OID4VCI Section 6.3: returned when the Client provides the wrong
-    // Transaction Code in the Pre-Authorized Code Flow.
-    | "invalid_tx_code"
-    // RFC 9449 Section 5 / 7.1: invalid DPoP proof at token or PAR endpoint.
-    | "invalid_dpop_proof"
-    // RFC 9126 Section 2.3: PAR endpoint uses authorization error codes.
-    | "unsupported_response_type";
+export type TokenErrorCode = OAuthErrorCode;
 
 /**
  * Exception for OAuth 2.0 Token Error responses.
@@ -75,6 +66,20 @@ export class TokenErrorException extends HttpException {
         }
         super(response, status);
     }
+}
+
+/**
+ * HTTP response for an application {@link OAuthError}: 401 when client
+ * authentication failed at the token endpoint, 400 otherwise.
+ */
+export function tokenErrorResponse(error: OAuthError): TokenErrorException {
+    return new TokenErrorException(
+        error.code,
+        error.description,
+        error.clientAuthenticationFailed
+            ? HttpStatus.UNAUTHORIZED
+            : HttpStatus.BAD_REQUEST,
+    );
 }
 
 /**
