@@ -94,6 +94,22 @@ describe("OpenAPI contract", () => {
         await request(app.getHttpServer()).get(path).expect(200);
     });
 
+    test("keeps the public ClientEntity schema name for SDK compatibility", () => {
+        const schemas = document.components?.schemas ?? {};
+        expect(schemas).toHaveProperty("ClientEntity");
+        expect(schemas).not.toHaveProperty("ClientResponseDto");
+        expect(
+            Object.keys((schemas.ClientEntity as any).properties).sort(),
+        ).toEqual([
+            "allowedIssuanceConfigs",
+            "allowedPresentationConfigs",
+            "clientId",
+            "description",
+            "roles",
+            "tenantId",
+        ]);
+    });
+
     test("documents tenant description clearing without create-only PATCH fields", () => {
         const createTenantSchema = document.components?.schemas
             ?.CreateTenantDto as any;
