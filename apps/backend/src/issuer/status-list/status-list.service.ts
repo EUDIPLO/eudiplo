@@ -38,7 +38,7 @@ import {
     ImportPhase,
 } from "../../platform/config-import/config-import-orchestrator.service.js";
 import type { SessionData as Session } from "../../session/domain/session-data.js";
-import type { CredentialConfig } from "../configuration/credentials/entities/credential.entity.js";
+import type { CredentialConfiguration } from "../configuration/credentials/domain/credential-configuration.js";
 import { StatusListImportSchema } from "./dto/status-list.schema.js";
 import { StatusListImportDto } from "./dto/status-list-import.dto.js";
 import { StatusUpdateDto } from "./dto/status-update.dto.js";
@@ -51,6 +51,12 @@ import {
     type StatusListSettings,
 } from "./status-list-settings.js";
 import { SubjectKeyService } from "./subject-key.service.js";
+
+/** The credential configuration fields that govern status entry allocation. */
+type StatusEntryPolicy = Pick<
+    CredentialConfiguration,
+    "activeCredentials" | "statusManagement"
+>;
 
 /**
  * Status list value meaning "revoked", per the convention documented on
@@ -567,7 +573,7 @@ export class StatusListService {
     async createEntry(
         session: Session,
         credentialConfigurationId: string,
-        credentialConfiguration?: CredentialConfig,
+        credentialConfiguration?: StatusEntryPolicy,
         issuanceSetId?: string,
     ): Promise<JWTwithStatusListPayload> {
         // Resolve the pseudonymous subject key when the active-credential-limit
@@ -647,7 +653,7 @@ export class StatusListService {
     private async resolveSubjectScopedKey(
         session: Session,
         credentialConfigurationId: string,
-        credentialConfiguration?: CredentialConfig,
+        credentialConfiguration?: StatusEntryPolicy,
     ): Promise<string | undefined> {
         const policy = credentialConfiguration?.activeCredentials;
         if (!policy?.enabled) {

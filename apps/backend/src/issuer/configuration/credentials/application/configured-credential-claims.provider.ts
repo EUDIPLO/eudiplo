@@ -6,14 +6,17 @@ import type {
     CredentialClaimsResult,
 } from "../domain/credential-claims.js";
 import { CredentialClaimsResolutionError } from "../domain/credential-claims.js";
-import type { CredentialClaimsConfiguration } from "../ports/credential-claims-configuration.js";
+import type { CredentialConfigurationRepository } from "../ports/credential-configuration.repository.js";
 import type { RemoteCredentialClaims } from "../ports/remote-credential-claims.js";
 
 export class ConfiguredCredentialClaimsProvider
     implements CredentialClaimsProvider
 {
     constructor(
-        private readonly credentialConfigs: CredentialClaimsConfiguration,
+        private readonly credentialConfigs: Pick<
+            CredentialConfigurationRepository,
+            "findForTenant"
+        >,
         private readonly attributeProviders: Pick<
             AttributeProviderRepository,
             "findForTenant"

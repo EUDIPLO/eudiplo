@@ -25,11 +25,11 @@ import type { CredentialConfiguration as CredentialConfig } from "../domain/cred
 import { CredentialConfigCreate } from "../dto/credential-config-create.dto.js";
 import { CredentialConfigUpdate } from "../dto/credential-config-update.dto.js";
 import { IaeActionType } from "../entities/iae-action.dto.js";
-import { CredentialConfigCreateSchema } from "../schemas/credential-config.schema.js";
 import {
-    CREDENTIAL_CONFIG_REPOSITORY,
-    type CredentialConfigRepository,
-} from "./ports/credential-config.repository.js";
+    CREDENTIAL_CONFIGURATION_REPOSITORY,
+    type CredentialConfigurationRepository,
+} from "../ports/credential-configuration.repository.js";
+import { CredentialConfigCreateSchema } from "../schemas/credential-config.schema.js";
 
 /**
  * Service for managing credential configurations.
@@ -40,11 +40,11 @@ export class CredentialConfigService {
 
     /**
      * Constructor for CredentialConfigService.
-     * @param credentialConfigRepository - Repository for CredentialConfig entity.
+     * @param credentialConfigRepository - Tenant-scoped credential configuration store.
      */
     constructor(
-        @Inject(CREDENTIAL_CONFIG_REPOSITORY)
-        private readonly credentialConfigRepository: CredentialConfigRepository,
+        @Inject(CREDENTIAL_CONFIGURATION_REPOSITORY)
+        private readonly credentialConfigRepository: CredentialConfigurationRepository,
         private readonly certService: CertService,
         private readonly filesService: FilesService,
         private readonly configImportService: ConfigImportService,

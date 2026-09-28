@@ -20,9 +20,9 @@ function fixture(source?: unknown) {
     };
     const configs = {
         getForTenant: vi.fn().mockResolvedValue(configuration),
-        findForTenant: vi.fn(),
-        listForTenant: vi.fn(),
-        findAttributeProvider: vi.fn().mockResolvedValue({
+    };
+    const providers = {
+        findForTenant: vi.fn().mockResolvedValue({
             url: "https://configured.example",
             auth: { type: "none" },
         }),
@@ -36,6 +36,7 @@ function fixture(source?: unknown) {
     const issue = vi.fn().mockResolvedValue("signed");
     const useCase = new IssueCredential(
         configs,
+        providers,
         claims,
         federation,
         new CredentialIssuerFormatRegistry([{ format: "test", issue }]),
@@ -50,6 +51,7 @@ function fixture(source?: unknown) {
         session,
         configuration,
         configs,
+        providers,
         claims,
         federation,
         issue,
@@ -66,7 +68,7 @@ describe("IssueCredential", () => {
         ).resolves.toBe("signed");
         expect(f.configs.getForTenant).toHaveBeenCalledWith("tenant", "pid");
         expect(f.claims.resolve).not.toHaveBeenCalled();
-        expect(f.configs.findAttributeProvider).not.toHaveBeenCalled();
+        expect(f.providers.findForTenant).not.toHaveBeenCalled();
         expect(f.issue).toHaveBeenCalledWith({
             credentialConfiguration: f.configuration,
             holderKey: f.command.holderKey,
@@ -96,12 +98,12 @@ describe("IssueCredential", () => {
             f.session,
             "pid",
         );
-        expect(f.configs.findAttributeProvider).not.toHaveBeenCalled();
+        expect(f.providers.findForTenant).not.toHaveBeenCalled();
     });
     it("looks up configured providers within the session tenant", async () => {
         const f = fixture();
         await f.useCase.execute(f.command);
-        expect(f.configs.findAttributeProvider).toHaveBeenCalledWith(
+        expect(f.providers.findForTenant).toHaveBeenCalledWith(
             "tenant",
             "provider",
         );
@@ -114,7 +116,7 @@ describe("IssueCredential", () => {
         async (reason) => {
             const f = fixture();
             if (reason === "missing provider")
-                f.configs.findAttributeProvider.mockResolvedValue(null);
+                f.providers.findForTenant.mockResolvedValue(null);
             else f.claims.resolve.mockResolvedValue(undefined);
             f.federation.entityIdForTenant.mockRejectedValue(
                 new Error("missing settings"),

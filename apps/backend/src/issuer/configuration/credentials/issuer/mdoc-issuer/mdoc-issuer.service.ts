@@ -15,12 +15,12 @@ import { KeyUsageType } from "../../../../../crypto/key/types/key-usage-type.js"
 import type { SessionData as Session } from "../../../../../session/domain/session-data.js";
 import { mdocContext } from "../../../../../verifier/presentations/mdoc-context.js";
 import { StatusListService } from "../../../../status-list/status-list.service.js";
-import { CredentialConfig } from "../../entities/credential.entity.js";
+import type { CredentialConfiguration } from "../../domain/credential-configuration.js";
 import { buildClaimsByNamespace } from "../../utils/index.js";
 import { roundedCredentialValidity } from "../credential-time.util.js";
 
 export interface MdocIssueOptions {
-    credentialConfiguration: CredentialConfig;
+    credentialConfiguration: CredentialConfiguration;
     deviceKey: Jwk;
     session: Session;
     claims: Record<string, any>;

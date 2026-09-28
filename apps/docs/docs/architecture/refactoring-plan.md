@@ -17,12 +17,12 @@ This plan is not an instruction to execute tasks automatically. Pick one slice, 
 | 2 | Boundary enforcement | Done | Layer checks plus a ratchet baseline for legacy debt. Remaining gap E5 under [enforcement gaps](#enforcement-gaps). |
 | 3–4 | Session repository and lifecycle | Done | Follow-ups S1–S3 below. |
 | 5–6 | OID4VCI use cases, no Express | Partial | Split `Oid4vciProtocolMetadata`, finish deferred issuance, remove forwarding wrappers. Authorization services still orchestrate in legacy services. |
-| 7–9 | Issuer credential formats | Partial | Registry exists; format issuer services still take the TypeORM entity type. |
+| 7–9 | Issuer credential formats | Done | Registry dispatches to SD-JWT VC and mdoc issuers typed on the plain `CredentialConfiguration` model. |
 | 10–11 | Claims provider and publisher ports | Done | Unify claim-source selection between `IssueCredential` and `ConfiguredCredentialClaimsProvider`. |
 | 12–13 | Trust retrieval and federation resolver | Partial | Federation trust is not cryptographically anchored (T1), traversal needs limits (T2). |
 | 14 | OID4VP use cases | Partial | Request retrieval, response parsing and completion extracted; `PresentationsService` (2300 lines) untouched. |
 | 15–16 | Verifier credential formats | Partial | Registry exists but formats have different `verify` signatures; ISO 18013 bypasses it. |
-| 17–18 | Configuration repositories, plain models | Done for tenant, credential, issuance, attribute-provider, webhook-endpoint | Presentation, status-list, registrar, key-chain and config-portability still use TypeORM in services. Merge the three credential-config ports. |
+| 17–18 | Configuration repositories, plain models | Done for tenant, credential, issuance, attribute-provider, webhook-endpoint | Presentation, status-list, registrar, key-chain and config-portability still use TypeORM in services. Credential configurations use one `CredentialConfigurationRepository` port owned by `CredentialConfigModule`. |
 | 19 | Client provider abstraction | Done in code | Regenerate the SDK (C7) and validate Keycloak mode against a live instance. |
 | 20 | Typed settings instead of `ConfigService` | Partial | Protocol-core files still importing `@nestjs/config` are listed in the ratchet baseline. Administrative CRUD may keep `ConfigService`. |
 | 21 | Modules as composition roots | Partial | Applied to migrated slices. |
@@ -64,8 +64,6 @@ Findings from the 2026-09-28 review that are not fixed yet. Items marked *pre-ex
 - **O2** Finish deferred issuance: all persistence through `DeferredTransactionRepository`, reuse the proof verifier and authorization-details use case, and unify resource-token verification for the credential, notification and deferred endpoints.
 - **O3** Remove forwarding wrappers in `Oid4vciService` and unused providers in `issuance.module.ts`.
 - **S2** Replace the seven near-identical `GetSession*` use cases with one lookup service, and build session retention settings once.
-- **CF1** Merge `CredentialConfigRepository`, `CredentialConfigurationRepository` and `CredentialClaimsConfiguration` into one port; inject `AttributeProviderRepository` instead of constructing it.
-- **CF2** Type `SdjwtvcIssuerService` and `MdocIssuerService` on the plain `CredentialConfiguration` model instead of casting.
 
 ### Enforcement gaps
 

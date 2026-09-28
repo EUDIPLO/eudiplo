@@ -1,5 +1,6 @@
 import type { Jwk } from "@openid4vc/oauth2";
 import type { SessionData } from "../../../../session/domain/session-data.js";
+import type { AttributeProviderRepository } from "../../attribute-provider/ports/attribute-provider.repository.js";
 import type { CredentialConfigurationRepository } from "../ports/credential-configuration.repository.js";
 import type {
     IssuerFederationContext,
@@ -11,7 +12,14 @@ import type { CredentialIssuerFormatRegistry } from "./credential-issuer-format-
 
 export class IssueCredential {
     constructor(
-        private readonly configurations: CredentialConfigurationRepository,
+        private readonly configurations: Pick<
+            CredentialConfigurationRepository,
+            "getForTenant"
+        >,
+        private readonly attributeProviders: Pick<
+            AttributeProviderRepository,
+            "findForTenant"
+        >,
         private readonly claims: SessionCredentialClaims,
         private readonly federation: IssuerFederationContext,
         private readonly formats: CredentialIssuerFormatRegistry,
@@ -46,7 +54,7 @@ export class IssueCredential {
                     source?.type === "webhook" ? source.webhook : undefined;
                 if (!webhook && configuration.attributeProviderId) {
                     const provider =
-                        await this.configurations.findAttributeProvider(
+                        await this.attributeProviders.findForTenant(
                             session.tenantId,
                             configuration.attributeProviderId,
                         );

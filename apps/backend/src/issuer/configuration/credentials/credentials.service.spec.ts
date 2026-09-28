@@ -55,7 +55,8 @@ describe("CredentialsService proof_types_supported generation", () => {
                     listForTenant,
                     findForTenant: vi.fn(),
                     getForTenant: vi.fn(),
-                    findAttributeProvider: vi.fn(),
+                    save: vi.fn(),
+                    deleteForTenant: vi.fn(),
                 },
                 settings: { publicUrl: "https://issuer.example" },
                 cryptoImplementationService: {

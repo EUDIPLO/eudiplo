@@ -25,6 +25,6 @@ import { ATTRIBUTE_PROVIDER_REPOSITORY } from "./ports/attribute-provider.reposi
                 new TypeOrmAttributeProviderRepository(repository),
         },
     ],
-    exports: [AttributeProviderService],
+    exports: [AttributeProviderService, ATTRIBUTE_PROVIDER_REPOSITORY],
 })
 export class AttributeProviderModule {}

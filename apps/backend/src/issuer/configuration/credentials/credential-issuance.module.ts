@@ -1,14 +1,11 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
-import type { Repository } from "typeorm";
 import { FederationTrustService } from "../../../trust/federation-trust.service.js";
 import { TrustModule } from "../../../trust/trust.module.js";
 import { WebhookModule } from "../../../webhook/webhook.module.js";
 import { WebhookService } from "../../../webhook/webhook.service.js";
 import { StatusListModule } from "../../status-list/status-list.module.js";
-import { TypeOrmAttributeProviderRepository } from "../attribute-provider/adapters/typeorm-attribute-provider.repository.js";
-import { AttributeProviderEntity } from "../attribute-provider/entities/attribute-provider.entity.js";
+import { AttributeProviderModule } from "../attribute-provider/attribute-provider.module.js";
 import {
     ATTRIBUTE_PROVIDER_REPOSITORY,
     type AttributeProviderRepository,
@@ -19,24 +16,20 @@ import { ConfiguredIssuerFederationContext } from "./adapters/issuer-federation-
 import { MdocCredentialIssuerFormat } from "./adapters/mdoc-credential-issuer-format.js";
 import { SdjwtvcCredentialIssuerFormat } from "./adapters/sdjwtvc-credential-issuer-format.js";
 import { WebhookSessionCredentialClaims } from "./adapters/session-credential-claims.js";
-import { TypeOrmCredentialClaimsConfiguration } from "./adapters/typeorm-credential-claims-configuration.js";
-import { TypeOrmCredentialConfigurationRepository } from "./adapters/typeorm-credential-configuration.repository.js";
 import { WebhookRemoteCredentialClaims } from "./adapters/webhook-remote-credential-claims.js";
 import { ConfiguredCredentialClaimsProvider } from "./application/configured-credential-claims.provider.js";
 import { CredentialIssuerFormatRegistry } from "./application/credential-issuer-format-registry.js";
 import { IssueCredential } from "./application/issue-credential.js";
+import { CredentialConfigModule } from "./credential-config.module.js";
 import { CREDENTIAL_SETTINGS } from "./credential-settings.js";
 import { CredentialsService } from "./credentials.service.js";
 import { CREDENTIAL_CLAIMS_PROVIDER } from "./domain/credential-claims.js";
-import { CredentialConfig } from "./entities/credential.entity.js";
 import { MdocIssuerService } from "./issuer/mdoc-issuer/mdoc-issuer.service.js";
 import { SdjwtvcIssuerService } from "./issuer/sdjwtvc-issuer/sdjwtvc-issuer.service.js";
 import {
-    CREDENTIAL_CLAIMS_CONFIGURATION,
-    type CredentialClaimsConfiguration,
-} from "./ports/credential-claims-configuration.js";
-import type { CredentialConfigurationRepository } from "./ports/credential-configuration.repository.js";
-import { CREDENTIAL_CONFIGURATION_REPOSITORY } from "./ports/credential-configuration.repository.js";
+    CREDENTIAL_CONFIGURATION_REPOSITORY,
+    type CredentialConfigurationRepository,
+} from "./ports/credential-configuration.repository.js";
 import {
     ISSUER_FEDERATION_CONTEXT,
     type IssuerFederationContext,
@@ -50,7 +43,8 @@ import {
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([CredentialConfig, AttributeProviderEntity]),
+        AttributeProviderModule,
+        CredentialConfigModule,
         IssuanceConfigModule,
         StatusListModule,
         TrustModule,
@@ -76,30 +70,24 @@ import {
             provide: IssueCredential,
             inject: [
                 CREDENTIAL_CONFIGURATION_REPOSITORY,
+                ATTRIBUTE_PROVIDER_REPOSITORY,
                 SESSION_CREDENTIAL_CLAIMS,
                 ISSUER_FEDERATION_CONTEXT,
                 CredentialIssuerFormatRegistry,
             ],
             useFactory: (
                 configs: CredentialConfigurationRepository,
+                providers: AttributeProviderRepository,
                 claims: SessionCredentialClaims,
                 federation: IssuerFederationContext,
                 formats: CredentialIssuerFormatRegistry,
-            ) => new IssueCredential(configs, claims, federation, formats),
-        },
-        {
-            provide: CREDENTIAL_CONFIGURATION_REPOSITORY,
-            inject: [
-                getRepositoryToken(CredentialConfig),
-                getRepositoryToken(AttributeProviderEntity),
-            ],
-            useFactory: (
-                credentialConfigs: Repository<CredentialConfig>,
-                attributeProviders: Repository<AttributeProviderEntity>,
             ) =>
-                new TypeOrmCredentialConfigurationRepository(
-                    credentialConfigs,
-                    attributeProviders,
+                new IssueCredential(
+                    configs,
+                    providers,
+                    claims,
+                    federation,
+                    formats,
                 ),
         },
         {
@@ -122,18 +110,6 @@ import {
             ) => new CredentialIssuerFormatRegistry([sdjwt, mdoc]),
         },
         {
-            provide: CREDENTIAL_CLAIMS_CONFIGURATION,
-            inject: [getRepositoryToken(CredentialConfig)],
-            useFactory: (repository: Repository<CredentialConfig>) =>
-                new TypeOrmCredentialClaimsConfiguration(repository),
-        },
-        {
-            provide: ATTRIBUTE_PROVIDER_REPOSITORY,
-            inject: [getRepositoryToken(AttributeProviderEntity)],
-            useFactory: (repository: Repository<AttributeProviderEntity>) =>
-                new TypeOrmAttributeProviderRepository(repository),
-        },
-        {
             provide: REMOTE_CREDENTIAL_CLAIMS,
             inject: [WebhookService],
             useFactory: (webhooks: WebhookService) =>
@@ -142,12 +118,12 @@ import {
         {
             provide: ConfiguredCredentialClaimsProvider,
             inject: [
-                CREDENTIAL_CLAIMS_CONFIGURATION,
+                CREDENTIAL_CONFIGURATION_REPOSITORY,
                 ATTRIBUTE_PROVIDER_REPOSITORY,
                 REMOTE_CREDENTIAL_CLAIMS,
             ],
             useFactory: (
-                configs: CredentialClaimsConfiguration,
+                configs: CredentialConfigurationRepository,
                 providers: AttributeProviderRepository,
                 remote: RemoteCredentialClaims,
             ) =>
