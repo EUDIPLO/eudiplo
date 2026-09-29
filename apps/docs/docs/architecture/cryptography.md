@@ -12,23 +12,20 @@ This page provides a concise overview of EUDIPLO's cryptographic operations, alg
 
 EUDIPLO uses **Key Chains** to manage cryptographic key material for signing and verification operations across all protocols (OID4VCI, OID4VP, status lists, trust lists).
 
-**Key Chain:** A logical grouping of cryptographic keys with metadata (algorithm, usage, rotation policy, KMS provider). Each key chain represents a **single purpose** (e.g., credential signing, access token signing, status list signing).
+**Key Chain:** A logical grouping of cryptographic keys with metadata (usage type, rotation policy, KMS provider). Each key chain represents a **single purpose** (e.g., credential signing, access token signing, status list signing).
 
 ---
 
 ## Supported Algorithms
 
-EUDIPLO supports the following cryptographic algorithms:
+EUDIPLO uses the following algorithms:
 
-| Algorithm | Type | Curve/Key Size | Use Case | Status |
-| ----------- | ------ | ---------------- | ---------- | -------- |
-| **ES256** | ECDSA | P-256 (secp256r1) | Credential signing, access tokens, status lists, trust lists | ✅ **Primary** |
-| **ES384** | ECDSA | P-384 (secp384r1) | High-security environments | ⚠️ Experimental |
-| **ES512** | ECDSA | P-521 (secp521r1) | High-security environments | ⚠️ Experimental |
-| **RS256** | RSA-PSS | 2048-bit | Legacy interoperability | ⚠️ Supported |
-| **EdDSA** | Edwards-curve | Ed25519 | Future EUDI ARF support | 🔮 Planned |
+| Algorithm   | Type          | Curve             | Use Case                                                                         |
+| ----------- | ------------- | ----------------- | -------------------------------------------------------------------------------- |
+| **ES256**   | ECDSA         | P-256 (secp256r1) | All signing: credentials, access tokens, status lists, trust lists, requests     |
+| **ECDH-ES** | Key agreement | P-256             | Encrypted OID4VP responses, encrypted credential requests, ISO 18013-7 responses |
 
-**Recommendation:** Use **ES256** for all production deployments. This is the **EUDI Wallet ARF baseline requirement** and ensures maximum interoperability across EUDI ecosystem implementations.
+ES256 is the only signing algorithm: `CRYPTO_ALG` accepts no other value. It is the **EUDI Wallet ARF baseline requirement** and ensures interoperability across EUDI ecosystem implementations. Other algorithms (for example EdDSA) may be added in future releases.
 
 ---
 
@@ -43,10 +40,10 @@ flowchart LR
     Data[Data to Sign] --> Hash[Hash Data]
     Hash --> Sign[Sign with Private Key]
     Sign --> Signature[Digital Signature]
-    
+
     KeyChain[Key Chain] -.provides.-> PrivateKey[Private Key]
     PrivateKey --> Sign
-    
+
     style Data fill:#e1f5ff
     style Signature fill:#e1ffe1
     style KeyChain fill:#fff5e1
@@ -57,7 +54,7 @@ flowchart LR
 1. **Hash the data**: Compute SHA-256 hash of the data (for ES256)
 2. **Retrieve private key**: Load private key from the configured KMS provider
 3. **Sign the hash**: Use ECDSA to sign the hash
-4. **Encode signature**: Encode signature as Base64URL (for JWT) or CBOR (for mDOC/CWT)
+4. **Encode signature**: Encode signature as Base64URL (for JWT) or as COSE_Sign1 (for the mDOC Mobile Security Object and CWT status lists)
 
 ---
 
@@ -71,13 +68,13 @@ flowchart LR
     Signature[Digital Signature] --> Verify[Verify with Public Key]
     Hash --> Verify
     Verify --> Valid{Valid?}
-    
+
     KeyChain[Key Chain / Trust List] -.provides.-> PublicKey[Public Key / Certificate]
     PublicKey --> Verify
-    
+
     Valid -->|Yes| Success[Accept]
     Valid -->|No| Fail[Reject]
-    
+
     style Data fill:#e1f5ff
     style Success fill:#e1ffe1
     style Fail fill:#ffe1e1
@@ -95,23 +92,27 @@ flowchart LR
 
 ## Key Chain Usage Modes
 
-Each Key Chain has a **usage mode** that determines its purpose:
+Each Key Chain has a **usage type** (`usageType`) that determines its purpose:
 
-| Usage Mode | Purpose | Example Operations |
-| ------------ | --------- | ------------------- |
-| `access` | Access token signing | Sign OID4VCI access tokens |
-| `attestation` | Credential signing | Sign SD-JWT VCs and mDOCs |
-| `statusList` | Status list signing | Sign OAuth Token Status Lists |
-| `trustList` | Trust list signing | Sign ETSI TL or OpenID Federation metadata |
-| `encrypt` | Response encryption | Decrypt JWE-encrypted VP Tokens |
+| Usage Type    | Purpose             | Example Operations                                                             |
+| ------------- | ------------------- | ------------------------------------------------------------------------------ |
+| `access`      | Access and requests | Sign OID4VCI access tokens and OID4VP request objects                          |
+| `attestation` | Credential signing  | Sign SD-JWT VCs and mDOCs                                                      |
+| `statusList`  | Status list signing | Sign OAuth Token Status Lists                                                  |
+| `trustList`   | Trust list signing  | Sign the trust lists EUDIPLO hosts for the tenant                              |
+| `encrypt`     | Decryption          | Decrypt encrypted OID4VCI credential requests and ISO 18013-7 (HPKE) responses |
 
 **Example:** A tenant might have three key chains:
 
 ```json
 [
-    { "id": "access-key", "usage": "access", "algorithm": "ES256" },
-    { "id": "attestation-key", "usage": "attestation", "algorithm": "ES256" },
-    { "id": "status-key", "usage": "statusList", "algorithm": "ES256" }
+    { "id": "access-key", "usageType": "access", "kmsProvider": "db" },
+    {
+        "id": "attestation-key",
+        "usageType": "attestation",
+        "kmsProvider": "db"
+    },
+    { "id": "status-key", "usageType": "statusList", "kmsProvider": "db" }
 ]
 ```
 
@@ -119,14 +120,16 @@ Each Key Chain has a **usage mode** that determines its purpose:
 
 ## Key Chain and Protocol Mapping
 
-| Protocol Operation | Key Chain Usage | Algorithm | Signing Entity | Verifying Entity |
-| -------------------- | ----------------- | ----------- | ---------------- | ------------------ |
-| **Issue Access Token** | `access` | ES256 | EUDIPLO (Authorization Server) | Wallet (via JWKS) |
-| **Issue SD-JWT VC** | `attestation` | ES256 | EUDIPLO (Issuer) | Verifier (via `x5c` or federation) |
-| **Issue mDOC** | `attestation` | ES256 | EUDIPLO (Issuer) | Verifier (via certificate chain) |
-| **Sign Status List** | `statusList` | ES256 | EUDIPLO (Issuer) | Verifier (via JWKS) |
-| **Sign Trust List** | `trustList` | ES256 | Trust Anchor | EUDIPLO (Verifier) |
-| **Decrypt VP Token** | `encrypt` | ECDH-ES+A256KW | EUDIPLO (Verifier) | Wallet (encrypts to EUDIPLO's public key) |
+| Protocol Operation             | Key Chain Usage        | Algorithm | Signing / Decrypting Entity    | Counterpart                                         |
+| ------------------------------ | ---------------------- | --------- | ------------------------------ | --------------------------------------------------- |
+| **Issue Access Token**         | `access`               | ES256     | EUDIPLO (Authorization Server) | EUDIPLO credential endpoint verifies it             |
+| **Sign Presentation Request**  | `access`               | ES256     | EUDIPLO (Verifier)             | Wallet (via `x5c`)                                  |
+| **Issue SD-JWT VC**            | `attestation`          | ES256     | EUDIPLO (Issuer)               | Verifier (via `x5c` or federation)                  |
+| **Issue mDOC**                 | `attestation`          | ES256     | EUDIPLO (Issuer)               | Verifier (via certificate chain)                    |
+| **Sign Status List**           | `statusList`           | ES256     | EUDIPLO (Issuer)               | Verifier                                            |
+| **Sign Trust List**            | `trustList`            | ES256     | EUDIPLO (Trust list provider)  | Wallets and verifiers that use the trust list       |
+| **Decrypt OID4VP Response**    | none (per-session key) | ECDH-ES   | EUDIPLO (Verifier)             | Wallet encrypts to the key from the request         |
+| **Decrypt Credential Request** | `encrypt`              | ECDH-ES   | EUDIPLO (Issuer)               | Wallet encrypts to the key from the issuer metadata |
 
 ---
 
@@ -193,60 +196,60 @@ EUDIPLO verifies the certificate chain by:
 
 1. Verifying each certificate's signature using the next certificate in the chain
 2. Checking certificate validity dates (`notBefore`, `notAfter`)
-3. Checking certificate revocation status (if CRL or OCSP is configured)
+3. Checking certificate revocation status via CRL (OCSP is not supported)
 4. Verifying the root CA is trusted (via trust list or trust store)
 
 ---
 
 ## Key Rotation
 
-Key Chains support **automatic key rotation** to enhance security and comply with key lifecycle policies.
+Key Chains support **automatic key rotation** for internal certificate chains (root CA + leaf signing key).
 
 ### Rotation Policy
 
-A rotation policy specifies **when** and **how often** to rotate keys:
+A rotation policy specifies **when** to rotate the signing key and how long new certificates are valid:
 
 ```json
 {
-    "enabled": true,
-    "rotateAfterDays": 90,
-    "retainOldKeyDays": 180
+    "rotationPolicy": {
+        "enabled": true,
+        "intervalDays": 90,
+        "certValidityDays": 365
+    }
 }
 ```
 
-| Field | Description |
-| ------- | ------------- |
-| `enabled` | Whether rotation is enabled |
-| `rotateAfterDays` | Rotate key after this many days |
-| `retainOldKeyDays` | Keep old key for verification (for issued credentials) |
+| Field              | Description                                       |
+| ------------------ | ------------------------------------------------- |
+| `enabled`          | Whether rotation is enabled                       |
+| `intervalDays`     | Rotate the signing key after this many days       |
+| `certValidityDays` | Validity period of newly issued leaf certificates |
 
 **Rotation Flow:**
 
 ```mermaid
 flowchart TB
-    Start[Key Rotation Triggered] --> Generate[Generate New Key Pair]
-    Generate --> Activate[Set New Key as Active]
-    Activate --> Retire[Mark Old Key as Retired]
-    Retire --> Retain[Retain Old Key for Verification]
-    Retain --> Schedule[Schedule Old Key Deletion]
-    
+    Start[Daily rotation check] --> Due{Rotation due?}
+    Due -->|Yes| Generate[Generate new key pair]
+    Generate --> Activate[Use new key for signing]
+    Activate --> Keep[Keep previous key and certificate for 30 days]
+    Due -->|No| Done[Nothing to do]
+
     style Start fill:#e1f5ff
     style Activate fill:#fff5e1
-    style Schedule fill:#ffe1e1
 ```
 
 **Steps:**
 
-1. **Generate new key pair**: Create a new key via the configured KMS provider
-2. **Activate new key**: Update the key chain to use the new key for signing
-3. **Retire old key**: Mark the old key as retired (no longer used for signing)
-4. **Retain old key**: Keep the old key for verification (to validate previously issued credentials)
-5. **Schedule deletion**: After `retainOldKeyDays`, permanently delete the old key
+1. **Check**: A scheduled job runs every day at midnight and rotates every key chain whose `intervalDays` have passed since the last rotation (or since creation)
+2. **Generate new key pair**: Create a new key via the configured KMS provider and issue a new leaf certificate from the chain's root CA
+3. **Activate new key**: The new key is used for all new signatures
+4. **Keep previous key**: The previous key and certificate are kept for a fixed grace period of 30 days (`previousKeyExpiry`), so relying parties can still validate recently signed material
 
 **Benefits:**
 
-- Limits the impact of key compromise (old credentials remain verifiable)
-- Complies with key lifecycle policies (e.g., FIPS 140-2)
+- Limits the impact of a key compromise
+- Supports key lifecycle policies
 - Supports gradual migration to new keys
 
 ---
@@ -268,7 +271,12 @@ jkt = Base64URL(SHA-256(UTF8(JWK_CANONICAL)))
 The canonical JWK is a JSON object with keys sorted alphabetically:
 
 ```json
-{"crv":"P-256","kty":"EC","x":"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU","y":"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"}
+{
+    "crv": "P-256",
+    "kty": "EC",
+    "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
+    "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
+}
 ```
 
 **Use Case:**
@@ -279,33 +287,35 @@ The JKT is embedded in the access token (`cnf.jkt`) to bind the token to the wal
 
 ## Encryption (JWE)
 
-EUDIPLO uses **JWE (JSON Web Encryption)** to encrypt VP Tokens in OID4VP flows.
+EUDIPLO uses **JWE (JSON Web Encryption)** so that wallet responses in OID4VP flows are always encrypted.
 
 ### Encryption Algorithm
 
-| Algorithm | Purpose | Key Agreement | Content Encryption |
-|-----------|---------|---------------|-------------------|
-| **ECDH-ES+A256KW** | VP Token encryption | ECDH (P-256) | AES-256-KW |
+| Parameter       | Value                  | Notes                                                 |
+| --------------- | ---------------------- | ----------------------------------------------------- |
+| `alg`           | `ECDH-ES`              | Direct key agreement on P-256, no key wrapping        |
+| `enc`           | `A128GCM` or `A256GCM` | Offered in `encrypted_response_enc_values_supported`  |
+| `response_mode` | `direct_post.jwt`      | `dc_api.jwt` when the Digital Credentials API is used |
 
 **Flow:**
 
-1. Wallet fetches verifier's public key (from presentation request metadata)
-2. Wallet generates ephemeral key pair
-3. Wallet computes shared secret via ECDH
-4. Wallet derives content encryption key (CEK) via HKDF
-5. Wallet encrypts VP Token using AES-256-GCM
-6. Wallet wraps CEK using AES-256-KW
-7. Wallet sends JWE to EUDIPLO
+1. EUDIPLO generates an **ephemeral key pair for each presentation session** and puts the public key into the signed request
+2. The wallet generates its own ephemeral key pair and derives the content encryption key via ECDH-ES (Concat KDF)
+3. The wallet encrypts the response with AES-GCM and sends the JWE to EUDIPLO
+4. EUDIPLO decrypts it with the session's private key; the key is removed from the session once the session ends
 
-**JWE Structure:**
+**JWE Structure (compact serialization):**
 
 ```text
-<Base64URL(JWE Protected Header)>.<Base64URL(Encrypted Key)>.<Base64URL(IV)>.<Base64URL(Ciphertext)>.<Base64URL(Authentication Tag)>
+<Base64URL(JWE Protected Header)>..<Base64URL(IV)>.<Base64URL(Ciphertext)>.<Base64URL(Authentication Tag)>
 ```
 
-**Decryption:**
+With `ECDH-ES` in direct mode, the encrypted key part is empty.
 
-EUDIPLO decrypts the JWE using the configured encryption key chain (usage: `encrypt`).
+**Other encryption uses:**
+
+- Encrypted OID4VCI credential requests are decrypted with the tenant's `encrypt` key chain, whose public key is published in the issuer metadata
+- ISO 18013-7 responses (HPKE) are decrypted with the tenant's `encrypt` key chain as well
 
 ---
 
@@ -315,25 +325,26 @@ EUDIPLO decrypts the JWE using the configured encryption key chain (usage: `encr
 
 Keys stored in the database are **encrypted at rest** using AES-256-GCM:
 
-| Field | Encryption | Notes |
-| ------- | ------------ | ------- |
-| **Private Key (JWK)** | ✅ Encrypted | Encrypted using a master key derived from `DB_ENCRYPTION_KEY` |
-| **Public Key (JWK)** | ❌ Plaintext | Public keys are not sensitive |
-| **Certificate (X.509)** | ❌ Plaintext | Certificates are public material |
+| Field                   | Encryption   | Notes                                              |
+| ----------------------- | ------------ | -------------------------------------------------- |
+| **Private Key (JWK)**   | ✅ Encrypted | Encrypted with the data encryption key (see below) |
+| **Public Key (JWK)**    | ❌ Plaintext | Public keys are not sensitive                      |
+| **Certificate (X.509)** | ❌ Plaintext | Certificates are public material                   |
 
-**Master Key Derivation:**
+The same data encryption key also protects other sensitive columns, such as session data and the per-session response encryption keys.
 
-The master key is derived from the `DB_ENCRYPTION_KEY` environment variable using PBKDF2:
+**Data Encryption Key:**
 
-```typescript
-const masterKey = pbkdf2Sync(
-    process.env.DB_ENCRYPTION_KEY,
-    'eudiplo-salt',
-    100000, // iterations
-    32, // key length (bytes)
-    'sha256'
-);
-```
+`ENCRYPTION_KEY_SOURCE` selects where the 256-bit data encryption key comes from:
+
+| Source          | Description                                                                                        |
+| --------------- | -------------------------------------------------------------------------------------------------- |
+| `env` (default) | Derived from `MASTER_SECRET` with HKDF-SHA256 (info `eudiplo-encryption-at-rest`); for development |
+| `vault`         | Fetched from HashiCorp Vault                                                                       |
+| `aws`           | Fetched from AWS Secrets Manager                                                                   |
+| `azure`         | Fetched from Azure Key Vault                                                                       |
+
+For production, use `vault`, `aws` or `azure`, so the key is not derived from a secret that is also used for other purposes.
 
 ---
 
@@ -341,11 +352,13 @@ const masterKey = pbkdf2Sync(
 
 For production deployments, use an external KMS provider to store private keys:
 
-| Provider | Security Model |
-| ---------- | --------------- |
+| Provider            | Security Model                                                  |
+| ------------------- | --------------------------------------------------------------- |
 | **HashiCorp Vault** | Keys stored in Vault Transit secrets engine (never leave Vault) |
-| **AWS KMS** | Keys stored in AWS HSM (FIPS 140-2 Level 2) |
-| **PKCS#11 HSM** | Keys stored in hardware security module (FIPS 140-2 Level 3+) |
+| **AWS KMS**         | Keys stored in AWS HSM (FIPS 140-2 Level 2)                     |
+| **PKCS#11 HSM**     | Keys stored in hardware security module (FIPS 140-2 Level 3+)   |
+| **CSC**             | Remote signing service via the Cloud Signature Consortium API   |
+| **HTTP**            | Custom remote KMS service that signs on EUDIPLO's behalf        |
 
 **Signing Flow (External KMS):**
 
@@ -359,7 +372,7 @@ For production deployments, use an external KMS provider to store private keys:
 - Private keys **never leave the KMS** (even for signing operations)
 - FIPS 140-2 compliance
 - Centralized key lifecycle management
-- Audit logging of all key operations
+- Key usage auditing in the KMS itself
 
 ---
 
@@ -369,30 +382,46 @@ For X.509-based trust models (mDOC, ETSI TL), EUDIPLO validates certificates usi
 
 ### Certificate Validation Checks
 
-| Check | Description |
-| ------- | ------------- |
-| **Signature Verification** | Verify certificate is signed by the issuing CA |
-| **Validity Dates** | Verify `notBefore <= now <= notAfter` |
-| **Trust Anchor** | Verify root CA is in the configured trust list |
-| **Revocation Status** | Check CRL or OCSP (if configured) |
-| **Key Usage** | Verify certificate is authorized for the operation (e.g., `digitalSignature`) |
-| **Extended Key Usage** | Verify certificate EKU matches the use case (e.g., `id-kp-codeSigning`) |
+| Check                      | Description                                                                                    |
+| -------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Signature Verification** | Verify certificate is signed by the issuing CA (path building from the leaf to a trust anchor) |
+| **Validity Dates**         | Verify `notBefore <= now <= notAfter`                                                          |
+| **Trust Anchor**           | Verify root CA is in the configured trust list                                                 |
+| **Revocation Status**      | Check the certificate against its CRL (OCSP is not supported)                                  |
 
 **Trust List Configuration:**
 
-Trust lists are configured per presentation configuration:
+Trust lists are referenced in the DCQL query of a presentation configuration, per requested credential:
 
 ```json
 {
-    "trustedAuthorities": [
-        {
-            "type": "etsi_tl",
-            "uri": "https://trust.example.com/tl.jwt",
-            "verifierKey": { "kty": "EC", "crv": "P-256", "x": "...", "y": "..." }
-        }
-    ]
+    "dcql_query": {
+        "credentials": [
+            {
+                "id": "pid",
+                "format": "dc+sd-jwt",
+                "meta": { "vct_values": ["urn:eudi:pid:de:1"] },
+                "trusted_authorities": [
+                    {
+                        "type": "etsi_tl",
+                        "values": [
+                            {
+                                "trustListId": "580831bc-ef11-43f4-a3be-a2b6bf1b29a3"
+                            },
+                            {
+                                "url": "https://trust.example.com/tl.jwt",
+                                "verifierX509Der": "MIIC..."
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 }
 ```
+
+A value either references a trust list hosted by the tenant (`trustListId`) or an external trust list (`url`) together with the key or certificate used to verify its signature (`verifierKey` or `verifierX509Der`).
 
 ---
 
