@@ -1,6 +1,7 @@
 import type { Jwk } from "@openid4vc/oauth2";
 import type { SessionData } from "../../../../session/domain/session-data.js";
 import type { AttributeProviderRepository } from "../../attribute-provider/ports/attribute-provider.repository.js";
+import { assertClaimsMatchConfiguration } from "../domain/credential-claims-validation.js";
 import type { CredentialConfigurationRepository } from "../ports/credential-configuration.repository.js";
 import type {
     IssuerFederationContext,
@@ -71,6 +72,8 @@ export class IssueCredential {
                 }
             }
         }
+        // Final claims from every source must match the configuration before signing.
+        assertClaimsMatchConfiguration(configuration, claims);
         // Existing direct-generation behavior tolerates unavailable issuance settings.
         const federationEntityId = await this.federation
             .entityIdForTenant(session.tenantId)

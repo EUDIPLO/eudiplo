@@ -23,7 +23,9 @@ import { AuditLogContext } from "../../../session/logging/session-audit.service.
 import { SessionLoggerService } from "../../../session/logging/session-logger.service.js";
 import { CredentialsService } from "../../configuration/credentials/credentials.service.js";
 import { CredentialClaimsResolutionError } from "../../configuration/credentials/domain/credential-claims.js";
+import { InvalidCredentialClaims } from "../../configuration/credentials/domain/credential-claims-validation.js";
 import { CredentialProofType } from "../../configuration/credentials/entities/credential.entity.js";
+import { InvalidClaimsException } from "../../configuration/credentials/exceptions/invalid-claims.exception.js";
 import { IssuanceService } from "../../configuration/issuance/issuance.service.js";
 import { SubjectKeyService } from "../../status-list/subject-key.service.js";
 import { addLegacyCredentialResponseEncryptionAlg } from "./adapters/credential-request-compat.js";
@@ -172,6 +174,17 @@ export class Oid4vciService {
     private mapToCredentialRequestException(error: unknown): never {
         if (error instanceof CredentialRequestException) {
             throw error;
+        }
+        // Resolved claims that do not match the credential configuration;
+        // the message names claim paths only, never claim values.
+        if (
+            error instanceof InvalidClaimsException ||
+            error instanceof InvalidCredentialClaims
+        ) {
+            throw new CredentialRequestException(
+                "credential_request_denied",
+                error.message,
+            );
         }
         if (error instanceof InvalidCredentialProof) {
             throw new CredentialRequestException(

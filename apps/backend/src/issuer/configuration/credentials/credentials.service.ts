@@ -1,7 +1,6 @@
 import { ConflictException, Inject, Injectable } from "@nestjs/common";
 import type { Jwk } from "@openid4vc/oauth2";
 import type { CredentialConfigurationSupported } from "@openid4vc/openid4vci";
-import { Ajv2020 as Ajv } from "ajv/dist/2020.js";
 import { CryptoImplementationService } from "../../../crypto/key/crypto-implementation/crypto-implementation.service.js";
 import type { SessionData as Session } from "../../../session/domain/session-data.js";
 import { VCT } from "../../issuance/oid4vci/metadata/dto/vct.dto.js";
@@ -10,11 +9,16 @@ import {
     CREDENTIAL_SETTINGS,
     type CredentialSettings,
 } from "./credential-settings.js";
+import {
+    assertClaimsMatchConfiguration,
+    InvalidCredentialClaims,
+} from "./domain/credential-claims-validation.js";
 import type { CredentialConfiguration as CredentialConfig } from "./domain/credential-configuration.js";
 import {
     CredentialFormat,
     CredentialProofType,
 } from "./entities/credential.entity.js";
+import { InvalidClaimsException } from "./exceptions/invalid-claims.exception.js";
 import {
     CREDENTIAL_CONFIGURATION_REPOSITORY,
     type CredentialConfigurationRepository,
@@ -27,7 +31,7 @@ import {
     type TypedCredentialConfig,
     toCredentialConfigurationSupported,
 } from "./types/credential-config-types.js";
-import { buildClaimsMetadata, buildJsonSchema } from "./utils/index.js";
+import { buildClaimsMetadata } from "./utils/index.js";
 
 /**
  * Service for managing credentials and their configurations.
@@ -350,44 +354,24 @@ export class CredentialsService {
     }
 
     /**
-     * Validates the provided claims against the schema defined in the credential configuration.
-     * @param credentialConfigurationId
-     * @param claims
-     * @returns
+     * Validates claims against the schema derived from the credential configuration fields.
+     * @throws InvalidClaimsException (409) naming claim paths, never claim values
      */
-    validateClaimsForCredential(
+    async validateClaimsForCredential(
         credentialConfigurationId: string,
         claims: Record<string, unknown>,
         tenantId: string,
-    ) {
-        // AJV instance with draft 2020-12 meta-schema support.
-        // removeAdditional:"all" ensures only schema-declared properties remain on the claims object.
-        const ajv = new Ajv({
-            allErrors: true,
-            strict: true,
-            removeAdditional: "all", // strip properties not defined in the schema
-            useDefaults: true, // optionally apply default values from schema
-        });
-        //fetch the credential configuration
-        return this.credentialConfigurationRepository
-            .getForTenant(tenantId, credentialConfigurationId)
-            .then((credentialConfiguration) => {
-                //if a schema is defined, validate the claims against it
-                const schema = buildJsonSchema(
-                    credentialConfiguration.fields as any,
-                );
-                if (schema && Object.keys(schema.properties ?? {}).length > 0) {
-                    const validate = ajv.compile(schema as any);
-                    const valid = validate(claims); // claims mutated: unknown props removed, defaults applied
-                    if (!valid) {
-                        throw new ConflictException(
-                            `Claims do not conform to the schema for credential configuration with id ${credentialConfigurationId}: ${ajv.errorsText(
-                                validate.errors,
-                            )}`,
-                        );
-                    }
-                }
-            });
+    ): Promise<void> {
+        const credentialConfiguration =
+            await this.credentialConfigurationRepository.getForTenant(
+                tenantId,
+                credentialConfigurationId,
+            );
+        try {
+            assertClaimsMatchConfiguration(credentialConfiguration, claims);
+        } catch (error) {
+            throw toInvalidClaimsException(error);
+        }
     }
 
     /**
@@ -407,13 +391,17 @@ export class CredentialsService {
         preloadedClaims?: Record<string, any>,
         issuanceSetId?: string,
     ) {
-        return this.issueCredential.execute({
-            credentialConfigurationId,
-            holderKey: holderCnf,
-            session,
-            preloadedClaims,
-            issuanceSetId,
-        });
+        return this.issueCredential
+            .execute({
+                credentialConfigurationId,
+                holderKey: holderCnf,
+                session,
+                preloadedClaims,
+                issuanceSetId,
+            })
+            .catch((error: unknown) => {
+                throw toInvalidClaimsException(error);
+            });
     }
 
     /**
@@ -445,4 +433,11 @@ export class CredentialsService {
         credentialConfig.vct.vct = `${host}/issuers/${tenantId}/credentials-metadata/vct/${credentialConfig.id}`;
         return credentialConfig.vct;
     }
+}
+
+/** Maps the domain error to the HTTP-facing exception; other errors pass through. */
+function toInvalidClaimsException(error: unknown): unknown {
+    return error instanceof InvalidCredentialClaims
+        ? new InvalidClaimsException(error.message)
+        : error;
 }

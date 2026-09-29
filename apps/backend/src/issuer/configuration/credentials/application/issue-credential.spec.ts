@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SessionData } from "../../../../session/domain/session-data.js";
+import { InvalidCredentialClaims } from "../domain/credential-claims-validation.js";
 import { CredentialIssuerFormatRegistry } from "./credential-issuer-format-registry.js";
 import { IssueCredential } from "./issue-credential.js";
 
@@ -137,6 +138,16 @@ describe("IssueCredential", () => {
         await expect(f.useCase.execute(f.command)).rejects.toBe(failure);
         f.claims.resolve.mockRejectedValueOnce(failure);
         await expect(f.useCase.execute(f.command)).rejects.toBe(failure);
+        expect(f.issue).not.toHaveBeenCalled();
+    });
+
+    it("rejects resolved claims that do not match the configuration before signing", async () => {
+        const f = fixture();
+        f.claims.resolve.mockResolvedValue({ name: "remote", nickname: "x" });
+
+        await expect(f.useCase.execute(f.command)).rejects.toBeInstanceOf(
+            InvalidCredentialClaims,
+        );
         expect(f.issue).not.toHaveBeenCalled();
     });
 });
