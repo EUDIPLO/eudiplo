@@ -81,8 +81,10 @@ The core modules include:
 
 Modules are activated via environment variable configuration. You select which backend to use globally for each module by setting the appropriate environment variables before starting EUDIPLO.
 
+Key management is the exception: KMS providers are configured in a `kms.json` file in `CONFIG_FOLDER`, and a tenant can add its own `<CONFIG_FOLDER>/<tenantId>/kms.json`, which is merged over the global configuration.
+
 :::note
-EUDIPLO is not designed to set individual database or storage options per tenant. All tenants share the same backend configuration for each module. If you need to switch backends, you are responsible for writing your own migration strategy to move existing data.
+EUDIPLO is not designed to set individual database or storage options per tenant. All tenants share the same database and storage backend. If you need to switch backends, you are responsible for writing your own migration strategy to move existing data.
 :::
 
 This modular approach allows you to run EUDIPLO with simple local backends during development, and swap to scalable, secure services in production—without changing your application code.
@@ -90,7 +92,7 @@ This modular approach allows you to run EUDIPLO with simple local backends durin
 For example, switching from local key management to HashiCorp Vault only requires updating your configuration.
 
 ```mermaid
-flowchart TD
+flowchart LR
     A(EUDIPLO)
     B{{Databases}}
     C{{Key Management}}
@@ -102,8 +104,12 @@ flowchart TD
     B --> B2[PostgreSQL]
 
     A --> C
-    C --> C1[Unencrypted DB]
+    C --> C1[Database, encrypted at rest]
     C --> C2[HashiCorp Vault]
+    C --> C3[AWS KMS]
+    C --> C4[PKCS#11 / HSM]
+    C --> C5[CSC remote signing]
+    C --> C6[HTTP]
 
     A --> D
     D --> D1[Local]
@@ -167,6 +173,6 @@ You can use EUDIPLO as:
 
 EUDIPLO is modular and extensible:
 
-- Add new key management backends (e.g., AWS KMS)
+- Add new key management backends (e.g., Azure Key Vault)
 - Customize issuance templates
 - Extend the API layer with business-specific endpoints

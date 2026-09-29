@@ -18,12 +18,12 @@ EUDIPLO uses **ES256 (ECDSA with P-256 curve)** as the primary signing algorithm
 | **SD-JWT VC Signing**    | ES256     | P-256 | Credential signed by issuer attestation key                  |
 | **mDOC Signing**         | ES256     | P-256 | Mobile Security Object (MSO) signed via COSE                 |
 | **Status List Signing**  | ES256     | P-256 | OAuth Token Status List JWT signed by issuer                 |
-| **Trust List Signing**   | ES256     | P-256 | ETSI TL or OpenID Federation metadata signed by trust anchor |
+| **Trust List Signing**   | ES256     | P-256 | Trust lists hosted by EUDIPLO, signed with a `trustList` key |
 | **VP Token Signing**     | ES256     | P-256 | Verifiable Presentation signed by wallet                     |
 
 **Rationale:**
 
-ES256 is the **EUDI Wallet Architecture Reference Framework (ARF) baseline requirement** and is widely supported across EUDI ecosystem implementations. Alternative algorithms (RS256, EdDSA) may be added in future releases based on interoperability requirements.
+ES256 is the **EUDI Wallet Architecture Reference Framework (ARF) baseline requirement** and is widely supported across EUDI ecosystem implementations. EUDIPLO only signs with ES256 (`CRYPTO_ALG` accepts no other value). Alternative algorithms may be added in future releases based on interoperability requirements.
 
 ---
 
@@ -52,22 +52,16 @@ See [Key Management](../administration/kms.md) for provider configuration.
 
 EUDIPLO enforces a **zero-secret-export policy** for private key material:
 
-| Scenario                                  | Policy                                                                                                                                                   |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Private Keys in Configuration Bundles** | ❌ **Never exported** — Private keys are always generated or stored in the KMS provider and are never included in configuration bundles.                 |
-| **Private Keys in API Responses**         | ❌ **Never returned** — The Key Chain API only returns public key material (JWK public key or X.509 certificate).                                        |
-| **Environment Variable Placeholders**     | ✅ **Allowed in `kms.json`** — Secret references (e.g., `${VAULT_TOKEN}`) are permitted for KMS provider configuration.                                  |
-| **Encryption Keys**                       | ⚠️ **Database-only** — Encryption keys (for decrypting VP Tokens) are always stored in the database. These are never loaded from external KMS providers. |
+| Scenario                                  | Policy                                                                                                                                                                                                                  |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Private Keys in Configuration Bundles** | ❌ **Never exported** — A configuration export does not include private keys held in the database. It lists a `PRIVATE_KEY_REQUIRED` requirement instead, so the key has to be supplied or regenerated on import.       |
+| **Private Keys in API Responses**         | ❌ **Never returned** — The Key Chain API only returns public key material (JWK public key or X.509 certificate).                                                                                                       |
+| **Environment Variable Placeholders**     | ✅ **Allowed** — Secret references (e.g., `${VAULT_TOKEN}`) can be used in `kms.json` and in any string field of imported configuration files.                                                                          |
+| **Response Encryption Keys**              | ⚠️ **Per session** — The key used to decrypt the wallet response is generated for each presentation session, stored encrypted in the session and removed when the session ends. It is never loaded from a KMS provider. |
 
 **Audit Logging:**
 
-All private key operations (signing, key generation, key rotation) are logged via the `AuditLogService` for compliance tracking. Logs include:
-
-- Timestamp
-- Tenant ID
-- Key Chain ID
-- Operation type (`sign`, `generate`, `rotate`, `delete`)
-- User/service identity (if authenticated)
+The `AuditLogService` records configuration changes per tenant, not key operations. Each entry contains the timestamp, tenant ID, action type, actor (user, client or system), the changed fields with their values before and after, and the request ID. Recorded actions include tenant changes; creating, updating and deleting presentation configs, credential configs, webhook endpoints and attribute providers; issuance and status list config changes; configuration bundle imports and exports; and generated client secrets.
 
 ---
 
@@ -87,7 +81,7 @@ EUDIPLO enforces strict JWT validation for all token-based flows (access tokens,
 
 **Clock Skew Tolerance:**
 
-EUDIPLO allows a **30-second clock skew** for `exp`, `nbf`, and `iat` validation to account for minor time synchronization differences between systems.
+JWT time checks allow a clock skew of `CRYPTO_TOLERANCE` seconds (default **5 seconds**). Presentation verification uses the presentation config's `skewSeconds` (default **60 seconds**), and DPoP proofs allow 60 seconds (see [DPoP](#dpop-demonstrating-proof-of-possession)).
 
 ---
 
@@ -95,24 +89,29 @@ EUDIPLO allows a **30-second clock skew** for `exp`, `nbf`, and `iat` validation
 
 When a wallet presents an access token at the credential endpoint, EUDIPLO verifies:
 
-1. **Signature**: Verify JWT signature using the issuer's public key (from JWKS or X.509 cert)
-2. **Issuer**: Check that `iss` matches the expected AS endpoint
-3. **Audience**: Check that `aud` includes the credential issuer URL
-4. **Expiration**: Check that `exp` is in the future
-5. **Session Correlation**: Extract `issuer_state` and correlate with active session
+1. **Signature**: Verify JWT signature using the authorization server's public key (from its JWKS)
+2. **Issuer**: Check that `iss` matches the expected authorization server
+3. **Audience**: Check that `aud` is the tenant's credential issuer URL
+4. **Expiration**: Check that `exp` is in the future (built-in access tokens are valid for 300 seconds)
+5. **Session Correlation**: Find the issuance session. Tokens of the built-in authorization server carry the session ID in `sub`; chained and OID4VP-based authorization servers use `issuer_state`; external authorization servers use the claim configured in `sessionBinding.claim`
 6. **DPoP Binding** _(if enabled)_: Verify `cnf.jkt` matches the DPoP proof key thumbprint
 
-**Example Access Token:**
+**Example Access Token (built-in authorization server):**
 
 ```json
 {
-    "iss": "https://eudiplo.example.com/tenant1/issuer",
-    "sub": "wallet-client-id",
-    "aud": "https://eudiplo.example.com/tenant1",
+    "iss": "https://eudiplo.example.com/issuers/tenant1",
+    "sub": "session-uuid",
+    "aud": "https://eudiplo.example.com/issuers/tenant1",
     "exp": 1234567890,
-    "iat": 1234567800,
-    "issuer_state": "session-uuid",
+    "iat": 1234567590,
     "client_id": "wallet-client-id",
+    "authorization_details": [
+        {
+            "type": "openid_credential",
+            "credential_configuration_id": "pid"
+        }
+    ],
     "cnf": {
         "jkt": "dpop-key-thumbprint"
     }
@@ -125,10 +124,10 @@ When a wallet presents an access token at the credential endpoint, EUDIPLO verif
 
 When a wallet submits a VP Token, EUDIPLO verifies:
 
-1. **Decryption**: Decrypt JWE using the configured encryption key (if VP Token is encrypted)
+1. **Decryption**: Decrypt the JWE response with the private key generated for this session (responses are always encrypted: `direct_post.jwt`, or `dc_api.jwt` for the Digital Credentials API)
 2. **Signature**: Verify each credential's signature using the issuer's public key
-3. **Nonce**: Verify the `nonce` claim matches the session's `walletNonce`
-4. **Audience**: Verify the `aud` claim matches the verifier's client ID
+3. **Nonce**: Verify the presentation is bound to the `nonce` sent in the request (stored as `vp_nonce` in the session)
+4. **Audience**: Verify the presentation is bound to the verifier's client ID
 5. **Trust Validation**: Verify the credential issuer is trusted (via trust list or federation)
 6. **Status Check**: Verify the credential is not revoked or suspended (via status list)
 7. **Claims Validation**: Verify presented claims match the DCQL query
@@ -184,7 +183,7 @@ The DPoP proof is a signed JWT included in the `DPoP` HTTP header:
 {
     "jti": "unique-jti",
     "htm": "POST",
-    "htu": "https://eudiplo.example.com/tenant1/issuer/token",
+    "htu": "https://eudiplo.example.com/issuers/tenant1/authorize/token",
     "iat": 1234567800
 }
 ```
@@ -287,7 +286,7 @@ sequenceDiagram
 ```json
 {
     "iss": "wallet-instance-id",
-    "aud": "https://eudiplo.example.com/tenant1",
+    "aud": "https://eudiplo.example.com/issuers/tenant1",
     "iat": 1234567800,
     "jti": "unique-jti"
 }
@@ -350,25 +349,28 @@ EUDIPLO implements the **OID4VP §13.3 session security model** to prevent sessi
 
 ### Wallet Nonce Separation
 
-The `walletNonce` is a **wallet-facing session identifier** that is **distinct from the internal session ID**. This prevents attackers from enumerating or guessing session IDs.
+The `walletNonce` is a **wallet-facing identifier** that is **distinct from the session ID**. The relying party frontend uses the session ID to poll the result, so it must not be visible in the QR code.
 
 **Flow:**
 
-1. EUDIPLO creates a presentation request with `nonce: walletNonce`
-2. Wallet includes the nonce in the VP Token
-3. EUDIPLO correlates the VP Token with the session via the `walletNonce`
-4. EUDIPLO **never exposes the internal session ID** to the wallet
+1. EUDIPLO creates the session and a random `walletNonce`
+2. The QR code or deep link contains `request_uri` = `/presentations/{walletNonce}/oid4vp/request`; the wallet posts its response to `/presentations/{walletNonce}/oid4vp`
+3. The signed request contains a separate random `nonce` (stored as `vp_nonce`), which the wallet binds its presentation to
+4. The session ID never appears in the wallet-facing URLs
 
 **Database Schema:**
 
 ```typescript
 @Entity()
 export class Session {
-    @PrimaryGeneratedColumn("uuid")
-    id: string; // Internal session ID (never exposed)
+    @PrimaryColumn("uuid")
+    id: string; // Session ID, used by the relying party frontend and the management API
 
-    @Column({ unique: true })
-    walletNonce: string; // Wallet-facing nonce (exposed in protocol)
+    @Column("varchar", { nullable: true })
+    walletNonce?: string; // Wallet-facing identifier in request_uri and response_uri
+
+    @Column("varchar", { nullable: true })
+    vp_nonce?: string; // nonce sent in the request and checked in the presentation
 
     // ...
 }
@@ -378,32 +380,30 @@ export class Session {
 
 ### Response Code (Same-Device Redirect)
 
-For same-device flows (e.g., verifier and wallet on the same device), EUDIPLO generates a **one-time `response_code`** to prevent session fixation attacks.
+For same-device flows (verifier website and wallet on the same device), EUDIPLO appends a random `response_code` to the redirect URI to prevent session fixation.
 
 **Flow:**
 
-1. Wallet submits VP Token to `/direct_post.jwt`
-2. EUDIPLO validates the VP Token
-3. EUDIPLO generates a one-time `response_code` and stores it in the session
-4. EUDIPLO redirects the wallet to `redirect_uri?response_code=xxx`
-5. Verifier exchanges the `response_code` for the verification result
+1. The wallet posts the encrypted response to `/presentations/{walletNonce}/oid4vp`
+2. EUDIPLO validates the presentation
+3. EUDIPLO generates a random `response_code` (UUID) and stores it in the session as `responseCode`
+4. EUDIPLO answers with `redirect_uri` = the configured redirect URI plus `response_code=...`
+5. The relying party compares the `response_code` from the redirect with the session's `responseCode` (via the management API) before accepting the result
 
 **Security Properties:**
 
-| Property          | Enforcement                                |
-| ----------------- | ------------------------------------------ |
-| **Single-Use**    | Response code is consumed after first use  |
-| **Short-Lived**   | Expires after 5 minutes                    |
-| **Random**        | Cryptographically random (32 bytes)        |
-| **Session-Bound** | Only valid for the session that created it |
+| Property          | Enforcement                                                           |
+| ----------------- | --------------------------------------------------------------------- |
+| **Random**        | Random UUID per completed presentation                                |
+| **Session-Bound** | Stored in the session that completed the presentation                 |
+| **Single-Use**    | A session can only be completed once, so only one code is ever issued |
 
 **Attack Prevention:**
 
 This prevents an attacker from:
 
 - Embedding a stolen `redirect_uri` in a malicious QR code
-- Correlating the wallet's session with a different verifier's session
-- Replaying a `response_code` from a previous presentation
+- Making a victim complete a session the attacker started, and then using the result in the attacker's browser
 
 ---
 
@@ -413,61 +413,60 @@ EUDIPLO enforces strict policies to prevent accidental exposure of secrets, priv
 
 ### Secrets in Configuration
 
-| Secret Type                        | Storage                              | Policy                                                            |
-| ---------------------------------- | ------------------------------------ | ----------------------------------------------------------------- |
-| **Private Keys**                   | KMS provider (never in config files) | ❌ Never exported or included in config bundles                   |
-| **Database Passwords**             | Environment variables                | ✅ Must use `${DB_PASSWORD}` placeholder in config files          |
-| **KMS Tokens**                     | Environment variables                | ✅ Must use `${VAULT_TOKEN}` placeholder in `kms.json`            |
-| **Webhook Secrets**                | Environment variables                | ✅ Must use `${WEBHOOK_SECRET}` placeholder in webhook config     |
-| **API Keys (Attribute Providers)** | Environment variables                | ✅ Must use `${API_KEY}` placeholder in attribute provider config |
+Configuration files are imported from `CONFIG_FOLDER`. Every string field can reference an environment variable with `${VAR}` or `${VAR:default}`, so secrets do not have to be stored in the files:
+
+| Secret Type                           | Recommendation                                                                                  |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Private Keys**                      | Keep them in a KMS provider; for `db` keys in config files, use a placeholder for the `d` value |
+| **Client Secrets**                    | Use a placeholder, e.g. `"secret": "${PLAYGROUND_CLIENT_SECRET}"`                               |
+| **KMS Credentials**                   | Use placeholders in `kms.json`, e.g. `${VAULT_TOKEN}`                                           |
+| **Registrar Credentials**             | Use placeholders for `password` and `clientSecret` in `registrar.json`                          |
+| **Webhook / Attribute Provider Auth** | Use a placeholder for the header value                                                          |
+
+Database credentials are not part of the tenant configuration; they are set through environment variables (see [Database](../administration/database.md)).
 
 **Configuration Export:**
 
 When exporting configuration bundles via the management API:
 
-- Private keys are **never included** (only public keys and certificates)
-- Secret placeholders are **preserved** (e.g., `${DB_PASSWORD}`)
-- Sensitive session data is **excluded** (user claims, VP tokens)
+- Private keys held in the database are **not included**; the bundle lists a `PRIVATE_KEY_REQUIRED` requirement instead
+- Client secrets are stored hashed and are replaced by a placeholder with a `CLIENT_SECRET_REQUIRED` requirement
+- KMS provider credentials, registrar credentials and webhook / attribute provider auth values are replaced by generated `${...}` placeholders with a `SECRET_REQUIRED` requirement
+- Sessions are not part of the export
 
 ---
 
 ### Secrets in Logs
 
-EUDIPLO uses **Pino logger** with automatic secret redaction:
+EUDIPLO logs with **Pino**. With `LOG_REDACT_SENSITIVE_DATA=true` (default), these fields are replaced by `[redacted]` in HTTP logs:
 
-| Logged Field          | Redaction Policy                                                     |
-| --------------------- | -------------------------------------------------------------------- |
-| **Access Tokens**     | ❌ Never logged (even redacted)                                      |
-| **Private Keys**      | ❌ Never logged                                                      |
-| **User PII**          | ❌ Never logged unless explicitly enabled for debugging              |
-| **DPoP Proofs**       | ⚠️ Logged at `debug` level only (contains public key, not secret)    |
-| **VP Tokens**         | ⚠️ Logged at `debug` level only (for debugging failed verifications) |
-| **Credential Claims** | ⚠️ Logged at `debug` level only (for debugging issuance)             |
+- Request headers: `Authorization`, `Cookie`, `DPoP`, `OAuth-Client-Attestation`, `OAuth-Client-Attestation-PoP`
+- Response headers: `Set-Cookie`
+- Response body fields: `access_token`, `refresh_token`, `id_token`, `c_nonce`, `credential`, `credentials`, `attestation_challenge`
 
-**Audit Logging:**
+Further settings limit what reaches the logs:
 
-The `AuditLogService` persists compliance events to the database. Audit logs include:
+| Variable                        | Default | Effect                                                                          |
+| ------------------------------- | ------- | ------------------------------------------------------------------------------- |
+| `LOG_HTTP_RESPONSE_BODY`        | `false` | Capture HTTP response bodies                                                    |
+| `LOG_OID4VP_DECRYPTED_RESPONSE` | `false` | Log decrypted OID4VP responses, which may contain personal data and credentials |
+| `LOG_REDACT_SENSITIVE_DATA`     | `true`  | Redact the fields listed above; disable only for debugging                      |
 
-- Timestamp
-- Tenant ID
-- User/service identity
-- Operation type
-- Success/failure status
-- **Redacted request/response payloads** (no secrets or PII)
+The HTTP request logger skips the management API (`/api`), `/health` and `/metrics`. Configuration changes are recorded separately in the audit log (see [Audit Logging](#secret-handling-policy)).
 
 ---
 
 ## HTTPS and TLS
 
-EUDIPLO **requires HTTPS in production** for all external endpoints:
+EUDIPLO does not enforce HTTPS for incoming requests; run it behind a reverse proxy that terminates TLS, and set `PUBLIC_URL` to the HTTPS URL. Wallets and the EUDI protocols expect HTTPS for all issuer and verifier endpoints.
 
-| Endpoint Type          | HTTPS Requirement | Notes                                              |
-| ---------------------- | ----------------- | -------------------------------------------------- |
-| **Issuer Endpoints**   | ✅ Required       | All OID4VCI endpoints must use HTTPS               |
-| **Verifier Endpoints** | ✅ Required       | All OID4VP endpoints must use HTTPS                |
-| **Webhook Endpoints**  | ✅ Required       | Outbound webhook requests use HTTPS                |
-| **Management API**     | ✅ Required       | All API endpoints must use HTTPS                   |
-| **Local Development**  | ⚠️ Optional       | Outbound HTTP needs `OUTBOUND_URL_ALLOW_HTTP=true` |
+For **outgoing** requests to tenant-configured URLs (webhook endpoints, attribute providers and issuer metadata fetched during presentation verification), EUDIPLO applies an outbound URL policy that protects against SSRF. HTTP targets and private, loopback or link-local addresses are rejected by default, independent of `NODE_ENV`. Enable the relaxations explicitly where needed, for example for local development or for services inside the same cluster:
+
+| Variable                             | Default | Effect                                                                                                 |
+| ------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------ |
+| `OUTBOUND_URL_ALLOW_HTTP`            | `false` | Allow plain HTTP targets                                                                               |
+| `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` | `false` | Allow targets that resolve to private, loopback or link-local addresses (checked after DNS resolution) |
+| `OUTBOUND_URL_ALLOWED_HOSTS`         | empty   | Hosts that are allowed even if they would otherwise be blocked                                         |
 
 **TLS Configuration:**
 
@@ -476,10 +475,6 @@ EUDIPLO does not terminate TLS itself. Deploy behind a reverse proxy (e.g., NGIN
 **Certificate Trust:**
 
 For external KMS providers (e.g., Vault, AWS KMS), EUDIPLO validates TLS certificates using the system's default trust store. Custom CA certificates can be added via the `NODE_EXTRA_CA_CERTS` environment variable.
-
-**Outbound URL Policy:**
-
-Webhooks, attribute providers and metadata imports go through the outbound URL policy. HTTP targets and private, loopback or link-local addresses are rejected by default, independent of `NODE_ENV`. Enable `OUTBOUND_URL_ALLOW_HTTP` or `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` explicitly where needed, for example for local development or for services inside the same cluster, and restrict targets with `OUTBOUND_URL_ALLOWED_HOSTS`. See [Webhook](../deployment/environment-variables.md#webhook).
 
 ---
 
@@ -497,44 +492,21 @@ See [Skip Flags](../deployment/environment-variables.md#skip-flags) for the full
 
 ## CORS (Cross-Origin Resource Sharing)
 
-EUDIPLO enforces **strict CORS policies** for browser-based wallet interactions:
+EUDIPLO enables CORS for **all origins on all endpoints**, including the management API. Protocol endpoints have to be reachable from wallets and browsers anyway, and the management API is protected by OAuth 2.0 bearer tokens rather than cookies, so a cross-origin page cannot call it without a token.
 
-| Endpoint Type               | CORS Policy                                                            |
-| --------------------------- | ---------------------------------------------------------------------- |
-| **Protocol Endpoints**      | ✅ CORS enabled for all OID4VCI/OID4VP endpoints                       |
-| **Management API**          | ❌ CORS disabled (API access requires server-to-server authentication) |
-| **Digital Credentials API** | ✅ CORS enabled for DC API endpoints                                   |
-
-**Allowed Origins:**
-
-By default, EUDIPLO allows CORS requests from **all origins** for protocol endpoints (to support wallet apps from any domain). For production deployments, configure the `CORS_ORIGINS` environment variable to restrict allowed origins:
-
-```bash
-CORS_ORIGINS=https://wallet.example.com,https://app.example.com
-```
+If you want to restrict origins, do it in the reverse proxy in front of EUDIPLO. Built-in configuration of allowed origins is tracked in [#1088](https://github.com/openwallet-foundation/eudiplo/issues/1088).
 
 ---
 
 ## Rate Limiting
 
-EUDIPLO includes built-in **rate limiting** to prevent abuse and denial-of-service attacks:
+EUDIPLO has **no built-in rate limiting**. Put rate limits in front of EUDIPLO (reverse proxy, API gateway or WAF), especially for the token, PAR and credential endpoints and the management API.
 
-| Endpoint Type           | Rate Limit                       | Window                   |
-| ----------------------- | -------------------------------- | ------------------------ |
-| **Token Endpoint**      | 10 requests/min per IP           | Rolling 60-second window |
-| **Credential Endpoint** | 20 requests/min per access token | Rolling 60-second window |
-| **Offer Endpoints**     | 100 requests/min per tenant      | Rolling 60-second window |
-| **Management API**      | 60 requests/min per API key      | Rolling 60-second window |
+Within the protocol flows, EUDIPLO limits abuse through:
 
-**Configuration:**
-
-Rate limits can be customized via environment variables:
-
-```bash
-RATE_LIMIT_TOKEN=10
-RATE_LIMIT_CREDENTIAL=20
-RATE_LIMIT_OFFER=100
-```
+- **Transaction codes**: a pre-authorized code is locked after `txCodeMaxAttempts` wrong `tx_code` attempts (default 5)
+- **Single-use values**: authorization codes, pre-authorized codes, `request_uri`s, credential nonces and presentation sessions can be used only once (see [Sessions](./sessions.md#single-use-validation))
+- **DPoP replay protection**: each DPoP proof `jti` is accepted only once
 
 ---
 
@@ -546,15 +518,15 @@ Before deploying EUDIPLO to production, verify:
 - ✅ **KMS provider configured** (not using `db` provider in production)
 - ✅ **Environment variables** used for all secrets (no hardcoded secrets)
 - ✅ **Session cleanup** enabled with appropriate retention policy
-- ✅ **Rate limiting** configured for protocol endpoints
-- ✅ **CORS origins** restricted to trusted wallet domains
-- ✅ **Audit logging** enabled and persisted to secure storage
+- ✅ **Rate limiting** configured in the reverse proxy or API gateway
+- ✅ **CORS origins** restricted in the reverse proxy, if required
+- ✅ **Outbound URL policy** relaxations (`OUTBOUND_URL_ALLOW_*`) only where required
+- ✅ **Log redaction** enabled (`LOG_REDACT_SENSITIVE_DATA=true`) and debug logging disabled
 - ✅ **TLS certificates** valid and trusted
 - ✅ **DPoP enforcement** enabled for production credential issuance
 - ✅ **Wallet attestation** enabled for high-security use cases
 - ✅ **Trust list validation** configured for credential verification
 - ✅ **No `SKIP_*` flags** set (the startup log lists active ones)
-- ✅ **Outbound URL policy** relaxations (`OUTBOUND_URL_ALLOW_*`) only where required
 
 ---
 

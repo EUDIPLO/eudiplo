@@ -173,7 +173,7 @@ CredentialIssuerFormat
 CredentialVerifierFormat
 FileStorage
 KmsAdapter
-ClientRegistry
+ClientsProvider
 ```
 
 Ports should be domain-specific.
@@ -203,7 +203,9 @@ KmsAdapter
   └─ Pkcs11KmsAdapter
 
 CredentialClaimsProvider
-  └─ HttpWebhookClaimsProvider
+  └─ ConfiguredCredentialClaimsProvider
+       ├─ WebhookRemoteCredentialClaims
+       └─ WebhookSessionCredentialClaims
 
 FederationResolver
   └─ OpenIdFederationResolver
@@ -338,11 +340,11 @@ Examples:
 
 ```text
 SessionNotFound
-UnknownCredentialConfiguration
+CredentialConfigurationNotFound
 UnsupportedCredentialFormat
 InvalidCredentialProof
-CredentialTrustValidationFailed
-InvalidPresentation
+CredentialVerificationFailedError
+IncompletePresentationError
 ```
 
 Inbound adapters translate these into protocol/transport errors. Not-found errors extend the shared `NotFoundError` base and are mapped to 404 centrally; see [Feature folder shape](#feature-folder-shape).

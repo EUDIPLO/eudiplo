@@ -33,33 +33,34 @@ sequenceDiagram
     Note over W,E: 1. Credential Offer
     E->>E: Create Session
     E->>W: Return credential_offer_uri
-    W->>E: GET /offers/{id}
+    W->>E: GET /issuers/{tenant}/vci/credential-offers/{id}
     E-->>W: CredentialOffer JSON
 
     Note over W,AS: 2. Authorization
-    W->>AS: Authorization request
-    AS->>W: User authentication
-    W->>E: Authorization callback
-    E-->>W: Authorization code
+    W->>AS: Pushed authorization request (PKCE)
+    W->>AS: Authorization request (request_uri)
+    AS->>W: User authentication (depends on AS type)
+    AS-->>W: Redirect with authorization code
 
-    Note over W,E: 3. Token Exchange
-    W->>E: POST /token (code, DPoP proof)
-    E->>E: Validate DPoP + Wallet Attestation
-    E-->>W: Access token (JWT)
+    Note over W,AS: 3. Token Exchange
+    W->>AS: POST token (code, code_verifier, DPoP proof)
+    AS->>AS: Validate PKCE, DPoP + Wallet Attestation
+    AS-->>W: Access token (JWT)
 
     Note over W,E: 4. Credential Request
-    W->>E: POST /credential (access token, proof)
-    E->>E: Validate access token + proof
+    W->>E: POST /issuers/{tenant}/vci/credential (access token, proofs)
+    E->>E: Validate access token + proofs
     E->>AP: Fetch claims (optional)
     AP-->>E: User attributes
+    E->>E: Validate claims against configuration
     E->>KMS: Sign credential
     KMS-->>E: Signed credential
     E-->>W: Credential (SD-JWT VC / mDOC)
 
     Note over W,E: 5. Notification (optional)
-    W->>E: POST /notification
-    E->>E: Log acceptance/rejection
-    E-->>W: 204 No Content
+    W->>E: POST /issuers/{tenant}/vci/notification
+    E->>E: Record event, update session status
+    E-->>W: 201 Created
 ```
 
 ---
@@ -105,12 +106,12 @@ The credential offer is the entry point for issuance. It contains metadata about
 
 ```json
 {
-    "credential_issuer": "https://eudiplo.example.com/tenant1",
+    "credential_issuer": "https://eudiplo.example.com/issuers/tenant1",
     "credential_configuration_ids": ["diploma", "employee-badge"],
     "grants": {
         "authorization_code": {
             "issuer_state": "session-uuid",
-            "authorization_server": "https://eudiplo.example.com/tenant1/issuer"
+            "authorization_server": "https://eudiplo.example.com/issuers/tenant1"
         }
     }
 }
@@ -120,17 +121,18 @@ The credential offer is the entry point for issuance. It contains metadata about
 
 Offers can be delivered via:
 
-- **credential_offer_uri**: A unique URI that returns the offer JSON when dereferenced (recommended)
+- **credential_offer_uri**: A unique URI (`/issuers/{tenant}/vci/credential-offers/{id}`) that returns the offer JSON when dereferenced (recommended)
 - **credential_offer**: The offer JSON embedded directly in the QR code (limited by QR code size)
 
 **Session Creation:**
 
 When an offer is created, EUDIPLO generates a new `Session` entity:
 
-- **ID**: UUID (referenced as `issuer_state` in the offer)
+- **ID**: UUID (referenced as `issuer_state` in authorization code offers)
 - **Status**: `active`
-- **Credentials**: List of credential configuration IDs offered
-- **Authorization Queries**: Parameters to pass to the authorization server (e.g., required attributes)
+- **Credentials**: List of credential configuration IDs offered, plus optional per-configuration claim sources
+- **Pre-authorized code**: Generated for pre-authorized code offers
+- **Webhook endpoint**: Optional `webhookEndpointId` that receives wallet notifications
 
 ---
 
@@ -140,33 +142,33 @@ The wallet authenticates the user via one of the configured authorization server
 
 ### 1. Built-in Authorization Server
 
-EUDIPLO hosts a minimal OAuth AS that issues authorization codes directly. No external identity provider is required.
+EUDIPLO hosts a minimal OAuth AS (issuer `https://eudiplo.example.com/issuers/tenant1`) that issues authorization codes directly. No external identity provider is required. Pushed authorization requests (PAR) and PKCE with `S256` are mandatory.
 
 **Use Case:** Development, testing, demo environments
 
 **Flow:**
 
-1. Wallet opens authorization URL in a browser
-2. EUDIPLO presents a simple consent screen
-3. User approves; EUDIPLO issues an authorization code
-4. Wallet exchanges code for access token
+1. Wallet pushes the authorization request to `/issuers/{tenant}/authorize/par` (with `code_challenge` and `code_challenge_method=S256`) and receives a `request_uri`
+2. Wallet opens `/issuers/{tenant}/authorize` with the `request_uri`
+3. EUDIPLO redeems the `request_uri` (single use) and redirects to the wallet's `redirect_uri` with an authorization code; there is no login or consent screen
+4. Wallet exchanges the code (with `code_verifier`) for an access token at `/issuers/{tenant}/authorize/token`
 
 ---
 
 ### 2. External Authorization Server
 
-The wallet authenticates with a completely separate OAuth AS (e.g., Keycloak, Okta). The external AS must include the `issuer_state` claim in its access tokens.
+The wallet authenticates with a completely separate OAuth AS (e.g., Keycloak, Okta). The external AS must carry the session ID (the offer's `issuer_state`) in an access token claim, configured as `sessionBinding.claim` (method `access_token_claim`).
 
 **Use Case:** Production environments with existing identity infrastructure
 
 **Flow:**
 
 1. Wallet redirects to external AS
-2. External AS authenticates user and includes `issuer_state` in the access token
+2. External AS authenticates user and includes the session ID in the configured claim of the access token
 3. Wallet presents access token to EUDIPLO
-4. EUDIPLO correlates session via `issuer_state`
+4. EUDIPLO correlates the session via the configured `sessionBinding.claim`
 
-**Limitation:** Requires modifying the external AS to include `issuer_state` in token claims.
+**Limitation:** Requires configuring the external AS to put the session ID into the configured token claim.
 
 ---
 
@@ -203,10 +205,10 @@ The wallet authenticates by presenting existing verifiable credentials (OID4VP f
 
 **Flow:**
 
-1. Wallet is redirected to EUDIPLO's OID4VP verifier
+1. Wallet calls the authorization server at `/issuers/{tenant}/authorization-servers/{id}` and is redirected to EUDIPLO's OID4VP verifier
 2. Wallet presents requested credentials
 3. EUDIPLO verifies credentials and issues an authorization code
-4. Wallet exchanges code for access token
+4. Wallet exchanges code for an access token (with `issuer_state`)
 
 ---
 
@@ -224,17 +226,24 @@ When wallet attestation is required by the selected EUDIPLO-managed authorizatio
 
 **Access Token Structure:**
 
-The access token is a JWT signed by the key referenced in `IssuanceConfig.signingKeyId`:
+The built-in authorization server issues a JWT signed by the key referenced in `IssuanceConfig.signingKeyId` (or the tenant's default key). It is valid for 300 seconds:
 
 ```json
 {
-    "iss": "https://eudiplo.example.com/tenant1/issuer",
-    "sub": "wallet-client-id",
-    "aud": "https://eudiplo.example.com/tenant1",
-    "exp": 1234567890,
+    "iss": "https://eudiplo.example.com/issuers/tenant1",
+    "sub": "session-uuid",
+    "aud": "https://eudiplo.example.com/issuers/tenant1",
+    "exp": 1234568100,
     "iat": 1234567800,
-    "issuer_state": "session-uuid",
+    "jti": "random-token-id",
     "client_id": "wallet-client-id",
+    "authorization_details": [
+        {
+            "type": "openid_credential",
+            "credential_configuration_id": "diploma",
+            "credential_identifiers": ["diploma"]
+        }
+    ],
     "cnf": {
         "jkt": "dpop-key-thumbprint"
     }
@@ -243,8 +252,11 @@ The access token is a JWT signed by the key referenced in `IssuanceConfig.signin
 
 **Claims:**
 
-- `issuer_state`: Correlates the token with the session
-- `cnf.jkt`: DPoP key thumbprint (if DPoP is enabled)
+- `sub`: Session ID; correlates the token with the session
+- `authorization_details`: Credential configurations the token authorizes
+- `cnf.jkt`: DPoP key thumbprint (if DPoP is used)
+
+Tokens of the chained and OID4VP-based authorization servers carry the session ID in an `issuer_state` claim instead. Tokens of an external authorization server are correlated via the configured `sessionBinding.claim`.
 
 ---
 
@@ -256,9 +268,10 @@ The credential endpoint is where the wallet requests the actual credential. This
 
 1. **Validate Access Token**: EUDIPLO verifies the access token signature, expiration, audience, and issuer
 2. **Validate Proof**: The wallet must prove possession of, or provide trusted attestation for, the holder key material to bind into the credential
-3. **Fetch Claims** _(optional)_: If the credential configuration references an attribute provider, EUDIPLO fetches user attributes from the external system
-4. **Sign Credential**: EUDIPLO signs the credential using the attestation key chain
-5. **Return Credential**: The credential (SD-JWT VC or mDOC) is returned to the wallet
+3. **Fetch Claims** _(optional)_: If the offer provides a claims webhook or the credential configuration references an attribute provider, EUDIPLO fetches user attributes from the external system
+4. **Validate Claims**: The resolved claims, whatever their source (inline in the offer, webhook, attribute provider or deferred completion), are validated against the JSON schema derived from the credential configuration's `fields` before signing. Missing, mistyped or unknown claims are rejected (at the credential endpoint with `credential_request_denied`); configurations without `fields` are not validated
+5. **Sign Credential**: EUDIPLO signs the credential using the attestation key chain
+6. **Return Credential**: The credential (SD-JWT VC or mDOC) is returned to the wallet
 
 **Proof Types:**
 
@@ -271,16 +284,18 @@ Key attestation is separate from wallet attestation. It is advertised per creden
 
 **Batch Issuance:**
 
-When `IssuanceConfig.batchSize > 1`, the wallet can request multiple credentials in a single request:
+When `IssuanceConfig.batchSize > 1`, the issuer metadata advertises `batch_credential_issuance` and the wallet can request multiple credentials of the same configuration in a single request by sending several proofs in the `proofs` array. One credential is issued per holder key, up to `batchSize`:
 
 ```json
 {
-    "credential_requests": [
-        { "credential_configuration_id": "diploma", "proof": {...} },
-        { "credential_configuration_id": "employee-badge", "proof": {...} }
-    ]
+    "credential_configuration_id": "diploma",
+    "proofs": {
+        "jwt": ["<proof JWT for key 1>", "<proof JWT for key 2>"]
+    }
 }
 ```
+
+With the `attestation` proof type, exactly one key attestation is sent and one credential is issued per attested key.
 
 ---
 
@@ -311,7 +326,7 @@ The credential is signed using the attestation key chain referenced by the crede
 
 **Selective Disclosure:**
 
-Claim disclosures are generated based on the credential configuration's `fields` array. Each field can be marked as `mandatory` or `sd` (selectively disclosable).
+Claim disclosures are generated based on the credential configuration's `fields` array. Each field can be marked as `mandatory` or `disclosable` (selectively disclosable).
 
 ---
 
@@ -339,10 +354,10 @@ When credentials cannot be issued immediately (e.g., manual approval required, e
 
 **Flow:**
 
-1. Wallet requests a credential at `/credential`
+1. Wallet requests a credential at `/issuers/{tenant}/vci/credential`
 2. EUDIPLO returns a `transaction_id` instead of the credential
-3. Wallet periodically polls `/deferred` with the `transaction_id`
-4. Once ready, EUDIPLO returns the credential
+3. Wallet periodically polls `/issuers/{tenant}/vci/deferred_credential` with the `transaction_id`
+4. Once the backend completes the transaction (`POST /issuer/deferred/{transactionId}/complete`), EUDIPLO returns the credential
 
 **Use Cases:**
 
@@ -373,9 +388,13 @@ After receiving a credential, the wallet can notify EUDIPLO whether the credenti
 | `credential_deleted`  | User deleted the credential  |
 | `credential_failure`  | Credential issuance failed   |
 
+**Session Status:**
+
+`credential_accepted` sets the session to `completed`; `credential_deleted` and `credential_failure` set it to `failed`.
+
 **Webhook Integration:**
 
-If a webhook endpoint is configured, EUDIPLO forwards the notification event to the external system.
+If the offer referenced a webhook endpoint (`webhookEndpointId` in the offer request), EUDIPLO forwards the notification event to it. A `webhookEndpointId` on the credential configuration is not used for notifications.
 
 ---
 
@@ -385,17 +404,15 @@ The session tracks the state of the issuance flow:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Active: Offer Created
-    Active --> Authorized: Authorization Complete
-    Authorized --> TokenIssued: Token Exchanged
-    TokenIssued --> Completed: Credential Issued
-    Completed --> [*]
-
-    Active --> Expired: TTL Exceeded
-    Authorized --> Expired: TTL Exceeded
-    TokenIssued --> Expired: TTL Exceeded
-    Expired --> [*]
+    [*] --> active: Offer created
+    active --> fetched: Credential issued
+    fetched --> completed: Notification credential_accepted
+    fetched --> failed: Notification credential_deleted / credential_failure
+    completed --> [*]
+    failed --> [*]
 ```
+
+Authorization and token exchange do not change the session status. Issuance sessions are not moved to `expired` (only presentation sessions are); they keep their last status until session cleanup removes or anonymizes them.
 
 **Session Cleanup:**
 
@@ -408,7 +425,7 @@ Sessions are cleaned up based on the tenant's `sessionConfig`:
 
 **Single-Use Enforcement:**
 
-Sessions are marked `consumed: true` after the first credential request. This prevents replay attacks.
+Sessions are atomically marked `consumed: true` when the first token request (authorization code or pre-authorized code) succeeds, so a code or offer cannot be redeemed twice. Refresh token requests remain possible.
 
 ---
 

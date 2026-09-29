@@ -4,6 +4,12 @@ title: Interactive Authorization Endpoint (IAE)
 
 # Interactive Authorization Endpoint (IAE)
 
+:::caution[Work in progress]
+
+The interactive authorization implementation is work in progress. The behavior described on this page reflects the current state and may change.
+
+:::
+
 The **Interactive Authorization Endpoint (IAE)** enables user interactions during the credential issuance flow. It allows wallets to request user authorization through a sequence of configurable actions before credential issuance completes.
 
 This is particularly useful for:
@@ -14,7 +20,7 @@ This is particularly useful for:
 
 ## How It Works
 
-The IAE is part of the OID4VCI authorization code flow. When a wallet initiates issuance with `interaction_types_supported`, EUDIPLO responds with the first required action. The wallet must complete each action in sequence before receiving an authorization code.
+The IAE is part of the OID4VCI authorization code flow and is served at `POST /issuers/{tenantId}/authorize/interactive`. When a wallet initiates issuance with `interaction_types_supported` (and `client_id`), EUDIPLO creates an `auth_session` and responds with the first required action. The wallet sends each follow-up request with the `auth_session` and must complete each action in sequence before receiving an authorization code.
 
 ```mermaid
 sequenceDiagram
@@ -23,14 +29,15 @@ sequenceDiagram
     participant EUDIPLO as Middleware
     participant Service as Your Backend
 
-    Wallet->>EUDIPLO: Authorization Request<br/>(interaction_types_supported)
-    EUDIPLO-->>Wallet: IAE Response (Step 1: openid4vp)
+    Wallet->>EUDIPLO: Authorization Request<br/>(interaction_types_supported, code_challenge)
+    EUDIPLO-->>Wallet: IAE Response (Step 1: openid4vp_presentation, auth_session)
 
-    Wallet->>EUDIPLO: OpenID4VP Presentation
-    EUDIPLO-->>Wallet: IAE Response (Step 2: redirect_to_web)
+    Wallet->>EUDIPLO: auth_session + openid4vp_response
+    EUDIPLO-->>Wallet: IAE Response (Step 2: redirect_to_web, request_uri)
 
-    Wallet->>Service: User completes web form
-    Service->>EUDIPLO: Callback with code_verifier
+    Note over Wallet,Service: User completes the web interaction
+    Service->>EUDIPLO: POST complete-web-auth (auth_session)
+    Wallet->>EUDIPLO: auth_session + code_verifier
     EUDIPLO-->>Wallet: Authorization Code
 
     Wallet->>EUDIPLO: Token Request
@@ -59,7 +66,7 @@ Request a PID presentation before issuing a credential:
 
 ```json
 {
-    "credentialConfigId": "citizen-credential",
+    "id": "citizen-credential",
     "iaeActions": [
         {
             "type": "openid4vp_presentation",
@@ -76,7 +83,7 @@ First verify identity with a presentation, then redirect to a web form:
 
 ```json
 {
-    "credentialConfigId": "organization-credential",
+    "id": "organization-credential",
     "iaeActions": [
         {
             "type": "openid4vp_presentation",
@@ -86,7 +93,7 @@ First verify identity with a presentation, then redirect to a web form:
         {
             "type": "redirect_to_web",
             "label": "Complete Registration",
-            "url": "https://example.com/register?session={auth_session}",
+            "url": "https://eudiplo.example.com/register",
             "description": "Please complete the organization registration form"
         }
     ]
@@ -111,31 +118,55 @@ The presentation configuration defines which credentials and claims to request. 
 
 Redirects the user to a web page for additional interaction.
 
-| Field         | Type   | Required | Description                                                         |
-| ------------- | ------ | -------- | ------------------------------------------------------------------- |
-| `type`        | string | Yes      | Must be `"redirect_to_web"`                                         |
-| `label`       | string | No       | Display label for this step                                         |
-| `url`         | string | Yes      | URL to redirect the user to (supports `{auth_session}` placeholder) |
-| `callbackUrl` | string | No       | URL for the external service to redirect back to                    |
-| `description` | string | No       | Instructions for the user (displayed in wallet)                     |
+| Field         | Type   | Required | Description                                      |
+| ------------- | ------ | -------- | ------------------------------------------------ |
+| `type`        | string | Yes      | Must be `"redirect_to_web"`                      |
+| `label`       | string | No       | Display label for this step                      |
+| `url`         | string | Yes      | URL of the web interaction                       |
+| `callbackUrl` | string | No       | URL for the external service to redirect back to |
+| `description` | string | No       | Instructions for the user                        |
 
-The `{auth_session}` placeholder in the URL is replaced with the session identifier, allowing your backend to correlate the web interaction with the issuance flow.
+For this action, EUDIPLO currently returns:
 
-## Completing Web-Based Actions
-
-When using `redirect_to_web`, your backend must signal completion by calling back to EUDIPLO with a `code_verifier`:
-
-```bash
-POST /{tenantId}/oid4vci/authorize/interactive
-Content-Type: application/json
-
+```json
 {
-    "auth_session": "<session-id>",
-    "code_verifier": "<unique-verifier>"
+    "status": "require_interaction",
+    "type": "redirect_to_web",
+    "auth_session": "<auth-session>",
+    "request_uri": "urn:ietf:params:oauth:request_uri:<uuid>",
+    "expires_in": 600
 }
 ```
 
-EUDIPLO will verify the `code_verifier` and either:
+:::note[Current behavior]
+
+The configured `url`, `description` and `callbackUrl` are validated and stored but currently not used: they are not included in the response, and no `{auth_session}` placeholder substitution takes place. The returned `request_uri` is stored with the auth session but is not currently resolved by any EUDIPLO endpoint.
+
+:::
+
+## Completing Web-Based Actions
+
+Completing a `redirect_to_web` action takes two calls:
+
+1. Your backend marks the web interaction as completed (no request body):
+
+    ```bash
+    POST https://eudiplo.example.com/issuers/tenant1/authorize/interactive/complete-web-auth/{auth_session}
+    ```
+
+2. The wallet sends a follow-up request with the `auth_session` and the PKCE `code_verifier` matching the `code_challenge` from its initial request:
+
+    ```bash
+    POST https://eudiplo.example.com/issuers/tenant1/authorize/interactive
+    Content-Type: application/json
+
+    {
+        "auth_session": "<auth-session>",
+        "code_verifier": "<pkce-code-verifier>"
+    }
+    ```
+
+EUDIPLO verifies the `code_verifier` (method `S256` by default, or `plain`), checks that the web interaction was marked as completed, and either:
 
 - Return the next action (if more steps remain), or
 - Issue the authorization code (if all steps are complete)
@@ -154,9 +185,9 @@ This state is managed automatically. Your backend only needs to respond to the c
 
 ## Attribute Provider Integration
 
-When an `openid4vp_presentation` action is completed, EUDIPLO can call an **Attribute Provider** to transform the verified presentation data into credential claims.
+For an `openid4vp_presentation` action, the endpoint currently only checks that the `openid4vp_response` is valid JSON and stores it with the auth session before advancing to the next step.
 
-The Attribute Provider receives the presented credentials in the request payload under the `credentials` field, allowing your backend to extract and transform claims from the presentation.
+Presented credentials are currently **not** passed to the **Attribute Provider**. When claims are fetched for the credential request, the Attribute Provider receives only `session`, `credential_configuration_id` and, if available, `identity`.
 
 See [Attribute Providers](./attribute-providers.md) for configuration details.
 
@@ -164,7 +195,7 @@ See [Attribute Providers](./attribute-providers.md) for configuration details.
 
 If no `iaeActions` are configured for a credential, EUDIPLO falls back to the wallet's `interaction_types_supported` preference:
 
-1. If the wallet supports `openid4vp` and a presentation configuration exists → use OpenID4VP
+1. If the wallet supports `openid4vp_presentation` and the tenant has a presentation configuration → use OpenID4VP with the tenant's first presentation configuration
 2. If the wallet supports `redirect_to_web` → use web redirect
 3. Otherwise → return an error
 
@@ -172,20 +203,20 @@ This ensures backward compatibility with wallets that don't support multi-step f
 
 ## Error Handling
 
-IAE errors are returned as JSON:
+IAE errors are returned as JSON with HTTP status 400:
 
 ```json
 {
     "error": "invalid_request",
-    "error_description": "Missing required field: code_verifier"
+    "error_description": "Missing openid4vp_response or code_verifier"
 }
 ```
 
 Common errors:
 
-| Error Code              | Description                                  |
-| ----------------------- | -------------------------------------------- |
-| `invalid_request`       | Missing required parameters                  |
-| `invalid_auth_session`  | Session not found or expired                 |
-| `invalid_code_verifier` | Code verifier mismatch for web authorization |
-| `presentation_failed`   | OpenID4VP presentation verification failed   |
+| Error Code        | Description                                                                                                                                                 |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `invalid_request` | Missing or invalid parameters, unknown or expired `auth_session`, unsupported interaction type, missing `code_challenge`, or malformed `openid4vp_response` |
+| `invalid_grant`   | `code_verifier` does not match the `code_challenge`                                                                                                         |
+| `access_denied`   | Web interaction was not marked as completed                                                                                                                 |
+| `server_error`    | Presentation request could not be created or no presentation configuration is available                                                                     |

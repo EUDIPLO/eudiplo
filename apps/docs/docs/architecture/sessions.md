@@ -10,19 +10,18 @@ EUDIPLO tracks **issuance** and **verification** sessions to correlate multi-ste
 
 Each verification session includes security fields defined by the OpenID4VP specification (§13.3):
 
-| Field          | Purpose                                                                                              |
-| -------------- | ---------------------------------------------------------------------------------------------------- |
-| `walletNonce`  | Wallet-facing nonce, included in presentation requests                                               |
-| `sessionId`    | Internal correlation ID, never exposed to the wallet                                                 |
-| `nonce`        | Server-side replay prevention nonce (deprecated in favor of `walletNonce` for clarity)               |
-| `state`        | Same-device state parameter (optional, for redirect-based flows)                                     |
-| `responseCode` | One-time code for same-device redirect flow (appended to `redirect_uri` to prevent session fixation) |
+| Field          | Purpose                                                                                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | Session ID (transaction ID) used by the relying party frontend and the management API, e.g. for polling; not part of the wallet-facing URLs               |
+| `walletNonce`  | Random identifier used in the wallet-facing URLs (`request_uri` and `response_uri` under `/presentations/{walletNonce}/oid4vp`) instead of the session ID |
+| `vp_nonce`     | Random `nonce` sent in the authorization request; the wallet binds its presentation to it and EUDIPLO checks it when verifying the VP token               |
+| `responseCode` | Random code appended as `response_code` to the redirect URI in same-device flows; lets the frontend prove that it received the redirect                   |
 
 **Security Rationale:**
 
-- `walletNonce` is the ONLY nonce value sent to the wallet and included in VP tokens
-- `sessionId` remains internal and is used only for backend correlation (e.g., mapping to `response_code`)
-- This separation prevents session fixation attacks where an attacker could substitute their own session identifier
+- The QR code and `request_uri` only contain the `walletNonce`, so they do not reveal the session ID that the frontend uses to poll the result
+- The `vp_nonce` binds the presentation to this request and prevents replay of VP tokens from other sessions
+- The `response_code` in the same-device redirect prevents session fixation, where an attacker makes a victim complete a session the attacker started
 
 For technical background, see [OID4VP §13.3 (Security Considerations)](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-session-identifier-separati).
 
@@ -46,10 +45,10 @@ A pre-authorized code is additionally only valid until the session's creation ti
 
 A maintenance job runs every `SESSION_TIDY_UP_INTERVAL` seconds (default: 1 hour). It marks overdue presentation sessions as `expired`, then applies each tenant's retention policy to sessions whose creation time is older than the tenant's TTL. Two cleanup modes exist:
 
-| Mode | Effect | Use when |
-| --- | --- | --- |
-| `full` (default) | Deletes the session record. | No audit trail of the flow is required. |
-| `anonymize` | Keeps the record but clears `credentials`, `credentialPayload`, `auth_queries`, `offer`, `requestObject` and `responseEncryptionPrivateJwk`. | Flow metadata (timestamps, protocol details, status) must be retained, but not credential data. |
+| Mode             | Effect                                                                                                                                       | Use when                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `full` (default) | Deletes the session record.                                                                                                                  | No audit trail of the flow is required.                                                         |
+| `anonymize`      | Keeps the record but clears `credentials`, `credentialPayload`, `auth_queries`, `offer`, `requestObject` and `responseEncryptionPrivateJwk`. | Flow metadata (timestamps, protocol details, status) must be retained, but not credential data. |
 
 ## Per-Tenant Configuration
 
@@ -62,10 +61,10 @@ Tenants override the global defaults through the session configuration API (`GET
 }
 ```
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `ttlSeconds` | `number` | `SESSION_TTL` (86400) | Session lifetime in seconds: retention period for cleanup and validity of pre-authorized codes. |
-| `cleanupMode` | `"full" \| "anonymize"` | `SESSION_CLEANUP_MODE` (`full`) | What cleanup does with sessions older than `ttlSeconds`. |
+| Field         | Type                    | Default                         | Description                                                                                     |
+| ------------- | ----------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `ttlSeconds`  | `number`                | `SESSION_TTL` (86400)           | Session lifetime in seconds: retention period for cleanup and validity of pre-authorized codes. |
+| `cleanupMode` | `"full" \| "anonymize"` | `SESSION_CLEANUP_MODE` (`full`) | What cleanup does with sessions older than `ttlSeconds`.                                        |
 
 Setting a field to `null` restores the global default.
 
