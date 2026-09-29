@@ -6,3 +6,4 @@ export * from "./dpop.util.js";
 export * from "./dto/chained-as.dto.js";
 export * from "./entities/chained-as-session.entity.js";
 export * from "./pkce.util.js";
+export * from "./wallet-invocation-page.util.js";
