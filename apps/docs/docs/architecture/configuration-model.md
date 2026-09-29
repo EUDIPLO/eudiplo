@@ -14,9 +14,9 @@ The configuration lifecycle follows this pipeline:
 
 ```mermaid
 flowchart LR
-    JSON[JSON Config File] --> Schema[Zod Schema Validation]
-    Schema --> Migration[Version Migration]
-    Migration --> DB[Database Entity]
+    JSON[JSON Config File] --> Migration[Version Migration]
+    Migration --> Schema[Zod Schema Validation]
+    Schema --> DB[Database Entity]
     DB --> Runtime[Protocol Behavior]
 
     style JSON fill:#e1f5ff
@@ -72,19 +72,20 @@ EUDIPLO supports importing configurations from JSON files on application startup
 
 ### Startup Provisioning
 
-Configuration files are loaded from the `config/` directory (or `assets/config/` when running locally with Node.js) when the application starts.
+Configuration files are loaded from the `CONFIG_FOLDER` directory (`/app/config/config` in the Docker image, `assets/config/` when running locally with Node.js) when the application starts.
 
 **Environment Variables:**
 
-| Variable             | Description                                            | Default                                        |
-| -------------------- | ------------------------------------------------------ | ---------------------------------------------- |
-| `CONFIG_FOLDER`      | Base directory for configuration files                 | `config/` (Docker), `assets/config/` (Node.js) |
-| `CONFIG_IMPORT_MODE` | Import mode: `disabled`, `create`, `upsert`, `replace` | `disabled`                                     |
+| Variable                 | Description                                                                                                                                                         | Default                                                   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `CONFIG_FOLDER`          | Base directory for configuration files                                                                                                                              | `/app/config/config` (Docker), `assets/config/` (Node.js) |
+| `CONFIG_IMPORT_MODE`     | Import mode: `disabled`, `create`, `upsert`, `replace`                                                                                                              | `disabled`                                                |
+| `CONFIG_VARIABLE_STRICT` | Handling of unresolved `${VAR}` placeholders: `abort`, `skip`, `ignore`, or a boolean (see [Environment Variable Placeholders](#environment-variable-placeholders)) | `skip`                                                    |
 
 **Import Modes:**
 
 - **`disabled`**: No automatic import on startup (manual import via API only)
-- **`create`**: Fail if a resource already exists (safe for initial bootstrap)
+- **`create`**: Create missing resources; existing resources are skipped (plan action `skip` with a `RESOURCE_EXISTS` warning), so it is safe for initial bootstrap
 - **`upsert`**: Create missing resources and update existing resources
 - **`replace`**: Upsert the bundle and delete only resources previously managed by the same bundle source but now absent (requires explicit confirmation)
 
@@ -102,17 +103,21 @@ Configuration files are organized by tenant and resource type:
 config/
   ├── kms.json                          # Global KMS provider configuration
   ├── {tenantId}/
+  │   ├── info.json                     # Tenant resource (required to create a new tenant)
   │   ├── kms.json                      # Tenant-specific KMS overrides
+  │   ├── registrar.json                # Registrar configuration
   │   ├── key-chains/
   │   │   ├── attestation-key.json
   │   │   └── access-token-key.json
   │   ├── clients/
   │   │   └── wallet-client.json
   │   ├── issuance/
-  │   │   ├── config.json               # Issuance configuration
-  │   │   └── credentials/
-  │   │       ├── diploma.json
-  │   │       └── employee-badge.json
+  │   │   ├── issuance.json             # Issuance configuration
+  │   │   ├── credentials/
+  │   │   │   ├── diploma.json
+  │   │   │   └── employee-badge.json
+  │   │   └── status-lists/
+  │   │       └── diploma-status.json
   │   ├── presentation/
   │   │   ├── age-verification.json
   │   │   └── employment-check.json
@@ -120,16 +125,29 @@ config/
   │   │   └── eu-wallet-providers.json
   │   ├── attribute-providers/
   │   │   └── hr-system.json
-  │   └── webhook-endpoints/
-  │       └── issuance-webhook.json
+  │   ├── webhook-endpoints/
+  │   │   └── issuance-webhook.json
+  │   └── images/
+  │       └── logo.png
 ```
 
 **Key Points:**
 
-- **Tenant isolation**: Each tenant has its own folder (e.g., `tenant1`, `company-xyz`)
+- **Tenant isolation**: Each tenant has its own folder (e.g., `tenant1`, `company-xyz`). A folder for a tenant that does not exist yet is skipped unless it contains `info.json`
 - **Configuration types**: Multiple configuration types are supported (credentials, issuance, presentation, key chains, etc.)
 - **File naming**: Not strictly enforced; the `id` is taken from the JSON file content
-- **Nested structure**: Credentials and issuance configs are grouped under `issuance/`
+- **Nested structure**: Credentials, status lists and the issuance settings are grouped under `issuance/`
+- **Symlinks**: Tenant folders are discovered by listing real directories inside `CONFIG_FOLDER`, so a symlinked tenant folder is skipped. Pointing `CONFIG_FOLDER` itself at a symlink works
+
+**Offline Validation:**
+
+Use the CLI to validate a tenant folder before deploying it:
+
+```bash
+eudiplo config validate tenant <path>
+```
+
+`eudiplo config validate tenants <path>` validates every tenant folder below a config root. Add `--format json` for a machine-readable report.
 
 ---
 
@@ -153,13 +171,13 @@ Every portable resource uses a stable envelope structure:
 
 **Envelope Fields:**
 
-| Field                       | Description                                                                          |
-| --------------------------- | ------------------------------------------------------------------------------------ |
-| `$schema`                   | Canonical schema URL identifying both resource type and configuration format version |
-| `spec.id` / `spec.clientId` | Stable identifier across instances                                                   |
-| `metadata.generation`       | Prevents an older file/bundle from overwriting newer configuration                   |
-| `metadata.ownership`        | `unmanaged` (editable via API/UI) or `file-managed` (authoritative from file)        |
-| `spec`                      | Desired configuration only (excludes runtime state, caches, sessions, timestamps)    |
+| Field                       | Description                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------- |
+| `$schema`                   | Canonical schema URL identifying both resource type and configuration format version  |
+| `spec.id` / `spec.clientId` | Stable identifier across instances                                                    |
+| `metadata.generation`       | Prevents an older file/bundle from overwriting newer configuration                    |
+| `metadata.ownership`        | Ownership reported on export; ignored on import (apply always records `file-managed`) |
+| `spec`                      | Desired configuration only (excludes runtime state, caches, sessions, timestamps)     |
 
 Metadata is optional and currently holds only generation and ownership. Resource IDs live in `spec.id` (`spec.clientId` for clients). Tenant, KMS, registrar and issuance settings are singletons within a tenant and need no ID in the document; their type and tenant context identify them. Bundle manifest IDs remain an index of the resources.
 
@@ -182,16 +200,19 @@ A ZIP export contains the following structure:
 ```text
 bundle.zip
   ├── manifest.json                    # Bundle metadata, checksums, requirements
-  ├── info.json                        # Export timestamp, source version, tenant
+  ├── info.json                        # Tenant resource
   ├── kms.json                         # KMS provider configuration
+  ├── registrar.json                   # Registrar configuration
   ├── key-chains/
   │   ├── <id>.json
   │   └── ...
   ├── clients/
   │   └── <id>.json
   ├── issuance/
-  │   ├── config.json
-  │   └── credentials/
+  │   ├── config.json                  # Issuance configuration
+  │   ├── credentials/
+  │   │   └── <id>.json
+  │   └── status-lists/
   │       └── <id>.json
   ├── presentation/
   │   └── <id>.json
@@ -210,6 +231,7 @@ bundle.zip
 
 - Bundle format version
 - Source EUDIPLO version
+- Export timestamp
 - Tenant ID
 - Resource schema versions and generations
 - Ownership status for each resource
@@ -219,6 +241,10 @@ bundle.zip
 **Binary Assets:**
 
 Images and other binary assets are stored directly in the ZIP (in the `images/` directory) rather than embedded in resource JSON.
+
+:::note
+Inside an exported ZIP the issuance settings are stored as `issuance/config.json`. In a startup config folder the same resource is read from `issuance/issuance.json`.
+:::
 
 ---
 
@@ -248,7 +274,7 @@ For missing client secrets, set the placeholder to `!generate`:
 
 ```json
 {
-    "clientSecret": "!generate"
+    "secret": "!generate"
 }
 ```
 
@@ -262,7 +288,6 @@ For missing database-held private keys, replace `keySource.type: required` with 
 {
     "keySource": {
         "type": "regenerate",
-        "provider": "vault",
         "keyChainType": "standalone"
     }
 }
@@ -305,9 +330,9 @@ flowchart LR
 3. **Migrate**: Run sequential config migrations to upgrade to latest schema version
 4. **Validate**: Validate against the current Zod schema
 5. **Preflight**: Verify references to other resources (e.g., key chains, webhook endpoints) and test KMS connectivity
-6. **Plan**: Produce a read-only plan showing which resources will be created/updated/deleted
+6. **Plan**: Produce a read-only plan showing which resources will be created, updated, skipped or deleted
 7. **Apply**: Execute the plan in dependency order (e.g., key chains before issuance configs)
-8. **Record Ownership**: Mark resources as `file-managed` or `unmanaged`
+8. **Record Ownership**: Mark applied resources as `file-managed` (a `metadata.ownership` value in the file is ignored)
 
 **Plan-Before-Apply:**
 
@@ -315,8 +340,12 @@ Planning is **read-only** and reports each resource as:
 
 - **`create`**: Resource does not exist and will be created
 - **`update`**: Resource exists and will be updated
+- **`unchanged`**: Resource exists and already matches the bundle
+- **`skip`**: Resource exists and is left untouched (only in `create` mode, reported with a `RESOURCE_EXISTS` warning)
 - **`delete`**: Resource exists but is absent from bundle (only in `replace` mode)
-- **`blocked`**: Resource exists but is `file-managed` by a different source
+- **`blocked`**: Resource has an error or required-input issue (e.g., stale `metadata.generation`, schema validation failure, unresolved reference or missing secret/key). A plan with a blocked item cannot be applied
+
+There is no check for resources managed by a different source: importing a resource takes over its ownership and records the new source.
 
 Required human decisions (e.g., selecting trust-list verifier material, replacing a legacy inline webhook with a webhook endpoint reference) are **not guessed** by migrations. These must be resolved manually before import succeeds.
 
@@ -341,8 +370,17 @@ Secrets and environment-specific values can be injected at runtime using placeho
 
 **Resolution:**
 
-- `${VAR_NAME}`: Required environment variable (fails if not set)
-- `${VAR_NAME:default}`: Optional environment variable with default value
+- `${VAR_NAME}`: Replaced with the environment variable's value
+- `${VAR_NAME:default}`: Replaced with the environment variable's value, or with `default` if it is not set
+- Variable names consist of uppercase letters, digits and underscores; an empty environment value counts as not set
+
+During startup import, placeholders are resolved in every resource file loaded from the tenant folder, including `registrar.json` (`info.json` is read without placeholder resolution). A placeholder without a value and without a default is unresolved; `CONFIG_VARIABLE_STRICT` decides what happens:
+
+| Value             | Behavior                                                                                  |
+| ----------------- | ----------------------------------------------------------------------------------------- |
+| `skip` (default)  | Unresolved placeholders are an error; the import of that tenant fails and others continue |
+| `abort`, `true`   | Same as `skip`                                                                            |
+| `ignore`, `false` | A warning is logged and the placeholder is kept as literal text                           |
 
 **When to Use:**
 
@@ -373,7 +411,7 @@ Resources are either **unmanaged** or **file-managed**:
 
 | Ownership          | API/UI Edits              | Re-import Behavior                                | Use Case                    |
 | ------------------ | ------------------------- | ------------------------------------------------- | --------------------------- |
-| **`unmanaged`**    | ✅ Allowed                | Imports succeed but do not prevent manual edits   | Development, ad-hoc testing |
+| **`unmanaged`**    | ✅ Allowed                | Import takes over and marks it `file-managed`     | Development, ad-hoc testing |
 | **`file-managed`** | ❌ Rejected with conflict | Re-importing is idempotent; file is authoritative | Production, CI/CD, GitOps   |
 
 **Lifecycle:**
@@ -557,7 +595,7 @@ Define credential templates and schemas.
 
 ### Issuance Configurations
 
-**Location**: `config/{tenant}/issuance/issuance/*.json`
+**Location**: `config/{tenant}/issuance/issuance.json`
 
 Define issuance workflows and authentication requirements.
 
@@ -571,8 +609,7 @@ Define issuance workflows and authentication requirements.
     "authorizationServers": [
         {
             "type": "built-in",
-            "id": "default",
-            "credentialConfigurationIds": ["university-diploma"]
+            "id": "default"
         }
     ]
 }
@@ -594,25 +631,26 @@ Define verification requirements for credential presentations.
 {
     "id": "age-verification",
     "description": "Verify user is over 18",
-    "credentialQuery": {
-        "credential_sets": [
-            [
-                {
-                    "format": "dc+sd-jwt",
-                    "meta": { "vct_values": ["urn:eu:age-over-18"] },
-                    "claims": [{ "path": ["age"], "values": ["18+"] }]
-                }
-            ]
+    "dcql_query": {
+        "credentials": [
+            {
+                "id": "age-proof",
+                "format": "dc+sd-jwt",
+                "meta": { "vct_values": ["urn:eu:age-over-18"] },
+                "claims": [{ "path": ["age"], "values": ["18+"] }],
+                "trusted_authorities": [
+                    {
+                        "type": "etsi_tl",
+                        "values": [{ "trustListId": "eu-wallet-providers" }]
+                    }
+                ]
+            }
         ]
-    },
-    "trustedAuthorities": [
-        {
-            "type": "etsi_tl",
-            "values": [{ "trustListId": "eu-wallet-providers" }]
-        }
-    ]
+    }
 }
 ```
+
+Each `etsi_tl` value references a trust list either by ID (`{ "trustListId": "..." }`) or by URL with verifier material (`{ "url": "...", "verifierX509Der": "..." }`, or `verifierKey` instead of `verifierX509Der`).
 
 **Schema Reference**: See [Presentation Configuration API](../reference/openapi.md).
 
