@@ -139,11 +139,10 @@ export class IssuanceService {
         tenantId: string,
         registrationCertificateCache: IssuanceConfig["registrationCertificateCache"],
     ): Promise<void> {
-        await this.issuanceConfigRepo.save({
-            ...(await this.getIssuanceConfiguration(tenantId)),
+        await this.issuanceConfigRepo.updateRegistrationCertificateCache(
             tenantId,
             registrationCertificateCache,
-        });
+        );
     }
 
     /**

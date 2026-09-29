@@ -19,6 +19,19 @@ export class TypeOrmIssuanceConfigRepository
             await this.repository.save(config as DeepPartial<IssuanceConfig>),
         );
     }
+    async updateRegistrationCertificateCache(
+        tenantId: string,
+        cache: IssuanceConfiguration["registrationCertificateCache"],
+    ) {
+        const result = await this.repository.update(
+            { tenantId },
+            {
+                registrationCertificateCache:
+                    cache as IssuanceConfig["registrationCertificateCache"],
+            },
+        );
+        if (!result.affected) throw new IssuanceConfigurationNotFound(tenantId);
+    }
     async deleteForTenant(tenantId: string) {
         await this.repository.delete({ tenantId });
     }

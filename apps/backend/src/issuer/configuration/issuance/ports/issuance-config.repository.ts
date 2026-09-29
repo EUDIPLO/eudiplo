@@ -5,5 +5,14 @@ export interface IssuanceConfigRepository {
     save(
         config: Partial<IssuanceConfiguration> & { tenantId: string },
     ): Promise<IssuanceConfiguration>;
+    /**
+     * Updates only the server-managed registration certificate cache, so a
+     * concurrent configuration change is not overwritten.
+     * @throws IssuanceConfigurationNotFound
+     */
+    updateRegistrationCertificateCache(
+        tenantId: string,
+        cache: IssuanceConfiguration["registrationCertificateCache"],
+    ): Promise<void>;
     deleteForTenant(tenantId: string): Promise<void>;
 }

@@ -51,4 +51,33 @@ export function issuanceRepositoryContract(database: () => DataSource) {
         expect(await repo.getForTenant(other)).toMatchObject({ batchSize: 9 });
         await db.getRepository(TenantEntity).delete([{ id }, { id: other }]);
     });
+
+    it("updates the registration certificate cache without overwriting other settings", async () => {
+        const db = database();
+        const id = randomUUID();
+        await db.getRepository(TenantEntity).save({ id });
+        const repo = new TypeOrmIssuanceConfigRepository(
+            db.getRepository(IssuanceConfig),
+        );
+        await repo.save({ tenantId: id, batchSize: 1 });
+        // An admin changes the configuration after a cache refresh started.
+        await repo.save({
+            ...(await repo.getForTenant(id)),
+            batchSize: 7,
+            authorizationServers: [{ type: "built-in", id: "local" }],
+        });
+        await repo.updateRegistrationCertificateCache(id, {
+            jwt: "cached",
+            fingerprint: "v2",
+        });
+
+        expect(await repo.getForTenant(id)).toMatchObject({
+            batchSize: 7,
+            authorizationServers: [{ type: "built-in", id: "local" }],
+            registrationCertificateCache: { jwt: "cached", fingerprint: "v2" },
+        });
+        await expect(
+            repo.updateRegistrationCertificateCache(randomUUID(), undefined),
+        ).rejects.toThrow();
+    });
 }
