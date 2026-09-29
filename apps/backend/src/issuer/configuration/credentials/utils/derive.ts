@@ -13,6 +13,7 @@ type PathCursor = Record<string, unknown> | unknown[];
 
 function resolveChildPath(
     parentPath: Segment[],
+    parentType: ClaimFieldDefinition["type"],
     childPath: Segment[],
 ): Segment[] {
     if (childPath.length >= parentPath.length) {
@@ -22,6 +23,11 @@ function resolveChildPath(
         if (startsWithParent) {
             return childPath;
         }
+    }
+    // Children of an array field describe its items, as in the SDK: insert the
+    // item step unless the relative path already starts with one
+    if (parentType === "array" && typeof childPath[0] === "string") {
+        return [...parentPath, null, ...childPath];
     }
     return [...parentPath, ...childPath];
 }
@@ -37,7 +43,7 @@ function flattenFields(fields: ClaimFieldDefinition[]): ClaimFieldDefinition[] {
             const resolvedChildren: ClaimFieldDefinition[] = children.map(
                 (child) => ({
                     ...child,
-                    path: resolveChildPath(field.path, child.path),
+                    path: resolveChildPath(field.path, field.type, child.path),
                 }),
             );
             result.push(...flattenFields(resolvedChildren));
