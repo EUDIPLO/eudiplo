@@ -196,8 +196,9 @@ EUDIPLO verifies the certificate chain by:
 
 1. Verifying each certificate's signature using the next certificate in the chain
 2. Checking certificate validity dates (`notBefore`, `notAfter`)
-3. Checking certificate revocation status via CRL (OCSP is not supported)
-4. Verifying the root CA is trusted (via trust list or trust store)
+3. Verifying the root CA is trusted (via trust list or trust store)
+
+Presented certificates are not checked against CRLs or OCSP; revocation of credentials is handled through status lists. EUDIPLO checks its **own** signing certificates for expiry and CRL revocation before it signs with them.
 
 ---
 
@@ -382,12 +383,12 @@ For X.509-based trust models (mDOC, ETSI TL), EUDIPLO validates certificates usi
 
 ### Certificate Validation Checks
 
-| Check                      | Description                                                                                    |
-| -------------------------- | ---------------------------------------------------------------------------------------------- |
-| **Signature Verification** | Verify certificate is signed by the issuing CA (path building from the leaf to a trust anchor) |
-| **Validity Dates**         | Verify `notBefore <= now <= notAfter`                                                          |
-| **Trust Anchor**           | Verify root CA is in the configured trust list                                                 |
-| **Revocation Status**      | Check the certificate against its CRL (OCSP is not supported)                                  |
+| Check                      | Description                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Signature Verification** | Verify certificate is signed by the issuing CA (path building from the leaf to a trust anchor)   |
+| **Validity Dates**         | Verify `notBefore <= now <= notAfter`                                                            |
+| **Trust Anchor**           | Verify root CA is in the configured trust list                                                   |
+| **Revocation Status**      | Not checked for presented certificates (no CRL or OCSP); credential revocation uses status lists |
 
 **Trust List Configuration:**
 
