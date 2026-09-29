@@ -4,11 +4,11 @@ title: Webhooks
 
 # Webhooks
 
-EUDIPLO can notify your backend systems when issuance and presentation events occur, enabling real-time integration without polling.
+EUDIPLO can notify your backend systems about presentation results and wallet notifications, enabling real-time integration without polling.
 
 :::info[Webhooks vs Attribute Providers]
 
-**Webhooks** are designed to **send data OUT** — notifying your backend when events occur (e.g., credential issued, presentation completed).
+**Webhooks** are designed to **send data OUT** — notifying your backend when events occur (e.g., presentation completed, credential accepted by the wallet).
 
 **Attribute Providers** are designed to **fetch data IN** — retrieving claims from your backend to include in credentials.
 
@@ -18,22 +18,23 @@ For fetching claims during issuance, see [Attribute Providers](./attribute-provi
 
 ## Supported Scenarios
 
-| Event                     | Description                                                       | Payload Includes                                       |
-| ------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------ |
-| Credential issued         | Wallet successfully received a credential                         | `sessionId`, `credentialType`, `format`, `tenantId`    |
-| Presentation completed    | Wallet submitted a verified presentation                          | `sessionId`, `presentedClaims`, `credentialTypes`      |
-| Deferred credential ready | Attribute provider completed processing, credential now available | `transactionId`, `claims`                              |
-| Notification received     | Wallet sent a notification (acceptance/rejection/deletion)        | `notificationId`, `event`, `credentialId`, `eventTime` |
+EUDIPLO has no event-type subscription model. Exactly two kinds of outbound webhook calls are sent:
+
+| Scenario               | Trigger                                                                        | Payload Includes                             |
+| ---------------------- | ------------------------------------------------------------------------------ | -------------------------------------------- |
+| Presentation completed | Wallet submitted a presentation that EUDIPLO verified                          | `credentials`, `session`, `transaction_data` |
+| Notification received  | Wallet called the OID4VCI notification endpoint (accepted / failure / deleted) | `notification`, `session`                    |
 
 ## Webhook Configuration
 
-Webhooks are configured per tenant via the **Webhook Endpoints** resource:
+Webhooks are configured per tenant via the **Webhook Endpoints** resource (`/api/issuer/webhook-endpoints`):
 
 ```json
 {
     "id": "issuance-webhook",
+    "name": "Issuance webhook",
+    "description": "Receives wallet notifications",
     "url": "https://your-backend.example.com/webhooks/eudiplo",
-    "events": ["credential.issued", "presentation.completed"],
     "auth": {
         "type": "apiKey",
         "config": {
@@ -44,21 +45,20 @@ Webhooks are configured per tenant via the **Webhook Endpoints** resource:
 }
 ```
 
-| Field    | Type     | Description                              |
-| -------- | -------- | ---------------------------------------- |
-| `id`     | `string` | Unique identifier within the tenant      |
-| `url`    | `string` | HTTPS endpoint to receive webhook events |
-| `events` | `array`  | List of event types to subscribe to      |
-| `auth`   | `object` | Authentication configuration (optional)  |
+| Field         | Type     | Description                                            |
+| ------------- | -------- | ------------------------------------------------------ |
+| `id`          | `string` | Unique identifier within the tenant                    |
+| `name`        | `string` | Display name                                           |
+| `description` | `string` | Optional description                                   |
+| `url`         | `string` | Endpoint that receives the webhook `POST` requests     |
+| `auth`        | `object` | Authentication configuration (required, may be `none`) |
 
 ### Authentication Options
 
-| Type          | Config Fields          | Description                                   |
-| ------------- | ---------------------- | --------------------------------------------- |
-| `apiKey`      | `headerName`, `value`  | Send a static API key in a custom header      |
-| `bearerToken` | `token`                | Send a Bearer token in `Authorization` header |
-| `basic`       | `username`, `password` | HTTP Basic authentication                     |
-| `none`        | —                      | No authentication (not recommended)           |
+| Type     | Config Fields         | Description                              |
+| -------- | --------------------- | ---------------------------------------- |
+| `apiKey` | `headerName`, `value` | Send a static API key in a custom header |
+| `none`   | —                     | No authentication (not recommended)      |
 
 ## Outbound URL Policy
 
@@ -68,26 +68,28 @@ import ConfigTable from "@site/src/components/ConfigTable";
 
 ## Notification Webhook
 
-The OID4VCI notification endpoint allows wallets to signal credential acceptance, rejection, or deletion. When a notification is received, EUDIPLO can forward it to your backend webhook:
+The OID4VCI notification endpoint allows wallets to signal credential acceptance, failure, or deletion. When a notification is received, EUDIPLO forwards it to the webhook endpoint referenced by `webhookEndpointId` in the **credential offer request** (`POST /api/issuer/offer`). If the offer did not set `webhookEndpointId`, no notification webhook is sent.
 
-**Event:** `notification.received`
+:::note
+
+Credential configurations also accept a `webhookEndpointId`, but it is currently not used at runtime. Set `webhookEndpointId` on the offer request instead.
+
+:::
 
 **Payload:**
 
 ```json
 {
-    "event": "notification.received",
-    "tenantId": "example-tenant",
-    "notificationId": "ntf_abc123",
     "notification": {
-        "notification_id": "ntf_abc123",
+        "id": "ntf_abc123",
         "event": "credential_accepted",
-        "event_time": 1672531200,
-        "credential_id": "cred_xyz789"
+        "credentialConfigurationId": "pid"
     },
-    "sessionId": "sess_def456"
+    "session": "sess_def456"
 }
 ```
+
+`event` is the value sent by the wallet (`credential_accepted`, `credential_failure` or `credential_deleted`). EUDIPLO does not evaluate the webhook response.
 
 **Use cases:**
 
@@ -97,39 +99,51 @@ The OID4VCI notification endpoint allows wallets to signal credential acceptance
 
 ## Presentation Webhook
 
-When a presentation is successfully verified, EUDIPLO extracts the claims and sends them to your backend:
+When a presentation is successfully verified, EUDIPLO sends the disclosed claims to your backend. The webhook is resolved in this order:
 
-**Event:** `presentation.completed`
+1. The inline `webhook` object in the presentation request (`POST /api/verifier/offer`)
+2. The webhook endpoint referenced by the presentation configuration's `webhookEndpointId`
+
+The inline `webhook` object has the fields `url`, `auth` and optionally `includeRawTokensFor`.
 
 **Payload:**
 
 ```json
 {
-    "event": "presentation.completed",
-    "tenantId": "example-tenant",
-    "sessionId": "sess_abc123",
-    "presentedClaims": {
-        "given_name": "John",
-        "family_name": "Doe",
-        "birth_date": "1990-01-01"
-    },
-    "credentialTypes": ["PersonIdentificationData"],
-    "verifiedAt": "2024-01-15T10:30:00Z"
+    "credentials": [
+        {
+            "id": "pid",
+            "values": [
+                {
+                    "given_name": "John",
+                    "family_name": "Doe",
+                    "birth_date": "1990-01-01"
+                }
+            ]
+        }
+    ],
+    "session": "sess_abc123",
+    "transaction_data": []
 }
 ```
+
+Each entry in `credentials` carries the DCQL credential query `id` and the disclosed claims in `values`. For every credential `id` listed in the inline webhook's `includeRawTokensFor`, the entry additionally contains `rawToken` with the raw presented token (for example the SD-JWT from the `vp_token`). `transaction_data` is only set when the request used [transaction data](../../presentation/transaction-data.md).
 
 **Request Format:**
 
 ```http
 POST /webhooks/eudiplo
 Content-Type: application/json
-X-API-Key: your-secret-key
+x-api-key: your-secret-key
 
 {
-  "event": "presentation.completed",
+  "credentials": [...],
+  "session": "sess_abc123",
   ...
 }
 ```
+
+**Response:** your backend may answer with `{ "redirectUri": "https://your-app.example.com/done" }`. If present, this URI is used instead of the configured `redirectUri` to redirect the user after the presentation. Webhook delivery errors do not fail the presentation.
 
 **Use cases:**
 
