@@ -12,6 +12,9 @@ services:
       - NODE_ENV=development
       # Backend configuration
       - PUBLIC_URL=http://localhost:3000
+      # Allow outbound calls to local HTTP services (webhooks, attribute providers)
+      - OUTBOUND_URL_ALLOW_HTTP=true
+      - OUTBOUND_URL_ALLOW_PRIVATE_NETWORK=true
       - MASTER_SECRET=dev-secret-change-in-production-32ch
       - AUTH_CLIENT_SECRET=dev-client-secret
       # Database (SQLite for development)

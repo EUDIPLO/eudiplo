@@ -78,6 +78,14 @@ PUBLIC_URL=https://f8e3-84-123-45-67.ngrok.io
 The project validates your environment variables on startup using Joi. If `PUBLIC_URL` is missing or invalid, the app may fail to register with external services.
 :::
 
+:::note[Outbound calls to local services]
+Webhooks, attribute providers and metadata imports reject HTTP and private or loopback targets by default, also in development. To call services running on your machine, enable `OUTBOUND_URL_ALLOW_HTTP=true` and `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK=true` in your `.env`. The dev container sets both.
+:::
+
+:::caution[Skip flags]
+`SKIP_*` variables (for example `SKIP_OVERASKING_CHECK`) turn off checks of the normal flow for development and interoperability testing. The backend lists active ones as warnings on startup. See [Skip Flags](../deployment/environment-variables.md#skip-flags).
+:::
+
 Check out the [Key Management System (KMS)](../administration/kms.md) or [Database](../administration/database.md) sections for more information on how to configure key storage and database options beyond the default settings.
 
 ## 4. Start the Applications

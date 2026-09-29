@@ -6,6 +6,7 @@ import {
     Logger,
     NotFoundException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { decodeJwt } from "jose";
 import { Repository } from "typeorm";
@@ -27,12 +28,17 @@ import { RegistrarAuthService } from "./registrar-auth.service.js";
 @Injectable()
 export class RegistrationCertificateService {
     private readonly logger = new Logger(RegistrationCertificateService.name);
+    private readonly skipOveraskingCheck: boolean;
 
     constructor(
         @InjectRepository(RegistrarConfigEntity)
         private readonly configRepository: Repository<RegistrarConfigEntity>,
         private readonly authService: RegistrarAuthService,
-    ) {}
+        configService: ConfigService,
+    ) {
+        this.skipOveraskingCheck =
+            configService.get<boolean>("SKIP_OVERASKING_CHECK") ?? false;
+    }
 
     /**
      * Resolve a registration certificate and return only the JWT string.
@@ -369,7 +375,8 @@ export class RegistrationCertificateService {
      * 3. DCQL fingerprint comparison: every credential being requested in
      *    `dcqlQuery.credentials` MUST be present in the certificate's authorized
      *    `credentials` claim. Prevents overasking with a cert issued for a
-     *    different/narrower set of credentials.
+     *    different/narrower set of credentials. Skipped when
+     *    `SKIP_OVERASKING_CHECK` is enabled.
      *
      * Fails closed by throwing `BadRequestException` on any mismatch.
      */
@@ -424,6 +431,14 @@ export class RegistrationCertificateService {
             return payload;
         }
 
+        if (this.skipOveraskingCheck) {
+            this.logger.warn(
+                { requestId, source },
+                `[${tenantId}] SKIP_OVERASKING_CHECK is enabled: not checking that the registration certificate authorizes the requested DCQL credentials`,
+            );
+            return payload;
+        }
+
         const authorizedCredentials = Array.isArray(payload.credentials)
             ? payload.credentials
             : null;
@@ -474,20 +489,23 @@ export class RegistrationCertificateService {
      *
      * Normalizes to registrar CredentialDef shape (`format`, `claims`, `meta`)
      * before hashing, because DCQL credentials may include transport/query fields
-     * that are not present in registrar certificates.
+     * that are not present in registrar certificates. Claims are reduced to their
+     * `path`: certificates only carry the path, while DCQL claims may add `id`,
+     * `values` or `intent_to_retain`.
      */
     private dcqlCredentialFingerprint(cred: any): string {
         if (!cred || typeof cred !== "object") {
             return JSON.stringify(cred ?? null);
         }
 
-        const normalizedClaims = Array.isArray(
-            (cred as Record<string, any>).claims,
-        )
+        const rawClaims = Array.isArray((cred as Record<string, any>).claims)
             ? (cred as Record<string, any>).claims
             : Array.isArray((cred as Record<string, any>).claim)
               ? (cred as Record<string, any>).claim
               : undefined;
+        const normalizedClaims = rawClaims?.map((claim: any) => ({
+            path: claim?.path,
+        }));
 
         const normalized = {
             format: (cred as Record<string, any>).format,

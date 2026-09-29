@@ -1,0 +1,139 @@
+import { BadRequestException } from "@nestjs/common";
+import { describe, expect, it } from "vitest";
+import { RegistrationCertificateService } from "./registration-certificate.service.js";
+
+function unsignedJwt(payload: Record<string, unknown>): string {
+    const encode = (value: unknown) =>
+        Buffer.from(JSON.stringify(value)).toString("base64url");
+    return `${encode({ alg: "none" })}.${encode(payload)}.`;
+}
+
+function createService(env: Record<string, unknown> = {}) {
+    const configService = { get: (key: string) => env[key] };
+    return new RegistrationCertificateService(
+        {} as any,
+        {} as any,
+        configService as any,
+    );
+}
+
+const dcqlQuery = {
+    credentials: [
+        {
+            id: "pid",
+            format: "dc+sd-jwt",
+            meta: { vct_values: ["urn:eudi:pid:1"] },
+            claims: [{ path: ["given_name"] }],
+        },
+    ],
+};
+
+const narrowerCertificate = unsignedJwt({
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    credentials: [
+        {
+            format: "dc+sd-jwt",
+            meta: { vct_values: ["urn:eudi:pid:1"] },
+            claims: [{ path: ["family_name"] }],
+        },
+    ],
+});
+
+describe("RegistrationCertificateService overasking check", () => {
+    it("rejects a certificate that does not authorize the requested credentials", async () => {
+        await expect(
+            createService().resolveRegistrationCertificate(
+                { jwt: narrowerCertificate },
+                dcqlQuery,
+                "r",
+                "tenant",
+            ),
+        ).rejects.toThrow(BadRequestException);
+    });
+
+    it("accepts the certificate when SKIP_OVERASKING_CHECK is enabled", async () => {
+        const resolved = await createService({
+            SKIP_OVERASKING_CHECK: true,
+        }).resolveRegistrationCertificate(
+            { jwt: narrowerCertificate },
+            dcqlQuery,
+            "r",
+            "tenant",
+        );
+        expect(resolved.jwt).toBe(narrowerCertificate);
+    });
+
+    it("still rejects expired certificates when SKIP_OVERASKING_CHECK is enabled", async () => {
+        const expired = unsignedJwt({ exp: 1, credentials: [] });
+        await expect(
+            createService({
+                SKIP_OVERASKING_CHECK: true,
+            }).resolveRegistrationCertificate(
+                { jwt: expired },
+                dcqlQuery,
+                "r",
+                "tenant",
+            ),
+        ).rejects.toThrow("Registration certificate is expired");
+    });
+
+    it("compares claims by path, as registrar certificates only carry the path", async () => {
+        const residentCity = {
+            credentials: [
+                {
+                    id: "pid-sd-jwt",
+                    format: "dc+sd-jwt",
+                    meta: { vct_values: ["urn:eudi:pid:de:1"] },
+                    claims: [{ path: ["address", "locality"] }],
+                },
+                {
+                    id: "pid-mso-mdoc",
+                    format: "mso_mdoc",
+                    meta: { doctype_value: "eu.europa.ec.eudi.pid.1" },
+                    claims: [
+                        {
+                            id: "city",
+                            path: ["eu.europa.ec.eudi.pid.1", "resident_city"],
+                            intent_to_retain: false,
+                        },
+                    ],
+                },
+                {
+                    id: "honorary",
+                    format: "dc+sd-jwt",
+                    meta: { vct_values: ["urn:de:eaa:ehrenamtskarte:1"] },
+                },
+            ],
+        };
+        // Shape produced by the registrar: `claim` with path-only entries.
+        const certificate = unsignedJwt({
+            exp: Math.floor(Date.now() / 1000) + 3600,
+            credentials: [
+                {
+                    format: "dc+sd-jwt",
+                    meta: { vct_values: ["urn:eudi:pid:de:1"] },
+                    claim: [{ path: ["address", "locality"] }],
+                },
+                {
+                    format: "mso_mdoc",
+                    meta: { doctype_value: "eu.europa.ec.eudi.pid.1" },
+                    claim: [
+                        { path: ["eu.europa.ec.eudi.pid.1", "resident_city"] },
+                    ],
+                },
+                {
+                    format: "dc+sd-jwt",
+                    meta: { vct_values: ["urn:de:eaa:ehrenamtskarte:1"] },
+                },
+            ],
+        });
+
+        const resolved = await createService().resolveRegistrationCertificate(
+            { jwt: certificate },
+            residentCity,
+            "r",
+            "tenant",
+        );
+        expect(resolved.jwt).toBe(certificate);
+    });
+});

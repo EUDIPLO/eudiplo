@@ -11,11 +11,8 @@ import { OutboundUrlPolicyService } from "./outbound-url-policy.service.js";
 type ConfigValue = string | boolean | undefined;
 
 describe("OutboundUrlPolicyService", () => {
-    const originalNodeEnv = process.env.NODE_ENV;
-
     beforeEach(() => {
         vi.clearAllMocks();
-        process.env.NODE_ENV = originalNodeEnv;
     });
 
     function createService(config: Record<string, ConfigValue> = {}) {
@@ -37,26 +34,28 @@ describe("OutboundUrlPolicyService", () => {
         );
     });
 
-    it("rejects HTTP in production by default", async () => {
-        process.env.NODE_ENV = "production";
+    it("rejects HTTP by default, independent of NODE_ENV", async () => {
+        vi.stubEnv("NODE_ENV", "development");
         const { service } = createService();
 
         await expect(
             service.assertSafeUrl("http://example.com/webhook"),
         ).rejects.toBeInstanceOf(BadRequestException);
+        vi.unstubAllEnvs();
     });
 
-    it("allows HTTP in non-production by default", async () => {
-        process.env.NODE_ENV = "development";
-        const { service } = createService();
+    it("allows HTTP when explicitly enabled", async () => {
+        vi.mocked(lookup).mockResolvedValue([
+            { address: "93.184.216.34", family: 4 },
+        ]);
+        const { service } = createService({ OUTBOUND_URL_ALLOW_HTTP: true });
 
         await expect(
             service.assertSafeUrl("http://example.com/webhook"),
         ).resolves.toBeUndefined();
     });
 
-    it("uses ConfigService fallback values for policy flags", () => {
-        process.env.NODE_ENV = "production";
+    it("uses secure ConfigService fallback values for policy flags", () => {
         const configService = {
             get: vi.fn(
                 (key: string, defaultValue?: boolean | string) => defaultValue,
@@ -78,7 +77,6 @@ describe("OutboundUrlPolicyService", () => {
     });
 
     it("rejects localhost targets", async () => {
-        process.env.NODE_ENV = "production";
         const { service } = createService();
 
         await expect(
@@ -87,7 +85,6 @@ describe("OutboundUrlPolicyService", () => {
     });
 
     it("rejects direct private IP targets", async () => {
-        process.env.NODE_ENV = "production";
         const { service } = createService();
 
         await expect(
@@ -96,7 +93,6 @@ describe("OutboundUrlPolicyService", () => {
     });
 
     it("rejects hostnames that resolve to private IPs", async () => {
-        process.env.NODE_ENV = "production";
         vi.mocked(lookup).mockResolvedValue([
             { address: "127.0.0.1", family: 4 },
         ]);
@@ -109,7 +105,6 @@ describe("OutboundUrlPolicyService", () => {
     });
 
     it("allows configured host allowlist including subdomains", async () => {
-        process.env.NODE_ENV = "production";
         vi.mocked(lookup).mockResolvedValue([
             { address: "93.184.216.34", family: 4 },
         ]);
@@ -124,7 +119,6 @@ describe("OutboundUrlPolicyService", () => {
     });
 
     it("rejects hosts outside configured allowlist", async () => {
-        process.env.NODE_ENV = "production";
         const { service } = createService({
             OUTBOUND_URL_ALLOWED_HOSTS: "example.com",
         });
@@ -135,7 +129,6 @@ describe("OutboundUrlPolicyService", () => {
     });
 
     it("allows private network targets when explicitly enabled", async () => {
-        process.env.NODE_ENV = "production";
         const { service } = createService({
             OUTBOUND_URL_ALLOW_PRIVATE_NETWORK: true,
         });

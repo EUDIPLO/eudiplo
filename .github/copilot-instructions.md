@@ -36,6 +36,7 @@
 - **Key Management**: Pluggable, supports filesystem and cloud KMS (see backend config).
 - **Session Management**: Real-time updates via polling in client.
 - **Environment Variables**: Each app has its own `.env` or `example.env`.
+- **Skipping checks**: A switch that turns off a check of the normal, secure flow is named `SKIP_<CHECK>` (e.g. `SKIP_OVERASKING_CHECK`), defaults to `false`, and is declared in [skip-validation.schema.ts](../apps/backend/src/platform/config/skip-validation.schema.ts) so it is logged as a warning on startup. Do not add ad-hoc `ALLOW_*`/`DISABLE_*` flags or `NODE_ENV` checks to bypass validation.
 - **Testing**: Use framework-native tools (Vitest for backend, Angular CLI for client).
 - **Docs**: Main docs in [apps/docs](../apps/docs), with API docs via Swagger/OpenAPI.
 

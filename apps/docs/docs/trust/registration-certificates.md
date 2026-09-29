@@ -63,6 +63,8 @@ Every registration certificate (regardless of source) is validated before use:
 
 Every credential requested in the DCQL query must be present in the certificate's authorized `credentials` claim. If the certificate does not cover all requested credentials, the request is rejected to prevent overasking.
 
+For development and interoperability testing, the check can be turned off with `SKIP_OVERASKING_CHECK=true`. The JWT and its `exp`/`nbf` are still validated; the service logs a warning on startup and for every request that skips the check. Never enable it in production. See [Skip Flags](../deployment/environment-variables.md#skip-flags).
+
 ## Recommended Setup
 
 ### Registrar Defaults

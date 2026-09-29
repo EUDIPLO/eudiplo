@@ -62,6 +62,8 @@ Webhooks are configured per tenant via the **Webhook Endpoints** resource:
 
 ## Outbound URL Policy
 
+Outbound calls reject HTTP targets and private, loopback or link-local addresses by default, in every environment. Enable the relaxations below only where needed, such as for local development or webhook receivers inside the same cluster, and prefer `OUTBOUND_URL_ALLOWED_HOSTS` to restrict targets.
+
 import ConfigTable from "@site/src/components/ConfigTable";
 
 <ConfigTable group="webhook" />

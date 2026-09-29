@@ -42,6 +42,10 @@ export default defineConfig({
             // Use synchronize for tests (fresh DB each run), skip migrations
             DB_SYNCHRONIZE: "true",
             DB_MIGRATIONS_RUN: "false",
+            // Suites call webhooks, attribute providers and metadata served
+            // over HTTP on localhost.
+            OUTBOUND_URL_ALLOW_HTTP: "true",
+            OUTBOUND_URL_ALLOW_PRIVATE_NETWORK: "true",
         },
     },
     plugins: [swc.vite()],

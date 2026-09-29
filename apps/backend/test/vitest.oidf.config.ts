@@ -26,6 +26,9 @@ export default defineConfig({
             DB_MIGRATIONS_RUN: "false",
             PUBLIC_URL: `https://${PUBLIC_DOMAIN}`,
             INTERNAL_URL: "https://localhost:3000",
+            // The conformance suite and the backend run on the local network.
+            OUTBOUND_URL_ALLOW_HTTP: "true",
+            OUTBOUND_URL_ALLOW_PRIVATE_NETWORK: "true",
         },
     },
     plugins: [swc.vite()],

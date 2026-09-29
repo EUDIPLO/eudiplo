@@ -461,13 +461,13 @@ The `AuditLogService` persists compliance events to the database. Audit logs inc
 
 EUDIPLO **requires HTTPS in production** for all external endpoints:
 
-| Endpoint Type          | HTTPS Requirement | Notes                                    |
-| ---------------------- | ----------------- | ---------------------------------------- |
-| **Issuer Endpoints**   | ✅ Required       | All OID4VCI endpoints must use HTTPS     |
-| **Verifier Endpoints** | ✅ Required       | All OID4VP endpoints must use HTTPS      |
-| **Webhook Endpoints**  | ✅ Required       | Outbound webhook requests use HTTPS      |
-| **Management API**     | ✅ Required       | All API endpoints must use HTTPS         |
-| **Local Development**  | ⚠️ Optional       | HTTP allowed when `NODE_ENV=development` |
+| Endpoint Type          | HTTPS Requirement | Notes                                              |
+| ---------------------- | ----------------- | -------------------------------------------------- |
+| **Issuer Endpoints**   | ✅ Required       | All OID4VCI endpoints must use HTTPS               |
+| **Verifier Endpoints** | ✅ Required       | All OID4VP endpoints must use HTTPS                |
+| **Webhook Endpoints**  | ✅ Required       | Outbound webhook requests use HTTPS                |
+| **Management API**     | ✅ Required       | All API endpoints must use HTTPS                   |
+| **Local Development**  | ⚠️ Optional       | Outbound HTTP needs `OUTBOUND_URL_ALLOW_HTTP=true` |
 
 **TLS Configuration:**
 
@@ -476,6 +476,22 @@ EUDIPLO does not terminate TLS itself. Deploy behind a reverse proxy (e.g., NGIN
 **Certificate Trust:**
 
 For external KMS providers (e.g., Vault, AWS KMS), EUDIPLO validates TLS certificates using the system's default trust store. Custom CA certificates can be added via the `NODE_EXTRA_CA_CERTS` environment variable.
+
+**Outbound URL Policy:**
+
+Webhooks, attribute providers and metadata imports go through the outbound URL policy. HTTP targets and private, loopback or link-local addresses are rejected by default, independent of `NODE_ENV`. Enable `OUTBOUND_URL_ALLOW_HTTP` or `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` explicitly where needed, for example for local development or for services inside the same cluster, and restrict targets with `OUTBOUND_URL_ALLOWED_HOSTS`. See [Webhook](../deployment/environment-variables.md#webhook).
+
+---
+
+## Skipping Checks
+
+Checks of the normal flow are never relaxed implicitly (for example based on `NODE_ENV`). A check that must be turned off for development or interoperability testing gets a `SKIP_<CHECK>` flag that defaults to `false`. The backend logs every active skip flag as a warning on startup, and the affected code path logs a warning each time it skips the check.
+
+| Flag                    | Skipped check                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------ |
+| `SKIP_OVERASKING_CHECK` | The registration certificate must authorize every credential in the DCQL query (overasking prevention) |
+
+See [Skip Flags](../deployment/environment-variables.md#skip-flags) for the full reference.
 
 ---
 
@@ -537,6 +553,8 @@ Before deploying EUDIPLO to production, verify:
 - ✅ **DPoP enforcement** enabled for production credential issuance
 - ✅ **Wallet attestation** enabled for high-security use cases
 - ✅ **Trust list validation** configured for credential verification
+- ✅ **No `SKIP_*` flags** set (the startup log lists active ones)
+- ✅ **Outbound URL policy** relaxations (`OUTBOUND_URL_ALLOW_*`) only where required
 
 ---
 

@@ -20,6 +20,7 @@ The complete environment variable reference is organized into the following sect
 - [Logging](#logging) — Log level and structured logging
 - [Observability](#observability) — OpenTelemetry tracing configuration
 - [Session](#session) — Session cleanup and retention policies
+- [Skip Flags](#skip-flags) — Development-only switches that turn off checks
 - [Status](#status) — Status list configuration
 - [Storage](#storage) — File storage provider (local/S3)
 - [TLS](#tls) — Built-in HTTPS termination
@@ -67,6 +68,12 @@ import ConfigTable from "@site/src/components/ConfigTable";
 ## Session
 
 <ConfigTable group="session" />
+
+## Skip Flags
+
+Every switch that turns off a check of the normal, secure flow is named `SKIP_<CHECK>` and defaults to `false`. Active skip flags are listed as warnings in the startup log. Use them only for development and interoperability testing, never in production.
+
+<ConfigTable group="skip" />
 
 ## Status
 

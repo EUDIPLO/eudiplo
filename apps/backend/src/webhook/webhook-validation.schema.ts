@@ -5,15 +5,15 @@ import Joi from "joi";
  */
 export const WEBHOOK_VALIDATION_SCHEMA = Joi.object({
     OUTBOUND_URL_ALLOW_HTTP: Joi.boolean()
-        .optional()
+        .default(false)
         .description(
-            "Allow HTTP (non-TLS) for outbound calls (webhooks, attribute providers, issuer and schema metadata imports). Defaults to true outside production.",
+            "Allow HTTP (non-TLS) for outbound calls (webhooks, attribute providers, issuer and schema metadata imports). Enable it for local development against HTTP endpoints.",
         )
         .meta({ group: "webhook", order: 10 }),
     OUTBOUND_URL_ALLOW_PRIVATE_NETWORK: Joi.boolean()
-        .optional()
+        .default(false)
         .description(
-            "Allow outbound calls (webhooks, attribute providers, metadata imports) to private, loopback, or link-local IP ranges. The address actually connected to is checked as well (DNS rebinding protection). Defaults to true outside production.",
+            "Allow outbound calls (webhooks, attribute providers, metadata imports) to private, loopback, or link-local IP ranges, e.g. for services inside the same cluster or for local development. The address actually connected to is checked as well (DNS rebinding protection).",
         )
         .meta({ group: "webhook", order: 20 }),
     OUTBOUND_URL_ALLOWED_HOSTS: Joi.string()

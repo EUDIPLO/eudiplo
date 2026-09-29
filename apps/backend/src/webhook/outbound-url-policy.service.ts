@@ -204,17 +204,11 @@ export class OutboundUrlPolicyService {
     }
 
     private allowHttp(): boolean {
-        return this.readBoolean(
-            "OUTBOUND_URL_ALLOW_HTTP",
-            process.env.NODE_ENV !== "production",
-        );
+        return this.readBoolean("OUTBOUND_URL_ALLOW_HTTP", false);
     }
 
     private allowPrivateNetwork(): boolean {
-        return this.readBoolean(
-            "OUTBOUND_URL_ALLOW_PRIVATE_NETWORK",
-            process.env.NODE_ENV !== "production",
-        );
+        return this.readBoolean("OUTBOUND_URL_ALLOW_PRIVATE_NETWORK", false);
     }
 
     private readBoolean(key: string, fallback: boolean): boolean {

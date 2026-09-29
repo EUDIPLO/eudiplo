@@ -12,6 +12,7 @@ import {
     filterOpenApiPaths,
     GLOBAL_PREFIX_EXCLUSIONS,
 } from "./main.helpers.js";
+import { getActiveSkipFlags } from "./platform/config/skip-validation.schema.js";
 import { ValidationErrorFilter } from "./shared/common/filters/validation-error.filter.js";
 import { createAppValidationPipe } from "./shared/common/zod/zod-schema.util.js";
 import { registerTolerantX509Extensions } from "./shared/utils/x509-tolerant-extensions.js";
@@ -297,6 +298,19 @@ async function bootstrap() {
                     `   → Mode:         Integrated OAuth2 (Client Credentials)`,
                 );
                 logger.log(`   → Token URL:    ${publicUrl}/api/oauth2/token`);
+            }
+
+            const activeSkipFlags = getActiveSkipFlags((key) =>
+                configService.get(key),
+            );
+            if (activeSkipFlags.length > 0) {
+                logger.log("");
+                logger.warn(
+                    "⚠️  Checks skipped (development/testing only, never in production):",
+                );
+                for (const flag of activeSkipFlags) {
+                    logger.warn(`   → ${flag}=true`);
+                }
             }
         });
     }
