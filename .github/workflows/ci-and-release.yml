@@ -284,6 +284,7 @@ jobs:
           ALGOLIA_APP_ID: ${{ secrets.ALGOLIA_APP_ID }}
           ALGOLIA_SEARCH_API_KEY: ${{ secrets.ALGOLIA_SEARCH_API_KEY }}
           ALGOLIA_INDEX_NAME: ${{ secrets.ALGOLIA_INDEX_NAME }}
+          DOCSEARCH_AGENT_ID: ${{ secrets.DOCSEARCH_AGENT_ID }}
         run: pnpm --filter @eudiplo/docs run build
 
       - name: Upload built documentation
@@ -325,6 +326,7 @@ jobs:
           ALGOLIA_APP_ID: ${{ secrets.ALGOLIA_APP_ID }}
           ALGOLIA_SEARCH_API_KEY: ${{ secrets.ALGOLIA_SEARCH_API_KEY }}
           ALGOLIA_INDEX_NAME: ${{ secrets.ALGOLIA_INDEX_NAME }}
+          DOCSEARCH_AGENT_ID: ${{ secrets.DOCSEARCH_AGENT_ID }}
         run: pnpm --filter @eudiplo/docs run build
 
       - name: Deploy website to Cloudflare Pages preview

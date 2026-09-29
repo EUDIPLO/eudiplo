@@ -463,6 +463,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          for var in ALGOLIA_APP_ID ALGOLIA_SEARCH_API_KEY ALGOLIA_INDEX_NAME DOCSEARCH_AGENT_ID; do
+            test -n "${!var}" || { echo "$var is not configured"; exit 1; }
+          done
+
           pnpm --filter @eudiplo/docs run build
 
           test -s apps/website/install.sh
@@ -475,6 +479,10 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_PAGES_BRANCH: production
+          ALGOLIA_APP_ID: ${{ secrets.ALGOLIA_APP_ID }}
+          ALGOLIA_SEARCH_API_KEY: ${{ secrets.ALGOLIA_SEARCH_API_KEY }}
+          ALGOLIA_INDEX_NAME: ${{ secrets.ALGOLIA_INDEX_NAME }}
+          DOCSEARCH_AGENT_ID: ${{ secrets.DOCSEARCH_AGENT_ID }}
 
       - name: Deploy release website to Cloudflare Pages
         if: steps.semantic_release.outputs.new_release == 'true'
