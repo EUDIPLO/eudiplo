@@ -17,6 +17,7 @@ export interface DcqlClaimQuery {
 /** The subset of a DCQL credential query the policy needs. */
 export interface DcqlCredentialQuery {
     id: string;
+    multiple?: boolean;
     claims?: DcqlClaimQuery[];
     claim_sets?: string[][];
 }

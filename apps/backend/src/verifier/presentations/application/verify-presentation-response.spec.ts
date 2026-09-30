@@ -10,6 +10,7 @@ import { CredentialVerifierFormatRegistry } from "./credential-verifier-format-r
 import {
     CredentialVerificationFailedError,
     IncompletePresentationError,
+    MultiplePresentationsNotAllowedError,
     type PresentationQuery,
     UnknownPresentedCredentialError,
     VerifyPresentationResponse,
@@ -22,6 +23,7 @@ function setup(
     credentials: PresentationQuery["dcql_query"]["credentials"],
     result: Partial<CredentialVerificationResult> = {},
     request: Record<string, unknown> = {},
+    credentialSets?: PresentationQuery["dcql_query"]["credential_sets"],
 ) {
     const format: CredentialVerifierFormat = {
         format: "dc+sd-jwt",
@@ -58,7 +60,7 @@ function setup(
     } as SessionData;
     const query: PresentationQuery = {
         tenantId: "tenant",
-        dcql_query: { credentials },
+        dcql_query: { credentials, credential_sets: credentialSets },
     };
     const run = (vpToken: Record<string, string[]>) =>
         useCase.execute({ vp_token: vpToken }, query, session);
@@ -100,6 +102,65 @@ describe("VerifyPresentationResponse", () => {
             IncompletePresentationError,
         );
         expect(format.verify).not.toHaveBeenCalled();
+    });
+
+    it("does not count an empty presentation array as a presented credential", async () => {
+        const { run, format } = setup([{ id: "mdl" }]);
+
+        await expect(run({ mdl: [] })).rejects.toBeInstanceOf(
+            IncompletePresentationError,
+        );
+        expect(format.verify).not.toHaveBeenCalled();
+    });
+
+    it("does not satisfy a credential set option with empty presentation arrays", async () => {
+        const { run, format } = setup(
+            [{ id: "pid" }, { id: "mdl" }, { id: "diploma" }],
+            {},
+            {},
+            [
+                {
+                    options: [
+                        ["pid", "diploma"],
+                        ["mdl", "diploma"],
+                    ],
+                },
+            ],
+        );
+
+        await expect(run({ pid: [], diploma: [] })).rejects.toBeInstanceOf(
+            IncompletePresentationError,
+        );
+        await expect(run({ pid: ["vp"], diploma: [] })).rejects.toBeInstanceOf(
+            IncompletePresentationError,
+        );
+        expect(format.verify).not.toHaveBeenCalled();
+    });
+
+    it("omits empty presentation arrays of optional credentials from the result", async () => {
+        const { run } = setup([{ id: "pid" }, { id: "mdl" }], {}, {}, [
+            { options: [["pid"], ["mdl"]] },
+        ]);
+
+        await expect(run({ pid: ["vp"], mdl: [] })).resolves.toEqual([
+            { id: "pid", values: [{ given_name: "Erika" }] },
+        ]);
+    });
+
+    it("rejects several presentations unless the query allows multiple", async () => {
+        const single = setup([{ id: "pid" }]);
+        await expect(
+            single.run({ pid: ["vp1", "vp2"] }),
+        ).rejects.toBeInstanceOf(MultiplePresentationsNotAllowedError);
+        expect(single.format.verify).not.toHaveBeenCalled();
+
+        const multiple = setup([{ id: "pid", multiple: true }]);
+        await expect(multiple.run({ pid: ["vp1", "vp2"] })).resolves.toEqual([
+            {
+                id: "pid",
+                values: [{ given_name: "Erika" }, { given_name: "Erika" }],
+            },
+        ]);
     });
 
     it("rejects credential ids outside the query", async () => {

@@ -69,6 +69,22 @@ export class UnknownPresentedCredentialError extends Error {
     }
 }
 
+/**
+ * The `vp_token` contains several presentations for a credential query that
+ * does not set `multiple: true` (DCQL defaults `multiple` to false).
+ */
+export class MultiplePresentationsNotAllowedError extends Error {
+    constructor(
+        readonly credentialId: string,
+        readonly count: number,
+    ) {
+        super(
+            `${credentialId} allows a single presentation, but ${count} were presented`,
+        );
+        this.name = "MultiplePresentationsNotAllowedError";
+    }
+}
+
 /** A presented credential failed signature, holder-binding or trust checks. */
 export class CredentialVerificationFailedError extends Error {
     constructor(
@@ -84,10 +100,12 @@ export class CredentialVerificationFailedError extends Error {
  * Verifies every credential in the `vp_token` of an OID4VP response against
  * the presentation config's DCQL query and returns the disclosed claims.
  *
- * Checks, in order: all required credentials are present; per credential id,
- * it is part of the query, its trusted authorities resolve, its claim sets are
- * well formed; then every presented value is verified by its format and must
- * disclose the requested claims (or one claim set).
+ * Checks, in order: all required credentials are present with at least one
+ * presentation; per credential id, it is part of the query, it has a single
+ * presentation unless the query allows `multiple`, its trusted authorities
+ * resolve, its claim sets are well formed; then every presented value is
+ * verified by its format and must disclose the requested claims (or one
+ * claim set).
  *
  * Throws the errors above, `UnknownClaimSetReferenceError`,
  * `UnsupportedCredentialVerifierFormat`, `InvalidTrustedAuthoritiesError`, or
@@ -105,7 +123,11 @@ export class VerifyPresentationResponse {
         query: PresentationQuery,
         session: SessionData,
     ): Promise<VerifiedPresentation> {
-        const credentialIds = Object.keys(response.vp_token);
+        // Only credential ids with at least one presentation count as
+        // received; an empty array would otherwise satisfy the query unverified.
+        const credentialIds = Object.keys(response.vp_token).filter(
+            (credentialId) => response.vp_token[credentialId].length > 0,
+        );
         const tenantHost = `${this.settings.publicUrl}/issuers/${query.tenantId}`;
 
         const missingCredentials = findMissingCredentials(
@@ -147,6 +169,12 @@ export class VerifyPresentationResponse {
                 );
                 if (!credentialQuery) {
                     throw new UnknownPresentedCredentialError(credentialId);
+                }
+                if (!credentialQuery.multiple && presented.length > 1) {
+                    throw new MultiplePresentationsNotAllowedError(
+                        credentialId,
+                        presented.length,
+                    );
                 }
 
                 const transactionData = transactionDataFor(
