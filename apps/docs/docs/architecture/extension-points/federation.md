@@ -243,7 +243,7 @@ Tenants without federation configuration will automatically use existing LoTE tr
 **DELETE `/api/cache`** and **DELETE `/api/cache/trust-list`**
 
 - Clear the LoTE trust list cache (and, for `DELETE /api/cache`, the status list cache)
-- Do **not** clear the federation trust cache; federation results remain cached until their TTL expires or the service restarts. Clearing it via the API is tracked in [#1089](https://github.com/openwallet-foundation/eudiplo/issues/1089).
+- Also clear the federation trust cache, so the next flow re-evaluates the federation trust chain
 
 Federation cache activity is exposed as OpenTelemetry counters instead: `federation_trust_cache_hits_total`, `federation_trust_cache_misses_total`, `federation_trust_cache_stale_total` and `federation_trust_fetches_total` (each with an `entity` attribute).
 
@@ -385,7 +385,7 @@ Migration: `1763000000000-AddFederationToIssuanceConfig`
 
 - Wait for the TTL to expire (failed fetches are cached for 10 seconds)
 - Reduce `cacheTtlSeconds` for faster updates
-- Restart the service to clear the in-memory federation cache; `DELETE /api/cache/trust-list` does not clear it yet ([#1089](https://github.com/openwallet-foundation/eudiplo/issues/1089))
+- Call `DELETE /api/cache/trust-list` (or `DELETE /api/cache`) to clear the in-memory federation cache
 
 ## Testing
 
@@ -406,7 +406,7 @@ Federation is covered by dedicated e2e tests:
 # Check trust decision for specific entity
 # (Via logs, error messages and federation_trust_* metrics)
 
-# Clear the LoTE trust list cache (does not clear the federation cache, see #1089)
+# Clear the LoTE trust list cache and the federation trust cache
 curl -X DELETE https://eudiplo.example.com/api/cache/trust-list \
   -H "Authorization: Bearer <token>"
 ```

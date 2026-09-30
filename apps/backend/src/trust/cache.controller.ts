@@ -3,6 +3,7 @@ import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Role } from "../auth/roles/role.enum.js";
 import { Secured } from "../auth/secure.decorator.js";
 import { CacheStatsResponseDto } from "./dto/cache-stats-response.dto.js";
+import { FederationTrustService } from "./federation-trust.service.js";
 import { StatusListVerifierService } from "./status-list-verifier.service.js";
 import { TrustStoreService } from "./trust-store.service.js";
 
@@ -19,6 +20,7 @@ export class CacheController {
     constructor(
         private readonly trustStoreService: TrustStoreService,
         private readonly statusListVerifierService: StatusListVerifierService,
+        private readonly federationTrustService: FederationTrustService,
     ) {}
 
     /**
@@ -51,14 +53,14 @@ export class CacheController {
     }
 
     /**
-     * Clear all caches (trust lists and status lists).
+     * Clear all caches (trust lists, federation trust results and status lists).
      */
     @Delete()
     @HttpCode(HttpStatus.NO_CONTENT)
     @ApiOperation({
         summary: "Clear all caches",
         description:
-            "Clears both trust list and status list caches. Next verification will fetch fresh data.",
+            "Clears the trust list, OpenID Federation trust and status list caches. Next verification will fetch fresh data.",
     })
     @ApiResponse({
         status: 204,
@@ -66,18 +68,19 @@ export class CacheController {
     })
     clearAllCaches() {
         this.trustStoreService.clearCache();
+        this.federationTrustService.clearTrustCache();
         this.statusListVerifierService.clearCache();
     }
 
     /**
-     * Clear the trust list cache.
+     * Clear the trust caches (trust lists and federation trust results).
      */
     @Delete("trust-list")
     @HttpCode(HttpStatus.NO_CONTENT)
     @ApiOperation({
         summary: "Clear trust list cache",
         description:
-            "Clears the trust list cache. Next verification will fetch fresh trust lists.",
+            "Clears the trust list cache and the OpenID Federation trust cache. Next verification will fetch fresh trust lists and re-evaluate federation trust.",
     })
     @ApiResponse({
         status: 204,
@@ -85,6 +88,7 @@ export class CacheController {
     })
     clearTrustListCache() {
         this.trustStoreService.clearCache();
+        this.federationTrustService.clearTrustCache();
     }
 
     /**
