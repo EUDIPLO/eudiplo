@@ -26,6 +26,9 @@ describe("ParseAuthorizationResponse", () => {
         expect(() => useCase.execute({})).toThrow(
             PresentationResponseValidationError,
         );
+        expect(() => useCase.execute({ vp_token: { mdl: [] } })).toThrow(
+            PresentationResponseValidationError,
+        );
         const response = useCase.execute({
             vp_token: { credential: ["vp"] },
             state: "other",

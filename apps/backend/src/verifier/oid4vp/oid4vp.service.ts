@@ -31,6 +31,7 @@ import { DEFAULT_VERIFIER_SKEW_SECONDS } from "../../trust/types.js";
 import {
     CredentialVerificationFailedError,
     IncompletePresentationError,
+    MultiplePresentationsNotAllowedError,
     type PresentationQuery,
     UnknownPresentedCredentialError,
     type VerifiedPresentation,
@@ -916,6 +917,7 @@ function presentationVerificationException(error: unknown): unknown {
     }
     if (
         error instanceof CredentialVerificationFailedError ||
+        error instanceof MultiplePresentationsNotAllowedError ||
         error instanceof InvalidTrustedAuthoritiesError ||
         error instanceof UnknownClaimSetReferenceError
     ) {
