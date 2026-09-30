@@ -640,7 +640,7 @@ export class InteractiveAuthorizationService {
         authSession: InteractiveAuthSession,
     ): Promise<{ success: true } | InteractiveAuthorizationResponse> {
         try {
-            const vpResponse = JSON.parse(openid4vpResponse);
+            JSON.parse(openid4vpResponse);
 
             // Update session status
             await this.authSessionRepository.update(authSession.id, {
@@ -648,23 +648,8 @@ export class InteractiveAuthorizationService {
                 presentationData: openid4vpResponse,
             });
 
-            // If there's an issuer_state, also update the main session
-            if (authSession.issuerState) {
-                try {
-                    await this.sessionStore.updateForTenant(
-                        authSession.tenantId,
-                        authSession.issuerState,
-                        {
-                            credentials: vpResponse,
-                        },
-                    );
-                } catch (error) {
-                    this.logger.warn(
-                        "Could not update main session with presentation data:",
-                        error,
-                    );
-                }
-            }
+            // The response is not verified here, so it is not stored as the
+            // session's credentials, which are forwarded to attribute providers.
 
             // Return success indicator (auth code will be issued by advanceOrComplete)
             return { success: true };

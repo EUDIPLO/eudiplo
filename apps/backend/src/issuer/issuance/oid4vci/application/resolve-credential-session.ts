@@ -87,6 +87,8 @@ export class ResolveCredentialSession {
             credentialConfigurationId,
             session,
             identity,
+            // Verified credentials presented to an OID4VP authorization server
+            credentials: session.credentials,
             ...(reference.kind === "external" ? { requireProvider: true } : {}),
         });
         return {

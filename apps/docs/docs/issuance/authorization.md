@@ -145,7 +145,7 @@ When a wallet initiates the authorization flow with an OID4VP authorization serv
 1. EUDIPLO exposes a tenant-local AS facade at `/issuers/{tenant}/authorization-servers/{id}`
 2. The wallet is redirected to the OID4VP presentation flow using the referenced presentation configuration
 3. After successful presentation verification, EUDIPLO issues an access token for credential issuance
-4. The identity claims from the presented credentials are available to Attribute Providers
+4. The claims from the presented credentials are sent to the Attribute Provider in the `credentials` field (see [Presentation-Based Authorization](attribute-provider.md#presentation-based-authorization))
 
 This flow is commonly used for higher-assurance issuance where the user must prove they already hold a trusted credential (such as a PID) before receiving a new credential.
 

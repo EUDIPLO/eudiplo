@@ -118,6 +118,27 @@ describe("ResolveCredentialSession", () => {
             }),
         );
     });
+    it("forwards credentials presented to a managed authorization server", async () => {
+        const f = fixture();
+        const credentials = [
+            {
+                id: "pid",
+                values: [{ given_name: "Erika", family_name: "Mustermann" }],
+            },
+        ];
+        f.sessions.getForTenant.mockResolvedValue({
+            ...f.session,
+            credentials,
+        });
+        await f.useCase.execute("tenant", "mdl", {
+            iss: "managed",
+            sub: "token-sub",
+            issuer_state: "session",
+        });
+        expect(f.claims.resolveClaims).toHaveBeenCalledWith(
+            expect.objectContaining({ credentials }),
+        );
+    });
     it("requires issuer_state before looking up a chained session", async () => {
         const f = fixture();
         await expect(
