@@ -1,4 +1,5 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { Injectable, Logger, OnApplicationBootstrap } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { ConfigImportMode } from "../config-portability/config-resource.types.js";
@@ -146,6 +147,8 @@ export class ConfigImportOrchestratorService implements OnApplicationBootstrap {
 
     /**
      * Discover all tenant folders in the config directory.
+     * Symlinked tenant folders are followed, so a tenant config kept elsewhere
+     * can be linked in without changing CONFIG_FOLDER.
      */
     private discoverTenants(): string[] {
         const configPath = this.configService.get<string>("CONFIG_FOLDER");
@@ -154,7 +157,14 @@ export class ConfigImportOrchestratorService implements OnApplicationBootstrap {
         }
 
         return readdirSync(configPath, { withFileTypes: true })
-            .filter((entry) => entry.isDirectory())
+            .filter(
+                (entry) =>
+                    entry.isDirectory() ||
+                    (entry.isSymbolicLink() &&
+                        statSync(join(configPath, entry.name), {
+                            throwIfNoEntry: false,
+                        })?.isDirectory()),
+            )
             .map((entry) => entry.name);
     }
 
