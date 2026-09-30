@@ -66,6 +66,28 @@ describe("MetadataFetchService", () => {
         ).rejects.toThrow("HTTP 500");
     });
 
+    it("wraps transport errors and rejects non-JSON bodies", async () => {
+        outbound.getFollowingRedirects.mockRejectedValueOnce(
+            new Error("socket hang up"),
+        );
+        await expect(
+            service.fetch("https://issuer.example/meta"),
+        ).rejects.toThrow(
+            "Failed to fetch issuer metadata from https://issuer.example/meta: socket hang up",
+        );
+
+        outbound.getFollowingRedirects.mockResolvedValueOnce({
+            status: 200,
+            url: "https://issuer.example/final",
+            body: "<html></html>",
+        });
+        await expect(
+            service.fetch("https://issuer.example/meta"),
+        ).rejects.toThrow(
+            "Issuer metadata response from https://issuer.example/final is not valid JSON or JWT",
+        );
+    });
+
     it("rejects userinfo in URLs before any request", async () => {
         await expect(
             service.fetch("https://user:pass@issuer.example/meta"),
