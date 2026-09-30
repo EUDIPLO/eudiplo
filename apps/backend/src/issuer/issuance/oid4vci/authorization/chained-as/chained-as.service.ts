@@ -28,6 +28,7 @@ import {
     type ChainedAsSessionRepository,
 } from "../ports/chained-as-session.repository.js";
 import {
+    assertPkceCodeChallenge,
     assertTokenRequestSessionValid,
     buildAccessTokenPayload,
     buildAuthorizationCodeRedirect,
@@ -345,7 +346,12 @@ export class ChainedAsService {
             );
         }
 
-        // Validate PKCE if required
+        // PKCE with S256 is mandatory (HAIP 1.0 Section 4)
+        assertPkceCodeChallenge(
+            request.code_challenge,
+            request.code_challenge_method,
+        );
+
         if (config.requireDPoP && !dpopJkt) {
             throw new BadRequestException("DPoP is required");
         }

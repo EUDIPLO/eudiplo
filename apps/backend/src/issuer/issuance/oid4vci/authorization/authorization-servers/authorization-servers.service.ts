@@ -27,6 +27,7 @@ import {
     type ChainedAsSessionRepository,
 } from "../ports/chained-as-session.repository.js";
 import {
+    assertPkceCodeChallenge,
     assertTokenRequestSessionValid,
     buildAccessTokenPayload,
     buildAuthorizationCodeRedirect,
@@ -235,6 +236,11 @@ export class AuthorizationServersService {
                 'Invalid response_type, must be "code"',
             );
         }
+
+        assertPkceCodeChallenge(
+            request.code_challenge,
+            request.code_challenge_method,
+        );
 
         if (config.requireDPoP && !dpopJkt) {
             throw new BadRequestException("DPoP is required");

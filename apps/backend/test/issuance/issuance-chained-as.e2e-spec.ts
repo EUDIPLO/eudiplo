@@ -521,6 +521,9 @@ describe("Issuance - Chained AS Flow", () => {
         expect(metadataResponse.body.grant_types_supported).toContain(
             "authorization_code",
         );
+        expect(metadataResponse.body.code_challenge_methods_supported).toEqual([
+            "S256",
+        ]);
     });
 
     test("PAR endpoint accepts authorization request and returns request_uri", async () => {
@@ -546,6 +549,46 @@ describe("Issuance - Chained AS Flow", () => {
             /^urn:ietf:params:oauth:request_uri:/,
         );
         expect(parResponse.body.expires_in).toBeGreaterThan(0);
+    });
+
+    test("PAR endpoint rejects a request without code_challenge", async () => {
+        setupUpstreamOidcMocks();
+        await configureChainedAs();
+
+        const parResponse = await request(app.getHttpServer())
+            .post("/issuers/haip/chained-as/par")
+            .trustLocalhost()
+            .send({
+                response_type: "code",
+                client_id: "test-wallet",
+                redirect_uri: "http://wallet.example.com/callback",
+                scope: "openid pid",
+            })
+            .expect(400);
+
+        expect(parResponse.body.error).toBe("invalid_request");
+        expect(parResponse.body.error_description).toContain("code_challenge");
+    });
+
+    test("PAR endpoint rejects code_challenge_method plain", async () => {
+        setupUpstreamOidcMocks();
+        await configureChainedAs();
+
+        const parResponse = await request(app.getHttpServer())
+            .post("/issuers/haip/chained-as/par")
+            .trustLocalhost()
+            .send({
+                response_type: "code",
+                client_id: "test-wallet",
+                redirect_uri: "http://wallet.example.com/callback",
+                code_challenge: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+                code_challenge_method: "plain",
+                scope: "openid pid",
+            })
+            .expect(400);
+
+        expect(parResponse.body.error).toBe("invalid_request");
+        expect(parResponse.body.error_description).toContain("S256");
     });
 
     test("authorize endpoint redirects to upstream OIDC provider", async () => {

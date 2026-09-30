@@ -143,11 +143,7 @@ The upstream client secret (`upstream.clientSecret`) is optional and stored in t
 
 The request from EUDIPLO to the upstream provider always uses PKCE with `S256`.
 
-On the wallet leg, PKCE is currently optional: if the wallet sends a `code_challenge` in the PAR request, the token request must include a matching `code_verifier` (`S256` is verified by hash, any other method is compared as `plain`). PAR requests without a `code_challenge` are accepted. The AS metadata advertises only `S256`.
-
-:::note
-Enforcing PKCE with `S256` on the wallet leg, as required by HAIP, is tracked in [issue #1090](https://github.com/openwallet-foundation/eudiplo/issues/1090).
-:::
+On the wallet leg, PKCE with `S256` is required, as mandated by HAIP: a PAR request without a `code_challenge`, or with a `code_challenge_method` other than `S256`, is rejected with `invalid_request`. The token request must include the matching `code_verifier`. The AS metadata advertises only `S256`.
 
 #### DPoP
 

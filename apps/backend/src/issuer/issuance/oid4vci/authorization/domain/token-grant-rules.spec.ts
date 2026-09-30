@@ -1,6 +1,6 @@
 import { calculateJwkThumbprint } from "jose";
 import { describe, expect, it } from "vitest";
-import { checkPkce } from "./pkce.js";
+import { assertS256CodeChallenge, checkPkce } from "./pkce.js";
 import { assertValidPushedAuthorizationRequest } from "./pushed-authorization-request.js";
 import {
     assertIssuedToClient,
@@ -33,6 +33,32 @@ describe("checkPkce", () => {
         expect(checkPkce(s256, "S256", "")).toBe("missing_verifier");
         expect(checkPkce(undefined, undefined, undefined)).toBe("valid");
         expect(checkPkce(undefined, "S256", "anything")).toBe("valid");
+    });
+});
+
+describe("assertS256CodeChallenge", () => {
+    const s256 = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+
+    it("accepts an S256 challenge", () => {
+        expect(() => assertS256CodeChallenge(s256, "S256")).not.toThrow();
+    });
+
+    it("rejects a missing challenge", () => {
+        expect(() => assertS256CodeChallenge(undefined, "S256")).toThrow(
+            expect.objectContaining({ code: "invalid_request" }),
+        );
+        expect(() => assertS256CodeChallenge("", "S256")).toThrow(
+            expect.objectContaining({ code: "invalid_request" }),
+        );
+    });
+
+    it("rejects plain and a missing method", () => {
+        expect(() => assertS256CodeChallenge(s256, "plain")).toThrow(
+            expect.objectContaining({ code: "invalid_request" }),
+        );
+        expect(() => assertS256CodeChallenge(s256, undefined)).toThrow(
+            expect.objectContaining({ code: "invalid_request" }),
+        );
     });
 });
 

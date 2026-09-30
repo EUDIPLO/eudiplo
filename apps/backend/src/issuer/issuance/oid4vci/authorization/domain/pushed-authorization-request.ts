@@ -1,4 +1,5 @@
 import { OAuthError } from "./oauth-error.js";
+import { assertS256CodeChallenge } from "./pkce.js";
 
 /** RFC 9126 Section 2.2: lifetime of a PAR `request_uri`. */
 export const PAR_REQUEST_URI_LIFETIME_SECONDS = 60;
@@ -44,18 +45,7 @@ export function assertValidPushedAuthorizationRequest(
             "Missing required parameter: redirect_uri",
         );
     }
-    if (!body.code_challenge) {
-        throw new OAuthError(
-            "invalid_request",
-            "Missing required parameter: code_challenge",
-        );
-    }
-    if (body.code_challenge_method !== "S256") {
-        throw new OAuthError(
-            "invalid_request",
-            "Only code_challenge_method 'S256' is supported",
-        );
-    }
+    assertS256CodeChallenge(body.code_challenge, body.code_challenge_method);
 }
 
 /**
