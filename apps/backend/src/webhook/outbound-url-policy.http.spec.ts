@@ -15,6 +15,11 @@ describe("OutboundUrlPolicyService outbound requests", () => {
                 response.end();
                 return;
             }
+            if (request.url === "/loop") {
+                response.writeHead(302, { location: "/loop" });
+                response.end();
+                return;
+            }
             if (request.url === "/large") {
                 response.end("x".repeat(2048));
                 return;
@@ -62,6 +67,59 @@ describe("OutboundUrlPolicyService outbound requests", () => {
             OUTBOUND_URL_ALLOW_PRIVATE_NETWORK: true,
         }).get(`${baseUrl}/redirect`, options);
         expect(response).toMatchObject({ status: 302, location: "/json" });
+    });
+
+    it("follows redirects and reports the final URL, content type and bytes", async () => {
+        const response = await policy({
+            OUTBOUND_URL_ALLOW_HTTP: true,
+            OUTBOUND_URL_ALLOW_PRIVATE_NETWORK: true,
+        }).getFollowingRedirects(`${baseUrl}/redirect`, {
+            ...options,
+            maxRedirects: 1,
+        });
+        expect(response).toMatchObject({
+            status: 200,
+            url: `${baseUrl}/json`,
+            contentType: "application/json",
+        });
+        expect(response.bytes.toString("utf8")).toBe(response.body);
+    });
+
+    it("stops after the redirect limit", async () => {
+        await expect(
+            policy({
+                OUTBOUND_URL_ALLOW_HTTP: true,
+                OUTBOUND_URL_ALLOW_PRIVATE_NETWORK: true,
+            }).getFollowingRedirects(`${baseUrl}/loop`, {
+                ...options,
+                maxRedirects: 2,
+            }),
+        ).rejects.toThrow("exceeded 2 redirects");
+    });
+
+    it("applies the policy to every redirect hop", async () => {
+        const service = policy({
+            OUTBOUND_URL_ALLOW_HTTP: true,
+            OUTBOUND_URL_ALLOW_PRIVATE_NETWORK: false,
+        });
+        // A public first hop that redirects to the cloud metadata endpoint.
+        const get = vi.spyOn(service, "get").mockResolvedValueOnce({
+            status: 302,
+            location: "http://169.254.169.254/latest/meta-data",
+            body: "",
+            bytes: Buffer.alloc(0),
+        });
+        await expect(
+            service.getFollowingRedirects("https://public.example/rulebook", {
+                ...options,
+                maxRedirects: 3,
+            }),
+        ).rejects.toThrow("private or loopback IP");
+        expect(get).toHaveBeenNthCalledWith(
+            2,
+            "http://169.254.169.254/latest/meta-data",
+            expect.anything(),
+        );
     });
 
     it("aborts responses larger than the limit", async () => {

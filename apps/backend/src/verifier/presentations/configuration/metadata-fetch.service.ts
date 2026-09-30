@@ -15,65 +15,39 @@ export class MetadataFetchService {
     constructor(private readonly outboundUrlPolicy: OutboundUrlPolicyService) {}
 
     async fetch(metadataUrl: string): Promise<string | object> {
-        let currentUrl = metadataUrl;
+        this.assertNoUserinfo(metadataUrl);
 
-        for (
-            let redirectCount = 0;
-            redirectCount <= this.maxRedirects;
-            redirectCount++
-        ) {
-            this.assertNoUserinfo(currentUrl);
-
-            const response = await this.outboundUrlPolicy
-                .get(currentUrl, {
-                    timeoutMs: this.timeoutMs,
-                    maxBytes: this.maxResponseBytes,
-                    headers: { accept: "application/json" },
-                })
-                .catch((error) => {
-                    if (error instanceof BadRequestException) throw error;
-                    throw new BadRequestException(
-                        `Failed to fetch issuer metadata from ${currentUrl}: ${error instanceof Error ? error.message : "unknown error"}`,
-                    );
-                });
-
-            if (response.status >= 300 && response.status < 400) {
-                const location = response.location;
-                if (!location) {
-                    throw new BadRequestException(
-                        `Issuer metadata response from ${currentUrl} returned a redirect without a location header`,
-                    );
-                }
-                currentUrl = new URL(location, currentUrl).toString();
-                continue;
-            }
-
-            if (response.status < 200 || response.status >= 300) {
+        const response = await this.outboundUrlPolicy
+            .getFollowingRedirects(metadataUrl, {
+                timeoutMs: this.timeoutMs,
+                maxBytes: this.maxResponseBytes,
+                maxRedirects: this.maxRedirects,
+                headers: { accept: "application/json" },
+            })
+            .catch((error) => {
+                if (error instanceof BadRequestException) throw error;
                 throw new BadRequestException(
-                    `Failed to fetch issuer metadata from ${currentUrl}: HTTP ${response.status}`,
+                    `Failed to fetch issuer metadata from ${metadataUrl}: ${error instanceof Error ? error.message : "unknown error"}`,
                 );
-            }
+            });
 
-            const text = response.body;
-            try {
-                return JSON.parse(text);
-            } catch {
-                if (
-                    /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(
-                        text,
-                    )
-                ) {
-                    return { signedJwt: text };
-                }
-                throw new BadRequestException(
-                    `Issuer metadata response from ${currentUrl} is not valid JSON or JWT`,
-                );
-            }
+        if (response.status < 200 || response.status >= 300) {
+            throw new BadRequestException(
+                `Failed to fetch issuer metadata from ${response.url}: HTTP ${response.status}`,
+            );
         }
 
-        throw new BadRequestException(
-            `Issuer metadata fetch exceeded ${this.maxRedirects} redirects`,
-        );
+        const text = response.body;
+        try {
+            return JSON.parse(text);
+        } catch {
+            if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(text)) {
+                return { signedJwt: text };
+            }
+            throw new BadRequestException(
+                `Issuer metadata response from ${response.url} is not valid JSON or JWT`,
+            );
+        }
     }
 
     buildCredentialIssuerMetadataUrl(inputUrl: string): string {
