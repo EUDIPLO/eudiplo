@@ -176,4 +176,56 @@ describe("buildJsonSchema", () => {
             validate({ nationalities: [{ country: "DE", extra: true }] }),
         ).toBe(false);
     });
+
+    it("treats children of an array field as properties of its items", () => {
+        const validate = compile([
+            {
+                path: ["driving_privileges"],
+                type: "array",
+                mandatory: true,
+                children: [
+                    {
+                        path: ["vehicle_category_code"],
+                        type: "string",
+                        mandatory: true,
+                    },
+                    {
+                        path: ["codes"],
+                        type: "array",
+                        children: [
+                            { path: ["code"], type: "string", mandatory: true },
+                        ],
+                    },
+                ],
+            },
+        ]);
+
+        expect(
+            validate({
+                driving_privileges: [
+                    { vehicle_category_code: "B", codes: [{ code: "B96" }] },
+                ],
+            }),
+        ).toBe(true);
+        expect(validate({ driving_privileges: [{ codes: [] }] })).toBe(false);
+        expect(
+            validate({
+                driving_privileges: [
+                    { vehicle_category_code: "B", codes: [{}] },
+                ],
+            }),
+        ).toBe(false);
+    });
+
+    it("keeps explicit item steps in children of an array field", () => {
+        const validate = compile([
+            {
+                path: ["nationalities"],
+                type: "array",
+                children: [{ path: [null, "country"], type: "string" }],
+            },
+        ]);
+
+        expect(validate({ nationalities: [{ country: "DE" }] })).toBe(true);
+    });
 });

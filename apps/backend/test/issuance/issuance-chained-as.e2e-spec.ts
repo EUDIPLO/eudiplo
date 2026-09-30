@@ -352,9 +352,13 @@ describe("Issuance - Chained AS Flow", () => {
             })
             .trustLocalhost()
             .redirects(0)
-            .expect(302);
+            .expect(200);
 
-        expect(authorizeResponse.headers.location).toContain("openid4vp://?");
+        expect(authorizeResponse.headers["content-type"]).toContain(
+            "text/html",
+        );
+        expect(authorizeResponse.headers["cache-control"]).toBe("no-store");
+        expect(authorizeResponse.text).toContain('href="openid4vp://?');
 
         const chainedAsSessionId = parResponse.body.request_uri.replace(
             "urn:ietf:params:oauth:request_uri:",

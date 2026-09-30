@@ -351,7 +351,9 @@ describe("OpenAPI contract", () => {
             "get",
         );
         expect(
-            chainedAsVpAuthorizeOperation.responses["302"].headers?.Location,
+            chainedAsVpAuthorizeOperation.responses["200"].content?.[
+                "text/html"
+            ],
         ).toBeTruthy();
 
         const sessionEventsOperation = getOperation(

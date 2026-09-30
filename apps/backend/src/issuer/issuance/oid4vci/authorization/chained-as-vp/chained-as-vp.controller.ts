@@ -29,6 +29,7 @@ import {
     ChainedAsTokenRequestDto,
     ChainedAsTokenResponseDto,
     extractDpopJkt,
+    renderWalletInvocationPage,
 } from "../shared/index.js";
 import { ChainedAsVpService } from "./chained-as-vp.service.js";
 
@@ -88,18 +89,14 @@ export class ChainedAsVpController {
     @ApiOperation({
         summary: "Authorization endpoint",
         description:
-            "Validates the request_uri and redirects the browser into an OID4VP wallet request.",
+            "Validates the request_uri and returns a page whose link opens the OID4VP wallet request.",
     })
     @ApiParam({ name: "tenantId", description: "Tenant identifier" })
     @ApiResponse({
-        status: 302,
-        description: "Redirect to OID4VP wallet invocation",
-        headers: {
-            Location: {
-                description: "Redirect target",
-                schema: { type: "string" },
-            },
-        },
+        status: 200,
+        description:
+            "HTML page with a link that opens the OID4VP wallet invocation",
+        content: { "text/html": { schema: { type: "string" } } },
     })
     @ApiResponse({ status: 400, type: ChainedAsErrorResponseDto })
     async authorize(
@@ -108,13 +105,15 @@ export class ChainedAsVpController {
         @Headers("origin") origin: string | undefined,
         @Res() res: Response,
     ): Promise<void> {
-        const redirectUrl = await this.chainedAsVpService.handleAuthorize(
+        const walletUrl = await this.chainedAsVpService.handleAuthorize(
             tenantId,
             query.client_id,
             query.request_uri,
             origin,
         );
-        res.redirect(redirectUrl);
+        res.set("Cache-Control", "no-store")
+            .type("html")
+            .send(renderWalletInvocationPage(walletUrl));
     }
 
     @Public()

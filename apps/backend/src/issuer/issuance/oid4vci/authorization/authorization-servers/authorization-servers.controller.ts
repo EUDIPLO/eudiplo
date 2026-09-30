@@ -27,6 +27,7 @@ import {
     ChainedAsTokenRequestDto,
     ChainedAsTokenResponseDto,
     extractDpopJkt,
+    renderWalletInvocationPage,
 } from "../shared/index.js";
 import { AuthorizationServersService } from "./authorization-servers.service.js";
 
@@ -93,8 +94,10 @@ export class AuthorizationServersController {
         description: "Authorization server identifier",
     })
     @ApiResponse({
-        status: 302,
-        description: "Redirect to OID4VP wallet invocation",
+        status: 200,
+        description:
+            "HTML page with a link that opens the OID4VP wallet invocation",
+        content: { "text/html": { schema: { type: "string" } } },
     })
     async authorize(
         @Param("tenantId") tenantId: string,
@@ -103,7 +106,7 @@ export class AuthorizationServersController {
         @Headers("origin") origin: string | undefined,
         @Res() res: Response,
     ): Promise<void> {
-        const redirectUrl =
+        const walletUrl =
             await this.authorizationServersService.handleAuthorize(
                 tenantId,
                 authorizationServerId,
@@ -111,7 +114,9 @@ export class AuthorizationServersController {
                 query.request_uri,
                 origin,
             );
-        res.redirect(redirectUrl);
+        res.set("Cache-Control", "no-store")
+            .type("html")
+            .send(renderWalletInvocationPage(walletUrl));
     }
 
     @Public()
