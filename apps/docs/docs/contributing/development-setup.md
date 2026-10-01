@@ -79,7 +79,7 @@ The project validates your environment variables on startup using Joi. If `PUBLI
 :::
 
 :::note[Outbound calls to local services]
-Webhooks, attribute providers and metadata imports reject HTTP and private or loopback targets by default, also in development. To call services running on your machine, enable `OUTBOUND_URL_ALLOW_HTTP=true` and `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK=true` in your `.env`. The dev container sets both.
+Webhooks, attribute providers, metadata imports and schema metadata publishing (rulebook and schema URLs) reject HTTP and private or loopback targets by default, also in development. To call services running on your machine, enable `OUTBOUND_URL_ALLOW_HTTP=true` and `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK=true` in your `.env`. The dev container sets both.
 :::
 
 :::caution[Skip flags]

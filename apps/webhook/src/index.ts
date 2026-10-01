@@ -50,8 +50,47 @@ function handleNotification(data: NotificationWebhookRequest): Response {
 }
 
 /**
- * Handle claims webhook for pre-authorized code flow with presentation.
- * Called after wallet presents credentials to derive claims for new credential.
+ * Sample values for claims the presented credential cannot provide, per
+ * credential configuration. Presented values take precedence.
+ */
+function sampleClaims(credentialConfigurationId: string): Record<string, unknown> {
+    const today = new Date();
+    const isoDate = (date: Date) => date.toISOString().slice(0, 10);
+    const inYears = (years: number) => {
+        const date = new Date(today);
+        date.setFullYear(date.getFullYear() + years);
+        return date;
+    };
+
+    switch (credentialConfigurationId) {
+        case "mdl":
+            return {
+                birth_date: "1964-08-12",
+                age_over_18: true,
+                document_number: "Z021AB37X13",
+                issue_date: isoDate(today),
+                expiry_date: isoDate(inYears(15)),
+                issuing_country: "DE",
+                issuing_authority: "Bundesrepublik Deutschland",
+                un_distinguishing_sign: "D",
+                driving_privileges: [
+                    {
+                        vehicle_category_code: "B",
+                        issue_date: isoDate(today),
+                        expiry_date: isoDate(inYears(15)),
+                        codes: [{ code: "B96", value: "4250", sign: "<=" }],
+                    },
+                ],
+            };
+        default:
+            return {};
+    }
+}
+
+/**
+ * Handle claims webhook for flows with a presentation.
+ * Called after the wallet presented credentials, e.g. to an OID4VP
+ * authorization server, to derive claims for the new credential.
  */
 function handleClaimsWithPresentation(data: ClaimsWebhookRequest): Response {
     console.log("Received claims webhook (presentation flow):");
@@ -65,29 +104,48 @@ function handleClaimsWithPresentation(data: ClaimsWebhookRequest): Response {
         );
     }
 
-    // Example: Extract locality from presented address credential
+    // Example: Take the disclosed values of the first presented credential
     const presentedCredential = data.credentials[0];
-    const disclosedValues = presentedCredential.values[0];
+    const disclosedValues = presentedCredential.values[0] ?? {};
+    console.log(
+        `  Presented credential '${presentedCredential.id}':`,
+        JSON.stringify(disclosedValues, null, 2),
+    );
+
+    const claims: Record<string, unknown> = {};
+    if (disclosedValues.given_name) {
+        claims.given_name = disclosedValues.given_name;
+    }
+    if (disclosedValues.family_name) {
+        claims.family_name = disclosedValues.family_name;
+    }
+    // SD-JWT PID uses `birthdate`, mdoc credentials use `birth_date`
+    const birthDate = disclosedValues.birth_date ?? disclosedValues.birthdate;
+    if (birthDate) {
+        claims.birth_date = birthDate;
+    }
 
     // Type-safe access with optional chaining
-    const address = disclosedValues?.address as
+    const address = disclosedValues.address as
         | { locality?: string }
         | undefined;
-    const locality = address?.locality;
+    // Claim schemas reject unknown claims, and the mDL has no `town`
+    if (address?.locality && data.credential_configuration_id !== "mdl") {
+        claims.town = `You live in ${address.locality}`;
+    }
 
-    if (!locality) {
+    if (Object.keys(claims).length === 0) {
         return Response.json(
-            { error: "Missing locality in presented credential" },
+            { error: "No usable claims in presented credential" },
             { status: 400 },
         );
     }
 
-    // Return claims for the requested credential configuration
+    // Return claims for the requested credential configuration, filling in
+    // sample values for mandatory claims the presentation did not provide
     const response: ClaimsWebhookResponse = createClaimsResponse(
         data.credential_configuration_id,
-        {
-            town: `You live in ${locality}`,
-        },
+        { ...sampleClaims(data.credential_configuration_id), ...claims },
     );
 
     console.log("Outgoing claims response:", JSON.stringify(response, null, 2));
@@ -97,15 +155,23 @@ function handleClaimsWithPresentation(data: ClaimsWebhookRequest): Response {
 /**
  * Handle unified claims webhook.
  * Supports both:
- * - Authorization code flow with external AS (when identity is present)
- * - Pre-authorized code flow with presentation (when credentials are present)
+ * - Flows with a presentation (when credentials are present)
+ * - Authorization code flow with external AS (when only identity is present)
  */
 function handleUnifiedClaims(data: ClaimsWebhookRequest): Response {
+    console.log("Incoming claims request:", JSON.stringify(data, null, 2));
+
     console.log("Received unified claims webhook:");
     console.log(`  Session: ${data.session}`);
     console.log(`  Credential Config: ${data.credential_configuration_id}`);
 
-    // Case 1: External AS flow - identity information is present
+    // Case 1: Presentation flow - credentials are present. Checked first,
+    // because an OID4VP authorization server sends identity as well.
+    if (hasCredentials(data)) {
+        return handleClaimsWithPresentation(data);
+    }
+
+    // Case 2: External AS flow - identity information is present
     if (hasIdentity(data)) {
         console.log(`  Identity from external AS:`);
         console.log(`    Issuer: ${data.identity.iss}`);
@@ -127,15 +193,10 @@ function handleUnifiedClaims(data: ClaimsWebhookRequest): Response {
 
         const response: ClaimsWebhookResponse = createClaimsResponse(
             data.credential_configuration_id,
-            claims,
+            { ...sampleClaims(data.credential_configuration_id), ...claims },
         );
         console.log("Outgoing unified claims response:", JSON.stringify(response, null, 2));
         return Response.json(response, { status: 200 });
-    }
-
-    // Case 2: Presentation flow - credentials are present
-    if (hasCredentials(data)) {
-        return handleClaimsWithPresentation(data);
     }
 
     // Case 3: No identity or credentials - return error or default claims

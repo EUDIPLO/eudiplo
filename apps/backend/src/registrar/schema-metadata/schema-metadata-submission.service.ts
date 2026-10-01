@@ -10,6 +10,10 @@ import {
 } from "../../issuer/configuration/credentials/dto/schema-meta-config.dto.js";
 import { buildJsonSchema } from "../../issuer/configuration/credentials/utils/index.js";
 import { TrustListService } from "../../issuer/trust-list/trustlist.service.js";
+import {
+    type OutboundFinalResponse,
+    OutboundUrlPolicyService,
+} from "../../webhook/outbound-url-policy.service.js";
 import { type CreateSchemaMetadataMultipartDto } from "../generated/index.js";
 import { type UpdateSchemaMetadataDto } from "./dto/schema-metadata.dto.js";
 import { SchemaMetadataService } from "./schema-metadata.service.js";
@@ -20,6 +24,11 @@ type TrustedAuthorityInput = NonNullable<
 
 type RegistrarMetadataPayload = CreateSchemaMetadataMultipartDto;
 
+/** Limits for fetching rulebooks and schemas referenced by URL. */
+const REMOTE_FILE_TIMEOUT_MS = 10_000;
+const REMOTE_FILE_MAX_BYTES = 5 * 1024 * 1024;
+const REMOTE_FILE_MAX_REDIRECTS = 3;
+
 @Injectable()
 export class SchemaMetadataSubmissionService {
     constructor(
@@ -28,6 +37,7 @@ export class SchemaMetadataSubmissionService {
         private readonly trustListService: TrustListService,
         private readonly keyChainService: KeyChainService,
         private readonly configService: ConfigService,
+        private readonly outboundUrlPolicy: OutboundUrlPolicyService,
     ) {}
 
     private extractConfiguredVct(credentialConfig: {
@@ -339,9 +349,18 @@ export class SchemaMetadataSubmissionService {
         fallbackFileName: string,
         label: string,
     ): Promise<Blob | File> {
-        let response: Response;
+        // Tenant-supplied URL: fetched under the shared outbound URL policy
+        // (no private targets, every redirect hop checked, bounded size/time).
+        let response: OutboundFinalResponse;
         try {
-            response = await fetch(sourceUrl);
+            response = await this.outboundUrlPolicy.getFollowingRedirects(
+                sourceUrl,
+                {
+                    timeoutMs: REMOTE_FILE_TIMEOUT_MS,
+                    maxBytes: REMOTE_FILE_MAX_BYTES,
+                    maxRedirects: REMOTE_FILE_MAX_REDIRECTS,
+                },
+            );
         } catch (error) {
             throw new BadRequestException(
                 `Failed to fetch ${label} (${sourceUrl}): ${
@@ -350,15 +369,14 @@ export class SchemaMetadataSubmissionService {
             );
         }
 
-        if (!response.ok) {
+        if (response.status < 200 || response.status >= 300) {
             throw new BadRequestException(
                 `Failed to fetch ${label} (${sourceUrl}): HTTP ${response.status}`,
             );
         }
 
-        const contentType =
-            response.headers.get("content-type") || "application/octet-stream";
-        const bytes = await response.arrayBuffer();
+        const contentType = response.contentType || "application/octet-stream";
+        const bytes = new Uint8Array(response.bytes);
 
         const parsedName = (() => {
             try {

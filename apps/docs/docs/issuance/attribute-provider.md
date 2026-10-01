@@ -139,17 +139,16 @@ When EUDIPLO calls your Attribute Provider endpoint, it sends a POST request wit
             "given_name": "John",
             "family_name": "Doe"
         }
-    },
-    "credentials": []
+    }
 }
 ```
 
-| Field                         | Type   | Description                                                  |
-| ----------------------------- | ------ | ------------------------------------------------------------ |
-| `session`                     | string | The session ID identifying the issuance request              |
-| `credential_configuration_id` | string | The ID of the credential configuration being requested       |
-| `identity`                    | object | Identity context from the authorization flow (see below)     |
-| `credentials`                 | array  | Presented credentials (only for IAE with presentation flows) |
+| Field                         | Type   | Description                                                                               |
+| ----------------------------- | ------ | ----------------------------------------------------------------------------------------- |
+| `session`                     | string | The session ID identifying the issuance request                                           |
+| `credential_configuration_id` | string | The ID of the credential configuration being requested                                    |
+| `identity`                    | object | Identity context from the authorization flow (see below)                                  |
+| `credentials`                 | array  | Verified presented credentials (only for OID4VP authorization servers, omitted otherwise) |
 
 ### Identity Object
 
@@ -163,39 +162,49 @@ The `identity` object contains information about the authenticated user. Its con
 
 #### Identity Sources by Flow
 
-| Flow                  | Identity Source                                                         |
-| --------------------- | ----------------------------------------------------------------------- |
-| **External AS**       | Claims from the external authorization server's access token            |
-| **Chained AS**        | Claims from the upstream OIDC provider (merged ID token + access token) |
-| **Pre-authenticated** | Not available (no user authentication)                                  |
-| **IAE**               | Identity from the IAE interaction (presentation or web redirect)        |
+| Flow                  | Identity Source                                                                                            |
+| --------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **External AS**       | Claims from the external authorization server's access token                                               |
+| **Chained AS**        | Claims from the upstream OIDC provider (merged ID token + access token)                                    |
+| **OID4VP AS**         | Access token claims of the tenant's OID4VP authorization server. The presented claims are in `credentials` |
+| **Pre-authenticated** | Not available (no user authentication)                                                                     |
+| **IAE**               | Identity from the IAE interaction (presentation or web redirect)                                           |
 
-### IAE Presentation Flows
+### Presentation-Based Authorization
 
-When using [Interactive Authorization (IAE)](../architecture/extension-points/iae.md) with an `openid4vp_presentation` action, the Attribute Provider receives the presented credentials in the `credentials` array:
+When the wallet authorizes through an [OID4VP authorization server](authorization.md#oid4vp-authorization-server), the Attribute Provider receives the verified claims of the presented credentials in the `credentials` array. There is one entry per credential ID of the presentation's DCQL query. `values` is an array with the disclosed claims of each presented credential, because a query with `multiple: true` can match more than one credential:
 
 ```json
 {
     "session": "a6318799-dff4-4b60-9d1d-58703611bd23",
     "credential_configuration_id": "citizen-credential",
     "identity": {
-        "iss": "https://idp.example.com",
-        "sub": "user-uuid"
+        "iss": "https://issuer.example.com/issuers/my-tenant/authorization-servers/pid-auth",
+        "sub": "wallet-client-id",
+        "token_claims": {
+            "issuer_state": "a6318799-dff4-4b60-9d1d-58703611bd23"
+        }
     },
     "credentials": [
         {
             "id": "pid",
-            "values": {
-                "given_name": "John",
-                "family_name": "Doe",
-                "birthdate": "1990-01-15"
-            }
+            "values": [
+                {
+                    "given_name": "John",
+                    "family_name": "Doe",
+                    "birthdate": "1990-01-15"
+                }
+            ]
         }
     ]
 }
 ```
 
 Your Attribute Provider can use the presented credentials to derive or transform claims for the new credential being issued.
+
+:::note
+The `openid4vp_presentation` action of [Interactive Authorization (IAE)](../architecture/extension-points/iae.md) does not verify the presented credentials, so they are not forwarded in `credentials`.
+:::
 
 ### Response Format
 
