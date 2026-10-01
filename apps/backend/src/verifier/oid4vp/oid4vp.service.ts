@@ -545,6 +545,77 @@ export class Oid4vpService {
     }
 
     /**
+     * Records an OAuth 2.0 error response from the wallet (e.g. the user
+     * declined) and marks the session as failed. Per OID4VP 1.0 §8.2 a
+     * successfully processed Authorization Error Response is answered with
+     * HTTP 200, optionally carrying a redirect_uri.
+     */
+    private async handleWalletError(
+        session: SessionData,
+        walletError: WalletErrorResponse,
+    ): Promise<{ redirect_uri?: string }> {
+        const errorMessage = walletError.error_description
+            ? `${walletError.error}: ${walletError.error_description}`
+            : walletError.error;
+
+        const logContext: AuditLogContext = {
+            sessionId: session.id,
+            tenantId: session.tenantId,
+            flowType: "OID4VP",
+            stage: "response_processing",
+        };
+
+        this.auditLogger.logFlowError(
+            logContext,
+            new Error(`Wallet error response: ${errorMessage}`),
+            {
+                action: "wallet_error_response",
+                errorCode: walletError.error,
+                errorDescription: walletError.error_description,
+            },
+        );
+
+        // The wallet's OAuth error code (e.g. `access_denied`) is already a
+        // stable, spec-defined code, so it becomes the session's failure code.
+        // Conditional on `consumed` so a late error response cannot overwrite
+        // a session a concurrent presentation already completed.
+        const reason = `Wallet error: ${errorMessage}`;
+        const updated = await this.sessionStore.updateIfUnconsumed(
+            session.tenantId,
+            session.id,
+            {
+                status: SessionStatus.Failed,
+                errorReason: reason,
+                failureCode: walletError.error,
+                outcome: {
+                    result: "failed",
+                    error: walletError.error,
+                    message: reason,
+                },
+                responseEncryptionPrivateJwk: null,
+            },
+        );
+        if (!updated) {
+            throw new BadRequestException(
+                "The presentation offer has already been used",
+            );
+        }
+        this.changeSessionState.announce(session, SessionStatus.Failed);
+
+        if (!session.redirectUri) {
+            return {};
+        }
+
+        const processedRedirectUri = decodeURIComponent(
+            session.redirectUri,
+        ).replaceAll("{sessionId}", session.id);
+        const separator = processedRedirectUri.includes("?") ? "&" : "?";
+        return {
+            redirect_uri: `${processedRedirectUri}${separator}error=${encodeURIComponent(walletError.error)}${walletError.error_description ? `&error_description=${encodeURIComponent(walletError.error_description)}` : ""}`,
+        };
+    }
+
+    /**
      * Processes the response from the wallet.
      * Per OID4VP spec Section 13.3, the nonce parameter is the walletNonce
      * from the URL path (not the session ID).
@@ -583,65 +654,10 @@ export class Oid4vpService {
             "session.requestId": session.requestId ?? "",
         });
 
-        // The expected state value is the walletNonce (or session.id for legacy sessions)
-
-        // Handle wallet error responses per OID4VP spec section 6.2
-        // When wallet cannot fulfill the request, it sends an OAuth 2.0 error response
-        if (body.error) {
-            const errorMessage = body.error_description
-                ? `${body.error}: ${body.error_description}`
-                : body.error;
-
-            // Create audit logging context for error response
-            const logContext: AuditLogContext = {
-                sessionId: session.id,
-                tenantId: session.tenantId,
-                flowType: "OID4VP",
-                stage: "response_processing",
-            };
-
-            this.auditLogger.logFlowError(
-                logContext,
-                new Error(`Wallet error response: ${errorMessage}`),
-                {
-                    action: "wallet_error_response",
-                    errorCode: body.error,
-                    errorDescription: body.error_description,
-                },
-            );
-
-            // Update session with failed status
-            const updated = await this.sessionStore.updateForTenant(
-                session.tenantId,
-                session.id,
-                {
-                    status: SessionStatus.Failed,
-                    errorReason: `Wallet error: ${errorMessage}`,
-                    responseEncryptionPrivateJwk: null,
-                },
-            );
-            if (updated > 0) {
-                this.changeSessionState.announce(session, SessionStatus.Failed);
-            }
-
-            // Return redirect_uri with error if configured
-            // and propagate HTTP 400 while preserving response body shape.
-            if (session.redirectUri) {
-                const processedRedirectUri = decodeURIComponent(
-                    session.redirectUri,
-                ).replaceAll("{sessionId}", session.id);
-
-                const separator = processedRedirectUri.includes("?")
-                    ? "&"
-                    : "?";
-                throw new BadRequestException({
-                    redirect_uri: `${processedRedirectUri}${separator}error=${encodeURIComponent(body.error)}${body.error_description ? `&error_description=${encodeURIComponent(body.error_description)}` : ""}`,
-                });
-            }
-
-            // Return empty response body (session status indicates failure)
-            // and propagate HTTP 400.
-            throw new BadRequestException({});
+        // Handle wallet error responses per OID4VP 1.0 §8.2: when the wallet
+        // cannot fulfill the request, it sends an OAuth 2.0 error response.
+        if (isWalletErrorResponse(body)) {
+            return this.handleWalletError(session, body);
         }
 
         // Ensure response field is present for success path
@@ -670,6 +686,11 @@ export class Oid4vpService {
             },
             "Decrypted OID4VP authorization response",
         );
+
+        // With direct_post.jwt the wallet may also encrypt its error response.
+        if (isWalletErrorResponse(decrypted)) {
+            return this.handleWalletError(session, decrypted);
+        }
 
         let res: AuthResponse;
         try {
@@ -824,9 +845,10 @@ export class Oid4vpService {
                 },
             );
 
-            // Per OID4VP spec, the verifier MUST always return HTTP 200.
-            // Validation failures are documented in the session and communicated
-            // via redirect_uri (if configured) or session status.
+            // An invalid presentation is not a successfully processed response,
+            // so it is answered with HTTP 400 (unlike a wallet error response).
+            // The failure is documented in the session and communicated via
+            // redirect_uri (if configured) or session status.
             const errorMessage = structured
                 ? structured.message
                 : error instanceof IncompletePresentationException
@@ -924,4 +946,21 @@ function presentationVerificationException(error: unknown): unknown {
         return new BadRequestException(error.message);
     }
     return error;
+}
+
+/** OAuth 2.0 Authorization Error Response sent by the wallet (OID4VP 1.0 §8.5). */
+interface WalletErrorResponse {
+    error: string;
+    error_description?: string;
+}
+
+/** True when a decrypted authorization response is an error response instead of a vp_token. */
+function isWalletErrorResponse(value: unknown): value is WalletErrorResponse {
+    if (!value || typeof value !== "object") return false;
+    const { error, error_description } = value as Record<string, unknown>;
+    return (
+        typeof error === "string" &&
+        (error_description === undefined ||
+            typeof error_description === "string")
+    );
 }

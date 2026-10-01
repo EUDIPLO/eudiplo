@@ -174,3 +174,96 @@ describe("OID4VP concurrent response handling", () => {
         expect(publish).not.toHaveBeenCalled();
     });
 });
+
+describe("OID4VP wallet error response handling", () => {
+    function createService(redirectUri?: string) {
+        const session = {
+            id: "session",
+            tenantId: "tenant",
+            walletNonce: "expected",
+            requestId: "presentation",
+            consumed: false,
+            redirectUri,
+            responseEncryptionPrivateJwk: { kty: "oct", k: "secret" },
+        };
+        const update = vi.fn().mockResolvedValue(true);
+        const announce = vi.fn();
+        const decrypt = vi.fn().mockResolvedValue({
+            error: "access_denied",
+            error_description: "User declined",
+            state: "expected",
+        });
+        const service = Object.assign(
+            Object.create(Oid4vpService.prototype) as Oid4vpService,
+            {
+                resolveSessionByNonce: vi.fn().mockResolvedValue(session),
+                logger: { debug: vi.fn() },
+                traceService: { getSpan: () => undefined },
+                encryptionService: { decryptJweWithPrivateJwk: decrypt },
+                parseAuthorizationResponse: new ParseAuthorizationResponse(),
+                auditLogger: { logFlowError: vi.fn() },
+                sessionStore: { updateIfUnconsumed: update },
+                changeSessionState: { announce },
+            },
+        );
+        return { service, session, update, announce, decrypt };
+    }
+
+    it.each([
+        [
+            "plain",
+            { error: "access_denied", error_description: "User declined" },
+        ],
+        ["encrypted", { response: "encrypted" }],
+    ])(
+        "marks the session failed and returns without an exception for a %s error response",
+        async (_kind, body) => {
+            const { service, session, update, announce } = createService();
+
+            await expect(
+                service.getResponse(body, "expected"),
+            ).resolves.toEqual({});
+            expect(update).toHaveBeenCalledExactlyOnceWith(
+                "tenant",
+                "session",
+                {
+                    status: "failed",
+                    errorReason: "Wallet error: access_denied: User declined",
+                    failureCode: "access_denied",
+                    outcome: {
+                        result: "failed",
+                        error: "access_denied",
+                        message: "Wallet error: access_denied: User declined",
+                    },
+                    responseEncryptionPrivateJwk: null,
+                },
+            );
+            expect(announce).toHaveBeenCalledExactlyOnceWith(session, "failed");
+        },
+    );
+
+    it("returns the redirect_uri with the wallet error for an encrypted error response", async () => {
+        const { service } = createService(
+            "https://client.example/complete/{sessionId}",
+        );
+
+        await expect(
+            service.getResponse({ response: "encrypted" }, "expected"),
+        ).resolves.toEqual({
+            redirect_uri:
+                "https://client.example/complete/session?error=access_denied&error_description=User%20declined",
+        });
+    });
+
+    it("does not overwrite a session a concurrent presentation already completed", async () => {
+        const { service, update, announce } = createService();
+        update.mockResolvedValue(false);
+
+        const error = await service
+            .getResponse({ error: "access_denied" }, "expected")
+            .catch((error) => error);
+
+        expect(error.getStatus()).toBe(400);
+        expect(announce).not.toHaveBeenCalled();
+    });
+});

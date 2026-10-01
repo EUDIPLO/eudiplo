@@ -431,7 +431,7 @@ describe("Presentation - Direct Post Security (Section 13.3)", () => {
                 error_description: "User declined",
                 state: walletNonce,
             })
-            .expect(400);
+            .e.expect(200);
 
         // Error redirect should NOT include a response_code
         expect(errorRes.body.redirect_uri).toBeDefined();

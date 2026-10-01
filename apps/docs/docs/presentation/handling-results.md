@@ -277,6 +277,31 @@ Detailed diagnostics for every failure are written to the audit log with the
 `error` code attached, so an operator can correlate a user-facing failure with
 the full reason without exposing it.
 
+### Wallet Error Responses
+
+When the wallet does not return a presentation — for example because the user
+declined the request — it sends an OAuth 2.0 error response
+([OID4VP 1.0 §8.5](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-error-response))
+instead of a `vp_token`. EUDIPLO accepts it both as plain form parameters and,
+for `direct_post.jwt`, inside the encrypted `response`.
+
+Per OID4VP 1.0 §8.2 a processed error response is answered with HTTP `200`.
+The session status is set to `failed` and the wallet's error is recorded:
+
+| Field         | Value                                                                  |
+| ------------- | ---------------------------------------------------------------------- |
+| `failureCode` | The wallet's `error` code, e.g. `access_denied`                        |
+| `outcome`     | `{ "result": "failed", "error": "<code>", "message": "<errorReason>" }` |
+| `errorReason` | `Wallet error: <error>: <error_description>`                           |
+
+Common codes are `access_denied` (the user declined), `invalid_request`,
+`vp_formats_not_supported` and `wallet_unavailable`. They come from the wallet,
+not from EUDIPLO's verification taxonomy above.
+
+If a `redirect_uri` is configured, the wallet is redirected to it with the
+wallet's `error` and `error_description` appended as query parameters, and
+without a `response_code`.
+
 ## Related Documentation
 
 - [Webhooks](../architecture/extension-points/webhooks.md) — Webhook integration patterns

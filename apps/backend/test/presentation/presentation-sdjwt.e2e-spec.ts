@@ -331,7 +331,7 @@ describe("Presentation - SD-JWT Credential", () => {
                 error_description: "User cancelled the presentation request",
                 state: sessionId,
             })
-            .expect(400); // OID4VP spec requires 400 response
+            .expect(200); // OID4VP 1.0 §8.2: processed error responses get 200
 
         // Verify response is empty (no redirect_uri configured)
         expect(errorResponse.body).toEqual({});
@@ -349,6 +349,11 @@ describe("Presentation - SD-JWT Credential", () => {
         expect(sessionRes.body.errorReason).toContain(
             "User cancelled the presentation request",
         );
+        expect(sessionRes.body.failureCode).toBe("access_denied");
+        expect(sessionRes.body.outcome).toMatchObject({
+            result: "failed",
+            error: "access_denied",
+        });
     });
 
     test("should reject credential signed by untrusted issuer (not in trust list)", async () => {
