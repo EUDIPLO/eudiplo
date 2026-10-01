@@ -12,7 +12,10 @@ import {
     ConfigImportOrchestratorService,
     ImportPhase,
 } from "../../platform/config-import/config-import-orchestrator.service.js";
-import { CertificateBuilderService } from "./cert/certificate-builder.service.js";
+import {
+    CertificateBuilderService,
+    certificateNotBefore,
+} from "./cert/certificate-builder.service.js";
 import { KeyChainImportDto } from "./dto/key-chain-import.dto.js";
 import { KeyChainEntity, KeyUsage } from "./entities/key-chain.entity.js";
 import type { KmsAdapter, KmsKeyRef } from "./kms/kms-adapter.js";
@@ -143,7 +146,7 @@ export class KeyChainImportService {
                 activeMat.ref,
                 tenant.name,
                 hostname,
-                now,
+                certificateNotBefore(now),
                 notAfter,
             );
         }
@@ -232,7 +235,7 @@ export class KeyChainImportService {
                 rootMat.ref,
                 `${subjectCN} Root CA`,
                 hostname,
-                now,
+                certificateNotBefore(now),
                 rootNotAfter,
             );
         }
@@ -252,7 +255,7 @@ export class KeyChainImportService {
             subjectPublicJwk: activeMat.ref.publicJwk,
             subjectCN,
             hostname,
-            notBefore: now,
+            notBefore: certificateNotBefore(now),
             notAfter,
         });
 
