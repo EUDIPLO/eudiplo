@@ -11,6 +11,7 @@ import { WEBHOOK_VALIDATION_SCHEMA } from "../../webhook/webhook-validation.sche
 import { ENCRYPTION_VALIDATION_SCHEMA } from "../data-encryption/encryption-validation.schema.js";
 import { LOG_VALIDATION_SCHEMA } from "../observability/log-validation.schema.js";
 import { CONFIG_VALIDATION_SCHEMA } from "./config-validation.schema.js";
+import { CORS_VALIDATION_SCHEMA } from "./cors-validation.schema.js";
 import { SKIP_VALIDATION_SCHEMA } from "./skip-validation.schema.js";
 import { TLS_VALIDATION_SCHEMA } from "./tls-validation.schema.js";
 import { BASE_VALIDATION_SCHEMA } from "./validation.schema.js";
@@ -23,6 +24,7 @@ export const VALIDATION_SCHEMA = BASE_VALIDATION_SCHEMA.concat(
 )
     .concat(DB_VALIDATION_SCHEMA)
     .concat(CONFIG_VALIDATION_SCHEMA)
+    .concat(CORS_VALIDATION_SCHEMA)
     .concat(LOG_VALIDATION_SCHEMA)
     .concat(CRYPTO_VALIDATION_SCHEMA)
     .concat(ISSUER_VALIDATION_SCHEMA)
