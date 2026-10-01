@@ -50,6 +50,44 @@ function handleNotification(data: NotificationWebhookRequest): Response {
 }
 
 /**
+ * Sample values for claims the presented credential cannot provide, per
+ * credential configuration. Presented values take precedence.
+ */
+function sampleClaims(credentialConfigurationId: string): Record<string, unknown> {
+    const today = new Date();
+    const isoDate = (date: Date) => date.toISOString().slice(0, 10);
+    const inYears = (years: number) => {
+        const date = new Date(today);
+        date.setFullYear(date.getFullYear() + years);
+        return date;
+    };
+
+    switch (credentialConfigurationId) {
+        case "mdl":
+            return {
+                birth_date: "1964-08-12",
+                age_over_18: true,
+                document_number: "Z021AB37X13",
+                issue_date: isoDate(today),
+                expiry_date: isoDate(inYears(15)),
+                issuing_country: "DE",
+                issuing_authority: "Bundesrepublik Deutschland",
+                un_distinguishing_sign: "D",
+                driving_privileges: [
+                    {
+                        vehicle_category_code: "B",
+                        issue_date: isoDate(today),
+                        expiry_date: isoDate(inYears(15)),
+                        codes: [{ code: "B96", value: "4250", sign: "<=" }],
+                    },
+                ],
+            };
+        default:
+            return {};
+    }
+}
+
+/**
  * Handle claims webhook for flows with a presentation.
  * Called after the wallet presented credentials, e.g. to an OID4VP
  * authorization server, to derive claims for the new credential.
@@ -81,12 +119,18 @@ function handleClaimsWithPresentation(data: ClaimsWebhookRequest): Response {
     if (disclosedValues.family_name) {
         claims.family_name = disclosedValues.family_name;
     }
+    // SD-JWT PID uses `birthdate`, mdoc credentials use `birth_date`
+    const birthDate = disclosedValues.birth_date ?? disclosedValues.birthdate;
+    if (birthDate) {
+        claims.birth_date = birthDate;
+    }
 
     // Type-safe access with optional chaining
     const address = disclosedValues.address as
         | { locality?: string }
         | undefined;
-    if (address?.locality) {
+    // Claim schemas reject unknown claims, and the mDL has no `town`
+    if (address?.locality && data.credential_configuration_id !== "mdl") {
         claims.town = `You live in ${address.locality}`;
     }
 
@@ -97,10 +141,11 @@ function handleClaimsWithPresentation(data: ClaimsWebhookRequest): Response {
         );
     }
 
-    // Return claims for the requested credential configuration
+    // Return claims for the requested credential configuration, filling in
+    // sample values for mandatory claims the presentation did not provide
     const response: ClaimsWebhookResponse = createClaimsResponse(
         data.credential_configuration_id,
-        claims,
+        { ...sampleClaims(data.credential_configuration_id), ...claims },
     );
 
     console.log("Outgoing claims response:", JSON.stringify(response, null, 2));
@@ -146,7 +191,7 @@ function handleUnifiedClaims(data: ClaimsWebhookRequest): Response {
 
         const response: ClaimsWebhookResponse = createClaimsResponse(
             data.credential_configuration_id,
-            claims,
+            { ...sampleClaims(data.credential_configuration_id), ...claims },
         );
         console.log("Outgoing unified claims response:", JSON.stringify(response, null, 2));
         return Response.json(response, { status: 200 });
