@@ -29,6 +29,41 @@ describe("shared configuration values", () => {
         expect(JSON.stringify(result.issues)).not.toContain("private-value");
         expect(input["a/b~c"][1]).toBe("${EMPTY:fallback}");
     });
+    it("matches the placeholder grammar on edge cases", () => {
+        const env = { A: "a", B_1: "b" };
+        const cases: Array<[string, string]> = [
+            ["x${A}y${B_1}z", "xaybz"],
+            ["${A:ignored}", "a"],
+            ["${MISSING:fall:back}", "fall:back"],
+            ["${MISSING:${A}}", "${A}"],
+            ["${${A}", "${a"],
+            ["${a}", "${a}"],
+            ["${}", "${}"],
+            ["${A", "${A"],
+            ["${A:no-close", "${A:no-close"],
+            ["$${A}", "$a"],
+            ["${A-}${A}", "${A-}a"],
+        ];
+        for (const [input, expected] of cases) {
+            expect(resolveConfigVariables(input, env).value).toBe(expected);
+            // Reference: the original regex-based implementation.
+            expect(
+                input.replace(
+                    /\$\{([A-Z0-9_]+)(?::([^}]*))?\}/g,
+                    (match, variable: string, fallback?: string) =>
+                        (env as Record<string, string>)[variable] ??
+                        fallback ??
+                        match,
+                ),
+            ).toBe(expected);
+        }
+    });
+    it("resolves unterminated placeholders in linear time", () => {
+        const input = "${A:".repeat(100_000);
+        const started = performance.now();
+        expect(resolveConfigVariables(input, {}).value).toBe(input);
+        expect(performance.now() - started).toBeLessThan(1000);
+    });
     it("preserves array order but ignores object key order", () => {
         expect(stableConfigJson({ b: 2, a: 1 })).toBe(
             stableConfigJson({ a: 1, b: 2 }),

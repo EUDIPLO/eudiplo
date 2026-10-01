@@ -49,6 +49,7 @@ If you start creation from a linked credential configuration, EUDIPLO can associ
 - Manual entry of schema format/URI and trust list URLs is not required in the current flow.
 - On submit, EUDIPLO sends references (`credentialConfigId`, `trustListId`) and resolves details server-side.
 - The backend uploads schema assets to the registrar, resolves trust list verification data, and computes integrity values during signing.
+- The backend downloads the `rulebookURI` (and any schema URIs given by URL) before uploading them. These downloads follow the [outbound URL policy](../architecture/security.md#https-and-tls): HTTPS only and no private or loopback targets by default, at most 5 MB each, and every redirect is checked.
 
 ## Versioning
 
