@@ -460,7 +460,7 @@ The HTTP request logger skips the management API (`/api`), `/health` and `/metri
 
 EUDIPLO does not enforce HTTPS for incoming requests; run it behind a reverse proxy that terminates TLS, and set `PUBLIC_URL` to the HTTPS URL. Wallets and the EUDI protocols expect HTTPS for all issuer and verifier endpoints.
 
-For **outgoing** requests to tenant-configured URLs (webhook endpoints, attribute providers and issuer metadata fetched during presentation verification), EUDIPLO applies an outbound URL policy that protects against SSRF. HTTP targets and private, loopback or link-local addresses are rejected by default, independent of `NODE_ENV`. Enable the relaxations explicitly where needed, for example for local development or for services inside the same cluster:
+For **outgoing** requests to tenant-configured URLs (webhook endpoints, attribute providers, issuer metadata fetched during presentation verification, and rulebooks and schemas fetched when publishing schema metadata), EUDIPLO applies an outbound URL policy that protects against SSRF. HTTP targets and private, loopback or link-local addresses are rejected by default, independent of `NODE_ENV`. Redirects are followed only for metadata, rulebook and schema fetches, and every hop is checked again. Enable the relaxations explicitly where needed, for example for local development or for services inside the same cluster:
 
 | Variable                             | Default | Effect                                                                                                 |
 | ------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------ |

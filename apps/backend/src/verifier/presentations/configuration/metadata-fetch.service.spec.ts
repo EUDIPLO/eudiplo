@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MetadataFetchService } from "./metadata-fetch.service.js";
 
 describe("MetadataFetchService", () => {
-    const outbound = { get: vi.fn() };
+    const outbound = { getFollowingRedirects: vi.fn() };
     const service = new MetadataFetchService(outbound as never);
 
     beforeEach(() => {
-        outbound.get.mockReset();
+        outbound.getFollowingRedirects.mockReset();
     });
 
     it("canonicalizes issuer URLs", () => {
@@ -29,56 +29,69 @@ describe("MetadataFetchService", () => {
     });
 
     it("normalizes raw JWT responses", async () => {
-        outbound.get.mockResolvedValue({
+        outbound.getFollowingRedirects.mockResolvedValue({
             status: 200,
+            url: "https://issuer.example/meta",
             body: "header.payload.signature",
         });
 
         await expect(
             service.fetch("https://issuer.example/meta"),
         ).resolves.toEqual({ signedJwt: "header.payload.signature" });
-        expect(outbound.get).toHaveBeenCalledWith(
+        expect(outbound.getFollowingRedirects).toHaveBeenCalledWith(
             "https://issuer.example/meta",
             expect.objectContaining({
                 headers: { accept: "application/json" },
                 timeoutMs: 5000,
+                maxRedirects: 3,
             }),
         );
     });
 
-    it("checks every redirect hop against the outbound policy", async () => {
-        outbound.get
-            .mockResolvedValueOnce({ status: 302, location: "/next", body: "" })
-            .mockResolvedValueOnce({ status: 200, body: '{"ok":true}' });
-
-        await expect(
-            service.fetch("https://issuer.example/meta"),
-        ).resolves.toEqual({ ok: true });
-        expect(outbound.get).toHaveBeenNthCalledWith(
-            2,
-            "https://issuer.example/next",
-            expect.anything(),
-        );
-    });
-
     it("maps policy rejections and HTTP errors to bad requests", async () => {
-        outbound.get.mockRejectedValueOnce(
+        outbound.getFollowingRedirects.mockRejectedValueOnce(
             new BadRequestException("Outbound URL host is not allowed"),
         );
         await expect(
             service.fetch("https://internal.example/meta"),
         ).rejects.toThrow("Outbound URL host is not allowed");
 
-        outbound.get.mockResolvedValueOnce({ status: 500, body: "" });
+        outbound.getFollowingRedirects.mockResolvedValueOnce({
+            status: 500,
+            url: "https://issuer.example/meta",
+            body: "",
+        });
         await expect(
             service.fetch("https://issuer.example/meta"),
         ).rejects.toThrow("HTTP 500");
+    });
+
+    it("wraps transport errors and rejects non-JSON bodies", async () => {
+        outbound.getFollowingRedirects.mockRejectedValueOnce(
+            new Error("socket hang up"),
+        );
+        await expect(
+            service.fetch("https://issuer.example/meta"),
+        ).rejects.toThrow(
+            "Failed to fetch issuer metadata from https://issuer.example/meta: socket hang up",
+        );
+
+        outbound.getFollowingRedirects.mockResolvedValueOnce({
+            status: 200,
+            url: "https://issuer.example/final",
+            body: "<html></html>",
+        });
+        await expect(
+            service.fetch("https://issuer.example/meta"),
+        ).rejects.toThrow(
+            "Issuer metadata response from https://issuer.example/final is not valid JSON or JWT",
+        );
     });
 
     it("rejects userinfo in URLs before any request", async () => {
         await expect(
             service.fetch("https://user:pass@issuer.example/meta"),
         ).rejects.toThrow("userinfo");
-        expect(outbound.get).not.toHaveBeenCalled();
+        expect(outbound.getFollowingRedirects).not.toHaveBeenCalled();
     });
 });

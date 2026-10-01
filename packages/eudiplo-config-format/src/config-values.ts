@@ -3,6 +3,44 @@ export interface PlaceholderIssue {
     variable: string;
     message: string;
 }
+const isVariableChar = (char: string) =>
+    (char >= "A" && char <= "Z") || (char >= "0" && char <= "9") || char === "_";
+/**
+ * Replaces `${VAR}` and `${VAR:fallback}` in one linear scan. Equivalent to
+ * `/\$\{([A-Z0-9_]+)(?::([^}]*))?\}/g`, which backtracks polynomially on
+ * inputs like repeated `${A:` without a closing brace.
+ */
+function replacePlaceholders(
+    input: string,
+    replace: (match: string, variable: string, fallback?: string) => string,
+): string {
+    let output = "";
+    let copied = 0;
+    let start = input.indexOf("${");
+    while (start !== -1) {
+        let cursor = start + 2;
+        while (cursor < input.length && isVariableChar(input[cursor])) cursor++;
+        const variable = input.slice(start + 2, cursor);
+        let end = -1;
+        let fallback: string | undefined;
+        if (variable && input[cursor] === "}") end = cursor;
+        else if (variable && input[cursor] === ":") {
+            end = input.indexOf("}", cursor + 1);
+            // No closing brace anywhere after this point: nothing else can match.
+            if (end === -1) break;
+            fallback = input.slice(cursor + 1, end);
+        }
+        if (end === -1) {
+            start = input.indexOf("${", start + 2);
+            continue;
+        }
+        output += input.slice(copied, start);
+        output += replace(input.slice(start, end + 1), variable, fallback);
+        copied = end + 1;
+        start = input.indexOf("${", copied);
+    }
+    return output + input.slice(copied);
+}
 /** Resolve one pass only: environment values are data, never another template. */
 export function resolveConfigVariables<T>(
     input: T,
@@ -12,8 +50,8 @@ export function resolveConfigVariables<T>(
     const seen = new WeakMap<object, unknown>();
     function visit(value: any, path: string): any {
         if (typeof value === "string")
-            return value.replace(
-                /\$\{([A-Z0-9_]+)(?::([^}]*))?\}/g,
+            return replacePlaceholders(
+                value,
                 (match, variable: string, fallback?: string) => {
                     if (env[variable] !== undefined && env[variable] !== "")
                         return env[variable];

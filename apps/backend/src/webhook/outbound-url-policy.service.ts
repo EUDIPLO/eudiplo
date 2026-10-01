@@ -10,7 +10,22 @@ import { ConfigService } from "@nestjs/config";
 export interface OutboundResponse {
     status: number;
     location?: string;
+    contentType?: string;
+    /** UTF-8 decoding of {@link bytes}. */
     body: string;
+    bytes: Buffer;
+}
+
+/** Final response of {@link OutboundUrlPolicyService.getFollowingRedirects}. */
+export interface OutboundFinalResponse extends OutboundResponse {
+    /** URL of the last hop, which produced this response. */
+    url: string;
+}
+
+interface OutboundGetOptions {
+    timeoutMs: number;
+    maxBytes: number;
+    headers?: Record<string, string>;
 }
 
 @Injectable()
@@ -60,11 +75,7 @@ export class OutboundUrlPolicyService {
      */
     async get(
         url: string,
-        options: {
-            timeoutMs: number;
-            maxBytes: number;
-            headers?: Record<string, string>;
-        },
+        options: OutboundGetOptions,
     ): Promise<OutboundResponse> {
         await this.assertSafeUrl(url);
         const target = new URL(url);
@@ -109,10 +120,13 @@ export class OutboundUrlPolicyService {
                     response.on("end", () => {
                         if (settled) return;
                         settled = true;
+                        const bytes = Buffer.concat(chunks);
                         resolve({
                             status: response.statusCode ?? 0,
                             location: response.headers.location,
-                            body: Buffer.concat(chunks).toString("utf8"),
+                            contentType: response.headers["content-type"],
+                            body: bytes.toString("utf8"),
+                            bytes,
                         });
                     });
                     response.on("error", fail);
@@ -128,6 +142,32 @@ export class OutboundUrlPolicyService {
             request.on("error", fail);
             request.end();
         });
+    }
+
+    /**
+     * {@link get} that follows up to `maxRedirects` redirects. Every hop goes
+     * through {@link get}, so a public URL cannot redirect to a blocked target.
+     */
+    async getFollowingRedirects(
+        url: string,
+        options: OutboundGetOptions & { maxRedirects: number },
+    ): Promise<OutboundFinalResponse> {
+        let currentUrl = url;
+        for (let hop = 0; hop <= options.maxRedirects; hop++) {
+            const response = await this.get(currentUrl, options);
+            if (response.status < 300 || response.status >= 400) {
+                return { ...response, url: currentUrl };
+            }
+            if (!response.location) {
+                throw new BadRequestException(
+                    `Redirect from ${currentUrl} has no location header`,
+                );
+            }
+            currentUrl = new URL(response.location, currentUrl).toString();
+        }
+        throw new BadRequestException(
+            `Outbound request exceeded ${options.maxRedirects} redirects`,
+        );
     }
 
     async assertSafeUrl(url: string): Promise<void> {
