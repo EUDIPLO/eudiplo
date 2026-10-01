@@ -159,6 +159,8 @@ function handleClaimsWithPresentation(data: ClaimsWebhookRequest): Response {
  * - Authorization code flow with external AS (when only identity is present)
  */
 function handleUnifiedClaims(data: ClaimsWebhookRequest): Response {
+    console.log("Incoming claims request:", JSON.stringify(data, null, 2));
+
     console.log("Received unified claims webhook:");
     console.log(`  Session: ${data.session}`);
     console.log(`  Credential Config: ${data.credential_configuration_id}`);
