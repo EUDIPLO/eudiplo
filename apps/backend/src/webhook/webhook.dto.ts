@@ -3,17 +3,22 @@ import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
 import type { WebhookConfiguration } from "./domain/webhook-configuration.js";
 import { WebhookAuthType as AuthConfig } from "./domain/webhook-configuration.js";
+import {
+    ApiKeyConfigSchema,
+    WebHookAuthConfigHeaderSchema,
+    WebHookAuthConfigNoneSchema,
+    WebHookAuthConfigSchema,
+    WebhookConfigSchema,
+} from "./webhook.dto.schema.js";
+
+export {
+    WebHookAuthConfigSchema,
+    WebhookConfigSchema,
+} from "./webhook.dto.schema.js";
 
 /**
  * Configuration for API key authentication in webhooks.
  */
-const ApiKeyConfigSchema = z
-    .object({
-        headerName: z.string(),
-        value: z.string(),
-    })
-    .strict();
-
 export class ApiKeyConfig extends createZodDto(ApiKeyConfigSchema) {
     /**
      * The name of the header where the API key will be sent.
@@ -33,13 +38,6 @@ export { WebhookAuthType as AuthConfig } from "./domain/webhook-configuration.js
 /**
  * Configuration for webhook authentication.
  */
-const WebHookAuthConfigHeaderSchema = z
-    .object({
-        type: z.literal(AuthConfig.API_KEY),
-        config: ApiKeyConfigSchema,
-    })
-    .strict();
-
 export class WebHookAuthConfigHeader extends createZodDto(
     WebHookAuthConfigHeaderSchema,
 ) {
@@ -54,12 +52,6 @@ export class WebHookAuthConfigHeader extends createZodDto(
     config!: ApiKeyConfig;
 }
 
-const WebHookAuthConfigNoneSchema = z
-    .object({
-        type: z.literal(AuthConfig.NONE),
-    })
-    .strict();
-
 export class WebHookAuthConfigNone extends createZodDto(
     WebHookAuthConfigNoneSchema,
 ) {
@@ -68,19 +60,6 @@ export class WebHookAuthConfigNone extends createZodDto(
      */
     type!: typeof AuthConfig.NONE;
 }
-
-export const WebHookAuthConfigSchema = z.discriminatedUnion("type", [
-    WebHookAuthConfigNoneSchema,
-    WebHookAuthConfigHeaderSchema,
-]);
-
-export const WebhookConfigSchema = z
-    .object({
-        url: z.string(),
-        auth: WebHookAuthConfigSchema,
-        includeRawTokensFor: z.array(z.string()).optional(),
-    })
-    .strict();
 
 /**
  * Configuration for webhooks used in various services.

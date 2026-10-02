@@ -10,18 +10,15 @@ Use this page for request payload shape and override behavior. For defining what
 
 - `POST /verifier/offer`
 
-## Request Fields
+## Request Body
 
-| Field              | Required | Description                                                           |
-| ------------------ | -------- | --------------------------------------------------------------------- |
-| `response_type`    | Yes      | Response mode. Supported values: `uri`, `dc-api`, `iso-18013-7`.      |
-| `requestId`        | Yes      | ID of the presentation configuration to use.                          |
-| `webhook`          | No       | Inline webhook override for this request.                             |
-| `redirectUri`      | No       | Redirect target after completion. Supports `{sessionId}` placeholder. |
-| `transaction_data` | No       | Transaction data override for this request.                           |
-| `skewSeconds`      | No       | Clock skew override in seconds for credential JWT time validation.    |
-| `expected_origin`  | No       | Browser origin for DC API flows. Falls back to the `Origin` header.   |
-| `clientIdScheme`   | No       | Client ID scheme: `x509_hash` (default) or `x509_san_dns`.            |
+import RequestBodyJson from "@site/src/components/RequestBodyJson";
+
+The annotated JSON view below is generated from the request DTO's Zod schema at docs build time. It shows all fields, including optional ones; placeholder values and comments are for reference, not a ready-to-send payload. Nested webhook authentication shows one variant inline and the other as a comment.
+
+<RequestBodyJson />
+
+For `dc-api`, `expected_origin` falls back to the request's `Origin` header when omitted. For `iso-18013-7`, it must match the calling page's origin as described below.
 
 When `clientIdScheme` is `x509_san_dns`, EUDIPLO uses the first DNS Subject Alternative Name from the active access certificate as the OID4VP client ID. The request fails if the certificate does not contain a DNS Subject Alternative Name.
 
