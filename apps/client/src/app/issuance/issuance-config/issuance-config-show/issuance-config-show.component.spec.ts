@@ -19,4 +19,17 @@ describe('IssuanceConfigShowComponent', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  it('shows the effective default token lifetime per authorization server type', () => {
+    component.config = {
+      authorizationServers: [
+        { type: 'built-in', id: 'issuer-built-in' },
+        { type: 'chained', id: 'chained' },
+        { type: 'oid4vp', id: 'vp', token: { lifetimeSeconds: 900 } },
+      ],
+    } as any;
+    expect(component.authorizationServerRows.map((row) => row.tokenLifetime)).toEqual([
+      300, 3600, 900,
+    ]);
+  });
 });

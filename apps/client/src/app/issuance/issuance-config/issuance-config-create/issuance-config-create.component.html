@@ -565,8 +565,15 @@
                                     type="number"
                                     formControlName="lifetimeSeconds"
                                     min="60"
-                                    placeholder="3600"
+                                    placeholder="{{
+                                      accessTokenLifetimeDefault(server.get('type')?.value)
+                                    }}"
                                   />
+                                  <mat-hint
+                                    >Default:
+                                    {{ accessTokenLifetimeDefault(server.get('type')?.value) }}
+                                    seconds</mat-hint
+                                  >
                                 </mat-form-field>
                                 <mat-form-field fxFlex>
                                   <mat-label>Signing Key ID (optional)</mat-label>

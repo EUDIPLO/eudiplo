@@ -17,7 +17,10 @@ import { decodeJwt, decodeProtectedHeader } from 'jose';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { IssuanceConfig } from '@eudiplo/sdk-core';
 import { downloadJsonFile } from '../../../common/download-json.util';
-import { IssuanceConfigService } from '../issuance-config.service';
+import {
+  defaultAccessTokenLifetimeSeconds,
+  IssuanceConfigService,
+} from '../issuance-config.service';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../../config-portability/config-ownership-notice.component';
 
@@ -252,7 +255,8 @@ export class IssuanceConfigShowComponent implements OnInit {
           preferred: false,
           enabled: server.enabled !== false,
           dpop: server.requireDPoP ? 'required' : 'optional',
-          tokenLifetime: server?.token?.lifetimeSeconds || 3600,
+          tokenLifetime:
+            server?.token?.lifetimeSeconds || defaultAccessTokenLifetimeSeconds(server?.type),
           refresh: refreshEnabled ? `${refreshLifetime}s` : 'disabled',
           details: isBuiltIn
             ? 'issuer-local authorization server'
