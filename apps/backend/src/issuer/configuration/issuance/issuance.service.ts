@@ -26,6 +26,10 @@ import { normalizeTrustListRefs } from "../../../trust/types.js";
 import type { TrustListRef } from "../../../verifier/presentations/entities/presentation-config.entity.js";
 import { CredentialConfigService } from "../credentials/credential-config/credential-config.service.js";
 import type { IssuanceConfiguration as IssuanceConfig } from "./domain/issuance-configuration.js";
+import {
+    REMOVED_CHAINED_VP_MESSAGE,
+    usesRemovedChainedVp,
+} from "./domain/removed-authorization-servers.js";
 import { DisplayInfo } from "./dto/display.dto.js";
 import { IssuanceDto } from "./dto/issuance.dto.js";
 import { IssuerProvidedAttestation } from "./dto/issuer-registration-certificate.dto.js";
@@ -317,6 +321,14 @@ export class IssuanceService {
         if (configuredAuthorizationServers.length < 1) {
             throw new BadRequestException(
                 "At least one authorization server must be configured",
+            );
+        }
+
+        const removedServer =
+            configuredAuthorizationServers.find(usesRemovedChainedVp);
+        if (removedServer) {
+            throw new BadRequestException(
+                `Authorization server '${removedServer.id}': ${REMOVED_CHAINED_VP_MESSAGE}`,
             );
         }
 

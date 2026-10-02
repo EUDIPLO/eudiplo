@@ -24,6 +24,7 @@ import {
     OID4VCI_SETTINGS,
     type Oid4vciSettings,
 } from "../../oid4vci-settings.js";
+import { refreshTokenPolicy } from "../domain/token-grant-rules.js";
 import {
     CHAINED_AS_SESSION_REPOSITORY,
     type ChainedAsSessionRepository,
@@ -48,6 +49,7 @@ import {
     resolveSessionForTokenRequest,
     resolveTokenBinding,
     resolveWalletAttestationPolicy,
+    retainSessionForIssuedTokens,
 } from "../shared/index.js";
 import {
     OIDC_DISCOVERY_RESOLVER,
@@ -752,6 +754,7 @@ export class ChainedAsService {
             this.sessionRepository,
             tenantId,
             request,
+            refreshTokenPolicy(config.token),
         );
 
         // Add session context to span for trace correlation
@@ -809,7 +812,12 @@ export class ChainedAsService {
         session.accessTokenJti = jti;
         const refreshToken = issueRefreshTokenIfEnabled(
             session,
-            config.token ?? {},
+            config.token,
+            request.grant_type,
+        );
+        retainSessionForIssuedTokens(
+            session,
+            new Date(Date.now() + tokenLifetime * 1000),
         );
 
         await this.sessionRepository.save(session);
@@ -866,7 +874,7 @@ export class ChainedAsService {
             issuanceConfig,
             config,
         );
-        const refreshTokensEnabled = config.token?.refreshTokenEnabled ?? true;
+        const refreshTokensEnabled = refreshTokenPolicy(config.token).enabled;
 
         return buildAuthorizationServerMetadata({
             issuer: baseUrl,
@@ -883,13 +891,6 @@ export class ChainedAsService {
                 walletAttestationPolicy.walletAttestationRequired,
             ),
         });
-    }
-
-    /**
-     * Clean up expired sessions.
-     */
-    async cleanupExpiredSessions(): Promise<number> {
-        return this.sessionRepository.deleteExpired(new Date());
     }
 
     /**

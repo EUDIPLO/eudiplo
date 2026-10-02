@@ -32,6 +32,10 @@ import {
     KeyChainAccessTokenSigningKeys,
     WalletAttestationClientVerifier,
 } from "./adapters/built-in-authorization-server.adapters.js";
+import {
+    CHAINED_AS_SESSION_CLEANUP_SETTINGS,
+    ChainedAsSessionCleanupJob,
+} from "./adapters/chained-as-session-cleanup.job.js";
 import { TypeOrmChainedAsSessionRepository } from "./adapters/typeorm-chained-as-session.repository.js";
 import { TypeOrmInteractiveAuthSessionRepository } from "./adapters/typeorm-interactive-auth-session.repository.js";
 import { AuthorizePushedRequest } from "./application/authorize-pushed-request.js";
@@ -50,8 +54,6 @@ import { ChainedAsController } from "./chained-as/chained-as.controller.js";
 import { ChainedAsService } from "./chained-as/chained-as.service.js";
 import { OIDC_DISCOVERY_RESOLVER } from "./chained-as/ports/oidc-discovery-resolver.js";
 import { OIDC_TOKEN_EXCHANGER } from "./chained-as/ports/oidc-token-exchanger.js";
-import { ChainedAsVpController } from "./chained-as-vp/chained-as-vp.controller.js";
-import { ChainedAsVpService } from "./chained-as-vp/chained-as-vp.service.js";
 import {
     ACCESS_TOKEN_SIGNING_KEYS,
     type AccessTokenSigningKeys,
@@ -213,12 +215,11 @@ export const builtInAuthorizationServerProviders = [
 /**
  * Authorization Module - Groups the OID4VCI authorization server implementations.
  *
- * Bundles the four authorization-server variants and their shared logic:
+ * Bundles the three authorization-server variants and their shared logic:
  * - `authorize` — the issuer-native OAuth 2.0 / OID4VCI authorization server
  *   (authorization code, pre-authorized code, refresh token, interactive auth).
  * - `authorization-servers` — managed OID4VP-backed authorization servers.
  * - `chained-as` — chained authorization server delegating to an upstream OIDC provider.
- * - `chained-as-vp` — chained authorization server backed by an OID4VP presentation flow.
  *
  * The authorization-server services are exported so the surrounding issuance
  * components (e.g. metadata and well-known endpoints) can consume them.
@@ -244,7 +245,6 @@ export const builtInAuthorizationServerProviders = [
         InteractiveAuthorizationController,
         ChainedAsController,
         AuthorizationServersController,
-        ChainedAsVpController,
     ],
     providers: [
         ...builtInAuthorizationServerProviders,
@@ -261,6 +261,17 @@ export const builtInAuthorizationServerProviders = [
             useFactory: (repository: Repository<ChainedAsSessionEntity>) =>
                 new TypeOrmChainedAsSessionRepository(repository),
         },
+        ChainedAsSessionCleanupJob,
+        {
+            provide: CHAINED_AS_SESSION_CLEANUP_SETTINGS,
+            inject: [ConfigService],
+            // Runs on the session tidy-up interval.
+            useFactory: (config: ConfigService) => ({
+                cleanupIntervalMs:
+                    config.getOrThrow<number>("SESSION_TIDY_UP_INTERVAL") *
+                    1000,
+            }),
+        },
         AuthorizeService,
         InteractiveAuthorizationService,
         ChainedAsService,
@@ -276,7 +287,6 @@ export const builtInAuthorizationServerProviders = [
             useFactory: (http: HttpService) => new HttpOidcTokenExchanger(http),
         },
         AuthorizationServersService,
-        ChainedAsVpService,
     ],
     exports: [
         OID4VCI_SETTINGS,
@@ -284,7 +294,6 @@ export const builtInAuthorizationServerProviders = [
         InteractiveAuthorizationService,
         ChainedAsService,
         AuthorizationServersService,
-        ChainedAsVpService,
     ],
 })
 export class AuthorizationModule {}

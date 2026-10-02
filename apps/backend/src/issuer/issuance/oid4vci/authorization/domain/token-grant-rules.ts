@@ -8,60 +8,128 @@ export const DEFAULT_TX_CODE_MAX_ATTEMPTS = 5;
 export const TX_CODE_LOCKED_DESCRIPTION =
     "Too many failed tx_code attempts. The pre-authorized code has been invalidated.";
 
-/** Access tokens of the built-in authorization server live five minutes. */
-export const ACCESS_TOKEN_LIFETIME_SECONDS = 300;
+/** Default lifetime of access tokens of the built-in authorization server: five minutes. */
+const ACCESS_TOKEN_LIFETIME_SECONDS = 300;
 
-/** Built-in default when no authorization server configures refresh tokens: 30 days. */
-const DEFAULT_REFRESH_TOKEN_LIFETIME_SECONDS = 2592000;
+/** Default lifetime of refresh tokens of every hosted authorization server: 30 days. */
+export const DEFAULT_REFRESH_TOKEN_LIFETIME_SECONDS = 2592000;
 
-interface ConfiguredAuthorizationServer {
+/** `token` settings of a hosted authorization server entry. */
+export interface AuthorizationServerTokenSettings {
+    lifetimeSeconds?: number;
+    signingKeyId?: string;
+    refreshTokenEnabled?: boolean;
+    refreshTokenExpiresInSeconds?: number;
+}
+
+/** Settings of the `built-in` authorization server entry. */
+export interface BuiltInAuthorizationServerSettings
+    extends WalletAttestationPolicyConfig {
+    token?: AuthorizationServerTokenSettings;
+    requireDPoP?: boolean;
+}
+
+interface ConfiguredAuthorizationServer
+    extends BuiltInAuthorizationServerSettings {
     type?: string;
     enabled?: boolean;
-    token?: {
-        refreshTokenEnabled?: boolean;
-        refreshTokenExpiresInSeconds?: number;
-    };
+}
+
+interface IssuanceAuthorizationSettings {
+    authorizationServers?: ConfiguredAuthorizationServer[] | null;
+    signingKeyId?: string | null;
+    dPopRequired?: boolean | null;
 }
 
 export interface RefreshTokenPolicy {
     enabled: boolean;
-    expiresInSeconds?: number;
+    expiresInSeconds: number;
 }
 
 /**
- * Refresh token policy of the built-in authorization server: the token
- * settings of the first enabled, non-external server that configures them,
- * otherwise enabled with a 30 day lifetime.
+ * Refresh token policy shared by all authorization servers EUDIPLO hosts
+ * (built-in, chained and OID4VP): enabled unless `refreshTokenEnabled` is
+ * `false`, valid for `refreshTokenExpiresInSeconds` or 30 days. A refresh
+ * token never lives unbounded.
  */
-export function resolveRefreshTokenPolicy(issuanceConfig: {
-    authorizationServers?: ConfiguredAuthorizationServer[] | null;
-}): RefreshTokenPolicy {
-    const server = (issuanceConfig.authorizationServers ?? []).find(
-        (candidate) =>
-            candidate.enabled !== false &&
-            candidate.type !== "external" &&
-            !!candidate.token,
-    );
-    if (server?.token) {
-        return {
-            enabled: server.token.refreshTokenEnabled ?? true,
-            expiresInSeconds: server.token.refreshTokenExpiresInSeconds,
-        };
-    }
+export function refreshTokenPolicy(
+    token: AuthorizationServerTokenSettings | null | undefined,
+): RefreshTokenPolicy {
     return {
-        enabled: true,
-        expiresInSeconds: DEFAULT_REFRESH_TOKEN_LIFETIME_SECONDS,
+        enabled: token?.refreshTokenEnabled !== false,
+        expiresInSeconds:
+            token?.refreshTokenExpiresInSeconds ??
+            DEFAULT_REFRESH_TOKEN_LIFETIME_SECONDS,
     };
 }
 
+/** Expiry of a refresh token issued at `issuedAt` under `policy`. */
+export function refreshTokenExpiresAt(
+    policy: RefreshTokenPolicy,
+    issuedAt: Date,
+): Date {
+    return new Date(issuedAt.getTime() + policy.expiresInSeconds * 1000);
+}
+
+/**
+ * Expiry enforced when a refresh token is redeemed: the stored one, or, for
+ * tokens stored without an expiry, the policy lifetime counted from the
+ * creation of the session they were issued for.
+ */
+export function enforcedRefreshTokenExpiry(
+    storedExpiresAt: Date | null | undefined,
+    sessionCreatedAt: Date,
+    policy: RefreshTokenPolicy,
+): Date {
+    return storedExpiresAt ?? refreshTokenExpiresAt(policy, sessionCreatedAt);
+}
+
+/** Refresh token policy of the built-in authorization server entry. */
+export function resolveRefreshTokenPolicy(
+    issuanceConfig: IssuanceAuthorizationSettings,
+): RefreshTokenPolicy {
+    return refreshTokenPolicy(
+        findBuiltInAuthorizationServer(issuanceConfig)?.token,
+    );
+}
+
 /** The enabled `built-in` authorization server entry, if configured. */
-export function findBuiltInAuthorizationServer(issuanceConfig: {
-    authorizationServers?: Array<{ type?: string; enabled?: boolean }> | null;
-}): WalletAttestationPolicyConfig | undefined {
+export function findBuiltInAuthorizationServer(
+    issuanceConfig: IssuanceAuthorizationSettings,
+): BuiltInAuthorizationServerSettings | undefined {
     return (issuanceConfig.authorizationServers ?? []).find(
         (candidate) =>
             candidate.enabled !== false && candidate.type === "built-in",
-    ) as WalletAttestationPolicyConfig | undefined;
+    );
+}
+
+/** Access token settings of the built-in authorization server. */
+export interface BuiltInAccessTokenSettings {
+    lifetimeSeconds: number;
+    /** Key chain id; `undefined` selects the tenant's default key. */
+    signingKeyId?: string;
+    /** DPoP at the token endpoint: issuance `dPopRequired` or the entry's `requireDPoP`. */
+    dpopRequired: boolean;
+}
+
+/**
+ * Access token settings of the built-in authorization server. The signing key
+ * is the entry's `token.signingKeyId`, then the issuance `signingKeyId`, then
+ * the tenant default.
+ */
+export function builtInAccessTokenSettings(
+    issuanceConfig: IssuanceAuthorizationSettings,
+): BuiltInAccessTokenSettings {
+    const server = findBuiltInAuthorizationServer(issuanceConfig);
+    return {
+        lifetimeSeconds:
+            server?.token?.lifetimeSeconds ?? ACCESS_TOKEN_LIFETIME_SECONDS,
+        signingKeyId:
+            server?.token?.signingKeyId ||
+            issuanceConfig.signingKeyId ||
+            undefined,
+        dpopRequired: !!issuanceConfig.dPopRequired || !!server?.requireDPoP,
+    };
 }
 
 /** Whether a pre-authorized code with a `tx_code` is locked after failed attempts. */

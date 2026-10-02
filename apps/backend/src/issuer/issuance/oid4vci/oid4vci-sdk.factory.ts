@@ -3,6 +3,7 @@ import { type Jwk, Oauth2ResourceServer } from "@openid4vc/oauth2";
 import { Openid4vciIssuer } from "@openid4vc/openid4vci";
 import { CryptoService } from "../../../crypto/crypto.service.js";
 import { IssuanceService } from "../../configuration/issuance/issuance.service.js";
+import { builtInAccessTokenSettings } from "./authorization/domain/token-grant-rules.js";
 
 /**
  * Creates tenant-scoped `@openid4vc` SDK instances wired to EUDIPLO's crypto
@@ -48,7 +49,8 @@ export class Oid4vciSdkFactory {
             .getIssuanceConfiguration(tenantId)
             .catch(() => null);
         const signingKeyId =
-            issuanceConfig?.signingKeyId ||
+            (issuanceConfig &&
+                builtInAccessTokenSettings(issuanceConfig).signingKeyId) ||
             (await this.cryptoService.keyChainService.getKid(tenantId));
         const publicJwk = await this.cryptoService.keyChainService.getPublicKey(
             "jwk",

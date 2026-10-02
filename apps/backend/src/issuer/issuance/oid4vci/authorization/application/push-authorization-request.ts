@@ -38,8 +38,9 @@ export interface PushedAuthorizationRequest {
 
 /**
  * Pushed Authorization Request endpoint (RFC 9126): authenticates the client
- * attestation, validates the FAPI 2.0 parameters and the optional DPoP proof,
- * and binds a short-lived `request_uri` to the issuance session.
+ * attestation, validates the FAPI 2.0 parameters and the DPoP proof (required
+ * when the built-in entry sets `requireDPoP`), and binds a short-lived
+ * `request_uri` to the issuance session.
  */
 export class PushAuthorizationRequest {
     constructor(
@@ -72,9 +73,10 @@ export class PushAuthorizationRequest {
             await this.configuration.issuanceConfiguration(tenantId);
         const authorizationServerMetadata =
             await this.metadata.execute(tenantId);
+        const builtInServer = findBuiltInAuthorizationServer(issuanceConfig);
         const walletAttestationPolicy = resolveWalletAttestationPolicy(
             issuanceConfig,
-            findBuiltInAuthorizationServer(issuanceConfig),
+            builtInServer,
         );
 
         try {
@@ -104,7 +106,11 @@ export class PushAuthorizationRequest {
                 authorizationServerMetadata,
                 request,
                 dpop: {
-                    required: false,
+                    // `requireDPoP` binds the authorization code to a DPoP key
+                    // (RFC 9449 Section 10), as on the chained and OID4VP
+                    // servers. Issuance `dPopRequired` applies from the
+                    // token endpoint on.
+                    required: !!builtInServer?.requireDPoP,
                     jwt: dpopJwt,
                     jwkThumbprint: body.dpop_jkt,
                     allowedSigningAlgs:

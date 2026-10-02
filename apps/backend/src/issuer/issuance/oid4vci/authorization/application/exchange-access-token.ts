@@ -24,14 +24,16 @@ import {
     toTokenErrorCode,
 } from "../domain/token-errors.js";
 import {
-    ACCESS_TOKEN_LIFETIME_SECONDS,
     assertIssuedToClient,
     authorizationDetailsForToken,
+    builtInAccessTokenSettings,
     clientInstanceKeyThumbprint,
     DEFAULT_TX_CODE_MAX_ATTEMPTS,
+    enforcedRefreshTokenExpiry,
     findBuiltInAuthorizationServer,
     isTxCodeLocked,
     preAuthorizedCodeExpiresAt,
+    refreshTokenExpiresAt,
     resolveRefreshTokenPolicy,
     TX_CODE_LOCKED_DESCRIPTION,
 } from "../domain/token-grant-rules.js";
@@ -138,6 +140,13 @@ export class ExchangeAccessToken {
         const issuanceConfig =
             await this.configuration.issuanceConfiguration(tenantId);
         const refreshTokenPolicy = resolveRefreshTokenPolicy(issuanceConfig);
+        if (isRefreshGrant && !refreshTokenPolicy.enabled) {
+            throw new OAuthError(
+                "unsupported_grant_type",
+                "Refresh tokens are disabled for this authorization server",
+            );
+        }
+        const accessTokenSettings = builtInAccessTokenSettings(issuanceConfig);
         const authorizationServerMetadata =
             await this.metadata.execute(tenantId);
         const walletAttestationPolicy = resolveWalletAttestationPolicy(
@@ -248,7 +257,7 @@ export class ExchangeAccessToken {
                     accessTokenRequest: parsed.accessTokenRequest,
                     request,
                     dpop: {
-                        required: issuanceConfig.dPopRequired,
+                        required: accessTokenSettings.dpopRequired,
                         allowedSigningAlgs,
                         jwt: parsed.dpop?.jwt,
                         ...dpopProofChecks,
@@ -281,7 +290,7 @@ export class ExchangeAccessToken {
                     codeExpiresAt: session.authorization_code_expires_at,
                     request,
                     dpop: {
-                        required: issuanceConfig.dPopRequired,
+                        required: accessTokenSettings.dpopRequired,
                         allowedSigningAlgs,
                         jwt: parsed.dpop?.jwt,
                         expectedJwkThumbprint: session.dpop_jkt,
@@ -305,7 +314,8 @@ export class ExchangeAccessToken {
                     // attested clients are bound via client authentication and may use a new key.
                     dpop: {
                         required:
-                            issuanceConfig.dPopRequired || !!session.dpop_jkt,
+                            accessTokenSettings.dpopRequired ||
+                            !!session.dpop_jkt,
                         allowedSigningAlgs,
                         jwt: parsed.dpop?.jwt,
                         expectedJwkThumbprint: clientAttestationJwt
@@ -314,16 +324,21 @@ export class ExchangeAccessToken {
                         ...dpopProofChecks,
                     },
                     authorizationServerMetadata,
-                    refreshTokenExpiresAt: session.refresh_token_expires_at,
+                    // Refresh tokens stored without an expiry still expire.
+                    refreshTokenExpiresAt: enforcedRefreshTokenExpiry(
+                        session.refresh_token_expires_at,
+                        session.createdAt,
+                        refreshTokenPolicy,
+                    ),
                 })
                 .catch((err) => {
                     throw oauthErrorFromLibrary(err);
                 }));
         }
 
-        // Pinned key from the issuance configuration, otherwise the default key.
+        // Key of the built-in entry, then the issuance key, then the default key.
         const signingKeyId =
-            issuanceConfig.signingKeyId ||
+            accessTokenSettings.signingKeyId ||
             (await this.signingKeys.defaultKeyId(tenantId));
         const publicJwk = await this.signingKeys.publicJwk(
             tenantId,
@@ -344,7 +359,7 @@ export class ExchangeAccessToken {
                     kid: signingKeyId,
                 },
                 subject: session.id,
-                expiresInSeconds: ACCESS_TOKEN_LIFETIME_SECONDS,
+                expiresInSeconds: accessTokenSettings.lifetimeSeconds,
                 authorizationServer: authorizationServerMetadata.issuer,
                 clientId: body?.client_id,
                 dpop,
@@ -369,14 +384,9 @@ export class ExchangeAccessToken {
             });
 
         if (!isRefreshGrant) {
-            const refreshTokenExpiresAt =
-                tokenResponse.refresh_token &&
-                refreshTokenPolicy.expiresInSeconds
-                    ? new Date(
-                          Date.now() +
-                              refreshTokenPolicy.expiresInSeconds * 1000,
-                      )
-                    : undefined;
+            const refreshTokenExpiry = tokenResponse.refresh_token
+                ? refreshTokenExpiresAt(refreshTokenPolicy, new Date())
+                : undefined;
 
             // Atomic single use: of concurrent requests for the same code,
             // only the first may mark the session consumed and receive a token.
@@ -390,7 +400,7 @@ export class ExchangeAccessToken {
                     ...(tokenResponse.refresh_token
                         ? {
                               refresh_token: tokenResponse.refresh_token,
-                              refresh_token_expires_at: refreshTokenExpiresAt,
+                              refresh_token_expires_at: refreshTokenExpiry,
                           }
                         : {}),
                 },

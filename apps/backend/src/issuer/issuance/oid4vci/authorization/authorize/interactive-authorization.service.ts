@@ -32,7 +32,8 @@ import {
     type InteractiveAuthSession,
     InteractiveAuthSessionStatus,
 } from "../domain/interactive-auth-session.js";
-import { checkPkce } from "../domain/pkce.js";
+import { OAuthError } from "../domain/oauth-error.js";
+import { assertS256CodeChallengeIfPresent, checkPkce } from "../domain/pkce.js";
 import {
     INTERACTIVE_AUTH_SESSION_REPOSITORY,
     type InteractiveAuthSessionRepository,
@@ -296,6 +297,23 @@ export class InteractiveAuthorizationService {
                 error: Oauth2ErrorCodes.InvalidRequest,
                 error_description: "Missing required parameter: client_id",
             };
+        }
+
+        // PKCE stays optional for openid4vp_presentation, but only with S256
+        // (HAIP 1.0 Section 4), as on the pushed authorization request.
+        try {
+            assertS256CodeChallengeIfPresent(
+                request.code_challenge,
+                request.code_challenge_method,
+            );
+        } catch (error) {
+            if (error instanceof OAuthError) {
+                return {
+                    error: error.code,
+                    error_description: error.description,
+                };
+            }
+            throw error;
         }
 
         // Parse supported interaction types
@@ -679,11 +697,10 @@ export class InteractiveAuthorizationService {
             };
         }
 
-        // Unlike PAR, the IAE defaults to S256 and rejects unknown methods.
-        const method = authSession.codeChallengeMethod || "S256";
+        // The initial request only accepts S256 challenges.
         const verifierValid =
-            (method === "S256" || method === "plain") &&
-            checkPkce(authSession.codeChallenge, method, codeVerifier) ===
+            authSession.codeChallengeMethod === "S256" &&
+            checkPkce(authSession.codeChallenge, "S256", codeVerifier) ===
                 "valid";
 
         if (!verifierValid) {

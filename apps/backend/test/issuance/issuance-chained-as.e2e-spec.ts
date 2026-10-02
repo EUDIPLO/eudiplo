@@ -21,9 +21,6 @@ import { AppModule } from "../../src/app.module.js";
 import { KeyChainImportDto } from "../../src/crypto/key/dto/key-chain-import.dto.js";
 import { CredentialConfigCreate } from "../../src/issuer/configuration/credentials/dto/credential-config-create.dto.js";
 import { IssuanceDto } from "../../src/issuer/configuration/issuance/dto/issuance.dto.js";
-import { SessionStore } from "../../src/session/application/session-store.js";
-import { SessionStatus } from "../../src/session/domain/session-state.js";
-import { PresentationConfigCreateDto } from "../../src/verifier/presentations/dto/presentation-config-create.dto.js";
 import { getToken, readConfig } from "../utils.js";
 
 setGlobalDispatcher(
@@ -106,7 +103,6 @@ describe("Issuance - Chained AS Flow", () => {
     let authToken: string;
     let clientId: string;
     let clientSecret: string;
-    let sessionStore: SessionStore;
 
     beforeAll(async () => {
         // Delete the database
@@ -127,8 +123,6 @@ describe("Issuance - Chained AS Flow", () => {
         clientSecret = configService.getOrThrow<string>("AUTH_CLIENT_SECRET");
 
         await app.init();
-
-        sessionStore = app.get(SessionStore);
 
         authToken = await getToken(app, clientId, clientSecret, "haip");
 
@@ -210,17 +204,6 @@ describe("Issuance - Chained AS Flow", () => {
                 ),
             )
             .expect(201);
-
-        await request(app.getHttpServer())
-            .post("/verifier/config")
-            .trustLocalhost()
-            .set("Authorization", `Bearer ${authToken}`)
-            .send(
-                readConfig<PresentationConfigCreateDto>(
-                    join(configFolder, "haip/presentation/pid-no-hook.json"),
-                ),
-            )
-            .expect(201);
     });
 
     beforeEach(() => {
@@ -280,134 +263,26 @@ describe("Issuance - Chained AS Flow", () => {
             .expect(201);
     }
 
-    async function configureChainedAsVp(
-        refreshTokenEnabled = false,
-    ): Promise<void> {
-        const currentConfigResponse = await request(app.getHttpServer())
-            .get("/issuer/config")
-            .trustLocalhost()
-            .set("Authorization", `Bearer ${authToken}`)
-            .expect(200);
-
-        const currentConfig = currentConfigResponse.body;
-
-        await request(app.getHttpServer())
+    test("rejects the removed OID4VP-backed chained authorization server", async () => {
+        const response = await request(app.getHttpServer())
             .post("/issuer/config")
             .trustLocalhost()
             .set("Authorization", `Bearer ${authToken}`)
             .send({
-                ...currentConfig,
                 authorizationServers: [
                     {
                         id: "chained-auth",
                         type: "chained",
-                        enabled: true,
                         vp: {
                             enabled: true,
                             presentationConfigId: "pid-no-hook",
                         },
-                        token: {
-                            lifetimeSeconds: 3600,
-                            refreshTokenEnabled,
-                        },
-                        requireDPoP: false,
                     },
                 ],
             })
-            .expect(201);
-    }
+            .expect(400);
 
-    test("VP chained AS flow redirects into OID4VP and returns OAuth code after verifier callback", async () => {
-        await configureChainedAsVp(true);
-
-        const metadataResponse = await request(app.getHttpServer())
-            .get(
-                "/.well-known/oauth-authorization-server/issuers/haip/chained-as-vp",
-            )
-            .trustLocalhost()
-            .expect(200);
-
-        expect(metadataResponse.body.issuer).toContain(
-            "/issuers/haip/chained-as-vp",
-        );
-
-        const parResponse = await request(app.getHttpServer())
-            .post("/issuers/haip/chained-as-vp/par")
-            .trustLocalhost()
-            .send({
-                response_type: "code",
-                client_id: "test-wallet",
-                redirect_uri: "http://wallet.example.com/callback",
-                code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-                code_challenge_method: "S256",
-                state: "wallet-state",
-            })
-            .expect(201);
-
-        const authorizeResponse = await request(app.getHttpServer())
-            .get("/issuers/haip/chained-as-vp/authorize")
-            .query({
-                client_id: "test-wallet",
-                request_uri: parResponse.body.request_uri,
-            })
-            .trustLocalhost()
-            .redirects(0)
-            .expect(200);
-
-        expect(authorizeResponse.headers["content-type"]).toContain(
-            "text/html",
-        );
-        expect(authorizeResponse.headers["cache-control"]).toBe("no-store");
-        expect(authorizeResponse.text).toContain('href="openid4vp://?');
-
-        const chainedAsSessionId = parResponse.body.request_uri.replace(
-            "urn:ietf:params:oauth:request_uri:",
-            "",
-        );
-
-        await sessionStore.updateForTenant("haip", chainedAsSessionId, {
-            status: SessionStatus.Completed,
-            responseCode: "vp-response-code",
-        });
-
-        const callbackResponse = await request(app.getHttpServer())
-            .get("/issuers/haip/chained-as-vp/vp-callback")
-            .query({
-                cas: chainedAsSessionId,
-                response_code: "vp-response-code",
-            })
-            .trustLocalhost()
-            .redirects(0)
-            .expect(302);
-
-        const walletRedirectUrl = new URL(callbackResponse.headers.location);
-        const authorizationCode = walletRedirectUrl.searchParams.get("code");
-
-        expect(walletRedirectUrl.searchParams.get("state")).toBe(
-            "wallet-state",
-        );
-        expect(walletRedirectUrl.searchParams.get("iss")).toContain(
-            "/issuers/haip/chained-as-vp",
-        );
-        expect(authorizationCode).toBeTruthy();
-
-        const tokenResponse = await request(app.getHttpServer())
-            .post("/issuers/haip/chained-as-vp/token")
-            .trustLocalhost()
-            .send({
-                grant_type: "authorization_code",
-                code: authorizationCode,
-                redirect_uri: "http://wallet.example.com/callback",
-                code_verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-            })
-            .expect(200);
-
-        expect(tokenResponse.body.access_token).toBeDefined();
-        expect(tokenResponse.body.refresh_token).toBeDefined();
-
-        const tokenPayload = decodeJwt(tokenResponse.body.access_token);
-        expect(tokenPayload.iss).toContain("/issuers/haip/chained-as-vp");
-        expect(tokenPayload.issuer_state).toBeDefined();
+        expect(response.body.message).toContain("'oid4vp'");
     });
 
     test("token endpoint supports refresh_token grant in Chained AS flow", async () => {
@@ -491,6 +366,30 @@ describe("Issuance - Chained AS Flow", () => {
             refreshedTokenResponse.body.access_token,
         );
         expect(refreshedTokenPayload.issuer_state).toBeDefined();
+    });
+
+    test("disabled refresh tokens are neither advertised nor accepted in Chained AS flow", async () => {
+        await configureChainedAs(false);
+
+        const metadataResponse = await request(app.getHttpServer())
+            .get(
+                "/.well-known/oauth-authorization-server/issuers/haip/chained-as",
+            )
+            .trustLocalhost()
+            .expect(200);
+        expect(metadataResponse.body.grant_types_supported).toEqual([
+            "authorization_code",
+        ]);
+
+        const refreshResponse = await request(app.getHttpServer())
+            .post("/issuers/haip/chained-as/token")
+            .trustLocalhost()
+            .send({
+                grant_type: "refresh_token",
+                refresh_token: "any-refresh-token",
+            })
+            .expect(400);
+        expect(refreshResponse.body.error).toBe("unsupported_grant_type");
     });
 
     test("chained AS metadata endpoint returns correct configuration", async () => {

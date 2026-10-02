@@ -41,9 +41,6 @@
     "issuer/issuance/oid4vci/authorization/authorize/interactive-authorization.service.ts": [
         "http-exception"
     ],
-    "issuer/issuance/oid4vci/authorization/chained-as-vp/chained-as-vp.service.ts": [
-        "http-exception"
-    ],
     "issuer/issuance/oid4vci/authorization/chained-as/chained-as.service.ts": [
         "http-exception"
     ],

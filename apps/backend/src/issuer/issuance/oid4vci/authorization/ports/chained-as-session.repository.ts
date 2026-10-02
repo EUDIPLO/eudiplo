@@ -40,7 +40,10 @@ export interface ChainedAsSessionRepository {
         tenantId: string,
         issuerState: string,
     ): Promise<ChainedAsSession | null>;
-    /** Delete sessions that expired before `now`; returns the number deleted. */
+    /**
+     * Delete sessions that expired before `now` and hold no refresh token
+     * that is still valid; returns the number deleted.
+     */
     deleteExpired(now: Date): Promise<number>;
 }
 

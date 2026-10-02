@@ -70,16 +70,6 @@ export class WellKnownController {
     }
 
     /**
-     * VP-backed Chained Authorization Server Metadata.
-     */
-    @Get(
-        ".well-known/oauth-authorization-server/issuers/:tenantId/chained-as-vp",
-    )
-    chainedAsVpMetadata(@Param("tenantId") tenantId: string) {
-        return this.wellKnownService.getChainedAsVpMetadata(tenantId);
-    }
-
-    /**
      * Returns the JSON Web Key Set (JWKS) for the authorization server.
      * @returns
      */
@@ -99,18 +89,6 @@ export class WellKnownController {
         @Param("tenantId") tenantId: string,
     ): Promise<{ keys: Record<string, unknown>[] }> {
         return this.wellKnownService.getChainedAsJwks(tenantId);
-    }
-
-    /**
-     * Returns the JSON Web Key Set (JWKS) for the VP-backed Chained Authorization Server.
-     * @returns
-     */
-    @Header("Content-Type", "application/jwk-set+json")
-    @Get(".well-known/jwks.json/issuers/:tenantId/chained-as-vp")
-    getChainedAsVpJwks(
-        @Param("tenantId") tenantId: string,
-    ): Promise<{ keys: Record<string, unknown>[] }> {
-        return this.wellKnownService.getChainedAsVpJwks(tenantId);
     }
 
     @Get(
