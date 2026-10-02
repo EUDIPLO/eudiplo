@@ -20,7 +20,7 @@
         "build:sea:bundle": "pnpm assets:sync && pnpm assets:check && esbuild src/index.ts --bundle --platform=node --format=esm --target=node22.12 --alias:jsonc-parser=jsonc-parser/lib/esm/main.js --outfile=dist-sea/index.js",
         "build:sea": "node scripts/build-cli-sea.mjs",
         "dev": "tsx src/index.ts",
-        "test": "vitest run --project cli",
+        "test": "vitest run --root ../.. --project cli",
         "lint": "biome lint .",
         "prepublishOnly": "pnpm build:publish"
     },
