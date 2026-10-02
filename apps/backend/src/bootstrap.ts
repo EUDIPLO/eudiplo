@@ -9,9 +9,11 @@ import { cleanupOpenApiDoc } from "nestjs-zod";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 import { AppModule } from "./app.module.js";
 import {
+    configureCors,
     filterOpenApiPaths,
     GLOBAL_PREFIX_EXCLUSIONS,
 } from "./main.helpers.js";
+import { splitCorsOrigins } from "./platform/config/cors-validation.schema.js";
 import { getActiveSkipFlags } from "./platform/config/skip-validation.schema.js";
 import { ValidationErrorFilter } from "./shared/common/filters/validation-error.filter.js";
 import { createAppValidationPipe } from "./shared/common/zod/zod-schema.util.js";
@@ -108,7 +110,6 @@ async function bootstrap() {
         limit: "10mb",
     });
     app.useBodyParser("json", { limit: "10mb" });
-    app.enableCors();
 
     // Global route prefix: all management endpoints under /api/,
     // protocol endpoints (wallet-facing) stay at root for compliance
@@ -128,6 +129,12 @@ async function bootstrap() {
 
     const configService = app.get(ConfigService);
     const publicUrl = configService.getOrThrow<string>("PUBLIC_URL");
+
+    const corsOrigins = splitCorsOrigins(
+        configService.get<string>("CORS_ORIGINS"),
+    );
+    configureCors(app, corsOrigins);
+
     const useExternalOIDC = configService.get<string>("OIDC");
 
     // ── Management API OpenAPI config ────────────────────────────────
@@ -280,6 +287,11 @@ async function bootstrap() {
                 `🔒 TLS:            ${isTlsEnabled ? "Enabled" : "Disabled (use reverse proxy for HTTPS)"}`,
             );
             logger.log(`🌐 Public URL:     ${publicUrl || "Not configured"}`);
+            const corsStatus =
+                corsOrigins.length > 0
+                    ? `Management API restricted to ${corsOrigins.length} origin(s)`
+                    : "All origins allowed";
+            logger.log(`🔀 CORS:           ${corsStatus}`);
             logger.log("");
             logger.log("📚 API Documentation:");
             logger.log(`   → Management:   ${baseUrl}/api/docs`);

@@ -1,4 +1,8 @@
-import { RequestMethod } from "@nestjs/common";
+import { type INestApplication, RequestMethod } from "@nestjs/common";
+import type {
+    CorsOptions,
+    CorsOptionsDelegate,
+} from "@nestjs/common/interfaces/external/cors-options.interface.js";
 import type { OpenAPIObject } from "@nestjs/swagger";
 
 /**
@@ -87,4 +91,47 @@ export function filterOpenApiPaths(
             usedTags.has(tag.name),
         ),
     };
+}
+
+/**
+ * Whether a request path belongs to the management API, i.e. lives under the
+ * global `/api` prefix. Express routes case-insensitively, so the check does too.
+ */
+export function isManagementApiPath(path: string): boolean {
+    const normalized = path.toLowerCase();
+    return normalized === "/api" || normalized.startsWith("/api/");
+}
+
+/**
+ * Build the CORS options delegate used when `CORS_ORIGINS` is set.
+ *
+ * Management API routes (`/api/*`) only answer to the configured origins.
+ * Wallet-facing protocol, discovery and public endpoints stay open to all
+ * origins, because browser-based flows such as the DC API post wallet
+ * responses from the relying party's own frontend.
+ */
+function createCorsOptionsDelegate(
+    allowedOrigins: string[],
+): CorsOptionsDelegate<{ path: string }> {
+    const restricted: CorsOptions = { origin: allowedOrigins };
+    const open: CorsOptions = {};
+    return (req, callback) => {
+        callback(null, isManagementApiPath(req.path) ? restricted : open);
+    };
+}
+
+/**
+ * Enable CORS on the application. Without allowed origins every origin is
+ * accepted on every endpoint; otherwise the management API is restricted to
+ * the given origins (see {@link createCorsOptionsDelegate}).
+ */
+export function configureCors(
+    app: INestApplication,
+    allowedOrigins: string[],
+): void {
+    if (allowedOrigins.length === 0) {
+        app.enableCors();
+        return;
+    }
+    app.enableCors(createCorsOptionsDelegate(allowedOrigins));
 }
