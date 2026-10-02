@@ -17,7 +17,7 @@ import { ArrayTypeComponent } from './types/array.type';
 import { provideMonacoEditor } from 'ngx-monaco-editor-v2';
 import schemas from './utils/schemas.json';
 import transactionDataSchemaObj from '../../../../schemas/TransactionData.schema.json';
-import { authInterceptor } from './core';
+import { ApiService, authInterceptor } from './core';
 import { OidcService } from './core/oidc.service';
 
 declare let monaco: any;
@@ -182,9 +182,13 @@ function onMonacoLoad() {
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    provideAppInitializer(() => {
+    provideAppInitializer(async () => {
       const oidcService = inject(OidcService);
-      return oidcService.initialize();
+      const apiService = inject(ApiService);
+      await oidcService.initialize();
+      // The page reload after the Keycloak redirect resets the API base URL,
+      // so re-apply the one the OIDC session was started with.
+      apiService.syncWithOidcSession();
     }),
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
