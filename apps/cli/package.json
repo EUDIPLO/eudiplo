@@ -22,6 +22,8 @@
         "dev": "tsx src/index.ts",
         "test": "vitest run --root ../.. --project cli",
         "lint": "biome lint .",
+        "format": "biome format --write .",
+        "format:check": "biome format .",
         "prepublishOnly": "pnpm build:publish"
     },
     "keywords": [

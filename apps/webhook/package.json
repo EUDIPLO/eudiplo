@@ -8,12 +8,15 @@
 		"dev": "wrangler dev",
 		"start": "wrangler dev",
 		"delete": "wrangler delete",
-		"cf-typegen": "wrangler types"
+		"cf-typegen": "wrangler types",
+		"format": "biome format --write .",
+		"format:check": "biome format ."
 	},
 	"dependencies": {
 		"zod": "^4.5.4"
 	},
 	"devDependencies": {
+		"@biomejs/biome": "2.5.14",
 		"typescript": "^7.0.2",
 		"wrangler": "^4.127.1"
 	}

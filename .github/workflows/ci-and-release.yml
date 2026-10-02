@@ -76,6 +76,9 @@ jobs:
       - name: Run linter for code
         run: pnpm run lint
 
+      - name: Check code formatting
+        run: pnpm run format:check
+
       - name: Check .env.example covers required config
         run: pnpm run check:env-example
 

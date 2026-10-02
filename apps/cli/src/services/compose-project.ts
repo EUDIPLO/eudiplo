@@ -59,14 +59,11 @@ export function createComposeEnv(options: ComposeEnvOptions): string {
         `AUTH_CLIENT_SECRET=${escapeEnvValue(authClientSecret)}`,
     ];
 
-    lines.push(
-        "",
-        ...databaseEnv(database),
-        "",
-        ...storageEnv(storage),
-        "",
-        ...kmsEnv(kms),
-    );
+    lines.push("", ...databaseEnv(database), "", ...storageEnv(storage));
+    const kmsLines = kmsEnv(kms);
+    if (kmsLines.length > 0) {
+        lines.push("", ...kmsLines);
+    }
 
     return `${lines.join("\n")}\n`;
 }
@@ -134,16 +131,17 @@ function storageEnv(storage: ComposeStorage): string[] {
     ];
 }
 
+/**
+ * The KMS provider itself is selected in `config/kms.json` (see
+ * {@link createGlobalKmsConfig}); these variables only fill its `${VAULT_*}`
+ * placeholders.
+ */
 function kmsEnv(kms: ComposeKms): string[] {
     if (kms === "db") {
-        return ["KM_TYPE=db"];
+        return [];
     }
 
-    return [
-        "KM_TYPE=vault",
-        "VAULT_ADDR=http://vault:8200",
-        "VAULT_TOKEN=root",
-    ];
+    return ["VAULT_ADDR=http://vault:8200", "VAULT_TOKEN=root"];
 }
 
 function randomSecret(): string {

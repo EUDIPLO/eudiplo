@@ -28,7 +28,7 @@ If this is a breaking change, list what is affected:
 - **Database**: (e.g., migration included? manual steps needed?)
 
 > Ensure the commit message includes `BREAKING CHANGE:` in the footer and the
-> [migration guide](docs/migration/index.md) is updated.
+> [migration guide](apps/docs/docs/migration/index.md) is updated.
 
 ## 🧪 Testing
 

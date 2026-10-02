@@ -66,6 +66,12 @@ By default, EUDIPLO mounts `/app/config` from a named Docker volume.
 - Use repository config files (useful for load tests and config import):
   - Set `EUDIPLO_CONFIG_MOUNT=../../assets:/app/config`
 
+The image reads tenant folders and `kms.json` from `CONFIG_FOLDER`, which
+defaults to `/app/config/config` (the `config/` folder inside the mount, next to
+the SQLite database). If you mount a folder that directly contains the tenant
+folders (for example `../../assets/config:/app/config`), also set
+`CONFIG_FOLDER=/app/config`.
+
 When using the demo image (`EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo-demo:latest` or `EUDIPLO_IMAGE=eudiplo-demo:local`), you typically do not need a bind mount for config import.
 
 Example:
@@ -135,7 +141,7 @@ After deployment, access the services at:
 | --------------------- | --------------------------------------- |
 | **Backend API**       | <http://localhost:3000>                 |
 | **Client Web UI**     | <http://localhost:4200>                 |
-| **API Documentation** | <http://localhost:3000/api-docs>        |
+| **API Documentation** | <http://localhost:3000/api/docs>        |
 | **RustFS Console**     | <http://localhost:9001/rustfs/console/> (standard/full) |
 | **Vault UI**          | <http://localhost:8200> (full)          |
 
@@ -155,12 +161,16 @@ After deployment, access the services at:
 2. Update `.env` with Vault configuration:
 
    ```
-   KM_TYPE=vault
    VAULT_ADDR=http://vault:8200
    VAULT_TOKEN=your-token
+   ENCRYPTION_KEY_SOURCE=vault
    ```
 
-3. Start with `docker compose --profile full up -d`
+3. To keep signing keys in Vault as well, add a `kms.json` with a provider of
+   type `vault` (`"vaultUrl": "${VAULT_ADDR}"`, `"vaultToken": "${VAULT_TOKEN}"`)
+   to `CONFIG_FOLDER`. The KMS provider is not selected via environment
+   variables; see the [KMS documentation](https://docs.eudiplo.dev/administration/kms).
+4. Start with `docker compose --profile full up -d`
 
 ## Production Considerations
 

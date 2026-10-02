@@ -66,4 +66,21 @@ export const LOG_VALIDATION_SCHEMA = Joi.object({
         .default(false)
         .description("Disable OpenTelemetry SDK (and OTel log forwarding)")
         .meta({ group: "log", order: 80 }),
+    // The OTel variables below are read by tracing.ts and the OpenTelemetry
+    // SDK before NestJS starts. No Joi defaults: @nestjs/config writes
+    // defaults back into process.env, which the SDK also reads.
+    OTEL_EXPORTER_OTLP_ENDPOINT: Joi.string()
+        .optional()
+        .allow("")
+        .description(
+            "Base URL of the OTLP/HTTP endpoint (e.g. the OpenTelemetry Collector) that receives traces, metrics and logs (default: http://localhost:4318)",
+        )
+        .meta({ group: "observability", order: 40 }),
+    OTEL_SERVICE_NAME: Joi.string()
+        .optional()
+        .allow("")
+        .description(
+            "Service name attached to exported traces, metrics and logs (default: eudiplo-backend)",
+        )
+        .meta({ group: "observability", order: 50 }),
 });

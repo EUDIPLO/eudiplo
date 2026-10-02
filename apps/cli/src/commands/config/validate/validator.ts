@@ -266,17 +266,26 @@ async function validateResourceFile(
         }
     } else {
         const kind = CONFIG_RESOURCE_KINDS.find(
-            (candidate) => CONFIG_FORMATS[candidate].file === schemaFile.replace(/\.schema\.json$/, ""),
+            (candidate) =>
+                CONFIG_FORMATS[candidate].file ===
+                schemaFile.replace(/\.schema\.json$/, ""),
         );
-        if (kind && resolved && typeof resolved === "object" && !Array.isArray(resolved)) {
+        if (
+            kind &&
+            resolved &&
+            typeof resolved === "object" &&
+            !Array.isArray(resolved)
+        ) {
             const spec = structuredClone(resolved) as Record<string, unknown>;
             if (kind === "KeyChain" && spec.key && !spec.keySource) {
                 spec.keySource = { type: "private-jwk", jwk: spec.key };
                 delete spec.key;
             }
             if (!CONFIG_SINGLETON_IDS[kind])
-                spec[kind === "Client" ? "clientId" : "id"] ??=
-                    basename(relativeFile, ".json");
+                spec[kind === "Client" ? "clientId" : "id"] ??= basename(
+                    relativeFile,
+                    ".json",
+                );
             resolved = {
                 $schema: schemaUrl(kind),
                 metadata: { generation: 1 },
