@@ -7,6 +7,14 @@ import type { Client } from '@eudiplo/sdk-core/api/client/index';
 import { environment } from '../../environments/environment';
 import { OidcService } from './oidc.service';
 
+/**
+ * Base URL used before a session is restored. The runtime value from env.js
+ * (API_BASE_URL of the container) wins over the build-time default.
+ */
+export function defaultApiUrl(runtimeApiUrl?: string, buildApiUrl?: string): string {
+  return runtimeApiUrl || buildApiUrl || 'http://localhost:3000';
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -24,8 +32,9 @@ export class ApiService {
     private readonly httpClient: HttpClient,
     private readonly oidcService: OidcService
   ) {
-    // Set default base URL from environment first
-    this.setClient(environment.api?.baseUrl || 'http://localhost:3000');
+    // Set default base URL from the runtime env.js or the build environment first
+    const runtimeEnv = globalThis as { env?: { apiUrl?: string } };
+    this.setClient(defaultApiUrl(runtimeEnv.env?.apiUrl, environment.api?.baseUrl));
     // Then try to load stored config (may override the default)
     this.loadTokenFromStorage();
   }
@@ -132,6 +141,16 @@ export class ApiService {
 
     // Set up the client immediately
     this.setClient(baseUrl);
+  }
+
+  /**
+   * Points the client at the backend of a restored OIDC session.
+   * Called after OidcService.initialize(); no-op when no OIDC session was restored.
+   */
+  syncWithOidcSession(): void {
+    if (this.oidcService.mode === 'oidc' && this.oidcService.apiUrl) {
+      this.setClient(this.oidcService.apiUrl);
+    }
   }
 
   setClient(url: string) {
