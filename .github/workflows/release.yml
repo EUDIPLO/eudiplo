@@ -97,17 +97,8 @@ jobs:
         env:
           SOURCE_SHA: ${{ github.sha }}
         run: |
-          # Base the prerelease on the latest repository semver tag (e.g., v5.1.0 -> 5.1.0).
-          # Fall back to package.json if tags are not available.
-          LATEST_TAG=$(git tag --sort=-v:refname | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)
-          if [ -n "$LATEST_TAG" ]; then
-            CURRENT_VERSION="${LATEST_TAG#v}"
-          else
-            CURRENT_VERSION=$(node -p "require('./package.json').version")
-          fi
-
-          SHORT_SHA=$(echo "$SOURCE_SHA" | cut -c1-7)
-          PRE_VERSION="${CURRENT_VERSION}-main.${SHORT_SHA}"
+          # Same version string as the main Docker images (e.g. 5.1.0-main.abc1234).
+          PRE_VERSION=$(../../scripts/ci-version.sh "$SOURCE_SHA")
           echo "Publishing version: ${PRE_VERSION}"
           npm version "${PRE_VERSION}" --no-git-tag-version
           node ../../apps/cli/scripts/sync-cli-version.cjs "${PRE_VERSION}"

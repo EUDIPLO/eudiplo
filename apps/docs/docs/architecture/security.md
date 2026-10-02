@@ -492,9 +492,28 @@ See [Skip Flags](../deployment/environment-variables.md#skip-flags) for the full
 
 ## CORS (Cross-Origin Resource Sharing)
 
-EUDIPLO enables CORS for **all origins on all endpoints**, including the management API. Protocol endpoints have to be reachable from wallets and browsers anyway, and the management API is protected by OAuth 2.0 bearer tokens rather than cookies, so a cross-origin page cannot call it without a token.
+By default, EUDIPLO enables CORS for **all origins on all endpoints**, including the management API. Protocol endpoints have to be reachable from wallets and browsers anyway, and the management API is protected by OAuth 2.0 bearer tokens rather than cookies, so a cross-origin page cannot call it without a token.
 
-If you want to restrict origins, do it in the reverse proxy in front of EUDIPLO. Built-in configuration of allowed origins is tracked in [#1088](https://github.com/openwallet-foundation/eudiplo/issues/1088).
+To restrict which browser origins may call the management API, set `CORS_ORIGINS` to a comma-separated list of origins:
+
+```bash
+CORS_ORIGINS=https://console.example.com,https://admin.example.com
+```
+
+When `CORS_ORIGINS` is set:
+
+- **Management API (`/api/*`)**, including the token endpoint `/api/oauth2/token`, only returns CORS headers to the listed origins. Browsers block responses for any other origin.
+- **Protocol, discovery and public endpoints** stay open to all origins. In the DC API flow, the relying party's frontend posts the wallet response directly to `/presentations/:sessionId/oid4vp` or `/presentations/:sessionId/iso-18013-7`. `.well-known` metadata, status lists, trust lists and public storage are meant to be fetched by anyone.
+
+Each entry must be an exact origin as browsers send it: scheme, lowercase host and optional non-default port, without a path or trailing slash (`https://console.example.com`, not `https://console.example.com/`). EUDIPLO refuses to start if an entry is malformed. The startup log shows whether CORS is restricted.
+
+:::warning Include every browser client of the management API
+If the EUDIPLO Web Client is served from a different origin than the backend (for example `http://localhost:4200` in the quick start), add that origin. Otherwise the browser blocks its API calls, and with the integrated OAuth2 server also its login. The same applies to your own frontends that call `/api/*` directly from the browser.
+:::
+
+CORS is a browser mechanism, not an access control: requests from servers, scripts or other non-browser clients are not affected. To restrict who can reach the management API at the network level, for example by IP address, use the reverse proxy in front of EUDIPLO.
+
+See [General](../deployment/environment-variables.md#general) for the variable reference.
 
 ---
 
@@ -519,7 +538,7 @@ Before deploying EUDIPLO to production, verify:
 - ✅ **Environment variables** used for all secrets (no hardcoded secrets)
 - ✅ **Session cleanup** enabled with appropriate retention policy
 - ✅ **Rate limiting** configured in the reverse proxy or API gateway
-- ✅ **CORS origins** restricted in the reverse proxy, if required
+- ✅ **CORS origins** for the management API restricted with `CORS_ORIGINS`, if required
 - ✅ **Outbound URL policy** relaxations (`OUTBOUND_URL_ALLOW_*`) only where required
 - ✅ **Log redaction** enabled (`LOG_REDACT_SENSITIVE_DATA=true`) and debug logging disabled
 - ✅ **TLS certificates** valid and trusted

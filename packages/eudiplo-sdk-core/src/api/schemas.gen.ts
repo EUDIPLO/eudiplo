@@ -26,6 +26,10 @@ export const VersionResponseDtoSchema = {
         version: {
             type: 'string',
             description: 'Running service version'
+        },
+        revision: {
+            type: 'string',
+            description: 'Git commit the service was built from. Clients compare it with their own revision to detect incompatible deployments.'
         }
     },
     required: [

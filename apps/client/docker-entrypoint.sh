@@ -4,6 +4,7 @@
 # Set defaults if not provided
 API_BASE_URL=${API_BASE_URL:-http://localhost:3000}
 VERSION=${VERSION:-dev}
+REVISION=${REVISION:-}
 CLIENT_BASE_HREF=${CLIENT_BASE_HREF:-/}
 
 # Handle empty string case
@@ -49,6 +50,9 @@ cat > /usr/share/nginx/html/env.js << EOF
   // Application version
   window['env']['version'] = '${VERSION}';
 
+  // Git commit the client was built from (used to check backend compatibility)
+  window['env']['revision'] = '${REVISION}';
+
   // Cache busting timestamp (changes every container start)
   window['env']['timestamp'] = '${TIMESTAMP}';
 
@@ -58,7 +62,7 @@ cat > /usr/share/nginx/html/env.js << EOF
 EOF
 
 echo "index.html base href set to: ${CLIENT_BASE_HREF}"
-echo "env.js configured with API_BASE_URL: ${API_BASE_URL}, VERSION: ${VERSION}, timestamp: ${TIMESTAMP}"
+echo "env.js configured with API_BASE_URL: ${API_BASE_URL}, VERSION: ${VERSION}, REVISION: ${REVISION}, timestamp: ${TIMESTAMP}"
 
 # Start nginx
 exec "$@"

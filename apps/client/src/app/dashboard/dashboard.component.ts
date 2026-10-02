@@ -15,12 +15,12 @@ import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { EnvironmentService } from '../services/environment.service';
 import { JwtService } from '../services/jwt.service';
 import { GrafanaLinkService } from '../services/grafana-link.service';
-import { appControllerGetVersion } from '@eudiplo/sdk-core';
 import { ApiService } from '../core';
 import { MatGridListModule } from '@angular/material/grid-list';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { DashboardService } from './dashboard.service';
 import { FrontendConfigService } from '../services/frontend-config.service';
+import { VersionService } from '../services/version.service';
 import {
   DashboardFocus,
   DashboardPreferences,
@@ -62,8 +62,6 @@ interface DashboardFocusOption {
 export class DashboardComponent implements OnInit, OnDestroy {
   private readonly refreshInterval?: NodeJS.Timeout;
   private tokenCheckInterval?: NodeJS.Timeout;
-  backendVersion: string | null = null;
-  clientVersion: string | null = null;
   grafanaEnabled = false;
   customizePanelOpen = false;
   preferences: DashboardPreferences = {
@@ -83,6 +81,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     public grafanaLinkService: GrafanaLinkService,
     public frontendConfigService: FrontendConfigService,
     public jwtService: JwtService,
+    public versionService: VersionService,
     private readonly router: Router,
     private readonly snackBar: MatSnackBar,
     private readonly dashboardPreferencesService: DashboardPreferencesService
@@ -103,9 +102,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // Initial check
     this.checkTokenStatus();
 
-    // Fetch versions
-    this.fetchBackendVersion();
-    this.fetchClientVersion();
+    // Fetch backend version (no-op if the app shell already checked it)
+    this.versionService.check(this.apiService.getBaseUrl());
 
     // Fetch dashboard stats
     this.dashboardService.getCounters();
@@ -157,35 +155,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
+  versionTooltip(label: string, revision?: string): string {
+    const tooltip = revision
+      ? `${label} version (commit ${revision.slice(0, 7)})`
+      : `${label} version`;
+    return this.versionService.compatibility === 'mismatch'
+      ? `${tooltip} – client and backend come from different builds`
+      : tooltip;
+  }
+
   get currentBaseUrl(): string {
     return this.apiService.getBaseUrl() || 'Not configured';
   }
 
   get canAutoRefresh(): boolean {
     return this.apiService.canRefreshToken();
-  }
-
-  /**
-   * Fetch backend version from the API
-   */
-  private async fetchBackendVersion(): Promise<void> {
-    try {
-      const response = await appControllerGetVersion();
-      if (response.data && typeof response.data === 'object' && 'version' in response.data) {
-        this.backendVersion = (response.data as any).version;
-      }
-    } catch (error) {
-      console.error('Failed to fetch backend version:', error);
-      this.backendVersion = 'Unknown';
-    }
-  }
-
-  /**
-   * Fetch client version from runtime environment
-   */
-  private fetchClientVersion(): void {
-    const env = (window as any)['env'];
-    this.clientVersion = env?.version || 'dev';
   }
 
   openGrafana(): void {

@@ -16,6 +16,7 @@ import { Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { JwtService, Role } from './services/jwt.service';
 import { ThemeService } from './services/theme.service';
+import { VersionService } from './services/version.service';
 import { ApiService } from './core';
 
 @Component({
@@ -55,7 +56,8 @@ export class AppComponent implements OnInit, OnDestroy {
     public apiService: ApiService,
     private breakpointObserver: BreakpointObserver,
     public jwtService: JwtService,
-    public themeService: ThemeService
+    public themeService: ThemeService,
+    public versionService: VersionService
   ) {}
 
   ngOnInit(): void {
@@ -65,6 +67,7 @@ export class AppComponent implements OnInit, OnDestroy {
       .subscribe((event: NavigationEnd) => {
         // Hide toolbar on login page, show on all other pages
         this.shouldShowToolbar = !event.url.includes('/login');
+        this.checkBackendVersion();
       });
 
     // Initial check for current route
@@ -92,6 +95,15 @@ export class AppComponent implements OnInit, OnDestroy {
     }
     if (this.breakpointSubscription) {
       this.breakpointSubscription.unsubscribe();
+    }
+  }
+
+  /**
+   * Compare client and backend builds once logged in, so a mismatch is visible on every page.
+   */
+  private checkBackendVersion(): void {
+    if (this.shouldShowToolbar && this.apiService.getAuthenticationStatus()) {
+      this.versionService.check(this.apiService.getBaseUrl());
     }
   }
 

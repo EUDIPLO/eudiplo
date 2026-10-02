@@ -24,9 +24,12 @@ FROM base AS eudiplo
 COPY --from=build-backend /prod/backend /app
 COPY --from=build-backend /usr/src/app/apps/backend/dist /app/dist
 
-# Accept VERSION as build argument and set as environment variable
-ARG VERSION=latest
+# Accept VERSION and REVISION (git commit) as build arguments and set as environment variables.
+# The client compares both against the backend to detect incompatible deployments.
+ARG VERSION=dev
 ENV VERSION=$VERSION
+ARG REVISION=
+ENV REVISION=$REVISION
 
 # Set production environment
 ENV NODE_ENV=production
@@ -75,9 +78,12 @@ COPY apps/client/nginx.conf /etc/nginx/nginx.conf
 COPY apps/client/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
-# Accept VERSION as build argument and set as environment variable
-ARG VERSION=latest
+# Accept VERSION and REVISION (git commit) as build arguments and set as environment variables.
+# The client compares both against the backend to detect incompatible deployments.
+ARG VERSION=dev
 ENV VERSION=$VERSION
+ARG REVISION=
+ENV REVISION=$REVISION
 
 # Environment variables with defaults
 ENV API_BASE_URL=http://localhost:3000

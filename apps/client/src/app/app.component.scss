@@ -50,6 +50,23 @@
   background-color: var(--mat-sys-background);
 }
 
+// Shown when client and backend come from different builds
+.version-warning {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 8px 8px 8px 16px;
+  border: 1px solid var(--eudiplo-warning);
+  border-radius: 8px;
+  background-color: var(--eudiplo-warning-soft);
+
+  > mat-icon {
+    color: var(--eudiplo-warning);
+    flex-shrink: 0;
+  }
+}
+
 :host-context(html.dark-theme) {
   .warning-icon {
     color: var(--eudiplo-warning);
