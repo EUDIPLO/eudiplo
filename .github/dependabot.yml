@@ -9,6 +9,8 @@ updates:
       day: tuesday
       time: "05:00"
       timezone: "Europe/Berlin"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 8
     commit-message:
       prefix: "deps"
@@ -20,17 +22,15 @@ updates:
     ignore:
       - dependency-name: "@eudiplo/*"
 
+    # One PR per ecosystem: everything npm lands in a single security PR
+    # and a single version PR.
     groups:
-      # Keep all @openid4vc packages in a dedicated PR group
-      openid4vc:
-        patterns: ["@openid4vc/*"]
-
-      # All minor/patch updates bundled together
-      all-minor-patch:
-        update-types: ["minor", "patch"]
-
-      # Major updates are NOT grouped - each gets its own PR
-      # to allow individual review and handling of breaking changes
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
+      npm-version:
+        applies-to: version-updates
+        patterns: ["*"]
 
   # --- GitHub Actions versions in .github/workflows ---
   - package-ecosystem: github-actions
@@ -40,7 +40,17 @@ updates:
       day: wednesday
       time: "05:30"
       timezone: "Europe/Berlin"
+    cooldown:
+      default-days: 7
     labels: ["dependencies", "github-actions"]
+
+    groups:
+      github-actions-security:
+        applies-to: security-updates
+        patterns: ["*"]
+      github-actions-version:
+        applies-to: version-updates
+        patterns: ["*"]
 
   # --- Docker base images (adjust directory if Dockerfiles live elsewhere) ---
   - package-ecosystem: docker
@@ -49,4 +59,34 @@ updates:
       interval: monthly
       time: "06:00"
       timezone: "Europe/Berlin"
+    cooldown:
+      default-days: 7
     labels: ["dependencies", "docker"]
+
+    # Container images are not in the GitHub Advisory Database, so docker has
+    # no security-updates stream - a version group only.
+    groups:
+      docker-version:
+        applies-to: version-updates
+        patterns: ["*"]
+
+  # --- Images pinned in compose files (docker does not cover these) ---
+  - package-ecosystem: docker-compose
+    directories:
+      - "/"
+      - "/monitor"
+      - "/deployment/docker-compose"
+      - "/apps/cli/templates"
+    schedule:
+      interval: monthly
+      time: "06:15"
+      timezone: "Europe/Berlin"
+    cooldown:
+      default-days: 7
+    labels: ["dependencies", "docker"]
+
+    # No security-updates stream here either, same as docker.
+    groups:
+      docker-compose-version:
+        applies-to: version-updates
+        patterns: ["*"]
