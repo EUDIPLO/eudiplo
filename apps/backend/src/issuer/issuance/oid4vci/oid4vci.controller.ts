@@ -17,6 +17,7 @@ import type {
     DeferredCredentialResponse,
 } from "@openid4vc/openid4vci";
 import type { Request, Response } from "express";
+import { CredentialNotificationNotFound } from "./application/record-credential-notification.js";
 import { DeferredCredentialRequestDto } from "./dto/deferred-credential-request.dto.js";
 import { NotificationRequestDto } from "./dto/notification-request.dto.js";
 import { CredentialRequestException } from "./exceptions/index.js";
@@ -201,6 +202,17 @@ export class Oid4vciController {
                 tenantId,
             )
             .catch((err) => {
+                // OID4VCI Section 11.3 Notification Error Response
+                if (err instanceof CredentialNotificationNotFound) {
+                    throw new HttpException(
+                        {
+                            error: "invalid_notification_id",
+                            error_description:
+                                "The notification_id is invalid or does not belong to the access token",
+                        },
+                        HttpStatus.BAD_REQUEST,
+                    );
+                }
                 throw toResourceAuthError(err, res) ?? err;
             });
     }

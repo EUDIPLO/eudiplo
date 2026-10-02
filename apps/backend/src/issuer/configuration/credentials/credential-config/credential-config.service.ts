@@ -21,6 +21,11 @@ import {
 import { loadConfigDto } from "../../../../shared/utils/config-file-loader.util.js";
 import { FilesService } from "../../../../storage/files.service.js";
 import { PresentationConfigService } from "../../../../verifier/presentations/configuration/presentation-config.service.js";
+import {
+    ACTIVE_CREDENTIALS_REQUIRE_STATUS_MANAGEMENT,
+    type ActiveCredentialPolicySettings,
+    activeCredentialsLackStatusManagement,
+} from "../domain/active-credential-policy.js";
 import type { CredentialConfiguration as CredentialConfig } from "../domain/credential-configuration.js";
 import { CredentialConfigCreate } from "../dto/credential-config-create.dto.js";
 import { CredentialConfigUpdate } from "../dto/credential-config-update.dto.js";
@@ -259,6 +264,7 @@ export class CredentialConfigService {
         actorToken?: TokenPayload,
         requestMeta?: AuditLogRequestMeta,
     ) {
+        assertActiveCredentialsEnforceable(config);
         await this.replaceImageReferences(tenantId, config);
         await this.validateAttestationKeyChain(tenantId, config.keyChainId);
         if (!skipValidation) {
@@ -307,6 +313,24 @@ export class CredentialConfigService {
         await this.replaceImageReferences(tenantId, config);
         await this.validateIaeActions(tenantId, config);
         const existing = await this.getById(tenantId, id);
+        // Checked only when the update touches the policy, so that partial
+        // updates of other fields (e.g. registrar schema metadata) keep working
+        // for configurations stored before the rule was enforced.
+        if (
+            config.activeCredentials !== undefined ||
+            config.statusManagement !== undefined
+        ) {
+            assertActiveCredentialsEnforceable({
+                activeCredentials:
+                    config.activeCredentials !== undefined
+                        ? config.activeCredentials
+                        : existing.activeCredentials,
+                statusManagement:
+                    config.statusManagement !== undefined
+                        ? config.statusManagement
+                        : existing.statusManagement,
+            });
+        }
         const keyChainId =
             config.keyChainId !== undefined
                 ? (config.keyChainId ?? undefined)
@@ -381,5 +405,16 @@ export class CredentialConfigService {
             iaeActions: config.iaeActions,
             keyChainId: config.keyChainId,
         };
+    }
+}
+
+/** Rejects an active-credential limit that cannot be enforced (HTTP 400). */
+function assertActiveCredentialsEnforceable(
+    settings: ActiveCredentialPolicySettings,
+): void {
+    if (activeCredentialsLackStatusManagement(settings)) {
+        throw new BadRequestException(
+            ACTIVE_CREDENTIALS_REQUIRE_STATUS_MANAGEMENT,
+        );
     }
 }

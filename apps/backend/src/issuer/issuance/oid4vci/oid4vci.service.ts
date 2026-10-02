@@ -18,7 +18,9 @@ import { Span, TraceService } from "nestjs-otel";
 import { v4 } from "uuid";
 import { EncryptionService } from "../../../crypto/encryption/encryption.service.js";
 import { ChangeSessionState } from "../../../session/application/change-session-state.js";
+import { SessionNotFound } from "../../../session/application/session-errors.js";
 import { SessionStore } from "../../../session/application/session-store.js";
+import type { SessionData } from "../../../session/domain/session-data.js";
 import { SessionStatus } from "../../../session/domain/session-state.js";
 import { AuditLogContext } from "../../../session/logging/session-audit.service.js";
 import { SessionLoggerService } from "../../../session/logging/session-logger.service.js";
@@ -31,7 +33,10 @@ import { IssuanceService } from "../../configuration/issuance/issuance.service.j
 import { SubjectKeyService } from "../../status-list/subject-key.service.js";
 import { addLegacyCredentialResponseEncryptionAlg } from "./adapters/credential-request-compat.js";
 import { BuildIssuerMetadata } from "./application/build-issuer-metadata.js";
-import { CredentialSessionAuthorizationDenied } from "./application/correlate-credential-token-session.js";
+import {
+    CorrelateCredentialTokenSession,
+    CredentialSessionAuthorizationDenied,
+} from "./application/correlate-credential-token-session.js";
 import { CreateCredentialOffer } from "./application/create-credential-offer.js";
 import { HandleCredentialNotification } from "./application/handle-credential-notification.js";
 import { IssueCredentialsFromProofs } from "./application/issue-credentials-from-proofs.js";
@@ -94,6 +99,7 @@ export class Oid4vciService {
         private readonly nonceService: NonceService,
         private readonly subjectKeyService: SubjectKeyService,
         private readonly changeSessionState: ChangeSessionState,
+        private readonly tokenSessions: CorrelateCredentialTokenSession,
     ) {}
 
     /**
@@ -575,7 +581,11 @@ export class Oid4vciService {
     }
 
     /**
-     * Store the notification in the session based on the notitification id.
+     * Store the notification in the session based on the notification id.
+     * The session is resolved from the access token like at the credential
+     * endpoint, and the notification id must have been issued in it.
+     * @throws CredentialNotificationNotFound when the token has no session or
+     * the notification id was not issued in it.
      * @param req
      * @param body
      */
@@ -604,13 +614,25 @@ export class Oid4vciService {
             issuanceConfig.dPopRequired,
         );
 
-        const session = await this.sessionStore.getForTenant(
-            tenantId,
-            tokenPayload.sub,
-        );
-
-        if (session.id !== tokenPayload.sub) {
-            throw new BadRequestException("Session not found");
+        let session: SessionData;
+        try {
+            session = await this.tokenSessions.resolveSession(
+                tenantId,
+                tokenPayload,
+            );
+        } catch (error) {
+            // Reported like an unknown notification_id so that sessions of
+            // other tokens cannot be probed.
+            if (
+                error instanceof CredentialSessionAuthorizationDenied ||
+                error instanceof SessionNotFound
+            ) {
+                this.logger.warn(
+                    `[${tenantId}] OID4VCI notification rejected: ${error.message}`,
+                );
+                throw new CredentialNotificationNotFound(body.notification_id);
+            }
+            throw error;
         }
 
         // Add session context to span for trace correlation
@@ -645,11 +667,6 @@ export class Oid4vciService {
                     notificationId: body.notification_id,
                 },
             );
-            if (error instanceof CredentialNotificationNotFound) {
-                throw new BadRequestException(
-                    "No notifications found in session",
-                );
-            }
             throw error;
         }
     }

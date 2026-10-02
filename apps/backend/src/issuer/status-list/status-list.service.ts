@@ -674,9 +674,12 @@ export class StatusListService {
             return undefined;
         }
 
+        // Rejected when a configuration is created, imported or its policy is
+        // updated; only configurations stored before that rule was enforced
+        // can still get here.
         if (!credentialConfiguration?.statusManagement) {
             this.logger.warn(
-                `activeCredentials is enabled for '${credentialConfigurationId}' but statusManagement is disabled; skipping enforcement.`,
+                `[${session.tenantId}] activeCredentials is enabled for '${credentialConfigurationId}' but statusManagement is disabled; skipping enforcement. Enable statusManagement or disable activeCredentials for this credential configuration.`,
             );
             return undefined;
         }

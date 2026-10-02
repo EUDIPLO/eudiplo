@@ -297,6 +297,27 @@ describe("StatusListService active-credential limit", () => {
         ).toBe(0);
     });
 
+    test("warns when a stored configuration enables the policy without statusManagement", async () => {
+        const warn = vi
+            .spyOn(
+                (service as unknown as { logger: { warn: () => void } }).logger,
+                "warn",
+            )
+            .mockImplementation(() => undefined);
+        await service.createEntry(
+            makeSession(),
+            CONFIG_ID,
+            makeConfig({ statusManagement: false }),
+        );
+
+        expect(warn).toHaveBeenCalledWith(
+            expect.stringContaining("skipping enforcement"),
+        );
+        expect(
+            await dataSource.getRepository(ActiveCredentialSlot).count(),
+        ).toBe(0);
+    });
+
     test("an issuance that fails to allocate leaves the existing credential valid", async () => {
         const first = await service.createEntry(
             makeSession(),
