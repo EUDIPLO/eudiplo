@@ -28,7 +28,7 @@ interface SessionOutcomeWarning {
 }
 
 /** Per-credential verification outcome. */
-interface SessionOutcomeCredential {
+export interface SessionOutcomeCredential {
     /** Requested credential id (DCQL), when known. */
     id?: string;
     /** Credential format, e.g. `mso_mdoc` or `dc+sd-jwt`. */

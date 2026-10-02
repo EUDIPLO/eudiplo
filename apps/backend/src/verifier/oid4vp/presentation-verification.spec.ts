@@ -5,7 +5,11 @@ import type { SessionData } from "../../session/domain/session-data.js";
 import { MdocCredentialVerifierFormat } from "../presentations/adapters/mdoc-credential-verifier-format.js";
 import { SdJwtCredentialVerifierFormat } from "../presentations/adapters/sd-jwt-credential-verifier-format.js";
 import { CredentialVerifierFormatRegistry } from "../presentations/application/credential-verifier-format-registry.js";
-import { VerifyPresentationResponse } from "../presentations/application/verify-presentation-response.js";
+import {
+    CredentialVerificationFailedError,
+    VerifyPresentationResponse,
+} from "../presentations/application/verify-presentation-response.js";
+import { SdJwtVerificationError } from "../presentations/credential/sdjwtvcverifier/sdjwtvcverifier.service.js";
 import type { PresentationConfig } from "../presentations/entities/presentation-config.entity.js";
 import { IncompletePresentationException } from "../presentations/exceptions/incomplete-presentation.exception.js";
 import { InvalidTrustedAuthoritiesError } from "../presentations/ports/trust-list-ref-resolver.js";
@@ -311,22 +315,67 @@ describe("OID4VP presentation verification", () => {
                 mdocResult: {
                     verified: false,
                     claims: {},
+                    docType: "org.iso.18013.5.1.mDL",
                     failureType: "trust_chain_not_trusted",
                     failureReason: "verbose details",
                 },
             },
         );
-        await expect(
-            service.parseResponse(
+        const error = await service
+            .parseResponse(
                 { vp_token: { mdl: ["dr"] } } as any,
                 config,
                 session,
-            ),
-        ).rejects.toThrow(
-            new BadRequestException(
-                'mDOC verification failed for credential "mdl": certificate chain does not match any trusted entity',
+            )
+            .catch((e: any) => e);
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect(error.message).toBe(
+            'mDOC verification failed for credential "mdl": certificate chain does not match any trusted entity',
+        );
+        // The structured failure travels as the cause for the session outcome.
+        expect(error.cause).toBeInstanceOf(CredentialVerificationFailedError);
+        expect(error.cause).toMatchObject({
+            credentialId: "mdl",
+            failure: {
+                type: "trust_chain_not_trusted",
+                reason: "verbose details",
+            },
+            credential: {
+                format: "mso_mdoc",
+                docType: "org.iso.18013.5.1.mDL",
+            },
+        });
+    });
+
+    it("reports classified SD-JWT VC failures like mdoc failures", async () => {
+        const { service, config, session, sdJwt } = setup([
+            { id: "pid", format: "dc+sd-jwt" },
+        ]);
+        sdJwt.verify.mockRejectedValue(
+            new SdJwtVerificationError(
+                "trust_chain_not_trusted",
+                "verbose details",
             ),
         );
+        const error = await service
+            .parseResponse(
+                { vp_token: { pid: ["vp"] } } as any,
+                config,
+                session,
+            )
+            .catch((e: any) => e);
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect(error.message).toBe(
+            'SD-JWT VC verification failed for credential "pid": The credential issuer is not in the trusted list.',
+        );
+        expect(error.cause).toMatchObject({
+            credentialId: "pid",
+            failure: {
+                type: "trust_chain_not_trusted",
+                reason: "verbose details",
+            },
+            credential: { format: "dc+sd-jwt" },
+        });
     });
 
     it("rejects incomplete trusted_authorities as a bad request", async () => {
@@ -418,17 +467,18 @@ describe("OID4VP presentation verification", () => {
                 claims: {},
                 failureType: "signature_invalid",
             });
-        await expect(
-            service.parseResponse(
+        const error = await service
+            .parseResponse(
                 { vp_token: { mdl: ["dr"] } } as any,
                 config,
                 session,
-            ),
-        ).rejects.toThrow(
-            new BadRequestException(
-                'mDOC verification failed for credential "mdl": mDOC signature is invalid',
-            ),
+            )
+            .catch((e: any) => e);
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect(error.message).toBe(
+            'mDOC verification failed for credential "mdl": mDOC signature is invalid',
         );
+        expect(error.cause.failure.type).toBe("signature_invalid");
         expect(mdoc.verify.mock.calls.map((call) => call[3])).toEqual([
             [["ns", "age_over_18"]],
             [["ns", "birth_date"]],

@@ -571,7 +571,7 @@ export const sessionConfigControllerUpdateConfig = <ThrowOnError extends boolean
 /**
  * Subscribe to session status updates
  *
- * Server-Sent Events endpoint for real-time session status updates. Requires JWT authentication via query parameter.
+ * Server-Sent Events endpoint for real-time session status updates. The first event carries the current status; the stream ends after a terminal status (completed, expired, failed). Requires JWT authentication via query parameter.
  */
 export const sessionEventsControllerSubscribeToSessionEvents = <ThrowOnError extends boolean = true>(options: Options<SessionEventsControllerSubscribeToSessionEventsData, ThrowOnError, SessionEventsControllerSubscribeToSessionEventsResponse>): Promise<ServerSentEventsResult<SessionEventsControllerSubscribeToSessionEventsResponses>> => (options.client ?? client).sse.get<SessionEventsControllerSubscribeToSessionEventsResponses, unknown, ThrowOnError>({ url: '/api/session/{id}/events', ...options });
 

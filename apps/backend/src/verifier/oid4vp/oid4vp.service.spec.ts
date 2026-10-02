@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { SessionStatus } from "../../session/domain/session-state.js";
 import { SessionNotUsable } from "../../session/domain/session-usability.js";
+import { CredentialVerificationFailedError } from "../presentations/application/verify-presentation-response.js";
 import { CompletePresentationResponse } from "./application/complete-presentation-response.js";
 import { FailPresentationResponse } from "./application/fail-presentation-response.js";
 import { ParseAuthorizationResponse } from "./application/parse-authorization-response.js";
@@ -62,6 +63,7 @@ describe("OID4VP state mismatch handling", () => {
                     failPresentationResponse: new FailPresentationResponse(
                         { updateIfUnconsumed: update },
                         { announce },
+                        { publish },
                     ),
                 },
             );
@@ -159,6 +161,7 @@ describe("OID4VP concurrent response handling", () => {
                 failPresentationResponse: new FailPresentationResponse(
                     { updateIfUnconsumed: update },
                     { announce },
+                    { publish },
                 ),
             },
         );
@@ -178,18 +181,38 @@ describe("OID4VP concurrent response handling", () => {
 });
 
 describe("OID4VP wallet error response handling", () => {
-    function createService(redirectUri?: string) {
+    const webhook = {
+        url: "https://webhook.example/result",
+        auth: { type: "none" as const },
+    };
+
+    function createService(
+        options: {
+            redirectUri?: string;
+            parsedWebhook?: typeof webhook;
+            webhookEndpointId?: string;
+        } = {},
+    ) {
         const session = {
             id: "session",
             tenantId: "tenant",
             walletNonce: "expected",
             requestId: "presentation",
             consumed: false,
-            redirectUri,
+            redirectUri: options.redirectUri,
+            parsedWebhook: options.parsedWebhook,
+            webhookEndpointId: options.webhookEndpointId,
             responseEncryptionPrivateJwk: { kty: "oct", k: "secret" },
         };
         const update = vi.fn().mockResolvedValue(true);
+        const updateForTenant = vi.fn();
         const announce = vi.fn();
+        const publish = vi.fn().mockResolvedValue({});
+        const logFlowError = vi.fn();
+        const resolveWebhookFromEndpoint = vi.fn().mockResolvedValue(undefined);
+        const getPresentationConfig = vi
+            .fn()
+            .mockResolvedValue({ webhookEndpointId: "config-endpoint" });
         const decrypt = vi.fn().mockResolvedValue({
             error: "access_denied",
             error_description: "User declined",
@@ -199,17 +222,39 @@ describe("OID4VP wallet error response handling", () => {
             Object.create(Oid4vpService.prototype) as Oid4vpService,
             {
                 resolveSessionByNonce: vi.fn().mockResolvedValue(session),
-                logger: { debug: vi.fn() },
+                logger: { debug: vi.fn(), warn: vi.fn() },
                 traceService: { getSpan: () => undefined },
                 encryptionService: { decryptJweWithPrivateJwk: decrypt },
                 parseAuthorizationResponse: new ParseAuthorizationResponse(),
-                auditLogger: { logFlowError: vi.fn() },
-                sessionStore: { updateIfUnconsumed: update },
-                changeSessionState: { announce },
+                auditLogger: { logFlowError },
+                presentationConfigService: { getPresentationConfig },
+                resolveWebhookFromEndpoint,
+                failPresentationResponse: new FailPresentationResponse(
+                    { updateForTenant, updateIfUnconsumed: update },
+                    { announce },
+                    { publish },
+                ),
             },
         );
-        return { service, session, update, announce, decrypt };
+        return {
+            service,
+            session,
+            update,
+            updateForTenant,
+            announce,
+            publish,
+            logFlowError,
+            resolveWebhookFromEndpoint,
+            getPresentationConfig,
+            decrypt,
+        };
     }
+
+    const walletOutcome = {
+        result: "failed",
+        error: "access_denied",
+        message: "Wallet error: access_denied: User declined",
+    };
 
     it.each([
         [
@@ -220,7 +265,8 @@ describe("OID4VP wallet error response handling", () => {
     ])(
         "marks the session failed and returns without an exception for a %s error response",
         async (_kind, body) => {
-            const { service, session, update, announce } = createService();
+            const { service, update, updateForTenant, announce, publish } =
+                createService();
 
             await expect(
                 service.getResponse(body, "expected"),
@@ -232,22 +278,28 @@ describe("OID4VP wallet error response handling", () => {
                     status: "failed",
                     errorReason: "Wallet error: access_denied: User declined",
                     failureCode: "access_denied",
-                    outcome: {
-                        result: "failed",
-                        error: "access_denied",
-                        message: "Wallet error: access_denied: User declined",
-                    },
+                    outcome: walletOutcome,
                     responseEncryptionPrivateJwk: null,
                 },
             );
-            expect(announce).toHaveBeenCalledExactlyOnceWith(session, "failed");
+            expect(updateForTenant).not.toHaveBeenCalled();
+            expect(announce).toHaveBeenCalledExactlyOnceWith(
+                {
+                    id: "session",
+                    tenantId: "tenant",
+                    requestId: "presentation",
+                },
+                "failed",
+            );
+            // No webhook configured on the session or the presentation config.
+            expect(publish).not.toHaveBeenCalled();
         },
     );
 
     it("returns the redirect_uri with the wallet error for an encrypted error response", async () => {
-        const { service } = createService(
-            "https://client.example/complete/{sessionId}",
-        );
+        const { service } = createService({
+            redirectUri: "https://client.example/complete/{sessionId}",
+        });
 
         await expect(
             service.getResponse({ response: "encrypted" }, "expected"),
@@ -258,7 +310,9 @@ describe("OID4VP wallet error response handling", () => {
     });
 
     it("does not overwrite a session a concurrent presentation already completed", async () => {
-        const { service, update, announce } = createService();
+        const { service, update, announce, publish } = createService({
+            parsedWebhook: webhook,
+        });
         update.mockResolvedValue(false);
 
         const error = await service
@@ -267,6 +321,289 @@ describe("OID4VP wallet error response handling", () => {
 
         expect(error.getStatus()).toBe(400);
         expect(announce).not.toHaveBeenCalled();
+        expect(publish).not.toHaveBeenCalled();
+    });
+
+    it("reports the declined presentation to the webhook without credentials", async () => {
+        const { service, session, publish } = createService({
+            parsedWebhook: webhook,
+        });
+
+        await expect(
+            service.getResponse({ response: "encrypted" }, "expected"),
+        ).resolves.toEqual({});
+        expect(publish).toHaveBeenCalledExactlyOnceWith({
+            webhook,
+            session,
+            status: "failed",
+            outcome: walletOutcome,
+        });
+    });
+
+    it("resolves the webhook endpoint of the presentation config like the success path", async () => {
+        const {
+            service,
+            publish,
+            resolveWebhookFromEndpoint,
+            getPresentationConfig,
+        } = createService();
+        resolveWebhookFromEndpoint.mockResolvedValue(webhook);
+
+        await service.getResponse({ error: "access_denied" }, "expected");
+
+        expect(getPresentationConfig).toHaveBeenCalledWith(
+            "presentation",
+            "tenant",
+        );
+        expect(resolveWebhookFromEndpoint).toHaveBeenCalledWith(
+            "config-endpoint",
+            "tenant",
+        );
+        expect(publish).toHaveBeenCalledOnce();
+    });
+
+    it("uses a redirectUri returned by the webhook for the error redirect", async () => {
+        const { service, publish } = createService({
+            redirectUri: "https://client.example/complete/{sessionId}",
+            parsedWebhook: webhook,
+        });
+        publish.mockResolvedValue({
+            redirectUri: "https://override.example/declined/{sessionId}?a=1",
+        });
+
+        await expect(
+            service.getResponse({ error: "access_denied" }, "expected"),
+        ).resolves.toEqual({
+            redirect_uri:
+                "https://override.example/declined/session?a=1&error=access_denied",
+        });
+    });
+
+    it("keeps the failed session and the 200 answer when webhook delivery fails", async () => {
+        const { service, update, publish, logFlowError } = createService({
+            parsedWebhook: webhook,
+        });
+        publish.mockRejectedValue(new Error("webhook down"));
+
+        await expect(
+            service.getResponse({ error: "access_denied" }, "expected"),
+        ).resolves.toEqual({});
+        expect(update).toHaveBeenCalledOnce();
+        expect(logFlowError).toHaveBeenLastCalledWith(
+            expect.anything(),
+            expect.objectContaining({ message: "webhook down" }),
+            { action: "webhook_callback" },
+        );
+    });
+
+    it("still records the failure when the webhook cannot be resolved", async () => {
+        const { service, update, publish, getPresentationConfig } =
+            createService();
+        getPresentationConfig.mockRejectedValue(new Error("config deleted"));
+
+        await expect(
+            service.getResponse({ error: "access_denied" }, "expected"),
+        ).resolves.toEqual({});
+        expect(update).toHaveBeenCalledOnce();
+        expect(publish).not.toHaveBeenCalled();
+    });
+});
+
+describe("OID4VP verification failure reporting", () => {
+    const webhook = {
+        url: "https://webhook.example/result",
+        auth: { type: "none" as const },
+    };
+
+    function createService(failure: unknown, redirectUri?: string) {
+        const session = {
+            id: "session",
+            tenantId: "tenant",
+            walletNonce: "expected",
+            requestId: "presentation",
+            consumed: false,
+            redirectUri,
+            parsedWebhook: webhook,
+            responseEncryptionPrivateJwk: { kty: "oct", k: "secret" },
+        };
+        const update = vi.fn().mockResolvedValue(true);
+        const publish = vi.fn().mockResolvedValue({});
+        const logFlowError = vi.fn();
+        const service = Object.assign(
+            Object.create(Oid4vpService.prototype) as Oid4vpService,
+            {
+                resolveSessionByNonce: vi.fn().mockResolvedValue(session),
+                logger: { debug: vi.fn(), warn: vi.fn(), assign: vi.fn() },
+                traceService: { getSpan: () => undefined },
+                encryptionService: {
+                    decryptJweWithPrivateJwk: vi.fn().mockResolvedValue({
+                        vp_token: { mdl: ["device-response"] },
+                        state: "expected",
+                    }),
+                },
+                parseAuthorizationResponse: new ParseAuthorizationResponse(),
+                settings: { logDecryptedResponse: false },
+                presentationConfigService: {
+                    getPresentationConfig: vi.fn().mockResolvedValue({}),
+                },
+                // The real verifyPresentation maps the use case error.
+                verifyPresentationResponse: {
+                    execute: vi.fn().mockRejectedValue(failure),
+                },
+                auditLogger: {
+                    logFlowStart: vi.fn(),
+                    logCredentialVerification: vi.fn(),
+                    logFlowError,
+                },
+                failPresentationResponse: new FailPresentationResponse(
+                    { updateIfUnconsumed: update },
+                    { announce: vi.fn() },
+                    { publish },
+                ),
+            },
+        );
+        return { service, session, update, publish, logFlowError };
+    }
+
+    it("classifies mDOC verification failures into failureCode and the per-credential outcome", async () => {
+        const { service, session, update, publish, logFlowError } =
+            createService(
+                new CredentialVerificationFailedError(
+                    "mdl",
+                    {
+                        type: "trust_chain_not_trusted",
+                        reason: "CN=Issuer is not in the configured list",
+                        message:
+                            'mDOC verification failed for credential "mdl": certificate chain does not match any trusted entity',
+                    },
+                    { format: "mso_mdoc", docType: "org.iso.18013.5.1.mDL" },
+                ),
+            );
+
+        const error = await service
+            .getResponse({ response: "encrypted" }, "expected")
+            .catch((error) => error);
+
+        expect(error.getStatus()).toBe(400);
+        const message = "The credential issuer is not in the trusted list.";
+        const outcome = {
+            result: "failed",
+            error: "trust_chain_not_trusted",
+            message,
+            credentials: [
+                {
+                    id: "mdl",
+                    format: "mso_mdoc",
+                    docType: "org.iso.18013.5.1.mDL",
+                    verified: false,
+                    error: "trust_chain_not_trusted",
+                    message,
+                },
+            ],
+        };
+        expect(update).toHaveBeenCalledExactlyOnceWith("tenant", "session", {
+            status: "failed",
+            errorReason: message,
+            failureCode: "trust_chain_not_trusted",
+            responseEncryptionPrivateJwk: null,
+            outcome,
+        });
+        // The verbose reason stays in the audit log.
+        expect(logFlowError).toHaveBeenCalledWith(
+            expect.anything(),
+            new Error("CN=Issuer is not in the configured list"),
+            {
+                action: "process_presentation_response",
+                errorCode: "trust_chain_not_trusted",
+            },
+        );
+        expect(publish).toHaveBeenCalledExactlyOnceWith({
+            webhook,
+            session,
+            status: "failed",
+            outcome,
+        });
+    });
+
+    it("falls back to verification_error for an unclassified credential failure", async () => {
+        const { service, update } = createService(
+            new CredentialVerificationFailedError(
+                "mdl",
+                { message: "mDOC verification failed" },
+                { format: "mso_mdoc" },
+            ),
+        );
+
+        await service
+            .getResponse({ response: "encrypted" }, "expected")
+            .catch(() => undefined);
+
+        expect(update.mock.calls[0][2]).toMatchObject({
+            failureCode: "verification_error",
+            outcome: {
+                error: "verification_error",
+                credentials: [
+                    { id: "mdl", verified: false, error: "verification_error" },
+                ],
+            },
+        });
+    });
+
+    it("keeps unclassified errors without a failure code", async () => {
+        const { service, update } = createService(new Error("boom"));
+
+        await service
+            .getResponse({ response: "encrypted" }, "expected")
+            .catch(() => undefined);
+
+        expect(update.mock.calls[0][2]).toEqual({
+            status: "failed",
+            errorReason: "Presentation validation failed: boom",
+            responseEncryptionPrivateJwk: null,
+            outcome: {
+                result: "failed",
+                message: "Presentation validation failed: boom",
+            },
+        });
+    });
+
+    it("uses a redirectUri returned by the failure webhook and keeps HTTP 400", async () => {
+        const { service, publish } = createService(
+            new Error("boom"),
+            "https://client.example/complete/{sessionId}",
+        );
+        publish.mockResolvedValue({
+            redirectUri: "https://override.example/failed",
+        });
+
+        const error = await service
+            .getResponse({ response: "encrypted" }, "expected")
+            .catch((error) => error);
+
+        expect(error.getStatus()).toBe(400);
+        expect(error.getResponse()).toEqual({
+            redirect_uri: `https://override.example/failed?error=invalid_request&error_description=${encodeURIComponent("Presentation validation failed: boom")}`,
+        });
+    });
+
+    it("keeps the failed session when the failure webhook cannot be delivered", async () => {
+        const { service, update, publish, logFlowError } = createService(
+            new Error("boom"),
+        );
+        publish.mockRejectedValue(new Error("webhook down"));
+
+        const error = await service
+            .getResponse({ response: "encrypted" }, "expected")
+            .catch((error) => error);
+
+        expect(error.getStatus()).toBe(400);
+        expect(error.getResponse()).toEqual({});
+        expect(update).toHaveBeenCalledOnce();
+        expect(logFlowError).toHaveBeenLastCalledWith(
+            expect.anything(),
+            expect.objectContaining({ message: "webhook down" }),
+            { action: "webhook_callback" },
+        );
     });
 });
 

@@ -7,7 +7,7 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { Test } from "@nestjs/testing";
 import { Oauth2ServerErrorResponseError } from "@openid4vc/oauth2";
-import { firstValueFrom, timeout } from "rxjs";
+import { lastValueFrom, timeout, toArray } from "rxjs";
 import { DataSource } from "typeorm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -379,10 +379,12 @@ describe("session lifecycle module wiring", () => {
             tenantId: "tenant-a",
             responseEncryptionPrivateJwk: { kty: "oct", k: "private-material" },
         });
-        const nextEvent = firstValueFrom(
+        // The stream starts with the stored status and completes after the
+        // terminal one, so its last event is the transition under test.
+        const nextEvent = lastValueFrom(
             app
                 .get(events.SessionEventsService)
-                .getSessionEvents(id)
+                .getSessionEvents("tenant-a", id)
                 .pipe(timeout(2000)),
         );
         const emitted: unknown[] = [];
@@ -421,6 +423,61 @@ describe("session lifecycle module wiring", () => {
             });
         } finally {
             emitter.off(eventPort.SESSION_STATUS_CHANGED, listener);
+        }
+    });
+
+    it("streams the stored status first and completes on a change made without an in-process event", async () => {
+        const { SESSION_EVENTS_POLL_INTERVAL_MS } = events;
+        const id = randomUUID();
+        const repository = db.getRepository(entities.Session);
+        await repository.save({
+            id,
+            tenantId: "tenant-a",
+            status: domain.SessionStatus.Fetched,
+        });
+        try {
+            const stream = lastValueFrom(
+                app
+                    .get(events.SessionEventsService)
+                    .getSessionEvents("tenant-a", id)
+                    .pipe(
+                        toArray(),
+                        timeout(SESSION_EVENTS_POLL_INTERVAL_MS * 3),
+                    ),
+            );
+            // Another replica completes the session: only the database changes.
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            await repository.update(
+                { id },
+                { status: domain.SessionStatus.Failed },
+            );
+            const statuses = (await stream).map(
+                (message) => JSON.parse(message.data).status,
+            );
+            expect(statuses).toEqual(["fetched", "failed"]);
+
+            // A late subscriber gets the terminal status and the end of stream.
+            const late = await lastValueFrom(
+                app
+                    .get(events.SessionEventsService)
+                    .getSessionEvents("tenant-a", id)
+                    .pipe(toArray(), timeout(2000)),
+            );
+            expect(late.map((message) => JSON.parse(message.data))).toEqual([
+                { id, status: "failed", updatedAt: expect.any(String) },
+            ]);
+
+            // Reads are tenant-scoped: another tenant's stream ends at once.
+            await expect(
+                lastValueFrom(
+                    app
+                        .get(events.SessionEventsService)
+                        .getSessionEvents("tenant-b", id)
+                        .pipe(toArray(), timeout(2000)),
+                ),
+            ).resolves.toEqual([]);
+        } finally {
+            await repository.delete({ id });
         }
     });
 
@@ -519,10 +576,12 @@ describe("session lifecycle module wiring", () => {
             expiresAt: new Date("2020-01-01"),
             responseEncryptionPrivateJwk: { kty: "oct", k: "private-material" },
         });
-        const nextEvent = firstValueFrom(
+        // The stream starts with the stored status and completes after the
+        // terminal one, so its last event is the transition under test.
+        const nextEvent = lastValueFrom(
             app
                 .get(events.SessionEventsService)
-                .getSessionEvents(id)
+                .getSessionEvents("tenant-a", id)
                 .pipe(timeout(2000)),
         );
         await app.get(cleanup.CleanupSessions).execute();

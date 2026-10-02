@@ -1,4 +1,5 @@
 import type { SessionData } from "../../../session/domain/session-data.js";
+import { SessionStatus } from "../../../session/domain/session-state.js";
 import type { WebhookConfiguration } from "../../../webhook/domain/webhook-configuration.js";
 import type { PresentationResultPublisher } from "../../../webhook/ports/presentation-result-publisher.js";
 import type { AuthResponseData } from "../../presentations/domain/auth-response.js";
@@ -35,7 +36,7 @@ export class ProcessVerifiedPresentation {
             input.response,
             session.walletNonce ?? session.id,
         );
-        await this.complete.execute({
+        const outcome = await this.complete.execute({
             tenantId: session.tenantId,
             sessionId: session.id,
             requestId: session.requestId,
@@ -47,6 +48,8 @@ export class ProcessVerifiedPresentation {
                 const response = await this.publisher.publish({
                     webhook: input.webhook,
                     session,
+                    status: SessionStatus.Completed,
+                    outcome,
                     credentials: input.credentials,
                     rawPresentationPayload: input.rawPresentationPayload,
                 });

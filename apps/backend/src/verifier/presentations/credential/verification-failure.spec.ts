@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { mapChainErrorToFailureType } from "./verification-failure.js";
+import {
+    mapChainErrorToFailureType,
+    verificationFailureDetails,
+} from "./verification-failure.js";
 
 /**
  * The chain validator (CredentialChainValidationService) is shared by the mDoc
@@ -48,5 +51,28 @@ describe("mapChainErrorToFailureType — format-neutral trust classification", (
         expect(mapChainErrorToFailureType("no_trusted_entity_match")).toBe(
             "trust_chain_not_trusted",
         );
+    });
+});
+
+describe("verificationFailureDetails", () => {
+    it("pairs the failure type with its short message and keeps the verbose reason apart", () => {
+        expect(
+            verificationFailureDetails(
+                "trust_chain_not_trusted",
+                "CN=Issuer not in list",
+            ),
+        ).toEqual({
+            code: "trust_chain_not_trusted",
+            message: "The credential issuer is not in the trusted list.",
+            verbose: "CN=Issuer not in list",
+        });
+    });
+
+    it("falls back to verification_error for an unclassified failure", () => {
+        expect(verificationFailureDetails(undefined)).toEqual({
+            code: "verification_error",
+            message: "The credential could not be verified.",
+            verbose: undefined,
+        });
     });
 });

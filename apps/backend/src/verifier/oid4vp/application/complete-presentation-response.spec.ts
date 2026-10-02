@@ -15,7 +15,7 @@ describe("CompletePresentationResponse", () => {
         );
         const consumedAt = new Date("2026-09-27T00:00:00.000Z");
 
-        await response.execute({
+        const outcome = await response.execute({
             tenantId: "tenant-1",
             sessionId: "session-1",
             requestId: "presentation-1",
@@ -47,6 +47,8 @@ describe("CompletePresentationResponse", () => {
                 ],
             },
         });
+        // The persisted outcome is returned for the presentation webhook.
+        expect(outcome).toEqual(update.mock.calls[0][2].outcome);
     });
 
     it("rejects a response that lost the race without announcing it", async () => {

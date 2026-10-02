@@ -488,11 +488,25 @@ describe("Presentation - mDOC Credential", () => {
             .expect(200);
 
         expect(sessionRes.body.status).toBe("failed");
-        expect(sessionRes.body.errorReason).toContain(
-            'mDOC verification failed for credential "pid-mso-mdoc":',
+        // mDOC failures are classified like SD-JWT VC ones: a stable code and
+        // a short message, also per credential in the outcome.
+        expect(sessionRes.body.failureCode).toMatch(
+            /^(no_trust_chain_to_root|trust_chain_not_trusted)$/,
         );
-        expect(sessionRes.body.errorReason).toMatch(
-            /no trust chain to a trusted root could be built|certificate chain does not match any trusted entity|mdoc verification failed/i,
-        );
+        expect(sessionRes.body.errorReason).toMatch(/trusted (root|list)/);
+        expect(sessionRes.body.outcome).toMatchObject({
+            result: "failed",
+            error: sessionRes.body.failureCode,
+            message: sessionRes.body.errorReason,
+            credentials: [
+                {
+                    id: "pid-mso-mdoc",
+                    format: "mso_mdoc",
+                    verified: false,
+                    error: sessionRes.body.failureCode,
+                    message: sessionRes.body.errorReason,
+                },
+            ],
+        });
     });
 });

@@ -1,6 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { PinoLogger } from "nestjs-pino";
-import { SdjwtvcverifierService } from "../credential/sdjwtvcverifier/sdjwtvcverifier.service.js";
+import {
+    SdJwtVerificationError,
+    SdjwtvcverifierService,
+} from "../credential/sdjwtvcverifier/sdjwtvcverifier.service.js";
+import { shortVerificationMessage } from "../credential/verification-failure.js";
 import type {
     CredentialVerificationContext,
     CredentialVerificationResult,
@@ -14,7 +18,9 @@ import {
 
 /**
  * SD-JWT VC verifier format. The verifier enforces the requested claims and
- * throws `SdJwtVerificationError` (or a library error) on failure. With
+ * throws `SdJwtVerificationError` (or a library error) on failure; the
+ * classified signature/trust failures are reported as a `verified: false`
+ * result, like mdoc, so callers can attribute them to the credential. With
  * `claim_sets` the credential is verified once and the options are matched
  * against the disclosed claims.
  */
@@ -43,13 +49,28 @@ export class SdJwtCredentialVerifierFormat implements CredentialVerifierFormat {
         const checkedClaimKeys = context.claimSets
             ? []
             : sdJwtRequiredClaimKeys(context.claims);
-        const result = await this.verifier.verify(credential, {
-            requiredClaimKeys: checkedClaimKeys,
-            keyBindingNonce: binding.sessionNonce!,
-            keyBindingAudience: this.keyBindingAudience(binding),
-            ...context.options,
-            keyBindingResponseMode: binding.request?.response_mode,
-        });
+        let result: Awaited<ReturnType<SdjwtvcverifierService["verify"]>>;
+        try {
+            result = await this.verifier.verify(credential, {
+                requiredClaimKeys: checkedClaimKeys,
+                keyBindingNonce: binding.sessionNonce!,
+                keyBindingAudience: this.keyBindingAudience(binding),
+                ...context.options,
+                keyBindingResponseMode: binding.request?.response_mode,
+            });
+        } catch (error) {
+            if (!(error instanceof SdJwtVerificationError)) {
+                throw error;
+            }
+            return {
+                verified: false,
+                failure: {
+                    type: error.failureType,
+                    reason: error.verboseReason,
+                    message: `SD-JWT VC verification failed for credential "${context.credentialId}": ${shortVerificationMessage(error.failureType)}`,
+                },
+            };
+        }
         const payload = (result.payload ?? {}) as Record<string, unknown>;
 
         const claimSetSatisfied = context.claimSets
