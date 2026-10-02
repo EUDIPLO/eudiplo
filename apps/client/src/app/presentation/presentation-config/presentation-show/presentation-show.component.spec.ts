@@ -1,4 +1,5 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { PresentationShowComponent } from './presentation-show.component';
 
@@ -9,6 +10,7 @@ describe('PresentationShowComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [PresentationShowComponent],
+      providers: [provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(PresentationShowComponent);

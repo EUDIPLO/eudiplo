@@ -2,11 +2,16 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router } from '@angular/router';
+import { provideFormlyCore } from '@ngx-formly/core';
+import { withFormlyMaterial } from '@ngx-formly/material';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { IssuanceOfferComponent } from './issuance-offer.component';
 import { AttributeProviderService } from '../attribute-provider/attribute-provider.service';
 import { CredentialConfigService } from '../credential-config/credential-config.service';
 import { IssuanceConfigService } from '../issuance-config/issuance-config.service';
+import { ArrayTypeComponent } from '../../types/array.type';
+import { ObjectTypeComponent } from '../../types/object.type';
 
 function buildMdocConfig() {
   return {
@@ -39,28 +44,37 @@ describe('IssuanceOfferComponent', () => {
     await TestBed.configureTestingModule({
       imports: [IssuanceOfferComponent],
       providers: [
+        provideFormlyCore([
+          ...withFormlyMaterial(),
+          {
+            types: [
+              { name: 'array', component: ArrayTypeComponent },
+              { name: 'object', component: ObjectTypeComponent },
+            ],
+          },
+        ]),
         {
           provide: IssuanceConfigService,
           useValue: {
-            getConfig: jasmine.createSpy().and.resolveTo(undefined),
-            getOffer: jasmine.createSpy().and.resolveTo({ session: 'session-id', uri: 'uri' }),
+            getConfig: vi.fn().mockResolvedValue(undefined),
+            getOffer: vi.fn().mockResolvedValue({ session: 'session-id', uri: 'uri' }),
           },
         },
         {
           provide: CredentialConfigService,
           useValue: {
-            loadConfigurations: jasmine.createSpy().and.resolveTo([]),
+            loadConfigurations: vi.fn().mockResolvedValue([]),
           },
         },
         {
           provide: AttributeProviderService,
           useValue: {
-            getAll: jasmine.createSpy().and.resolveTo([]),
+            getAll: vi.fn().mockResolvedValue([]),
           },
         },
-        { provide: MatSnackBar, useValue: { open: jasmine.createSpy() } },
-        { provide: Router, useValue: { navigate: jasmine.createSpy().and.resolveTo(true) } },
-        { provide: MatDialog, useValue: { open: jasmine.createSpy() } },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        { provide: Router, useValue: { navigate: vi.fn().mockResolvedValue(true) } },
+        { provide: MatDialog, useValue: { open: vi.fn() } },
       ],
     }).compileComponents();
 
@@ -78,26 +92,28 @@ describe('IssuanceOfferComponent', () => {
 
     await component.setClaimFormFields(['pid']);
 
-    expect(component.fields).toHaveSize(1);
-    expect(component.fields[0].fieldGroup?.some((field) => field.key === 'given_name')).toBeTrue();
+    expect(component.fields).toHaveLength(1);
+    expect(component.fields[0].fieldGroup?.some((field) => field.key === 'given_name')).toBe(true);
     expect(
       component.fields[0].fieldGroup?.some((field) => field.key === 'eu.europa.ec.eudi.pid.1')
-    ).toBeFalse();
+    ).toBe(false);
 
     expect(component.elements[0].defaultClaims).toEqual({ given_name: 'Ada' });
 
     component.flowStepForm.patchValue({ flow: 'pre_authorized_code' });
     component.credentialStepForm.patchValue({ credentialConfigurationIds: ['pid'] });
-    component.configStepForm.get('claims')?.patchValue({ pid: { given_name: 'Ada' } });
+    component.configStepForm
+      .get('claims')
+      ?.patchValue({ pid: { given_name: 'Ada', family_name: 'Lovelace' } });
     component.elements[0].claimSource = 'form';
 
     await component.onSubmit();
 
     const issuanceConfigService = TestBed.inject(IssuanceConfigService) as any;
-    const offerRequest = issuanceConfigService.getOffer.calls.mostRecent().args[0];
+    const offerRequest = issuanceConfigService.getOffer.mock.lastCall[0];
 
     expect(offerRequest.credentialClaims.pid.claims).toEqual({
-      'eu.europa.ec.eudi.pid.1': { given_name: 'Ada' },
+      'eu.europa.ec.eudi.pid.1': { given_name: 'Ada', family_name: 'Lovelace' },
     });
   });
 
@@ -199,7 +215,7 @@ describe('IssuanceOfferComponent', () => {
       { value: 'external-auth', label: 'external-auth' },
     ]);
     expect(component.configStepForm.get('authorization_server')?.value).toBe('external-auth');
-    expect(component.configStepForm.get('authorization_server')?.valid).toBeTrue();
+    expect(component.configStepForm.get('authorization_server')?.valid).toBe(true);
   });
 
   it('requires a valid explicit selection when multiple servers are available', () => {
@@ -213,10 +229,10 @@ describe('IssuanceOfferComponent', () => {
     (component as any).syncAuthorizationServerControl('pre_authorized_code');
 
     expect(component.configStepForm.get('authorization_server')?.value).toBe('');
-    expect(component.configStepForm.get('authorization_server')?.invalid).toBeTrue();
+    expect(component.configStepForm.get('authorization_server')?.invalid).toBe(true);
 
     component.configStepForm.patchValue({ authorization_server: 'second-auth' });
-    expect(component.configStepForm.get('authorization_server')?.valid).toBeTrue();
+    expect(component.configStepForm.get('authorization_server')?.valid).toBe(true);
   });
 
   it('clears a stale authorization server when the flow changes', () => {
@@ -245,13 +261,13 @@ describe('IssuanceOfferComponent', () => {
     component.credentialStepForm.patchValue({ credentialConfigurationIds: ['pid'] });
     component.configStepForm.patchValue({
       authorization_server: 'second-auth',
-      claims: { pid: { given_name: 'Ada' } },
+      claims: { pid: { given_name: 'Ada', family_name: 'Lovelace' } },
     });
 
     await component.onSubmit();
 
     const issuanceConfigService = TestBed.inject(IssuanceConfigService) as any;
-    expect(issuanceConfigService.getOffer.calls.mostRecent().args[0].authorization_server).toBe(
+    expect(issuanceConfigService.getOffer.mock.lastCall[0].authorization_server).toBe(
       'second-auth'
     );
   });

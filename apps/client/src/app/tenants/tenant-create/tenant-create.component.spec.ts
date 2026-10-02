@@ -1,20 +1,8 @@
 import '@angular/compiler';
 import { FormBuilder } from '@angular/forms';
+import { client } from '@eudiplo/sdk-core';
 import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const sdkMocks = vi.hoisted(() => ({
-  getTenant: vi.fn(),
-  initTenant: vi.fn(),
-  updateTenant: vi.fn(),
-}));
-
-vi.mock('@eudiplo/sdk-core', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@eudiplo/sdk-core')>()),
-  tenantControllerGetTenant: sdkMocks.getTenant,
-  tenantControllerInitTenant: sdkMocks.initTenant,
-  tenantControllerUpdateTenant: sdkMocks.updateTenant,
-}));
 
 import { TenantCreateComponent } from './tenant-create.component';
 
@@ -22,13 +10,34 @@ describe('TenantCreateComponent', () => {
   let component: TenantCreateComponent;
   let routeId: string | null;
   let router: { navigate: ReturnType<typeof vi.fn> };
+  let responseBody: unknown;
+  let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
+
+  async function lastRequest() {
+    const request = fetchMock.mock.lastCall?.[0];
+    if (!(request instanceof Request)) {
+      throw new Error('Expected the SDK to send a Request');
+    }
+    const text = await request.clone().text();
+    return {
+      method: request.method,
+      path: new URL(request.url).pathname,
+      body: text ? JSON.parse(text) : undefined,
+    };
+  }
 
   beforeEach(() => {
-    vi.clearAllMocks();
     routeId = null;
+    responseBody = {};
     router = { navigate: vi.fn().mockResolvedValue(true) };
-    sdkMocks.initTenant.mockResolvedValue({ data: {} });
-    sdkMocks.updateTenant.mockResolvedValue({ data: {} });
+    fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify(responseBody), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+    );
+    client.setConfig({ fetch: fetchMock });
 
     component = new TenantCreateComponent(
       new FormBuilder(),
@@ -52,7 +61,9 @@ describe('TenantCreateComponent', () => {
 
     await component.onSubmit();
 
-    expect(sdkMocks.initTenant).toHaveBeenCalledWith({
+    expect(await lastRequest()).toEqual({
+      method: 'POST',
+      path: '/api/tenant',
       body: {
         id: 'tenant',
         name: 'Tenant',
@@ -71,7 +82,9 @@ describe('TenantCreateComponent', () => {
 
     await component.onSubmit();
 
-    expect(sdkMocks.initTenant).toHaveBeenCalledWith({
+    expect(await lastRequest()).toEqual({
+      method: 'POST',
+      path: '/api/tenant',
       body: expect.objectContaining({ description: 'Example tenant' }),
     });
   });
@@ -89,8 +102,9 @@ describe('TenantCreateComponent', () => {
 
     await component.onSubmit();
 
-    expect(sdkMocks.updateTenant).toHaveBeenCalledWith({
-      path: { id: 'tenant' },
+    expect(await lastRequest()).toEqual({
+      method: 'PATCH',
+      path: '/api/tenant/tenant',
       body: { name: 'Renamed' },
     });
   });
@@ -109,8 +123,9 @@ describe('TenantCreateComponent', () => {
 
     await component.onSubmit();
 
-    expect(sdkMocks.updateTenant).toHaveBeenCalledWith({
-      path: { id: 'tenant' },
+    expect(await lastRequest()).toEqual({
+      method: 'PATCH',
+      path: '/api/tenant/tenant',
       body: { name: 'Tenant', description: null },
     });
   });
@@ -129,16 +144,15 @@ describe('TenantCreateComponent', () => {
 
     await component.onSubmit();
 
-    expect(sdkMocks.updateTenant).toHaveBeenCalledWith({
-      path: { id: 'tenant' },
+    expect(await lastRequest()).toEqual({
+      method: 'PATCH',
+      path: '/api/tenant/tenant',
       body: { name: 'Tenant', description: 'Updated description' },
     });
   });
 
   it('leaves the form pristine after loading tenant data', async () => {
-    sdkMocks.getTenant.mockResolvedValue({
-      data: { id: 'tenant', name: 'Tenant', description: null },
-    });
+    responseBody = { id: 'tenant', name: 'Tenant', description: null };
 
     await (component as unknown as { loadTenant(id: string): Promise<void> }).loadTenant('tenant');
 

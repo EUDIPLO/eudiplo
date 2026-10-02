@@ -1,4 +1,5 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { KeyManagementCreateComponent } from './key-management-create.component';
 
@@ -9,6 +10,7 @@ describe('KeyManagementCreateComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [KeyManagementCreateComponent],
+      providers: [provideRouter([{ path: 'keys/create', children: [] }])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(KeyManagementCreateComponent);

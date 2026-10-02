@@ -229,6 +229,9 @@ jobs:
       - name: Build client
         run: pnpm --filter @eudiplo/client build
 
+      - name: Run client unit tests
+        run: pnpm --filter @eudiplo/client test --watch=false
+
   build-webhook:
     name: Build Webhook
     permissions:

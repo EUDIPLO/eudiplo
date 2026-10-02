@@ -60,6 +60,7 @@
     "apps/client": {
       "entry": [
         "src/**/*.spec.ts",
+        "src/test-setup.ts",
         "e2e/**/*.ts"
       ],
       "ignoreDependencies": [

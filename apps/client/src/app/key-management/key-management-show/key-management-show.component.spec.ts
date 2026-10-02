@@ -1,4 +1,5 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { KeyManagementShowComponent } from './key-management-show.component';
 
@@ -9,6 +10,7 @@ describe('KeyManagementShowComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [KeyManagementShowComponent],
+      providers: [provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(KeyManagementShowComponent);

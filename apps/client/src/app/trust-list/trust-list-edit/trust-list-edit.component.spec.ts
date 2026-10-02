@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { TrustListEditComponent } from './trust-list-edit.component';
 
@@ -9,6 +10,7 @@ describe('TrustListEditComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [TrustListEditComponent],
+      providers: [provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(TrustListEditComponent);

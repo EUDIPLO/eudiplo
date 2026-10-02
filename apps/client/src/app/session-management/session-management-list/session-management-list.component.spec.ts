@@ -1,4 +1,5 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import { SessionManagementListComponent } from './session-management-list.component';
 
@@ -9,6 +10,7 @@ describe('SessionManagementListComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [SessionManagementListComponent],
+      providers: [provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(SessionManagementListComponent);
