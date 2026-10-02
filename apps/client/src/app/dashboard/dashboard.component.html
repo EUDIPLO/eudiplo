@@ -12,13 +12,21 @@
     </div>
     <div class="header-actions">
       <div class="version-chips" fxLayout="row" fxLayoutGap="8px">
-        <mat-chip matTooltip="Backend version">
+        <mat-chip
+          [matTooltip]="versionTooltip('Backend', versionService.backend?.revision)"
+          [class.version-mismatch]="versionService.compatibility === 'mismatch'"
+        >
           <mat-icon matChipAvatar>dns</mat-icon>
-          Backend: {{ backendVersion || '...' }}
+          Backend: {{ versionService.backend?.version || '...' }}
         </mat-chip>
-        <mat-chip matTooltip="Client version">
-          <mat-icon matChipAvatar>web</mat-icon>
-          Client: {{ clientVersion || '...' }}
+        <mat-chip
+          [matTooltip]="versionTooltip('Client', versionService.client.revision)"
+          [class.version-mismatch]="versionService.compatibility === 'mismatch'"
+        >
+          <mat-icon matChipAvatar>{{
+            versionService.compatibility === 'mismatch' ? 'warning' : 'web'
+          }}</mat-icon>
+          Client: {{ versionService.client.version }}
         </mat-chip>
         <mat-chip matTooltip="Startup configuration import mode">
           <mat-icon matChipAvatar>sync</mat-icon>

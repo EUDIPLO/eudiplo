@@ -55,6 +55,7 @@ export class AppController {
     getVersion(): VersionResponseDto {
         return {
             version: process.env.VERSION ?? "main",
+            revision: process.env.REVISION || undefined,
         };
     }
 

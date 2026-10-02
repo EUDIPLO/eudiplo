@@ -81,6 +81,14 @@ mat-icon[mat-card-avatar] {
 
   .version-chips mat-chip {
     background: var(--mat-sys-surface-container-high);
+
+    &.version-mismatch {
+      background: var(--eudiplo-warning-soft);
+
+      mat-icon {
+        color: var(--eudiplo-warning);
+      }
+    }
   }
 
   .customize-button {

@@ -530,13 +530,35 @@ jobs:
           fail-on-error: false
 
   # =============================================================================
+  # Build info: one version shared by all Docker images of this run, so the
+  # client can detect when it is connected to a backend from a different build.
+  # =============================================================================
+  build-info:
+    name: Compute Build Version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      revision: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: tree:0
+
+      - name: Compute version
+        id: version
+        run: echo "version=$(scripts/ci-version.sh "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
+
+  # =============================================================================
   # Docker Backend: Build, Test & Push (multi-platform with native runners)
   # Uses native ARM runners instead of QEMU for ~4x faster arm64 builds.
   # Skip arm64 on PRs to save time - only build amd64 for validation.
   # =============================================================================
   docker-backend:
     name: Build & Test Backend Docker (${{ matrix.arch }})
-    needs: [test-e2e, test-e2e-oidf]
+    needs: [build-info, test-e2e, test-e2e-oidf]
     strategy:
       fail-fast: false
       matrix:
@@ -574,7 +596,9 @@ jobs:
           target: eudiplo
           load: true
           tags: ghcr.io/openwallet-foundation/eudiplo:test
-          build-args: VERSION=main
+          build-args: |
+            VERSION=${{ needs.build-info.outputs.version }}
+            REVISION=${{ needs.build-info.outputs.revision }}
           cache-from: type=gha,scope=backend-${{ matrix.arch }}
           cache-to: type=gha,scope=backend-${{ matrix.arch }},mode=max
 
@@ -660,7 +684,9 @@ jobs:
           context: .
           target: eudiplo
           platforms: ${{ matrix.platform }}
-          build-args: VERSION=main
+          build-args: |
+            VERSION=${{ needs.build-info.outputs.version }}
+            REVISION=${{ needs.build-info.outputs.revision }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=ghcr.io/openwallet-foundation/eudiplo,push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=backend-${{ matrix.arch }}
@@ -732,7 +758,7 @@ jobs:
   # =============================================================================
   docker-backend-demo:
     name: Build & Push Backend Demo Docker (${{ matrix.arch }})
-    needs: [test-e2e, test-e2e-oidf]
+    needs: [build-info, test-e2e, test-e2e-oidf]
     strategy:
       fail-fast: false
       matrix:
@@ -768,7 +794,9 @@ jobs:
           context: .
           target: eudiplo-demo
           platforms: ${{ matrix.platform }}
-          build-args: VERSION=main
+          build-args: |
+            VERSION=${{ needs.build-info.outputs.version }}
+            REVISION=${{ needs.build-info.outputs.revision }}
           cache-from: type=gha,scope=backend-demo-${{ matrix.arch }}
           cache-to: type=gha,scope=backend-demo-${{ matrix.arch }},mode=max
 
@@ -781,7 +809,9 @@ jobs:
           context: .
           target: eudiplo-demo
           platforms: ${{ matrix.platform }}
-          build-args: VERSION=main
+          build-args: |
+            VERSION=${{ needs.build-info.outputs.version }}
+            REVISION=${{ needs.build-info.outputs.revision }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=ghcr.io/openwallet-foundation/eudiplo-demo,push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=backend-demo-${{ matrix.arch }}
@@ -853,7 +883,7 @@ jobs:
   # =============================================================================
   docker-client:
     name: Build & Push Client Docker (${{ matrix.arch }})
-    needs: [lint]
+    needs: [build-info, lint]
     strategy:
       fail-fast: false
       matrix:
@@ -891,6 +921,9 @@ jobs:
           context: .
           target: client
           platforms: ${{ matrix.platform }}
+          build-args: |
+            VERSION=${{ needs.build-info.outputs.version }}
+            REVISION=${{ needs.build-info.outputs.revision }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=ghcr.io/openwallet-foundation/eudiplo-client,push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=client-${{ matrix.arch }}
@@ -904,6 +937,9 @@ jobs:
           context: .
           target: client
           platforms: ${{ matrix.platform }}
+          build-args: |
+            VERSION=${{ needs.build-info.outputs.version }}
+            REVISION=${{ needs.build-info.outputs.revision }}
           cache-from: type=gha,scope=client-${{ matrix.arch }}
           cache-to: type=gha,scope=client-${{ matrix.arch }},mode=max
 
