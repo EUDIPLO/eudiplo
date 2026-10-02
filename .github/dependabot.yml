@@ -21,6 +21,11 @@ updates:
     # Ignore internal workspace packages (Dependabot doesn't support workspace: protocol)
     ignore:
       - dependency-name: "@eudiplo/*"
+      # TypeScript 7.0 ships tsc only, without the compiler API that the Nest CLI,
+      # tsup and typescript-eslint need. Packages that only run tsc are already on
+      # 7; hold the rest on 6 until 7.1 restores the API.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
     # One PR per ecosystem: everything npm lands in a single security PR
     # and a single version PR.
