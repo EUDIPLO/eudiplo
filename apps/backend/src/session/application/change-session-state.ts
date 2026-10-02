@@ -5,13 +5,14 @@ import {
 } from "../domain/session-state.js";
 import type { SessionRepository } from "../ports/session.repository.js";
 import type { SessionEventPublisher } from "../ports/session-event-publisher.js";
-import type { SessionMetrics } from "../ports/session-metrics.js";
 
 export class ChangeSessionState {
     constructor(
-        private readonly sessions: Pick<SessionRepository, "changeState">,
+        private readonly sessions: Pick<
+            SessionRepository,
+            "changeState" | "changeStateFrom"
+        >,
         private readonly events: SessionEventPublisher,
-        private readonly metrics: Pick<SessionMetrics, "recordStateChange">,
     ) {}
 
     async execute(
@@ -27,17 +28,36 @@ export class ChangeSessionState {
     }
 
     /**
-     * Publishes the status event and records metrics for a transition the
-     * caller already persisted in its own write (e.g. an atomic single-use
-     * completion). Call it once, and only after that write took effect.
+     * Changes the status only while the session is still in one of `from`
+     * (compare-and-set) and announces the transition only when this call
+     * changed it, so repeated or concurrent requests publish it once.
+     * @returns whether this call changed the status
+     */
+    async executeFrom(
+        session: SessionLifecycleContext,
+        from: readonly SessionStatus[],
+        status: SessionStatus,
+    ): Promise<boolean> {
+        const changed = await this.sessions.changeStateFrom(
+            session.tenantId,
+            session.id,
+            from,
+            stateUpdate(status),
+        );
+        if (changed) this.announce(session, status);
+        return changed;
+    }
+
+    /**
+     * Publishes the status event for a transition the caller already
+     * persisted in its own write (e.g. an atomic single-use completion). Call
+     * it once, and only after that write took effect.
      */
     announce(session: SessionLifecycleContext, status: SessionStatus): void {
-        // Keep the existing persistence -> synchronous event -> metrics order.
         this.events.publishStatusChanged({
             sessionId: session.id,
             status,
             updatedAt: new Date(),
         });
-        this.metrics.recordStateChange(session, status);
     }
 }

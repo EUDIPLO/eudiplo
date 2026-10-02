@@ -10,6 +10,8 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { AddKeyUsageEntity1743000000000 } from "../src/database/migrations/1743000000000-AddKeyUsageEntity.js";
 import { FlattenKeyUsageType1746000000000 } from "../src/database/migrations/1746000000000-FlattenKeyUsageType.js";
 import { MigrateKeysToKeyChain1747000000000 } from "../src/database/migrations/1747000000000-MigrateKeysToKeyChain.js";
+import { ChangeSessionExpiresAtToTimestamp1784000000000 } from "../src/database/migrations/1784000000000-ChangeSessionExpiresAtToTimestamp.js";
+import { AddOfferLifetimeToIssuanceConfig1784100000000 } from "../src/database/migrations/1784100000000-AddOfferLifetimeToIssuanceConfig.js";
 import { describeWithContainers } from "./container-runtime.js";
 
 /**
@@ -859,6 +861,160 @@ describe("Migration tests", () => {
                 expect(tables).toHaveLength(0);
 
                 await queryRunner.release();
+            });
+        });
+    });
+
+    /**
+     * SQLite is covered by src/database/session-expiry-migration.spec.ts.
+     * On PostgreSQL the type change must keep the stored values (TypeORM's
+     * changeColumn would drop and re-add the column).
+     */
+    describe("ChangeSessionExpiresAtToTimestamp1784000000000", () => {
+        describeWithContainers("PostgreSQL", () => {
+            let dataSource: DataSource;
+            let postgresContainer: StartedPostgreSqlContainer;
+            let driftAfterSynchronize: string[];
+            const sessionId = "00000000-0000-4000-8000-000000000001";
+
+            const drift = async () =>
+                (await dataSource.driver.createSchemaBuilder().log()).upQueries
+                    .map((query) => query.query)
+                    .sort();
+            const columnType = async (table: string, column: string) =>
+                (
+                    await dataSource.query(
+                        `SELECT data_type FROM information_schema.columns WHERE table_name = $1 AND column_name = $2`,
+                        [table, column],
+                    )
+                )[0]?.data_type;
+
+            beforeAll(async () => {
+                const [
+                    { Session },
+                    { SessionLogEntry },
+                    { TenantEntity },
+                    { ClientEntity },
+                    { IssuanceConfig },
+                ] = await Promise.all([
+                    import("../src/session/entities/session.entity.js"),
+                    import(
+                        "../src/session/entities/session-log-entry.entity.js"
+                    ),
+                    import("../src/auth/tenant/entities/tenant.entity.js"),
+                    import("../src/auth/client/entities/client.entity.js"),
+                    import(
+                        "../src/issuer/configuration/issuance/entities/issuance-config.entity.js"
+                    ),
+                ]);
+                postgresContainer = await new PostgreSqlContainer(
+                    "postgres:alpine",
+                ).start();
+                dataSource = new DataSource({
+                    type: "postgres",
+                    url: postgresContainer.getConnectionUri(),
+                    entities: [
+                        Session,
+                        SessionLogEntry,
+                        TenantEntity,
+                        ClientEntity,
+                        IssuanceConfig,
+                    ],
+                    synchronize: true,
+                    logging: false,
+                });
+                await dataSource.initialize();
+                driftAfterSynchronize = await drift();
+
+                // Recreate the schema before the migrations.
+                const queryRunner = dataSource.createQueryRunner();
+                await new ChangeSessionExpiresAtToTimestamp1784000000000().down(
+                    queryRunner,
+                );
+                await new AddOfferLifetimeToIssuanceConfig1784100000000().down(
+                    queryRunner,
+                );
+                await queryRunner.release();
+                await dataSource.query(
+                    `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't')`,
+                );
+                await dataSource.query(
+                    `INSERT INTO "session" ("id", "tenantId", "expiresAt") VALUES ($1, 't', '2026-03-01')`,
+                    [sessionId],
+                );
+                await dataSource.query(
+                    `INSERT INTO "session_log_entry" ("sessionId", "level", "message") VALUES ($1, 'info', 'kept')`,
+                    [sessionId],
+                );
+            }, 60_000);
+
+            afterAll(async () => {
+                await dataSource?.destroy();
+                await postgresContainer?.stop();
+            });
+
+            test("starts from a date-only column without an offer lifetime", async () => {
+                expect(await columnType("session", "expiresAt")).toBe("date");
+                expect(
+                    await columnType("issuance_config", "offerLifetimeSeconds"),
+                ).toBeUndefined();
+            });
+
+            test("converts stored dates to midnight timestamps in place", async () => {
+                const queryRunner = dataSource.createQueryRunner();
+                await new ChangeSessionExpiresAtToTimestamp1784000000000().up(
+                    queryRunner,
+                );
+                await new AddOfferLifetimeToIssuanceConfig1784100000000().up(
+                    queryRunner,
+                );
+                await queryRunner.release();
+
+                expect(await columnType("session", "expiresAt")).toBe(
+                    "timestamp without time zone",
+                );
+                expect(
+                    await columnType("issuance_config", "offerLifetimeSeconds"),
+                ).toBe("integer");
+                await expect(
+                    dataSource.query(
+                        `SELECT "expiresAt"::text AS "expiresAt" FROM "session" WHERE "id" = $1`,
+                        [sessionId],
+                    ),
+                ).resolves.toEqual([{ expiresAt: "2026-03-01 00:00:00" }]);
+                await expect(
+                    dataSource.query(
+                        `SELECT "message" FROM "session_log_entry"`,
+                    ),
+                ).resolves.toEqual([{ message: "kept" }]);
+                expect(await drift()).toEqual(driftAfterSynchronize);
+            });
+
+            test("is idempotent and keeps the time of day", async () => {
+                const queryRunner = dataSource.createQueryRunner();
+                await new ChangeSessionExpiresAtToTimestamp1784000000000().up(
+                    queryRunner,
+                );
+                await new AddOfferLifetimeToIssuanceConfig1784100000000().up(
+                    queryRunner,
+                );
+                await queryRunner.release();
+                expect(await drift()).toEqual(driftAfterSynchronize);
+
+                const { Session } = await import(
+                    "../src/session/entities/session.entity.js"
+                );
+                const later = new Date("2026-03-01T10:15:30.250Z");
+                await dataSource
+                    .getRepository(Session)
+                    .update(sessionId, { expiresAt: later });
+                expect(
+                    (
+                        await dataSource
+                            .getRepository(Session)
+                            .findOneByOrFail({ id: sessionId })
+                    ).expiresAt,
+                ).toEqual(later);
             });
         });
     });

@@ -4,7 +4,7 @@ import { SessionStatus } from "../../../session/domain/session-state.js";
 
 export class FailPresentationResponse {
     constructor(
-        private readonly sessions: Pick<SessionStore, "updateForTenant">,
+        private readonly sessions: Pick<SessionStore, "updateIfUnconsumed">,
         private readonly state: Pick<ChangeSessionState, "announce">,
     ) {}
     async execute(input: {
@@ -15,7 +15,9 @@ export class FailPresentationResponse {
         message: string;
         code?: string;
     }) {
-        const updated = await this.sessions.updateForTenant(
+        // Conditional like the completion: a session another response
+        // completed, or one that expired meanwhile, keeps its final state.
+        const updated = await this.sessions.updateIfUnconsumed(
             input.tenantId,
             input.sessionId,
             {
@@ -30,7 +32,7 @@ export class FailPresentationResponse {
                 },
             },
         );
-        if (updated > 0) {
+        if (updated) {
             this.state.announce(
                 {
                     id: input.sessionId,

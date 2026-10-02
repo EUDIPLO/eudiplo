@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { SessionStatus } from "../../session/domain/session-state.js";
+import { SessionNotUsable } from "../../session/domain/session-usability.js";
 import { CompletePresentationResponse } from "./application/complete-presentation-response.js";
 import { FailPresentationResponse } from "./application/fail-presentation-response.js";
 import { ParseAuthorizationResponse } from "./application/parse-authorization-response.js";
@@ -58,7 +60,7 @@ describe("OID4VP state mismatch handling", () => {
                             { publish },
                         ),
                     failPresentationResponse: new FailPresentationResponse(
-                        { updateForTenant: update },
+                        { updateIfUnconsumed: update },
                         { announce },
                     ),
                 },
@@ -155,7 +157,7 @@ describe("OID4VP concurrent response handling", () => {
                     { publish },
                 ),
                 failPresentationResponse: new FailPresentationResponse(
-                    { updateForTenant: update },
+                    { updateIfUnconsumed: update },
                     { announce },
                 ),
             },
@@ -265,5 +267,82 @@ describe("OID4VP wallet error response handling", () => {
 
         expect(error.getStatus()).toBe(400);
         expect(announce).not.toHaveBeenCalled();
+    });
+});
+
+describe("OID4VP expired or finished requests", () => {
+    function createService(session: Record<string, unknown>) {
+        const decrypt = vi.fn();
+        const fail = vi.fn();
+        const service = Object.assign(
+            Object.create(Oid4vpService.prototype) as Oid4vpService,
+            {
+                resolveSessionByNonce: vi.fn().mockResolvedValue({
+                    id: "session",
+                    tenantId: "tenant",
+                    requestId: "presentation",
+                    consumed: false,
+                    status: SessionStatus.Active,
+                    ...session,
+                }),
+                logger: { debug: vi.fn() },
+                traceService: { getSpan: () => undefined },
+                encryptionService: { decryptJweWithPrivateJwk: decrypt },
+                failPresentationResponse: { execute: fail },
+            },
+        );
+        return { service, decrypt, fail };
+    }
+
+    it.each([
+        [
+            "past its expiry",
+            { expiresAt: new Date(Date.now() - 1000) },
+            "The session has expired",
+        ],
+        [
+            "already expired",
+            { status: SessionStatus.Expired },
+            "The session has expired",
+        ],
+        [
+            "already failed",
+            { status: SessionStatus.Failed },
+            "The session is already failed",
+        ],
+    ])(
+        "rejects a response to a request %s without touching the session",
+        async (_case, session, message) => {
+            const { service, decrypt, fail } = createService(session);
+
+            const error = await service
+                .getResponse({ response: "encrypted" }, "nonce")
+                .catch((error) => error);
+
+            expect(error.getStatus()).toBe(400);
+            expect(error.message).toBe(message);
+            expect(decrypt).not.toHaveBeenCalled();
+            expect(fail).not.toHaveBeenCalled();
+        },
+    );
+
+    it("maps an expired request object fetch to HTTP 400", async () => {
+        const { service } = createService({});
+        Object.assign(service, {
+            retrievePresentationRequest: {
+                execute: vi
+                    .fn()
+                    .mockRejectedValue(
+                        new SessionNotUsable(SessionStatus.Expired),
+                    ),
+            },
+        });
+
+        const error = await service
+            .getAuthorizationRequest("nonce", "https://wallet.example")
+            .catch((error) => error);
+
+        expect(error.getStatus()).toBe(400);
+        expect(error.message).toBe("The session has expired");
     });
 });

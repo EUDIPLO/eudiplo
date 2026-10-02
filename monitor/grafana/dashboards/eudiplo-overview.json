@@ -239,7 +239,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "sum(sessions{status=\"active\"})",
+                    "expr": "sum(max by (tenant_id, session_type, status) (sessions{status=\"active\"}))",
                     "refId": "A"
                 }
             ]
@@ -504,7 +504,7 @@
                         "type": "prometheus",
                         "uid": "prometheus"
                     },
-                    "expr": "sum by (status) (sessions)",
+                    "expr": "sum by (status) (max by (tenant_id, session_type, status) (sessions))",
                     "legendFormat": "{{status}}",
                     "refId": "A"
                 }

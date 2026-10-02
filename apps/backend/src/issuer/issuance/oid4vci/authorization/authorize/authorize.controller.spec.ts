@@ -6,6 +6,7 @@ import {
 } from "@openid4vc/oauth2";
 import { calculateJwkThumbprint } from "jose";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SessionNotFound } from "../../../../../session/application/session-errors.js";
 import type { SessionData } from "../../../../../session/domain/session-data.js";
 import {
     ConfiguredBuiltInAuthorizationServerConfiguration,
@@ -117,6 +118,11 @@ function createHarness(issuanceConfig: Record<string, unknown> = {}) {
     Object.assign(server, oauth);
 
     const sessions = {
+        getForTenant: vi
+            .fn()
+            .mockResolvedValue(
+                session({ id: "offer-1", authorization_code: undefined }),
+            ),
         getByAuthorizationCode: vi.fn().mockResolvedValue(session()),
         getByRefreshToken: vi.fn(),
         getByRequestUri: vi.fn(),
@@ -387,6 +393,75 @@ describe("Built-in authorization server token endpoint", () => {
                 ),
             );
             expect(h.issuance.getIssuanceConfiguration).not.toHaveBeenCalled();
+        });
+
+        it("rejects a code of an expired offer before loading the configuration", async () => {
+            h.sessions.getByAuthorizationCode.mockResolvedValue(
+                session({ expiresAt: new Date(Date.now() - 1) }),
+            );
+            expect(
+                await token({ grant_type: "authorization_code", code: "c" }),
+            ).toEqual(
+                tokenError("invalid_grant", "The credential offer has expired"),
+            );
+            expect(h.issuance.getIssuanceConfiguration).not.toHaveBeenCalled();
+            expect(h.sessions.updateIfUnconsumed).not.toHaveBeenCalled();
+        });
+
+        it.each(["completed", "failed", "expired"] as const)(
+            "rejects a code of a %s session",
+            async (status) => {
+                h.sessions.getByAuthorizationCode.mockResolvedValue(
+                    session({ status: status as SessionData["status"] }),
+                );
+                expect(
+                    await token({
+                        grant_type: "authorization_code",
+                        code: "c",
+                    }),
+                ).toEqual(
+                    tokenError(
+                        "invalid_grant",
+                        status === "expired"
+                            ? "The credential offer has expired"
+                            : "The credential offer is no longer valid",
+                    ),
+                );
+            },
+        );
+
+        it("redeems a code before the offer expires", async () => {
+            h.sessions.getByAuthorizationCode.mockResolvedValue(
+                session({ expiresAt: new Date(Date.now() + 60_000) }),
+            );
+            expect(
+                await token({ grant_type: "authorization_code", code: "c" }),
+            ).toEqual({
+                value: expect.objectContaining({
+                    access_token: "access-token",
+                }),
+            });
+        });
+
+        it("refreshes after the offer expired and the session completed", async () => {
+            h.sessions.getByRefreshToken.mockResolvedValue(
+                session({
+                    consumed: true,
+                    refresh_token: "rt",
+                    status: "completed" as SessionData["status"],
+                    expiresAt: new Date(Date.now() - 60_000),
+                }),
+            );
+            expect(
+                await token({
+                    grant_type: "refresh_token",
+                    refresh_token: "rt",
+                }),
+            ).toEqual({
+                value: expect.objectContaining({
+                    access_token: "access-token",
+                }),
+            });
         });
 
         it("allows a consumed session for the refresh grant", async () => {
@@ -810,6 +885,22 @@ describe("Built-in authorization server token endpoint", () => {
                 error,
                 error_description: description,
             });
+
+        it("rejects the pre-authorized code of an expired offer without counting a tx_code attempt", async () => {
+            h.sessions.getByAuthorizationCode.mockResolvedValue(
+                session({
+                    credentialPayload: { tx_code: "1234" } as never,
+                    expiresAt: new Date(Date.now() - 1),
+                }),
+            );
+            expect(await token(preAuth("0000"))).toEqual(
+                tokenError("invalid_grant", "The credential offer has expired"),
+            );
+            expect(
+                h.oauth.verifyPreAuthorizedCodeAccessTokenRequest,
+            ).not.toHaveBeenCalled();
+            expect(h.recordFailedTxCodeAttempt.execute).not.toHaveBeenCalled();
+        });
 
         it("rejects an expired pre-authorized code without counting a tx_code attempt", async () => {
             h.sessions.getByAuthorizationCode.mockResolvedValue(withTxCode());
@@ -1371,7 +1462,33 @@ describe("Built-in authorization server PAR endpoint", () => {
         expect(h.createSession.execute).not.toHaveBeenCalled();
     });
 
+    it.each([
+        [
+            "expired",
+            { expiresAt: new Date(Date.now() - 1) },
+            "The credential offer has expired",
+        ],
+        [
+            "completed",
+            { status: "completed" as SessionData["status"] },
+            "The credential offer is no longer valid",
+        ],
+    ])(
+        "rejects an issuer_state whose offer is %s",
+        async (_case, values, description) => {
+            h.sessions.getForTenant.mockResolvedValue(
+                session({ id: "offer-1", ...values }),
+            );
+            expect(await par({ ...validPar, issuer_state: "offer-1" })).toEqual(
+                tokenError("invalid_request", description),
+            );
+            expect(h.sessions.updateForTenant).not.toHaveBeenCalled();
+            expect(h.createSession.execute).not.toHaveBeenCalled();
+        },
+    );
+
     it("creates a session when issuer_state is unknown or absent", async () => {
+        h.sessions.getForTenant.mockRejectedValue(new SessionNotFound());
         h.sessions.updateForTenant.mockResolvedValue(false);
         await par({ ...validPar, issuer_state: "unknown" });
         await par(validPar);
@@ -1474,6 +1591,25 @@ describe("Built-in authorization server authorize endpoint", () => {
         expect(new URL(url).searchParams.get("error_description")).toBe(
             "request_uri is expired or was already used",
         );
+        expect(h.sessions.updateForTenant).not.toHaveBeenCalled();
+    });
+
+    it("redirects with an error when the credential offer expired", async () => {
+        h.sessions.getByRequestUri.mockResolvedValue(
+            parSession({ expiresAt: new Date(Date.now() - 1) }),
+        );
+        const url = new URL(
+            await h.service.sendAuthorizationResponse(
+                { request_uri: "urn:r", client_id: "wallet-client" },
+                TENANT,
+            ),
+        );
+        expect(url.searchParams.get("error")).toBe("invalid_request");
+        expect(url.searchParams.get("error_description")).toBe(
+            "The credential offer has expired",
+        );
+        expect(url.searchParams.get("state")).toBe("wallet-state");
+        expect(h.sessions.consumeRequestUri).not.toHaveBeenCalled();
         expect(h.sessions.updateForTenant).not.toHaveBeenCalled();
     });
 

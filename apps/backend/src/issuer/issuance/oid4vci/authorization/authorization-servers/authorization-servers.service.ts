@@ -12,6 +12,7 @@ import { KeyChainService } from "../../../../../crypto/key/key-chain.service.js"
 import { CreateSession } from "../../../../../session/application/create-session.js";
 import { SessionStore } from "../../../../../session/application/session-store.js";
 import { SessionStatus } from "../../../../../session/domain/session-state.js";
+import { assertSessionUsable } from "../../../../../session/domain/session-usability.js";
 import { WalletAttestationService } from "../../../../../trust/wallet-attestation.service.js";
 import { Oid4vpService } from "../../../../../verifier/oid4vp/oid4vp.service.js";
 import type { TrustListRef } from "../../../../../verifier/presentations/entities/presentation-config.entity.js";
@@ -262,7 +263,10 @@ export class AuthorizationServersService {
         let issuerState = request.issuer_state;
         if (issuerState) {
             try {
-                await this.sessionStore.getForTenant(tenantId, issuerState);
+                assertSessionUsable(
+                    await this.sessionStore.getForTenant(tenantId, issuerState),
+                    new Date(),
+                );
             } catch {
                 throw new BadRequestException("Invalid issuer_state");
             }

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+    CONFIG_FORMATS,
     CONFIG_RESOURCE_KINDS,
     CONFIG_SINGLETON_IDS,
     type ConfigMigration,
@@ -26,7 +27,7 @@ describe("portable schema identity and migrations", () => {
             expect(resolveConfigIdentity({ $schema: schemaUrl(kind) })).toEqual(
                 {
                     kind,
-                    version: 1,
+                    version: CONFIG_FORMATS[kind].version,
                 },
             );
             const document = normalizeDocument({
@@ -93,6 +94,52 @@ describe("portable schema identity and migrations", () => {
         expect(result.document.$schema).toBe(schemaUrl("Tenant", 2));
         expect(result.document.spec).toEqual({ displayName: "Example" });
         expect(result.migrations).toEqual(["rename-name"]);
+    });
+
+    it("upgrades a v1 issuance configuration to v2 unchanged", () => {
+        const v1 = {
+            $schema: schemaUrl("IssuanceConfig", 1),
+            metadata: { generation: 2 },
+            spec: {
+                authorizationServers: [{ id: "issuer", type: "built-in" }],
+                txCodeMaxAttempts: 3,
+            },
+        };
+        const result = migrateDocument(v1, validateConfigDocument);
+        expect(result.issues).toEqual([]);
+        expect(result.migrations).toEqual([
+            "issuance-config-v2-offer-lifetime",
+        ]);
+        expect(result.document.$schema).toBe(schemaUrl("IssuanceConfig", 2));
+        expect(result.document.spec).toEqual(v1.spec);
+        expect(result.document.metadata).toEqual({ generation: 2 });
+        // Repeating the upgrade on the result is a no-op.
+        expect(
+            migrateDocument(result.document, validateConfigDocument).migrations,
+        ).toEqual([]);
+    });
+
+    it("accepts the v2-only offer lifetime only from v2 on", () => {
+        const spec = {
+            authorizationServers: [{ id: "issuer", type: "built-in" }],
+            offerLifetimeSeconds: 600,
+        };
+        expect(
+            validateConfigDocument(
+                normalizeDocument({
+                    $schema: schemaUrl("IssuanceConfig", 2),
+                    spec,
+                }),
+            ),
+        ).toEqual([]);
+        expect(
+            validateConfigDocument(
+                normalizeDocument({
+                    $schema: schemaUrl("IssuanceConfig", 1),
+                    spec,
+                }),
+            ).map((issue) => issue.message),
+        ).toContain("Unknown property: offerLifetimeSeconds");
     });
 
     it("refuses missing migration steps", () =>

@@ -13,7 +13,7 @@ export const CONFIG_FORMATS = {
     IssuanceConfig: {
         slug: "issuance-config",
         file: "IssuanceConfigFile",
-        version: 1,
+        version: 2,
     },
     CredentialConfig: {
         slug: "credential-config",
@@ -107,8 +107,18 @@ export interface ConfigMigration {
         issues?: ConfigMigrationIssue[];
     };
 }
-// The first published format is v1. Register migrations when a later version ships.
-const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [];
+// The first published format is v1. Register one step per later version.
+const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
+    {
+        id: "issuance-config-v2-offer-lifetime",
+        kind: "IssuanceConfig",
+        from: 1,
+        to: 2,
+        // v2 only adds the optional offerLifetimeSeconds: a v1 spec is a
+        // valid v2 spec whose offers keep having no lifetime.
+        migrate: (spec) => ({ spec }),
+    },
+];
 export function schemaUrl(
     kind: ConfigResourceKind,
     version: number = CONFIG_FORMATS[kind].version,

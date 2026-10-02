@@ -25,6 +25,10 @@ import { CreateSession } from "../../session/application/create-session.js";
 import { SessionStore } from "../../session/application/session-store.js";
 import type { SessionData } from "../../session/domain/session-data.js";
 import { SessionStatus } from "../../session/domain/session-state.js";
+import {
+    assertSessionUsable,
+    SessionNotUsable,
+} from "../../session/domain/session-usability.js";
 import { AuditLogContext } from "../../session/logging/session-audit.service.js";
 import { SessionLoggerService } from "../../session/logging/session-logger.service.js";
 import { DEFAULT_VERIFIER_SKEW_SECONDS } from "../../trust/types.js";
@@ -152,17 +156,21 @@ export class Oid4vpService {
             "oid4vp.cached": !!session.requestObject,
         });
 
-        return this.retrievePresentationRequest.execute(
-            session,
-            origin,
-            noRedirect,
-            (sessionId, requestOrigin, shouldNotRedirect) =>
-                this.createAuthorizationRequest(
-                    sessionId,
-                    requestOrigin,
-                    shouldNotRedirect,
-                ),
-        );
+        return this.retrievePresentationRequest
+            .execute(
+                session,
+                origin,
+                noRedirect,
+                (sessionId, requestOrigin, shouldNotRedirect) =>
+                    this.createAuthorizationRequest(
+                        sessionId,
+                        requestOrigin,
+                        shouldNotRedirect,
+                    ),
+            )
+            .catch((error: unknown) => {
+                throw sessionNotUsableException(error);
+            });
     }
 
     /**
@@ -645,6 +653,11 @@ export class Oid4vpService {
                 "The presentation offer has already been used",
             );
         }
+        try {
+            assertSessionUsable(session, new Date());
+        } catch (error) {
+            throw sessionNotUsableException(error);
+        }
 
         // Add session context to span for trace correlation
         const span = this.traceService.getSpan();
@@ -919,6 +932,13 @@ export class Oid4vpService {
             throw presentationVerificationException(error);
         }
     }
+}
+
+/** An expired or finished presentation request is a client error (HTTP 400). */
+function sessionNotUsableException(error: unknown): unknown {
+    return error instanceof SessionNotUsable
+        ? new BadRequestException(error.message)
+        : error;
 }
 
 /** Maps presentation verification errors to the HTTP exceptions of the OID4VP API. */

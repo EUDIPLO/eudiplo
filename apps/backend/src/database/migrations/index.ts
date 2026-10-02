@@ -51,3 +51,5 @@ export { AddIssuanceSetIdToDeferredTransaction1780000000000 } from "./1780000000
 export { AddConfigImportRun1781000000000 } from "./1781000000000-AddConfigImportRun.js";
 export { AddOauthBindingsToSession1782000000000 } from "./1782000000000-AddOauthBindingsToSession.js";
 export { AddDpopProofJti1783000000000 } from "./1783000000000-AddDpopProofJti.js";
+export { ChangeSessionExpiresAtToTimestamp1784000000000 } from "./1784000000000-ChangeSessionExpiresAtToTimestamp.js";
+export { AddOfferLifetimeToIssuanceConfig1784100000000 } from "./1784100000000-AddOfferLifetimeToIssuanceConfig.js";

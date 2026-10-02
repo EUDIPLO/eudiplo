@@ -117,10 +117,10 @@ describe("presentation completion and publication", () => {
     it.each([undefined, "invalid_signature"])(
         "persists failure and clears keys with code %s",
         async (code) => {
-            const updateForTenant = vi.fn().mockResolvedValue(1);
+            const updateIfUnconsumed = vi.fn().mockResolvedValue(true);
             const announce = vi.fn();
             await new FailPresentationResponse(
-                { updateForTenant },
+                { updateIfUnconsumed },
                 { announce },
             ).execute({
                 tenantId: "tenant",
@@ -137,24 +137,28 @@ describe("presentation completion and publication", () => {
                 },
                 "failed",
             );
-            expect(updateForTenant).toHaveBeenCalledWith("tenant", "session", {
-                status: "failed",
-                errorReason: "failed",
-                responseEncryptionPrivateJwk: null,
-                ...(code ? { failureCode: code } : {}),
-                outcome: {
-                    result: "failed",
-                    message: "failed",
-                    ...(code ? { error: code } : {}),
+            expect(updateIfUnconsumed).toHaveBeenCalledWith(
+                "tenant",
+                "session",
+                {
+                    status: "failed",
+                    errorReason: "failed",
+                    responseEncryptionPrivateJwk: null,
+                    ...(code ? { failureCode: code } : {}),
+                    outcome: {
+                        result: "failed",
+                        message: "failed",
+                        ...(code ? { error: code } : {}),
+                    },
                 },
-            });
+            );
         },
     );
 
-    it("does not announce a failure when no session was updated", async () => {
+    it("does not announce a failure when the session is gone, completed or expired", async () => {
         const announce = vi.fn();
         await new FailPresentationResponse(
-            { updateForTenant: vi.fn().mockResolvedValue(0) },
+            { updateIfUnconsumed: vi.fn().mockResolvedValue(false) },
             { announce },
         ).execute({ tenantId: "tenant", sessionId: "gone", message: "failed" });
         expect(announce).not.toHaveBeenCalled();

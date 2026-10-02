@@ -8,8 +8,8 @@ function setup() {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-02-01T12:00:00Z"));
     const sessions = {
-        findExpiredPresentationsForMaintenance: vi
-            .fn<SessionRepository["findExpiredPresentationsForMaintenance"]>()
+        findExpiredSessionsForMaintenance: vi
+            .fn<SessionRepository["findExpiredSessionsForMaintenance"]>()
             .mockResolvedValue([]),
         deleteSessionsCreatedBefore: vi
             .fn<SessionRepository["deleteSessionsCreatedBefore"]>()
@@ -26,7 +26,7 @@ function setup() {
             .fn<SessionRetentionPolicies["listForMaintenance"]>()
             .mockResolvedValue([]),
     };
-    const changeState = { execute: vi.fn().mockResolvedValue(undefined) };
+    const changeState = { executeFrom: vi.fn().mockResolvedValue(true) };
     const cleanup = new CleanupSessions(sessions, policies, changeState, {
         ttlSeconds: 3600,
         cleanupMode: SessionCleanupMode.Full,
@@ -39,6 +39,28 @@ describe("CleanupSessions", () => {
         vi.useRealTimers();
     });
 
+    it("expires overdue presentations and unredeemed issuance offers alike", async () => {
+        const { sessions, changeState, cleanup } = setup();
+        const presentation = {
+            id: "presentation",
+            tenantId: "tenant",
+            requestId: "config",
+        };
+        const offer = { id: "offer", tenantId: "tenant", requestId: null };
+        sessions.findExpiredSessionsForMaintenance.mockResolvedValue([
+            presentation,
+            offer,
+        ]);
+        changeState.executeFrom.mockResolvedValueOnce(true);
+        // The second one completed after the selection: nothing to announce.
+        changeState.executeFrom.mockResolvedValueOnce(false);
+        await cleanup.execute();
+        expect(changeState.executeFrom.mock.calls).toEqual([
+            [presentation, ["active", "fetched"], "expired"],
+            [offer, ["active", "fetched"], "expired"],
+        ]);
+    });
+
     it("finishes expiry state changes before fetching retention policies and deleting data", async () => {
         const { sessions, policies, changeState, cleanup } = setup();
         const session = {
@@ -46,25 +68,28 @@ describe("CleanupSessions", () => {
             tenantId: "tenant",
             requestId: "presentation",
         };
-        sessions.findExpiredPresentationsForMaintenance.mockResolvedValue([
-            session,
-        ]);
+        sessions.findExpiredSessionsForMaintenance.mockResolvedValue([session]);
         let finish!: () => void;
-        changeState.execute.mockReturnValue(
-            new Promise<void>((resolve) => {
-                finish = resolve;
+        changeState.executeFrom.mockReturnValue(
+            new Promise<boolean>((resolve) => {
+                finish = () => resolve(true);
             }),
         );
         const pending = cleanup.execute();
         await Promise.resolve();
-        expect(changeState.execute).toHaveBeenCalledWith(session, "expired");
+        // Only still-open sessions expire; a finished one keeps its state.
+        expect(changeState.executeFrom).toHaveBeenCalledWith(
+            session,
+            ["active", "fetched"],
+            "expired",
+        );
         expect(policies.listForMaintenance).not.toHaveBeenCalled();
         finish();
         await pending;
         expect(policies.listForMaintenance).toHaveBeenCalledOnce();
-        expect(
-            sessions.findExpiredPresentationsForMaintenance,
-        ).toHaveBeenCalledWith(new Date("2026-02-01T12:00:00Z"));
+        expect(sessions.findExpiredSessionsForMaintenance).toHaveBeenCalledWith(
+            new Date("2026-02-01T12:00:00Z"),
+        );
     });
 
     it("inherits defaults per field, applies tenant overrides, then uses default TTL for orphans", async () => {
@@ -105,7 +130,7 @@ describe("CleanupSessions", () => {
         const { sessions, cleanup } = setup();
         await cleanup.execute();
         expect(
-            sessions.findExpiredPresentationsForMaintenance,
+            sessions.findExpiredSessionsForMaintenance,
         ).toHaveBeenCalledOnce();
         expect(sessions.deleteSessionsCreatedBefore).not.toHaveBeenCalled();
         expect(sessions.anonymizeSessionsCreatedBefore).not.toHaveBeenCalled();
@@ -130,10 +155,10 @@ describe("CleanupSessions", () => {
     it("does not proceed to retention if an expiry state change fails", async () => {
         const { sessions, policies, changeState, cleanup } = setup();
         const error = new Error("write failed");
-        sessions.findExpiredPresentationsForMaintenance.mockResolvedValue([
+        sessions.findExpiredSessionsForMaintenance.mockResolvedValue([
             { id: "id", tenantId: "a" },
         ]);
-        changeState.execute.mockRejectedValue(error);
+        changeState.executeFrom.mockRejectedValue(error);
         await expect(cleanup.execute()).rejects.toBe(error);
         expect(policies.listForMaintenance).not.toHaveBeenCalled();
         expect(

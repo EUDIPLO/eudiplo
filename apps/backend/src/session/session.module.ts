@@ -15,7 +15,6 @@ import { TypeOrmSessionRetentionPolicies } from "./adapters/typeorm-session-rete
 import { ChangeSessionState } from "./application/change-session-state.js";
 import { CleanupSessions } from "./application/cleanup-sessions.js";
 import { CreateSession } from "./application/create-session.js";
-import { InitializeSessionMetrics } from "./application/initialize-session-metrics.js";
 import { RecordFailedTxCodeAttempt } from "./application/record-failed-tx-code-attempt.js";
 import { ResolveExternalAuthorizationSession } from "./application/resolve-external-authorization-session.js";
 import { SessionStore } from "./application/session-store.js";
@@ -31,10 +30,6 @@ import {
     SESSION_EVENT_PUBLISHER,
     type SessionEventPublisher,
 } from "./ports/session-event-publisher.js";
-import {
-    SESSION_METRICS,
-    type SessionMetrics,
-} from "./ports/session-metrics.js";
 import {
     SESSION_RETENTION_POLICIES,
     type SessionRetentionPolicies,
@@ -59,11 +54,9 @@ import { SESSION_SETTINGS, type SessionSettings } from "./session-settings.js";
     providers: [
         {
             provide: CreateSession,
-            inject: [SESSION_REPOSITORY, SESSION_METRICS],
-            useFactory: (
-                sessions: SessionRepository,
-                metrics: SessionMetrics,
-            ) => new CreateSession(sessions, metrics),
+            inject: [SESSION_REPOSITORY],
+            useFactory: (sessions: SessionRepository) =>
+                new CreateSession(sessions),
         },
         {
             provide: SessionStore,
@@ -106,19 +99,6 @@ import { SESSION_SETTINGS, type SessionSettings } from "./session-settings.js";
                     cleanupMode: settings.defaultCleanupMode,
                 }),
         },
-        {
-            provide: InitializeSessionMetrics,
-            inject: [
-                SESSION_REPOSITORY,
-                SESSION_RETENTION_POLICIES,
-                SESSION_METRICS,
-            ],
-            useFactory: (
-                sessions: SessionRepository,
-                policies: SessionRetentionPolicies,
-                metrics: SessionMetrics,
-            ) => new InitializeSessionMetrics(sessions, policies, metrics),
-        },
         SessionMaintenanceJob,
         {
             provide: SESSION_MAINTENANCE_SETTINGS,
@@ -133,19 +113,14 @@ import { SESSION_SETTINGS, type SessionSettings } from "./session-settings.js";
             provide: SESSION_EVENT_PUBLISHER,
             useClass: NestSessionEventPublisher,
         },
-        { provide: SESSION_METRICS, useClass: OtelSessionMetrics },
+        OtelSessionMetrics,
         {
             provide: ChangeSessionState,
-            inject: [
-                SESSION_REPOSITORY,
-                SESSION_EVENT_PUBLISHER,
-                SESSION_METRICS,
-            ],
+            inject: [SESSION_REPOSITORY, SESSION_EVENT_PUBLISHER],
             useFactory: (
                 repository: SessionRepository,
                 events: SessionEventPublisher,
-                metrics: SessionMetrics,
-            ) => new ChangeSessionState(repository, events, metrics),
+            ) => new ChangeSessionState(repository, events),
         },
         SessionConfigService,
         {

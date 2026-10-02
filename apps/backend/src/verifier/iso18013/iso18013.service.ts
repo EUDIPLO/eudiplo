@@ -32,6 +32,10 @@ import type {
     SessionUpdate,
 } from "../../session/domain/session-data.js";
 import { SessionStatus } from "../../session/domain/session-state.js";
+import {
+    assertSessionUsable,
+    SessionNotUsable,
+} from "../../session/domain/session-usability.js";
 import { SessionAuditService } from "../../session/logging/session-audit.service.js";
 import {
     DEFAULT_VERIFIER_SKEW_SECONDS,
@@ -99,12 +103,13 @@ export class Iso18013Service {
         session: SessionData,
         update: Omit<SessionUpdate, "status">,
     ): Promise<void> {
-        const updated = await this.sessionStore.updateForTenant(
+        // Conditional, so a completed or expired session keeps its state.
+        const updated = await this.sessionStore.updateIfUnconsumed(
             session.tenantId,
             session.id,
             { ...update, status: SessionStatus.Failed },
         );
-        if (updated > 0) {
+        if (updated) {
             this.changeSessionState.announce(session, SessionStatus.Failed);
         }
     }
@@ -340,6 +345,14 @@ export class Iso18013Service {
             throw new BadRequestException(
                 "The presentation offer has already been used",
             );
+        }
+        try {
+            assertSessionUsable(session, new Date());
+        } catch (error) {
+            if (error instanceof SessionNotUsable) {
+                throw new BadRequestException(error.message);
+            }
+            throw error;
         }
 
         const logContext = {

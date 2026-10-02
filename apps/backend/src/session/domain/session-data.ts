@@ -38,6 +38,8 @@ export interface SessionOfferRequest {
         | { type: "webhook"; webhook: WebhookConfiguration }
     >;
     webhookEndpointId?: string;
+    /** Overrides the issuance configuration's offer lifetime. */
+    offerLifetimeSeconds?: number;
 }
 interface SessionTransactionData {
     type: string;

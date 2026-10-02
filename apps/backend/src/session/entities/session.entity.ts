@@ -46,9 +46,10 @@ export class Session {
     updatedAt!: Date;
 
     /**
-     * The timestamp when the request is set to expire.
+     * The timestamp after which a wallet can no longer redeem the offer or
+     * presentation request. Not set for offers without a lifetime.
      */
-    @Column("date", { nullable: true })
+    @Column({ nullable: true })
     expiresAt?: Date;
 
     /**

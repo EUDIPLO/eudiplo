@@ -9,8 +9,10 @@ import {
 import { CryptoKey } from "jose";
 import request from "supertest";
 import { App } from "supertest/types";
+import { DataSource } from "typeorm";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { StatusListService } from "../src/issuer/status-list/status-list.service.js";
+import { Session } from "../src/session/entities/session.entity.js";
 import { ResponseType } from "../src/verifier/oid4vp/dto/presentation-request.dto.js";
 import {
     callbacks,
@@ -151,6 +153,151 @@ describe("Single-Use Validation (Issue #503) - OID4VCI", () => {
     });
 });
 
+describe("Session expiry (Issue #1120) - OID4VCI", () => {
+    let app: INestApplication<App>;
+    let authToken: string;
+
+    beforeAll(async () => {
+        const ctx = await setupIssuanceTestApp();
+        app = ctx.app;
+        authToken = ctx.authToken;
+    });
+
+    afterAll(async () => {
+        await app?.close();
+    });
+
+    async function createOffer(body: Record<string, unknown> = {}) {
+        const res = await request(app.getHttpServer())
+            .post("/issuer/offer")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                response_type: "uri",
+                credentialConfigurationIds: ["pid-no-key"],
+                flow: "pre_authorized_code",
+                ...body,
+            })
+            .expect(201);
+        return {
+            sessionId: res.body.session as string,
+            offerPath: new URL(
+                new URL(res.body.uri).searchParams.get(
+                    "credential_offer_uri",
+                ) as string,
+            ).pathname,
+        };
+    }
+
+    async function session(sessionId: string) {
+        return (
+            await request(app.getHttpServer())
+                .get(`/session/${sessionId}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200)
+        ).body;
+    }
+
+    const expire = (sessionId: string) =>
+        app
+            .get(DataSource)
+            .getRepository(Session)
+            .update(sessionId, { expiresAt: new Date(Date.now() - 1000) });
+
+    test("offers do not expire unless a lifetime is configured or requested", async () => {
+        const { sessionId } = await createOffer();
+        expect((await session(sessionId)).expiresAt ?? null).toBeNull();
+    });
+
+    test("applies the configured lifetime and the per-offer override with time of day", async () => {
+        await request(app.getHttpServer())
+            .post("/issuer/config")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({ offerLifetimeSeconds: 120 })
+            .expect(201);
+        try {
+            const configured = await createOffer();
+            const remaining =
+                new Date(
+                    (await session(configured.sessionId)).expiresAt,
+                ).getTime() - Date.now();
+            expect(remaining).toBeGreaterThan(100_000);
+            expect(remaining).toBeLessThanOrEqual(120_000);
+
+            const overridden = await createOffer({ offerLifetimeSeconds: 30 });
+            const overriddenRemaining =
+                new Date(
+                    (await session(overridden.sessionId)).expiresAt,
+                ).getTime() - Date.now();
+            expect(overriddenRemaining).toBeGreaterThan(10_000);
+            expect(overriddenRemaining).toBeLessThanOrEqual(30_000);
+        } finally {
+            await request(app.getHttpServer())
+                .post("/issuer/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({ offerLifetimeSeconds: null })
+                .expect(201);
+        }
+    });
+
+    test("rejects fetching an expired offer by reference", async () => {
+        const { sessionId, offerPath } = await createOffer({
+            offerLifetimeSeconds: 600,
+        });
+        await expire(sessionId);
+        const res = await request(app.getHttpServer())
+            .get(offerPath)
+            .trustLocalhost()
+            .expect(404);
+        expect(res.body.message).toBe("The session has expired");
+    });
+
+    test("rejects the pre-authorized code once the offer expired", async () => {
+        const { sessionId } = await createOffer({ offerLifetimeSeconds: 600 });
+        const client = new Openid4vciClient({
+            callbacks: {
+                ...callbacks,
+                clientAuthentication: clientAuthenticationAnonymous(),
+            },
+        });
+        const offer = await session(sessionId);
+        const credentialOffer = await client.resolveCredentialOffer(
+            offer.offerUrl,
+        );
+        const issuerMetadata = await client.resolveIssuerMetadata(
+            credentialOffer.credential_issuer,
+        );
+        await expire(sessionId);
+
+        const tokenPath = new URL(
+            issuerMetadata.authorizationServers?.[0]?.token_endpoint as string,
+        ).pathname;
+        const res = await request(app.getHttpServer())
+            .post(tokenPath)
+            .trustLocalhost()
+            .send({
+                grant_type:
+                    "urn:ietf:params:oauth:grant-type:pre-authorized_code",
+                "pre-authorized_code":
+                    credentialOffer.grants?.[
+                        "urn:ietf:params:oauth:grant-type:pre-authorized_code"
+                    ]?.["pre-authorized_code"],
+            })
+            .expect(400);
+        expect(res.body).toEqual({
+            error: "invalid_grant",
+            error_description: "The credential offer has expired",
+        });
+        expect(await session(sessionId)).toMatchObject({
+            consumed: false,
+            status: "active",
+        });
+    });
+});
+
 describe("Single-Use Validation (Issue #503) - OID4VP", () => {
     let app: INestApplication<App>;
     let authToken: string;
@@ -254,6 +401,94 @@ describe("Single-Use Validation (Issue #503) - OID4VP", () => {
         expect(secondSubmit.body.message).toContain(
             "presentation offer has already been used",
         );
+    });
+});
+
+describe("Session expiry (Issue #1120) - OID4VP", () => {
+    let app: INestApplication<App>;
+    let authToken: string;
+    let host: string;
+    let client: Openid4vpClient;
+
+    beforeAll(async () => {
+        const ctx = await setupPresentationTestApp();
+        app = ctx.app;
+        authToken = ctx.authToken;
+        host = ctx.host;
+        client = new Openid4vpClient({
+            callbacks: {
+                ...callbacks,
+                fetch: createTestFetch(app, () => host),
+            },
+        });
+    });
+
+    afterAll(async () => {
+        await app?.close();
+    });
+
+    async function session(sessionId: string) {
+        return (
+            await request(app.getHttpServer())
+                .get(`/session/${sessionId}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200)
+        ).body;
+    }
+
+    test("marks the request fetched and rejects it after its lifetime", async () => {
+        const res = await createPresentationRequest(app, authToken, {
+            response_type: ResponseType.URI,
+            requestId: "pid-no-hook",
+        });
+        const sessionId: string = res.body.session;
+        const created = await session(sessionId);
+        expect(created.status).toBe("active");
+        // Stored with its time of day, not truncated to midnight.
+        const remaining = new Date(created.expiresAt).getTime() - Date.now();
+        expect(remaining).toBeGreaterThan(0);
+        expect(remaining).toBeLessThan(24 * 60 * 60 * 1000);
+
+        const authRequest = client.parseOpenid4vpAuthorizationRequest({
+            authorizationRequest: res.body.uri,
+        });
+        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+            authorizationRequestPayload: authRequest.params,
+            responseMode: { type: "direct_post" },
+        });
+        expect((await session(sessionId)).status).toBe("fetched");
+
+        await app
+            .get(DataSource)
+            .getRepository(Session)
+            .update(sessionId, { expiresAt: new Date(Date.now() - 1000) });
+
+        const requestUri = new URL(
+            new URLSearchParams(res.body.uri.split("?")[1]).get(
+                "request_uri",
+            ) as string,
+        );
+        const fetchAgain = await request(app.getHttpServer())
+            .get(requestUri.pathname)
+            .trustLocalhost()
+            .expect(400);
+        expect(fetchAgain.body.message).toBe("The session has expired");
+
+        const response = await request(app.getHttpServer())
+            .post(
+                new URL(
+                    resolved.authorizationRequestPayload.response_uri as string,
+                ).pathname,
+            )
+            .trustLocalhost()
+            .send({ response: "unused.jwe.value" })
+            .expect(400);
+        expect(response.body.message).toBe("The session has expired");
+        expect(await session(sessionId)).toMatchObject({
+            status: "fetched",
+            consumed: false,
+        });
     });
 });
 

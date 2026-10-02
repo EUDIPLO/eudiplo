@@ -5,6 +5,7 @@ import {
     In,
     IsNull,
     LessThan,
+    MoreThan,
     Not,
     Repository,
 } from "typeorm";
@@ -20,12 +21,14 @@ import type {
     SessionSummary,
 } from "../domain/session-list.js";
 import {
+    OPEN_SESSION_STATUSES,
     type SessionLifecycleContext,
     type SessionStateUpdate,
     SessionStatus,
 } from "../domain/session-state.js";
 import { Session } from "../entities/session.entity.js";
 import type {
+    SessionCount,
     SessionCredentialOffer,
     SessionRepository,
 } from "../ports/session.repository.js";
@@ -60,8 +63,19 @@ export class TypeOrmSessionRepository implements SessionRepository {
         id: string,
         update: SessionUpdate,
     ): Promise<boolean> {
+        // One atomic statement: a session that is already finished or past
+        // its expiry keeps its final state.
+        const base = {
+            tenantId,
+            id,
+            consumed: false,
+            status: In([...OPEN_SESSION_STATUSES]),
+        };
         const result = await this.sessions.update(
-            { tenantId, id, consumed: false },
+            [
+                { ...base, expiresAt: IsNull() },
+                { ...base, expiresAt: MoreThan(new Date()) },
+            ],
             update as QueryDeepPartialEntity<Session>,
         );
         return (result.affected ?? 0) > 0;
@@ -215,15 +229,25 @@ export class TypeOrmSessionRepository implements SessionRepository {
         await this.sessions.delete({ id: sessionId, tenantId });
     }
 
-    async findExpiredPresentationsForMaintenance(
+    async findExpiredSessionsForMaintenance(
         before: Date,
     ): Promise<SessionLifecycleContext[]> {
         const sessions = await this.sessions.find({
-            where: {
-                expiresAt: LessThan(before),
-                requestId: Not(IsNull()),
-                status: In([SessionStatus.Active, SessionStatus.Fetched]),
-            },
+            where: [
+                {
+                    expiresAt: LessThan(before),
+                    requestId: Not(IsNull()),
+                    status: In([...OPEN_SESSION_STATUSES]),
+                },
+                // Issuance offers expire only while not redeemed: a wallet
+                // holding tokens keeps using the session after `expiresAt`.
+                {
+                    expiresAt: LessThan(before),
+                    requestId: IsNull(),
+                    status: SessionStatus.Active,
+                    consumed: false,
+                },
+            ],
             select: { id: true, tenantId: true, requestId: true },
             loadEagerRelations: false,
         });
@@ -234,16 +258,31 @@ export class TypeOrmSessionRepository implements SessionRepository {
         }));
     }
 
-    countSessionsForMaintenance(
-        tenantId: string,
-        kind: "issuance" | "verification",
-        status: SessionStatus,
-    ): Promise<number> {
-        return this.sessions.countBy({
-            tenantId,
-            status,
-            requestId: kind === "issuance" ? IsNull() : Not(IsNull()),
-        });
+    async countSessionsByStatus(): Promise<SessionCount[]> {
+        const rows: {
+            tenantId: string;
+            issuance: number | string | boolean;
+            status: SessionStatus;
+            count: number | string;
+        }[] = await this.sessions
+            .createQueryBuilder("s")
+            .select("s.tenantId", "tenantId")
+            .addSelect(
+                "CASE WHEN s.requestId IS NULL THEN 1 ELSE 0 END",
+                "issuance",
+            )
+            .addSelect("s.status", "status")
+            .addSelect("COUNT(*)", "count")
+            .groupBy("s.tenantId")
+            .addGroupBy("CASE WHEN s.requestId IS NULL THEN 1 ELSE 0 END")
+            .addGroupBy("s.status")
+            .getRawMany();
+        return rows.map((row) => ({
+            tenantId: row.tenantId,
+            kind: Number(row.issuance) === 1 ? "issuance" : "verification",
+            status: row.status,
+            count: Number(row.count),
+        }));
     }
 
     async deleteSessionsCreatedBefore(
@@ -318,16 +357,38 @@ export class TypeOrmSessionRepository implements SessionRepository {
         await this.sessions.update({ id: sessionId, tenantId }, update);
     }
 
+    async changeStateFrom(
+        tenantId: string,
+        sessionId: string,
+        from: readonly SessionStatus[],
+        update: SessionStateUpdate,
+    ): Promise<boolean> {
+        if (from.length === 0) return false;
+        const result = await this.sessions.update(
+            { id: sessionId, tenantId, status: In([...from]) },
+            update,
+        );
+        return (result.affected ?? 0) > 0;
+    }
+
     async findCredentialOffer(
         tenantId: string,
         sessionId: string,
     ): Promise<SessionCredentialOffer | null> {
         const session = await this.sessions.findOne({
             where: { id: sessionId, tenantId },
-            select: { id: true, offer: true },
+            select: { id: true, offer: true, status: true, expiresAt: true },
             loadEagerRelations: false,
         });
-        return session ? { offer: session.offer ?? null } : null;
+        return session
+            ? {
+                  offer: session.offer ?? null,
+                  status: session.status,
+                  ...(session.expiresAt
+                      ? { expiresAt: session.expiresAt }
+                      : {}),
+              }
+            : null;
     }
 
     async consumeCredentialOffer(

@@ -1,8 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionOfferRequest } from "../../../../session/domain/session-data.js";
 import { CreateCredentialOffer } from "./create-credential-offer.js";
 
-function fixture() {
+function fixture(offerLifetimeSeconds?: number | null) {
     const events: string[] = [];
     const execute = vi.fn().mockImplementation(async (input) => {
         events.push("create");
@@ -32,6 +32,9 @@ function fixture() {
             };
         }),
     };
+    const issuanceConfigs = {
+        getForTenant: vi.fn().mockResolvedValue({ offerLifetimeSeconds }),
+    };
     const ids = vi
         .fn()
         .mockReturnValueOnce("session")
@@ -42,17 +45,22 @@ function fixture() {
         update,
         protocol,
         ids,
+        issuanceConfigs,
         useCase: new CreateCredentialOffer(
             { execute },
             { updateForTenant: update },
             selectAuthorizationServer,
             protocol,
             ids,
+            issuanceConfigs,
         ),
     };
 }
 
 describe("CreateCredentialOffer", () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
     const request: SessionOfferRequest = {
         response_type: "uri",
         flow: "pre_authorized_code",
@@ -124,5 +132,38 @@ describe("CreateCredentialOffer", () => {
         );
         expect(f.execute).toHaveBeenCalledOnce();
         expect(f.update).not.toHaveBeenCalled();
+    });
+
+    it("keeps offers without a configured or requested lifetime unbounded", async () => {
+        const f = fixture();
+        await f.useCase.execute("tenant", request);
+        expect(f.execute.mock.calls[0][0]).not.toHaveProperty("expiresAt");
+    });
+    it("expires the offer after the configured lifetime", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+        const f = fixture(600);
+        await f.useCase.execute("tenant", request);
+        expect(f.issuanceConfigs.getForTenant).toHaveBeenCalledWith("tenant");
+        expect(f.execute).toHaveBeenCalledWith(
+            expect.objectContaining({
+                expiresAt: new Date("2026-01-01T12:10:00Z"),
+            }),
+        );
+    });
+    it("lets the offer request override the configured lifetime", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+        const f = fixture(600);
+        await f.useCase.execute("tenant", {
+            ...request,
+            offerLifetimeSeconds: 30,
+        });
+        expect(f.issuanceConfigs.getForTenant).not.toHaveBeenCalled();
+        expect(f.execute).toHaveBeenCalledWith(
+            expect.objectContaining({
+                expiresAt: new Date("2026-01-01T12:00:30Z"),
+            }),
+        );
     });
 });

@@ -17,6 +17,7 @@ import {
 import { Span, TraceService } from "nestjs-otel";
 import { v4 } from "uuid";
 import { EncryptionService } from "../../../crypto/encryption/encryption.service.js";
+import { ChangeSessionState } from "../../../session/application/change-session-state.js";
 import { SessionStore } from "../../../session/application/session-store.js";
 import { SessionStatus } from "../../../session/domain/session-state.js";
 import { AuditLogContext } from "../../../session/logging/session-audit.service.js";
@@ -92,6 +93,7 @@ export class Oid4vciService {
         private readonly encryptionService: EncryptionService,
         private readonly nonceService: NonceService,
         private readonly subjectKeyService: SubjectKeyService,
+        private readonly changeSessionState: ChangeSessionState,
     ) {}
 
     /**
@@ -538,8 +540,14 @@ export class Oid4vciService {
                 session.id,
                 {
                     notifications: session.notifications,
-                    status: SessionStatus.Fetched,
                 },
+            );
+            // Only the first issuance moves the session on; a later request
+            // must not reopen a completed or failed session.
+            await this.changeSessionState.executeFrom(
+                session,
+                [SessionStatus.Active],
+                SessionStatus.Fetched,
             );
 
             this.auditLogger.logFlowComplete(logContext, {

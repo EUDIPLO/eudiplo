@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { SessionStore } from "../../../../../session/application/session-store.js";
 import type { Oid4vciSettings } from "../../oid4vci-settings.js";
 import { OAuthError } from "../domain/oauth-error.js";
+import { assertOfferRedeemable } from "../domain/offer-redemption.js";
 import {
     AUTHORIZATION_CODE_LIFETIME_SECONDS,
     buildAuthorizationResponseUrl,
@@ -73,6 +74,15 @@ export class AuthorizePushedRequest {
                 "invalid_request",
                 "client_id does not match the pushed authorization request",
             );
+        }
+
+        try {
+            assertOfferRedeemable(session, new Date(), "invalid_request");
+        } catch (error) {
+            if (error instanceof OAuthError) {
+                return redirectError(error.code, error.description ?? "");
+            }
+            throw error;
         }
 
         // Expire the request_uri on use so it cannot be redeemed twice (RFC 9126

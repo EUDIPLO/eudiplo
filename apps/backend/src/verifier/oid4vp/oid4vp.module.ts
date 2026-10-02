@@ -74,9 +74,9 @@ import { OID4VP_SETTINGS } from "./oid4vp-settings.js";
         },
         {
             provide: RetrievePresentationRequest,
-            inject: [SessionStore],
-            useFactory: (sessions: SessionStore) =>
-                new RetrievePresentationRequest(sessions),
+            inject: [SessionStore, ChangeSessionState],
+            useFactory: (sessions: SessionStore, state: ChangeSessionState) =>
+                new RetrievePresentationRequest(sessions, state),
         },
     ],
     exports: [Oid4vpService],

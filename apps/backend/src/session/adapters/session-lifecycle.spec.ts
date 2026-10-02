@@ -1,43 +1,36 @@
 import { EventEmitter2 } from "@nestjs/event-emitter";
-import { MetricService } from "nestjs-otel";
 import { Repository } from "typeorm";
 import { describe, expect, it, vi } from "vitest";
 import { ChangeSessionState } from "../application/change-session-state.js";
 import { SessionStatus } from "../domain/session-state.js";
 import { Session } from "../entities/session.entity.js";
 import { NestSessionEventPublisher } from "./nest-session-event-publisher.js";
-import { OtelSessionMetrics } from "./otel-session-metrics.js";
 import { TypeOrmSessionRepository } from "./typeorm-session.repository.js";
 
-function setup(write = async () => {}) {
+function setup(write = async () => {}, affected = 1) {
     const order: string[] = [];
     const update = vi.fn(async (_where: unknown, _change: unknown) => {
         order.push("persist");
         await write();
+        return { affected };
     });
     const emit = vi.fn(() => {
         order.push("publish");
-    });
-    const add = vi.fn((_value: number, _attributes: unknown) => {
-        order.push("metric");
     });
     const service = new ChangeSessionState(
         new TypeOrmSessionRepository({
             update,
         } as unknown as Repository<Session>),
         new NestSessionEventPublisher({ emit } as unknown as EventEmitter2),
-        new OtelSessionMetrics({
-            getUpDownCounter: () => ({ add }),
-        } as unknown as MetricService),
     );
-    return { service, update, emit, add, order };
+    return { service, update, emit, order };
 }
 
 describe("session state-change characterization", () => {
     it.each(Object.values(SessionStatus))(
-        "preserves persistence, event, and metric order for %s",
+        "preserves persistence and event order for %s",
         async (status) => {
-            const { service, order, update, emit, add } = setup();
+            const { service, order, update, emit } = setup();
             const session = {
                 id: "session",
                 tenantId: "tenant",
@@ -45,7 +38,7 @@ describe("session state-change characterization", () => {
                 status: SessionStatus.Fetched,
             } as Session;
             await service.execute(session, status);
-            expect(order).toEqual(["persist", "publish", "metric", "metric"]);
+            expect(order).toEqual(["persist", "publish"]);
             expect(emit).toHaveBeenCalledWith(
                 "session.status.changed",
                 expect.objectContaining({
@@ -54,24 +47,6 @@ describe("session state-change characterization", () => {
                     updatedAt: expect.any(Date),
                 }),
             );
-            expect(add.mock.calls).toEqual([
-                [
-                    1,
-                    {
-                        tenant_id: "tenant",
-                        session_type: "verification",
-                        status,
-                    },
-                ],
-                [
-                    -1,
-                    {
-                        tenant_id: "tenant",
-                        session_type: "verification",
-                        status: "active",
-                    },
-                ],
-            ]);
             expect(update.mock.calls[0][0]).toEqual({
                 id: "session",
                 tenantId: "tenant",
@@ -90,9 +65,9 @@ describe("session state-change characterization", () => {
         },
     );
 
-    it("does not publish or record metrics if persistence fails", async () => {
+    it("does not publish if persistence fails", async () => {
         const failure = new Error("database unavailable");
-        const { service, emit, add } = setup(async () => {
+        const { service, emit } = setup(async () => {
             throw failure;
         });
         await expect(
@@ -102,6 +77,27 @@ describe("session state-change characterization", () => {
             ),
         ).rejects.toBe(failure);
         expect(emit).not.toHaveBeenCalled();
-        expect(add).not.toHaveBeenCalled();
+    });
+
+    it("publishes a compare-and-set transition only when a row changed", async () => {
+        const changed = setup();
+        await expect(
+            changed.service.executeFrom(
+                { id: "session", tenantId: "tenant" },
+                [SessionStatus.Active],
+                SessionStatus.Fetched,
+            ),
+        ).resolves.toBe(true);
+        expect(changed.order).toEqual(["persist", "publish"]);
+
+        const unchanged = setup(async () => {}, 0);
+        await expect(
+            unchanged.service.executeFrom(
+                { id: "session", tenantId: "tenant" },
+                [SessionStatus.Active],
+                SessionStatus.Fetched,
+            ),
+        ).resolves.toBe(false);
+        expect(unchanged.emit).not.toHaveBeenCalled();
     });
 });

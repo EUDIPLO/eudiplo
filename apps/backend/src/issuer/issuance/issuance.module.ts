@@ -307,12 +307,14 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
                 SessionStore,
                 SelectAuthorizationServer,
                 CREDENTIAL_OFFER_PROTOCOL,
+                IssuanceService,
             ],
             useFactory: (
                 sessions: CreateSession,
                 update: SessionStore,
                 authorizationServers: SelectAuthorizationServer,
                 protocol: CredentialOfferProtocol,
+                issuance: IssuanceService,
             ) =>
                 new CreateCredentialOffer(
                     sessions,
@@ -320,6 +322,10 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
                     authorizationServers,
                     protocol,
                     v4,
+                    {
+                        getForTenant: (tenantId) =>
+                            issuance.getIssuanceConfiguration(tenantId),
+                    },
                 ),
         },
         {

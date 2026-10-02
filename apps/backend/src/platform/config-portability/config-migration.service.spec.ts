@@ -6,7 +6,7 @@ describe("ConfigMigrationService", () => {
     const registry = new ConfigResourceRegistry();
     const service = new ConfigMigrationService(registry);
 
-    it("upgrades a bare legacy configuration to v1", () => {
+    it("upgrades a bare legacy configuration to the current version", () => {
         const input = service.wrapLegacy(
             "IssuanceConfig",
             {
@@ -21,12 +21,14 @@ describe("ConfigMigrationService", () => {
         const result = service.upgrade(input);
 
         expect(result.document.$schema).toBe(
-            "https://eudiplo.dev/schemas/v1/IssuanceConfigFile.schema.json",
+            "https://eudiplo.dev/schemas/v2/IssuanceConfigFile.schema.json",
         );
         expect(result.document.spec.walletProviderTrustLists).toEqual([
             { url: "https://example.com/trust-list" },
         ]);
-        expect(result.migrations).toEqual([]);
+        expect(result.migrations).toEqual([
+            "issuance-config-v2-offer-lifetime",
+        ]);
         expect(result.issues).toEqual([]);
     });
 

@@ -231,10 +231,37 @@ async function normalizeConfigSchema(
       any
     >[]);
     storedSchema.description = "Configuration file identified by its $schema URL.";
-    storedSchema.oneOf = alternatives.filter(
-      (item: Record<string, any>) => item.properties?.$schema,
+    // The canonical alternative references the current spec schema; earlier
+    // versions are embedded as their published snapshots, which carry an $id.
+    // A format version bump moves the canonical URL to the new version.
+    const canonical = alternatives.find(
+      (item: Record<string, any>) => item.properties?.$schema && !item.$id,
     );
+    if (canonical) {
+      canonical.properties.$schema.const = schemaUrl(
+        kind as keyof typeof CONFIG_FORMATS,
+      );
+      const historical = [] as Record<string, unknown>[];
+      for (let version = 1; version < format.version; version++) {
+        historical.push(
+          await readStoredSchema(
+            join(SCHEMAS_DIR, `v${version}`, `${name}.schema.json`),
+          ),
+        );
+      }
+      storedSchema.oneOf = [canonical, ...historical];
+    } else {
+      storedSchema.oneOf = alternatives.filter(
+        (item: Record<string, any>) => item.properties?.$schema,
+      );
+    }
     if (generated) generated.schema = storedSchema;
+    else
+      await writeGeneratedFile(
+        join(SCHEMAS_DIR, `${name}.schema.json`),
+        `${JSON.stringify(storedSchema, null, 2)}\n`,
+        "utf8",
+      );
     return;
   }
 
