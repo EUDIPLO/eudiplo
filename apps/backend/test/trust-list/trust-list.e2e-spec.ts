@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { AppModule } from "../../src/app.module.js";
 import { KeyChainImportDto } from "../../src/crypto/key/dto/key-chain-import.dto.js";
 import { TrustListCreateDto } from "../../src/issuer/trust-list/dto/trust-list-create.dto.js";
+import { TrustListService } from "../../src/issuer/trust-list/trustlist.service.js";
 import { createAppValidationPipe } from "../../src/shared/common/zod/zod-schema.util.js";
 import { getToken, readConfig } from "../utils.js";
 
@@ -421,6 +422,73 @@ describe("Trust List e2e Tests", () => {
             await request(ctx.app.getHttpServer())
                 .get("/issuers/root/trust-list/non-existent-id")
                 .expect(400);
+        });
+    });
+
+    describe("Renewal", () => {
+        const renewalTestId = "renewal-test";
+
+        test("re-issues a list in its renewal window with the next sequence number", async () => {
+            await request(ctx.app.getHttpServer())
+                .post("/trust-list")
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .send({
+                    id: renewalTestId,
+                    keyChainId: "570852d7-7e7f-40af-a0e3-a6ebffd75ed0",
+                    entities: [
+                        {
+                            type: "internal",
+                            issuerKeyChainId:
+                                "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                            revocationKeyChainId:
+                                "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
+                            info: { name: "Renewal Provider", lang: "en" },
+                        },
+                    ],
+                } satisfies TrustListCreateDto)
+                .expect(201);
+
+            // Run the scheduled renewal as it would run 25 days from now.
+            const later = new Date(Date.now() + 25 * 24 * 60 * 60 * 1000);
+            await ctx.app.get(TrustListService).renewDueTrustLists(later);
+
+            const jwt = (
+                await request(ctx.app.getHttpServer())
+                    .get(`/issuers/root/trust-list/${renewalTestId}`)
+                    .expect(200)
+            ).text;
+            const x5c = decodeProtectedHeader(jwt).x5c as string[];
+            const { payload } = await jwtVerify<{
+                LoTE: {
+                    ListAndSchemeInformation: {
+                        LoTESequenceNumber: number;
+                        NextUpdate: string;
+                    };
+                };
+            }>(
+                jwt,
+                await importX509(
+                    `-----BEGIN CERTIFICATE-----\n${x5c[0]}\n-----END CERTIFICATE-----`,
+                    "ES256",
+                ),
+            );
+            expect(payload.LoTE.ListAndSchemeInformation).toMatchObject({
+                LoTESequenceNumber: 2,
+                NextUpdate: new Date(
+                    later.getTime() + 30 * 24 * 60 * 60 * 1000,
+                ).toISOString(),
+            });
+
+            const versions = await request(ctx.app.getHttpServer())
+                .get(`/trust-list/${renewalTestId}/versions`)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .expect(200);
+            expect(
+                versions.body.map(
+                    (version: { sequenceNumber: number }) =>
+                        version.sequenceNumber,
+                ),
+            ).toEqual([1]);
         });
     });
 

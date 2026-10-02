@@ -15,9 +15,8 @@ const RegistrationCertificateBodySchema = z
         intermediary: z.string().optional(),
         purpose: z.array(RegistrationCertificatePurposeSchema).optional(),
         credentials: z.array(z.record(z.string(), z.unknown())).optional(),
-        provided_attestations: z
-            .array(z.record(z.string(), z.unknown()))
-            .optional(),
+        // Named and typed as in the registrar's RegistrationCertificateCreation.
+        provides_attestations: z.array(z.string().min(1)).optional(),
     })
     .strict();
 
@@ -50,7 +49,11 @@ export class RegistrationCertificateBody extends createZodDto(
 
     credentials?: Record<string, unknown>[];
 
-    provided_attestations?: Record<string, unknown>[];
+    /**
+     * Credential type identifiers (SD-JWT VC `vct` or mdoc doctype) provided
+     * by an issuer.
+     */
+    provides_attestations?: string[];
 }
 
 /**

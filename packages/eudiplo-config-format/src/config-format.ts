@@ -23,7 +23,7 @@ export const CONFIG_FORMATS = {
     PresentationConfig: {
         slug: "presentation-config",
         file: "PresentationConfigFile",
-        version: 1,
+        version: 2,
     },
     AttributeProvider: {
         slug: "attribute-provider",
@@ -107,6 +107,43 @@ export interface ConfigMigration {
         issues?: ConfigMigrationIssue[];
     };
 }
+/**
+ * PresentationConfig v2 replaces `registration_cert.body.provided_attestations`
+ * with the registrar's `provides_attestations` (credential type identifiers).
+ * v1 only accepted objects there, which the registrar API does not define and
+ * ignored, so the field is dropped with a warning instead of being converted.
+ */
+const presentationConfigV1ToV2: ConfigMigration = {
+    id: "presentation-config-v2-provides-attestations",
+    kind: "PresentationConfig",
+    from: 1,
+    to: 2,
+    migrate(spec) {
+        const registrationCert = spec.registration_cert;
+        if (
+            !object(registrationCert) ||
+            !object(registrationCert.body) ||
+            !("provided_attestations" in registrationCert.body)
+        ) {
+            return { spec };
+        }
+        const { provided_attestations: _, ...body } = registrationCert.body;
+        return {
+            spec: { ...spec, registration_cert: { ...registrationCert, body } },
+            issues: [
+                {
+                    severity: "warning",
+                    code: "PROVIDED_ATTESTATIONS_REMOVED",
+                    path: "/spec/registration_cert/body/provided_attestations",
+                    message:
+                        "provided_attestations is not part of the registrar API and was removed. Set provides_attestations to the credential type identifiers (SD-JWT VC vct or mdoc doctype) the issuer provides.",
+                },
+            ],
+        };
+    },
+};
+
+
 // The first published format is v1. Register one step per later version.
 const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
     {
@@ -118,6 +155,7 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         // valid v2 spec whose offers keep having no lifetime.
         migrate: (spec) => ({ spec }),
     },
+    presentationConfigV1ToV2,
 ];
 export function schemaUrl(
     kind: ConfigResourceKind,

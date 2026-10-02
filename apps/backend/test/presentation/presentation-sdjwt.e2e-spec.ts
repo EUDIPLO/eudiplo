@@ -114,7 +114,7 @@ describe("Presentation - SD-JWT Credential", () => {
             });
         console.log(await submitRes.response.json());
 
-        return { res, submitRes };
+        return { res, submitRes, resolved };
     }
 
     beforeAll(async () => {
@@ -139,7 +139,7 @@ describe("Presentation - SD-JWT Credential", () => {
     });
 
     test("present sd jwt credential", async () => {
-        const { res, submitRes } = await submitPresentation({
+        const { res, submitRes, resolved } = await submitPresentation({
             requestId: "pid-no-hook",
             credentialId: "pid",
             privateKey: privateIssuerKey,
@@ -148,6 +148,28 @@ describe("Presentation - SD-JWT Credential", () => {
 
         expect(submitRes).toBeDefined();
         expect(submitRes.response.status).toBe(200);
+
+        // The wallet receives the issuers of the managed trust list as `aki`
+        // values, and the presented credential's chain carries one of them.
+        const dcqlQuery = resolved.authorizationRequestPayload
+            .dcql_query as any;
+        const chainAkis = issuerCertChain.flatMap((der) => {
+            const keyId = new x509Lib.X509Certificate(der).getExtension(
+                x509Lib.AuthorityKeyIdentifierExtension,
+            )?.keyId;
+            return keyId
+                ? [Buffer.from(keyId, "hex").toString("base64url")]
+                : [];
+        });
+        const authorities = dcqlQuery.credentials[0].trusted_authorities;
+        expect(authorities).toEqual([
+            { type: "aki", values: expect.any(Array) },
+        ]);
+        expect(
+            authorities[0].values.filter((value: string) =>
+                chainAkis.includes(value),
+            ),
+        ).not.toHaveLength(0);
 
         const sessionResponse = await request(app.getHttpServer())
             .get(`/session/${res.body.session}`)

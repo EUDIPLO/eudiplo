@@ -53,3 +53,4 @@ export { AddOauthBindingsToSession1782000000000 } from "./1782000000000-AddOauth
 export { AddDpopProofJti1783000000000 } from "./1783000000000-AddDpopProofJti.js";
 export { ChangeSessionExpiresAtToTimestamp1784000000000 } from "./1784000000000-ChangeSessionExpiresAtToTimestamp.js";
 export { AddOfferLifetimeToIssuanceConfig1784100000000 } from "./1784100000000-AddOfferLifetimeToIssuanceConfig.js";
+export { RemoveRegistrationCertProvidedAttestations1784200000000 } from "./1784200000000-RemoveRegistrationCertProvidedAttestations.js";

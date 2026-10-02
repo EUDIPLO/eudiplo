@@ -1,11 +1,13 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
+import type { LoTE } from "@owf/eudi-lote";
 import { TrustListService } from "../issuer/trust-list/trustlist.service.js";
 import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
+import { LoteParserService } from "./lote-parser.service.js";
 import {
     TRUST_STORE_SETTINGS,
     type TrustStoreSettings,
 } from "./trust-store-settings.js";
-import { TrustedEntity, TrustListSource } from "./types.js";
+import { TrustedEntity, TrustListRef, TrustListSource } from "./types.js";
 
 /**
  * Built trust store with TrustedEntities preserving service groupings.
@@ -27,6 +29,7 @@ export class TrustStoreService {
         private readonly trustListService: TrustListService,
         @Inject(TRUST_STORE_SETTINGS)
         private readonly settings: TrustStoreSettings,
+        private readonly loteParser: LoteParserService,
     ) {}
 
     async getTrustStore(
@@ -75,6 +78,31 @@ export class TrustStoreService {
             `Built trust store with ${store.entities.length} trusted entit${store.entities.length === 1 ? "y" : "ies"}`,
         );
         return store;
+    }
+
+    /**
+     * Trusted entities of a single trust list, for hints that do not decide
+     * trust (DCQL `trusted_authorities` sent to the wallet). Managed lists are
+     * read from their stored content; external lists are fetched and their
+     * signature verified like in {@link getTrustStore}, sharing its cache.
+     * Staleness is not checked here; verification still fails closed on it.
+     */
+    async getListedEntities(
+        ref: TrustListRef,
+        tenantId: string,
+    ): Promise<TrustedEntity[]> {
+        if (ref.trustListId === undefined) {
+            return (await this.getTrustStore({ tenantId, lotes: [ref] }))
+                .entities;
+        }
+        const { data } = await this.trustListService.findOne(
+            tenantId,
+            ref.trustListId.trim(),
+        );
+        if (!data) return [];
+        // Stored as `{ LoTE: ... }`; lists created by older releases lack the wrapper.
+        const lote = ((data as { LoTE?: LoTE }).LoTE ?? data) as LoTE;
+        return this.loteParser.parse(lote).entities;
     }
 
     /**

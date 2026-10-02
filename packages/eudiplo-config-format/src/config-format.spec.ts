@@ -147,3 +147,104 @@ describe("portable schema identity and migrations", () => {
             "No unique migration",
         ));
 });
+
+describe("PresentationConfig v1 to v2", () => {
+    const dcql_query = {
+        credentials: [
+            {
+                id: "pid",
+                format: "dc+sd-jwt",
+                meta: { vct_values: ["urn:eudi:pid:de:1"] },
+            },
+        ],
+    };
+    const privacy = {
+        privacy_policy: "https://verifier.example/privacy",
+        support_uri: "https://verifier.example/support",
+    };
+    const spec = {
+        id: "pid",
+        dcql_query,
+        registration_cert: {
+            body: {
+                ...privacy,
+                provided_attestations: [{ vct: "urn:eudi:pid:de:1" }],
+            },
+        },
+    };
+    const v1 = { $schema: schemaUrl("PresentationConfig", 1), spec };
+
+    it("drops the unused provided_attestations with a warning", () => {
+        const result = migrateDocument(v1, validateConfigDocument);
+
+        expect(result.document.$schema).toBe(schemaUrl("PresentationConfig"));
+        expect(result.migrations).toEqual([
+            "presentation-config-v2-provides-attestations",
+        ]);
+        expect(result.document.spec.registration_cert).toEqual({
+            body: privacy,
+        });
+        expect(result.issues).toEqual([
+            expect.objectContaining({
+                severity: "warning",
+                code: "PROVIDED_ATTESTATIONS_REMOVED",
+                path: "/spec/registration_cert/body/provided_attestations",
+            }),
+        ]);
+    });
+
+    it("upgrades documents without the field unchanged and only once", () => {
+        const plain = migrateDocument(
+            {
+                $schema: schemaUrl("PresentationConfig", 1),
+                spec: { id: "pid", dcql_query },
+            },
+            validateConfigDocument,
+        );
+        expect(plain.issues).toEqual([]);
+        expect(plain.document.$schema).toBe(schemaUrl("PresentationConfig"));
+        expect(plain.document.spec).toEqual({ id: "pid", dcql_query });
+
+        const again = migrateDocument(
+            migrateDocument(v1, validateConfigDocument).document,
+            validateConfigDocument,
+        );
+        expect(again.migrations).toEqual([]);
+        expect(again.issues).toEqual([]);
+    });
+
+    it("validates provides_attestations only from v2 on", () => {
+        const withField = (version: number) =>
+            normalizeDocument({
+                $schema: schemaUrl("PresentationConfig", version),
+                spec: {
+                    ...spec,
+                    registration_cert: {
+                        body: {
+                            ...privacy,
+                            provides_attestations: ["urn:eudi:pid:de:1"],
+                        },
+                    },
+                },
+            });
+        const unknownProperty = (name: string) =>
+            expect.arrayContaining([
+                expect.objectContaining({
+                    message: `Unknown property: ${name}`,
+                }),
+            ]);
+
+        expect(validateConfigDocument(withField(2))).toEqual([]);
+        expect(validateConfigDocument(withField(1))).toEqual(
+            unknownProperty("provides_attestations"),
+        );
+        expect(
+            validateConfigDocument(
+                normalizeDocument({
+                    ...v1,
+                    $schema: schemaUrl("PresentationConfig", 2),
+                }),
+            ),
+        ).toEqual(unknownProperty("provided_attestations"));
+    });
+});

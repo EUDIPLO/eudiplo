@@ -94,3 +94,90 @@ describe("TrustStoreService cache isolation", () => {
         );
     });
 });
+
+describe("TrustStoreService.getListedEntities", () => {
+    const entities = [
+        {
+            entityId: "Issuer",
+            services: [
+                {
+                    serviceTypeIdentifier:
+                        "http://uri.etsi.org/19602/SvcType/EAA/Issuance",
+                    certValue: "cert",
+                },
+            ],
+        },
+    ];
+    const lote = {
+        ListAndSchemeInformation: { NextUpdate: "2026-01-01T00:00:00Z" },
+        TrustedEntitiesList: [],
+    };
+
+    function createService(data: object | undefined) {
+        const fetchJwt = vi.fn();
+        const findOne = vi.fn().mockResolvedValue({ data });
+        const parse = vi.fn().mockReturnValue({ info: {}, entities });
+        const service = Object.assign(
+            Object.create(TrustStoreService.prototype),
+            {
+                cache: new Map(),
+                logger: { debug: vi.fn() },
+                trustListService: { findOne },
+                loteParser: { parse },
+                collectTrustedEntities: new CollectTrustedEntities(
+                    new VerifiedLoteProvider(
+                        {
+                            fetchJwt: fetchJwt.mockResolvedValue(
+                                `e30.${Buffer.from(JSON.stringify({ LoTE: lote })).toString("base64url")}.c2ln`,
+                            ),
+                            verifyTrustListJwt: vi
+                                .fn()
+                                .mockResolvedValue(undefined),
+                        },
+                        { parse },
+                    ),
+                ),
+            },
+        ) as TrustStoreService;
+        return { service, fetchJwt, findOne, parse };
+    }
+
+    it("reads managed lists from their stored content without fetching", async () => {
+        const { service, fetchJwt, findOne, parse } = createService({
+            LoTE: lote,
+        });
+
+        await expect(
+            service.getListedEntities(
+                { trustListId: " list-1 ", url: "" },
+                "t",
+            ),
+        ).resolves.toEqual(entities);
+        expect(findOne).toHaveBeenCalledWith("t", "list-1");
+        expect(parse).toHaveBeenCalledWith(lote);
+        expect(fetchJwt).not.toHaveBeenCalled();
+    });
+
+    it("accepts stored lists without the LoTE wrapper", async () => {
+        const { service, parse } = createService(lote);
+        await service.getListedEntities(
+            { trustListId: "list-1", url: "" },
+            "t",
+        );
+        expect(parse).toHaveBeenCalledWith(lote);
+    });
+
+    it("fetches and verifies external lists", async () => {
+        const { service, fetchJwt, findOne } = createService(undefined);
+        const ref = {
+            url: "https://trust.example/list",
+            verifierX509Der: "certificate",
+        };
+
+        await expect(service.getListedEntities(ref, "t")).resolves.toEqual(
+            entities,
+        );
+        expect(fetchJwt).toHaveBeenCalledWith(ref.url);
+        expect(findOne).not.toHaveBeenCalled();
+    });
+});

@@ -1,8 +1,14 @@
 import { X509Certificate } from "node:crypto";
-import { BadRequestException, Injectable } from "@nestjs/common";
+import {
+    BadRequestException,
+    ConflictException,
+    Injectable,
+    Logger,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
     createLoTE,
+    type LoTE,
     type LoTEDocument,
     type TrustedEntity as LoTETrustedEntity,
     service,
@@ -25,6 +31,10 @@ import {
 } from "../../platform/config-import/config-import-orchestrator.service.js";
 import { loadConfigDto } from "../../shared/utils/config-file-loader.util.js";
 import {
+    isTrustListRenewalDue,
+    trustListNextUpdate,
+} from "./domain/trust-list-validity.js";
+import {
     TrustListCreateDto,
     TrustListEntity,
     TrustListEntityInfo,
@@ -44,8 +54,25 @@ enum ServiceTypeIdentifier {
 /** Default language for trust list entries */
 const DEFAULT_LANG = "en";
 
+/** Fields that change when a new version of a trust list is published. */
+type TrustListVersionChanges = Pick<
+    TrustList,
+    "sequenceNumber" | "data" | "jwt"
+> &
+    Partial<Pick<TrustList, "description" | "keyChainId" | "entityConfig">>;
+
+/** Stored list content; lists created by older releases lack the `LoTE` wrapper. */
+function storedLoTE(data: object | undefined): LoTE | undefined {
+    const content = (data as { LoTE?: LoTE } | undefined)?.LoTE ?? data;
+    return (content as LoTE | undefined)?.ListAndSchemeInformation
+        ? (content as LoTE)
+        : undefined;
+}
+
 @Injectable()
 export class TrustListService {
+    private readonly logger = new Logger(TrustListService.name);
+
     constructor(
         @InjectRepository(TrustList)
         private readonly trustListRepo: Repository<TrustList>,
@@ -113,7 +140,7 @@ export class TrustListService {
 
     /**
      * Update a trust list with new entities
-     * Increments the sequence number and stores a version for audit
+     * Increments the sequence number and stores the previous version for audit
      * @param tenantId
      * @param id
      * @param values
@@ -129,11 +156,41 @@ export class TrustListService {
             id: tenantId,
         });
 
-        // Store the current version for audit before updating
-        await this.saveVersion(existing);
-
-        // Update the trust list
         return this.buildAndSaveTrustList(values, tenant, existing);
+    }
+
+    /**
+     * Re-issue every managed trust list, across all tenants, whose `NextUpdate`
+     * is within the renewal window or already passed. Each list keeps its
+     * entities and gets the next sequence number, a fresh `NextUpdate` and a
+     * new signature; the previous version is kept in the version history.
+     *
+     * Safe to run on several replicas at once: a list is only replaced while
+     * its sequence number is unchanged, so exactly one renewal wins.
+     * @returns the number of lists this call renewed
+     */
+    async renewDueTrustLists(now = new Date()): Promise<number> {
+        let renewed = 0;
+        for (const trustList of await this.trustListRepo.find()) {
+            const lote = storedLoTE(trustList.data);
+            if (
+                !lote ||
+                !isTrustListRenewalDue(
+                    lote.ListAndSchemeInformation.NextUpdate,
+                    now,
+                )
+            ) {
+                continue;
+            }
+            try {
+                if (await this.renew(trustList, lote, now)) renewed++;
+            } catch (error) {
+                this.logger.error(
+                    `Failed to renew trust list ${trustList.id} of tenant ${trustList.tenantId}: ${error}`,
+                );
+            }
+        }
+        return renewed;
     }
 
     /**
@@ -256,6 +313,9 @@ export class TrustListService {
             });
         }
 
+        // Keep the stored state: it becomes the previous version on updates
+        const previous = existing ? { ...existing } : undefined;
+
         // Use existing trust list or create new
         const trustList =
             existing ??
@@ -335,22 +395,102 @@ export class TrustListService {
             ),
         );
         trustList.jwt = await this.generateJwt(trustList);
-        return this.trustListRepo.save(trustList);
+        if (!previous) {
+            return this.trustListRepo.save(trustList);
+        }
+
+        const published = await this.publishNextVersion(previous, {
+            description: trustList.description,
+            keyChainId: trustList.keyChainId,
+            entityConfig: trustList.entityConfig,
+            sequenceNumber: trustList.sequenceNumber,
+            data: trustList.data,
+            jwt: trustList.jwt,
+        });
+        if (!published) {
+            throw new ConflictException(
+                `Trust list ${previous.id} was modified concurrently; retry the update`,
+            );
+        }
+        return this.findOne(previous.tenantId, previous.id);
     }
 
     /**
-     * Save the current state of a trust list as a version for audit
+     * Re-issue a trust list with unchanged entities, the next sequence number
+     * and a fresh validity period.
+     * @returns false when another writer published a new version first
      */
-    private saveVersion(trustList: TrustList): Promise<TrustListVersion> {
-        const version = this.trustListVersionRepo.create({
-            trustListId: trustList.id,
-            tenantId: trustList.tenantId,
-            sequenceNumber: trustList.sequenceNumber || 1,
-            data: trustList.data ?? {},
-            entityConfig: trustList.entityConfig,
-            jwt: trustList.jwt,
+    private async renew(
+        trustList: TrustList,
+        lote: LoTE,
+        now: Date,
+    ): Promise<boolean> {
+        const sequenceNumber = (trustList.sequenceNumber || 1) + 1;
+        const data: LoTEDocument = {
+            LoTE: {
+                ...lote,
+                ListAndSchemeInformation: {
+                    ...lote.ListAndSchemeInformation,
+                    LoTESequenceNumber: sequenceNumber,
+                    ListIssueDateTime: now.toISOString(),
+                    NextUpdate: trustListNextUpdate(now).toISOString(),
+                },
+            },
+        };
+        const jwt = await this.generateJwt({ ...trustList, data });
+
+        const published = await this.publishNextVersion(trustList, {
+            sequenceNumber,
+            data,
+            jwt,
         });
-        return this.trustListVersionRepo.save(version);
+        if (published) {
+            this.logger.log(
+                `Renewed trust list ${trustList.id} of tenant ${trustList.tenantId} (sequence number ${sequenceNumber}, next update ${data.LoTE.ListAndSchemeInformation.NextUpdate})`,
+            );
+        } else {
+            this.logger.debug(
+                `Trust list ${trustList.id} of tenant ${trustList.tenantId} was already re-issued by another writer`,
+            );
+        }
+        return published;
+    }
+
+    /**
+     * Replace a trust list with its next version and keep the previous one in
+     * the version history, atomically. The write only applies while the stored
+     * sequence number still equals `previous.sequenceNumber` (compare-and-set),
+     * so concurrent writers such as renewals on other replicas or API updates
+     * never publish two lists with the same sequence number.
+     * @returns false when the list changed since `previous` was read
+     */
+    private publishNextVersion(
+        previous: TrustList,
+        changes: TrustListVersionChanges,
+    ): Promise<boolean> {
+        return this.trustListRepo.manager.transaction(async (manager) => {
+            const result = await manager.update(
+                TrustList,
+                {
+                    tenantId: previous.tenantId,
+                    id: previous.id,
+                    sequenceNumber: previous.sequenceNumber,
+                },
+                changes,
+            );
+            if (result.affected !== 1) {
+                return false;
+            }
+            await manager.insert(TrustListVersion, {
+                trustListId: previous.id,
+                tenantId: previous.tenantId,
+                sequenceNumber: previous.sequenceNumber || 1,
+                data: previous.data ?? {},
+                entityConfig: previous.entityConfig,
+                jwt: previous.jwt,
+            });
+            return true;
+        });
     }
 
     /**
@@ -545,8 +685,8 @@ export class TrustListService {
         sequenceNumber = 1,
         walletProviders = false,
     ): LoTEDocument {
-        const nextUpdate = new Date();
-        nextUpdate.setDate(nextUpdate.getDate() + 30);
+        const issuedAt = new Date();
+        const nextUpdate = trustListNextUpdate(issuedAt);
 
         return createLoTE(
             {
@@ -571,6 +711,7 @@ export class TrustListService {
                     },
                 ],
                 SchemeTerritory: "EU",
+                ListIssueDateTime: issuedAt.toISOString(),
                 NextUpdate: nextUpdate.toISOString(),
                 LoTESequenceNumber: sequenceNumber,
             },

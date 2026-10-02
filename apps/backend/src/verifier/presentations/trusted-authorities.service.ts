@@ -1,8 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import * as x509 from "@peculiar/x509";
-import { base64url } from "jose";
 import { PinoLogger } from "nestjs-pino";
 import { TrustListService } from "../../issuer/trust-list/trustlist.service.js";
+import {
+    credentialIssuerAuthorityKeyIdentifiers,
+    type IssuerAuthorityKeyIdentifiers,
+} from "../../trust/domain/authority-key-identifiers.js";
+import { TrustStoreService } from "../../trust/trust-store.service.js";
 import {
     TrustedAuthorityType,
     TrustListRef,
@@ -11,6 +14,9 @@ import {
     InvalidTrustedAuthoritiesError,
     type TrustListRefResolver,
 } from "./ports/trust-list-ref-resolver.js";
+
+/** A `trusted_authorities` entry as sent to the wallet. */
+type WalletTrustedAuthority = { type: string; values: string[] };
 
 /**
  * Resolves the `trusted_authorities` of a presentation config: into
@@ -21,28 +27,35 @@ import {
 export class TrustedAuthoritiesService implements TrustListRefResolver {
     constructor(
         private readonly trustListService: TrustListService,
+        private readonly trustStore: TrustStoreService,
         private readonly logger: PinoLogger,
     ) {
         this.logger.setContext(TrustedAuthoritiesService.name);
     }
 
     /**
-     * Transform `trusted_authorities` in a DCQL query from internal `etsi_tl`
-     * format (TrustListRef objects) to the DCQL-compliant `aki` format
-     * (base64url-encoded Subject Key Identifier strings).
+     * Transform `trusted_authorities` in a DCQL query from the internal `etsi_tl`
+     * format (TrustListRef objects) into what the wallet receives: an `aki`
+     * entry (OpenID4VP 1.0 §6.1.1.1) whose values are the base64url-encoded key
+     * identifiers of the credential issuers listed in the referenced trust
+     * lists, so the wallet can match credentials without fetching the lists.
      *
-     * Per OID4VP 1.0 Final §6 / trusted-authorities-query, `aki` values must be
-     * an array of strings. This ensures wallets receive a spec-compliant DCQL query
-     * rather than the internal representation with TrustListRef objects.
+     * The values come from the PID/EAA issuance certificates of the listed
+     * entities (see {@link credentialIssuerAuthorityKeyIdentifiers}), not from
+     * the certificate that signs the trust list. Managed lists are read from
+     * their stored content, external lists are fetched and signature-verified.
      *
-     * For each `etsi_tl` entry the Subject Key Identifier (SKI, OID 2.5.29.14)
-     * of the trust anchor certificate is extracted and base64url-encoded. The
-     * SKI equals the AKI field in any credential signed by that CA, so a wallet
-     * can match credentials locally without fetching external resources.
+     * A trust list that cannot be loaded, or whose issuers are not all covered
+     * by key identifiers (e.g. a pinned self-signed certificate without AKI),
+     * is logged and additionally stays an `etsi_tl` entry, reduced to its plain
+     * trust-list URL as the spec requires. Entries of a credential query are
+     * alternatives, so the wallet still matches the issuers that resolved.
+     * Verification is unaffected: it reads the stored config.
      */
     async transformDcqlTrustedAuthoritiesToAki(
         dcqlQuery: any,
         tenantId: string,
+        tenantHost: string,
     ): Promise<any> {
         const credentials = dcqlQuery?.credentials;
         if (!Array.isArray(credentials)) {
@@ -56,38 +69,25 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
                     return cred;
                 }
 
-                const transformedAuthorities = await Promise.all(
-                    trustedAuthorities.map(async (ta: any) => {
-                        if (ta?.type !== TrustedAuthorityType.ETSI_TL) {
-                            return ta;
-                        }
+                const transformedAuthorities = (
+                    await Promise.all(
+                        trustedAuthorities.map((ta: any) =>
+                            ta?.type === TrustedAuthorityType.ETSI_TL
+                                ? this.toWalletAuthorities(
+                                      ta.values ?? [],
+                                      tenantId,
+                                      tenantHost,
+                                  )
+                                : [ta],
+                        ),
+                    )
+                ).flat();
 
-                        const akiValues: string[] = [];
-                        for (const ref of ta.values ?? []) {
-                            const derB64 = await this.resolveTrustAnchorDer(
-                                ref,
-                                tenantId,
-                            );
-                            if (!derB64) continue;
-
-                            const aki = extractSkiAsBase64url(derB64);
-                            if (aki) {
-                                akiValues.push(aki);
-                            }
-                        }
-
-                        if (akiValues.length === 0) {
-                            this.logger.warn(
-                                { tenantId },
-                                "Could not extract any AKI values from etsi_tl trusted_authorities; leaving entry unchanged",
-                            );
-                            return ta;
-                        }
-
-                        return { type: "aki", values: akiValues };
-                    }),
-                );
-
+                // `trusted_authorities` must be non-empty when present.
+                if (transformedAuthorities.length === 0) {
+                    const { trusted_authorities: _, ...rest } = cred;
+                    return rest;
+                }
                 return { ...cred, trusted_authorities: transformedAuthorities };
             }),
         );
@@ -130,7 +130,7 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
 
                     return {
                         trustListId,
-                        url: `${tenantHost}/trust-list/${encodeURIComponent(trustListId)}`,
+                        url: managedTrustListUrl(tenantHost, trustListId),
                         verifierX509Der,
                     };
                 }
@@ -152,59 +152,68 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
     }
 
     /**
-     * Resolve the base64-encoded DER trust anchor certificate for a TrustListRef.
-     * For managed trust lists (trustListId), fetches the verifier certificate from
-     * the trust list service. For external refs, uses the supplied verifierX509Der.
+     * Wallet-facing entries for the trust lists of one `etsi_tl` entry: one
+     * `aki` entry with the key identifiers of all lists, and an `etsi_tl` entry
+     * with the URLs of the lists they do not fully cover.
      */
-    private async resolveTrustAnchorDer(
+    private async toWalletAuthorities(
+        refs: TrustListRef[],
+        tenantId: string,
+        tenantHost: string,
+    ): Promise<WalletTrustedAuthority[]> {
+        const akiValues = new Set<string>();
+        const unresolvedUrls: string[] = [];
+        for (const ref of refs) {
+            const { values, complete } = await this.authorityKeyIdentifiers(
+                ref,
+                tenantId,
+            );
+            for (const value of values) akiValues.add(value);
+            if (complete && values.length > 0) continue;
+
+            const trustListId = ref.trustListId?.trim();
+            const url = trustListId
+                ? managedTrustListUrl(tenantHost, trustListId)
+                : ref.url;
+            if (url) unresolvedUrls.push(url);
+        }
+
+        const authorities: WalletTrustedAuthority[] = [];
+        if (akiValues.size > 0) {
+            authorities.push({ type: "aki", values: [...akiValues] });
+        }
+        if (unresolvedUrls.length > 0) {
+            this.logger.warn(
+                { tenantId, trustLists: unresolvedUrls },
+                "AKI values do not cover all issuers of these etsi_tl trust lists; also sending the trust-list URLs",
+            );
+            authorities.push({
+                type: TrustedAuthorityType.ETSI_TL,
+                values: unresolvedUrls,
+            });
+        }
+        return authorities;
+    }
+
+    /** Key identifiers of the credential issuers listed in one trust list. */
+    private async authorityKeyIdentifiers(
         ref: TrustListRef,
         tenantId: string,
-    ): Promise<string | undefined> {
-        if (ref.verifierX509Der) {
-            return ref.verifierX509Der;
+    ): Promise<IssuerAuthorityKeyIdentifiers> {
+        try {
+            return credentialIssuerAuthorityKeyIdentifiers(
+                await this.trustStore.getListedEntities(ref, tenantId),
+            );
+        } catch (err: unknown) {
+            this.logger.warn(
+                { tenantId, trustListId: ref.trustListId, url: ref.url, err },
+                "Failed to load trust list for AKI extraction",
+            );
+            return { values: [], complete: false };
         }
-        if (ref.trustListId) {
-            try {
-                return await this.trustListService.getVerifierX509Der(
-                    tenantId,
-                    ref.trustListId,
-                );
-            } catch (err: any) {
-                this.logger.warn(
-                    { tenantId, trustListId: ref.trustListId, err },
-                    "Failed to resolve verifier certificate for trust list; skipping AKI extraction",
-                );
-                return undefined;
-            }
-        }
-        return undefined;
     }
 }
 
-/**
- * Extract the Subject Key Identifier (SKI, OID 2.5.29.14) from a
- * base64-encoded DER certificate and return it as a base64url string.
- *
- * Wallets check that a credential's certificate chain contains a cert whose
- * AKI matches this SKI, enabling local credential matching without fetching
- * external trust-list resources.
- */
-function extractSkiAsBase64url(derB64: string): string | undefined {
-    try {
-        const certBytes = Buffer.from(derB64, "base64");
-        const cert = new x509.X509Certificate(certBytes);
-        const skiExt = cert.getExtension("2.5.29.14") as
-            | { keyId?: string }
-            | undefined;
-        const keyId = skiExt?.keyId;
-        if (!keyId) {
-            return undefined;
-        }
-        // @peculiar/x509 returns keyId as a lowercase hex string;
-        // convert to bytes and base64url-encode per OID4VP spec.
-        const skiBytes = Buffer.from(keyId.replaceAll(":", ""), "hex");
-        return base64url.encode(skiBytes);
-    } catch {
-        return undefined;
-    }
+function managedTrustListUrl(tenantHost: string, trustListId: string): string {
+    return `${tenantHost}/trust-list/${encodeURIComponent(trustListId)}`;
 }

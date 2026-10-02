@@ -37,6 +37,26 @@ describe("PresentationConfigCreateSchema", () => {
         expect(result.success).toBe(true);
     });
 
+    it("uses the registrar's provides_attestations for issuer registrations", () => {
+        const withBody = (body: Record<string, unknown>) =>
+            PresentationConfigCreateSchema.safeParse({
+                ...basePresentationConfig,
+                registration_cert: {
+                    body: {
+                        privacy_policy: "https://example.com/privacy",
+                        support_uri: "https://example.com/support",
+                        ...body,
+                    },
+                },
+            }).success;
+
+        expect(
+            withBody({ provides_attestations: ["https://example.com/age"] }),
+        ).toBe(true);
+        expect(withBody({ provides_attestations: [{ vct: "x" }] })).toBe(false);
+        expect(withBody({ provided_attestations: [{ vct: "x" }] })).toBe(false);
+    });
+
     it("continues rejecting unrelated fields", () => {
         const result = PresentationConfigCreateSchema.safeParse({
             ...basePresentationConfig,

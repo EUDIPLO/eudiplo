@@ -511,14 +511,11 @@
                     "additionalProperties": {}
                   }
                 },
-                "provided_attestations": {
+                "provides_attestations": {
                   "type": "array",
                   "items": {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {}
+                    "type": "string",
+                    "minLength": 1
                   }
                 }
               },

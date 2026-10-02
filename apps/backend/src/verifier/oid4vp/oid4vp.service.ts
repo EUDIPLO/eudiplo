@@ -272,12 +272,13 @@ export class Oid4vpService {
             );
 
             // Transform internal etsi_tl trusted_authorities (TrustListRef objects)
-            // to the DCQL-compliant aki format (base64url Subject Key Identifier
-            // strings). Wallets must receive string values per OID4VP 1.0 Final §6.
+            // to the DCQL-compliant aki format (base64url key identifiers of the
+            // listed issuers). Wallets must receive string values per OID4VP 1.0 §6.
             dcql_query =
                 await this.trustedAuthoritiesService.transformDcqlTrustedAuthoritiesToAki(
                     dcql_query,
                     session.tenantId,
+                    tenantHost,
                 );
 
             // Some wallets do not yet handle trusted_authorities correctly.
