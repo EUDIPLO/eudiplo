@@ -7,7 +7,10 @@ import type { JWK, JWSHeaderParameters, JWTPayload } from "jose";
 import { Repository } from "typeorm";
 import { v4 } from "uuid";
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
-import { CertificateBuilderService } from "./cert/certificate-builder.service.js";
+import {
+    CertificateBuilderService,
+    certificateNotBefore,
+} from "./cert/certificate-builder.service.js";
 import { KeyChainCreateDto, KeyChainType } from "./dto/key-chain-create.dto.js";
 import { KeyChainExportDto } from "./dto/key-chain-export.dto.js";
 import { KeyChainImportDto } from "./dto/key-chain-import.dto.js";
@@ -134,7 +137,7 @@ export class KeyChainService {
                 adapter,
                 subjectCN,
                 hostname,
-                now,
+                certificateNotBefore(now),
                 notAfter,
             );
         } else {
@@ -143,7 +146,7 @@ export class KeyChainService {
                 adapter,
                 subjectCN,
                 hostname,
-                now,
+                certificateNotBefore(now),
                 notAfter,
             );
         }
@@ -512,7 +515,7 @@ export class KeyChainService {
                 subjectPublicJwk: newMat.ref.publicJwk,
                 subjectCN,
                 hostname,
-                notBefore: now,
+                notBefore: certificateNotBefore(now),
                 notAfter,
             });
             newCertificate = chain.join("\n");
@@ -522,7 +525,7 @@ export class KeyChainService {
                 newMat.ref,
                 subjectCN,
                 hostname,
-                now,
+                certificateNotBefore(now),
                 notAfter,
             );
         }

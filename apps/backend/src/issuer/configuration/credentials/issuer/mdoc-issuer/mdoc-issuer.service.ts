@@ -17,7 +17,10 @@ import { mdocContext } from "../../../../../verifier/presentations/mdoc-context.
 import { StatusListService } from "../../../../status-list/status-list.service.js";
 import type { CredentialConfiguration } from "../../domain/credential-configuration.js";
 import { buildClaimsByNamespace } from "../../utils/index.js";
-import { roundedCredentialValidity } from "../credential-time.util.js";
+import {
+    clampCredentialValidityToCertificate,
+    roundedCredentialValidity,
+} from "../credential-time.util.js";
 
 export interface MdocIssueOptions {
     credentialConfiguration: CredentialConfiguration;
@@ -125,10 +128,23 @@ export class MdocIssuerService {
         );
 
         // Set validity dates
-        // Use lifeTime from config or default to 1 year
-        const { issuedAt, expiresAt } = roundedCredentialValidity(
-            credentialConfiguration.lifeTime ?? 365 * 24 * 60 * 60,
-        );
+        // Use lifeTime from config or default to 1 year, kept within the leaf
+        // certificate's validity (ISO 18013-5 checks the signed date against it)
+        const leafCertificate = new X509Certificate(certificate.crt[0]);
+        let issuedAt: number;
+        let expiresAt: number;
+        try {
+            ({ issuedAt, expiresAt } = clampCredentialValidityToCertificate(
+                roundedCredentialValidity(
+                    credentialConfiguration.lifeTime ?? 365 * 24 * 60 * 60,
+                ),
+                leafCertificate,
+            ));
+        } catch (error) {
+            throw new Error(
+                `mDOC issuance failed for key chain ${certificate.keyId}: ${(error as Error).message}`,
+            );
+        }
         const signed = new Date(issuedAt * 1000);
         const validFrom = new Date(signed);
         const validUntil = new Date(expiresAt * 1000);
