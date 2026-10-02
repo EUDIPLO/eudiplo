@@ -1,7 +1,8 @@
 FROM node:26@sha256:a723b54c35a76e947095a20a67d39585bb09c862e6b1adeb8a9f518f95e34fb0 AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
+# Node 25 and later no longer bundle corepack, so install it before enabling it.
+RUN npm install -g corepack@0.36.0 && corepack enable
 
 FROM base AS build
 COPY . /usr/src/app
