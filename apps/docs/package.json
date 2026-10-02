@@ -42,7 +42,7 @@
     "@docusaurus/types": "3.10.2",
     "@types/react": "^19.2.18",
     "markdownlint-cli": "^0.49.1",
-    "typescript": "~6.0.2"
+    "typescript": "~7.0.2"
   },
   "browserslist": {
     "production": [
