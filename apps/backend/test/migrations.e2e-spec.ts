@@ -12,6 +12,7 @@ import { FlattenKeyUsageType1746000000000 } from "../src/database/migrations/174
 import { MigrateKeysToKeyChain1747000000000 } from "../src/database/migrations/1747000000000-MigrateKeysToKeyChain.js";
 import { ChangeSessionExpiresAtToTimestamp1784000000000 } from "../src/database/migrations/1784000000000-ChangeSessionExpiresAtToTimestamp.js";
 import { AddOfferLifetimeToIssuanceConfig1784100000000 } from "../src/database/migrations/1784100000000-AddOfferLifetimeToIssuanceConfig.js";
+import { AddSessionListFilters1784300000000 } from "../src/database/migrations/1784300000000-AddSessionListFilters.js";
 import { describeWithContainers } from "./container-runtime.js";
 
 /**
@@ -1015,6 +1016,111 @@ describe("Migration tests", () => {
                             .findOneByOrFail({ id: sessionId })
                     ).expiresAt,
                 ).toEqual(later);
+            });
+        });
+    });
+
+    describe("AddSessionListFilters1784300000000", () => {
+        describeWithContainers("PostgreSQL", () => {
+            let dataSource: DataSource;
+            let postgresContainer: StartedPostgreSqlContainer;
+            let driftAfterSynchronize: string[];
+            const sessionId = "00000000-0000-4000-8000-000000000001";
+
+            const drift = async () =>
+                (await dataSource.driver.createSchemaBuilder().log()).upQueries
+                    .map((query) => query.query)
+                    .sort();
+            const indexes = async () =>
+                (
+                    await dataSource.query(
+                        `SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'session' AND indexname LIKE 'IDX_session_%' ORDER BY indexname`,
+                    )
+                ).map(
+                    (row: { indexname: string; indexdef: string }) =>
+                        `${row.indexname}: ${row.indexdef.replace(/^.* USING btree /, "")}`,
+                );
+
+            beforeAll(async () => {
+                const [
+                    { Session },
+                    { SessionLogEntry },
+                    { TenantEntity },
+                    { ClientEntity },
+                ] = await Promise.all([
+                    import("../src/session/entities/session.entity.js"),
+                    import(
+                        "../src/session/entities/session-log-entry.entity.js"
+                    ),
+                    import("../src/auth/tenant/entities/tenant.entity.js"),
+                    import("../src/auth/client/entities/client.entity.js"),
+                ]);
+                postgresContainer = await new PostgreSqlContainer(
+                    "postgres:alpine",
+                ).start();
+                dataSource = new DataSource({
+                    type: "postgres",
+                    url: postgresContainer.getConnectionUri(),
+                    entities: [
+                        Session,
+                        SessionLogEntry,
+                        TenantEntity,
+                        ClientEntity,
+                    ],
+                    synchronize: true,
+                    logging: false,
+                });
+                await dataSource.initialize();
+                driftAfterSynchronize = await drift();
+
+                // Recreate the schema before the migration.
+                const queryRunner = dataSource.createQueryRunner();
+                await new AddSessionListFilters1784300000000().down(
+                    queryRunner,
+                );
+                await queryRunner.release();
+                await dataSource.query(
+                    `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't')`,
+                );
+                await dataSource.query(
+                    `INSERT INTO "session" ("id", "tenantId", "requestId") VALUES ($1, 't', 'age-check')`,
+                    [sessionId],
+                );
+            }, 60_000);
+
+            afterAll(async () => {
+                await dataSource?.destroy();
+                await postgresContainer?.stop();
+            });
+
+            test("adds the columns and indexes, keeps the rows and is idempotent", async () => {
+                expect(await indexes()).toEqual([]);
+                const queryRunner = dataSource.createQueryRunner();
+                await new AddSessionListFilters1784300000000().up(queryRunner);
+                await new AddSessionListFilters1784300000000().up(queryRunner);
+                await queryRunner.release();
+
+                expect(await indexes()).toEqual([
+                    'IDX_session_tenant_created_at: ("tenantId", "createdAt")',
+                    'IDX_session_tenant_reference: ("tenantId", reference)',
+                    'IDX_session_tenant_request_id: ("tenantId", "requestId")',
+                    'IDX_session_tenant_status: ("tenantId", status)',
+                    'IDX_session_tenant_updated_at: ("tenantId", "updatedAt")',
+                    'IDX_session_wallet_nonce: ("walletNonce")',
+                ]);
+                await expect(
+                    dataSource.query(
+                        `SELECT "requestId", "reference", "credentialConfigurationIds" FROM "session" WHERE "id" = $1`,
+                        [sessionId],
+                    ),
+                ).resolves.toEqual([
+                    {
+                        requestId: "age-check",
+                        reference: null,
+                        credentialConfigurationIds: null,
+                    },
+                ]);
+                expect(await drift()).toEqual(driftAfterSynchronize);
             });
         });
     });

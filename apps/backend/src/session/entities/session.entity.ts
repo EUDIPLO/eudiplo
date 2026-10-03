@@ -6,6 +6,7 @@ import {
     Column,
     CreateDateColumn,
     Entity,
+    Index,
     ManyToOne,
     PrimaryColumn,
     UpdateDateColumn,
@@ -26,6 +27,12 @@ import { SessionStatus } from "../domain/session-state.js";
  * request URI, authorization queries, and more.
  */
 @Entity()
+@Index("IDX_session_tenant_created_at", ["tenantId", "createdAt"])
+@Index("IDX_session_tenant_updated_at", ["tenantId", "updatedAt"])
+@Index("IDX_session_tenant_status", ["tenantId", "status"])
+@Index("IDX_session_tenant_request_id", ["tenantId", "requestId"])
+@Index("IDX_session_tenant_reference", ["tenantId", "reference"])
+@Index("IDX_session_wallet_nonce", ["walletNonce"])
 export class Session {
     /**
      * Unique identifier for the session.
@@ -87,6 +94,14 @@ export class Session {
         eager: true,
     })
     tenant!: TenantEntity;
+
+    /**
+     * Caller-provided reference of the offer, e.g. an order or case id of the
+     * integrating system. Stored in plaintext and kept when the session is
+     * anonymized, so it must not contain personal data.
+     */
+    @Column("varchar", { nullable: true })
+    reference?: string | null;
 
     /**
      * Status of the session.
@@ -167,6 +182,12 @@ export class Session {
      */
     @Column("text", { nullable: true, transformer: EncryptedJsonTransformer })
     credentialPayload?: OfferRequestDto;
+    /**
+     * Credential configuration ids of the issuance offer. Stored in plaintext
+     * (unlike {@link credentialPayload}) so the session list can filter by them.
+     */
+    @Column("json", { nullable: true })
+    credentialConfigurationIds?: string[] | null;
     /**
      * ID of the webhook endpoint to notify about issuance status.
      */

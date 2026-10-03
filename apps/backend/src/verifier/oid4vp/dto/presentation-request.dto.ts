@@ -32,6 +32,7 @@ interface PresentationRequestData {
     transaction_data?: z.infer<typeof TransactionDataSchema>[];
     skewSeconds?: number;
     clientIdScheme?: ClientIdSchemeValue;
+    reference?: string;
 }
 
 /** DTO for the presentation request containing the response type and request ID. */
@@ -91,6 +92,13 @@ export class PresentationRequest
         default: ClientIdScheme.X509_HASH,
     })
     clientIdScheme?: ClientIdSchemeValue;
+
+    /**
+     * Caller reference stored with the session, e.g. an order or case id.
+     * Stored in plaintext and kept on anonymization: never put personal data here.
+     * @example "order-4711"
+     */
+    reference?: string;
 }
 
 export type PresentationRequestOptions = Pick<
@@ -101,6 +109,7 @@ export type PresentationRequestOptions = Pick<
     | "transaction_data"
     | "skewSeconds"
     | "clientIdScheme"
+    | "reference"
 > & {
     session?: string;
 };

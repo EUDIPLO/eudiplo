@@ -16,6 +16,22 @@ describe("CreateSession", () => {
         expect(create).toHaveBeenCalledExactlyOnceWith(input);
     });
 
+    it("binds the created session to the request context", async () => {
+        const created = {
+            id: "session-1",
+            tenantId: "tenant-1",
+        } as SessionData;
+        const context = { bind: vi.fn() };
+        const useCase = new CreateSession(
+            { create: vi.fn().mockResolvedValue(created) },
+            context,
+        );
+
+        await useCase.execute({ id: "session-1", tenantId: "tenant-1" });
+
+        expect(context.bind).toHaveBeenCalledExactlyOnceWith(created);
+    });
+
     it("propagates persistence failures", async () => {
         const failure = new Error("database unavailable");
         const useCase = new CreateSession({

@@ -81,6 +81,7 @@ export class ConfiguredCredentialClaimsProvider
         return this.remoteClaims.fetchClaims({
             webhook,
             session: session.id,
+            ...(session.reference ? { reference: session.reference } : {}),
             credentialConfigurationId,
             identity,
             credentials,

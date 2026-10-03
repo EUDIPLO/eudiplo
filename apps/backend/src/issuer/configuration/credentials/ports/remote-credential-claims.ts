@@ -9,6 +9,8 @@ export const REMOTE_CREDENTIAL_CLAIMS = Symbol("REMOTE_CREDENTIAL_CLAIMS");
 export interface RemoteCredentialClaimsRequest {
     webhook: WebhookConfiguration;
     session: string;
+    /** Caller reference of the session, when set. */
+    reference?: string;
     credentialConfigurationId: string;
     identity?: CredentialClaimsRequest["identity"];
     credentials?: unknown[];

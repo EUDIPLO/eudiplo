@@ -78,6 +78,14 @@ Since 9.0, an offer can expire:
 - The code in the offer is redeemed once, at the token endpoint. A second token request answers `invalid_grant` ("The credential offer has already been used"). Refresh tokens stay usable.
 - Create a new offer for every issuance.
 
+## Your own reference
+
+`reference` (optional, up to 255 characters) stores an identifier of your system with the session, for example an order or case ID. It is returned in the session list and detail, sent in the session's webhooks, and you can [find the session](../concepts/sessions.md#finding-sessions) by it later.
+
+:::warning
+The reference is stored in plaintext, unlike the claims, and stays when sessions are anonymized. Use an opaque identifier, never a name, email address or other personal data.
+:::
+
 ## Restrict clients
 
 A client with `allowedIssuanceConfigs` can only offer the listed credential configurations; other IDs answer `403`. See [Tenants and access](../operate/tenants-and-access.md).

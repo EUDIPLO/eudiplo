@@ -24,61 +24,170 @@
     </div>
   </div>
 
-  <div fxLayout="row" fxLayoutGap="16px" fxLayoutAlign="start center">
-    <mat-form-field appearance="outline">
-      <mat-label>Session Type</mat-label>
-      <mat-select [formControl]="typeFilter">
-        @for (option of typeOptions; track option.value) {
-          <mat-option [value]="option.value">
-            {{ option.label }}
-          </mat-option>
-        }
-      </mat-select>
-      <mat-icon matSuffix>category</mat-icon>
-    </mat-form-field>
-
-    <mat-form-field appearance="outline">
-      <mat-label>Status</mat-label>
-      <mat-select [formControl]="statusFilter">
-        @for (option of statusOptions; track option.value) {
-          <mat-option [value]="option.value">
-            {{ option.label }}
-          </mat-option>
-        }
-      </mat-select>
-      <mat-icon matSuffix>flag</mat-icon>
-    </mat-form-field>
-
-    <button mat-button (click)="refreshSessions()">
-      <mat-icon>refresh</mat-icon>
-      Refresh
-    </button>
-
-    <!-- Bulk Actions -->
-    @if (selection.selected.length > 0) {
-      <div fxLayout="row" fxLayoutGap="8px" fxLayoutAlign="start center" class="bulk-actions">
-        <span class="selection-info">{{ selection.selected.length }} selected</span>
+  <form [formGroup]="filters" fxLayout="column" fxLayoutGap="8px" class="filters">
+    <mat-form-field appearance="outline" class="search-field">
+      <mat-label>Search</mat-label>
+      <mat-icon matPrefix>search</mat-icon>
+      <input
+        matInput
+        formControlName="q"
+        placeholder="Session id, reference, pre-authorized code, or a pasted offer or request link"
+      />
+      @if (filters.controls.q.value) {
         <button
-          mat-raised-button
-          color="warn"
-          (click)="deleteSelectedSessions()"
-          [disabled]="deletingSelected"
-          matTooltip="Delete selected sessions"
+          matIconButton
+          matSuffix
+          type="button"
+          aria-label="Clear search"
+          (click)="filters.controls.q.setValue('')"
         >
-          <mat-icon>delete</mat-icon>
-          @if (deletingSelected) {
-            Deleting...
-          } @else {
-            Delete Selected
+          <mat-icon>close</mat-icon>
+        </button>
+      }
+    </mat-form-field>
+
+    <div fxLayout="row wrap" fxLayoutGap="16px" fxLayoutAlign="start center">
+      <mat-form-field appearance="outline">
+        <mat-label>Session Type</mat-label>
+        <mat-select formControlName="type">
+          @for (option of typeOptions; track option.value) {
+            <mat-option [value]="option.value">
+              {{ option.label }}
+            </mat-option>
           }
+        </mat-select>
+        <mat-icon matSuffix>category</mat-icon>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Status</mat-label>
+        <mat-select formControlName="status" multiple placeholder="All Statuses">
+          @for (option of statusOptions; track option.value) {
+            <mat-option [value]="option.value">
+              {{ option.label }}
+            </mat-option>
+          }
+        </mat-select>
+        <mat-icon matSuffix>flag</mat-icon>
+      </mat-form-field>
+
+      <button
+        mat-stroked-button
+        type="button"
+        (click)="showPending()"
+        [disabled]="isPendingSelected()"
+        matTooltip="Active and fetched sessions the wallet has not finished yet"
+      >
+        <mat-icon>hourglass_empty</mat-icon>
+        Pending
+      </button>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Configuration</mat-label>
+        <mat-select formControlName="config">
+          <mat-option value="">All Configurations</mat-option>
+          @if (issuanceConfigOptions.length) {
+            <mat-optgroup label="Issuance (credential configuration)">
+              @for (option of issuanceConfigOptions; track option.value) {
+                <mat-option [value]="option.value">{{ option.label }}</mat-option>
+              }
+            </mat-optgroup>
+          }
+          @if (presentationConfigOptions.length) {
+            <mat-optgroup label="Presentation">
+              @for (option of presentationConfigOptions; track option.value) {
+                <mat-option [value]="option.value">{{ option.label }}</mat-option>
+              }
+            </mat-optgroup>
+          }
+        </mat-select>
+        <mat-icon matSuffix>tune</mat-icon>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Created</mat-label>
+        <mat-date-range-input [rangePicker]="createdPicker">
+          <input matStartDate formControlName="createdFrom" placeholder="From" />
+          <input matEndDate formControlName="createdTo" placeholder="To" />
+        </mat-date-range-input>
+        <mat-datepicker-toggle matIconSuffix [for]="createdPicker"></mat-datepicker-toggle>
+        <mat-date-range-picker #createdPicker></mat-date-range-picker>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Updated</mat-label>
+        <mat-select formControlName="updated">
+          <mat-option value="">Any Time</mat-option>
+          @for (option of updatedOptions; track option.value) {
+            <mat-option [value]="option.value">{{ option.label }}</mat-option>
+          }
+          <mat-option value="custom">Custom Range</mat-option>
+        </mat-select>
+        <mat-icon matSuffix>update</mat-icon>
+      </mat-form-field>
+
+      @if (filters.controls.updated.value === 'custom') {
+        <mat-form-field appearance="outline">
+          <mat-label>Updated Between</mat-label>
+          <mat-date-range-input [rangePicker]="updatedPicker">
+            <input matStartDate formControlName="updatedFrom" placeholder="From" />
+            <input matEndDate formControlName="updatedTo" placeholder="To" />
+          </mat-date-range-input>
+          <mat-datepicker-toggle matIconSuffix [for]="updatedPicker"></mat-datepicker-toggle>
+          <mat-date-range-picker #updatedPicker></mat-date-range-picker>
+        </mat-form-field>
+      }
+
+      <mat-form-field appearance="outline">
+        <mat-label>Failure Code</mat-label>
+        <input matInput formControlName="failureCode" [matAutocomplete]="failureCodes" />
+        <mat-autocomplete #failureCodes="matAutocomplete">
+          @for (code of matchingFailureCodes(); track code) {
+            <mat-option [value]="code">{{ code }}</mat-option>
+          }
+        </mat-autocomplete>
+        <mat-icon matSuffix>error_outline</mat-icon>
+      </mat-form-field>
+
+      @if (hasActiveFilters()) {
+        <button mat-button type="button" (click)="clearFilters()">
+          <mat-icon>filter_alt_off</mat-icon>
+          Clear Filters
         </button>
-        <button mat-button (click)="clearSelection()" matTooltip="Clear selection">
-          <mat-icon>clear</mat-icon>
-          Clear
-        </button>
-      </div>
-    }
-  </div>
+      }
+
+      <button mat-button type="button" (click)="refreshSessions()">
+        <mat-icon>refresh</mat-icon>
+        Refresh
+      </button>
+
+      <!-- Bulk Actions -->
+      @if (selection.selected.length > 0) {
+        <div fxLayout="row" fxLayoutGap="8px" fxLayoutAlign="start center" class="bulk-actions">
+          <span class="selection-info">{{ selection.selected.length }} selected</span>
+          <button
+            mat-raised-button
+            color="warn"
+            type="button"
+            (click)="deleteSelectedSessions()"
+            [disabled]="deletingSelected"
+            matTooltip="Delete selected sessions"
+          >
+            <mat-icon>delete</mat-icon>
+            @if (deletingSelected) {
+              Deleting...
+            } @else {
+              Delete Selected
+            }
+          </button>
+          <button mat-button type="button" (click)="clearSelection()" matTooltip="Clear selection">
+            <mat-icon>clear</mat-icon>
+            Clear
+          </button>
+        </div>
+      }
+    </div>
+  </form>
 
   <div class="table-container">
     @if (isLoadingResults) {
@@ -86,7 +195,14 @@
         <mat-spinner></mat-spinner>
       </div>
     }
-    <table mat-table [dataSource]="dataSource" matSort class="sessions-table">
+    <table
+      mat-table
+      [dataSource]="dataSource"
+      matSort
+      [matSortActive]="initialSort.active"
+      [matSortDirection]="initialSort.direction"
+      class="sessions-table"
+    >
       <!-- Checkbox Column -->
       <ng-container matColumnDef="select">
         <th mat-header-cell *matHeaderCellDef>
@@ -130,9 +246,20 @@
       <ng-container matColumnDef="status">
         <th mat-header-cell *matHeaderCellDef mat-sort-header>Status</th>
         <td mat-cell *matCellDef="let session">
-          <span class="status-badge" [class]="getStatusClass(session.status)">
+          <span
+            class="status-badge"
+            [class]="getStatusClass(session.status)"
+            [matTooltip]="session.failureCode ?? ''"
+          >
             {{ getSessionStatus(session) | titlecase }}
           </span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="reference">
+        <th mat-header-cell *matHeaderCellDef>Reference</th>
+        <td mat-cell *matCellDef="let session">
+          <span class="reference-text">{{ session.reference }}</span>
         </td>
       </ng-container>
 
@@ -140,6 +267,13 @@
         <th mat-header-cell *matHeaderCellDef mat-sort-header="createdAt">Created At</th>
         <td mat-cell *matCellDef="let session">
           <span class="date-text">{{ session.createdAt | date: 'short' }}</span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="updatedAt">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header="updatedAt">Updated At</th>
+        <td mat-cell *matCellDef="let session">
+          <span class="date-text">{{ session.updatedAt | date: 'short' }}</span>
         </td>
       </ng-container>
 
@@ -158,6 +292,7 @@
 
     <mat-paginator
       [length]="totalItems"
+      [pageIndex]="initialPageIndex"
       [pageSize]="pageSize"
       [pageSizeOptions]="pageSizeOptions"
       showFirstLastButtons
@@ -170,7 +305,7 @@
       <mat-icon>inbox</mat-icon>
       <p>No sessions found</p>
       <p class="subtitle">
-        @if (typeFilter.value !== 'all' || statusFilter.value !== 'all') {
+        @if (hasActiveFilters()) {
           Try adjusting your filters or create your first session to get started
         } @else {
           Create your first session to get started

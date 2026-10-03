@@ -26,6 +26,7 @@ interface OfferRequestData {
     credentialClaims?: Record<string, ClaimsSource>;
     webhookEndpointId?: string;
     offerLifetimeSeconds?: number;
+    reference?: string;
 }
 
 type OfferRequestConstructor = new () => OfferRequestData;
@@ -176,6 +177,17 @@ export class OfferRequestDto
         example: 600,
     })
     offerLifetimeSeconds?: number;
+
+    /**
+     * Caller reference stored with the session, e.g. an order or case id.
+     */
+    @ApiPropertyOptional({
+        description:
+            "Your own reference for this offer, e.g. an order or case id. Stored in plaintext, searchable in the session list, included in webhooks and kept when the session is anonymized. Must not contain personal data.",
+        maxLength: 255,
+        example: "order-4711",
+    })
+    reference?: string;
 }
 
 export class OfferResponse {

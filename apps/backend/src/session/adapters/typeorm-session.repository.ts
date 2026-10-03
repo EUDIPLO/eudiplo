@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
+    Brackets,
     type FindOptionsWhere,
     In,
     IsNull,
@@ -8,6 +9,7 @@ import {
     MoreThan,
     Not,
     Repository,
+    type SelectQueryBuilder,
 } from "typeorm";
 import type { QueryDeepPartialEntity } from "typeorm/query-builder/QueryPartialEntity.js";
 import type {
@@ -20,6 +22,11 @@ import type {
     SessionListQuery,
     SessionSummary,
 } from "../domain/session-list.js";
+import {
+    parseSessionSearch,
+    type SessionSearch,
+    uuidPrefixRange,
+} from "../domain/session-search.js";
 import {
     OPEN_SESSION_STATUSES,
     type SessionLifecycleContext,
@@ -191,38 +198,138 @@ export class TypeOrmSessionRepository implements SessionRepository {
         tenantId: string,
         query: SessionListQuery,
     ): Promise<{ items: SessionSummary[]; total: number }> {
-        const { page, pageSize, status, type, sortBy, sortOrder } = query;
-        const where: FindOptionsWhere<Session> = { tenantId };
-        if (status) where.status = status;
-        if (type === "issuance") where.requestId = IsNull();
-        else if (type === "presentation") where.requestId = Not(IsNull());
-        const sessions = await this.sessions.find({
-            select: {
-                id: true,
-                status: true,
-                createdAt: true,
-                requestId: true,
-            },
-            where,
-            order: {
-                [sortBy ?? "updatedAt"]: sortOrder === "asc" ? "ASC" : "DESC",
-            },
-            skip: (page - 1) * pageSize,
-            take: pageSize,
-            loadEagerRelations: false,
-        });
-        // Count rows independently: projected nullable columns can be excluded
-        // by TypeORM's DISTINCT count for findAndCount.
-        const total = await this.sessions.countBy(where);
+        const { page, pageSize, sortBy, sortOrder } = query;
+        const filtered = this.filteredSessions(tenantId, query);
+        // Count separately from the paged, projected query.
+        const total = await filtered.clone().getCount();
+        const direction = sortOrder === "asc" ? "ASC" : "DESC";
+        const sessions = await filtered
+            .select([
+                "s.id",
+                "s.status",
+                "s.createdAt",
+                "s.updatedAt",
+                "s.expiresAt",
+                "s.requestId",
+                "s.failureCode",
+                "s.reference",
+            ])
+            .orderBy(`s.${sortBy ?? "updatedAt"}`, direction)
+            // Tie-breaker so pages neither repeat nor skip equal sort values.
+            .addOrderBy("s.id", direction)
+            .offset((page - 1) * pageSize)
+            .limit(pageSize)
+            .getMany();
         return {
-            items: sessions.map(({ id, status, createdAt, requestId }) => ({
-                id,
-                status,
-                createdAt,
-                requestId: requestId ?? null,
+            items: sessions.map((session) => ({
+                id: session.id,
+                status: session.status,
+                createdAt: session.createdAt,
+                updatedAt: session.updatedAt,
+                expiresAt: session.expiresAt ?? null,
+                requestId: session.requestId ?? null,
+                failureCode: session.failureCode ?? null,
+                reference: session.reference ?? null,
             })),
             total,
         };
+    }
+
+    /** The tenant's sessions matching every filter of the query. */
+    private filteredSessions(
+        tenantId: string,
+        query: SessionListQuery,
+    ): SelectQueryBuilder<Session> {
+        const qb = this.sessions
+            .createQueryBuilder("s")
+            .where("s.tenantId = :tenantId", { tenantId });
+        if (query.status?.length)
+            qb.andWhere("s.status IN (:...statuses)", {
+                statuses: query.status,
+            });
+        if (query.type === "issuance") qb.andWhere("s.requestId IS NULL");
+        else if (query.type === "presentation")
+            qb.andWhere("s.requestId IS NOT NULL");
+        if (query.createdFrom)
+            qb.andWhere("s.createdAt >= :createdFrom", {
+                createdFrom: query.createdFrom,
+            });
+        if (query.createdTo)
+            qb.andWhere("s.createdAt <= :createdTo", {
+                createdTo: query.createdTo,
+            });
+        if (query.updatedFrom)
+            qb.andWhere("s.updatedAt >= :updatedFrom", {
+                updatedFrom: query.updatedFrom,
+            });
+        if (query.updatedTo)
+            qb.andWhere("s.updatedAt <= :updatedTo", {
+                updatedTo: query.updatedTo,
+            });
+        if (query.requestId)
+            qb.andWhere("s.requestId = :requestId", {
+                requestId: query.requestId,
+            });
+        if (query.failureCode)
+            qb.andWhere("s.failureCode = :failureCode", {
+                failureCode: query.failureCode,
+            });
+        if (query.credentialConfigurationId)
+            qb.andWhere(
+                ...this.offersCredentialConfiguration(
+                    query.credentialConfigurationId,
+                ),
+            );
+        if (query.id) {
+            const [idFrom, idTo] = uuidPrefixRange(query.id);
+            qb.andWhere("s.id BETWEEN :idFrom AND :idTo", { idFrom, idTo });
+        }
+        if (query.q)
+            qb.andWhere(this.matchesSearch(parseSessionSearch(query.q)));
+        return qb;
+    }
+
+    /** JSON array membership; neither dialect can index it, the tenant scope bounds it. */
+    private offersCredentialConfiguration(
+        id: string,
+    ): [string, { credentialConfigurationId: string }] {
+        return this.sessions.manager.connection.options.type === "postgres"
+            ? [
+                  "CAST(s.credentialConfigurationIds AS jsonb) @> CAST(:credentialConfigurationId AS jsonb)",
+                  { credentialConfigurationId: JSON.stringify([id]) },
+              ]
+            : [
+                  "EXISTS (SELECT 1 FROM json_each(s.credentialConfigurationIds) WHERE json_each.value = :credentialConfigurationId)",
+                  { credentialConfigurationId: id },
+              ];
+    }
+
+    /** Any identifier of the search matches; a search without identifiers matches nothing. */
+    private matchesSearch(search: SessionSearch): Brackets {
+        return new Brackets((qb) => {
+            qb.where("1 = 0");
+            if (search.idPrefix) {
+                const [searchIdFrom, searchIdTo] = uuidPrefixRange(
+                    search.idPrefix,
+                );
+                qb.orWhere("s.id BETWEEN :searchIdFrom AND :searchIdTo", {
+                    searchIdFrom,
+                    searchIdTo,
+                });
+            }
+            if (search.walletNonce)
+                qb.orWhere("s.walletNonce = :searchWalletNonce", {
+                    searchWalletNonce: search.walletNonce,
+                });
+            if (search.authorizationCode)
+                qb.orWhere("s.authorization_code = :searchAuthorizationCode", {
+                    searchAuthorizationCode: search.authorizationCode,
+                });
+            if (search.reference)
+                qb.orWhere("s.reference = :searchReference", {
+                    searchReference: search.reference,
+                });
+        });
     }
 
     async deleteForTenant(tenantId: string, sessionId: string): Promise<void> {

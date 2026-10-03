@@ -179,6 +179,11 @@ export interface IssuanceOfferOptions {
   flow?: 'authorization_code' | 'pre_authorized_code';
   /** Optional authorization server id from issuer configuration */
   authorizationServer?: string;
+  /**
+   * Your own reference (e.g. an order id) to find the session later.
+   * Stored in plaintext: never put personal data here.
+   */
+  reference?: string;
 }
 
 /**
@@ -193,6 +198,11 @@ export interface PresentationRequestOptions {
   redirectUri?: string;
   /** Optional clock skew tolerance for this presentation request, in seconds */
   skewSeconds?: number;
+  /**
+   * Your own reference (e.g. a case id) to find the session later.
+   * Stored in plaintext: never put personal data here.
+   */
+  reference?: string;
   /**
    * Optional browser origin used for DC API audience binding.
    * For server-side flows, pass the caller origin explicitly.
@@ -363,6 +373,7 @@ export class EudiploClient {
       flow: options.flow ?? 'pre_authorized_code',
       tx_code: options.txCode,
       authorization_server: options.authorizationServer,
+      reference: options.reference,
     };
 
     // Build credential claims if provided
@@ -433,6 +444,7 @@ export class EudiploClient {
       requestId: options.configId,
       redirectUri: options.redirectUri,
       skewSeconds: options.skewSeconds,
+      reference: options.reference,
       expected_origin:
         options.responseType === 'dc-api' ? inferredOrigin : undefined,
     };
@@ -719,6 +731,7 @@ export class EudiploClient {
       response_type: 'dc-api' as const,
       requestId: options.configId,
       redirectUri: options.redirectUri,
+      reference: options.reference,
       expected_origin: inferredOrigin,
     };
 

@@ -551,6 +551,7 @@ export class Oid4vpService {
                     undefined,
                 tenantId,
                 requestId,
+                reference: values.reference,
                 requestUrl: `openid4vp://?${queryString}`,
                 expiresAt,
                 useDcApi,

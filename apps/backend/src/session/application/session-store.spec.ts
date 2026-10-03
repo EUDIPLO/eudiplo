@@ -6,7 +6,10 @@ import { SessionStore } from "./session-store.js";
 
 const session = { id: "session-1", tenantId: "tenant-1" } as SessionData;
 
-function createStore(overrides: Partial<SessionRepository> = {}) {
+function createStore(
+    overrides: Partial<SessionRepository> = {},
+    context = { bind: vi.fn() },
+) {
     const repository = {
         findForTenant: vi.fn().mockResolvedValue(session),
         findByIdForInternalFlow: vi.fn().mockResolvedValue(session),
@@ -24,7 +27,11 @@ function createStore(overrides: Partial<SessionRepository> = {}) {
         consumeCredentialOffer: vi.fn(),
         ...overrides,
     };
-    return { store: new SessionStore(repository), repository };
+    return {
+        store: new SessionStore(repository, context),
+        repository,
+        context,
+    };
 }
 
 describe("SessionStore", () => {
@@ -41,17 +48,19 @@ describe("SessionStore", () => {
         ["getForInternalFlow", "findByIdForInternalFlow", ["session-1"]],
         ["getIso18013", "findIso18013Session", ["session-1"]],
     ] as const)(
-        "%s passes its scope through and maps a miss to SessionNotFound",
+        "%s passes its scope through, binds the session and maps a miss to SessionNotFound",
         async (method, finder, args) => {
-            const { store, repository } = createStore();
+            const { store, repository, context } = createStore();
             const call = () =>
                 (store[method] as (...a: string[]) => unknown)(...args);
 
             await expect(call()).resolves.toBe(session);
             expect(repository[finder]).toHaveBeenCalledExactlyOnceWith(...args);
+            expect(context.bind).toHaveBeenCalledExactlyOnceWith(session);
 
             vi.mocked(repository[finder]).mockResolvedValue(null);
             await expect(call()).rejects.toBeInstanceOf(SessionNotFound);
+            expect(context.bind).toHaveBeenCalledOnce();
         },
     );
 
@@ -66,6 +75,24 @@ describe("SessionStore", () => {
             expect(repository.findByAuthorizationCode).not.toHaveBeenCalled();
         },
     );
+
+    it("binds the session of a found credential offer only", async () => {
+        const { store, repository, context } = createStore({
+            findCredentialOffer: vi
+                .fn()
+                .mockResolvedValueOnce({ offer: null, status: "active" })
+                .mockResolvedValueOnce(null),
+        });
+
+        await store.findCredentialOffer("tenant-1", "session-1");
+        await store.findCredentialOffer("tenant-1", "session-2");
+
+        expect(repository.findCredentialOffer).toHaveBeenCalledTimes(2);
+        expect(context.bind).toHaveBeenCalledExactlyOnceWith({
+            id: "session-1",
+            tenantId: "tenant-1",
+        });
+    });
 
     it("rejects an absent session ID without querying", async () => {
         const { store, repository } = createStore();

@@ -3651,6 +3651,13 @@ export const OfferRequestDtoSchema = {
         webhookEndpointId: {
             type: 'string',
             description: 'ID of the webhook endpoint to notify about the status of the issuance process.'
+        },
+        reference: {
+            description: 'Your own reference for this offer, e.g. an order or case id. Stored in plaintext, searchable in the session list, included in webhooks and kept when the session is anonymized. Must not contain personal data.',
+            type: 'string',
+            minLength: 1,
+            maxLength: 255,
+            example: 'order-4711'
         }
     },
     required: [
@@ -3839,6 +3846,13 @@ export const SessionSchema = {
                 }
             ]
         },
+        reference: {
+            type: [
+                'string',
+                'null'
+            ],
+            description: 'Caller-provided reference of the offer, e.g. an order or case id of the\nintegrating system. Stored in plaintext and kept when the session is\nanonymized, so it must not contain personal data.'
+        },
         authorization_code: {
             type: 'string'
         },
@@ -3881,6 +3895,16 @@ export const SessionSchema = {
                     $ref: '#/components/schemas/OfferRequestDto'
                 }
             ]
+        },
+        credentialConfigurationIds: {
+            description: 'Credential configuration ids of the issuance offer. Stored in plaintext\n(unlike {@link credentialPayload}) so the session list can filter by them.',
+            type: [
+                'array',
+                'null'
+            ],
+            items: {
+                type: 'string'
+            }
         },
         webhookEndpointId: {
             type: 'string',
@@ -11259,6 +11283,13 @@ export const PresentationRequestSchema = {
             type: 'number',
             minimum: 0,
             description: 'Optional clock skew tolerance for this presentation offer, in seconds.\nIf provided, this overrides the presentation configuration for the created session.'
+        },
+        reference: {
+            description: 'Caller reference stored with the session, e.g. an order or case id.\nStored in plaintext and kept on anonymization: never put personal data here.',
+            type: 'string',
+            minLength: 1,
+            maxLength: 255,
+            example: 'order-4711'
         }
     },
     required: [

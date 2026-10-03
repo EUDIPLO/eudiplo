@@ -1611,6 +1611,10 @@ export type OfferRequestDto = {
      * ID of the webhook endpoint to notify about the status of the issuance process.
      */
     webhookEndpointId?: string;
+    /**
+     * Your own reference for this offer, e.g. an order or case id. Stored in plaintext, searchable in the session list, included in webhooks and kept when the session is anonymized. Must not contain personal data.
+     */
+    reference?: string;
 };
 
 export type WebHookAuthConfigNone = {
@@ -1710,6 +1714,12 @@ export type Session = {
      * The tenant that owns this object.
      */
     tenant: TenantEntity;
+    /**
+     * Caller-provided reference of the offer, e.g. an order or case id of the
+     * integrating system. Stored in plaintext and kept when the session is
+     * anonymized, so it must not contain personal data.
+     */
+    reference?: string | null;
     authorization_code?: string;
     /**
      * Refresh token for the session - used to obtain a new access token.
@@ -1745,6 +1755,11 @@ export type Session = {
      * Encrypted at rest - may contain sensitive claim data.
      */
     credentialPayload?: OfferRequestDto;
+    /**
+     * Credential configuration ids of the issuance offer. Stored in plaintext
+     * (unlike {@link credentialPayload}) so the session list can filter by them.
+     */
+    credentialConfigurationIds?: Array<string> | null;
     /**
      * ID of the webhook endpoint to notify about issuance status.
      */
@@ -5255,6 +5270,11 @@ export type PresentationRequest = {
      * If provided, this overrides the presentation configuration for the created session.
      */
     skewSeconds?: number;
+    /**
+     * Caller reference stored with the session, e.g. an order or case id.
+     * Stored in plaintext and kept on anonymization: never put personal data here.
+     */
+    reference?: string;
 };
 
 export type FileUploadDto = {
@@ -6378,17 +6398,53 @@ export type SessionControllerGetAllSessionsData = {
          */
         pageSize?: number;
         /**
-         * Filter by session status
+         * Filter by session status. Repeat the parameter to match any of several statuses.
          */
-        status?: 'active' | 'fetched' | 'completed' | 'expired' | 'failed';
+        status?: 'active' | 'fetched' | 'completed' | 'expired' | 'failed' | Array<'active' | 'fetched' | 'completed' | 'expired' | 'failed'>;
         /**
          * Filter by session type
          */
         type?: 'issuance' | 'presentation';
         /**
-         * Field to sort by
+         * Only sessions created at or after this time (ISO 8601)
          */
-        sortBy?: 'id' | 'status' | 'createdAt' | 'requestId';
+        createdFrom?: string;
+        /**
+         * Only sessions created at or before this time (ISO 8601)
+         */
+        createdTo?: string;
+        /**
+         * Only sessions last updated at or after this time (ISO 8601)
+         */
+        updatedFrom?: string;
+        /**
+         * Only sessions last updated at or before this time (ISO 8601)
+         */
+        updatedTo?: string;
+        /**
+         * Presentation configuration id (exact match)
+         */
+        requestId?: string;
+        /**
+         * Credential configuration id of an issuance offer (exact match). Only sessions created since this filter exists record it.
+         */
+        credentialConfigurationId?: string;
+        /**
+         * Machine-readable failure code (exact match)
+         */
+        failureCode?: string;
+        /**
+         * Beginning of the session id
+         */
+        id?: string;
+        /**
+         * Search term: a session id or its beginning, a wallet nonce, a pre-authorized code, a caller reference, or a pasted credential offer or OID4VP request link.
+         */
+        q?: string;
+        /**
+         * Field to sort by (default: updatedAt)
+         */
+        sortBy?: 'id' | 'status' | 'createdAt' | 'updatedAt' | 'requestId';
         /**
          * Sort direction
          */

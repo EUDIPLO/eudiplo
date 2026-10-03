@@ -2,8 +2,22 @@
   display: none;
 }
 
+.filters {
+  .search-field {
+    width: 100%;
+  }
+}
+
 .sessions-table {
   width: 100%;
+
+  .reference-text {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+  }
 
   .session-id {
     max-width: 200px;

@@ -40,6 +40,8 @@ export interface SessionOfferRequest {
     webhookEndpointId?: string;
     /** Overrides the issuance configuration's offer lifetime. */
     offerLifetimeSeconds?: number;
+    /** Caller reference stored with the session; plaintext, never personal data. */
+    reference?: string;
 }
 interface SessionTransactionData {
     type: string;
@@ -81,6 +83,8 @@ export interface SessionData {
     browserOrigin?: string;
     tenantId: string;
     tenant?: SessionTenant;
+    /** Caller reference of the offer; plaintext, never personal data. */
+    reference?: string | null;
     status: SessionStatus;
     authorization_code?: string;
     authorization_code_expires_at?: Date;
@@ -94,6 +98,8 @@ export interface SessionData {
     offer?: CredentialOfferObject | null;
     offerUrl?: string;
     credentialPayload?: SessionOfferRequest;
+    /** Plaintext copy of the offered credential configuration ids. */
+    credentialConfigurationIds?: string[] | null;
     webhookEndpointId?: string;
     notifications: Notification[];
     requestId?: string;

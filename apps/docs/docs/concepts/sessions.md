@@ -57,12 +57,57 @@ Without the `response_code`, an attacker could start a request at your site, sen
 
 ISO 18013-7 responses are posted by your own page with the session ID, so these values do not apply there. How to implement the check is described in [Receive results](../presentation/receive-results.md); the specification text is in [OID4VP §13.3](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-session-identifier-separati).
 
+## Finding sessions
+
+`GET /api/session` lists the sessions of the caller's tenant, most recently updated first. All filters are optional, combined with AND, and always limited to the tenant.
+
+| Parameter                   | Matches                                                                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `createdFrom`, `createdTo`  | Creation time, bounds included. ISO 8601 with a time zone, for example `2026-10-02T08:00:00Z`.                                  |
+| `updatedFrom`, `updatedTo`  | Time of the last change, for example sessions that completed or failed in the last hour.                                        |
+| `status`                    | One or more states; repeat the parameter, for example `status=active&status=fetched` for pending sessions.                      |
+| `type`                      | `issuance` or `presentation`.                                                                                                   |
+| `credentialConfigurationId` | Issuance sessions that offer this credential configuration.                                                                     |
+| `requestId`                 | Presentation sessions of this presentation configuration.                                                                       |
+| `failureCode`               | Failed sessions with this [failure code](../reference/session-outcome.md#failure-codes), for example `trust_chain_not_trusted`. |
+| `id`                        | Sessions whose ID starts with the value.                                                                                        |
+| `q`                         | Search, see below.                                                                                                              |
+| `sortBy`, `sortOrder`       | `id`, `status`, `createdAt`, `updatedAt` (default) or `requestId`; `asc` or `desc` (default).                                   |
+
+A range that starts after it ends, an unknown status or an ID longer than 255 characters answers `400`.
+
+```http
+GET /api/session?type=presentation&status=failed&createdFrom=2026-10-02T08:00:00Z&requestId=age-check&sortBy=updatedAt&sortOrder=desc
+```
+
+`credentialConfigurationId` only finds issuance sessions created with 9.x or later releases that store the offered configuration IDs next to the encrypted offer; older sessions are not backfilled.
+
+### Search
+
+`q` takes whatever identifier you have at hand, for example from a log line, a support request or a screenshot of a QR code:
+
+- a session ID or its beginning,
+- the `walletNonce` of a presentation,
+- a pre-authorized code,
+- the `reference` set when the offer or request was created,
+- a pasted link: a credential offer link (by reference or by value) finds its session, an OID4VP request link (`openid4vp://?…request_uri=…`) finds the session of its `walletNonce`.
+
+The search term can contain a pre-authorized code, so its value is replaced by `[redacted]` in all log lines and in the `url.query` attribute of traces. The web client offers the same filters in the session list and keeps them in the URL, so a filtered view can be bookmarked or shared; its update-time presets (for example "Last hour") stay relative in a bookmark.
+
+### Your own reference
+
+`POST /api/issuer/offer` and `POST /api/verifier/offer` accept an optional `reference`, an identifier of your system such as an order or case ID (up to 255 characters). It is returned in the session list and detail, sent in the session's webhooks and found by `q`. The reference is stored **in plaintext** and **stays when sessions are anonymized**: never put personal data into it.
+
+### From a log line to the session
+
+Once a wallet request has resolved its session (by offer ID, `walletNonce`, `issuer_state`, code or access token), every following log line of that request carries `sessionId` and `tenantId`, with or without OpenTelemetry, and the request's trace gets the `session.id` attribute. See [Logging](../operate/logging.md#correlate-logs-with-sessions).
+
 ## Session cleanup
 
 Sessions contain personal data: claims, offers, authorization requests and presented credentials. Sensitive fields are encrypted at rest ([Security model](security-model.md#encryption-at-rest)), and sessions are kept only for a retention period:
 
 - A maintenance job runs every `SESSION_TIDY_UP_INTERVAL` seconds (default one hour). It marks overdue sessions as `expired`, then processes every session older than the tenant's TTL, counted from creation (default `SESSION_TTL`, 24 hours).
 - In `full` mode (default) the session is deleted.
-- In `anonymize` mode the session keeps its status, timestamps and protocol metadata, but `credentials`, `credentialPayload`, `auth_queries`, `offer`, `requestObject` and `responseEncryptionPrivateJwk` are cleared.
+- In `anonymize` mode the session keeps its status, timestamps and protocol metadata, but `credentials`, `credentialPayload`, `auth_queries`, `offer`, `requestObject` and `responseEncryptionPrivateJwk` are cleared. The plaintext `reference` and `credentialConfigurationIds` are kept.
 
 The TTL also limits how long a pre-authorized code is valid. The global defaults are `SESSION_TTL` and `SESSION_CLEANUP_MODE` ([environment variables](../reference/environment-variables.md#session)); a tenant can override both through `/api/session-config`. Session log entries are stored separately and controlled by `LOG_SESSION_STORE` ([Logging](../operate/logging.md)).

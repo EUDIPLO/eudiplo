@@ -106,6 +106,15 @@ export const OfferRequestSchema = z
             .describe(
                 "Lifetime of this offer in seconds. Overrides offerLifetimeSeconds of the issuance configuration; without both the offer does not expire.",
             ),
+        reference: z
+            .string()
+            .trim()
+            .min(1)
+            .max(255)
+            .optional()
+            .describe(
+                "Your own reference for this offer, e.g. an order or case id. Stored in plaintext, searchable in the session list, included in webhooks and kept when the session is anonymized. Must not contain personal data.",
+            ),
     })
     .strict()
     .superRefine((data, ctx) => {

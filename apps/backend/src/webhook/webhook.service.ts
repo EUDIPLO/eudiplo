@@ -52,6 +52,11 @@ interface PresentationWebhookResult {
     outcome: SessionOutcome;
 }
 
+/** The caller reference of the session, only when one was set. */
+function referenceOf(session: { reference?: string | null }) {
+    return session.reference ? { reference: session.reference } : {};
+}
+
 /**
  * Service for handling webhooks in the application.
  * HTTP calls are auto-instrumented by OpenTelemetry for distributed tracing.
@@ -142,6 +147,7 @@ export class WebhookService {
                         : {}),
                     credentials: payloadCredentials,
                     session: values.session.id,
+                    ...referenceOf(values.session),
                     transaction_data: values.session.transaction_data,
                 },
                 {
@@ -205,6 +211,7 @@ export class WebhookService {
                 {
                     notification,
                     session: session.id,
+                    ...referenceOf(session),
                 },
                 {
                     headers,
@@ -239,6 +246,7 @@ export class WebhookService {
     async sendClaimsWebhook(values: {
         webhook: WebhookConfig;
         session: string;
+        reference?: string;
         credentialConfigurationId: string;
         identity?: {
             iss: string;
@@ -267,6 +275,7 @@ export class WebhookService {
 
         const payload: Record<string, unknown> = {
             session: values.session,
+            ...(values.reference ? { reference: values.reference } : {}),
             credential_configuration_id: values.credentialConfigurationId,
         };
 

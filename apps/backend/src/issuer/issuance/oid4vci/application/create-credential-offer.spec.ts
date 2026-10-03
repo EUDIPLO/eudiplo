@@ -92,6 +92,21 @@ describe("CreateCredentialOffer", () => {
             },
         });
     });
+    it("stores the offered configuration ids and the reference in plaintext", async () => {
+        const f = fixture();
+        await f.useCase.execute("tenant", {
+            ...request,
+            credentialConfigurationIds: ["pid", "mdl"],
+            credentialClaims: undefined,
+            reference: "order-4711",
+        });
+        expect(f.execute).toHaveBeenCalledWith(
+            expect.objectContaining({
+                credentialConfigurationIds: ["pid", "mdl"],
+                reference: "order-4711",
+            }),
+        );
+    });
     it("builds authorization-code offers without a pre-authorized code", async () => {
         const f = fixture();
         await f.useCase.execute("tenant", {

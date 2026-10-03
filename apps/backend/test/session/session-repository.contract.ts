@@ -8,6 +8,7 @@ import { DataEncryptionService } from "../../src/platform/data-encryption/data-e
 import { initializeEncryptionTransformer } from "../../src/platform/data-encryption/encrypted-column.transformer.js";
 import { TypeOrmSessionRepository } from "../../src/session/adapters/typeorm-session.repository.js";
 import { TypeOrmSessionRetentionPolicies } from "../../src/session/adapters/typeorm-session-retention-policies.js";
+import type { SessionListQuery } from "../../src/session/domain/session-list.js";
 import { SessionCleanupMode } from "../../src/session/domain/session-retention.js";
 import {
     SessionStatus,
@@ -522,7 +523,11 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
                     id: ids[0],
                     status: SessionStatus.Active,
                     createdAt: new Date("2025-01-01"),
+                    updatedAt: new Date("2025-01-03"),
+                    expiresAt: null,
                     requestId: null,
+                    failureCode: null,
+                    reference: null,
                 },
             ]);
             expect(page.items[0]).not.toBeInstanceOf(Session);
@@ -550,7 +555,7 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
                     page: 1,
                     pageSize: 10,
                     type: "presentation",
-                    status: SessionStatus.Completed,
+                    status: [SessionStatus.Completed],
                 }),
             ).toMatchObject({
                 total: 1,
@@ -561,7 +566,7 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
                     page: 1,
                     pageSize: 10,
                     type: "presentation",
-                    status: SessionStatus.Active,
+                    status: [SessionStatus.Active],
                 }),
             ).toEqual({ total: 0, items: [] });
             expect(
@@ -584,6 +589,248 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
                     })
                 ).items.map((item) => item.id),
             ).toEqual([ids[0], ids[1]]);
+        });
+
+        describe("list filters", () => {
+            const ids = {
+                pidOffer: "3f2a0000-0000-4000-8000-000000000001",
+                mdlOffer: "3f2b0000-0000-4000-8000-000000000002",
+                failedAge: "9c000000-0000-4000-8000-000000000003",
+                pendingAge: "9c100000-0000-4000-8000-000000000004",
+                otherTenant: "3f2a0000-0000-4000-8000-000000000005",
+            };
+            const list = (query: Partial<SessionListQuery>) =>
+                adapter
+                    .listForTenant("tenant-a", {
+                        page: 1,
+                        pageSize: 10,
+                        sortBy: "id",
+                        sortOrder: "asc",
+                        ...query,
+                    })
+                    .then(({ items, total }) => ({
+                        total,
+                        ids: items.map((item) => item.id),
+                    }));
+
+            beforeEach(async () => {
+                const repository = getDataSource().getRepository(Session);
+                await repository.clear();
+                await repository.save([
+                    {
+                        id: ids.pidOffer,
+                        tenantId: "tenant-a",
+                        createdAt: new Date("2026-10-02T08:00:00Z"),
+                        updatedAt: new Date("2026-10-02T08:05:00Z"),
+                        credentialConfigurationIds: ["pid", "pid-mdoc"],
+                        authorization_code: "pre-auth-code",
+                        reference: "order-4711",
+                    },
+                    {
+                        id: ids.mdlOffer,
+                        tenantId: "tenant-a",
+                        createdAt: new Date("2026-10-02T09:00:00Z"),
+                        updatedAt: new Date("2026-10-02T09:00:00Z"),
+                        status: SessionStatus.Fetched,
+                        credentialConfigurationIds: ["mdl"],
+                    },
+                    {
+                        id: ids.failedAge,
+                        tenantId: "tenant-a",
+                        createdAt: new Date("2026-10-02T10:00:00Z"),
+                        updatedAt: new Date("2026-10-02T10:30:00Z"),
+                        requestId: "age-check",
+                        walletNonce: "11111111-1111-4111-8111-111111111111",
+                        status: SessionStatus.Failed,
+                        failureCode: "trust_chain_not_trusted",
+                    },
+                    {
+                        id: ids.pendingAge,
+                        tenantId: "tenant-a",
+                        createdAt: new Date("2026-10-02T11:00:00Z"),
+                        updatedAt: new Date("2026-10-02T11:00:00Z"),
+                        requestId: "age-check",
+                        expiresAt: new Date("2026-10-02T11:05:00Z"),
+                        reference: "case-42",
+                    },
+                    {
+                        id: ids.otherTenant,
+                        tenantId: "tenant-b",
+                        createdAt: new Date("2026-10-02T08:00:00Z"),
+                        credentialConfigurationIds: ["pid"],
+                        authorization_code: "pre-auth-code",
+                        reference: "order-4711",
+                        requestId: "age-check",
+                        failureCode: "trust_chain_not_trusted",
+                    },
+                ]);
+            });
+
+            it("filters by creation and update time ranges, bounds included", async () => {
+                expect(
+                    await list({
+                        createdFrom: new Date("2026-10-02T09:00:00Z"),
+                        createdTo: new Date("2026-10-02T10:00:00Z"),
+                    }),
+                ).toEqual({ total: 2, ids: [ids.mdlOffer, ids.failedAge] });
+                expect(
+                    await list({
+                        updatedFrom: new Date("2026-10-02T10:30:00Z"),
+                    }),
+                ).toEqual({ total: 2, ids: [ids.failedAge, ids.pendingAge] });
+                expect(
+                    await list({ updatedTo: new Date("2026-10-02T08:05:00Z") }),
+                ).toEqual({ total: 1, ids: [ids.pidOffer] });
+            });
+
+            it("matches any of several statuses", async () => {
+                expect(
+                    await list({
+                        status: [SessionStatus.Active, SessionStatus.Fetched],
+                    }),
+                ).toEqual({
+                    total: 3,
+                    ids: [ids.pidOffer, ids.mdlOffer, ids.pendingAge],
+                });
+            });
+
+            it("filters by configuration, failure code and id prefix", async () => {
+                expect(await list({ requestId: "age-check" })).toEqual({
+                    total: 2,
+                    ids: [ids.failedAge, ids.pendingAge],
+                });
+                expect(
+                    await list({ credentialConfigurationId: "pid" }),
+                ).toEqual({ total: 1, ids: [ids.pidOffer] });
+                expect(
+                    await list({ credentialConfigurationId: "pid-mdoc" }),
+                ).toEqual({ total: 1, ids: [ids.pidOffer] });
+                // Only whole configuration ids match.
+                expect(await list({ credentialConfigurationId: "pi" })).toEqual(
+                    { total: 0, ids: [] },
+                );
+                expect(
+                    await list({ failureCode: "trust_chain_not_trusted" }),
+                ).toEqual({ total: 1, ids: [ids.failedAge] });
+                expect(await list({ id: "3F2" })).toEqual({
+                    total: 2,
+                    ids: [ids.pidOffer, ids.mdlOffer],
+                });
+                expect(await list({ id: ids.mdlOffer })).toEqual({
+                    total: 1,
+                    ids: [ids.mdlOffer],
+                });
+            });
+
+            it("combines filters and counts the total over all pages", async () => {
+                const query = {
+                    type: "presentation" as const,
+                    createdFrom: new Date("2026-10-02T09:30:00Z"),
+                    status: [SessionStatus.Active, SessionStatus.Failed],
+                };
+                expect(await list(query)).toEqual({
+                    total: 2,
+                    ids: [ids.failedAge, ids.pendingAge],
+                });
+                expect(await list({ ...query, pageSize: 1, page: 2 })).toEqual({
+                    total: 2,
+                    ids: [ids.pendingAge],
+                });
+                expect(
+                    await list({
+                        ...query,
+                        failureCode: "trust_chain_not_trusted",
+                    }),
+                ).toEqual({ total: 1, ids: [ids.failedAge] });
+                expect(
+                    await list({ type: "issuance", requestId: "age-check" }),
+                ).toEqual({ total: 0, ids: [] });
+            });
+
+            it("searches by id prefix, wallet nonce, pre-authorized code and reference", async () => {
+                expect(await list({ q: "9c1" })).toEqual({
+                    total: 1,
+                    ids: [ids.pendingAge],
+                });
+                expect(
+                    await list({ q: "11111111-1111-4111-8111-111111111111" }),
+                ).toEqual({ total: 1, ids: [ids.failedAge] });
+                expect(await list({ q: "pre-auth-code" })).toEqual({
+                    total: 1,
+                    ids: [ids.pidOffer],
+                });
+                expect(await list({ q: "case-42" })).toEqual({
+                    total: 1,
+                    ids: [ids.pendingAge],
+                });
+                expect(await list({ q: "case" })).toEqual({
+                    total: 0,
+                    ids: [],
+                });
+                expect(
+                    await list({ q: "order-4711", requestId: "age-check" }),
+                ).toEqual({ total: 0, ids: [] });
+            });
+
+            it("finds the session behind a pasted offer or request link", async () => {
+                const offerUri = `https://issuer.example/issuers/tenant-a/vci/credential-offers/${ids.mdlOffer}`;
+                expect(
+                    await list({
+                        q: `openid-credential-offer://?credential_offer_uri=${encodeURIComponent(offerUri)}`,
+                    }),
+                ).toEqual({ total: 1, ids: [ids.mdlOffer] });
+                const requestUri =
+                    "https://verifier.example/presentations/11111111-1111-4111-8111-111111111111/oid4vp/request/no-redirect";
+                expect(
+                    await list({
+                        q: `openid4vp://?client_id=x509_hash%3Aabc&request_uri=${encodeURIComponent(requestUri)}`,
+                    }),
+                ).toEqual({ total: 1, ids: [ids.failedAge] });
+                // A link to an unknown or malformed session matches nothing.
+                expect(
+                    await list({
+                        q: "https://issuer.example/vci/credential-offers/3f2a",
+                    }),
+                ).toEqual({ total: 0, ids: [] });
+            });
+
+            it("never returns another tenant's sessions", async () => {
+                for (const query of [
+                    { q: "pre-auth-code" },
+                    { q: "order-4711" },
+                    { id: "3f2a" },
+                    { credentialConfigurationId: "pid" },
+                    { requestId: "age-check" },
+                ])
+                    expect((await list(query)).ids).not.toContain(
+                        ids.otherTenant,
+                    );
+            });
+
+            it("sorts by update time and returns the summary fields", async () => {
+                const page = await adapter.listForTenant("tenant-a", {
+                    page: 1,
+                    pageSize: 10,
+                    sortBy: "updatedAt",
+                    sortOrder: "desc",
+                });
+                expect(page.items.map((item) => item.id)).toEqual([
+                    ids.pendingAge,
+                    ids.failedAge,
+                    ids.mdlOffer,
+                    ids.pidOffer,
+                ]);
+                expect(page.items[0]).toEqual({
+                    id: ids.pendingAge,
+                    status: SessionStatus.Active,
+                    createdAt: new Date("2026-10-02T11:00:00Z"),
+                    updatedAt: new Date("2026-10-02T11:00:00Z"),
+                    expiresAt: new Date("2026-10-02T11:05:00Z"),
+                    requestId: "age-check",
+                    failureCode: null,
+                    reference: "case-42",
+                });
+            });
         });
 
         it("deletes only the requested tenant's session and tolerates repeated or missing deletes", async () => {

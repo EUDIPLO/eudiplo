@@ -62,6 +62,8 @@ export class CreateCredentialOffer {
             id,
             tenantId,
             credentialPayload: request,
+            credentialConfigurationIds: request.credentialConfigurationIds,
+            reference: request.reference,
             authorization_code: authorizationCode,
             webhookEndpointId: request.webhookEndpointId,
             authorizationServerId: selection.sessionServerId,

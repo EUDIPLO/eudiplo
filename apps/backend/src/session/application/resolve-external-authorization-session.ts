@@ -1,4 +1,8 @@
 import type { SessionRepository } from "../ports/session.repository.js";
+import {
+    NO_SESSION_CONTEXT,
+    type SessionContext,
+} from "../ports/session-context.js";
 
 export class ExternalSessionBindingError extends Error {}
 
@@ -8,6 +12,7 @@ export class ResolveExternalAuthorizationSession {
             SessionRepository,
             "bindExternalAuthorization"
         >,
+        private readonly context: SessionContext = NO_SESSION_CONTEXT,
     ) {}
 
     async execute(
@@ -34,6 +39,7 @@ export class ResolveExternalAuthorizationSession {
             throw new ExternalSessionBindingError(
                 `No existing issuance session found for external AS token for tenant ${tenantId}, auth server ${authorizationServerId}, claim ${bindingClaim}, value ${bindingValue}`,
             );
+        this.context.bind(session);
         return session;
     }
 }

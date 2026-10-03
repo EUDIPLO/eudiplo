@@ -6,6 +6,7 @@ import { TenantEntity } from "../auth/tenant/entities/tenant.entity.js";
 import { StatusListModule } from "../issuer/status-list/status-list.module.js";
 import { NestSessionEventPublisher } from "./adapters/nest-session-event-publisher.js";
 import { OtelSessionMetrics } from "./adapters/otel-session-metrics.js";
+import { RequestSessionContext } from "./adapters/request-session-context.js";
 import {
     SESSION_MAINTENANCE_SETTINGS,
     SessionMaintenanceJob,
@@ -26,6 +27,10 @@ import {
     SESSION_REPOSITORY,
     type SessionRepository,
 } from "./ports/session.repository.js";
+import {
+    SESSION_CONTEXT,
+    type SessionContext,
+} from "./ports/session-context.js";
 import {
     SESSION_EVENT_PUBLISHER,
     type SessionEventPublisher,
@@ -52,23 +57,30 @@ import { SESSION_SETTINGS, type SessionSettings } from "./session-settings.js";
         AuthModule,
     ],
     providers: [
+        { provide: SESSION_CONTEXT, useClass: RequestSessionContext },
         {
             provide: CreateSession,
-            inject: [SESSION_REPOSITORY],
-            useFactory: (sessions: SessionRepository) =>
-                new CreateSession(sessions),
+            inject: [SESSION_REPOSITORY, SESSION_CONTEXT],
+            useFactory: (
+                sessions: SessionRepository,
+                context: SessionContext,
+            ) => new CreateSession(sessions, context),
         },
         {
             provide: SessionStore,
-            inject: [SESSION_REPOSITORY],
-            useFactory: (sessions: SessionRepository) =>
-                new SessionStore(sessions),
+            inject: [SESSION_REPOSITORY, SESSION_CONTEXT],
+            useFactory: (
+                sessions: SessionRepository,
+                context: SessionContext,
+            ) => new SessionStore(sessions, context),
         },
         {
             provide: ResolveExternalAuthorizationSession,
-            inject: [SESSION_REPOSITORY],
-            useFactory: (sessions: SessionRepository) =>
-                new ResolveExternalAuthorizationSession(sessions),
+            inject: [SESSION_REPOSITORY, SESSION_CONTEXT],
+            useFactory: (
+                sessions: SessionRepository,
+                context: SessionContext,
+            ) => new ResolveExternalAuthorizationSession(sessions, context),
         },
         {
             provide: RecordFailedTxCodeAttempt,

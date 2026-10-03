@@ -99,4 +99,51 @@ describe("WebhookService presentation payloads", () => {
             "transaction_data",
         ]);
     });
+
+    it("adds the caller reference to every webhook of a session that has one", async () => {
+        const { service, post } = setup();
+        const referenced = {
+            ...session,
+            reference: "order-4711",
+        } as unknown as SessionData;
+
+        await service.sendWebhook({
+            webhook,
+            session: referenced as never,
+            expectResponse: true,
+        });
+        await service.sendWebhookNotification(webhook, referenced as never, {
+            id: "n-1",
+            credentialConfigurationId: "pid",
+        });
+        await service.sendClaimsWebhook({
+            webhook,
+            session: "session-1",
+            reference: "order-4711",
+            credentialConfigurationId: "pid",
+        });
+
+        for (const [, payload] of post.mock.calls)
+            expect(payload).toMatchObject({
+                session: "session-1",
+                reference: "order-4711",
+            });
+    });
+
+    it("omits the reference when the session has none", async () => {
+        const { service, post } = setup();
+
+        await service.sendWebhookNotification(webhook, session as never, {
+            id: "n-1",
+            credentialConfigurationId: "pid",
+        });
+        await service.sendClaimsWebhook({
+            webhook,
+            session: "session-1",
+            credentialConfigurationId: "pid",
+        });
+
+        for (const [, payload] of post.mock.calls)
+            expect(payload).not.toHaveProperty("reference");
+    });
 });

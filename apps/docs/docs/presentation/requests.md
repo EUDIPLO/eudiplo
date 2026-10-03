@@ -23,7 +23,9 @@ A minimal request only names the flow and the configuration:
 
 ### Override rules
 
-`webhook`, `redirectUri`, `transaction_data` and `skewSeconds` in the request replace the values of the presentation configuration for this session only. Values are replaced, not merged: a request `webhook` replaces the configuration's webhook endpoint, and request `transaction_data` replaces the whole configured list. `clientIdScheme` and `expected_origin` exist only on requests. ISO 18013-7 requests use only `webhook`, `skewSeconds` and `expected_origin` (see [below](#iso-18013-7-annex-c)).
+`webhook`, `redirectUri`, `transaction_data` and `skewSeconds` in the request replace the values of the presentation configuration for this session only. Values are replaced, not merged: a request `webhook` replaces the configuration's webhook endpoint, and request `transaction_data` replaces the whole configured list. `clientIdScheme`, `expected_origin` and `reference` exist only on requests. ISO 18013-7 requests use only `webhook`, `skewSeconds`, `expected_origin` and `reference` (see [below](#iso-18013-7-annex-c)).
+
+`reference` (optional, up to 255 characters) stores an identifier of your system with the session, for example an order or case ID. It is returned with the session, sent in the presentation webhook, and you can [find the session](../concepts/sessions.md#finding-sessions) by it later. It is stored in plaintext and stays when sessions are anonymized, so it must never contain personal data.
 
 ### Response
 

@@ -6,6 +6,7 @@ import {
   sessionControllerGetSession,
   PaginatedSessionResponseDto,
   Session,
+  SessionControllerGetAllSessionsData,
 } from '@eudiplo/sdk-core';
 
 export interface SessionLogEntry {
@@ -18,14 +19,7 @@ export interface SessionLogEntry {
   detail?: Record<string, unknown>;
 }
 
-export interface SessionQueryParams {
-  page?: number;
-  pageSize?: number;
-  status?: 'active' | 'fetched' | 'completed' | 'expired' | 'failed';
-  type?: 'issuance' | 'presentation';
-  sortBy?: 'id' | 'status' | 'createdAt' | 'requestId';
-  sortOrder?: 'asc' | 'desc';
-}
+export type SessionQueryParams = NonNullable<SessionControllerGetAllSessionsData['query']>;
 
 @Injectable({
   providedIn: 'root',

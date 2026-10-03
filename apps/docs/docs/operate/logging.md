@@ -72,6 +72,15 @@ Read the entries with `GET /api/session/:id/logs` (roles `issuance:offer` or
 They are deleted with their session ([session retention](database.md#session-retention)).
 `verbose` stores personal data and much more volume; use it for debugging only.
 
+## Correlate logs with sessions
+
+Once a request has resolved its session (by offer ID, `walletNonce`, `issuer_state`, code or access token), every following log line of that request, including the HTTP request log, carries `sessionId` and `tenantId`. This works with or without OpenTelemetry; with it, the request span and the span handling the session also get `session.id`.
+
+- The OID4VP routes (`/presentations/{walletNonce}/oid4vp/...`) contain the wallet nonce, not the session ID, so the HTTP request log reports it as `req.walletNonce`.
+- The value of the session search parameter `q` is always replaced by `[redacted]` in logged URLs and in the `url.query` span attribute, because it can contain a pre-authorized code.
+
+To go from a log line or a pasted offer link to the session, search the session list with `GET /api/session?q=...` ([Finding sessions](../concepts/sessions.md#finding-sessions)).
+
 ## Audit log
 
 Changes to a tenant and to its credential, issuance, presentation and

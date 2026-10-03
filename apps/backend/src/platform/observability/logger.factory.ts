@@ -2,6 +2,8 @@ import { IncomingMessage } from "node:http";
 import { ConfigService } from "@nestjs/config";
 import { Params } from "nestjs-pino";
 import { SerializedRequest, SerializedResponse } from "pino";
+import { logContextMixin } from "./log-context.js";
+import { redactUrl } from "./redact-url.js";
 
 /**
  * Content types we consider safe to buffer and stringify for logs. Anything else
@@ -140,6 +142,28 @@ function attachResponseBodyCapture(
 }
 
 /**
+ * Identifiers in the path of wallet-facing routes. The OID4VP routes carry the
+ * wallet nonce, which is not the session id (OID4VP Section 13.3); the session
+ * id is added by the log context once the request resolved its session.
+ */
+function pathIdentifiers(url: string | undefined): Record<string, string> {
+    let pathname: string;
+    try {
+        pathname = decodeURI(new URL(url ?? "", "http://localhost").pathname);
+    } catch {
+        return {};
+    }
+    const walletNonce = /^\/presentations\/([^/]+)\/oid4vp(?:\/|$)/.exec(
+        pathname,
+    )?.[1];
+    const tenantId = /^\/issuers\/([^/]+)\//.exec(pathname)?.[1];
+    return {
+        ...(walletNonce ? { walletNonce } : {}),
+        ...(tenantId ? { tenantId } : {}),
+    };
+}
+
+/**
  * Factory function for configuring the logger module
  *
  * Logging targets:
@@ -150,6 +174,10 @@ function attachResponseBodyCapture(
  * Trace correlation:
  * - @opentelemetry/instrumentation-pino automatically injects trace_id/span_id
  * - pino-opentelemetry-transport forwards context to OTel logs pipeline
+ *
+ * Session correlation (with or without OTel):
+ * - once a request resolved its session, every following log line of that
+ *   request carries `sessionId` and `tenantId` (see `log-context.ts`)
  *
  * @param configService The config service instance
  * @returns The logger configuration object
@@ -281,19 +309,20 @@ export const createLoggerOptions = (configService: ConfigService) => {
             // Put request/response essentials directly into `msg` so they
             // remain visible after pino-pretty ignores nested req/res fields.
             customReceivedMessage: (req: IncomingMessage) =>
-                `--> ${req.method} ${req.url}`,
+                `--> ${req.method} ${redactUrl(req.url)}`,
             customSuccessMessage: (
                 req: IncomingMessage,
                 res: { statusCode: number },
                 responseTime: number,
             ) =>
-                `<-- ${req.method} ${req.url} ${res.statusCode} ${Math.round(responseTime)}ms`,
+                `<-- ${req.method} ${redactUrl(req.url)} ${res.statusCode} ${Math.round(responseTime)}ms`,
             customErrorMessage: (
                 req: IncomingMessage,
                 res: { statusCode: number },
                 err: Error,
             ) =>
-                `<-- ${req.method} ${req.url} ${res.statusCode} ${err.message}`,
+                `<-- ${req.method} ${redactUrl(req.url)} ${res.statusCode} ${err.message}`,
+            mixin: logContextMixin,
             formatters: {
                 log: (object: any) => {
                     object.hostname = undefined;
@@ -308,20 +337,20 @@ export const createLoggerOptions = (configService: ConfigService) => {
                         maxLoggedResponseBodyLength,
                     );
                 }
-                return {
-                    sessionId: req.params?.session,
-                };
+                return {};
             },
             serializers: {
                 req: (req: SerializedRequest) => ({
                     method: req.method,
-                    url: req.url,
+                    // Bound to every log line of the request, errors included.
+                    url: redactUrl(req.url),
                     headers: {
                         "user-agent": req.headers["user-agent"],
                         "content-type": req.headers["content-type"],
                     },
-                    sessionId: req.params?.session,
-                    tenantId: req.params?.tenantId,
+                    // Serialized when the request starts, before routing
+                    // sets `req.params`, so read the path itself.
+                    ...pathIdentifiers(req.url),
                 }),
                 res: (res: SerializedResponse & { raw?: any }) => {
                     return {

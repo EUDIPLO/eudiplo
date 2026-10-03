@@ -210,6 +210,7 @@ export class Iso18013Service {
         origin: string,
         skewSeconds?: number,
         webhook?: WebhookConfig,
+        reference?: string,
     ): Promise<Iso18013Offer> {
         const config =
             await this.presentationConfigService.getPresentationConfig(
@@ -302,6 +303,7 @@ export class Iso18013Service {
             id: sessionId,
             tenantId,
             requestId,
+            reference,
             useDcApi: true,
             dcApiProtocol: "iso-18013-7",
             browserOrigin: origin,

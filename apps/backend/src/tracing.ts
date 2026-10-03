@@ -10,6 +10,21 @@ import {
     ATTR_SERVICE_NAME,
     ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
+import { REDACTED_QUERY_PARAMETERS } from "./platform/observability/redact-url.js";
+
+/**
+ * The query parameters @opentelemetry/instrumentation-http redacts by default
+ * (not exported by the package).
+ */
+const DEFAULT_REDACTED_QUERY_PARAMETERS = [
+    "sig",
+    "Signature",
+    "AWSAccessKeyId",
+    "X-Goog-Signature",
+    "X-Amz-Signature",
+    "X-Amz-Credential",
+    "X-Amz-Security-Token",
+];
 
 /**
  * OpenTelemetry SDK bootstrap — must be started BEFORE NestJS initializes.
@@ -45,6 +60,11 @@ const otelSDK = new NodeSDK({
             // Enable HTTP metrics (server request duration, etc.)
             "@opentelemetry/instrumentation-http": {
                 enabled: true,
+                // Replaces the instrumentation's default list, so repeat it.
+                redactedQueryParamsServer: [
+                    ...DEFAULT_REDACTED_QUERY_PARAMETERS,
+                    ...REDACTED_QUERY_PARAMETERS,
+                ],
             },
         }),
     ],
