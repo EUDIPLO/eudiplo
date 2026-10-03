@@ -1,5 +1,5 @@
 import React from "react";
-import configModel from "@site/docs/generated/config-model.json";
+import configModel from "@site/docs/_generated/config-model.json";
 
 export interface ConfigItem {
     key: string;

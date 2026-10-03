@@ -1,311 +1,143 @@
 ---
 title: DCQL (Digital Credentials Query Language)
+sidebar_label: DCQL
 ---
 
-DCQL (Digital Credentials Query Language) is a standardized query format for requesting specific credentials and claims from wallets in OpenID4VP flows. EUDIPLO uses DCQL in the `dcql_query` field of presentation configurations.
+The `dcql_query` of a presentation configuration tells the wallet which credentials and claims to present. EUDIPLO uses the [DCQL of OpenID4VP 1.0](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-digital-credentials-query-l) and checks the response against the same query. Every field is listed in the [presentation configuration reference](../reference/presentation-configuration.md).
 
-## Overview
+## Request a credential
 
-DCQL allows verifiers to:
-
-- Request specific credential formats (SD-JWT, mDoc, etc.)
-- Select specific claims from credentials
-- Define trust requirements for credential issuers
-- Allow or restrict multiple matching credentials
-
-## Schema Reference
-
-The full DCQL JSON schema is available at [DCQL.schema.json](https://github.com/openwallet-foundation/eudiplo/blob/main/schemas/DCQL.schema.json) in the repository.
-
-## Basic Structure
+Each entry in `credentials` is one credential query. `id`, `format` and `meta` are required; `meta` identifies the credential type.
 
 ```json
 {
-    "dcql_query": {
-        "credentials": [
-            {
-                "id": "credential-query-id",
-                "format": "mso_mdoc",
-                "meta": {
-                    "doctype_value": "eu.europa.ec.eudi.pid.1"
-                },
-                "claims": [
-                    {
-                        "path": ["eu.europa.ec.eudi.pid.1", "given_name"]
-                    },
-                    {
-                        "path": ["eu.europa.ec.eudi.pid.1", "family_name"]
-                    }
-                ],
-                "trusted_authorities": [
-                    {
-                        "type": "etsi_tl",
-                        "values": [
-                            {
-                                "trustListId": "local-pid-trust-list"
-                            }
-                        ]
-                    }
-                ]
-            }
-        ]
-    }
-}
-```
-
-## Credential Query Fields
-
-Each entry in the `credentials` array defines one credential query:
-
-| Field                 | Type    | Required | Description                                                 |
-| --------------------- | ------- | -------- | ----------------------------------------------------------- |
-| `id`                  | string  | Yes      | Unique identifier for this credential query                 |
-| `format`              | string  | Yes      | Credential format (e.g., `mso_mdoc`, `dc+sd-jwt`)           |
-| `meta`                | object  | No       | Format-specific metadata (e.g., `doctype_value` for mDoc)   |
-| `claims`              | array   | No       | Specific claims to request (see below)                      |
-| `multiple`            | boolean | No       | Allow multiple matching credentials. Default: `false`       |
-| `trusted_authorities` | array   | No       | Trust requirements for credential issuers (see below)       |
-| `claim_sets`          | array   | No       | Alternative claim combinations (any matching set satisfies) |
-
-## Requesting Claims
-
-Claims are specified using JSON path arrays:
-
-### SD-JWT Format
-
-```json
-{
-    "id": "employee-badge",
-    "format": "dc+sd-jwt",
-    "meta": {
-        "vct_values": ["EmployeeBadge"]
-    },
-    "claims": [
+    "credentials": [
         {
-            "path": ["employee_id"]
-        },
-        {
-            "path": ["department"]
+            "id": "membership",
+            "format": "dc+sd-jwt",
+            "meta": { "vct_values": ["urn:example:membership:1"] },
+            "claims": [{ "path": ["name"] }, { "path": ["member_id"] }]
         }
     ]
 }
 ```
 
-### mDoc Format
+For mDOC, `meta.doctype_value` names the document type and each claim path is `[namespace, element]`:
 
 ```json
 {
-    "id": "pid-mso-mdoc",
+    "credentials": [
+        {
+            "id": "pid",
+            "format": "mso_mdoc",
+            "meta": { "doctype_value": "eu.europa.ec.eudi.pid.1" },
+            "claims": [
+                { "path": ["eu.europa.ec.eudi.pid.1", "given_name"] },
+                { "path": ["eu.europa.ec.eudi.pid.1", "family_name"] }
+            ]
+        }
+    ]
+}
+```
+
+- `credentials` needs at least one query. Query IDs use letters, digits, `_` and `-` and are unique; results, `credential_sets` and transaction data refer to them. EUDIPLO rejects configurations that break these rules.
+- SD-JWT VC paths are property names, with numbers as array indexes (`["address", "locality"]`, `["nationalities", 0]`).
+- Without `claim_sets`, the presented credential must disclose every listed claim; otherwise the presentation fails.
+
+## Accept specific values
+
+`values` lists the accepted values of a claim. It is sent to the wallet, which only offers matching credentials:
+
+```json
+{ "path": ["membership_level"], "values": ["gold", "platinum"] }
+```
+
+EUDIPLO does not compare the presented value with `values` again. If the decision matters, check the claim in your backend.
+
+## Alternative claims
+
+`claim_sets` lists alternative claim combinations by claim `id`. The credential must disclose every claim of at least one set; list the preferred set first. Each ID must match the `id` of a claim in the same query, otherwise the configuration is rejected:
+
+```json
+{
+    "id": "pid",
     "format": "mso_mdoc",
-    "meta": {
-        "doctype_value": "eu.europa.ec.eudi.pid.1"
-    },
+    "meta": { "doctype_value": "eu.europa.ec.eudi.pid.1" },
     "claims": [
+        { "id": "over18", "path": ["eu.europa.ec.eudi.pid.1", "age_over_18"] },
+        { "id": "birth_date", "path": ["eu.europa.ec.eudi.pid.1", "birth_date"] }
+    ],
+    "claim_sets": [["over18"], ["birth_date"]]
+}
+```
+
+## Alternative credentials
+
+`credential_sets` combines credential queries by `id`. Each entry has `options`, a list of alternatives; every option lists queries that must be presented together. A set is required unless it has `"required": false`. Without `credential_sets`, every query in `credentials` is required.
+
+This query accepts the PID either as SD-JWT VC or as mDOC, and optionally a membership credential:
+
+```json
+{
+    "credentials": [
         {
-            "path": ["eu.europa.ec.eudi.pid.1", "given_name"]
+            "id": "pid_sd_jwt",
+            "format": "dc+sd-jwt",
+            "meta": { "vct_values": ["urn:eudi:pid:1"] },
+            "claims": [{ "path": ["family_name"] }]
         },
         {
-            "path": ["eu.europa.ec.eudi.pid.1", "family_name"]
+            "id": "pid_mdoc",
+            "format": "mso_mdoc",
+            "meta": { "doctype_value": "eu.europa.ec.eudi.pid.1" },
+            "claims": [{ "path": ["eu.europa.ec.eudi.pid.1", "family_name"] }]
         },
         {
-            "path": ["eu.europa.ec.eudi.pid.1", "birthdate"]
+            "id": "membership",
+            "format": "dc+sd-jwt",
+            "meta": { "vct_values": ["urn:example:membership:1"] },
+            "claims": [{ "path": ["member_id"] }]
         }
+    ],
+    "credential_sets": [
+        { "options": [["pid_sd_jwt"], ["pid_mdoc"]] },
+        { "options": [["membership"]], "required": false }
     ]
 }
 ```
 
-## Trust Authorities
+EUDIPLO rejects a response that does not satisfy one option of every required set. Your backend sees which queries were answered by the `id` of each entry in the result.
 
-To validate that a credential was issued by a trusted entity, configure trust lists per credential using the `trusted_authorities` field. This follows the [OID4VP Trusted Authorities Query](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-trusted-authorities-query) specification.
+## Several credentials of one type
 
-### Structure
-
-Each entry in `trusted_authorities` specifies:
-
-- `type`: The trust framework type. Supported values:
-    - `etsi_tl` — ETSI TS 119 602 List of Trusted Entities (LoTE)
-    - `openid_federation` — OpenID Federation trust anchors
-- `values`: Array of trust anchors.
-
-### ETSI Trust Lists
-
-For `etsi_tl`, each `values` entry can be:
-
-**Managed local trust list pointer:**
+By default a query matches one credential, and a response with several presentations for the same query fails. Set `"multiple": true` to accept several, for example all employee badges in the wallet:
 
 ```json
 {
-    "type": "etsi_tl",
-    "values": [
-        {
-            "trustListId": "local-pid-trust-list"
-        }
-    ]
-}
-```
-
-**External trust list reference:**
-
-```json
-{
-    "type": "etsi_tl",
-    "values": [
-        {
-            "url": "https://example.com/trust-list/pid-provider.jwt",
-            "verifierX509Der": "MIIB..."
-        }
-    ]
-}
-```
-
-When `trustListId` is used, EUDIPLO resolves:
-
-- LoTE URL as `<TENANT_URL>/trust-list/{trustListId}`
-- verifier certificate from the trust list key chain
-
-### Using Your Own Trust Lists
-
-You can reference trust lists published by your own EUDIPLO instance at `/{tenantId}/trust-list/{trustListId}`. You can also use the `<TENANT_URL>` placeholder in trust list URLs, which will be replaced with the tenant's base URL at runtime.
-
-### Automatic Transformation to AKI
-
-:::info[Automatic transformation to `aki` in authorization requests]
-The `etsi_tl` format with `TrustListRef` objects is an **internal configuration format** only. When EUDIPLO builds the OID4VP authorization request sent to wallets, it automatically transforms each `etsi_tl` entry into the DCQL-compliant `aki` (Authority Key Identifier) format required by [OID4VP 1.0 Final §6](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-trusted-authorities-query).
-
-The transformation extracts the Subject Key Identifier (SKI, OID 2.5.29.14) from the trust anchor certificate and encodes it as a base64url string. A wallet can match credentials locally by checking whether any certificate in a credential's chain was signed by a CA whose key identifier equals one of the `aki` values — without fetching external trust-list resources.
-
-**Configuration format** (stored in EUDIPLO):
-
-```json
-{ "type": "etsi_tl", "values": [{ "trustListId": "my-list" }] }
-```
-
-**Wire format** (sent to wallets):
-
-```json
-{ "type": "aki", "values": ["<base64url-encoded-SKI>"] }
-```
-
-:::
-
-### Verification Behavior
-
-During verification, EUDIPLO will:
-
-1. Fetch the LoTE JWT(s) from the provided URLs
-2. Parse the trusted entities and their certificates
-3. Validate that the credential's issuer certificate chains to one of the trusted entities
-4. If status checks are enabled (`statusCheckMode` is `strict` or `best_effort`), ensure the status list (if present) is signed by the revocation certificate from the **same** trusted entity
-
-:::warning[Trust validation is opt-in per credential]
-If `trusted_authorities` is not specified on a credential query, trust list validation is **skipped** for that credential. To enforce trust validation, always include `trusted_authorities` in your DCQL credential queries.
-:::
-
-## Claim Sets
-
-Claim sets define alternative combinations of claims. The credential satisfies the query if it contains **all claims from any one set**:
-
-```json
-{
-    "id": "age-verification",
-    "format": "mso_mdoc",
-    "meta": {
-        "doctype_value": "eu.europa.ec.eudi.pid.1"
-    },
-    "claim_sets": [["age_over_18"], ["birthdate"]]
-}
-```
-
-In this example, the credential satisfies the query if it contains either:
-
-- The `age_over_18` claim, **OR**
-- The `birthdate` claim
-
-## Multiple Credentials
-
-By default, EUDIPLO expects exactly one credential matching each query. Set `multiple: true` to allow multiple matching credentials:
-
-```json
-{
-    "id": "employee-badges",
+    "id": "badges",
     "format": "dc+sd-jwt",
+    "meta": { "vct_values": ["urn:example:employee-badge:1"] },
     "multiple": true,
-    "claims": [
-        {
-            "path": ["badge_type"]
-        }
-    ]
+    "claims": [{ "path": ["badge_id"] }]
 }
 ```
 
-## Full Example
+## Intent to retain (mDOC)
+
+For `mso_mdoc` claims, `intent_to_retain: true` tells the wallet and the user that you store the element after the presentation. It is sent in OpenID4VP requests; [ISO 18013-7 requests](requests.md#iso-18013-7-annex-c) always send `false`.
+
+```json
+{ "path": ["eu.europa.ec.eudi.pid.1", "family_name"], "intent_to_retain": true }
+```
+
+## Accept only trusted issuers
+
+Without `trusted_authorities`, EUDIPLO verifies the credential's signature but not who issued it. Add `trusted_authorities` to a credential query to accept only issuers from a trust list or an OpenID Federation:
 
 ```json
 {
-    "dcql_query": {
-        "credentials": [
-            {
-                "id": "pid-mso-mdoc",
-                "format": "mso_mdoc",
-                "meta": {
-                    "doctype_value": "eu.europa.ec.eudi.pid.1"
-                },
-                "claims": [
-                    {
-                        "path": ["eu.europa.ec.eudi.pid.1", "given_name"]
-                    },
-                    {
-                        "path": ["eu.europa.ec.eudi.pid.1", "family_name"]
-                    },
-                    {
-                        "path": ["eu.europa.ec.eudi.pid.1", "age_over_18"]
-                    }
-                ],
-                "trusted_authorities": [
-                    {
-                        "type": "etsi_tl",
-                        "values": [
-                            {
-                                "trustListId": "eudi-pid-trust-list"
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                "id": "employee-badge",
-                "format": "dc+sd-jwt",
-                "meta": {
-                    "vct_values": ["EmployeeBadge"]
-                },
-                "claims": [
-                    {
-                        "path": ["employee_id"]
-                    }
-                ]
-            }
-        ]
-    }
+    "trusted_authorities": [{ "type": "etsi_tl", "values": [{ "trustListId": "membership-issuers" }] }]
 }
 ```
 
-This query requests:
-
-1. A PID (mDoc format) with name and age verification
-2. An employee badge (SD-JWT format) with employee ID
-
-Both credentials must be present to satisfy the request.
-
-## Best Practices
-
-1. **Request only necessary claims** — Minimize data collection to protect user privacy
-2. **Use trust lists** — Always configure `trusted_authorities` for production deployments
-3. **Use descriptive IDs** — Choose credential query IDs that indicate their purpose
-4. **Test with real wallets** — Verify that your DCQL queries work with target wallet implementations
-5. **Document claim requirements** — Keep a mapping of business requirements to DCQL claims
-
-## Related Documentation
-
-- [Presentation Configuration](presentation-configuration.md) — Configuring presentation requests
-- [Trust Lists](../trust/trust-lists.md) — Trust list management
-- [OpenID4VP Specification](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) — DCQL specification
+How trust lists are resolved, what the wallet receives (`aki` values) and how the issuer chain is checked is described in [Trust Lists](../trust/trust-lists.md#use-a-trust-list-in-a-presentation); federation trust anchors in [OpenID Federation](../trust/federation.md).

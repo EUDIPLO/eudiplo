@@ -1,106 +1,95 @@
 ---
 title: Supported Protocols
+description: Standards support matrix for issuance, presentation, credential formats, status and trust.
 ---
 
-# Supported Protocols
+# Supported protocols
 
-EUDIPLO is **deliberately limited** to protocols that are part of the European Digital Identity Wallet (EUDI Wallet) ecosystem. This focused scope reduces implementation complexity, improves long-term maintainability, and ensures a consistent trust model across services.
+This page lists every standard and feature EUDIPLO implements, grouped by area, with a link to the guide that explains how to use it. EUDIPLO implements only the protocols of the EUDI Wallet ecosystem, so it stays interoperable with the reference wallets and uses one trust model.
 
-Rather than being a general-purpose verifiable credentials broker, EUDIPLO aligns strictly with the specifications endorsed by the EU regulatory and technical framework.
+**Legend:** ✅ supported · ⚠️ partial or experimental (see note) · ❌ not supported
 
-## Protocol Overview
+## Specifications
 
-| Protocol                                                                                                                          | Description                                                                                |
-| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| [OpenID for Verifiable Credential Issuance (OID4VCI)](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) | Enables issuers to deliver verifiable credentials to EUDI Wallets using OAuth-based flows |
-| [OpenID for Verifiable Presentations (OID4VP)](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html)              | Allows services to request and verify credentials presented by EUDI Wallet holders        |
-| [Selective Disclosure JWT VC (SD-JWT VC)](https://www.ietf.org/archive/id/draft-ietf-oauth-selective-disclosure-jwt-08.html)     | Data model for credentials allowing selective disclosure of individual claims by the user |
-| [Mobile Driving License (mDOC/mDL)](https://www.iso.org/standard/69084.html)                                                      | ISO 18013-5 standard for mobile driving licenses and other mobile documents               |
-| [OAuth Token Status List](https://drafts.oauth.net/draft-ietf-oauth-status-list/draft-ietf-oauth-status-list.html)               | Mechanism for determining revocation or suspension status of issued credentials           |
+| Specification                                                                                                                                       | Role in EUDIPLO                                 |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| [OpenID for Verifiable Credential Issuance 1.0](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) (OID4VCI)               | Issuance to wallets                             |
+| [OpenID for Verifiable Presentations 1.0](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) (OID4VP)                            | Presentation requests and verification          |
+| [SD-JWT-based Verifiable Credentials](https://datatracker.ietf.org/doc/draft-ietf-oauth-sd-jwt-vc/) (SD-JWT VC)                                    | Credential format `dc+sd-jwt`                   |
+| [ISO/IEC 18013-5](https://www.iso.org/standard/69084.html) (mdoc)                                                                                   | Credential format `mso_mdoc`                    |
+| ISO/IEC 18013-7 Annex C                                                                                                                             | mdoc presentation over the Digital Credentials API |
+| [Token Status List](https://datatracker.ietf.org/doc/draft-ietf-oauth-status-list/)                                                                 | Revocation and suspension                       |
+| [OAuth 2.0 PAR (RFC 9126)](https://www.rfc-editor.org/rfc/rfc9126), [PKCE (RFC 7636)](https://www.rfc-editor.org/rfc/rfc7636), [DPoP (RFC 9449)](https://www.rfc-editor.org/rfc/rfc9449) | Authorization servers hosted by EUDIPLO         |
+| [OAuth 2.0 Attestation-Based Client Authentication](https://datatracker.ietf.org/doc/draft-ietf-oauth-attestation-based-client-auth/)              | Wallet attestation                              |
+| ETSI TS 119 602 List of Trusted Entities (LoTE)                                                                                                     | Trust lists                                     |
+| [OpenID Federation 1.0](https://openid.net/specs/openid-federation-1_0.html)                                                                        | Federation-based trust (partial)                |
 
-## OID4VCI Features
+## OID4VCI (issuance)
 
-EUDIPLO implements the following OID4VCI (OpenID for Verifiable Credential Issuance) features:
+| Feature                                    | Status | Notes                                                                                                                                       | Guide                                                         |
+| ------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Pre-authorized code flow                   | ✅     | Optional `tx_code`; the code is locked after too many wrong attempts                                                                        | [Credential offers](../issuance/credential-offers.md)         |
+| Authorization code flow                    | ✅     | Built-in, external, chained and OID4VP-based authorization servers                                                                          | [Authorization servers](../issuance/authorization-servers.md) |
+| Pushed authorization requests (PAR)        | ✅     | Required by every authorization server EUDIPLO hosts; wallet-initiated requests without `issuer_state` are accepted                        | [Authorization servers](../issuance/authorization-servers.md) |
+| PKCE                                       | ✅     | `S256` only, for every authorization code                                                                                                   | [Authorization servers](../issuance/authorization-servers.md) |
+| Refresh tokens                             | ✅     | On by default for hosted authorization servers, 30-day lifetime                                                                             | [Authorization servers](../issuance/authorization-servers.md) |
+| DPoP                                       | ✅     | Proofs verified per RFC 9449 (signature, `htm`/`htu`, freshness, single-use `jti`, `ath`, key binding)                                      | [Authorization servers](../issuance/authorization-servers.md) |
+| Chained authorization server               | ✅     | EUDIPLO issues the tokens and delegates user login to an upstream OpenID Connect provider                                                   | [Authorization servers](../issuance/authorization-servers.md) |
+| OID4VP-based authorization server          | ✅     | The wallet authorizes issuance by presenting a credential                                                                                   | [Authorization servers](../issuance/authorization-servers.md) |
+| Interactive authorization endpoint         | ⚠️     | Experimental; behavior may change                                                                                                           | [Interactive authorization](../issuance/interactive-authorization.md) |
+| Nonce endpoint                             | ✅     | `POST /issuers/{tenant}/vci/nonce`; nonces are single use                                                                                   | [Issuance under the hood](../concepts/issuance.md)            |
+| Batch issuance                             | ✅     | Enabled when `batchSize` is greater than 1; one credential per holder key                                                                   | [Issuance configuration](../issuance/issuance-configuration.md) |
+| Deferred issuance                          | ✅     | Your backend completes or fails the transaction later                                                                                       | [Deferred issuance](../issuance/deferred-issuance.md)         |
+| Notification endpoint                      | ✅     | Can be disabled per tenant                                                                                                                  | [Notifications](../issuance/notifications.md)                 |
+| Credential request and response encryption | ✅     | Offered in the issuer metadata; can be made mandatory per tenant                                                                            | [Issuance configuration](../issuance/issuance-configuration.md) |
+| Signed issuer metadata                     | ✅     | Returned for `Accept: application/jwt`, signed with the tenant's access certificate                                                         | [Issuance configuration](../issuance/issuance-configuration.md) |
+| Wallet attestation                         | ✅     | `OAuth-Client-Attestation` headers at PAR and token endpoints of hosted authorization servers                                               | [Wallet and key attestation](../trust/attestation.md)         |
+| Key attestation                            | ✅     | `attestation` proof type, or a `key_attestation` header in `jwt` proofs                                                                     | [Wallet and key attestation](../trust/attestation.md)         |
 
-| Feature                                  | Status | Description                                                      |
-| ---------------------------------------- | ------ | ---------------------------------------------------------------- |
-| Pre-Authorized Code Flow                 | ✅     | Issue credentials without user authentication at the issuer      |
-| Authorization Code Flow                  | ✅     | Issue credentials with user authentication                       |
-| Batch Credential Issuance                | ✅     | Issue multiple credentials in a single request                   |
-| **Deferred Credential Endpoint**         | ✅     | Support for credentials that cannot be issued immediately        |
-| Notification Endpoint                    | ✅     | Receive wallet acknowledgment of credential acceptance/rejection |
-| DPoP (Demonstrating Proof-of-Possession) | ✅     | Enhanced security with proof-of-possession tokens                |
-| Wallet Attestation                       | ✅     | Verify wallet provider trustworthiness                           |
+## OID4VP (presentation)
 
-:::tip[Deferred Issuance]
-The **Deferred Credential Endpoint** allows issuers to handle scenarios where credentials cannot be issued immediately (e.g., pending manual approval, external data sources). Wallets can poll the endpoint to retrieve credentials once they become available.
-:::
+| Feature                                   | Status | Notes                                                                                                                             | Guide                                                         |
+| ----------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Signed request object by reference        | ✅     | `request_uri` with `GET` or `POST`                                                                                                | [Presentation requests](../presentation/requests.md)          |
+| `direct_post.jwt` response mode           | ✅     | Responses are always encrypted; plain `direct_post` is not accepted                                                              | [Presentation requests](../presentation/requests.md)          |
+| DCQL                                      | ✅     | Including `credential_sets`, `claim_sets`, `values`, `multiple` and `trusted_authorities`                                         | [DCQL](../presentation/dcql.md)                               |
+| Session separation and response code (§13.3) | ✅  | Wallet-facing identifier separate from the session ID; one-time `response_code` on same-device redirects                         | [Sessions](../concepts/sessions.md)                           |
+| Client identifier prefixes                | ✅     | `x509_hash` (default) and `x509_san_dns`; other prefixes are not supported                                                        | [Presentation requests](../presentation/requests.md)          |
+| Transaction data                          | ✅     | Hashes checked in the SD-JWT VC key binding JWT; TS12 types (`urn:eudi:sca:*`) are validated                                       | [Transaction data](../presentation/transaction-data.md)       |
+| Registration certificate in the request   | ✅     | Sent as `verifier_info`                                                                                                           | [Registration certificates](../trust/registration-certificates.md) |
+| Digital Credentials API                   | ✅     | `dc_api.jwt` response mode with `expected_origins`                                                                                | [Presentation requests](../presentation/requests.md)          |
+| ISO 18013-7 Annex C                       | ✅     | `org-iso-mdoc` over the Digital Credentials API; ignores `redirectUri`, `transaction_data` and `clientIdScheme`                     | [Presentation requests](../presentation/requests.md)          |
+| Status check of presented credentials     | ✅     | `statusCheckMode`: `strict` (default), `best_effort` or `disabled`                                                                | [Configure verification](../presentation/configure-verification.md) |
 
-## OID4VP Features
+## Credential formats
 
-EUDIPLO implements the following OID4VP (OpenID for Verifiable Presentations) features:
+| Format                         | Issue | Verify | Notes                                                                                                   | Guide                                                             |
+| ------------------------------ | ----- | ------ | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| SD-JWT VC (`dc+sd-jwt`)        | ✅    | ✅     | Issuer trust signaled with an `x5c` header (default) or OpenID Federation (`sdJwtTrustFormat`)          | [Credential configuration](../issuance/credential-configuration.md) |
+| mdoc (`mso_mdoc`)              | ✅    | ✅     | Over OID4VCI, OID4VP and ISO 18013-7 Annex C                                                            | [Credential configuration](../issuance/credential-configuration.md) |
+| mdoc proximity (BLE, NFC)      | ❌    | ❌     | No device engagement or offline presentation flows                                                      |                                                                   |
+| W3C VCDM formats               | ❌    | ❌     | `jwt_vc_json`, `ldp_vc` and similar are not supported                                                   |                                                                   |
 
-| Feature                                          | Status | Description                                                                               |
-| ------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------- |
-| `direct_post.jwt` Response Mode                  | ✅     | Wallet posts the VP Token directly to the verifier, encrypted as a JWE                    |
-| DCQL (Digital Credentials Query Language)        | ✅     | Structured credential queries with selective disclosure                                   |
-| Session Identifier Separation (§13.3)            | ✅     | Wallet-facing identifier (`walletNonce`) is distinct from the internal session ID         |
-| Response Code for Same-Device Redirect (§13.3)   | ✅     | One-time `response_code` appended to `redirect_uri` prevents session fixation on redirect |
-| JWE-Encrypted Authorization Responses            | ✅     | VP Tokens are encrypted to the verifier's key                                             |
-| `x509_san_dns` / `x509_san_uri` Client ID Scheme | ✅     | Verifier identification via X.509 certificates                                            |
-| Wallet Attestation Verification                  | ✅     | Validate wallet provider trustworthiness before accepting presentations                   |
-| Digital Credentials API (DC API)                 | ✅     | Browser-native credential exchange without QR codes or redirects                          |
+## Status
 
-:::tip[Security Features]
-EUDIPLO implements advanced security features from the OID4VP specification including session identifier separation (§13.3), response code verification for same-device flows, and JWE-encrypted responses to prevent token leakage.
-:::
+| Feature                     | Status | Notes                                                                                      | Guide                                       |
+| --------------------------- | ------ | ------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| Token Status List (publish) | ✅     | Served as JWT or CWT depending on the `Accept` header; status values 1 = revoked, 2 = suspended | [Revocation](../issuance/revocation.md)     |
+| Status list aggregation     | ✅     | Enabled by default (`STATUS_ENABLE_AGGREGATION`)                                           | [Revocation](../issuance/revocation.md)     |
+| Token Status List (verify)  | ✅     | Checked for presented credentials according to `statusCheckMode`                          | [Configure verification](../presentation/configure-verification.md) |
+| CRL or OCSP for presented certificates | ❌ | Credential revocation relies on status lists                                           |                                             |
 
-## Why This Limited Scope?
+## Trust
 
-By **limiting scope to official EUDI Wallet protocols**, EUDIPLO avoids:
+| Feature                                  | Status | Notes                                                                                                                       | Guide                                                              |
+| ---------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| LoTE trust lists                         | ✅     | Host signed lists per tenant and consume external ones; ETSI TS 119 612 XML lists are not loaded                             | [Trust lists](../trust/trust-lists.md)                             |
+| OpenID Federation                        | ⚠️     | Entity configurations are fetched and `authority_hints` followed, but statements are not yet verified cryptographically      | [OpenID Federation](../trust/federation.md)                        |
+| Access certificates                      | ✅     | X.509 certificate of the access key chain signs requests and signed metadata and determines the `client_id`                  | [Keys and certificates](../trust/keys-and-certificates.md)         |
+| Registration certificates                | ✅     | For verifiers (`verifier_info`) and issuers (`issuer_info`), issued by a registrar                                          | [Registration certificates](../trust/registration-certificates.md) |
+| Credential reuse policy                  | ✅     | `credentialReusePolicy` published in the credential metadata                                                                | [Credential configuration](../issuance/credential-configuration.md) |
+| Embedded disclosure policy               | ✅     | `embeddedDisclosurePolicy`: `none`, `allowList`, `rootOfTrust` or `attestationBased`                                         | [Credential configuration](../issuance/credential-configuration.md) |
 
-- ❌ Incompatibilities with reference implementations
-- ❌ Bloated code from supporting rarely used formats
-- ❌ Uncertain trust assumptions from broader ecosystems
+## Conformance
 
-This makes EUDIPLO especially suitable for:
-
-- ✅ Public sector services integrating with national wallet pilots
-- ✅ Companies targeting pan-European credential workflows
-- ✅ Developers seeking a reliable, minimal abstraction layer over complex specs
-
-:::note[Evolving Standards]
-These standards are evolving in coordination with EU-level pilot projects and working groups. EUDIPLO tracks these developments closely to provide early, stable support as specifications mature.
-:::
-
-## OIDF Conformance
-
-EUDIPLO has been tested against the **OpenID Foundation (OIDF) Conformance Suite** to ensure strict compliance with protocol specifications:
-
-- ✅ **OID4VCI (OpenID for Verifiable Credential Issuance)** — Conformance tested
-- ✅ **OID4VP (OpenID for Verifiable Presentations)** — Conformance tested
-
-These conformance tests validate that EUDIPLO correctly implements the protocol flows, security requirements, and interoperability features specified by the OpenID Foundation.
-
-### Running Conformance Tests
-
-To run the OIDF conformance tests yourself:
-
-1. Deploy EUDIPLO to a publicly accessible instance (required for the hosted OIDF test suite)
-2. Run the conformance test suite:
-
-```bash
-cd apps/backend
-pnpm run test:oidf
-```
-
-These tests execute against your running instance and communicate with the hosted OIDF conformance suite to validate protocol compliance.
-
-For more details on testing, see the [Conformance Testing guide](../contributing/conformance-testing.md).
-
-## Related Topics
-
-- [Credential Configuration](../issuance/credential-configuration.md) — Configure credentials for issuance
-- [Presentation Configuration](../presentation/presentation-configuration.md) — Configure credential requests
-- [Status Management](../issuance/status-management.md) — Revocation and suspension
-- [Trust Lists](../trust/trust-lists.md) — Trust architecture and key management
+EUDIPLO is tested against the [OpenID Foundation conformance suite](https://openid.net/certification/about-conformance-suite/) for OID4VCI and OID4VP. To run the suite yourself, see [Testing](../contributing/testing.md). Results with individual wallets are recorded in [Wallet compatibility](wallet-compatibility.md).

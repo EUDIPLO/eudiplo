@@ -2,158 +2,66 @@
 title: Transaction Data
 ---
 
-Transaction data allows you to include additional context in the OID4VP authorization request. This is useful for scenarios where the verifier needs to convey transaction-specific information that the wallet can display to the user for informed consent.
+Transaction data binds a presentation to a concrete transaction, such as a payment. The wallet shows it to the user, and the holder's signature over the presentation includes a hash of it, so your backend knows the user approved exactly this transaction. EUDIPLO implements [OpenID4VP transaction data](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-transaction-data) and validates the TS12 strong customer authentication types.
 
-## Overview
+## Add transaction data
 
-When requesting credentials from a user's wallet, you may need to provide context about why the credentials are being requested. Transaction data enables this by:
+Set `transaction_data` in the presentation configuration, or per request in `POST /api/verifier/offer`. Request-level `transaction_data` replaces the configured list for that session; the two are not merged. ISO 18013-7 requests ignore transaction data.
 
-- **Providing transaction context** to the wallet and user
-- **Enabling informed consent** by showing what the credentials will be used for
-- **Supporting various use cases** like payments, contract signing, or access control
+Each entry needs:
 
-## Configuration
+| Field            | Description                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| `type`           | Transaction data type. Wallets must reject types they do not support, so use one your target wallets know, such as a TS12 type. |
+| `credential_ids` | IDs of the DCQL credential queries the transaction applies to.                              |
+| other fields     | Type-specific content. TS12 types put it in `payload`.                                       |
 
-Transaction data is defined as an array of objects. It can be configured at two levels:
+EUDIPLO sends each entry base64url-encoded as JSON in the `transaction_data` parameter of the signed request.
 
-1. **Presentation Configuration** — Default transaction data for all requests using this configuration
-2. **Request Time** — Override or provide transaction data when creating a specific presentation request
+## TS12 SCA transaction data
 
-### In Presentation Configuration
+Types starting with `urn:eudi:sca:` are validated when you save the configuration or create the request. Unsupported `urn:eudi:sca:` types and incomplete payloads are rejected with `400`.
 
-Add transaction data to your presentation configuration:
+| `type`                                  | Required `payload` fields                                                                                     |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `urn:eudi:sca:payment:1`                | `transaction_id`, `payee.name`, `payee.id`, `currency` (three upper-case letters), `amount` (number)          |
+| `urn:eudi:sca:login_risk_transaction:1` | `transaction_id`, `action`                                                                                    |
+| `urn:eudi:sca:account_access:1`         | `transaction_id`                                                                                              |
+| `urn:eudi:sca:emandate:1`               | `transaction_id`                                                                                              |
+
+A payment confirmation request, with the credential query `payment_credential` defined in the configuration's DCQL query:
 
 ```json
 {
-  "id": "payment-verification",
-  "description": "Payment verification with transaction details",
-  "dcql_query": {
-    "credentials": [
-      {
-        "id": "pid",
-        "format": "dc+sd-jwt",
-        "meta": {
-          "vct_values": ["urn:eudi:pid:1"]
+    "response_type": "uri",
+    "requestId": "payment-confirmation",
+    "transaction_data": [
+        {
+            "type": "urn:eudi:sca:payment:1",
+            "credential_ids": ["payment_credential"],
+            "payload": {
+                "transaction_id": "order-4711",
+                "payee": { "name": "Example Shop", "id": "merchant-001" },
+                "currency": "EUR",
+                "amount": 49.99
+            }
         }
-      }
     ]
-  },
-  "transaction_data": [
-    {
-      "type": "payment",
-      "credential_ids": ["pid"],
-      "amount": 100,
-      "currency": "EUR",
-      "merchant": "Example Store"
-    }
-  ]
 }
 ```
 
-### At Request Time
+For TS12 entries, the key binding JWT must additionally contain:
 
-When creating a presentation request via the `/verifier/offer` endpoint, you can provide or override transaction data:
+- a non-empty `jti`,
+- `response_mode` equal to the request's response mode (`direct_post.jwt`, or `dc_api.jwt` with the DC API),
+- `transaction_data_hashes_alg` set to `sha-256`,
+- an `amr` array with factors from at least two of the categories `knowledge`, `possession` and `inherence`.
 
-```json
-{
-  "requestId": "payment-verification",
-  "response_type": "uri",
-  "transaction_data": [
-    {
-      "type": "payment",
-      "credential_ids": ["pid"],
-      "amount": 250,
-      "currency": "EUR",
-      "merchant": "Different Store"
-    }
-  ]
-}
-```
+## How EUDIPLO checks the binding
 
-:::note Override Behavior
-When `transaction_data` is provided in the request, it completely replaces any transaction data defined in the presentation configuration. The two are not merged.
+The check applies to SD-JWT VC credentials; EUDIPLO does not check transaction data for mDOC presentations. For every presented SD-JWT VC, EUDIPLO takes the entries whose `credential_ids` contain the credential's query ID and requires in the key binding JWT:
 
-The same request-time override model also applies to `webhook` and `redirectUri`. See [Presentation Configuration](presentation-configuration.md#configuration-fields).
-:::
+- `transaction_data_hashes` with one hash per entry, in request order,
+- each hash computed over the base64url-encoded entry exactly as sent in the request, with the algorithm from `transaction_data_hashes_alg` (`sha-256` by default, `sha-384` and `sha-512` also accepted).
 
-## Fields
-
-Each transaction data object must include the following required fields:
-
-| Field            | Type     | Required | Description                                                                                        |
-| ---------------- | -------- | -------- | -------------------------------------------------------------------------------------------------- |
-| `type`           | string   | Yes      | Identifies the type of transaction (e.g., `"payment"`, `"age_verification"`, `"contract_signing"`) |
-| `credential_ids` | string[] | Yes      | Array of credential IDs from the DCQL query that this transaction data relates to                  |
-
-Additional properties can be added based on the transaction type to provide context-specific information.
-
-## Use Cases
-
-### Payment Authorization
-
-Include payment details so users can verify the transaction before sharing credentials:
-
-```json
-{
-  "type": "payment",
-  "credential_ids": ["pid"],
-  "amount": 49.99,
-  "currency": "EUR",
-  "merchant": "Online Shop GmbH",
-  "reference": "ORDER-12345"
-}
-```
-
-### Age Verification
-
-Specify the minimum age requirement for age-restricted services:
-
-```json
-{
-  "type": "age_verification",
-  "credential_ids": ["pid"],
-  "minimum_age": 18,
-  "service": "Alcohol Purchase"
-}
-```
-
-### Contract Signing
-
-Reference document details for contract or agreement signing:
-
-```json
-{
-  "type": "contract_signing",
-  "credential_ids": ["pid"],
-  "document_hash": "sha256:abc123...",
-  "document_title": "Service Agreement",
-  "signing_date": "2026-01-25"
-}
-```
-
-### Access Control
-
-Include resource or permission information for access control scenarios:
-
-```json
-{
-  "type": "access_control",
-  "credential_ids": ["employee_badge"],
-  "resource": "Building A - Floor 3",
-  "access_level": "visitor",
-  "valid_until": "2026-01-25T18:00:00Z"
-}
-```
-
-## Best Practices
-
-1. **Be specific with types** — Use clear, descriptive type values that indicate the purpose
-2. **Include relevant context** — Add properties that help users understand what they're consenting to
-3. **Match credential_ids** — Ensure the `credential_ids` reference valid credentials from your DCQL query
-4. **Keep it minimal** — Only include information necessary for informed consent
-
-## Related Documentation
-
-- [Presentation Configuration](presentation-configuration.md) — Configuring transaction data defaults
-- [Presentation Requests](presentation-requests.md) — Overriding transaction data at request time
-- [DCQL](dcql.md) — Referencing credential IDs in transaction data
+EUDIPLO does not check that `credential_ids` exist in the DCQL query: an entry whose IDs match no presented SD-JWT VC is sent to the wallet but not verified. If a hash is missing or does not match, the presentation fails and the session is set to `failed` (see [Session Outcome](../reference/session-outcome.md)). On success, the session and the [webhook](../reference/webhooks.md) contain the `transaction_data` that was sent, so your backend can match the result to its transaction.

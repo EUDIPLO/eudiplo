@@ -56,7 +56,7 @@ export function createProgram(
         .helpCommand(true)
         .addHelpText(
             "afterAll",
-            "\nFor more information, see https://docs.eudiplo.dev/getting-started/quick-start",
+            "\nFor more information, see https://docs.eudiplo.dev/cookbooks/foundation",
         );
 
     program.addCommand(createDemoCommand(context, setExitCode));

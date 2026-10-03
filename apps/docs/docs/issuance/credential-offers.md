@@ -1,184 +1,87 @@
 ---
-title: Credential Offers
+title: Create credential offers
+sidebar_label: Credential offers
 ---
 
-Credential offers start OID4VCI issuance. Your backend creates an offer via the API, EUDIPLO returns an offer URI, and you present that URI to the wallet (for example as a QR code or deep link).
+import SchemaReference from "@site/src/components/SchemaReference";
 
-This page covers request shape and offer behavior. For flow selection guidance, see the [Issuance Overview](index.md).
+Start an issuance: your backend creates an offer, EUDIPLO returns an offer URI, and you show it to the wallet as a QR code or link. Which flow to offer is explained in the [issuance overview](index.md).
 
-## Before You Create an Offer
+**Prerequisites:** a [credential configuration](credential-configuration.md), an [authorization server](authorization-servers.md) in the issuance configuration, and a client with the `issuance:offer` role.
 
-Usually you create these resources first:
+## Create the offer
 
-1. A [Credential Configuration](credential-configuration.md)
-2. An [Issuance Configuration](issuance-configuration.md)
-3. Optionally an [Attribute Provider](attribute-provider.md) if claims should be fetched dynamically
-
-## Creating Credential Offers
-
-Use the [credential offer endpoint](../reference/openapi.md) to create the offer.
-
-When creating an offer, you can:
-
-1. Define the flow with `flow`
-2. Select the credentials with `credentialConfigurationIds`
-3. Optionally select a configured authorization server by `id` with `authorization_server`
-4. Optionally override claims with `credentialClaims`
-5. Optionally enable a transaction code with `tx_code` and `tx_code_description`
-6. Optionally configure notifications with `webhookEndpointId`
-
-### Common Request Fields
-
-- `response_type` - how the offer is returned to the caller
-- `flow` - `pre_authorized_code` or `authorization_code`
-- `credentialConfigurationIds` - list of credential configuration IDs to include in the offer
-- `authorization_server` - optional authorization server `id` from issuance configuration
-- `credentialClaims` - optional per-credential claims source override
-- `tx_code` - optional transaction code for pre-authorized flows
-- `tx_code_description` - optional prompt shown with the transaction code
-- `webhookEndpointId` - optional notification webhook endpoint ID
-
-:::info[Notification webhook endpoint references]
-`webhookEndpointId` references a standalone Webhook Endpoint resource. Create the endpoint first, then reference it by ID.
-
-If both a credential configuration and an offer specify `webhookEndpointId`, the offer-level value is used for that session.
-:::
-
-### Example: Pre-authorized Offer with Inline Claims
-
-```json
-{
+```bash
+curl -X POST "$EUDIPLO_URL/api/issuer/offer" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
     "response_type": "uri",
     "flow": "pre_authorized_code",
-    "credentialConfigurationIds": ["citizen"],
+    "credentialConfigurationIds": ["membership"],
     "credentialClaims": {
-        "citizen": {
-            "type": "inline",
-            "claims": {
-                "given_name": "John",
-                "family_name": "Doe"
-            }
-        }
-    }
-}
+      "membership": { "type": "inline", "claims": { "name": "Max", "member_id": "M-001" } }
+    },
+    "offerLifetimeSeconds": 600
+  }'
 ```
 
-### Example: Authorization Code Offer with External AS
+EUDIPLO answers `201` with:
 
 ```json
 {
-    "response_type": "uri",
-    "flow": "authorization_code",
-    "authorization_server": "external-corp-idp",
-    "credentialConfigurationIds": ["employee_badge"]
+    "session": "a6318799-dff4-4b60-9d1d-58703611bd23",
+    "uri": "openid-credential-offer://?credential_offer_uri=https%3A%2F%2Feudiplo.example.com%2Fissuers%2Fmembership-demo%2Fvci%2Fcredential-offers%2Fa6318799-…"
 }
 ```
 
-`authorization_server` must match the `id` of an enabled entry in `authorizationServers`. See [Authorization](authorization.md) for configuration details.
+- `uri` is the offer to render as QR code or deep link. The wallet resolves the offer by reference at `/issuers/{tenant}/vci/credential-offers/{session}`.
+- `session` identifies the issuance session. Use it to follow the status (`GET /api/session/{session}`: `active`, then `fetched` after the first credential, `completed` or `failed` after the wallet's [notification](notifications.md), or `expired`), to [revoke credentials](revocation.md) and to correlate [attribute provider](attribute-provider.md) requests.
 
-## Single-Use Offers
+`response_type` is required by the schema, but issuance offers always answer with this JSON; use `uri`. Unknown credential configurations and inline claims that do not match the configuration answer `409`, an unknown or disabled `authorization_server` answers `400`.
 
-Credential offers are single-use and non-replayable. Once a wallet completes issuance with an offer:
+## Choose the flow and authorization server
 
-- Token replay with the same authorization or pre-authorized code is rejected with an `invalid_grant` error
-- Offer-by-reference replay is rejected: once the offer is resolved by `credential_offer_uri` from the server, it cannot be requested again (`404` on subsequent fetches).
-- The offer is marked as consumed at the credential endpoint and cannot be used again after successful credential processing
-- The `consumedAt` timestamp records when the offer was first used
+| `flow` | Use it when | Authorization server |
+| --- | --- | --- |
+| `pre_authorized_code` | Your backend already knows the user. The offer contains a pre-authorized code; anyone who has the offer can redeem it, so protect it with a transaction code if needed. | Must be the built-in server (default if it is the first enabled entry). |
+| `authorization_code` | The user must authenticate or present a credential first. The offer contains `issuer_state` = the session ID. | Set `authorization_server` to the `id` of the entry; without it, the first enabled entry is used. |
 
-Important considerations:
+### Transaction code
 
-- Create a new offer for each issuance request
-- Combine single-use enforcement with TTL-based cleanup so expired offers do not accumulate
-- Refresh tokens remain valid for follow-up operations on the issued credentials
+For pre-authorized offers, `tx_code` sets a code the user must type into the wallet; send it on a second channel. EUDIPLO advertises its length and `input_mode` (`numeric` if it consists of digits only, otherwise `text`) and shows `tx_code_description` as hint. A wrong code answers `invalid_grant`. After `txCodeMaxAttempts` failed attempts (issuance configuration, default 5) the pre-authorized code is invalidated, and even the correct code is rejected.
 
-This prevents credential offer replay attacks where an intercepted offer could otherwise be reused.
+## Choose the claim source
 
-## Pre-Authorized Code Lifetime and Transaction Codes
+`credentialClaims` sets the claim source per credential configuration of this offer. Keys must appear in `credentialConfigurationIds`; configurations without an entry use their attribute provider or static defaults.
 
-- A pre-authorized code expires with its session: it is accepted until the session's creation time plus the tenant's session time-to-live (`sessionConfig.ttlSeconds`, or the global `SESSION_TTL`, 24 hours by default). Later token requests fail with `invalid_grant` ("Expired 'pre-authorized_code' provided"). Lower the tenant's session TTL if offers should expire sooner.
-- A wrong `tx_code` is rejected with `invalid_grant` (OID4VCI 1.0, Section 6.3). After `txCodeMaxAttempts` failed attempts (default 5) the pre-authorized code is invalidated, and even the correct transaction code is rejected.
+| `type` | Shape | Use it when |
+| --- | --- | --- |
+| `inline` | `{ "type": "inline", "claims": { … } }` | The values are known now. They are validated when the offer is created. |
+| `attributeProvider` | `{ "type": "attributeProvider", "attributeProviderId": "…" }` | Another [attribute provider](attribute-provider.md) than the configuration's should answer. |
+| `webhook` | `{ "type": "webhook", "webhook": { "url": "…", "auth": { "type": "none" } } }` | A one-off endpoint with the [attribute provider contract](../reference/attribute-provider-api.md) should answer. |
 
-## Passing Claims
+Priority, identity and validation rules are described in [Claims](claims.md).
 
-EUDIPLO provides multiple methods to pass claims during issuance. Claims are resolved in the following priority order:
+## Lifetime and expiry
 
-1. Offer-level claims via `credentialClaims`
-2. Configuration-level Attribute Provider via `attributeProviderId`
-3. Configuration-level static claims on the credential configuration
+Since 9.0, an offer can expire:
 
-:::warning[Claims are not merged]
-Higher priority sources completely override lower priority sources. If an offer-level webhook or Attribute Provider is used, lower-priority sources are not merged in. For a complete explanation of the claims priority system, see [Claims](claims.md).
-:::
+- `offerLifetimeSeconds` in the request, or the default `offerLifetimeSeconds` of the [issuance configuration](issuance-configuration.md), sets how long the offer can be redeemed. Without both, the offer does not expire until the session is removed by the session retention (`SESSION_TTL`, 24 hours by default).
+- After expiry, the offer URI answers `404`, the token endpoint `invalid_grant` ("The credential offer has expired"), and authorization requests with its `issuer_state` are rejected. Tokens issued before keep their own lifetimes.
+- The session's `expiresAt` holds the deadline. A maintenance job marks unredeemed offers as `expired` every `SESSION_TIDY_UP_INTERVAL`; expiry is enforced at request time regardless.
+- Pre-authorized codes additionally expire with the session retention time (`SESSION_TTL` or the tenant's session settings).
 
-### Request Shape for `credentialClaims`
+## Single use
 
-`credentialClaims` must be an object keyed by credential configuration ID. Each key must also appear in `credentialConfigurationIds`.
+- The offer URI can be resolved once; later fetches answer `404`. Set `ISSUER_MULTI_CONSUMPTION=true` to allow repeated fetches, for example for wallets that load the offer twice.
+- The code in the offer is redeemed once, at the token endpoint. A second token request answers `invalid_grant` ("The credential offer has already been used"). Refresh tokens stay usable.
+- Create a new offer for every issuance.
 
-Each value selects the claims source for that credential:
+## Restrict clients
 
-- `type: "inline"` - pass the claims directly in the request
-- `type: "attributeProvider"` - fetch claims from an existing Attribute Provider
-- `type: "webhook"` - fetch claims from an inline webhook definition for this offer only
+A client with `allowedIssuanceConfigs` can only offer the listed credential configurations; other IDs answer `403`. See [Tenants and access](../operate/tenants-and-access.md).
 
-The most common way to override claims is the inline variant:
+## Request fields
 
-```json
-{
-    "response_type": "uri",
-    "flow": "pre_authorized_code",
-    "credentialConfigurationIds": ["citizen"],
-    "credentialClaims": {
-        "citizen": {
-            "type": "inline",
-            "claims": {
-                "given_name": "John",
-                "family_name": "Doe"
-            }
-        }
-    }
-}
-```
-
-In this example:
-
-- `citizen` is the credential configuration ID
-- `claims` contains the actual credential claim values
-- the inline claims override any configuration-level Attribute Provider or static claims for `citizen`
-
-You can also override the source instead of embedding claims directly:
-
-```json
-{
-    "response_type": "uri",
-    "flow": "pre_authorized_code",
-    "credentialConfigurationIds": ["citizen", "employee_badge"],
-    "credentialClaims": {
-        "citizen": {
-            "type": "attributeProvider",
-            "attributeProviderId": "citizen-claims-provider"
-        },
-        "employee_badge": {
-            "type": "webhook",
-            "webhook": {
-                "url": "https://issuer.example.com/api/claims/employee-badge"
-            }
-        }
-    }
-}
-```
-
-Notes:
-
-- `credentialClaims` keys must be a subset of `credentialConfigurationIds`
-- values are resolved per credential configuration, not globally for the whole offer
-- if you want to override only one credential in a multi-credential offer, include only that credential in `credentialClaims`
-- for the full webhook shape, see [Attribute Providers](attribute-provider.md), [Webhooks](../architecture/extension-points/webhooks.md), and the [API documentation](../reference/openapi.md)
-
-### When to Use Each Method
-
-- Configuration-level static claims for fixed metadata used on every issuance
-- Configuration-level Attribute Providers for dynamic claims based on authentication context
-- Offer-level inline claims when claim values are already known at offer creation time
-- Offer-level webhook or Attribute Provider overrides when claim resolution should vary per offer
-
-For the broader claims model, see [Claims](claims.md) and [Webhooks](../architecture/extension-points/webhooks.md).
+<SchemaReference name="offer-request" mode="table" />

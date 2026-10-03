@@ -2,228 +2,102 @@
 title: Trust Lists
 ---
 
-# Trust Lists
+import SchemaReference from "@site/src/components/SchemaReference";
 
-EUDIPLO implements a trust framework for credential verification based on the ETSI TS 119 602 standard (List of Trusted Entities - LoTE). This ensures that credentials are only accepted from authorized issuers and that revocation information comes from the correct authority.
+A trust list names the issuers you accept. EUDIPLO uses Lists of Trusted Entities (LoTE, ETSI TS 119 602) as signed JWTs: it publishes lists you manage and reads lists published by others. ETSI TS 119 612 XML trusted lists are not supported. For a complete walkthrough, follow the [trusted issuers cookbook](../cookbooks/trusted-issuers.md).
 
-## Overview
+## How a trust list is used
 
-When verifying a credential presentation, EUDIPLO needs to answer two critical questions:
+Each trusted entity has an issuance certificate and a revocation certificate. When a credential is presented, EUDIPLO:
 
-1. **Was this credential issued by a trusted entity?**
-2. **Is the revocation status provided by an authorized source?**
+1. loads the lists referenced in the credential query and checks their signature and `NextUpdate`,
+2. builds a certificate path from the credential's `x5c` chain to a listed issuance certificate,
+3. requires the matching entity to be listed with a PID or EAA issuance service (`http://uri.etsi.org/19602/SvcType/PID/Issuance` or `.../EAA/Issuance`); other service types are ignored for credentials,
+4. if status checks are enabled, requires the credential's status list to be signed by the revocation certificate of the **same** entity.
 
-Trust lists solve this by maintaining a registry of:
+A listed CA certificate accepts every credential issued below it; a listed end-entity certificate only accepts credentials signed with exactly that certificate. Wallet-provider lists, used to trust wallet and key attestations during issuance, are described in [Wallet and Key Attestation](attestation.md).
 
-- **Issuance Certificates**: Certificates authorized to sign credentials
-- **Revocation Certificates**: Certificates authorized to sign status lists
+## Publish a managed trust list
 
-:::important[Issuance and Revocation Certificate Pairing]
-Each trusted entity defines **both** an issuance certificate and a revocation certificate. When verifying a credential, EUDIPLO ensures that the status list is signed by the revocation certificate **from the same entity** that issued the credential. This prevents an attacker from using a valid issuance certificate with a rogue status list.
-:::
-
-## Wallet Provider Trust During Issuance
-
-Wallet-provider trust lists also validate attestations received during credential issuance:
-
-- The authorization server verifies wallet attestations using its configured `walletProviderTrustLists`, inheriting the issuance-level list when omitted.
-- The credential issuer verifies key attestations using the issuance-level `walletProviderTrustLists`, including attestations embedded in JWT proofs and deferred issuance.
-
-Both uses authenticate the signed trust-list JWT using the configured verifier key or certificate before trusting its provider certificates. See [Wallet and Key Attestation](../issuance/issuance-configuration.md#wallet-and-key-attestation) for configuration examples and inheritance rules.
-
-### Hosting a Wallet Provider List
-
-Create a managed trust list with `providerType: "wallet-provider"` on each entity
-(internal or external). The editor exposes this as **Provider type → Wallet
-provider**. EUDIPLO publishes `WalletSolution/Issuance` and
-`WalletSolution/Revocation` services; omitting `providerType` keeps the existing
-credential-provider behavior. A list containing only wallet-provider entities
-uses wallet-provider scheme metadata from
-[ETSI TS 119 602, Annex E](https://www.etsi.org/deliver/etsi_TS/119600_119699/119602/01.01.01_60/ts_119602v010101p.pdf).
-
-Use the hosted URL `/issuers/{tenantId}/trust-list/{id}` in the issuance-level
-`walletProviderTrustLists`, together with the list signing certificate as
-`verifierX509Der` (base64 DER, without PEM headers). This pins the certificate
-that signs the list, which is separate from the provider CA certificates inside
-it. Set `authorizationServers[].walletAttestationRequired` to `true` and omit the
-AS-level list to inherit the same trust for wallet and key attestations.
-
-If wallet and key attestations use different provider CAs, include both in the
-list. The OIDF HAIP tests provision such a hosted list automatically with fresh
-test CAs on every run.
-
-## Trust List Structure
-
-A trust list in EUDIPLO follows the LoTE (List of Trusted Entities) format and contains:
-
-### Metadata
-
-- **ID**: Unique identifier for the trust list
-- **Description**: Human-readable description
-- **Signing Certificate**: Certificate used to sign the trust list itself
-- **Version/Sequence Number**: Tracks trust list updates
-
-### Trusted Entities
-
-Each entity represents an authorized issuer with:
-
-- **Issuance Certificate**: Used to verify credential signatures
-- **Revocation Certificate**: Used to verify status list signatures
-- **Entity Information**: Name, country, contact details
-
-```mermaid
-graph TD
-    TL[Trust List] --> E1[Entity 1]
-    TL --> E2[Entity 2]
-    TL --> E3[Entity N...]
-
-    E1 --> IC1[Issuance Cert]
-    E1 --> RC1[Revocation Cert]
-    E1 --> I1[Entity Info]
-
-    E2 --> IC2[Issuance Cert]
-    E2 --> RC2[Revocation Cert]
-    E2 --> I2[Entity Info]
-```
-
-## How Trust Verification Works
-
-### Credential Verification Flow
-
-When a credential is presented for verification:
-
-```mermaid
-sequenceDiagram
-    participant W as Wallet
-    participant V as EUDIPLO Verifier
-    participant TL as Trust List
-    participant SL as Status List
-
-    W->>V: Present credential (with x5c chain)
-    V->>TL: Look up trusted entities
-    V->>V: Find matching issuance cert
-    Note over V: Credential chains to Entity X's<br/>issuance certificate
-    V->>SL: Fetch status list
-    V->>V: Verify status list signature
-    Note over V: Status list must be signed by<br/>Entity X's revocation cert
-    V->>W: Verification result
-```
-
-### Certificate Chain Matching
-
-EUDIPLO supports two modes for matching certificates:
-
-1. **CA Mode**: The trust list contains CA certificates. The credential's certificate chain must terminate at the trusted CA.
-
-2. **Pinned Mode**: The trust list contains end-entity certificates. The credential's leaf certificate must exactly match the pinned certificate.
-
-## Creating Trust Lists
-
-### Via Configuration Import
-
-Create a JSON file in `config/{tenant}/trust-lists/`:
+Create the list in the Web Client under **Credential Issuance → Trust Lists**, or with `POST /api/trust-list` (role `issuance:manage` or `presentation:manage`):
 
 ```json
 {
-    "id": "my-trust-list",
-    "description": "Production Trust List",
-    "keyChainId": "trust-list-signing-key-chain-id",
+    "id": "membership-issuers",
+    "description": "Issuers of membership credentials",
     "entities": [
         {
             "type": "internal",
-            "issuerKeyChainId": "uuid-of-issuance-cert",
-            "revocationKeyChainId": "uuid-of-revocation-cert",
-            "info": {
-                "name": "Organization Name",
-                "country": "DE"
-            }
+            "issuerKeyChainId": "<attestation key chain id>",
+            "revocationKeyChainId": "<status list key chain id>",
+            "info": { "name": "Example Club", "country": "DE" }
+        },
+        {
+            "type": "external",
+            "issuerCertPem": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
+            "revocationCertPem": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
+            "info": { "name": "Partner Club" }
         }
     ]
 }
 ```
 
-### Via API
+- **Internal** entities reference key chains of this tenant. EUDIPLO lists the last certificate of each chain, the root CA for internal and external CA chains, so the entry survives key rotation.
+- **External** entities carry the PEM certificates of issuers outside this tenant.
+- The list is signed with the `trustList` key chain in `keyChainId`, or with a `trustList` key chain of the tenant if omitted; create one first ([Keys and Certificates](keys-and-certificates.md)).
 
-Use the Trust List API endpoints:
+EUDIPLO publishes the signed JWT at `GET /issuers/{tenantId}/trust-list/{id}` without authentication, so others can use your list.
 
-```bash
-# Create a trust list
-curl -X POST "${BASE_URL}/trust-list" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "id": "my-trust-list",
-    "description": "Production Trust List",
-    "keyChainId": "trust-list-signing-key-chain-id",
-    "entities": [...]
-  }'
-```
+| Task                       | Endpoint                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| Replace entities           | `PUT /api/trust-list/{id}` with the complete body; publishes the next sequence number            |
+| Version history            | `GET /api/trust-list/{id}/versions`, `GET /api/trust-list/{id}/versions/{versionId}`             |
+| List, read, export, delete | `GET /api/trust-list`, `GET /api/trust-list/{id}`, `GET /api/trust-list/{id}/export`, `DELETE /api/trust-list/{id}` |
 
-## Entity Types
+To manage lists as files, put the same JSON into `config/<tenant>/trust-lists/` ([Configuration as Code](../operate/configuration-as-code.md)).
 
-### Internal Entities
+### Validity and renewal
 
-Reference certificates already managed in EUDIPLO:
+A managed list is valid for 30 days (`NextUpdate`). EUDIPLO renews it automatically in the last 10 days: it re-signs the unchanged entities with the next sequence number and a new `NextUpdate`, and keeps the previous version in the history. The check runs every hour and at startup, so lists that expired while EUDIPLO was stopped are renewed when it starts. Verifiers reject a list whose `NextUpdate` has passed (`trust_list_unavailable`).
 
-```json
-{
-    "type": "internal",
-    "issuerKeyChainId": "uuid-of-issuance-cert",
-    "revocationKeyChainId": "uuid-of-revocation-cert",
-    "info": {
-        "name": "Organization Name",
-        "country": "DE"
-    }
-}
-```
+Renewals and updates never publish the same sequence number twice. If a renewal or another update was published between reading and writing, `PUT` fails with `409`; read the list again and retry.
 
-**Use Case**: You are an **issuer** and want to publish a trust list containing your own certificates that are already managed by EUDIPLO.
+### Fields
 
-**Benefits**:
+<SchemaReference name="trust-list" mode="table" />
 
-- Seamless integration with certificates managed in EUDIPLO
-- Certificates are validated and linked automatically
-- Easy to maintain as certificates are updated in the system
+`data` is accepted but ignored; EUDIPLO builds the list content from `entities`.
 
-### External Entities
+## Use a trust list in a presentation
 
-Include PEM certificates directly:
+Reference trust lists in the `trusted_authorities` of a [DCQL](../presentation/dcql.md) credential query:
 
 ```json
 {
-    "type": "external",
-    "issuerCertPem": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
-    "revocationCertPem": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
-    "info": {
-        "name": "External Issuer",
-        "country": "US"
-    }
+    "trusted_authorities": [
+        {
+            "type": "etsi_tl",
+            "values": [
+                { "trustListId": "membership-issuers" },
+                { "url": "https://trust.example.org/lists/pid.jwt", "verifierX509Der": "MIIB..." }
+            ]
+        }
+    ]
 }
 ```
 
-**Use Case**: You are a **verifier** and want to accept credentials from external issuers that are not managed by your EUDIPLO instance.
+- `trustListId` references a managed list of this tenant. EUDIPLO fetches it from `<INTERNAL_URL or PUBLIC_URL>/issuers/<tenant>/trust-list/<id>` and pins the certificate that signs it. Set `INTERNAL_URL` if the backend cannot reach its own `PUBLIC_URL`.
+- `url` references an external LoTE JWT. `verifierX509Der` (base64 DER certificate) or `verifierKey` (public JWK) is required to check its signature; without them loading the list fails (`trust_list_unavailable`). `<TENANT_URL>` in the URL is replaced with `<PUBLIC_URL>/issuers/<tenant>`.
+- Put several lists into the `values` of one `etsi_tl` entry: only the first `etsi_tl` entry of a credential query is used for verification.
 
-**Benefits**:
+A credential query without `trusted_authorities` is verified without any issuer check.
 
-- Accept credentials from third-party issuers
-- No need to import external certificates into EUDIPLO's key management
-- Enable cross-organization and cross-border credential acceptance
+### What the wallet receives
 
-## Public Trust List Endpoint
+Wallets match credentials by key identifier, without fetching the list. EUDIPLO therefore replaces each `etsi_tl` entry in the request with an `aki` entry whose values are the base64url-encoded key identifiers of the listed PID and EAA issuance certificates: the Subject Key Identifier of every certificate, plus the Authority Key Identifier of end-entity certificates. If a list cannot be loaded, or an issuer certificate has no usable identifier (for example a self-signed certificate without Authority Key Identifier), the request additionally keeps an `etsi_tl` entry with the plain URL of that list. Verification always uses the stored configuration.
 
-Trust lists are published as signed JWTs at:
+Some wallets do not handle `trusted_authorities` yet. `VP_REMOVE_TA=true` removes it from all requests sent to wallets; EUDIPLO still verifies against the configured lists.
 
-```
-GET /{tenantId}/trust-list/{trustListId}
-```
+### Caching
 
-This allows:
-
-- **Other verifiers** to synchronize trust information
-- **Auditors** to verify the trust chain
-
-## Related Topics
-
-- [Key Chains](key-chains.md) — Managing trust list signing keys
-- [Certificates](certificates.md) — Certificate types and lifecycle
-- [Status Management](../issuance/status-management.md) — Credential revocation and status lists
+Loaded trust lists are cached for five minutes. After changing a list, clear the cache with `DELETE /api/cache/trust-list` (it also clears the OpenID Federation cache) to use it immediately; `GET /api/cache/stats` shows what is cached. Fetching a list times out after four seconds. Outside `NODE_ENV=production`, the TLS certificate of the list's host is not checked; the list signature always is.

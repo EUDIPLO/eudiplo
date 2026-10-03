@@ -6,10 +6,10 @@ description: Implement one EUDIPLO architecture-hardening task completely
 Only execute when the user explicitly requests implementation of a named task or bounded slice. A review or documentation merge does not authorize implementation. If no task is selected, ask which task to implement.
 
 Implement the requested slice from the "Next slices" and "Open review findings" sections of
-[the refactoring plan](../../apps/docs/docs/architecture/refactoring-plan.md).
+[the refactoring plan](../../apps/backend/docs/refactoring-plan.md).
 
 Use
-[the target backend architecture](../../apps/docs/docs/architecture/backend-architecture.md)
+[the target backend architecture](../../apps/docs/docs/contributing/backend-architecture.md)
 and the repository Copilot instructions as authoritative guidance.
 
 Before changing code:

@@ -2,133 +2,90 @@
 title: Documentation
 ---
 
-# Contributing to Documentation
+# Documentation
 
-EUDIPLO documentation is built with [Docusaurus](https://docusaurus.io/) and includes both hand-written guides and auto-generated API references.
+The documentation is a [Docusaurus](https://docusaurus.io/) site in `apps/docs`; pages live in `apps/docs/docs/`. This page covers where content goes, which parts are generated from code, the checks a change must pass and how the site is deployed.
 
-## General Contribution Guidelines
-
-Thank you for considering contributing to EUDIPLO!
-
-Please refer to the [CONTRIBUTING.md](https://github.com/openwallet-foundation/eudiplo/blob/main/CONTRIBUTING.md) file in the root of the repository for detailed guidelines on:
-
-- Reporting issues
-- Suggesting features
-- Setting up the development environment
-- Submitting pull requests
-
-## Documentation Structure
-
-Documentation lives in `apps/docs/docs/`:
-
-- **Hand-written guides** — Architecture, deployment, getting started, migration guides
-- **Auto-generated references** — API documentation from Swagger/OpenAPI specs, configuration tables, and CLI references
-- **Configuration tables** — Generated from backend schemas and environment variables
-
-## Local Documentation Development
-
-To preview documentation locally with live reload:
+## Run it locally
 
 ```bash
-pnpm --filter @eudiplo/docs start
+pnpm --filter @eudiplo/config-format build     # the generators import backend code
+pnpm --filter @eudiplo/docs run prebuild       # generate docs/_generated/ (once, and after schema changes)
+pnpm --filter @eudiplo/docs start              # live reload on http://127.0.0.1:3003
 ```
 
-This starts a development server at `http://localhost:3000` that automatically reloads when you edit Markdown files.
+| Command | Purpose |
+| --- | --- |
+| `pnpm --filter @eudiplo/docs build` | Runs `prebuild`, then a production build. Broken links and anchors fail the build. |
+| `pnpm --filter @eudiplo/docs serve` | Serves the last build on port 3003 |
+| `pnpm --filter @eudiplo/docs lint` | markdownlint (`apps/docs/.markdownlint.json`); `lint:fix` fixes what it can |
+| `pnpm --filter @eudiplo/docs test` | Sidebar orphan check and the schema generator tests |
+| `pnpm --filter @eudiplo/docs typecheck:scripts` | Type-checks the generator scripts |
 
-## Building Documentation
+The search widget reads `ALGOLIA_APP_ID`, `ALGOLIA_SEARCH_API_KEY`, `ALGOLIA_INDEX_NAME` and `DOCSEARCH_AGENT_ID`; local builds work without them.
 
-To build the documentation for production:
+## Where content goes
 
-```bash
-pnpm --filter @eudiplo/docs build
-```
+The sidebar order is Start, Cookbooks, Issuance, Presentation, Trust, Operate, Reference, Concepts, Contributing, Upgrade.
 
-This generates:
+| Folder | Content | Page type |
+| --- | --- | --- |
+| `cookbooks/` | End-to-end recipes that end in a working result | Cookbook |
+| `issuance/`, `presentation/`, `trust/` | One task per page for issuers, verifiers and trust setup | How-to |
+| `operate/` | Deploying and running EUDIPLO: Compose, Kubernetes, TLS, database, KMS, monitoring | How-to |
+| `reference/` | Exact facts: API, environment variables, CLI, payloads, field references | Reference |
+| `concepts/` | How EUDIPLO works; no configuration steps | Concept |
+| `contributing/` | Working on EUDIPLO itself | How-to |
+| `upgrade/` | Upgrade procedure and one guide per major version | How-to |
+| `troubleshooting.md` | Symptoms shared by several pages | Reference |
 
-1. **Docusaurus static site** — Main documentation
-2. **Auto-generated references** — Configuration tables and CLI reference
+Page types:
 
-### Regenerating Auto-Generated Content
+- **Cookbook**: title "Cookbook: …"; sections *What you will build* (one paragraph, optional diagram), *Before you start* (prerequisites, the recipe it starts from), numbered steps that each end with a **Checkpoint**, *Troubleshooting* (symptom → cause → fix), *Next steps* (2–4 links). Reuse the values of the issue-and-verify recipe where possible (`membership-demo`, `membership`, `urn:example:membership:1`, `membership-check`).
+- **How-to**: the goal in one sentence, prerequisites, steps, a minimal example, links to the reference.
+- **Reference**: tables and generated components, no tutorials.
+- **Concept**: explanation and diagrams, links to the how-tos.
 
-Before building, regenerate auto-generated reference pages:
+Rules for every page:
 
-```bash
-pnpm --filter @eudiplo/docs run prebuild
-```
+- **One owner per topic.** Every fact lives on one page; other pages link to it in one sentence. Before you write a table or payload, check whether a page already owns it.
+- **Code is the truth.** Check every field, endpoint, default and behavior against the code of the version you document.
+- **Paths:** management endpoints with the `/api` prefix (`POST /api/issuer/offer`), wallet-facing endpoints without it (see `GLOBAL_PREFIX_EXCLUSIONS` in `apps/backend/src/main.helpers.ts`).
+- **Short.** Lead with the task; at most three sentences of introduction; aim for under 250 lines and split a page that serves two tasks. No marketing, no textbook material, no "future work" or TODOs.
+- Use mermaid only where a flow really needs it, and give every code block a language (markdownlint MD040).
+- Every published page must be listed in `apps/docs/sidebars.ts`. Files and folders starting with `_` are not published; use them for partials and generated content.
+- When you move or delete a page, add a client redirect in `docusaurus.config.ts` and point existing redirects at the final target (no chains).
 
-This script:
+## Generated content
 
-- Generates configuration tables from backend schemas
-- Updates CLI command reference
-- Refreshes environment variable documentation
+Prefer a reference generated from code over a hand-written table. `prebuild` writes the generated files to `docs/_generated/` (git-ignored, not published as pages).
 
-## API Documentation
+| Content | Source of truth | Generator | Use on a page |
+| --- | --- | --- | --- |
+| Environment variables | Joi schemas combined in `apps/backend/src/platform/config/combined.schema.ts` | `scripts/generate-config-docs.ts` → `_generated/config-model.json` | `<ConfigTable group="…" />` (`src/components/ConfigTable`) |
+| CLI command reference | The commander program of `apps/cli` | `scripts/generate-cli-reference.ts` → `_generated/cli-reference.md` | Imported as an MDX partial in `reference/cli.md` |
+| Request bodies and configuration fields | Zod schemas registered in `scripts/schema-docs/registry.ts` | `scripts/generate-schema-docs.ts` → `_generated/schemas/` | `<SchemaReference name="…" mode="table" />` (field table) or `mode="body"` (annotated JSON sample) |
 
-API documentation is auto-generated from Swagger/OpenAPI specs:
+To document a new Zod schema, add `{ name, schema }` to `registry.ts`, run `prebuild`, import `SchemaReference` from `@site/src/components/SchemaReference` and place the component. Field descriptions come from the schema's `.describe(…)` texts, so improve the description in the backend schema instead of the page. An unknown `name` fails the build.
 
-- Swagger UI is available at `/api/docs` when the backend is running
-- OpenAPI spec JSON is available at `/api/docs-json`
+The same applies to other references that can be derived from code (for example roles from `apps/backend/src/auth/roles/role.enum.ts`): generate them instead of writing a table by hand. The published JSON schemas for configuration files are a separate pipeline: [Configuration schemas](./configuration-schemas.md).
 
-The backend automatically includes Swagger annotations via NestJS decorators (`@ApiTags`, `@ApiOperation`, `@ApiResponse`).
+## Checks
 
-## Documentation Versioning
+CI runs on every pull request:
 
-EUDIPLO uses Docusaurus's built-in versioning system (replacing the old mike/MkDocs workflow).
+- `pnpm --filter @eudiplo/docs lint` (markdownlint) in the Lint job,
+- `pnpm --filter @eudiplo/docs test`, `typecheck:scripts` and `build` in the Build Documentation job.
 
-### Creating a New Version
+The build is configured with `onBrokenLinks: 'throw'` and `onBrokenAnchors: 'throw'`, so a link to a missing page or heading fails it. The sidebar orphan check (`scripts/check-sidebar-orphans.ts`) fails when a page is missing from `sidebars.ts` or the sidebar references a page that does not exist.
 
-When releasing a new major version:
+## Deployment and versions
 
-```bash
-pnpm --filter @eudiplo/docs run docusaurus docs:version X.Y
-```
+| Trigger | Built from | Deployed to |
+| --- | --- | --- |
+| Push to `main` (CI job *Deploy Preview Website & Documentation*) | `main` | Cloudflare Pages project `eudiplo-docs`, branch `preview` |
+| Release (*Versioned Release* workflow) | The release commit | Cloudflare Pages project `eudiplo-docs`, branch `production`, served at [docs.eudiplo.dev](https://docs.eudiplo.dev/) |
 
-This creates a snapshot of the current documentation in `apps/docs/versioned_docs/version-X.Y/`.
+So docs.eudiplo.dev describes the latest release, and the preview describes `main`. The repository keeps no per-version copies (`versioned_docs/` is not committed). For a major release the workflow runs `docs:version` in its own checkout before building; that snapshot is not committed. Documentation of an older release is the `apps/docs/docs` folder at its git tag, which is how the [upgrade overview](../upgrade/index.md) links to old upgrade guides.
 
-### Version Behavior
-
-- **Current (`docs/`)** — The latest development version (from `main` branch)
-- **Versioned (`versioned_docs/version-X.Y/`)** — Frozen snapshots for each major release
-- **Latest** — The default version shown to users (configured in `docusaurus.config.ts`)
-
-### Editing Versioned Documentation
-
-- **To update current docs**: Edit files in `apps/docs/docs/`
-- **To update a released version**: Edit files in `apps/docs/versioned_docs/version-X.Y/`
-- **To update navigation**: Edit `apps/docs/sidebars.ts` (current) or `apps/docs/versioned_sidebars/version-X.Y-sidebars.json` (versioned)
-
-## Deployment
-
-Documentation is automatically deployed to GitHub Pages on every push to `main`:
-
-1. CI generates the auto-generated references
-2. Docusaurus builds the static site
-3. Cloudflare Pages deploys the artifact
-
-**Access URLs:**
-
-- **Primary site**: [https://docs.eudiplo.dev/](https://docs.eudiplo.dev/)
-- **Legacy documentation**: [https://openwallet-foundation.github.io/eudiplo/docs/latest/](https://openwallet-foundation.github.io/eudiplo/docs/latest/)
-
-## Migration from MkDocs
-
-:::note Historical Context
-EUDIPLO previously used MkDocs with the Material theme and mike for versioning. The documentation is being migrated to Docusaurus for better integration with the TypeScript ecosystem and improved developer experience.
-
-The old MkDocs sources in `docs/` are being progressively migrated to `apps/docs/docs/` with updated syntax and structure.
-:::
-
-## Documentation Style Guide
-
-- Use clear, concise language
-- Include code examples where helpful
-- Use Docusaurus admonitions (:::note, :::tip, :::warning, :::danger) for callouts
-- Link to related documentation pages
-- Keep configuration examples up-to-date
-- Test all code snippets before committing
-
-## Structure
-
-- Main documentation: `apps/docs/docs/`
-- API documentation: Auto-generated from Swagger/OpenAPI specs
-- The site is built using Docusaurus with versioning support
+Document the behavior of `main`. A change that breaks existing setups also needs an entry in the upgrade guide of the next major (see [Releases](./releases.md#commit-messages)).

@@ -4,72 +4,117 @@ title: Testing
 
 # Testing
 
-EUDIPLO uses Vitest for colocated unit tests and backend end-to-end (E2E) tests. Run focused unit tests while developing, then add the relevant E2E suite when a change affects module wiring, persistence, or a protocol flow.
+All TypeScript packages test with [Vitest](https://vitest.dev). Run the unit tests of the package you change while you work, then the E2E suites when a change affects module wiring, persistence or a protocol flow. `pnpm test` at the root runs the `test` script of every package.
 
-## Running Tests Locally
+| Suite | Location | Command | CI job |
+| --- | --- | --- | --- |
+| Backend unit and architecture | `apps/backend/src/**/*.spec.ts`, `apps/backend/test/architecture/` | `pnpm --filter @eudiplo/backend test` | Test Coverage Report |
+| Backend E2E | `apps/backend/test/**/*.e2e-spec.ts` | `pnpm --filter @eudiplo/backend test:e2e:local` | E2E Tests (non-OIDF) |
+| OIDF conformance | `apps/backend/test/oidf/` | `pnpm --filter @eudiplo/backend test:oidf` | E2E Tests (OIDF) |
+| CLI | `apps/cli/test/**/*.test.ts`, `apps/cli/src/**/*.spec.ts` | `pnpm --filter @eudiplo/cli test` | Build CLI |
+| Config format, SDK | `packages/*/src/**/*.spec.ts`, `packages/eudiplo-sdk-core/test/` | `pnpm --filter @eudiplo/config-format test`, `pnpm --filter @eudiplo/sdk-core test` | — |
+| Client unit | `apps/client/src/**/*.spec.ts` | `pnpm --filter @eudiplo/client test` | Build Client |
+| Client browser (Playwright) | `apps/client/e2e/` | `pnpm --filter @eudiplo/client e2e` | not run |
+| Documentation tooling | `apps/docs/scripts/` | `pnpm --filter @eudiplo/docs test` | Build Documentation |
 
-To run all workspace unit tests locally:
+CI is defined in `.github/workflows/ci-and-release.yml` and runs on pull requests, the merge queue and pushes to `main`.
 
-```bash
-pnpm run test
-```
+## Backend unit tests
 
-To target the backend or use watch mode:
-
-```bash
-pnpm --filter @eudiplo/backend run test
-pnpm --filter @eudiplo/backend run test:watch
-```
-
-This uses [Vitest](https://vitest.dev) under the hood, which is configured for NestJS.
-
-## Test Structure
-
-Unit tests are located next to their implementation files:
+Unit tests sit next to the code as `*.spec.ts` and run with SWC (`apps/backend/vitest.config.ts`):
 
 ```bash
-src/
-  service/
-    my.service.ts
-    my.service.spec.ts  <-- Test file
+pnpm --filter @eudiplo/backend test                 # all unit tests
+pnpm --filter @eudiplo/backend test:watch
+pnpm --filter @eudiplo/backend exec vitest run src/session/application/session-store.spec.ts
+pnpm --filter @eudiplo/backend test:debug           # with the Node inspector
 ```
 
-Architecture and dependency-boundary tests also use the `.spec.ts` suffix, so they run with the same backend unit-test command.
+Test use cases with fake ports, without a Nest `TestingModule`. Adapters with several implementations share a contract suite (`*.contract.ts`, for example `test/session/session-repository.contract.ts`) that runs against SQLite and PostgreSQL.
 
-## Linting
+The architecture checks (`src/platform/module-boundaries.spec.ts`, `test/architecture/dependency-rules.spec.ts`) run with the unit tests. What they enforce and how to update the ratchet baseline: [Backend architecture](./backend-architecture.md#current-boundary-enforcement).
 
-Before pushing code, check linting rules and fix them:
+## E2E testing
+
+Backend E2E tests start the assembled Nest application and drive it over HTTP. They live under `apps/backend/test/`, grouped by area (`issuance/`, `presentation/`, `session/`, `trust-list/`, `config-portability/`, `persistence/`, `key/`, …) with shared helpers in `utils.ts`, `utils-mdoc.ts` and `shared/`, and fixtures in `fixtures/`.
+
+### Running E2E tests locally
 
 ```bash
-pnpm run lint
+pnpm --filter @eudiplo/backend test:e2e:local
 ```
 
-The repository's Git pre-push hook also runs the Knip check automatically:
+The script builds `@eudiplo/config-format` and runs every suite except the OIDF conformance tests, without coverage. Prerequisites:
+
+- **Port 3000 must be free.** The suites start the backend there and abort with a clear error when the port is taken. Stop `pnpm dev:backend` or a Compose stack first, and do not run two E2E runs in parallel.
+- **Docker is optional.** The PostgreSQL, HashiCorp Vault and S3 (RustFS) suites start containers with [Testcontainers](https://testcontainers.com/). Without a container runtime they are skipped with a warning. Set `E2E_SKIP_CONTAINERS=true` to skip them on purpose. In CI (`CI` set) a missing runtime fails the run.
+
+You need no `.env` file, no hosts entry and no running `test-rp` webhook:
+
+- The suites ignore `apps/backend/.env`, so development settings cannot leak into a run. Test defaults (secrets, `DB_SYNCHRONIZE=true`, both `OUTBOUND_URL_ALLOW_*` flags) come from the `env` block of `apps/backend/test/vitest.config.ts`.
+- Outgoing webhook and trust-list calls to `localhost:8787` are mocked with `nock`.
+
+Capability settings such as the public and internal URLs are read once when the Nest module is compiled. Set them in the Vitest `env` block or with `vi.stubEnv` before the module is created; `ConfigService.set()` afterwards has no effect.
+
+### Watch mode and coverage
 
 ```bash
-pnpm run knip
+pnpm --filter @eudiplo/backend test:e2e:watch   # re-run on change
+pnpm --filter @eudiplo/backend test:e2e         # with coverage, as in CI
 ```
 
-Install dependencies with `pnpm install` to enable the Husky hooks locally.
+The CI job also adds the `host.testcontainers.internal` hosts entry and starts `test-rp`; locally neither is required.
 
-## GitHub Actions
+## OIDF conformance testing
 
-Tests run automatically on every push to `main` or pull request via GitHub Actions.
+The conformance tests run the [OpenID Foundation conformance suite](https://openid.net/certification/conformance/) locally and execute its OID4VCI issuer and OID4VP verifier test plans against EUDIPLO. Testcontainers starts the suite (MongoDB, the suite server and its nginx front end on port 8443); the tests start the backend at `https://host.testcontainers.internal:3000`. No public deployment and no hosted suite are needed.
 
-You can find the workflow config in `.github/workflows/ci-and-release.yml`.
+Prerequisites:
 
-## Test Coverage
+- Docker, and free ports 3000 and 8443.
+- A hosts entry so the suite containers and your machine resolve the backend the same way:
 
-Coverage is generated when running the E2E tests. See [E2E Testing](./e2e-testing.md) for details.
+    ```bash
+    echo "127.0.0.1 host.testcontainers.internal" | sudo tee -a /etc/hosts
+    ```
 
-This generates a report in the `/coverage` folder. Open `coverage/index.html` in your browser to view it.
+Run them:
 
-Coverage is also accessible via [codecov](https://app.codecov.io/github/openwallet-foundation/eudiplo/tree/main).
+```bash
+pnpm --filter @eudiplo/config-format build
+pnpm --filter @eudiplo/backend test:oidf
+```
 
-## Code Quality (SonarCloud)
+| File | Purpose |
+| --- | --- |
+| `oidf-issuance.e2e-spec.ts` | OID4VCI issuer test plans |
+| `oidf-presentation.e2e-spec.ts` | OID4VP verifier test plans |
+| `oidf-setup.ts` | Container lifecycle |
+| `oidf-suite.ts` | Client for the suite's API, log export |
+| `oidf-issuer-modules.snapshot.json`, `oidf-verifier-modules.snapshot.json` | Modules the plans contain; rewritten when the suite's plan changes, so commit the updated file |
 
-Static analysis and code quality metrics are tracked on [SonarCloud](https://sonarcloud.io/project/overview?id=openwallet-foundation_eudiplo).
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `VITE_OIDF_MODULES` | all | Comma-separated module filter |
+| `VITE_OIDF_MODULE_PATTERN` | — | Regular expression module filter |
+| `VITE_OIDF_ENFORCE_MODULE_COVERAGE` | `false` | Fail instead of warn when scenarios are not covered |
+| `VITE_OIDF_URL` | `https://localhost:8443` | Suite URL |
+| `VITE_OIDF_DEMO_TOKEN` | — | API token for the suite |
+| `VITE_DOMAIN` | `host.testcontainers.internal:3000` | Host of the backend's `PUBLIC_URL` |
+| `OIDF_EXPORT_LOGS` (or `VITE_OIDF_EXPORT_LOGS`) | on | Export suite logs; `false` speeds up local runs |
+| `OIDF_TEARDOWN_PER_FILE` (or `VITE_OIDF_TEARDOWN_PER_FILE`) | on | Tear the containers down after each spec file; `false` reuses them within one run |
 
-:::info[Scope]
-The SonarCloud analysis focuses on the **backend** (`apps/backend`). The Angular client is excluded from coverage reporting as it is considered optional and does not have E2E test coverage yet.
-:::
+Logs land in `tmp/oidf-logs/<planId>/` and, for failed modules, `tmp/oidf-logs/failed/<testInstanceId>/`. CI uploads them as the `oidf-test-results` artifact. Wait thresholds (`OIDF_WAIT_*`) and how to calibrate them are described in `apps/backend/test/oidf/README.md`.
+
+## Client tests
+
+Unit tests run with Vitest through the Angular builder; the Playwright browser tests are not part of CI. Setup and conventions: [Client development](./client.md#tests).
+
+## Coverage
+
+| Report | Command | Output |
+| --- | --- | --- |
+| Backend unit | `pnpm --filter @eudiplo/backend exec vitest run --coverage --config ./vitest.config.ts` | `apps/backend/coverage/unit/` |
+| Backend E2E | `pnpm --filter @eudiplo/backend test:e2e` | `apps/backend/coverage/e2e/` |
+
+Both write text, LCOV (HTML under `lcov-report/`) and Cobertura reports. The **Test Coverage Report** CI job runs both and uploads the Cobertura files to **GitHub Code Quality** (labels `backend-unit` and `backend-e2e`) for pushes and for pull requests from branches of the repository. Static analysis runs on [SonarCloud](https://sonarcloud.io/project/overview?id=openwallet-foundation_eudiplo), configured in `.sonarcloud.properties` (backend and client sources; the client is excluded from coverage).
