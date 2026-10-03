@@ -597,6 +597,67 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
             ).resolves.toBeUndefined();
         });
 
+        it("reads and deletes a session only within the requested type", async () => {
+            const repository = getDataSource().getRepository(Session);
+            const presentationId = randomUUID();
+            await repository.save({
+                id: presentationId,
+                tenantId: "tenant-a",
+                requestId: "pid-request",
+            });
+
+            expect(
+                await adapter.findForTenant("tenant-a", sessionId, "issuance"),
+            ).toMatchObject({ id: sessionId });
+            expect(
+                await adapter.findForTenant(
+                    "tenant-a",
+                    sessionId,
+                    "presentation",
+                ),
+            ).toBeNull();
+            expect(
+                await adapter.findForTenant(
+                    "tenant-a",
+                    presentationId,
+                    "presentation",
+                ),
+            ).toMatchObject({ id: presentationId });
+            expect(
+                await adapter.findForTenant(
+                    "tenant-a",
+                    presentationId,
+                    "issuance",
+                ),
+            ).toBeNull();
+
+            await adapter.deleteForTenant(
+                "tenant-a",
+                presentationId,
+                "issuance",
+            );
+            await adapter.deleteForTenant(
+                "tenant-a",
+                sessionId,
+                "presentation",
+            );
+            expect(await repository.existsBy({ id: presentationId })).toBe(
+                true,
+            );
+            expect(await repository.existsBy({ id: sessionId })).toBe(true);
+
+            await adapter.deleteForTenant(
+                "tenant-a",
+                presentationId,
+                "presentation",
+            );
+            await adapter.deleteForTenant("tenant-a", sessionId, "issuance");
+            expect(await repository.existsBy({ id: presentationId })).toBe(
+                false,
+            );
+            expect(await repository.existsBy({ id: sessionId })).toBe(false);
+        });
+
         it("finds overdue open presentations and unredeemed offers across tenants, without returning entities or sensitive data", async () => {
             const repository = getDataSource().getRepository(Session);
             const past = new Date("2025-01-01");

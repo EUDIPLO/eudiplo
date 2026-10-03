@@ -56,7 +56,7 @@ events.onmessage = (message) => {
 
 ## Polling
 
-Read the session with `GET /api/session/{id}`. The caller needs the `presentation:request` role (or `issuance:offer`). Poll every one or two seconds until `status` is `completed`, `failed` or `expired`:
+Read the session with `GET /api/session/{id}`. The caller needs the `presentation:request` role; a client with only issuance roles gets `404` for presentation sessions. Poll every one or two seconds until `status` is `completed`, `failed` or `expired`:
 
 ```json
 {

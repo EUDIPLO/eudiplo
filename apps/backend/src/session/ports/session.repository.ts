@@ -8,6 +8,7 @@ import type {
 import type {
     SessionListQuery,
     SessionSummary,
+    SessionType,
 } from "../domain/session-list.js";
 
 import type {
@@ -51,7 +52,12 @@ export interface SessionRepository {
         id: string,
         update: SessionUpdate,
     ): Promise<boolean>;
-    findForTenant(tenantId: string, id: string): Promise<SessionData | null>;
+    /** With `type`, a session of the other type is not found. */
+    findForTenant(
+        tenantId: string,
+        id: string,
+        type?: SessionType,
+    ): Promise<SessionData | null>;
     /**
      * Redeem a PAR `request_uri` once (RFC 9126 Section 7.3): set its expiry to
      * `now` only while it still equals `expiresAt` and lies after `now`.
@@ -99,8 +105,15 @@ export interface SessionRepository {
         tenantId: string,
         query: SessionListQuery,
     ): Promise<{ items: SessionSummary[]; total: number }>;
-    /** Missing sessions and sessions owned by another tenant are both no-ops. */
-    deleteForTenant(tenantId: string, sessionId: string): Promise<void>;
+    /**
+     * Missing sessions, sessions owned by another tenant and, with `type`,
+     * sessions of the other type are all no-ops.
+     */
+    deleteForTenant(
+        tenantId: string,
+        sessionId: string,
+        type?: SessionType,
+    ): Promise<void>;
 
     /**
      * Privileged cross-tenant selection of sessions overdue before `before`:

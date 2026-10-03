@@ -67,8 +67,9 @@ LOG_SESSION_STORE=errors
 | `verbose`           | All events with full request and response bodies and error stacks       |
 
 `LOG_SESSION_STORE` has no effect without `LOG_ENABLE_SESSION_LOGGER=true`.
-Read the entries with `GET /api/session/:id/logs` (roles `issuance:offer` or
-`presentation:request`) or in the **Logs** tab of a session in the web client.
+Read the entries with `GET /api/session/:id/logs` (role `issuance:offer` for
+issuance sessions, `presentation:request` for presentation sessions) or in the
+**Logs** tab of a session in the web client.
 They are deleted with their session ([session retention](database.md#session-retention)).
 `verbose` stores personal data and much more volume; use it for debugging only.
 

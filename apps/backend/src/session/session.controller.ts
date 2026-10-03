@@ -2,6 +2,7 @@ import {
     Body,
     Controller,
     Delete,
+    ForbiddenException,
     Get,
     HttpCode,
     Param,
@@ -16,11 +17,33 @@ import { StatusUpdateDto } from "../issuer/status-list/dto/status-update.dto.js"
 import { StatusListService } from "../issuer/status-list/status-list.service.js";
 import { SessionStore } from "./application/session-store.js";
 import type { SessionData } from "./domain/session-data.js";
+import type { SessionType } from "./domain/session-list.js";
 import { PaginatedSessionResponseDto } from "./dto/paginated-session-response.dto.js";
 import { SessionLogEntryResponseDto } from "./dto/session-log-entry-response.dto.js";
 import { SessionQueryDto } from "./dto/session-query.dto.js";
 import { Session } from "./entities/session.entity.js";
 import { SessionLogStoreService } from "./logging/session-log-store.service.js";
+
+/**
+ * The session type a client may read and delete: issuance sessions need
+ * `issuance:offer` or `issuance:manage`, presentation sessions
+ * `presentation:request` or `presentation:manage`. `undefined` means both.
+ * A verifier-only client never sees issued credential payloads, an
+ * issuer-only client never sees presented credentials.
+ */
+function sessionScope(token: TokenPayload): SessionType | undefined {
+    const roles = token.roles ?? [];
+    const issuance =
+        roles.includes(Role.IssuanceOffer) || roles.includes(Role.Issuances);
+    const presentation =
+        roles.includes(Role.PresentationRequest) ||
+        roles.includes(Role.Presentations);
+    if (issuance && presentation) return undefined;
+    if (issuance) return "issuance";
+    if (presentation) return "presentation";
+    // Unreachable behind the class guard; fail closed if that ever changes.
+    throw new ForbiddenException();
+}
 
 @ApiTags("Session")
 @Secured([Role.IssuanceOffer, Role.PresentationRequest])
@@ -42,7 +65,11 @@ export class SessionController {
         @Token() token: TokenPayload,
         @Query() query: SessionQueryDto,
     ): Promise<PaginatedSessionResponseDto> {
-        return this.sessions.listForTenant(token.entity!.id, query);
+        return this.sessions.listForTenant(
+            token.entity!.id,
+            query,
+            sessionScope(token),
+        );
     }
 
     /**
@@ -56,7 +83,11 @@ export class SessionController {
         @Param("id") id: string,
         @Token() token: TokenPayload,
     ): Promise<SessionData> {
-        return this.sessions.getForTenant(token.entity!.id, id);
+        return this.sessions.getForTenant(
+            token.entity!.id,
+            id,
+            sessionScope(token),
+        );
     }
 
     /**
@@ -72,7 +103,11 @@ export class SessionController {
         @Param("id") id: string,
         @Token() user: TokenPayload,
     ): Promise<void> {
-        return this.sessions.deleteForTenant(user.entity!.id, id);
+        return this.sessions.deleteForTenant(
+            user.entity!.id,
+            id,
+            sessionScope(user),
+        );
     }
 
     /**
@@ -87,7 +122,11 @@ export class SessionController {
         @Param("id") id: string,
         @Token() token: TokenPayload,
     ): Promise<SessionLogEntryResponseDto[]> {
-        await this.sessions.getForTenant(token.entity!.id, id);
+        await this.sessions.getForTenant(
+            token.entity!.id,
+            id,
+            sessionScope(token),
+        );
         return this.logStoreService.findBySessionId(id);
     }
 

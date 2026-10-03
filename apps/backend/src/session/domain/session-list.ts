@@ -1,10 +1,13 @@
 import type { SessionStatus } from "./session-state.js";
 
+/** Presentation sessions have a `requestId`; issuance sessions have none. */
+export type SessionType = "issuance" | "presentation";
+
 export interface SessionListQuery {
     page: number;
     pageSize: number;
     status?: SessionStatus;
-    type?: "issuance" | "presentation";
+    type?: SessionType;
     sortBy?: "id" | "status" | "createdAt" | "requestId";
     sortOrder?: "asc" | "desc";
 }

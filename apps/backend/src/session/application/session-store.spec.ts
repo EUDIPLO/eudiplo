@@ -29,7 +29,11 @@ function createStore(overrides: Partial<SessionRepository> = {}) {
 
 describe("SessionStore", () => {
     it.each([
-        ["getForTenant", "findForTenant", ["tenant-1", "session-1"]],
+        [
+            "getForTenant",
+            "findForTenant",
+            ["tenant-1", "session-1", "presentation"],
+        ],
         [
             "getByAuthorizationCode",
             "findByAuthorizationCode",
@@ -118,10 +122,11 @@ describe("SessionStore", () => {
             expiresAt,
             now,
         );
-        await store.deleteForTenant("tenant-1", "session-1");
+        await store.deleteForTenant("tenant-1", "session-1", "issuance");
         expect(repository.deleteForTenant).toHaveBeenCalledWith(
             "tenant-1",
             "session-1",
+            "issuance",
         );
     });
 
@@ -146,5 +151,51 @@ describe("SessionStore", () => {
             "tenant-a",
             query,
         );
+    });
+
+    it.each([
+        [undefined, undefined, undefined],
+        [undefined, "issuance", "issuance"],
+        ["presentation", undefined, "presentation"],
+        ["presentation", "presentation", "presentation"],
+    ] as const)(
+        "lists sessions of scope %s with type filter %s as type %s",
+        async (scope, type, expected) => {
+            const { store, repository } = createStore({
+                listForTenant: vi
+                    .fn()
+                    .mockResolvedValue({ items: [], total: 0 }),
+            });
+
+            await store.listForTenant(
+                "tenant-a",
+                { page: 1, pageSize: 25, type },
+                scope,
+            );
+
+            expect(repository.listForTenant).toHaveBeenCalledExactlyOnceWith(
+                "tenant-a",
+                { page: 1, pageSize: 25, type: expected },
+            );
+        },
+    );
+
+    it("lists nothing for a type filter outside the scope, without querying", async () => {
+        const { store, repository } = createStore();
+
+        await expect(
+            store.listForTenant(
+                "tenant-a",
+                { page: 1, pageSize: 25, type: "issuance" },
+                "presentation",
+            ),
+        ).resolves.toEqual({
+            items: [],
+            total: 0,
+            page: 1,
+            pageSize: 25,
+            totalPages: 0,
+        });
+        expect(repository.listForTenant).not.toHaveBeenCalled();
     });
 });

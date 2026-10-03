@@ -92,6 +92,14 @@ put in offers, `allowedPresentationConfigs` the presentation configurations it
 may request. Other IDs are rejected with `403`; an empty or missing list allows
 all.
 
+The session endpoints (`/api/session`) need `issuance:offer` or
+`presentation:request` and show a client only the sessions of its side:
+issuance sessions with `issuance:offer` or `issuance:manage`, presentation
+sessions with `presentation:request` or `presentation:manage`. Other sessions
+are left out of the list, answer `404` and are not deleted. Changing credential
+status (`POST /api/session/revoke`) needs `issuance:offer` or
+`issuance:manage`.
+
 Typical role sets:
 
 | Caller                                   | Roles                                                         |

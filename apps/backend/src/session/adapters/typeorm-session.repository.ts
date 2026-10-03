@@ -19,6 +19,7 @@ import type {
 import type {
     SessionListQuery,
     SessionSummary,
+    SessionType,
 } from "../domain/session-list.js";
 import {
     OPEN_SESSION_STATUSES,
@@ -32,6 +33,13 @@ import type {
     SessionCredentialOffer,
     SessionRepository,
 } from "../ports/session.repository.js";
+
+/** Where clause selecting one session type; any type when omitted. */
+function typeWhere(type?: SessionType): FindOptionsWhere<Session> {
+    if (type === "issuance") return { requestId: IsNull() };
+    if (type === "presentation") return { requestId: Not(IsNull()) };
+    return {};
+}
 
 @Injectable()
 export class TypeOrmSessionRepository implements SessionRepository {
@@ -97,8 +105,8 @@ export class TypeOrmSessionRepository implements SessionRepository {
         return (result.affected ?? 0) > 0;
     }
 
-    findForTenant(tenantId: string, id: string) {
-        return this.findSession({ tenantId, id });
+    findForTenant(tenantId: string, id: string, type?: SessionType) {
+        return this.findSession({ tenantId, id, ...typeWhere(type) });
     }
 
     findByIdForInternalFlow(id: string) {
@@ -192,10 +200,11 @@ export class TypeOrmSessionRepository implements SessionRepository {
         query: SessionListQuery,
     ): Promise<{ items: SessionSummary[]; total: number }> {
         const { page, pageSize, status, type, sortBy, sortOrder } = query;
-        const where: FindOptionsWhere<Session> = { tenantId };
+        const where: FindOptionsWhere<Session> = {
+            tenantId,
+            ...typeWhere(type),
+        };
         if (status) where.status = status;
-        if (type === "issuance") where.requestId = IsNull();
-        else if (type === "presentation") where.requestId = Not(IsNull());
         const sessions = await this.sessions.find({
             select: {
                 id: true,
@@ -225,8 +234,16 @@ export class TypeOrmSessionRepository implements SessionRepository {
         };
     }
 
-    async deleteForTenant(tenantId: string, sessionId: string): Promise<void> {
-        await this.sessions.delete({ id: sessionId, tenantId });
+    async deleteForTenant(
+        tenantId: string,
+        sessionId: string,
+        type?: SessionType,
+    ): Promise<void> {
+        await this.sessions.delete({
+            id: sessionId,
+            tenantId,
+            ...typeWhere(type),
+        });
     }
 
     async findExpiredSessionsForMaintenance(
