@@ -26,22 +26,6 @@ export function assertS256CodeChallenge(
 }
 
 /**
- * Require `S256` when an authorization request sends PKCE parameters but may
- * omit them, as the interactive authorization request of an
- * `openid4vp_presentation` interaction does. A challenge without a method
- * means `plain` (RFC 7636 Section 4.3) and is rejected as well.
- */
-export function assertS256CodeChallengeIfPresent(
-    codeChallenge: string | undefined,
-    codeChallengeMethod: string | undefined,
-): void {
-    if (codeChallenge === undefined && codeChallengeMethod === undefined) {
-        return;
-    }
-    assertS256CodeChallenge(codeChallenge, codeChallengeMethod);
-}
-
-/**
  * Check a PKCE `code_verifier` against the stored challenge (RFC 7636 Section 4.6).
  * Without a stored challenge there is nothing to verify. `S256` hashes the
  * verifier; any other method compares it literally (`plain`).
@@ -62,4 +46,20 @@ export function checkPkce(
             ? createHash("sha256").update(codeVerifier).digest("base64url")
             : codeVerifier;
     return expectedChallenge === codeChallenge ? "valid" : "mismatch";
+}
+
+/**
+ * PKCE check of an authorization code at the token endpoint (RFC 7636
+ * Section 4.6). Authorization codes are only issued for an `S256`
+ * code_challenge, so a code without one is never redeemable.
+ */
+export function checkS256Pkce(
+    codeChallenge: string | undefined,
+    codeChallengeMethod: string | undefined,
+    codeVerifier: string | undefined,
+): PkceCheck | "missing_challenge" {
+    if (!codeChallenge || codeChallengeMethod !== "S256") {
+        return "missing_challenge";
+    }
+    return checkPkce(codeChallenge, codeChallengeMethod, codeVerifier);
 }

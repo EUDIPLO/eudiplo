@@ -1,9 +1,12 @@
 import { randomBytes } from "node:crypto";
 import { BadRequestException, UnauthorizedException } from "@nestjs/common";
+import type { CallbackContext } from "@openid4vc/oauth2";
+import type { DpopProofReplayRegistry } from "../../ports/dpop-proof-replay-registry.js";
 import {
     type ChainedAsSession,
     ChainedAsSessionStatus,
 } from "../domain/chained-as-session.js";
+import { OAuthError } from "../domain/oauth-error.js";
 import {
     type AuthorizationServerTokenSettings,
     enforcedRefreshTokenExpiry,
@@ -12,6 +15,8 @@ import {
     refreshTokenPolicy,
 } from "../domain/token-grant-rules.js";
 import type { ChainedAsSessionRepository } from "../ports/chained-as-session.repository.js";
+import { DEFAULT_DPOP_SIGNING_ALG_VALUES_SUPPORTED } from "./authorization-server-metadata.util.js";
+import { verifyDpopProof } from "./dpop.util.js";
 import { ChainedAsTokenRequestDto } from "./dto/chained-as.dto.js";
 import { verifyPkceCodeChallenge } from "./pkce.util.js";
 
@@ -184,23 +189,84 @@ export async function assertTokenRequestSessionValid(
     }
 }
 
-export function resolveTokenBinding(
+/** Verification context for DPoP proofs sent to a chained authorization server. */
+export interface ChainedAsDpopVerification {
+    /** Issuer of the authorization server; its endpoints are `<issuer>/par` and `<issuer>/token`. */
+    issuer: string;
+    callbacks: Pick<CallbackContext, "hash" | "verifyJwt">;
+    replayRegistry: DpopProofReplayRegistry;
+}
+
+/**
+ * Verify the DPoP proof sent to the PAR or token endpoint of a chained
+ * authorization server (RFC 9449 Section 4.3), bound to the endpoint URL
+ * under the configured public URL and the advertised signing algorithms.
+ * Returns the RFC 7638 thumbprint of the proof key, or `undefined` without a
+ * proof. An invalid proof is rejected with `invalid_dpop_proof`.
+ */
+export async function verifyChainedAsDpopProof(
+    verification: ChainedAsDpopVerification,
+    endpoint: "par" | "token",
+    dpopJwt: string | undefined,
+    binding: { expectedJwkThumbprint?: string; required?: boolean } = {},
+): Promise<string | undefined> {
+    const { issuer } = verification;
+    try {
+        return await verifyDpopProof(
+            {
+                jwt: dpopJwt,
+                request: { method: "POST", url: `${issuer}/${endpoint}` },
+                authorizationServerMetadata: {
+                    issuer,
+                    token_endpoint: `${issuer}/token`,
+                    dpop_signing_alg_values_supported: [
+                        ...DEFAULT_DPOP_SIGNING_ALG_VALUES_SUPPORTED,
+                    ],
+                },
+                ...binding,
+            },
+            verification.callbacks,
+            verification.replayRegistry,
+        );
+    } catch (error) {
+        if (error instanceof OAuthError) {
+            throw new BadRequestException({
+                error: error.code,
+                error_description: error.description,
+                message: error.description,
+            });
+        }
+        throw error;
+    }
+}
+
+/**
+ * DPoP binding of a token request (RFC 9449 Sections 5 and 10). A session
+ * bound to a DPoP key at PAR, or a server requiring DPoP, needs a valid proof
+ * (with the bound key). The access token is DPoP-bound only to a verified
+ * proof key, which then also binds the session and its refresh token.
+ */
+export async function resolveTokenBinding(
+    verification: ChainedAsDpopVerification,
     requireDPoP: boolean | undefined,
     session: ChainedAsSession,
     dpopJwt?: string,
-): { tokenType: string; dpopJkt?: string } {
-    if (dpopJwt) {
-        return {
-            tokenType: "DPoP",
-            dpopJkt: session.dpopJkt,
-        };
-    }
+): Promise<{ tokenType: string; dpopJkt?: string }> {
+    const dpopJkt = await verifyChainedAsDpopProof(
+        verification,
+        "token",
+        dpopJwt,
+        {
+            expectedJwkThumbprint: session.dpopJkt,
+            required: !!requireDPoP || !!session.dpopJkt,
+        },
+    );
 
-    if (requireDPoP) {
-        throw new BadRequestException("DPoP proof is required");
+    if (!dpopJkt) {
+        return { tokenType: "Bearer" };
     }
-
-    return { tokenType: "Bearer" };
+    session.dpopJkt = dpopJkt;
+    return { tokenType: "DPoP", dpopJkt };
 }
 
 /**

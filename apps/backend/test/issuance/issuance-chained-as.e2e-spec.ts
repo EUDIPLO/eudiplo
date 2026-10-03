@@ -1,9 +1,17 @@
+import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
-import { decodeJwt } from "jose";
+import { createDpopHeadersForRequest, type Jwk } from "@openid4vc/oauth2";
+import {
+    calculateJwkThumbprint,
+    decodeJwt,
+    exportJWK,
+    generateKeyPair,
+    SignJWT,
+} from "jose";
 import nock from "nock";
 import request from "supertest";
 import { App } from "supertest/types";
@@ -21,7 +29,15 @@ import { AppModule } from "../../src/app.module.js";
 import { KeyChainImportDto } from "../../src/crypto/key/dto/key-chain-import.dto.js";
 import { CredentialConfigCreate } from "../../src/issuer/configuration/credentials/dto/credential-config-create.dto.js";
 import { IssuanceDto } from "../../src/issuer/configuration/issuance/dto/issuance.dto.js";
-import { getToken, readConfig } from "../utils.js";
+import { SessionStore } from "../../src/session/application/session-store.js";
+import { SessionStatus } from "../../src/session/domain/session-state.js";
+import { PresentationConfigCreateDto } from "../../src/verifier/presentations/dto/presentation-config-create.dto.js";
+import {
+    callbacks,
+    getSignJwtCallback,
+    getToken,
+    readConfig,
+} from "../utils.js";
 
 setGlobalDispatcher(
     new Agent({
@@ -98,11 +114,66 @@ function createFakeIdToken(claims: Record<string, unknown>): string {
     return `${header}.${payload}.`;
 }
 
+async function holderKey() {
+    const { privateKey, publicKey } = await generateKeyPair("ES256", {
+        extractable: true,
+    });
+    return {
+        privateKey,
+        privateJwk: (await exportJWK(privateKey)) as Jwk,
+        publicJwk: (await exportJWK(publicKey)) as Jwk,
+    };
+}
+
+type HolderKey = Awaited<ReturnType<typeof holderKey>>;
+
+/** A DPoP proof for a POST to `url`, created like a wallet does with the OAuth library. */
+async function dpopProof(key: HolderKey, url: string): Promise<string> {
+    const { DPoP } = await createDpopHeadersForRequest({
+        request: { method: "POST", url },
+        signer: { method: "jwk", alg: "ES256", publicJwk: key.publicJwk },
+        callbacks: {
+            ...callbacks,
+            signJwt: getSignJwtCallback([key.privateJwk]),
+        },
+    });
+    return DPoP;
+}
+
+/** A hand-made DPoP proof for a POST to `url`, to break single checks. */
+function craftedDpopProof(
+    key: HolderKey,
+    url: string,
+    {
+        payload = {},
+        signingKey = key.privateKey,
+    }: {
+        payload?: Record<string, unknown>;
+        signingKey?: HolderKey["privateKey"];
+    } = {},
+): Promise<string> {
+    return new SignJWT({
+        htm: "POST",
+        htu: url,
+        iat: Math.floor(Date.now() / 1000),
+        jti: randomUUID(),
+        ...payload,
+    })
+        .setProtectedHeader({
+            alg: "ES256",
+            typ: "dpop+jwt",
+            jwk: key.publicJwk,
+        })
+        .sign(signingKey);
+}
+
 describe("Issuance - Chained AS Flow", () => {
     let app: INestApplication<App>;
     let authToken: string;
     let clientId: string;
     let clientSecret: string;
+    let publicUrl: string;
+    let sessionStore: SessionStore;
 
     beforeAll(async () => {
         // Delete the database
@@ -121,8 +192,11 @@ describe("Issuance - Chained AS Flow", () => {
 
         clientId = configService.getOrThrow<string>("AUTH_CLIENT_ID");
         clientSecret = configService.getOrThrow<string>("AUTH_CLIENT_SECRET");
+        publicUrl = configService.getOrThrow<string>("PUBLIC_URL");
 
         await app.init();
+
+        sessionStore = app.get(SessionStore);
 
         authToken = await getToken(app, clientId, clientSecret, "haip");
 
@@ -283,6 +357,111 @@ describe("Issuance - Chained AS Flow", () => {
             .expect(400);
 
         expect(response.body.message).toContain("'oid4vp'");
+    });
+
+    test("OID4VP authorization server binds the token to the PAR DPoP key", async () => {
+        await request(app.getHttpServer())
+            .post("/verifier/config")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send(
+                readConfig<PresentationConfigCreateDto>(
+                    join(
+                        resolve(__dirname + "/../fixtures"),
+                        "haip/presentation/pid-no-hook.json",
+                    ),
+                ),
+            )
+            .expect(201);
+        const currentConfigResponse = await request(app.getHttpServer())
+            .get("/issuer/config")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        await request(app.getHttpServer())
+            .post("/issuer/config")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                ...currentConfigResponse.body,
+                authorizationServers: [
+                    {
+                        id: "vp-as",
+                        type: "oid4vp",
+                        presentationConfigId: "pid-no-hook",
+                        token: { lifetimeSeconds: 3600 },
+                        requireDPoP: false,
+                    },
+                ],
+            })
+            .expect(201);
+
+        const path = "/issuers/haip/authorization-servers/vp-as";
+        const key = await holderKey();
+        const parResponse = await request(app.getHttpServer())
+            .post(`${path}/par`)
+            .trustLocalhost()
+            .set("DPoP", await dpopProof(key, `${publicUrl}${path}/par`))
+            .send({
+                response_type: "code",
+                client_id: "test-wallet",
+                redirect_uri: "http://wallet.example.com/callback",
+                code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+                code_challenge_method: "S256",
+            })
+            .expect(201);
+        await request(app.getHttpServer())
+            .get(`${path}/authorize`)
+            .query({
+                client_id: "test-wallet",
+                request_uri: parResponse.body.request_uri,
+            })
+            .trustLocalhost()
+            .expect(200);
+        const sessionId = parResponse.body.request_uri.replace(
+            "urn:ietf:params:oauth:request_uri:",
+            "",
+        );
+        await sessionStore.updateForTenant("haip", sessionId, {
+            status: SessionStatus.Completed,
+            responseCode: "vp-response-code",
+        });
+        const callbackResponse = await request(app.getHttpServer())
+            .get(`${path}/vp-callback`)
+            .query({ cas: sessionId, response_code: "vp-response-code" })
+            .trustLocalhost()
+            .redirects(0)
+            .expect(302);
+        const tokenRequest = {
+            grant_type: "authorization_code",
+            code: new URL(callbackResponse.headers.location).searchParams.get(
+                "code",
+            ),
+            redirect_uri: "http://wallet.example.com/callback",
+            code_verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+        };
+
+        const otherKey = await request(app.getHttpServer())
+            .post(`${path}/token`)
+            .trustLocalhost()
+            .set(
+                "DPoP",
+                await dpopProof(await holderKey(), `${publicUrl}${path}/token`),
+            )
+            .send(tokenRequest)
+            .expect(400);
+        expect(otherKey.body.error).toBe("invalid_dpop_proof");
+
+        const tokenResponse = await request(app.getHttpServer())
+            .post(`${path}/token`)
+            .trustLocalhost()
+            .set("DPoP", await dpopProof(key, `${publicUrl}${path}/token`))
+            .send(tokenRequest)
+            .expect(200);
+        expect(tokenResponse.body.token_type).toBe("DPoP");
+        expect(decodeJwt(tokenResponse.body.access_token).cnf).toEqual({
+            jkt: await calculateJwkThumbprint(key.publicJwk, "sha256"),
+        });
     });
 
     test("token endpoint supports refresh_token grant in Chained AS flow", async () => {
@@ -770,5 +949,208 @@ describe("Issuance - Chained AS Flow", () => {
         expect(walletRedirectUrl.searchParams.get("state")).toBe(
             "wallet-state-error",
         );
+    });
+
+    describe("DPoP", () => {
+        const parUrl = () => `${publicUrl}/issuers/haip/chained-as/par`;
+        const tokenUrl = () => `${publicUrl}/issuers/haip/chained-as/token`;
+
+        const par = (dpop?: string) => {
+            const req = request(app.getHttpServer())
+                .post("/issuers/haip/chained-as/par")
+                .trustLocalhost();
+            if (dpop) req.set("DPoP", dpop);
+            return req.send({
+                response_type: "code",
+                client_id: "test-wallet",
+                redirect_uri: "http://wallet.example.com/callback",
+                code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+                code_challenge_method: "S256",
+            });
+        };
+
+        /** PAR, authorization and upstream callback; returns the wallet's code. */
+        async function authorizationCode(parDpop?: string): Promise<string> {
+            const parResponse = await par(parDpop).expect(201);
+            const authorizeResponse = await request(app.getHttpServer())
+                .get("/issuers/haip/chained-as/authorize")
+                .query({
+                    client_id: "test-wallet",
+                    request_uri: parResponse.body.request_uri,
+                })
+                .trustLocalhost()
+                .redirects(0)
+                .expect(302);
+            const callbackResponse = await request(app.getHttpServer())
+                .get("/issuers/haip/chained-as/callback")
+                .query({
+                    code: "upstream-auth-code",
+                    state: new URL(
+                        authorizeResponse.headers.location,
+                    ).searchParams.get("state"),
+                })
+                .trustLocalhost()
+                .redirects(0)
+                .expect(302);
+            return new URL(callbackResponse.headers.location).searchParams.get(
+                "code",
+            )!;
+        }
+
+        const token = (body: Record<string, string>, dpop?: string) => {
+            const req = request(app.getHttpServer())
+                .post("/issuers/haip/chained-as/token")
+                .trustLocalhost();
+            if (dpop) req.set("DPoP", dpop);
+            return req.send(body);
+        };
+
+        const codeGrant = (code: string) => ({
+            grant_type: "authorization_code",
+            code,
+            redirect_uri: "http://wallet.example.com/callback",
+            code_verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+        });
+
+        beforeEach(async () => {
+            setupUpstreamOidcMocks();
+            mockUpstreamTokenResponse({ sub: "dpop-user" });
+            await configureChainedAs(true);
+        });
+
+        test("binds the access and refresh token to the verified DPoP key", async () => {
+            const key = await holderKey();
+            const code = await authorizationCode(
+                await dpopProof(key, parUrl()),
+            );
+
+            const tokenResponse = await token(
+                codeGrant(code),
+                await dpopProof(key, tokenUrl()),
+            ).expect(200);
+            expect(tokenResponse.body.token_type).toBe("DPoP");
+            expect(decodeJwt(tokenResponse.body.access_token).cnf).toEqual({
+                jkt: await calculateJwkThumbprint(key.publicJwk, "sha256"),
+            });
+
+            const refreshGrant = {
+                grant_type: "refresh_token",
+                refresh_token: tokenResponse.body.refresh_token,
+            };
+            const withoutProof = await token(refreshGrant).expect(400);
+            expect(withoutProof.body.error).toBe("invalid_dpop_proof");
+            const otherKey = await token(
+                refreshGrant,
+                await dpopProof(await holderKey(), tokenUrl()),
+            ).expect(400);
+            expect(otherKey.body.error).toBe("invalid_dpop_proof");
+
+            const refreshed = await token(
+                refreshGrant,
+                await dpopProof(key, tokenUrl()),
+            ).expect(200);
+            expect(refreshed.body.token_type).toBe("DPoP");
+        });
+
+        test.each<[string, (key: HolderKey) => Promise<string>]>([
+            [
+                "a forged signature",
+                async (key) =>
+                    craftedDpopProof(key, parUrl(), {
+                        signingKey: (await holderKey()).privateKey,
+                    }),
+            ],
+            [
+                "the wrong htm",
+                (key) =>
+                    craftedDpopProof(key, parUrl(), {
+                        payload: { htm: "GET" },
+                    }),
+            ],
+            ["the wrong htu", (key) => craftedDpopProof(key, tokenUrl())],
+            [
+                "a stale iat",
+                (key) =>
+                    craftedDpopProof(key, parUrl(), {
+                        payload: { iat: Math.floor(Date.now() / 1000) - 3600 },
+                    }),
+            ],
+            [
+                "no signature",
+                async (key) => {
+                    const [, payload] = (
+                        await craftedDpopProof(key, parUrl())
+                    ).split(".");
+                    const header = Buffer.from(
+                        JSON.stringify({
+                            alg: "none",
+                            typ: "dpop+jwt",
+                            jwk: key.publicJwk,
+                        }),
+                    ).toString("base64url");
+                    return `${header}.${payload}.`;
+                },
+            ],
+            ["a malformed value", async () => "not-a-dpop-proof"],
+        ])("rejects a PAR DPoP proof with %s", async (_, createProof) => {
+            const response = await par(
+                await createProof(await holderKey()),
+            ).expect(400);
+            expect(response.body.error).toBe("invalid_dpop_proof");
+        });
+
+        test("rejects a replayed PAR DPoP proof", async () => {
+            const proof = await dpopProof(await holderKey(), parUrl());
+            await par(proof).expect(201);
+
+            const replay = await par(proof).expect(400);
+            expect(replay.body.error).toBe("invalid_dpop_proof");
+        });
+
+        test("requires a DPoP proof with the PAR-bound key at the token endpoint", async () => {
+            const key = await holderKey();
+            const code = await authorizationCode(
+                await dpopProof(key, parUrl()),
+            );
+
+            const withoutProof = await token(codeGrant(code)).expect(400);
+            expect(withoutProof.body.error).toBe("invalid_dpop_proof");
+            const otherKey = await token(
+                codeGrant(code),
+                await dpopProof(await holderKey(), tokenUrl()),
+            ).expect(400);
+            expect(otherKey.body.error).toBe("invalid_dpop_proof");
+
+            await token(codeGrant(code), await dpopProof(key, tokenUrl()))
+                .expect(200)
+                .expect(({ body }) => expect(body.token_type).toBe("DPoP"));
+        });
+
+        test("never issues a DPoP token for an invalid proof", async () => {
+            const forged = await craftedDpopProof(
+                await holderKey(),
+                tokenUrl(),
+                { signingKey: (await holderKey()).privateKey },
+            );
+
+            const response = await token(
+                codeGrant(await authorizationCode()),
+                forged,
+            ).expect(400);
+            expect(response.body.error).toBe("invalid_dpop_proof");
+        });
+
+        test("rejects a replayed DPoP proof at the token endpoint", async () => {
+            const proof = await dpopProof(await holderKey(), tokenUrl());
+            await token(codeGrant(await authorizationCode()), proof).expect(
+                200,
+            );
+
+            const replay = await token(
+                codeGrant(await authorizationCode()),
+                proof,
+            ).expect(400);
+            expect(replay.body.error).toBe("invalid_dpop_proof");
+        });
     });
 });

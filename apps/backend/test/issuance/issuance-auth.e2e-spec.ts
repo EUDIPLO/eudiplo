@@ -198,4 +198,117 @@ describe("Issuance - Authorization Code Flow", () => {
         expect(notificationObj).toBeDefined();
         expect(notificationObj.event).toBe("credential_accepted");
     });
+
+    describe("token endpoint grant binding", () => {
+        const codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        const codeChallenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+        const redirectUri = "http://127.0.0.1:3000/callback";
+
+        const createOffer = (
+            flow: "authorization_code" | "pre_authorized_code",
+        ) =>
+            request(app.getHttpServer())
+                .post("/issuer/offer")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    response_type: "uri",
+                    credentialConfigurationIds: ["pid-no-key"],
+                    flow,
+                    ...(flow === "pre_authorized_code" && { tx_code: "1234" }),
+                })
+                .expect(201);
+
+        /** Pushed authorization request and authorization for `issuerState`; returns the code. */
+        async function authorize(issuerState: string): Promise<string> {
+            const parResponse = await request(app.getHttpServer())
+                .post("/issuers/root/authorize/par")
+                .type("form")
+                .send({
+                    response_type: "code",
+                    client_id: "wallet",
+                    redirect_uri: redirectUri,
+                    code_challenge: codeChallenge,
+                    code_challenge_method: "S256",
+                    issuer_state: issuerState,
+                })
+                .expect(201);
+            const authorizeResponse = await request(app.getHttpServer())
+                .get("/issuers/root/authorize")
+                .query({
+                    client_id: "wallet",
+                    request_uri: parResponse.body.request_uri,
+                })
+                .redirects(0)
+                .expect(302);
+            return new URL(authorizeResponse.headers.location).searchParams.get(
+                "code",
+            )!;
+        }
+
+        const token = (body: Record<string, string>) =>
+            request(app.getHttpServer())
+                .post("/issuers/root/authorize/token")
+                .type("form")
+                .send(body);
+
+        test("rejects an authorization code redeemed with the pre-authorized_code grant", async () => {
+            const offerResponse = await createOffer("authorization_code");
+            const code = await authorize(offerResponse.body.session);
+
+            const response = await token({
+                grant_type:
+                    "urn:ietf:params:oauth:grant-type:pre-authorized_code",
+                "pre-authorized_code": code,
+            }).expect(400);
+            expect(response.body.error).toBe("invalid_grant");
+
+            // The code stays redeemable by the client holding the code_verifier.
+            await token({
+                grant_type: "authorization_code",
+                code,
+                client_id: "wallet",
+                redirect_uri: redirectUri,
+                code_verifier: codeVerifier,
+            }).expect(200);
+        });
+
+        test("rejects a pre-authorized code redeemed with the authorization_code grant", async () => {
+            const offerResponse = await createOffer("pre_authorized_code");
+            const client = new Openid4vciClient({
+                callbacks: {
+                    ...callbacks,
+                    clientAuthentication: clientAuthenticationAnonymous(),
+                },
+            });
+            const credentialOffer = await client.resolveCredentialOffer(
+                offerResponse.body.uri,
+            );
+            const preAuthorizedCode =
+                credentialOffer.grants?.[
+                    "urn:ietf:params:oauth:grant-type:pre-authorized_code"
+                ]?.["pre-authorized_code"];
+            expect(preAuthorizedCode).toBeDefined();
+
+            const response = await token({
+                grant_type: "authorization_code",
+                code: preAuthorizedCode!,
+            }).expect(400);
+            expect(response.body.error).toBe("invalid_grant");
+        });
+
+        test("rejects an authorization code for a pre-authorized offer", async () => {
+            const offerResponse = await createOffer("pre_authorized_code");
+            const code = await authorize(offerResponse.body.session);
+
+            const response = await token({
+                grant_type: "authorization_code",
+                code,
+                client_id: "wallet",
+                redirect_uri: redirectUri,
+                code_verifier: codeVerifier,
+            }).expect(400);
+            expect(response.body.error).toBe("invalid_grant");
+        });
+    });
 });

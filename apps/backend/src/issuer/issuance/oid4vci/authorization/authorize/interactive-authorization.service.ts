@@ -33,7 +33,7 @@ import {
     InteractiveAuthSessionStatus,
 } from "../domain/interactive-auth-session.js";
 import { OAuthError } from "../domain/oauth-error.js";
-import { assertS256CodeChallengeIfPresent, checkPkce } from "../domain/pkce.js";
+import { assertS256CodeChallenge, checkS256Pkce } from "../domain/pkce.js";
 import {
     INTERACTIVE_AUTH_SESSION_REPOSITORY,
     type InteractiveAuthSessionRepository,
@@ -299,10 +299,11 @@ export class InteractiveAuthorizationService {
             };
         }
 
-        // PKCE stays optional for openid4vp_presentation, but only with S256
-        // (HAIP 1.0 Section 4), as on the pushed authorization request.
+        // PKCE with S256 is mandatory for every interaction (HAIP 1.0
+        // Section 4): the token endpoint only redeems the issued code with the
+        // matching code_verifier.
         try {
-            assertS256CodeChallengeIfPresent(
+            assertS256CodeChallenge(
                 request.code_challenge,
                 request.code_challenge_method,
             );
@@ -699,9 +700,11 @@ export class InteractiveAuthorizationService {
 
         // The initial request only accepts S256 challenges.
         const verifierValid =
-            authSession.codeChallengeMethod === "S256" &&
-            checkPkce(authSession.codeChallenge, "S256", codeVerifier) ===
-                "valid";
+            checkS256Pkce(
+                authSession.codeChallenge,
+                authSession.codeChallengeMethod,
+                codeVerifier,
+            ) === "valid";
 
         if (!verifierValid) {
             return {
@@ -906,6 +909,13 @@ export class InteractiveAuthorizationService {
                     authSession.issuerState,
                     {
                         authorization_code: authorizationCode,
+                        // The token endpoint verifies the code_verifier
+                        // against this challenge (RFC 7636 Section 4.6).
+                        auth_queries: {
+                            code_challenge: authSession.codeChallenge,
+                            code_challenge_method:
+                                authSession.codeChallengeMethod,
+                        },
                     },
                 );
             } catch (error) {

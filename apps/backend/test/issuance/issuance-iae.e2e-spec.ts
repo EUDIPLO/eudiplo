@@ -18,6 +18,11 @@ describe("Interactive Authorization Endpoint (IAE)", () => {
     let authToken: string;
     let ctx: IssuanceTestContext;
     const tenantId = "root";
+    /** PKCE with S256 is required on every initial request. */
+    const pkce = {
+        code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        code_challenge_method: "S256",
+    };
 
     beforeAll(async () => {
         ctx = await setupIssuanceTestApp();
@@ -39,6 +44,7 @@ describe("Interactive Authorization Endpoint (IAE)", () => {
                     interaction_types_supported: "openid4vp_presentation",
                     redirect_uri: "https://wallet.example.com/callback",
                     scope: "openid",
+                    ...pkce,
                 })
                 .expect(200);
 
@@ -79,11 +85,41 @@ describe("Interactive Authorization Endpoint (IAE)", () => {
                     interaction_types_supported:
                         "openid4vp_presentation,redirect_to_web",
                     redirect_uri: "https://wallet.example.com/callback",
+                    ...pkce,
                 })
                 .expect(200);
 
             expect(response.body.type).toBe("openid4vp_presentation");
         });
+
+        test.each([
+            [{}, "code_challenge"],
+            [{ code_challenge: pkce.code_challenge }, "S256"],
+            [
+                {
+                    code_challenge:
+                        "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+                    code_challenge_method: "plain",
+                },
+                "S256",
+            ],
+        ])(
+            "should return error without an S256 code_challenge (%o)",
+            async (challenge, description) => {
+                const response = await request(app.getHttpServer())
+                    .post(`/issuers/${tenantId}/authorize/interactive`)
+                    .send({
+                        response_type: "code",
+                        client_id: "test-wallet",
+                        interaction_types_supported: "openid4vp_presentation",
+                        ...challenge,
+                    })
+                    .expect(400);
+
+                expect(response.body.error).toBe("invalid_request");
+                expect(response.body.error_description).toContain(description);
+            },
+        );
 
         test("should return error when client_id is missing", async () => {
             const response = await request(app.getHttpServer())
@@ -123,6 +159,7 @@ describe("Interactive Authorization Endpoint (IAE)", () => {
                             credential_configuration_id: "pid-no-key",
                         },
                     ]),
+                    ...pkce,
                 })
                 .expect(200);
 
@@ -222,6 +259,7 @@ describe("Interactive Authorization Endpoint (IAE)", () => {
                         client_id: "test-wallet",
                         interaction_types_supported: "openid4vp_presentation",
                         issuer_state: issuerState,
+                        ...pkce,
                     })
                     .expect(200);
 
@@ -254,6 +292,7 @@ describe("Interactive Authorization Endpoint (IAE)", () => {
                     response_type: "code",
                     client_id: "test-wallet",
                     interaction_types_supported: "openid4vp_presentation",
+                    ...pkce,
                 })
                 .expect(200);
 
@@ -278,6 +317,7 @@ describe("Interactive Authorization Endpoint (IAE)", () => {
                     response_type: "code",
                     client_id: "test-wallet",
                     interaction_types_supported: "openid4vp_presentation",
+                    ...pkce,
                 })
                 .expect(200);
 
@@ -434,6 +474,85 @@ describe("Interactive Authorization Endpoint (IAE)", () => {
         });
     });
 
+    describe("Token endpoint", () => {
+        const codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        const codeChallenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+
+        /** Completes an IAE flow for a new authorization code offer and returns the code. */
+        async function issueIaeCode(): Promise<string> {
+            const offerResponse = await request(app.getHttpServer())
+                .post("/issuer/offer")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    response_type: "uri",
+                    credentialConfigurationIds: ["pid-no-key"],
+                    flow: "authorization_code",
+                })
+                .expect(201);
+
+            const initialResponse = await request(app.getHttpServer())
+                .post(`/issuers/${tenantId}/authorize/interactive`)
+                .send({
+                    response_type: "code",
+                    client_id: "test-wallet",
+                    interaction_types_supported: "openid4vp_presentation",
+                    issuer_state: offerResponse.body.session,
+                    code_challenge: codeChallenge,
+                    code_challenge_method: "S256",
+                })
+                .expect(200);
+
+            const codeResponse = await request(app.getHttpServer())
+                .post(`/issuers/${tenantId}/authorize/interactive`)
+                .send({
+                    auth_session: initialResponse.body.auth_session,
+                    openid4vp_response: JSON.stringify({
+                        vp_token: "mock-vp-token",
+                    }),
+                })
+                .expect(200);
+
+            expect(codeResponse.body.code).toBeDefined();
+            return codeResponse.body.code;
+        }
+
+        const redeem = (code: string, verifier?: string) =>
+            request(app.getHttpServer())
+                .post(`/issuers/${tenantId}/authorize/token`)
+                .type("form")
+                .send({
+                    grant_type: "authorization_code",
+                    code,
+                    client_id: "test-wallet",
+                    ...(verifier && { code_verifier: verifier }),
+                });
+
+        test("rejects an IAE authorization code without code_verifier", async () => {
+            const response = await redeem(await issueIaeCode()).expect(400);
+
+            expect(response.body.error).toBe("invalid_grant");
+        });
+
+        test("rejects an IAE authorization code with a wrong code_verifier", async () => {
+            const response = await redeem(
+                await issueIaeCode(),
+                "wrong-code-verifier-wrong-code-verifier-wrong",
+            ).expect(400);
+
+            expect(response.body.error).toBe("invalid_grant");
+        });
+
+        test("redeems an IAE authorization code with the matching code_verifier", async () => {
+            const response = await redeem(
+                await issueIaeCode(),
+                codeVerifier,
+            ).expect(200);
+
+            expect(response.body.access_token).toBeDefined();
+        });
+    });
+
     describe("Complete Web Auth Endpoint", () => {
         test("should return error for non-existent session", async () => {
             const response = await request(app.getHttpServer())
@@ -566,6 +685,7 @@ describe("Interactive Authorization Endpoint (IAE)", () => {
                             credential_configuration_id: "pid-no-key", // Uses default presentation config
                         },
                     ]),
+                    ...pkce,
                 })
                 .expect(200);
 

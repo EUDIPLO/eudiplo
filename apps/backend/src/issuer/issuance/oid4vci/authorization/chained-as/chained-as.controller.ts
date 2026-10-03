@@ -26,7 +26,6 @@ import {
     ChainedAsParResponseDto,
     ChainedAsTokenRequestDto,
     ChainedAsTokenResponseDto,
-    extractDpopJkt,
 } from "../shared/index.js";
 import { ChainedAsService } from "./chained-as.service.js";
 
@@ -106,9 +105,6 @@ export class ChainedAsController {
         @Headers("oauth-client-attestation-pop")
         clientAttestationPopJwt?: string,
     ): Promise<ChainedAsParResponseDto> {
-        // DPoP JWK thumbprint extraction will be handled in service layer when DPoP is fully implemented
-        const dpopJkt = dpopJwt ? extractDpopJkt(dpopJwt) : undefined;
-
         // Build client attestation object if both headers are provided
         const clientAttestation =
             clientAttestationJwt && clientAttestationPopJwt
@@ -118,7 +114,7 @@ export class ChainedAsController {
         return this.chainedAsService.handlePar(
             tenantId,
             body,
-            dpopJkt,
+            dpopJwt,
             clientAttestation,
         );
     }

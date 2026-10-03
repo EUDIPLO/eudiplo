@@ -16,7 +16,7 @@ import type { Oid4vciSettings } from "../../oid4vci-settings.js";
 import type { DpopProofReplayRegistry } from "../../ports/dpop-proof-replay-registry.js";
 import { OAuthError } from "../domain/oauth-error.js";
 import { assertOfferRedeemable } from "../domain/offer-redemption.js";
-import { checkPkce } from "../domain/pkce.js";
+import { checkS256Pkce } from "../domain/pkce.js";
 import {
     describeLibraryError,
     describeMalformedTokenRequest,
@@ -24,6 +24,7 @@ import {
     toTokenErrorCode,
 } from "../domain/token-errors.js";
 import {
+    assertCodeIssuedForGrant,
     assertIssuedToClient,
     authorizationDetailsForToken,
     builtInAccessTokenSettings,
@@ -135,6 +136,10 @@ export class ExchangeAccessToken {
         // keep their own lifetime after the session is fetched or completed.
         if (!isRefreshGrant) {
             assertOfferRedeemable(session, new Date(), "invalid_grant");
+            assertCodeIssuedForGrant(
+                grantType,
+                session.credentialPayload?.flow,
+            );
         }
 
         const issuanceConfig =
@@ -215,12 +220,13 @@ export class ExchangeAccessToken {
             );
         }
 
+        // PAR and the interactive authorization endpoint bind every
+        // authorization code to an S256 code_challenge.
         if (
             grantType === authorizationCodeGrantIdentifier &&
-            session.auth_queries?.code_challenge &&
-            checkPkce(
-                session.auth_queries.code_challenge,
-                session.auth_queries.code_challenge_method,
+            checkS256Pkce(
+                session.auth_queries?.code_challenge,
+                session.auth_queries?.code_challenge_method,
                 body?.code_verifier,
             ) !== "valid"
         ) {

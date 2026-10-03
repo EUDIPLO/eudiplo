@@ -1,3 +1,4 @@
+import { preAuthorizedCodeGrantIdentifier } from "@openid4vc/oauth2";
 import { calculateJwkThumbprint, decodeJwt, type JWK } from "jose";
 import { OAuthError } from "./oauth-error.js";
 import type { WalletAttestationPolicyConfig } from "./wallet-attestation-policy.js";
@@ -152,6 +153,27 @@ export async function clientInstanceKeyThumbprint(
     }
     const jwk = (decodeJwt(clientAttestationJwt).cnf as { jwk?: JWK })?.jwk;
     return jwk ? calculateJwkThumbprint(jwk, "sha256") : undefined;
+}
+
+/**
+ * Pre-authorized codes and authorization codes are stored in the same session
+ * column, so a code is only redeemable with the grant it was issued for: the
+ * pre-authorized code of a pre-authorized offer with the pre-authorized_code
+ * grant, any other code with the authorization_code grant. Otherwise switching
+ * the grant type would skip the `tx_code` of a pre-authorized code or the PKCE
+ * and client binding of an authorization code.
+ */
+export function assertCodeIssuedForGrant(
+    grantType: string,
+    offerFlow: string | undefined,
+): void {
+    const preAuthorizedGrant = grantType === preAuthorizedCodeGrantIdentifier;
+    if (preAuthorizedGrant !== (offerFlow === "pre_authorized_code")) {
+        throw new OAuthError(
+            "invalid_grant",
+            "The provided code was not issued for this grant_type",
+        );
+    }
 }
 
 /**
