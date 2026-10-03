@@ -7,7 +7,12 @@ import {
     runCompletionCandidates,
 } from "./action.js";
 
-const supportedShells: CompletionShell[] = ["bash", "zsh", "fish", "powershell"];
+const supportedShells: CompletionShell[] = [
+    "bash",
+    "zsh",
+    "fish",
+    "powershell",
+];
 
 export function createCompletionCommand(
     context: CommandContext,
@@ -32,12 +37,24 @@ export function createCompletionCandidatesCommand(
     return new Command("_complete")
         .argument("[words...]")
         .allowUnknownOption(true)
-        .action(async (words: string[], _options: OptionValues, command: Command) => {
-            if (!command.parent) {
-                throw new Error("Completion command is not attached to the CLI root.");
-            }
-            setExitCode(
-                await runCompletionCandidates(command.parent, words, context),
-            );
-        });
+        .action(
+            async (
+                words: string[],
+                _options: OptionValues,
+                command: Command,
+            ) => {
+                if (!command.parent) {
+                    throw new Error(
+                        "Completion command is not attached to the CLI root.",
+                    );
+                }
+                setExitCode(
+                    await runCompletionCandidates(
+                        command.parent,
+                        words,
+                        context,
+                    ),
+                );
+            },
+        );
 }

@@ -82,7 +82,7 @@ const apiReachabilityCheck: DoctorCheckDefinition = {
     id: "api-reachability",
     run: ({ baseUrl, context }) =>
         requireBaseUrl("API reachability", baseUrl, (url) =>
-            checkEndpoint("API reachability", url, "/api/docs", context),
+            checkEndpoint("API reachability", url, "api/docs", context),
         ),
 };
 
@@ -90,7 +90,7 @@ const healthEndpointCheck: DoctorCheckDefinition = {
     id: "health-endpoint",
     run: ({ baseUrl, context }) =>
         requireBaseUrl("health endpoint", baseUrl, (url) =>
-            checkEndpoint("health endpoint", url, "/health", context),
+            checkEndpoint("health endpoint", url, "health", context),
         ),
 };
 
@@ -136,7 +136,7 @@ const clientConnectivityCheck: DoctorCheckDefinition = {
                 message: `${instance.clientUrl} is not a valid absolute URL`,
             };
         }
-        return checkEndpoint("client connectivity", clientUrl, "/", context);
+        return checkEndpoint("client connectivity", clientUrl, "", context);
     },
 };
 
@@ -149,19 +149,19 @@ const versionCompatibilityCheck: DoctorCheckDefinition = {
                 return authUnavailable("version compatibility", token);
             }
             const response = await fetchAuthenticated(
-                new URL("version", withTrailingSlash(url)),
+                new URL("api/version", withTrailingSlash(url)),
                 token.accessToken,
                 context,
             );
             if (!response.ok) {
-                // Older backends have no /version endpoint. That cannot be
-                // checked rather than being a failure of the deployment.
+                // A backend without /api/version (added in v4.0.0) cannot be
+                // checked; that is not a failure of the deployment.
                 if (response.status === 404) {
                     return {
                         name: "version compatibility",
                         status: "skip",
                         message:
-                            "This backend does not expose /version, so compatibility cannot be checked.",
+                            "This backend does not expose /api/version, so compatibility cannot be checked.",
                     };
                 }
                 return {
@@ -191,11 +191,15 @@ const kmsHealthCheck: DoctorCheckDefinition = {
                 return authUnavailable("KMS providers", token);
             }
             const response = await fetchAuthenticated(
-                new URL("key-chain/providers/health", withTrailingSlash(url)),
+                new URL(
+                    "api/key-chain/providers/health",
+                    withTrailingSlash(url),
+                ),
                 token.accessToken,
                 context,
             );
             if (!response.ok) {
+                // Backends before v4.5.0 have no provider health endpoint.
                 if (response.status === 404) {
                     return {
                         name: "KMS providers",
@@ -345,13 +349,17 @@ async function requireBaseUrl(
     return run(baseUrl);
 }
 
+/**
+ * `path` is relative, so a path prefix in the base URL (e.g.
+ * https://example.com/eudiplo) is kept, as for the authenticated checks.
+ */
 async function checkEndpoint(
     name: string,
     baseUrl: URL,
     path: string,
     context: CommandContext,
 ): Promise<DoctorCheck> {
-    const url = new URL(path, baseUrl);
+    const url = new URL(path, withTrailingSlash(baseUrl));
     try {
         const response = await context.fetch(url, { method: "GET" });
         if (response.ok) {

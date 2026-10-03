@@ -42,10 +42,5 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/env/-
         value:
-          name: KM_TYPE
-          value: "vault"
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value:
           name: VAULT_ADDR
           value: "http://vault:8200"

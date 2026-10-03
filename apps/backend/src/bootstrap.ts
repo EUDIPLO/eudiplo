@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
@@ -15,73 +15,10 @@ import {
 } from "./main.helpers.js";
 import { splitCorsOrigins } from "./platform/config/cors-validation.schema.js";
 import { getActiveSkipFlags } from "./platform/config/skip-validation.schema.js";
+import { loadTlsOptions } from "./platform/config/tls-options.js";
 import { ValidationErrorFilter } from "./shared/common/filters/validation-error.filter.js";
 import { createAppValidationPipe } from "./shared/common/zod/zod-schema.util.js";
 import { registerTolerantX509Extensions } from "./shared/utils/x509-tolerant-extensions.js";
-
-/**
- * TLS configuration options for HTTPS server.
- */
-interface TlsOptions {
-    cert: Buffer;
-    key: Buffer;
-    ca?: Buffer;
-    passphrase?: string;
-}
-
-/**
- * Load TLS options from certificate and key files.
- * Returns undefined if TLS is not enabled or files are not found.
- */
-function loadTlsOptions(): TlsOptions | undefined {
-    const tlsEnabled = process.env.TLS_ENABLED?.toLowerCase() === "true";
-    if (!tlsEnabled) {
-        return undefined;
-    }
-
-    const certPath = process.env.TLS_CERT_PATH;
-    const keyPath = process.env.TLS_KEY_PATH;
-    const caPath = process.env.TLS_CA_PATH;
-
-    if (!certPath || !keyPath) {
-        console.warn(
-            "⚠️ TLS_ENABLED is true but TLS_CERT_PATH or TLS_KEY_PATH is not set. Falling back to HTTP.",
-        );
-        return undefined;
-    }
-
-    if (!existsSync(certPath)) {
-        console.warn(
-            `⚠️ TLS certificate file not found: ${certPath}. Falling back to HTTP.`,
-        );
-        return undefined;
-    }
-
-    if (!existsSync(keyPath)) {
-        console.warn(
-            `⚠️ TLS key file not found: ${keyPath}. Falling back to HTTP.`,
-        );
-        return undefined;
-    }
-
-    const options: TlsOptions = {
-        cert: readFileSync(certPath),
-        key: readFileSync(keyPath),
-    };
-
-    // Optional: Load CA certificate chain for client verification
-    if (caPath && existsSync(caPath)) {
-        options.ca = readFileSync(caPath);
-    }
-
-    // Optional: Passphrase for encrypted key files
-    const passphrase = process.env.TLS_KEY_PASSPHRASE;
-    if (passphrase) {
-        options.passphrase = passphrase;
-    }
-
-    return options;
-}
 
 /**
  * Bootstrap function to initialize the NestJS application.
@@ -92,8 +29,9 @@ async function bootstrap() {
     // certificate is parsed.
     registerTolerantX509Extensions();
 
-    // Load TLS options if configured
-    const tlsOptions = loadTlsOptions();
+    // Load TLS options if configured. Fails startup when TLS is enabled but
+    // the certificate or key cannot be loaded, instead of falling back to HTTP.
+    const tlsOptions = await loadTlsOptions();
     const isTlsEnabled = tlsOptions !== undefined;
 
     const app = await NestFactory.create<NestExpressApplication>(AppModule, {

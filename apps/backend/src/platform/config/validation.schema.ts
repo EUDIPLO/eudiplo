@@ -9,6 +9,13 @@ export const BASE_VALIDATION_SCHEMA = Joi.object({
         .default("../../tmp")
         .description("Root working folder for temp files")
         .meta({ group: "general", order: 10 }),
+    // Read from process.env in bootstrap.ts. No Joi default: @nestjs/config
+    // writes defaults back into process.env.
+    PORT: Joi.string()
+        .optional()
+        .allow("")
+        .description("Port the HTTP(S) server listens on (default: 3000)")
+        .meta({ group: "general", order: 12 }),
     GRAFANA_URL: Joi.string()
         .uri({ scheme: ["http", "https"] })
         .optional()

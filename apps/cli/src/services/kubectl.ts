@@ -11,12 +11,7 @@ export interface KubernetesScope {
  * happens to point at.
  */
 function scopeArgs(scope: KubernetesScope): string[] {
-    return [
-        "--context",
-        scope.context,
-        "--namespace",
-        scope.namespace,
-    ];
+    return ["--context", scope.context, "--namespace", scope.namespace];
 }
 
 export function resolveScope(

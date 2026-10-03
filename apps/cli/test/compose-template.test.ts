@@ -27,12 +27,13 @@ describe("compose template helpers", () => {
 
         expect(env).toContain("DB_TYPE=sqlite");
         expect(env).toContain("STORAGE_DRIVER=local");
-        expect(env).toContain("KM_TYPE=db");
         expect(env).toContain("EUDIPLO_CONFIG_MOUNT=./config:/app/config");
         expect(env).toContain("CONFIG_FOLDER=/app/config");
         expect(env).not.toContain("DB_HOST=postgres");
         expect(env).not.toContain("S3_ENDPOINT=");
         expect(env).not.toContain("VAULT_ADDR=");
+        expect(env).not.toContain("KM_TYPE");
+        expect(env.endsWith("\n\n")).toBe(false);
     });
 
     it("generates a global db KMS configuration", () => {
@@ -92,8 +93,9 @@ describe("compose template helpers", () => {
             variables.S3_SECRET_ACCESS_KEY,
         );
         expect(env).not.toContain("MINIO_");
-        expect(env).toContain("KM_TYPE=vault");
+        expect(env).not.toContain("KM_TYPE");
         expect(env).toContain("VAULT_ADDR=http://vault:8200");
+        expect(env).toContain("VAULT_TOKEN=root");
     });
 
     it("quotes user-provided environment values without interpolating dollar signs", () => {

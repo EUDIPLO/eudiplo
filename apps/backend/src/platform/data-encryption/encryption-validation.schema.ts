@@ -18,7 +18,22 @@ export const ENCRYPTION_VALIDATION_SCHEMA = Joi.object({
         )
         .meta({ group: "encryption", order: 10 }),
 
-    // Vault-related config (reuses VAULT_ADDR from key-validation.schema.ts)
+    // Vault-related config. VAULT_ADDR and VAULT_TOKEN can also be referenced
+    // from kms.json (`${VAULT_ADDR}`), so they are not required here.
+    VAULT_ADDR: Joi.string()
+        .optional()
+        .allow("")
+        .description(
+            "URL of the HashiCorp Vault server, e.g. http://vault:8200. Required when ENCRYPTION_KEY_SOURCE=vault",
+        )
+        .meta({ group: "encryption", order: 15 }),
+    VAULT_TOKEN: Joi.string()
+        .optional()
+        .allow("")
+        .description(
+            "Token for the HashiCorp Vault server. Required when ENCRYPTION_KEY_SOURCE=vault",
+        )
+        .meta({ group: "encryption", order: 16, secret: true }),
     VAULT_ENCRYPTION_KEY_PATH: Joi.string()
         .when("ENCRYPTION_KEY_SOURCE", {
             is: "vault",
@@ -28,7 +43,15 @@ export const ENCRYPTION_VALIDATION_SCHEMA = Joi.object({
         .description("Path to encryption key in Vault KV secrets engine")
         .meta({ group: "encryption", order: 20 }),
 
-    // AWS Secrets Manager config
+    // AWS Secrets Manager config. AWS_REGION is also read by the AWS SDK and
+    // can be referenced from kms.json (`${AWS_REGION}`).
+    AWS_REGION: Joi.string()
+        .optional()
+        .allow("")
+        .description(
+            "AWS region, e.g. eu-central-1. Required when ENCRYPTION_KEY_SOURCE=aws",
+        )
+        .meta({ group: "encryption", order: 25 }),
     AWS_ENCRYPTION_SECRET_NAME: Joi.string()
         .when("ENCRYPTION_KEY_SOURCE", {
             is: "aws",

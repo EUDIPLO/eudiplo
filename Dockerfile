@@ -35,7 +35,11 @@ ENV REVISION=$REVISION
 # Set production environment
 ENV NODE_ENV=production
 
-# Set the default FOLDER environment variable
+# /app/config is the data volume: FOLDER holds the SQLite database and, by
+# default, the local uploads folder. Tenant config folders and kms.json live in
+# its config/ subfolder, because every folder in CONFIG_FOLDER is treated as a
+# tenant folder (mirrors the repository's assets/ folder). Setups that mount a
+# config-only folder at /app/config must set CONFIG_FOLDER=/app/config.
 ENV FOLDER=/app/config
 ENV CONFIG_FOLDER=/app/config/config
 

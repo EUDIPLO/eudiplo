@@ -683,3 +683,84 @@ describe("OID4VP expired or finished requests", () => {
         expect(error.message).toBe("The session has expired");
     });
 });
+
+describe("OID4VP request creation", () => {
+    function createService(updateForTenant: ReturnType<typeof vi.fn>) {
+        return Object.assign(
+            Object.create(Oid4vpService.prototype) as Oid4vpService,
+            {
+                presentationConfigService: {
+                    getPresentationConfig: vi.fn().mockResolvedValue({}),
+                },
+                certService: {
+                    find: vi.fn().mockResolvedValue({}),
+                    getCertHash: vi.fn().mockReturnValue("hash"),
+                },
+                settings: { publicUrl: "https://verifier.example" },
+                resolveWebhookFromEndpoint: vi
+                    .fn()
+                    .mockResolvedValue(undefined),
+                createSession: {
+                    execute: vi.fn(async (data: { id: string }) => data),
+                },
+                createAuthorizationRequest: vi
+                    .fn()
+                    .mockResolvedValue("signed.request.object"),
+                sessionStore: { updateForTenant },
+            },
+        );
+    }
+
+    it("returns the offer only after the request object is stored", async () => {
+        let storeRequestObject!: () => void;
+        const updateForTenant = vi.fn(
+            () =>
+                new Promise<void>((resolve) => {
+                    storeRequestObject = resolve;
+                }),
+        );
+        const service = createService(updateForTenant);
+
+        let settled = false;
+        const offer = service
+            .createRequest("presentation", {}, "tenant", true, "https://rp")
+            .finally(() => {
+                settled = true;
+            });
+
+        await vi.waitFor(() => expect(updateForTenant).toHaveBeenCalled());
+        const [, sessionId] = updateForTenant.mock.calls[0] as unknown[];
+        expect(updateForTenant).toHaveBeenCalledExactlyOnceWith(
+            "tenant",
+            sessionId,
+            { requestObject: "signed.request.object" },
+        );
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(settled).toBe(false);
+
+        storeRequestObject();
+        await expect(offer).resolves.toMatchObject({ session: sessionId });
+    });
+
+    it("rejects the offer when the request object cannot be stored", async () => {
+        const updateForTenant = vi
+            .fn()
+            .mockRejectedValue(new Error("database unavailable"));
+        const service = createService(updateForTenant);
+
+        await expect(
+            service.createRequest(
+                "presentation",
+                {},
+                "tenant",
+                true,
+                "https://rp",
+            ),
+        ).rejects.toThrow("database unavailable");
+        expect(updateForTenant).toHaveBeenCalledExactlyOnceWith(
+            "tenant",
+            expect.any(String),
+            { requestObject: "signed.request.object" },
+        );
+    });
+});
