@@ -2,136 +2,55 @@
 title: Releases & Versioning
 ---
 
-<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
-  - 'Backward Compatibility Policy' and 'Verifying Release Artifacts' -> upgrade/index.md; keep the maintainer part only
--->
+# Releases
 
-# Versioning & Releases
+This page is for maintainers. Releases are created by [semantic-release](https://github.com/semantic-release/semantic-release) from the commit history of `main`; operators find the compatibility policy and how to verify artifacts in [Upgrade](../upgrade/index.md).
 
-This project follows a structured release strategy that balances stability with ongoing development.
+## Commit messages
 
-## Semantic Versioning
+The version bump is derived from the commits since the last tag (`.releaserc.js`, Angular preset):
 
-We use **[Semantic Versioning](https://semver.org/)** (`MAJOR.MINOR.PATCH`) for all tagged releases.
+| Commit | Release |
+| --- | --- |
+| `fix:`, `perf:`, `refactor:`, `docs(README):` | patch |
+| `feat:` | minor |
+| a `BREAKING CHANGE:` footer | major |
+| `docs:`, `test:`, `chore:`, `ci:`, `build:` | none |
 
-- **MAJOR** – breaking changes
-- **MINOR** – new features, backwards compatible
-- **PATCH** – bug fixes and internal improvements
+For a breaking change write both: a `!` in the header (`fix(trust)!: …`) for readers, and a `BREAKING CHANGE:` footer that says what changed and what users must do. Only the footer triggers the major release: the Angular preset does not parse `!`, so a `!` header without the footer releases nothing. The footer text ends up in the release notes. A breaking change also needs an entry in `apps/docs/docs/upgrade/<previous>.x-to-<next>.0.md`, and the PR gets the `breaking-change` label.
 
-Example: `1.2.3` means the 3rd patch release of the 2nd minor version of the 1st major version.
+Every commit must carry a DCO sign-off (`git commit -s`) and be cryptographically signed. The full process rules are in [`CONTRIBUTING.MD`](https://github.com/openwallet-foundation/eudiplo/blob/main/CONTRIBUTING.MD#commits).
 
-## Development Builds from `main`
+## Builds from `main`
 
-Every push to the `main` branch automatically builds a Docker image and publishes it with the `:main` tag.
+Every push to `main` that passes CI publishes development artifacts. Their version is `<last release>-main.<short sha>` (`scripts/ci-version.sh`), for example `8.1.0-main.ed0bbe9`.
 
-Use this tag for development environments:
+| Artifact | Published as |
+| --- | --- |
+| `ghcr.io/openwallet-foundation/eudiplo`, `eudiplo-client`, `eudiplo-demo` | `:main` and `:sha-<full commit sha>` |
+| `@eudiplo/sdk-core`, `@eudiplo/cli` on npm | `<last release>-main.<short sha>` with the dist-tag `main` |
 
-```bash
-ghcr.io/openwallet-foundation/eudiplo:main
-```
+There is no alpha or beta channel. The `:main` images carry unreleased database migrations, which can still change before a release; use them only with throwaway databases.
 
-:::warning[`main` is always moving`]
-`main` is always moving and may contain untagged or unreleased features.
-:::
+## Cut a release
 
-## Stable Releases
+1. Check that the *CI / Docker* run for the `main` commit you want to release succeeded. The release workflow refuses commits without one.
+2. In GitHub Actions, run **Versioned Release** (`.github/workflows/release.yml`) on `main`.
+3. For a major version, enter `CONFIRM` in `confirm_major`. Without it the workflow stops after detecting the major bump. It also stops when there are no releasable commits.
 
-Stable releases are published via GitHub tags and follow semantic versioning. Each release creates both a versioned tag and updates the `:latest` tag:
+The workflow then:
 
-```text
-ghcr.io/openwallet-foundation/eudiplo:1.2.3
-ghcr.io/openwallet-foundation/eudiplo:latest
-```
+- determines the next version with a semantic-release dry run,
+- builds the standalone CLI for `linux-x64`, `linux-arm64`, `macos-arm64` and `windows-x64`, writes `SHA256SUMS.txt` and a build provenance attestation (`provenance.sigstore.json`),
+- runs semantic-release: sets the SDK and CLI versions, creates the tag `vX.Y.Z` and the GitHub release with the CLI archives, checksums and attestation, and publishes `@eudiplo/sdk-core` and `@eudiplo/cli` to npm with the dist-tag `latest`,
+- promotes the CI images of the released commit (`:sha-<commit>`, by digest) for `eudiplo`, `eudiplo-client` and `eudiplo-demo` to `:X.Y.Z`, `:X.Y`, `:X` and `:latest` (`scripts/release-docker.sh`, `Dockerfile.release`, `linux/amd64` and `linux/arm64`),
+- builds and deploys the documentation and the website to production (see [Documentation](./documentation.md#deployment-and-versions)).
 
-The `:latest` tag always points to the most recent stable release and is recommended for production use.
+Images are never rebuilt from source for a release: the tested CI image is promoted.
 
-## Pre-Releases
+## Before a major release
 
-Optionally, pre-release tags such as `1.3.0-alpha.1` may be published for testing upcoming features:
-
-```text
-ghcr.io/openwallet-foundation/eudiplo:1.3.0-alpha.1
-```
-
-## Release Automation
-
-Releases are managed using [`semantic-release`](https://github.com/semantic-release/semantic-release). It:
-
-- Analyzes commit messages
-- Determines the next version
-- Publishes a GitHub release
-- Pushes Docker images
-
-Make sure to follow the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) specification when contributing to ensure proper versioning.
-
-## Summary
-
-| Tag                    | Source             | Use Case             |
-| ---------------------- | ------------------ | -------------------- |
-| `main`                 | `main` branch      | Development          |
-| `latest`               | GitHub release     | Production (Latest)  |
-| `x.y.z` (e.g. `1.2.3`) | GitHub release     | Specific Version     |
-| `x.y.z-alpha.N`        | GitHub pre-release | Feature Preview / RC |
-
-## Backward Compatibility Policy
-
-- **Breaking changes only in major versions.** API field renames, removed endpoints, changed configuration formats, and new required environment variables are only introduced in major releases.
-- **Deprecate before removing.** Where feasible, features are deprecated in a minor release before being removed in the next major.
-- **Database migrations are automatic.** Schema changes are applied by the migration system on startup. No manual SQL is required.
-- **Migration guides for every major version.** Each major release includes a step-by-step [migration guide](../upgrade/index.md) covering all required actions.
-- **If it breaks in a minor/patch, it's a bug.** If you experience a breaking change outside of a major release, please [report it](https://github.com/openwallet-foundation/eudiplo/issues/new?template=bug_report.md).
-
-## Breaking Change Checklist (for contributors)
-
-When introducing a breaking change, ensure:
-
-- [ ] The commit message includes `BREAKING CHANGE:` in the footer (triggers major version bump)
-- [ ] The PR description lists all affected endpoints, fields, and environment variables under "Breaking Changes"
-- [ ] The [migration guide](../upgrade/index.md) is updated with upgrade steps
-- [ ] The `.env.example` is updated if environment variables changed
-- [ ] The PR has the `breaking-change` label
-
-## Verifying Release Artifacts
-
-CLI release archives and `SHA256SUMS.txt` are covered by a signed GitHub build
-provenance attestation. Starting with releases that include
-`provenance.sigstore.json`, the same Sigstore bundle is also attached to the
-release for verification after downloading it.
-
-Download the archive for your platform and `provenance.sigstore.json` from the
-same release, then verify the archive with the GitHub CLI:
-
-```bash
-gh attestation verify ./eudiplo-vX.Y.Z-linux-x64.tar.gz \
-  --repo openwallet-foundation/eudiplo \
-  --signer-workflow openwallet-foundation/eudiplo/.github/workflows/release.yml \
-  --bundle ./provenance.sigstore.json
-```
-
-Replace `vX.Y.Z` and the platform with the archive you downloaded. For v8.0.1,
-omit `--bundle` to retrieve its existing attestation from GitHub. Earlier
-releases were published before build attestations were enabled.
-
-The attestation authenticates the artifact and its producing workflow; checksums
-alone only detect changes relative to the checksum file. OpenSSF Scorecard looks
-for signature files attached to the last five releases, so older releases will
-continue affecting that check until they leave its evaluation window.
-
-## Signed Commits
-
-**All commits must be signed** to pass GitHub's verification checks.
-
-Configure GPG signing locally:
-
-```bash
-git config --global user.signingkey <key>
-git config --global commit.gpgsign true
-```
-
-Or use `-S` flag when committing:
-
-```bash
-git commit -S -m "feat: add new feature"
-```
-
-For more information, see [GitHub's guide on signing commits](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits).
+- Every `!` commit and `BREAKING CHANGE` footer since the last tag is covered in the upgrade guide (`git log --format='%h %s%n%b' vX.Y.Z..main`).
+- The guide is listed in the Upgrade sidebar and on [the upgrade overview](../upgrade/index.md).
+- `eudiplo upgrade` prints `https://docs.eudiplo.dev/migration/<from>.x-to-<to>.0` for every major it crosses; add a redirect from that path to the new guide in `apps/docs/docusaurus.config.ts`.
+- Configuration format changes are published: new `schemas/v*/` snapshots go live with the website deployment of the release ([Configuration schemas](./configuration-schemas.md)).

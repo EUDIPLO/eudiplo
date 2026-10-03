@@ -1,102 +1,77 @@
 ---
-title: Migration & Upgrade Guide
+title: Upgrade
 ---
 
-# Migration & Upgrade Guide
+# Upgrading EUDIPLO
 
-This section provides step-by-step guidance for upgrading EUDIPLO between versions, with a focus on breaking changes and required actions.
+Minor and patch releases are drop-in: change the image tag and restart. A new major version can need changes to your configuration, integration or deployment; its upgrade guide lists every one of them.
 
-## Upgrade Process
+## Upgrade guides
 
-When upgrading EUDIPLO, follow this general process:
+Upgrade one major version at a time and read every guide on the way.
 
-1. **Read the release notes** for every version between your current and target version
-2. **Check the migration guide** below for your target version
-3. **Back up your database** before upgrading
-4. **Update environment variables** as documented
-5. **Deploy the new version** — database migrations run automatically on startup
-6. **Verify** that the service starts correctly and your integrations work
+| From | To | Guide |
+| --- | --- | --- |
+| 8.x | 9.0 | [8.x to 9.0](./8.x-to-9.0.md): object storage, outbound URL defaults, stricter OAuth and OID4VP, session expiry, presentation webhooks, configuration format v2 |
+| 7.x | 8.0 | [7.x to 8.0](./7.x-to-8.0.md): canonical `$schema` envelopes for configuration files |
+| 6.x | 7.0 | [6.x to 7.0](./6.x-to-7.0.md): verifier material for wallet-provider trust lists |
+| 5.x | 6.0 | [5.x to 6.0](https://github.com/openwallet-foundation/eudiplo/blob/v8.1.0/apps/docs/docs/migration/5.x-to-6.0.md) (at tag v8.1.0): `authorizationServers` model |
+| 4.x | 5.0 | [4.x to 5.0](https://github.com/openwallet-foundation/eudiplo/blob/v8.1.0/apps/docs/docs/migration/4.x-to-5.0.md) (at tag v8.1.0): field-based credential configuration |
+| 3.x | 4.0 | [3.x to 4.0](https://github.com/openwallet-foundation/eudiplo/blob/v8.1.0/apps/docs/docs/migration/3.x-to-4.0.md) (at tag v8.1.0): `/api` prefix, key chains, attribute providers |
+| 2.x | 3.0 | No action; the migration system was introduced and runs automatically. |
 
-For tenant configuration, export a safe bundle before the application upgrade, run `eudiplo config upgrade <bundle> --dry-run`, and plan the import against the new instance. Config migrations are separate from database migrations and run sequentially per resource schema. See [Configuration Model](../operate/configuration-as-code.md#configuration-model).
+## Upgrade procedure
 
-:::warning[Always upgrade sequentially]
-If you are multiple major versions behind, upgrade one major version at a time. Do not skip major versions.
+1. **Read the guide** of every major version you cross and the [release notes](https://github.com/openwallet-foundation/eudiplo/releases) of the versions in between.
+2. **Back up** everything you would need to go back:
+    - the database (for PostgreSQL `pg_dump`; for SQLite a copy of the database file taken while EUDIPLO is stopped),
+    - the configuration folder (`CONFIG_FOLDER`; `config/` in a CLI project) and the env file,
+    - uploaded files (`LOCAL_STORAGE_DIR` or the S3 bucket),
+    - the key material behind encrypted columns: `MASTER_SECRET` when `ENCRYPTION_KEY_SOURCE=env`, otherwise the key in Vault, AWS or Azure. A database backup cannot be read without it.
+3. **Export the tenant configuration** if you manage it as files: `eudiplo config export --output <bundle>`, then `eudiplo config upgrade <bundle> --dry-run` shows the format migrations the new release applies ([Configuration as code](../operate/configuration-as-code.md)).
+4. **Apply the changes** the guide lists for your environment variables, configuration and integrations.
+5. **Deploy the new version.**
+    - Compose project created with the CLI: `eudiplo upgrade --image-tag X.Y.Z`. It rewrites `EUDIPLO_IMAGE` and `EUDIPLO_CLIENT_IMAGE` in the instance's env file, pulls and recreates the services, and prints the upgrade guide for every major version it crosses. It changes nothing else: the Compose file and the other variables stay as they are.
+    - Any other deployment: set the tag of `ghcr.io/openwallet-foundation/eudiplo` and `ghcr.io/openwallet-foundation/eudiplo-client` to the new version and redeploy. Use the same version for both; the client shows a warning when it talks to a backend from a different release.
+    - Start one backend instance first; it applies the database migrations on startup (`DB_MIGRATIONS_RUN=true`, the default). Scale out after it is healthy.
+6. **Verify.** `GET /health` reports `"status": "ok"`, the startup log shows no migration or configuration import errors, `eudiplo doctor --strict` passes for CLI-managed instances, and `GET /api/version` reports the new version. Run one issuance and one presentation end to end.
+
+Pin a full version tag (`:9.0.0`) in production. The release images are also tagged `:9.0`, `:9` and `:latest`.
+
+:::warning[No downgrades]
+Database migrations are not reverted when you start an older image. To go back, restore the backup taken in step 2.
 :::
 
-:::danger[Using the `main` branch image? Start with a fresh database]
-The `main` branch image tracks active development and **does not guarantee complete database migrations between snapshots**. Migration files are only finalized when a version is released. If you are running `main` and pull a newer snapshot, schema changes may have been added without a corresponding migration, causing startup failures or data corruption.
-
-**The only safe approach for `main` is to start with a fresh database each time you update.** If you need a stable, upgradeable deployment, use a tagged release image instead.
+:::danger[`:main` images]
+Images tagged `:main` are development builds. Their database migrations can still change before the release, so upgrading a `:main` database to a later snapshot or to a release is not supported. Use a fresh database for every `:main` snapshot, or run a release.
 :::
 
-## Version History
-
-| Version | Status             | Notes                                                                                                                                                                 |
-| ------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1.x     | Archived           | Initial development and protocol testing                                                                                                                              |
-| 2.x     | Archived           | First stable release                                                                                                                                                  |
-| 3.x     | Maintained         | Introduced automatic database migrations. Bumped from v2 due to the migration system being flagged as a breaking change, though no user-facing API changes were made. |
-| 4.x     | Maintained         | Unified Key Chain model, Attribute Providers, `/api/` prefix, @owf ecosystem packages.                                                                                |
-| 5.0     | **Current stable** | Field-based credential configuration model (v2), improved UX for config creation.                                                                                     |
-| 6.0     | Planned            | Authorization server model migration to `authorizationServers` and related issuance config updates.                                                                   |
-| 7.0     | Planned            | Strict trust-list integrity for wallet-provider trust lists (`walletProviderTrustLists`) requiring verifier material.                                                 |
-| 8.0     | Planned            | Portable configuration resources now use canonical `$schema` envelopes; legacy `apiVersion`/`kind` envelopes are no longer accepted.                                |
-
-## Migration Guides
-
-### Bundled object storage: MinIO to RustFS
-
-The CLI and deployment templates now use RustFS with new service names,
-credentials, and data volumes. Existing MinIO objects must be copied through
-the S3 API before switching endpoints; reusing the old data directory is not
-supported. Follow the migration instructions for
-[Docker Compose](../operate/docker-compose.md#migrating-existing-minio-storage)
-or [Kubernetes](../operate/kubernetes.md#migrating-existing-minio-storage).
-
-### Application versions
-
-| From | To  | Guide                                                                                                     |
-| ---- | --- | --------------------------------------------------------------------------------------------------------- |
-| 2.x  | 3.0 | No action required — the migration system is backward compatible. Just update and start.                  |
-| 3.x  | 4.0 | [Migration Guide](https://github.com/openwallet-foundation/eudiplo/blob/v8.1.0/apps/docs/docs/migration/3.x-to-4.0.md) — API prefix, Key Chains, Attribute Providers, and more                |
-| 4.x  | 5.0 | [Migration Guide](https://github.com/openwallet-foundation/eudiplo/blob/v8.1.0/apps/docs/docs/migration/4.x-to-5.0.md) — Field-based credential configuration (v2)                            |
-| 5.x  | 6.0 | [Migration Guide](https://github.com/openwallet-foundation/eudiplo/blob/v8.1.0/apps/docs/docs/migration/5.x-to-6.0.md) — Authorization server model (`authorizationServers`)                  |
-| 6.x  | 7.0 | [Migration Guide](./6.x-to-7.0.md) — Strict trust-list verifier requirements (`walletProviderTrustLists`) |
-| 7.x  | 8.0 | [Migration Guide](./7.x-to-8.0.md) — Canonical portable configuration envelopes                           |
-
-## What Can Break Between Versions
-
-### Major Versions (Breaking Changes)
-
-Major versions may include:
-
-- **Database schema changes** — handled automatically by the migration system (see [Database](../operate/database.md))
-- **Environment variable changes** — new required variables, renamed variables, or changed defaults
-- **API changes** — modified request/response formats, removed endpoints, changed field names
-- **Configuration format changes** — credential configs, issuance configs, or presentation configs with new required fields or changed structure
-- **Protocol updates** — changes to OID4VCI/OID4VP behavior to align with spec updates
-
-### Minor Versions
-
-Minor versions add features in a backward-compatible way. However, new optional fields may appear in API responses or configuration objects.
-
-### Patch Versions
-
-Patch versions contain only bug fixes and should never require any migration steps.
-
-## Backward Compatibility Policy
+## Compatibility policy
 
 EUDIPLO follows [Semantic Versioning](https://semver.org/):
 
-- **Breaking changes only happen in major versions.** If you experience a breaking change in a minor or patch release, please [report it as a bug](https://github.com/openwallet-foundation/eudiplo/issues/new?template=bug_report.md).
-- **Deprecation before removal.** Where feasible, features are deprecated in a minor release before being removed in the next major release.
-- **Database migrations are automatic.** Schema changes are handled by the migration system and should not require manual intervention.
+- **Breaking changes only in major versions.** Removed or renamed API fields and endpoints, changed defaults, stricter validation, new required environment variables and changed configuration formats wait for a major release, which comes with an upgrade guide. A breaking change in a minor or patch release is a bug; please [report it](https://github.com/openwallet-foundation/eudiplo/issues/new?template=bug_report.md).
+- **Deprecation before removal** where feasible: a minor release deprecates, the next major removes.
+- **Database migrations are automatic.** No manual SQL is needed.
+- **Configuration files are versioned per resource.** A release imports files of its own and older format versions and upgrades them; it rejects files with a newer version. Files exported from a new major can therefore not be imported into the previous one.
+- **Client and backend** of the same release work together; releases that differ only in the patch version are compatible.
 
-## Troubleshooting Upgrades
+## Verifying release artifacts
 
-If you encounter issues after upgrading:
+The standalone CLI archives and `SHA256SUMS.txt` of every release carry a signed GitHub build provenance attestation; the Sigstore bundle is attached to the release as `provenance.sigstore.json`. Download the archive for your platform and the bundle from the same release, then verify with the GitHub CLI:
 
-1. **Check the logs** — EUDIPLO logs migration steps and configuration errors on startup
-2. **Compare environment variables** — diff your `.env` against the latest `example.env`
-3. **Check the migration guide** — the version-specific guide lists all required actions
-4. **Open an issue** — if the migration guide doesn't cover your situation, [let us know](https://github.com/openwallet-foundation/eudiplo/issues/new?template=bug_report.md)
+```bash
+gh attestation verify ./eudiplo-vX.Y.Z-linux-x64.tar.gz \
+  --repo openwallet-foundation/eudiplo \
+  --signer-workflow openwallet-foundation/eudiplo/.github/workflows/release.yml \
+  --bundle ./provenance.sigstore.json
+```
+
+For v8.0.1, which has no attached bundle, omit `--bundle` to fetch the attestation from GitHub; earlier releases have none. The attestation proves which workflow built the artifact; a checksum alone only detects changes relative to the checksum file.
+
+## If the upgrade fails
+
+1. Read the startup log: migrations, configuration import and environment validation report their errors there.
+2. Compare your env file with the `.env.example` of the target release.
+3. Check the upgrade guide again for the area that fails.
+4. If the guide does not cover your case, [open an issue](https://github.com/openwallet-foundation/eudiplo/issues/new?template=bug_report.md). Restore the backup if you need the old version back.

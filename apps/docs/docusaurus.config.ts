@@ -147,9 +147,8 @@ const config: Config = {
           {from: '/migration/5.x-to-6.0', to: '/upgrade'},
           {from: '/migration/4.x-to-5.0', to: '/upgrade'},
           {from: '/migration/3.x-to-4.0', to: '/upgrade'},
-          // CLI 8.x prints this URL before an upgrade to 9.0. Point it at
-          // /upgrade/8.x-to-9.0 once that guide exists.
-          {from: '/migration/8.x-to-9.0', to: '/upgrade'},
+          // `eudiplo upgrade` prints /migration/<from>.x-to-<to>.0 for every major it crosses.
+          {from: '/migration/8.x-to-9.0', to: '/upgrade/8.x-to-9.0'},
           // Older URLs from earlier restructures (getting-started/, architecture/,
           // api/ and development/ sections).
           {from: '/getting-started/first-steps', to: '/cookbooks/first-credential'},

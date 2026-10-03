@@ -2,120 +2,53 @@
 title: Code Quality
 ---
 
-# Code Quality Standards
+# Code quality
 
-This project uses [Biome](https://biomejs.dev/) for code formatting, linting, and import organization to ensure consistent code quality across the codebase.
+Each package brings its own formatter and linter. The root scripts run them for every package: `pnpm format` writes, `pnpm format:check` only checks, `pnpm lint` lints and `pnpm lint:fix` fixes what it can.
 
-## Biome Configuration
+| Package | Formatter | Linter | Configuration |
+| --- | --- | --- | --- |
+| Backend, CLI, webhook (`test-rp`) | Biome (`biome format`) | Biome (`biome lint`; backend and CLI) | `biome.json` (TypeScript files of these three apps only) |
+| Client | Prettier | ESLint (`ng lint`, angular-eslint) | `apps/client/.prettierrc`, `apps/client/eslint.config.js` |
+| Documentation | — | markdownlint | `apps/docs/.markdownlint.json` |
 
-Biome has replaced ESLint and Prettier in this project for better performance and a unified tooling experience. The configuration is defined in `biome.json` at the project root.
+Biome settings: 4-space indentation, 80-character lines, double quotes, semicolons, LF line endings; the linter only enforces `noUnusedImports` and `noUnusedVariables`. Generated files (`config-schemas.generated.ts`) are excluded. The client uses 2 spaces, single quotes and 100-character lines.
 
-### Key Settings
-
-- **Semicolons**: Always required (`"always"`)
-- **Indentation**: 4 spaces
-- **Quote Style**: Double quotes preferred
-- **Line Width**: 80 characters
-- **Parameter Decorators**: Enabled for NestJS compatibility (`unsafeParameterDecoratorsEnabled: true`)
-
-## Available Commands
+## Commands
 
 ```bash
-# Format all files
-pnpm run format
-
-# Check formatting without making changes
-pnpm run format:check
-
-# Run linting checks
-pnpm run lint
-
-# Fix linting issues automatically
-pnpm run lint:fix
+pnpm format                                   # format every package
+pnpm format:check                             # check only; CI runs this
+pnpm lint                                     # lint every package, including markdownlint for the docs
+pnpm --filter @eudiplo/backend lint:fix       # Biome check --fix for the backend
+pnpm knip                                     # unused files, dependencies and exports
 ```
 
-## IDE Setup
+## In CI
 
-### VS Code (Recommended)
+The **Lint Codebase** job runs on every pull request:
 
-1. **Install the Biome extension**:
+- `pnpm run lint` and `pnpm run format:check`,
+- `pnpm run check:env-example`: the live entries of `.env.example` must satisfy the backend's required variables,
+- `pnpm --filter @eudiplo/docs run lint`,
+- a license check of the production dependencies of backend and client (MIT, Apache-2.0, BSD, ISC, 0BSD, OFL-1.1),
+- `pnpm knip`.
 
-    ```text
-    Extension ID: biomejs.biome
-    ```
+The **Check Config Schemas and Website** job checks that the generated schemas match the code and that published schema versions were not changed ([Configuration schemas](./configuration-schemas.md)). [SonarCloud](https://sonarcloud.io/project/overview?id=openwallet-foundation_eudiplo) analyzes the backend and client sources; its findings are good first contributions.
 
-2. **Workspace settings are pre-configured** in `.vscode/settings.json`:
-    - Format on save enabled
-    - Biome set as default formatter
-    - Auto-organize imports on save
-    - Quick fixes applied automatically
+## Git hooks
 
-### Other Editors
+`pnpm install` installs two [Husky](https://typicode.github.io/husky/) hooks:
 
-For other editors, refer to the [Biome Editor Integration](https://biomejs.dev/guides/integrate-in-editor/) guide.
+- `pre-commit` runs `pnpm -r run format && pnpm -r run lint`, so it can rewrite files you are committing.
+- `pre-push` runs `pnpm run knip`.
 
-## File Coverage
+## Editor setup
 
-Biome processes the following file types:
+The repository's `.vscode/settings.json` enables format on save and runs the Biome quick fixes and import organization on save. Install the extensions the dev container uses: Biome (`biomejs.biome`), ESLint, Prettier and the Angular Language Service. For other editors, see [Biome editor integration](https://biomejs.dev/guides/integrate-in-editor/).
 
-- TypeScript files: `src/**/*.ts`, `test/**/*.ts`, `src/**/*.spec.ts`
-- JavaScript files: `*.js`, `*.mjs`
-- JSON files: `*.json`, `*.jsonc`
+## Style
 
-## Git Hooks
-
-The repository uses Husky hooks to run checks locally:
-
-- `pre-commit` formats and lints the workspace.
-- `pre-push` runs `pnpm run knip` to detect unused files, dependencies, and exports before a push.
-
-Install dependencies with `pnpm install` to enable the hooks. You can run the checks manually as well:
-
-```bash
-pnpm -r run format
-pnpm -r run lint
-pnpm run knip
-```
-
-## Code Style Guidelines
-
-### TypeScript/JavaScript
-
-- Use explicit types where beneficial for readability
-- Prefer `const` over `let` when variables don't change
-- Use meaningful variable and function names
-- Add JSDoc comments for public APIs
-- Destructure objects when accessing multiple properties
-
-### NestJS Specific
-
-- Use parameter decorators (e.g., `@Body()`, `@Param()`)
-- Organize imports: external packages, then internal modules
-- Use dependency injection consistently
-- Follow NestJS naming conventions for controllers, services, modules
-
-### Example
-
-```typescript
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-
-/**
- * Service for managing user authentication.
- */
-@Injectable()
-export class AuthService {
-    constructor(private readonly configService: ConfigService) {}
-
-    /**
-     * Validates user credentials.
-     * @param email User's email address
-     * @param password User's password
-     * @returns Authentication result
-     */
-    async validateUser(email: string, password: string): Promise<boolean> {
-        const isValid = await this.checkCredentials(email, password);
-        return isValid;
-    }
-}
-```
+- Backend code follows the placement and dependency rules in [Backend architecture](./backend-architecture.md).
+- Prefer explicit names over comments; add a comment where the reason for the code is not obvious, for example a protocol requirement.
+- Do not log secrets, keys or personal data. Session and HTTP logging have redaction settings; see [Logging](../operate/logging.md).
