@@ -124,14 +124,14 @@ eudiplo config tenant remove acme --force
 
 See the detailed guides:
 
-- [Quick Start](https://docs.eudiplo.dev/getting-started/quick-start)
-- [EUDIPLO CLI](https://docs.eudiplo.dev/deployment/cli)
-- [API Reference](https://docs.eudiplo.dev/reference/openapi)
+- [Quick Start](https://docs.eudiplo.dev/cookbooks/foundation)
+- [EUDIPLO CLI](https://docs.eudiplo.dev/operate/cli)
+- [API Reference](https://docs.eudiplo.dev/reference/api)
 
 ### Other deployment options
 
-- Docker Compose deployment: [Deployment Guide](https://docs.eudiplo.dev/deployment/docker-compose)
-- Individual container images: [Deployment Options](https://docs.eudiplo.dev/deployment)
+- Docker Compose deployment: [Deployment Guide](https://docs.eudiplo.dev/operate/docker-compose)
+- Individual container images: [Deployment Options](https://docs.eudiplo.dev/operate)
 - Local development workflow: [Development Guide](https://docs.eudiplo.dev/contributing/development-setup)
 
 ### Get Started with the API
@@ -147,7 +147,7 @@ curl -X POST http://localhost:3000/api/oauth2/token \
   }'
 ```
 
-For production authentication setup, see [Authentication](https://docs.eudiplo.dev/administration/authentication).
+For production authentication setup, see [Authentication](https://docs.eudiplo.dev/operate/tenants-and-access).
 
 ---
 
@@ -159,13 +159,13 @@ Use the current documentation:
 - **Legacy documentation**: [https://openwallet-foundation.github.io/eudiplo/docs/latest/](https://openwallet-foundation.github.io/eudiplo/docs/latest/)
 
 The current documentation reflects the active release. For older releases,
-use the [legacy documentation archive](https://docs.eudiplo.dev/).
+use the [legacy documentation archive](https://openwallet-foundation.github.io/eudiplo/docs/latest/).
 
 **Key sections:**
 
-- [Architecture](https://docs.eudiplo.dev/architecture/)
+- [Architecture](https://docs.eudiplo.dev/concepts/)
 - [Supported Protocols](https://docs.eudiplo.dev/reference/protocols)
-- [API Reference](https://docs.eudiplo.dev/reference/openapi)
+- [API Reference](https://docs.eudiplo.dev/reference/api)
 
 ---
 

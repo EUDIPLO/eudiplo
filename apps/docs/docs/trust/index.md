@@ -17,8 +17,8 @@ EUDIPLO's trust infrastructure ensures that:
 
 ## Trust Components
 
-- **[Key Chains](key-chains.md)** — Unified key and certificate management abstraction
-- **[Certificates](certificates.md)** — Self-signed, CA-issued, and imported certificates
+- **[Key Chains](keys-and-certificates.md)** — Unified key and certificate management abstraction
+- **[Certificates](keys-and-certificates.md#certificates)** — Self-signed, CA-issued, and imported certificates
 - **[Registrar](registrar.md)** — EUDI Wallet access and registration certificates
 - **[Registration Certificates](registration-certificates.md)** — Authorization for credential requests
 - **[Trust Lists](trust-lists.md)** — ETSI TS 119 602 compliant trusted entity registries
@@ -34,4 +34,4 @@ Every credential issuance and verification flow in EUDIPLO relies on cryptograph
 
 Without proper trust configuration, credentials may be rejected by wallets or verifiers.
 
-For deep technical details on KMS backends (Vault, AWS KMS, PKCS#11, HTTP, CSC), see [KMS Configuration](../administration/kms.md).
+For deep technical details on KMS backends (Vault, AWS KMS, PKCS#11, HTTP, CSC), see [KMS Configuration](../operate/kms.md).

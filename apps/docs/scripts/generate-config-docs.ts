@@ -6,7 +6,7 @@ import { buildModelFromSchema } from "./config-docs/model";
 import { VALIDATION_SCHEMA } from "../../backend/src/platform/config/combined.schema";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DOCS_GENERATED_DIR = resolve(__dirname, "../docs/generated");
+const DOCS_GENERATED_DIR = resolve(__dirname, "../docs/_generated");
 const MODEL_FILE = resolve(DOCS_GENERATED_DIR, "config-model.json");
 
 async function main() {

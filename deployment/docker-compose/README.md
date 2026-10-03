@@ -172,7 +172,7 @@ After deployment, access the services at:
 4. **Set up TLS/HTTPS** via reverse proxy
 5. **Configure backup strategies** for PostgreSQL and RustFS
 
-For more details, see the [full documentation](https://docs.eudiplo.dev/deployment/docker-compose/).
+For more details, see the [full documentation](https://docs.eudiplo.dev/operate/docker-compose/).
 
 ## Migrating existing MinIO storage
 

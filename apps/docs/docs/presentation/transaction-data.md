@@ -73,7 +73,7 @@ When creating a presentation request via the `/verifier/offer` endpoint, you can
 :::note Override Behavior
 When `transaction_data` is provided in the request, it completely replaces any transaction data defined in the presentation configuration. The two are not merged.
 
-The same request-time override model also applies to `webhook` and `redirectUri`. See [Presentation Configuration](presentation-configuration.md#configuration-fields).
+The same request-time override model also applies to `webhook` and `redirectUri`. See [Presentation Configuration](configure-verification.md#configuration-fields).
 :::
 
 ## Fields
@@ -154,6 +154,6 @@ Include resource or permission information for access control scenarios:
 
 ## Related Documentation
 
-- [Presentation Configuration](presentation-configuration.md) — Configuring transaction data defaults
-- [Presentation Requests](presentation-requests.md) — Overriding transaction data at request time
+- [Presentation Configuration](configure-verification.md) — Configuring transaction data defaults
+- [Presentation Requests](requests.md) — Overriding transaction data at request time
 - [DCQL](dcql.md) — Referencing credential IDs in transaction data

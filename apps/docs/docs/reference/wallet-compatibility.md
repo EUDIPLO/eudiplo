@@ -105,8 +105,8 @@ The following workflow is the recommended way to test a new wallet end-to-end.
 
 ### 1. Setup a Test Environment
 
-1. Start EUDIPLO using the [Quick Start](../getting-started/quick-start.md).
-2. Complete the initial tenant and credential setup from [Issue Your First Credential](../getting-started/first-credential.md).
+1. Start EUDIPLO using the [Quick Start](../cookbooks/foundation.md).
+2. Complete the initial tenant and credential setup from [Issue Your First Credential](../cookbooks/first-credential.md).
 3. For testing with a mobile wallet, expose EUDIPLO on a public HTTPS URL and set `PUBLIC_URL` to that URL (for example via ngrok as described in [Running Locally](../contributing/development-setup.md)).
 
 Minimal backend example:

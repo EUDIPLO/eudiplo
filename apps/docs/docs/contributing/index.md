@@ -9,18 +9,18 @@ EUDIPLO is organized as a **monorepo workspace** containing multiple application
 ## Contributor Journey
 
 1. **[Development Setup](./development-setup.md)** — Install dependencies, configure environment variables, and run locally
-2. **[Architecture Overview](../architecture/index.md)** — Understand the system architecture and design principles
-3. **[Repository Structure](./repository-structure.md)** — Navigate the monorepo layout and workspace conventions
-4. **[Backend Development](./backend.md)** — Build and extend the NestJS API server
+2. **[Architecture Overview](../concepts/index.md)** — Understand the system architecture and design principles
+3. **[Repository Structure](./development-setup.md#workspace-structure)** — Navigate the monorepo layout and workspace conventions
+4. **[Backend Development](./backend-architecture.md#backend-development)** — Build and extend the NestJS API server
 5. **[Client Development](./client.md)** — Work with the Angular management UI
 6. **[CLI Development](./cli.md)** — Develop and test the command-line interface
 7. **[Testing](./testing.md)** — Write and run unit tests
-8. **[E2E Testing](./e2e-testing.md)** — Integration and end-to-end test workflows
-9. **[Conformance Testing](./conformance-testing.md)** — OIDF conformance suite integration
+8. **[E2E Testing](./testing.md#e2e-testing)** — Integration and end-to-end test workflows
+9. **[Conformance Testing](./testing.md#oidf-conformance-testing)** — OIDF conformance suite integration
 10. **[Documentation](./documentation.md)** — Contributing to documentation
 11. **[Releases](./releases.md)** — Versioning, release process, and backward compatibility
 12. **[Code Quality](./code-quality.md)** — Formatting, linting, and style guidelines
-13. **[Logging Configuration](./logging-configuration.md)** — Debugging with logs and observability
+13. **[Logging Configuration](../operate/logging.md)** — Debugging with logs and observability
 
 ## Quick Start
 

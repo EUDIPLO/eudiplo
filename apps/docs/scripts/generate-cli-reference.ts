@@ -6,7 +6,7 @@ import { createProgram } from "../../cli/src/runtime.js";
 import type { CommandContext } from "../../cli/src/types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const outputPath = resolve(__dirname, "../docs/generated/cli-reference.md");
+const outputPath = resolve(__dirname, "../docs/_generated/cli-reference.md");
 
 const GENERATED_WARNING = [
     "> **Auto-generated.** Do not edit manually.",

@@ -2,6 +2,10 @@
 title: Releases & Versioning
 ---
 
+<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
+  - 'Backward Compatibility Policy' and 'Verifying Release Artifacts' -> upgrade/index.md; keep the maintainer part only
+-->
+
 # Versioning & Releases
 
 This project follows a structured release strategy that balances stability with ongoing development.
@@ -34,7 +38,7 @@ ghcr.io/openwallet-foundation/eudiplo:main
 
 Stable releases are published via GitHub tags and follow semantic versioning. Each release creates both a versioned tag and updates the `:latest` tag:
 
-```
+```text
 ghcr.io/openwallet-foundation/eudiplo:1.2.3
 ghcr.io/openwallet-foundation/eudiplo:latest
 ```
@@ -45,7 +49,7 @@ The `:latest` tag always points to the most recent stable release and is recomme
 
 Optionally, pre-release tags such as `1.3.0-alpha.1` may be published for testing upcoming features:
 
-```
+```text
 ghcr.io/openwallet-foundation/eudiplo:1.3.0-alpha.1
 ```
 
@@ -74,7 +78,7 @@ Make sure to follow the [Conventional Commits](https://www.conventionalcommits.o
 - **Breaking changes only in major versions.** API field renames, removed endpoints, changed configuration formats, and new required environment variables are only introduced in major releases.
 - **Deprecate before removing.** Where feasible, features are deprecated in a minor release before being removed in the next major.
 - **Database migrations are automatic.** Schema changes are applied by the migration system on startup. No manual SQL is required.
-- **Migration guides for every major version.** Each major release includes a step-by-step [migration guide](../migration/index.md) covering all required actions.
+- **Migration guides for every major version.** Each major release includes a step-by-step [migration guide](../upgrade/index.md) covering all required actions.
 - **If it breaks in a minor/patch, it's a bug.** If you experience a breaking change outside of a major release, please [report it](https://github.com/openwallet-foundation/eudiplo/issues/new?template=bug_report.md).
 
 ## Breaking Change Checklist (for contributors)
@@ -83,7 +87,7 @@ When introducing a breaking change, ensure:
 
 - [ ] The commit message includes `BREAKING CHANGE:` in the footer (triggers major version bump)
 - [ ] The PR description lists all affected endpoints, fields, and environment variables under "Breaking Changes"
-- [ ] The [migration guide](../migration/index.md) is updated with upgrade steps
+- [ ] The [migration guide](../upgrade/index.md) is updated with upgrade steps
 - [ ] The `.env.example` is updated if environment variables changed
 - [ ] The PR has the `breaking-change` label
 

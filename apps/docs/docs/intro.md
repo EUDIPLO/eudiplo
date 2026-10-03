@@ -3,6 +3,12 @@ title: What is EUDIPLO?
 slug: /
 ---
 
+<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
+  - 'Key capabilities' table -> reference/protocols.md (support matrix)
+  - ':::info[Documentation lifecycle]' note -> contributing/documentation.md
+  - trim to a ~40-line landing page (what EUDIPLO is, one call to action, cards for cookbooks, guides and reference)
+-->
+
 # What is EUDIPLO?
 
 **EUDIPLO** is a lightweight, open-source **middleware layer** that bridges your
@@ -48,7 +54,7 @@ can run yourself, integrate over HTTP, and configure via JSON.
 
 ## Try the complete flow
 
-Follow the [issuance and verification cookbook](getting-started/index.md) to install EUDIPLO, issue a membership credential to a wallet, and verify its claims. Each chapter includes expected results and troubleshooting.
+Follow the [issuance and verification cookbook](cookbooks/index.md) to install EUDIPLO, issue a membership credential to a wallet, and verify its claims. Each chapter includes expected results and troubleshooting.
 
 ## Three ways to approach EUDIPLO
 
@@ -60,7 +66,7 @@ Follow the [issuance and verification cookbook](getting-started/index.md) to ins
 Run EUDIPLO, issue your first credential, and verify your first presentation
 in minutes.
 
-**Start here:** [Getting Started](./getting-started/index.md)
+**Start here:** [Getting Started](./cookbooks/index.md)
 
 </div>
 <div className="col col--4">
@@ -71,7 +77,7 @@ Learn how tenants, credential/issuance/presentation configurations, sessions,
 and key chains relate — and how the pluggable database, storage, and KMS
 backends fit together.
 
-**Start here:** [Architecture](./architecture/index.md)
+**Start here:** [Architecture](./concepts/index.md)
 
 </div>
 <div className="col col--4">
@@ -93,8 +99,8 @@ learn how to test and submit changes.
 | Issue a credential              | [Issuance](./issuance/index.md)                        |
 | Request/verify credentials      | [Presentation](./presentation/index.md)                |
 | Configure claims                | [Claims](./issuance/claims.md)                         |
-| Connect an authorization server | [Issuance: Authorization](./issuance/authorization.md) |
-| Deploy to production            | [Deployment](./deployment/index.md)                    |
+| Connect an authorization server | [Issuance: Authorization](./issuance/authorization-servers.md) |
+| Deploy to production            | [Deployment](./operate/index.md)                    |
 | Configure trust                 | [Trust & Security](./trust/index.md)                   |
 
 ## Key capabilities
@@ -146,4 +152,4 @@ Both options run the same **EUDIPLO CLI**.
 The documentation on the `main` branch represents the current development state and is used for preview deployments. Published, stable documentation is frozen per major release version. This keeps the active docs current without creating a large number of historical snapshots for every minor or patch release.
 :::
 
-Continue with the [Getting Started guide](./getting-started/index.md).
+Continue with the [Getting Started guide](./cookbooks/index.md).

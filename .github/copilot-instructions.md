@@ -10,10 +10,10 @@
 - **Monitoring**: [monitor/](../monitor) — OpenTelemetry Collector, Prometheus, Tempo, Loki & Grafana for observability.
 
 ## Backend Architecture Direction
-- Follow the [target backend architecture](../apps/docs/docs/architecture/backend-architecture.md) and [backend-specific instructions](instructions/backend-architecture.instructions.md) for new or explicitly migrated code.
+- Follow the [target backend architecture](../apps/docs/docs/contributing/backend-architecture.md) and [backend-specific instructions](instructions/backend-architecture.instructions.md) for new or explicitly migrated code.
 - Keep capability ownership; application use cases depend on domain models and application-owned ports, with infrastructure implementing those ports and NestJS modules wiring them.
 - Keep Express, TypeORM, direct HTTP clients, infrastructure SDKs, and HTTP exceptions outside migrated application/domain boundaries. Prefer meaningful capability ports over generic library wrappers.
-- The [refactoring plan](../apps/docs/docs/architecture/refactoring-plan.md) tracks status, open findings and next slices. Execute only the task or slice requested by the user; do not automatically start or continue it.
+- The [refactoring plan](../apps/backend/docs/refactoring-plan.md) tracks status, open findings and next slices. Execute only the task or slice requested by the user; do not automatically start or continue it.
 - Internal refactors may update all affected callers within the selected scope. Preserve external protocol/API/configuration behavior unless a change is explicitly requested.
 
 ## Developer Workflows
@@ -27,7 +27,7 @@
 
 ## Patterns & Conventions
 - **API Design**: RESTful, protocol-agnostic endpoints. See [apps/backend/src](../apps/backend/src).
-- **NestJS Modules**: Each feature has its own module. Folder layout, error mapping and DI wiring follow "Feature folder shape" in the [backend architecture](../apps/docs/docs/architecture/backend-architecture.md#feature-folder-shape): protocol and trust code uses `application/`, `domain/`, `ports/` and `adapters/`; administrative CRUD may stay a service with a TypeORM repository. Common subfolders:
+- **NestJS Modules**: Each feature has its own module. Folder layout, error mapping and DI wiring follow "Feature folder shape" in the [backend architecture](../apps/docs/docs/contributing/backend-architecture.md#feature-folder-shape): protocol and trust code uses `application/`, `domain/`, `ports/` and `adapters/`; administrative CRUD may stay a service with a TypeORM repository. Common subfolders:
   - `dto/` — Data Transfer Objects (request/response classes)
   - `entities/` — Database entities (TypeORM)
   - Application and domain errors are plain `Error` subclasses next to the use case or in `domain/`; missing resources extend `NotFoundError` (`shared/domain/not-found-error.ts`)

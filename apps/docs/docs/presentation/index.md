@@ -14,7 +14,7 @@ Credential presentation enables verifiers to:
 - **Maintain privacy** by requesting only necessary information
 - **Support multiple presentation flows** for different use cases
 
-EUDIPLO supports both standalone presentation flows and presentation as part of credential issuance via the [Interactive Authorization Endpoint (IAE)](../architecture/extension-points/iae.md), providing flexibility for various business requirements.
+EUDIPLO supports both standalone presentation flows and presentation as part of credential issuance via the [Interactive Authorization Endpoint (IAE)](../issuance/interactive-authorization.md), providing flexibility for various business requirements.
 
 ## Key Concepts
 
@@ -31,12 +31,12 @@ EUDIPLO supports multiple presentation scenarios:
     - Credentials presented as part of the issuance authorization flow
     - Enables qualification-based credential issuance
     - Supports multi-step workflows combining presentations with web-based verification
-    - See [Interactive Authorization Endpoint](../architecture/extension-points/iae.md) for details
+    - See [Interactive Authorization Endpoint](../issuance/interactive-authorization.md) for details
 
 - **ISO 18013-7 Presentation (Digital Credentials API)**
     - Requests an mdoc credential through the browser using the `org-iso-mdoc` protocol (ISO/IEC TS 18013-7:2025 Annex C)
     - Covers browsers that do not implement the OpenID4VP profile of the Digital Credentials API (e.g. Safari on iOS/macOS)
-    - See [Presentation Requests](presentation-requests.md#iso-18013-7-requests) for the request payload
+    - See [Presentation Requests](requests.md#iso-18013-7-requests) for the request payload
 
 ### DCQL (Digital Credentials Query Language)
 
@@ -94,17 +94,17 @@ Presentation flows create sessions that:
 
 ## Quick Start
 
-Use the verifier section in the [API Documentation](../reference/openapi.md) to manage presentation configurations and create presentation requests.
+Use the verifier section in the [API Documentation](../reference/api.md) to manage presentation configurations and create presentation requests.
 
-For request payloads, examples, and runtime override behavior, see [Presentation Requests](presentation-requests.md).
+For request payloads, examples, and runtime override behavior, see [Presentation Requests](requests.md).
 
 ## In This Section
 
-- [Presentation Configuration](presentation-configuration.md) — Define reusable presentation templates
-- [Presentation Requests](presentation-requests.md) — Create presentation requests and override configuration
+- [Presentation Configuration](configure-verification.md) — Define reusable presentation templates
+- [Presentation Requests](requests.md) — Create presentation requests and override configuration
 - [DCQL](dcql.md) — Digital Credentials Query Language for structured queries
 - [Transaction Data](transaction-data.md) — Contextual data displayed to users during presentation
-- [Handling Results](handling-results.md) — Retrieve verified claims and session status
+- [Handling Results](receive-results.md) — Retrieve verified claims and session status
 
 ## Security Considerations
 
@@ -151,7 +151,7 @@ For detailed information on how trust verification works, see [Trust Lists](../t
 
 ## Related Documentation
 
-- [Interactive Authorization Endpoint](../architecture/extension-points/iae.md) — Presentation as part of issuance
+- [Interactive Authorization Endpoint](../issuance/interactive-authorization.md) — Presentation as part of issuance
 - [Trust Lists](../trust/trust-lists.md) — Trust verification and validation
-- [Sessions](../architecture/sessions.md) — Session lifecycle and cleanup
-- [API Reference](../reference/openapi.md) — Verifier API endpoints
+- [Sessions](../concepts/sessions.md) — Session lifecycle and cleanup
+- [API Reference](../reference/api.md) — Verifier API endpoints

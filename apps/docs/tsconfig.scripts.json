@@ -5,5 +5,9 @@
     "moduleResolution": "Bundler",
     "noEmit": true
   },
-  "include": ["scripts/generate-request-docs.ts", "scripts/request-docs/**/*.ts"]
+  "include": [
+    "scripts/generate-schema-docs.ts",
+    "scripts/schema-docs/**/*.ts",
+    "scripts/check-sidebar-orphans.ts"
+  ]
 }

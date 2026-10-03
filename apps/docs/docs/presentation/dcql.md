@@ -2,6 +2,11 @@
 title: DCQL (Digital Credentials Query Language)
 ---
 
+<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
+  - 'Trust Authorities' (ETSI trust lists, own trust lists, AKI transformation, verification behavior) -> trust/trust-lists.md and cookbooks/trusted-issuers.md; keep a one-sentence link
+  - add credential_sets from concepts/presentation.md ('DCQL (Digital Credentials Query Language)')
+-->
+
 DCQL (Digital Credentials Query Language) is a standardized query format for requesting specific credentials and claims from wallets in OpenID4VP flows. EUDIPLO uses DCQL in the `dcql_query` field of presentation configurations.
 
 ## Overview
@@ -306,6 +311,6 @@ Both credentials must be present to satisfy the request.
 
 ## Related Documentation
 
-- [Presentation Configuration](presentation-configuration.md) — Configuring presentation requests
+- [Presentation Configuration](configure-verification.md) — Configuring presentation requests
 - [Trust Lists](../trust/trust-lists.md) — Trust list management
 - [OpenID4VP Specification](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) — DCQL specification

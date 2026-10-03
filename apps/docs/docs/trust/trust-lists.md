@@ -2,6 +2,10 @@
 title: Trust Lists
 ---
 
+<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
+  - 'Wallet Provider Trust During Issuance' -> trust/attestation.md
+-->
+
 # Trust Lists
 
 EUDIPLO implements a trust framework for credential verification based on the ETSI TS 119 602 standard (List of Trusted Entities - LoTE). This ensures that credentials are only accepted from authorized issuers and that revocation information comes from the correct authority.
@@ -213,7 +217,7 @@ Include PEM certificates directly:
 
 Trust lists are published as signed JWTs at:
 
-```
+```http
 GET /{tenantId}/trust-list/{trustListId}
 ```
 
@@ -224,6 +228,6 @@ This allows:
 
 ## Related Topics
 
-- [Key Chains](key-chains.md) — Managing trust list signing keys
-- [Certificates](certificates.md) — Certificate types and lifecycle
-- [Status Management](../issuance/status-management.md) — Credential revocation and status lists
+- [Key Chains](keys-and-certificates.md) — Managing trust list signing keys
+- [Certificates](keys-and-certificates.md#certificates) — Certificate types and lifecycle
+- [Status Management](../issuance/revocation.md) — Credential revocation and status lists

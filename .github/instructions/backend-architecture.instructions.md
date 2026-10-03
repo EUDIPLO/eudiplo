@@ -4,7 +4,7 @@ applyTo: "apps/backend/**/*.ts"
 
 # EUDIPLO Backend Architecture Instructions
 
-The backend is migrating toward pragmatic hexagonal / ports-and-adapters boundaries. The canonical [target architecture](../../apps/docs/docs/architecture/backend-architecture.md) defines roles and migration scope; the [backlog](../../apps/docs/docs/architecture/refactoring-plan.md) is not authorization to execute work.
+The backend is migrating toward pragmatic hexagonal / ports-and-adapters boundaries. The canonical [target architecture](../../apps/docs/docs/contributing/backend-architecture.md) defines roles and migration scope; the [backlog](../../apps/backend/docs/refactoring-plan.md) is not authorization to execute work.
 
 Apply these rules to new or explicitly migrated application/domain code. Do not classify all existing services as application code or refactor unrelated areas. Preserve external behavior unless the requested task explicitly changes it. Minimal NestJS DI decorators are allowed on application classes that can be constructed directly with fake ports; domain logic remains framework-independent.
 

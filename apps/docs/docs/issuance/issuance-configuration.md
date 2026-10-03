@@ -2,6 +2,12 @@
 title: Issuance Configuration
 ---
 
+<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
+  - 'Registration Certificate in Issuer Metadata' -> trust/registration-certificates.md
+  - 'Refresh Tokens' -> issuance/authorization-servers.md
+  - 'Wallet and Key Attestation' -> trust/attestation.md
+-->
+
 Issuance configurations define runtime behavior for issuing credentials, such as authorization, token behavior, and trust-related requirements.
 
 ## Guided setup in the Web Client
@@ -42,12 +48,12 @@ Press Enter in a single-line field or choose **Continue** to advance. Missing fi
 ```
 
 :::info
-The auto generated schema reference can be found in the [API Documentation](../reference/openapi.md)
+The auto generated schema reference can be found in the [API Documentation](../reference/api.md)
 :::
 
 ## Configuration Fields
 
-- `authorizationServers` (array, required): Managed authorization server definitions. Must contain at least one entry and supports `external`, `oid4vp`, `chained`, and `built-in` types. See [Authorization](authorization.md) for detailed configuration.
+- `authorizationServers` (array, required): Managed authorization server definitions. Must contain at least one entry and supports `external`, `oid4vp`, `chained`, and `built-in` types. See [Authorization](authorization-servers.md) for detailed configuration.
     - Each entry must define a non-empty `id`.
     - `id` values must be unique within the array.
     - `id` values `built-in` and `chained-as` are reserved and cannot be used.
@@ -61,12 +67,12 @@ The auto generated schema reference can be found in the [API Documentation](../r
 - `walletProviderTrustLists` (array, optional): Shared trust lists for key attestations at the credential endpoint and default wallet authentication at managed authorization servers. Per-AS overrides apply only to wallet authentication.
 - `credentialRequestEncryption` (boolean, optional): Advertise support for encrypted credential requests (`credential_request_encryption`).
 - `credentialResponseEncryption` (boolean, optional): Advertise support for encrypted credential responses (`credential_response_encryption`).
-- `federation` (object, optional): OpenID Federation trust configuration for auth-server/upstream trust evaluation. See [OpenID Federation](../architecture/extension-points/federation.md).
+- `federation` (object, optional): OpenID Federation trust configuration for auth-server/upstream trust evaluation. See [OpenID Federation](../trust/federation.md).
 - `registrationCertificate` (object, optional): Controls whether a registration certificate is published in issuer metadata (`issuer_info`) and whether it is imported as JWT or generated from selected schema metadata.
-- `display` (array of objects, required): The display information from the [OID4VCI spec](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-issuer-metadata:~:text=2%20or%20greater.-,display,-%3A%20OPTIONAL.%20A%20non). To host images or logos, you can use the [storage](../architecture/storage.md) system provided by EUDIPLO.
+- `display` (array of objects, required): The display information from the [OID4VCI spec](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html#name-credential-issuer-metadata:~:text=2%20or%20greater.-,display,-%3A%20OPTIONAL.%20A%20non). To host images or logos, you can use the [storage](../operate/object-storage.md) system provided by EUDIPLO.
 
 :::warning[Migration Note]
-`authServers` and `chainedAs` are legacy fields. New configurations should use `authorizationServers` only. See [Migrating from 4.x to 5.0](../migration/4.x-to-5.0.md) for the breaking-change mapping.
+`authServers` and `chainedAs` are legacy fields. New configurations should use `authorizationServers` only. See [Migrating from 4.x to 5.0](https://github.com/openwallet-foundation/eudiplo/blob/v8.1.0/apps/docs/docs/migration/4.x-to-5.0.md) for the breaking-change mapping.
 :::
 
 ## Authorization Servers
@@ -80,7 +86,7 @@ EUDIPLO-managed authorization servers (`oid4vp`, `chained`, and `built-in`) can 
 
 When omitted on an authorization server, EUDIPLO falls back to the issuance-level `walletAttestationRequired` and `walletProviderTrustLists` values.
 
-For complete configuration details and examples for each type, see the dedicated [Authorization](authorization.md) page.
+For complete configuration details and examples for each type, see the dedicated [Authorization](authorization-servers.md) page.
 
 ## Registration Certificate in Issuer Metadata
 
@@ -136,7 +142,7 @@ It regenerates when:
 ### Notes
 
 - If generation fails, issuer metadata is still returned, but `issuer_info` omits the registration certificate entry.
-- Schema metadata management is documented in [Schema Metadata](schema-metadata.md).
+- Schema metadata management is documented in [Schema Metadata](../trust/registrar.md#schema-metadata-ts11).
 
 ## Refresh Tokens
 

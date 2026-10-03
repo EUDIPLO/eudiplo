@@ -1095,7 +1095,7 @@
             <span><i>●</i> Updates instantly in your browser</span
             ><a
               id="reference"
-              href="https://docs.eudiplo.dev/getting-started/issuance/credential-configuration/"
+              href="https://docs.eudiplo.dev/issuance/credential-configuration/"
               >Explore the full configuration reference →</a
             >
           </div>
@@ -1203,7 +1203,7 @@
         </div>
         <a
           class="button"
-          href="https://docs.eudiplo.dev/getting-started/quick-start/"
+          href="https://docs.eudiplo.dev/cookbooks/foundation/"
           >Open the quick start →</a
         >
       </section>
@@ -1398,7 +1398,7 @@
                 : 'Status management disabled',
             );
           $('reference').href =
-            'https://docs.eudiplo.dev/getting-started/issuance/credential-configuration/';
+            'https://docs.eudiplo.dev/issuance/credential-configuration/';
         } else {
           $('preview').innerHTML =
             `<div class="verified"><span class="verified-icon">✓</span><div><small>VERIFIED RESULT</small><strong>${itemData.title}</strong><p>${itemData.fields.length} claims returned to your webhook</p></div></div>`;
@@ -1422,7 +1422,7 @@
             ) +
             item('Clean JSON result', 'Delivered through webhook or API');
           $('reference').href =
-            'https://docs.eudiplo.dev/getting-started/presentation/presentation-configuration/';
+            'https://docs.eudiplo.dev/presentation/configure-verification/';
         }
       }
       $('issue-tab').addEventListener('click', () => {

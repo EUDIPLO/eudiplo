@@ -16,7 +16,7 @@ Usually you create these resources first:
 
 ## Creating Credential Offers
 
-Use the [credential offer endpoint](../reference/openapi.md) to create the offer.
+Use the [credential offer endpoint](../reference/api.md) to create the offer.
 
 When creating an offer, you can:
 
@@ -74,7 +74,7 @@ If both a credential configuration and an offer specify `webhookEndpointId`, the
 }
 ```
 
-`authorization_server` must match the `id` of an enabled entry in `authorizationServers`. See [Authorization](authorization.md) for configuration details.
+`authorization_server` must match the `id` of an enabled entry in `authorizationServers`. See [Authorization](authorization-servers.md) for configuration details.
 
 ## Single-Use Offers
 
@@ -172,7 +172,7 @@ Notes:
 - `credentialClaims` keys must be a subset of `credentialConfigurationIds`
 - values are resolved per credential configuration, not globally for the whole offer
 - if you want to override only one credential in a multi-credential offer, include only that credential in `credentialClaims`
-- for the full webhook shape, see [Attribute Providers](attribute-provider.md), [Webhooks](../architecture/extension-points/webhooks.md), and the [API documentation](../reference/openapi.md)
+- for the full webhook shape, see [Attribute Providers](attribute-provider.md), [Webhooks](../reference/webhooks.md), and the [API documentation](../reference/api.md)
 
 ### When to Use Each Method
 
@@ -181,4 +181,4 @@ Notes:
 - Offer-level inline claims when claim values are already known at offer creation time
 - Offer-level webhook or Attribute Provider overrides when claim resolution should vary per offer
 
-For the broader claims model, see [Claims](claims.md) and [Webhooks](../architecture/extension-points/webhooks.md).
+For the broader claims model, see [Claims](claims.md) and [Webhooks](../reference/webhooks.md).

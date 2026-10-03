@@ -282,10 +282,10 @@ jobs:
       - name: Build config format
         run: pnpm --filter @eudiplo/config-format build
 
-      - name: Test request documentation
+      - name: Test documentation (sidebar orphans, schema generator)
         run: pnpm --filter @eudiplo/docs test
 
-      - name: Typecheck request documentation scripts
+      - name: Typecheck documentation scripts
         run: pnpm --filter @eudiplo/docs typecheck:scripts
 
       - name: Build documentation

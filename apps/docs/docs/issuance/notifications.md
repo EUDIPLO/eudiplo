@@ -2,6 +2,10 @@
 title: Notification Endpoint
 ---
 
+<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
+  - 'Webhook Integration > Webhook Payload' -> reference/webhooks.md (single owner of webhook payloads)
+-->
+
 EUDIPLO supports the OID4VCI Notification Endpoint, allowing wallets to notify the issuer when credential processing events occur (acceptance, deletion, failure).
 
 :::note Implementation Status
@@ -18,7 +22,7 @@ The notification endpoint provides a way for wallets to send event notifications
 
 ## Endpoint
 
-```
+```http
 POST /{tenant}/notification
 ```
 
@@ -181,5 +185,5 @@ An [Attribute Provider](attribute-provider.md) is not a notification webhook. It
 
 - [Credential Configuration](credential-configuration.md) — Configuring credential-level webhooks
 - [Credential Offers](credential-offers.md) — Configuring offer-level webhooks
-- [Architecture: Webhooks](../architecture/extension-points/webhooks.md) — Webhook integration patterns
-- [API Reference](../reference/openapi.md) — Webhook Endpoint management API
+- [Architecture: Webhooks](../reference/webhooks.md) — Webhook integration patterns
+- [API Reference](../reference/api.md) — Webhook Endpoint management API

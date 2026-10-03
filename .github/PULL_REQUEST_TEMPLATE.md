@@ -28,7 +28,7 @@ If this is a breaking change, list what is affected:
 - **Database**: (e.g., migration included? manual steps needed?)
 
 > Ensure the commit message includes `BREAKING CHANGE:` in the footer and the
-> [migration guide](docs/migration/index.md) is updated.
+> [upgrade guide](https://github.com/openwallet-foundation/eudiplo/tree/main/apps/docs/docs/upgrade) is updated.
 
 ## 🧪 Testing
 

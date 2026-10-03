@@ -293,11 +293,11 @@ Three different things can be upgraded, and each has its own command:
 | ---- | --- | ------- |
 | The CLI itself | Re-run the installer, or `npm install -g @eudiplo/cli@latest`. `eudiplo version` checks for a newer CLI | Only the `eudiplo` command on your machine. Running deployments are untouched |
 | The EUDIPLO application (Compose) | `eudiplo upgrade --image-tag <tag>` | The backend and web client images of the selected instance |
-| Tenant configuration files | `eudiplo config upgrade <bundle>` | Exported configuration bundles, see [Configuration Model](../architecture/configuration-model.md) |
+| Tenant configuration files | `eudiplo config upgrade <bundle>` | Exported configuration bundles, see [Configuration Model](../operate/configuration-as-code.md#configuration-model) |
 
 `eudiplo upgrade` only changes the two image lines the CLI manages in the instance env file (`EUDIPLO_IMAGE` and `EUDIPLO_CLIENT_IMAGE`). Everything else in the env file and all Compose files are left exactly as they are. The command:
 
-1. Shows the current and new tag for each image, and links the [migration guide](../migration/index.md) for every major version crossed. It warns about downgrades, and about tags such as `latest` that cannot be compared.
+1. Shows the current and new tag for each image, and links the [migration guide](../upgrade/index.md) for every major version crossed. It warns about downgrades, and about tags such as `latest` that cannot be compared.
 2. Asks for confirmation, unless `--yes` is passed. Non-interactive runs require `--yes`.
 3. Updates the image tags, pulls the new images and recreates the services. If pulling fails, the previous tags are restored.
 
@@ -355,12 +355,12 @@ eudiplo commands --format markdown
 
 This generates the same command documentation embedded below, straight from the CLI's own command definitions.
 
-import CliCommandReference from "@site/docs/generated/cli-reference.md";
+import CliCommandReference from "@site/docs/_generated/cli-reference.md";
 
 <CliCommandReference />
 
 ## Related Topics
 
-- [CLI Deployment Guide](../deployment/cli.md) — Setup and usage guide
-- [Docker Compose Deployment](../deployment/docker-compose.md) — Deploy with Docker Compose
-- [Kubernetes Deployment](../deployment/kubernetes.md) — Deploy on K8s
+- [CLI Deployment Guide](../operate/cli.md) — Setup and usage guide
+- [Docker Compose Deployment](../operate/docker-compose.md) — Deploy with Docker Compose
+- [Kubernetes Deployment](../operate/kubernetes.md) — Deploy on K8s

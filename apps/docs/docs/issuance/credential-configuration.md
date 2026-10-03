@@ -2,6 +2,15 @@
 title: Credential Configuration
 ---
 
+<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
+  - 'Basic Structure', 'Configuration Fields' (field reference) -> reference/credential-configuration.md (generated from Zod)
+  - 'Guided setup in the Web Client' (UI steps) -> cookbooks
+  - 'Configuring Fields' claim sources/validation duplicates -> issuance/claims.md
+  - 'Notification Webhook Endpoint' -> issuance/notifications.md
+  - 'Key Attestation' -> trust/attestation.md
+  - 'Single Active Credential > Fingerprints and Revocation Procedure' (internals) -> concepts/issuance.md
+-->
+
 Credential configurations define the structure and behavior of individual credentials. Each credential type has its own configuration.
 
 ## Guided setup in the Web Client
@@ -23,7 +32,7 @@ Each credential configuration is a JSON object that defines how a specific crede
 For a complete configuration example, see the [Complete Configuration Example](#complete-configuration-example) section at the bottom of this page.
 
 :::info
-The data object for the import can be found in the [API Documentation](../reference/openapi.md)
+The data object for the import can be found in the [API Documentation](../reference/api.md)
 :::
 
 ## Configuration Fields
@@ -47,7 +56,7 @@ The data object for the import can be found in the [API Documentation](../refere
 - `vct`: **OPTIONAL** - [VC Type Metadata](https://www.ietf.org/archive/id/draft-ietf-oauth-sd-jwt-vc-09.html#name-sd-jwt-vc-type-metadata) provided via the `/{tenantId}/credentials-metadata/vct/{id}` endpoint. This link will be automatically added to the credential.
 - `keyChainId`: **OPTIONAL** - Unique identifier for the key chain used to sign the credential. If not provided, the key chain with `attestation` usage type will be used. See [Signing Key Chain](#signing-key-chain) for details.
 - `lifeTime`: **OPTIONAL** - Credential expiration time in seconds. If specified, credentials will include an `exp` claim calculated as `iat + lifeTime`. See [Credential Expiration](#credential-expiration) for details.
-- `statusManagement`: **OPTIONAL** - Enable OAuth Token Status Lists for credential revocation. When `true`, credentials include a `status` claim with revocation information. See [Status Management](status-management.md) for details.
+- `statusManagement`: **OPTIONAL** - Enable OAuth Token Status Lists for credential revocation. When `true`, credentials include a `status` claim with revocation information. See [Status Management](revocation.md) for details.
 - `activeCredentials`: **OPTIONAL** - Enforce one active credential of this configuration per subject. Requires `statusManagement: true`; issuing a replacement revokes the subject's previous credential. See [Single Active Credential](#single-active-credential) for details.
 - `keyBinding`: **OPTIONAL** - Enable cryptographic key binding. When `true`, credentials include a `cnf` claim with the holder's public key and require proof of possession. See [Cryptographic Key Binding](#cryptographic-key-binding) for details.
 - `fields`: **REQUIRED** - Field definitions (`ClaimFieldDefinition[]`) that describe claim paths, data types, defaults, disclosure behavior, and optional display labels.
@@ -61,7 +70,7 @@ The data object for the import can be found in the [API Documentation](../refere
 - `iaeActions`: **OPTIONAL** - Sequence of Interactive Authorization actions required before credential issuance. See [Interactive Authorization Actions](#interactive-authorization-actions) for details.
 
 :::info[Schema Metadata is managed separately]
-Schema Metadata is managed in the dedicated Schema Metadata flow, not in the Credential Configuration editor. Use [Schema Metadata](schema-metadata.md) to create and version schema metadata entries.
+Schema Metadata is managed in the dedicated Schema Metadata flow, not in the Credential Configuration editor. Use [Schema Metadata](../trust/registrar.md#schema-metadata-ts11) to create and version schema metadata entries.
 :::
 
 ## Configuring Fields
@@ -281,7 +290,7 @@ The `keyChainId` field specifies which key chain should be used to sign the cred
 
 The `lifeTime` field determines when the credential expires. When set, EUDIPLO includes an `exp` claim in the credential calculated as:
 
-```
+```text
 exp = iat + lifeTime
 ```
 
@@ -382,7 +391,7 @@ For deferred issuance, EUDIPLO persists only the opaque issuance-set key with th
 
 Enable this policy only when invalidating the prior credential is the desired business outcome. A new access token that issues a credential immediately makes credentials issued with the previous token revoked, which can interrupt a holder who is still using them. An access token must remain bound to one holder; sharing a token causes the issuances it authorizes to be treated as one batch.
 
-Revocation takes effect for relying parties that check the credential's OAuth Token Status List. A verifier operating offline, using cached status information, or not checking status at all can continue accepting a replaced credential until it refreshes the status list or changes its verification policy. See [Status Management](status-management.md) for cache and update behavior.
+Revocation takes effect for relying parties that check the credential's OAuth Token Status List. A verifier operating offline, using cached status information, or not checking status at all can continue accepting a replaced credential until it refreshes the status list or changes its verification policy. See [Status Management](revocation.md) for cache and update behavior.
 
 ## Embedded Disclosure Policy
 
@@ -390,7 +399,7 @@ The `embeddedDisclosurePolicy` field defines rules for selective disclosure when
 
 ## Interactive Authorization Actions
 
-The `iaeActions` field defines a sequence of interactive authorization steps required before credential issuance. See the [Architecture documentation](../architecture/authorization.md) for details on the Interactive Authorization Endpoint (IAE).
+The `iaeActions` field defines a sequence of interactive authorization steps required before credential issuance. See the [Architecture documentation](authorization-servers.md#authorization) for details on the Interactive Authorization Endpoint (IAE).
 
 ## Complete Configuration Example
 

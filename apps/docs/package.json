@@ -5,9 +5,9 @@
   "scripts": {
     "docusaurus": "docusaurus",
     "start": "docusaurus start --host 127.0.0.1 --port 3003",
-    "lint": "markdownlint \"docs/**/*.md\"",
-    "lint:fix": "markdownlint --fix \"docs/**/*.md\"",
-    "prebuild": "tsx --tsconfig ../../tsconfig.scripts.json scripts/generate-config-docs.ts && tsx --tsconfig ../../tsconfig.scripts.json scripts/generate-cli-reference.ts && tsx --tsconfig ../../tsconfig.scripts.json scripts/generate-request-docs.ts",
+    "lint": "markdownlint \"docs/**/*.md\" --ignore \"docs/_generated/**\"",
+    "lint:fix": "markdownlint --fix \"docs/**/*.md\" --ignore \"docs/_generated/**\"",
+    "prebuild": "tsx --tsconfig ../../tsconfig.scripts.json scripts/generate-config-docs.ts && tsx --tsconfig ../../tsconfig.scripts.json scripts/generate-cli-reference.ts && tsx --tsconfig ../../tsconfig.scripts.json scripts/generate-schema-docs.ts",
     "build": "pnpm run prebuild && docusaurus build",
     "version:release": "VERSION=${VERSION:-current}; docusaurus docs:version \"$VERSION\"",
     "pages:deploy": "CLOUDFLARE_PAGES_BRANCH=${CLOUDFLARE_PAGES_BRANCH:-main}; npx wrangler pages deploy ./build --project-name eudiplo-docs --branch \"$CLOUDFLARE_PAGES_BRANCH\" --commit-dirty=true",
@@ -19,7 +19,8 @@
     "write-heading-ids": "docusaurus write-heading-ids",
     "typecheck": "tsc",
     "typecheck:scripts": "tsc --project tsconfig.scripts.json",
-    "test": "tsx --tsconfig ../../tsconfig.scripts.json --test scripts/request-docs/*.test.ts"
+    "check:sidebar": "tsx --tsconfig ../../tsconfig.scripts.json scripts/check-sidebar-orphans.ts",
+    "test": "pnpm run check:sidebar && tsx --tsconfig ../../tsconfig.scripts.json --test scripts/schema-docs/*.test.ts"
   },
   "dependencies": {
     "@docsearch/core": "^5.0.4",

@@ -12,10 +12,10 @@ Credential issuance in EUDIPLO is organized into **three layers**:
 
 - **[Claims](claims.md)** — Understand claim resolution, priority, and sources (static, Attribute Provider, offer-time)
 - **[Attribute Provider](attribute-provider.md)** — Dynamically fetch claims from external systems
-- **[Authorization](authorization.md)** — Configure authorization servers (external, OID4VP, chained, built-in)
-- **[Status Management](status-management.md)** — Enable credential revocation and suspension via OAuth Token Status Lists
+- **[Authorization](authorization-servers.md)** — Configure authorization servers (external, OID4VP, chained, built-in)
+- **[Status Management](revocation.md)** — Enable credential revocation and suspension via OAuth Token Status Lists
 - **[Notifications](notifications.md)** — Receive issuance status updates via webhooks
-- **[Schema Metadata](schema-metadata.md)** — Manage TS11 schema metadata for attestation schemas
+- **[Schema Metadata](../trust/registrar.md#schema-metadata-ts11)** — Manage TS11 schema metadata for attestation schemas
 
 ## Supported Credential Formats
 
@@ -33,10 +33,10 @@ EUDIPLO supports:
 | **Authorization code + Managed AS (OID4VP)** | No | OID4VP presentation inside issuer-hosted AS | Issuer or Wallet | Attribute Provider (required) |
 | **Interactive Authorization (IAE)** | No | Credential presentation (OID4VP) or web redirect | Issuer or Wallet | Attribute Provider (required) |
 
-For detailed flow diagrams and use cases, see the [Issuance Overview](index.md#supported-issuance-flows) in the source documentation.
+For detailed flow diagrams and use cases, see the [Issuance Overview](#supported-issuance-flows) in the source documentation.
 
 ## Quick Links
 
-- **API Reference**: [OpenAPI Documentation](../reference/openapi.md)
-- **Architecture**: [Webhooks](../architecture/extension-points/webhooks.md), [IAE](../architecture/extension-points/iae.md)
-- **Trust & Security**: [Trust Lists](../trust/trust-lists.md), [Key Chains](../trust/key-chains.md)
+- **API Reference**: [OpenAPI Documentation](../reference/api.md)
+- **Architecture**: [Webhooks](../reference/webhooks.md), [IAE](interactive-authorization.md)
+- **Trust & Security**: [Trust Lists](../trust/trust-lists.md), [Key Chains](../trust/keys-and-certificates.md)

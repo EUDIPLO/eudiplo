@@ -119,7 +119,7 @@ See [.devcontainer/README.md](.devcontainer/README.md) for more details.
 
 ## Backend Architecture
 
-See the [Backend Development guide](apps/docs/docs/contributing/backend.md), the [target architecture](apps/docs/docs/architecture/backend-architecture.md) (where code goes, reference implementations) and the [refactoring plan](apps/docs/docs/architecture/refactoring-plan.md) (status, open findings, and how to continue the migration). Pick one bounded slice before implementation. Run the backend E2E suite locally with `pnpm --filter @eudiplo/backend test:e2e:local` ([E2E testing](apps/docs/docs/contributing/e2e-testing.md)).
+See the [Backend Development guide](apps/docs/docs/contributing/backend-architecture.md#backend-development), the [target architecture](apps/docs/docs/contributing/backend-architecture.md) (where code goes, reference implementations) and the [refactoring plan](apps/backend/docs/refactoring-plan.md) (status, open findings, and how to continue the migration). Pick one bounded slice before implementation. Run the backend E2E suite locally with `pnpm --filter @eudiplo/backend test:e2e:local` ([E2E testing](apps/docs/docs/contributing/testing.md#e2e-testing)).
 
 ## Code Quality
 
@@ -168,11 +168,12 @@ pnpm run dev:docs
 
 The documentation includes:
 
-- Getting started guides in `apps/docs/docs/getting-started/`
-- Issuance and Presentation guides in `apps/docs/docs/issuance/` and `apps/docs/docs/presentation/`
+- Cookbooks (end-to-end recipes) in `apps/docs/docs/cookbooks/`
+- Guides in `apps/docs/docs/issuance/`, `apps/docs/docs/presentation/`, `apps/docs/docs/trust/` and `apps/docs/docs/operate/`
+- Reference pages in `apps/docs/docs/reference/` (partly generated from code)
+- Concepts in `apps/docs/docs/concepts/`
 - Contributor guides in `apps/docs/docs/contributing/`
-- API documentation generated from code (Compodoc + OpenAPI)
-- Architecture documentation in `apps/docs/docs/architecture/`
+- Upgrade guides in `apps/docs/docs/upgrade/`
 
 ---
 

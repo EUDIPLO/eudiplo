@@ -2,6 +2,12 @@
 title: Attribute Providers
 ---
 
+<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
+  - 'API Endpoints', 'Request and Response' (request format, identity object, response format) -> reference/attribute-provider-api.md
+  - 'Request and Response > Response Format > Deferred Issuance' -> issuance/deferred-issuance.md
+  - claim-source duplicates -> issuance/claims.md
+-->
+
 Attribute Providers are external HTTPS endpoints that EUDIPLO calls during credential issuance to dynamically fetch claim values. They provide a centralized, reusable way to configure claim sources at the tenant level.
 
 ## Overview
@@ -172,7 +178,7 @@ The `identity` object contains information about the authenticated user. Its con
 
 ### Presentation-Based Authorization
 
-When the wallet authorizes through an [OID4VP authorization server](authorization.md#oid4vp-authorization-server), the Attribute Provider receives the verified claims of the presented credentials in the `credentials` array. There is one entry per credential ID of the presentation's DCQL query. `values` is an array with the disclosed claims of each presented credential, because a query with `multiple: true` can match more than one credential:
+When the wallet authorizes through an [OID4VP authorization server](authorization-servers.md#oid4vp-authorization-server), the Attribute Provider receives the verified claims of the presented credentials in the `credentials` array. There is one entry per credential ID of the presentation's DCQL query. `values` is an array with the disclosed claims of each presented credential, because a query with `multiple: true` can match more than one credential:
 
 ```json
 {
@@ -203,7 +209,7 @@ When the wallet authorizes through an [OID4VP authorization server](authorizatio
 Your Attribute Provider can use the presented credentials to derive or transform claims for the new credential being issued.
 
 :::note
-The `openid4vp_presentation` action of [Interactive Authorization (IAE)](../architecture/extension-points/iae.md) does not verify the presented credentials, so they are not forwarded in `credentials`.
+The `openid4vp_presentation` action of [Interactive Authorization (IAE)](interactive-authorization.md) does not verify the presented credentials, so they are not forwarded in `credentials`.
 :::
 
 ### Response Format
@@ -233,7 +239,7 @@ To defer credential issuance (e.g., for background verification), return:
 }
 ```
 
-See the [Architecture documentation](../architecture/extension-points/attribute-providers.md) for details on deferred issuance handling.
+See the [Architecture documentation](../reference/attribute-provider-api.md) for details on deferred issuance handling.
 
 ## Offer-time Override
 
@@ -311,4 +317,4 @@ You can override the Attribute Provider at offer creation time. For complete exa
 
 - [Claims](claims.md) — Claims priority and resolution
 - [Credential Offers](credential-offers.md) — Offer-level overrides
-- [Architecture: Webhooks](../architecture/extension-points/webhooks.md) — Webhook integration patterns
+- [Architecture: Webhooks](../reference/webhooks.md) — Webhook integration patterns

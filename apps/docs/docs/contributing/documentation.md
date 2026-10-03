@@ -2,6 +2,11 @@
 title: Documentation
 ---
 
+<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
+  - document the tooling added by the restructure: `docs/_generated/` (generator output, not published), the schema registry `scripts/schema-docs/registry.ts` with `<SchemaReference name="…" mode="table|body" />`, the sidebar orphan check in `pnpm --filter @eudiplo/docs test`, markdownlint MD040, `onBrokenAnchors: 'throw'`
+  - once no page carries a RESTRUCTURE comment any more, drop `markdown.mdx1Compat.comments` from docusaurus.config.ts if HTML comments are not wanted
+-->
+
 # Contributing to Documentation
 
 EUDIPLO documentation is built with [Docusaurus](https://docusaurus.io/) and includes both hand-written guides and auto-generated API references.

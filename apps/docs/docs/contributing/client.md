@@ -233,6 +233,6 @@ When adding a new feature:
 ## Related Documentation
 
 - [Development Setup](./development-setup.md) — Environment configuration and running locally
-- [Repository Structure](./repository-structure.md) — Monorepo layout and workspace conventions
+- [Repository Structure](./development-setup.md#workspace-structure) — Monorepo layout and workspace conventions
 - [Testing](./testing.md) — Writing and running tests
-- [Backend Development](./backend.md) — Understanding the API structure
+- [Backend Development](./backend-architecture.md#backend-development) — Understanding the API structure
