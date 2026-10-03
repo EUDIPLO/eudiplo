@@ -2,7 +2,6 @@ import type { AuthorizationServerMetadata } from "@openid4vc/oauth2";
 import type { AuthorizationServersService } from "../authorization/authorization-servers/authorization-servers.service.js";
 import type { AuthorizeService } from "../authorization/authorize/authorize.service.js";
 import type { ChainedAsService } from "../authorization/chained-as/chained-as.service.js";
-import type { ChainedAsVpService } from "../authorization/chained-as-vp/chained-as-vp.service.js";
 import type { HostedAuthorizationServer } from "../domain/authorization-server-endpoint.js";
 import type { HostedAuthorizationServerMetadata } from "../ports/authorization-server-metadata.js";
 
@@ -14,7 +13,6 @@ export class HostedAuthorizationServerMetadataAdapter
         private readonly builtIn: AuthorizeService,
         private readonly oid4vp: AuthorizationServersService,
         private readonly chainedAs: ChainedAsService,
-        private readonly chainedAsVp: ChainedAsVpService,
     ) {}
 
     async get(
@@ -31,10 +29,6 @@ export class HostedAuthorizationServerMetadataAdapter
                 )) as AuthorizationServerMetadata;
             case "chained-as":
                 return (await this.chainedAs.getMetadata(
-                    tenantId,
-                )) as AuthorizationServerMetadata;
-            case "chained-as-vp":
-                return (await this.chainedAsVp.getMetadata(
                     tenantId,
                 )) as AuthorizationServerMetadata;
         }

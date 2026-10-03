@@ -4,14 +4,16 @@ import {
     type ChainedAsSession,
     ChainedAsSessionStatus,
 } from "../domain/chained-as-session.js";
+import {
+    type AuthorizationServerTokenSettings,
+    enforcedRefreshTokenExpiry,
+    type RefreshTokenPolicy,
+    refreshTokenExpiresAt,
+    refreshTokenPolicy,
+} from "../domain/token-grant-rules.js";
 import type { ChainedAsSessionRepository } from "../ports/chained-as-session.repository.js";
 import { ChainedAsTokenRequestDto } from "./dto/chained-as.dto.js";
 import { verifyPkceCodeChallenge } from "./pkce.util.js";
-
-export interface RefreshTokenIssuanceConfig {
-    refreshTokenEnabled?: boolean;
-    refreshTokenExpiresInSeconds?: number;
-}
 
 export function buildAuthorizationErrorRedirect(
     redirectUri: string,
@@ -94,8 +96,19 @@ export async function resolveSessionForTokenRequest(
     >,
     tenantId: string,
     request: ChainedAsTokenRequestDto,
+    refreshTokens: RefreshTokenPolicy,
 ): Promise<ChainedAsSession> {
     if (request.grant_type === "refresh_token") {
+        if (!refreshTokens.enabled) {
+            const description =
+                "Refresh tokens are disabled for this authorization server";
+            throw new BadRequestException({
+                error: "unsupported_grant_type",
+                error_description: description,
+                message: description,
+            });
+        }
+
         if (!request.refresh_token) {
             throw new BadRequestException(
                 "refresh_token is required for refresh_token grant",
@@ -111,9 +124,13 @@ export async function resolveSessionForTokenRequest(
             throw new UnauthorizedException("Invalid or expired refresh_token");
         }
 
+        // Refresh tokens stored without an expiry still expire.
         if (
-            session.refreshTokenExpiresAt &&
-            session.refreshTokenExpiresAt < new Date()
+            enforcedRefreshTokenExpiry(
+                session.refreshTokenExpiresAt,
+                session.createdAt,
+                refreshTokens,
+            ) < new Date()
         ) {
             throw new UnauthorizedException("refresh_token has expired");
         }
@@ -186,25 +203,50 @@ export function resolveTokenBinding(
     return { tokenType: "Bearer" };
 }
 
+/**
+ * Keep the session, which holds the upstream identity and the refresh token,
+ * until the tokens issued for it expire. Expired sessions are deleted
+ * periodically.
+ */
+export function retainSessionForIssuedTokens(
+    session: ChainedAsSession,
+    accessTokenExpiresAt: Date,
+): void {
+    session.expiresAt = new Date(
+        Math.max(
+            new Date(session.expiresAt).getTime(),
+            accessTokenExpiresAt.getTime(),
+            session.refreshTokenExpiresAt
+                ? new Date(session.refreshTokenExpiresAt).getTime()
+                : 0,
+        ),
+    );
+}
+
+/**
+ * Issue a refresh token under the shared refresh token policy. A token issued
+ * for a refresh_token grant replaces the redeemed one and keeps its expiry,
+ * so refreshing never extends the authorization.
+ */
 export function issueRefreshTokenIfEnabled(
     session: ChainedAsSession,
-    issuanceConfig: RefreshTokenIssuanceConfig,
+    token: AuthorizationServerTokenSettings | undefined,
+    grantType: ChainedAsTokenRequestDto["grant_type"],
 ): string | undefined {
-    if (!issuanceConfig.refreshTokenEnabled) {
+    const policy = refreshTokenPolicy(token);
+    if (!policy.enabled) {
         return undefined;
     }
 
-    const refreshToken = randomBytes(32).toString("base64url");
-    let refreshTokenExpiresAt: Date | undefined;
+    session.refreshTokenExpiresAt =
+        grantType === "refresh_token"
+            ? enforcedRefreshTokenExpiry(
+                  session.refreshTokenExpiresAt,
+                  session.createdAt,
+                  policy,
+              )
+            : refreshTokenExpiresAt(policy, new Date());
+    session.refreshToken = randomBytes(32).toString("base64url");
 
-    if (issuanceConfig.refreshTokenExpiresInSeconds) {
-        refreshTokenExpiresAt = new Date(
-            Date.now() + issuanceConfig.refreshTokenExpiresInSeconds * 1000,
-        );
-    }
-
-    session.refreshToken = refreshToken;
-    session.refreshTokenExpiresAt = refreshTokenExpiresAt;
-
-    return refreshToken;
+    return session.refreshToken;
 }

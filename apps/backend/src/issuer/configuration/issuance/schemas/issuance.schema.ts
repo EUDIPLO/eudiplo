@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { REMOVED_CHAINED_VP_MESSAGE } from "../domain/removed-authorization-servers.js";
 
 const ChainedAsTokenConfigSchema = z
     .object({
@@ -168,31 +169,42 @@ const Oid4VpAuthorizationServerConfigSchema = z
     .strict();
 
 const ChainedAuthorizationServerConfigSchema = z
-    .object({
-        type: z
-            .literal("chained")
-            .describe("Use upstream OIDC as authorization source."),
-        id: z.string().min(1).describe("Authorization server identifier."),
-        upstream: UpstreamOidcConfigSchema.describe(
-            "Upstream OIDC connection settings.",
-        ),
-        token: ChainedAsTokenConfigSchema.optional().describe(
-            "Optional token issuance settings.",
-        ),
-        requireDPoP: z
-            .boolean()
-            .optional()
-            .describe("Require DPoP proofs for token/credential requests."),
-        ...WalletAttestationAuthorizationServerSchema,
-        label: z
-            .string()
-            .optional()
-            .describe("Optional display label for UI selection."),
-        enabled: z
-            .boolean()
-            .optional()
-            .describe("Whether this authorization server entry is enabled."),
-    })
+    .object(
+        {
+            type: z
+                .literal("chained")
+                .describe("Use upstream OIDC as authorization source."),
+            id: z.string().min(1).describe("Authorization server identifier."),
+            upstream: UpstreamOidcConfigSchema.describe(
+                "Upstream OIDC connection settings.",
+            ),
+            token: ChainedAsTokenConfigSchema.optional().describe(
+                "Optional token issuance settings.",
+            ),
+            requireDPoP: z
+                .boolean()
+                .optional()
+                .describe("Require DPoP proofs for token/credential requests."),
+            ...WalletAttestationAuthorizationServerSchema,
+            label: z
+                .string()
+                .optional()
+                .describe("Optional display label for UI selection."),
+            enabled: z
+                .boolean()
+                .optional()
+                .describe(
+                    "Whether this authorization server entry is enabled.",
+                ),
+        },
+        {
+            // Point configurations of the removed `vp` option to `oid4vp`.
+            error: (issue) =>
+                issue.code === "unrecognized_keys" && issue.keys.includes("vp")
+                    ? REMOVED_CHAINED_VP_MESSAGE
+                    : undefined,
+        },
+    )
     .describe("Chained authorization server configuration.")
     .strict();
 

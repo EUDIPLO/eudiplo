@@ -173,3 +173,38 @@ describe("ChainedAsService upstream identity lookup", () => {
         ).resolves.toBeUndefined();
     });
 });
+
+describe("ChainedAsService metadata", () => {
+    const withToken = (token?: Record<string, unknown>): ChainedAsService =>
+        Object.assign(Object.create(ChainedAsService.prototype), {
+            settings: { publicUrl: "https://issuer.example" },
+            issuanceService: {
+                getIssuanceConfiguration: vi.fn().mockResolvedValue({
+                    authorizationServers: [
+                        {
+                            type: "chained",
+                            id: "chained-auth",
+                            upstream: {
+                                issuer: "https://idp.example",
+                                clientId: "eudiplo",
+                            },
+                            token,
+                        },
+                    ],
+                }),
+            },
+        });
+
+    it("advertises the refresh_token grant unless refresh tokens are disabled", async () => {
+        await expect(
+            withToken().getMetadata("tenant-1"),
+        ).resolves.toMatchObject({
+            grant_types_supported: ["authorization_code", "refresh_token"],
+        });
+        await expect(
+            withToken({ refreshTokenEnabled: false }).getMetadata("tenant-1"),
+        ).resolves.toMatchObject({
+            grant_types_supported: ["authorization_code"],
+        });
+    });
+});

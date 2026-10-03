@@ -4,8 +4,7 @@ import type { ManagedAuthorizationServerData } from "../../../configuration/issu
 export type HostedAuthorizationServer =
     | { kind: "built-in" }
     | { kind: "oid4vp"; id: string }
-    | { kind: "chained-as" }
-    | { kind: "chained-as-vp" };
+    | { kind: "chained-as" };
 
 /** An authorization server entry that can be advertised to wallets. */
 export type AuthorizationServerEndpoint =
@@ -15,13 +14,12 @@ export type AuthorizationServerEndpoint =
 type ConfiguredServer = ManagedAuthorizationServerData & {
     issuer?: unknown;
     upstream?: unknown;
-    vp?: { enabled?: boolean };
 };
 
 /**
  * Classifies a configured authorization server entry. Returns `undefined` for
  * entries that cannot be advertised (for example a chained server without
- * upstream or VP configuration). The `enabled` flag is not evaluated here.
+ * upstream configuration). The `enabled` flag is not evaluated here.
  */
 export function toAuthorizationServerEndpoint(
     server: ManagedAuthorizationServerData,
@@ -39,9 +37,7 @@ export function toAuthorizationServerEndpoint(
         case "built-in":
             return { kind: "built-in" };
         case "chained":
-            if (entry.upstream) return { kind: "chained-as" };
-            if (entry.vp?.enabled) return { kind: "chained-as-vp" };
-            return undefined;
+            return entry.upstream ? { kind: "chained-as" } : undefined;
         default:
             return undefined;
     }
@@ -65,7 +61,5 @@ export function authorizationServerIssuer(
             return `${credentialIssuer}/authorization-servers/${endpoint.id}`;
         case "chained-as":
             return `${credentialIssuer}/chained-as`;
-        case "chained-as-vp":
-            return `${credentialIssuer}/chained-as-vp`;
     }
 }
