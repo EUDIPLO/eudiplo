@@ -1,6 +1,7 @@
 import {
     Body,
     Controller,
+    ForbiddenException,
     Headers,
     HttpCode,
     HttpStatus,
@@ -11,6 +12,12 @@ import {
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import type { Request, Response } from "express";
+import { Role } from "../../../../../auth/roles/role.enum.js";
+import { Secured } from "../../../../../auth/secure.decorator.js";
+import {
+    Token,
+    type TokenPayload,
+} from "../../../../../auth/token.decorator.js";
 import type { Oid4vciRequestContext } from "../../request-context.js";
 import {
     InteractiveAuthorizationCodeResponseDto,
@@ -141,15 +148,24 @@ Handles interactive authorization requests during credential issuance.
      * @returns Success indicator
      */
     @Post("complete-web-auth/:authSession")
+    @Secured([Role.IssuanceOffer])
     @HttpCode(HttpStatus.OK)
     @ApiOperation({
         summary: "Complete web authorization",
         description:
-            "Mark a web authorization session as completed after user interaction",
+            "Called by the issuer's backend with a management API token of the tenant: marks the redirect_to_web step of an auth session as completed after the user interaction.",
     })
     @ApiResponse({
         status: 200,
         description: "Web authorization marked as completed",
+    })
+    @ApiResponse({
+        status: 401,
+        description: "Missing or invalid management API token",
+    })
+    @ApiResponse({
+        status: 403,
+        description: "The token belongs to another tenant",
     })
     @ApiResponse({
         status: 404,
@@ -158,7 +174,15 @@ Handles interactive authorization requests during credential issuance.
     async completeWebAuth(
         @Param("authSession") authSession: string,
         @Param("tenantId") tenantId: string,
+        @Token() token: TokenPayload,
     ) {
+        // Only the tenant's backend may complete a web interaction; the
+        // wallet knows the auth_session and must not complete it itself.
+        if (token.entity?.id !== tenantId) {
+            throw new ForbiddenException(
+                "The token does not belong to this tenant",
+            );
+        }
         const success =
             await this.interactiveAuthorizationService.completeWebAuthorization(
                 authSession,
