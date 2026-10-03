@@ -225,6 +225,13 @@ export interface OfferResult {
   sessionId: string;
 }
 
+/** Removes trailing slashes in linear time (a `/\/+$/` regex can backtrack). */
+function withoutTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === '/') end--;
+  return url.slice(0, end);
+}
+
 /**
  * Framework-agnostic EUDIPLO client for demos and integrations.
  *
@@ -259,7 +266,7 @@ export class EudiploClient {
       autoRefresh: true,
       ...config,
       // Hand-written URLs append paths with a leading slash.
-      baseUrl: config.baseUrl.replace(/\/+$/, ''),
+      baseUrl: withoutTrailingSlashes(config.baseUrl),
     };
 
     // Configure the underlying API client
