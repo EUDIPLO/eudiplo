@@ -15,9 +15,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# main only advances through the merge queue, whose merge_group run already
+# checked the exact commit. Push runs therefore skip the checks and only
+# publish images, deploy the preview site and upload default-branch coverage.
 jobs:
   config-schemas:
     name: Check Config Schemas and Website
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -50,6 +54,7 @@ jobs:
     permissions:
       contents: read
     name: Lint Codebase
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -90,6 +95,7 @@ jobs:
 
   build-sdk-core:
     name: Build SDK Core
+    if: github.event_name != 'push'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -115,6 +121,7 @@ jobs:
 
   build-cli:
     name: Build CLI
+    if: github.event_name != 'push'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -175,6 +182,7 @@ jobs:
 
   build-backend:
     name: Build Backend
+    if: github.event_name != 'push'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -203,6 +211,7 @@ jobs:
 
   build-client:
     name: Build Client
+    if: github.event_name != 'push'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -234,6 +243,7 @@ jobs:
 
   build-webhook:
     name: Build Webhook
+    if: github.event_name != 'push'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -259,6 +269,7 @@ jobs:
 
   build-doc:
     name: Build Documentation
+    if: github.event_name != 'push'
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -305,7 +316,6 @@ jobs:
   deploy-docs:
     name: Deploy Preview Website & Documentation
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [build-doc]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -368,8 +378,8 @@ jobs:
     permissions:
       contents: read
     name: E2E Tests (non-OIDF)
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    needs: [lint]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -406,8 +416,8 @@ jobs:
     permissions:
       contents: read
     name: E2E Tests (OIDF)
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    needs: [lint]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -453,7 +463,6 @@ jobs:
       contents: read
     name: Test Coverage Report
     runs-on: ubuntu-latest
-    needs: [lint]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -513,6 +522,7 @@ jobs:
     needs: [test-coverage-report]
     if: >-
       needs.test-coverage-report.result == 'success' &&
+      github.event_name != 'merge_group' &&
       (
         github.event_name != 'pull_request' ||
         github.event.pull_request.head.repo.full_name == github.repository
@@ -564,10 +574,11 @@ jobs:
   # Docker Backend: Build, Test & Push (multi-platform with native runners)
   # Uses native ARM runners instead of QEMU for ~4x faster arm64 builds.
   # Skip arm64 on PRs to save time - only build amd64 for validation.
+  # Runs alongside the tests: on main only tested merge-queue commits get pushed.
   # =============================================================================
   docker-backend:
     name: Build & Test Backend Docker (${{ matrix.arch }})
-    needs: [build-info, test-e2e, test-e2e-oidf]
+    needs: [build-info]
     strategy:
       fail-fast: false
       matrix:
@@ -582,6 +593,9 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          # Runners are ephemeral; removing the builder only adds 15-60s.
+          cleanup: false
 
       - name: Docker meta
         id: meta
@@ -608,8 +622,6 @@ jobs:
           build-args: |
             VERSION=${{ needs.build-info.outputs.version }}
             REVISION=${{ needs.build-info.outputs.revision }}
-          cache-from: type=gha,scope=backend-${{ matrix.arch }}
-          cache-to: type=gha,scope=backend-${{ matrix.arch }},mode=max
 
       - name: Run container (detached)
         if: matrix.arch == 'amd64'
@@ -698,8 +710,6 @@ jobs:
             REVISION=${{ needs.build-info.outputs.revision }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=ghcr.io/openwallet-foundation/eudiplo,push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=backend-${{ matrix.arch }}
-          cache-to: type=gha,scope=backend-${{ matrix.arch }},mode=max
 
       - name: Export digest
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -767,7 +777,7 @@ jobs:
   # =============================================================================
   docker-backend-demo:
     name: Build & Push Backend Demo Docker (${{ matrix.arch }})
-    needs: [build-info, test-e2e, test-e2e-oidf]
+    needs: [build-info]
     strategy:
       fail-fast: false
       matrix:
@@ -781,6 +791,9 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          # Runners are ephemeral; removing the builder only adds 15-60s.
+          cleanup: false
 
       - name: Docker meta
         id: meta
@@ -806,8 +819,6 @@ jobs:
           build-args: |
             VERSION=${{ needs.build-info.outputs.version }}
             REVISION=${{ needs.build-info.outputs.revision }}
-          cache-from: type=gha,scope=backend-demo-${{ matrix.arch }}
-          cache-to: type=gha,scope=backend-demo-${{ matrix.arch }},mode=max
 
       # --- Build and push by digest (main push only) ---
       - name: Build and push by digest
@@ -823,8 +834,6 @@ jobs:
             REVISION=${{ needs.build-info.outputs.revision }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=ghcr.io/openwallet-foundation/eudiplo-demo,push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=backend-demo-${{ matrix.arch }}
-          cache-to: type=gha,scope=backend-demo-${{ matrix.arch }},mode=max
 
       - name: Export digest
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -892,7 +901,7 @@ jobs:
   # =============================================================================
   docker-client:
     name: Build & Push Client Docker (${{ matrix.arch }})
-    needs: [build-info, lint]
+    needs: [build-info]
     strategy:
       fail-fast: false
       matrix:
@@ -907,6 +916,9 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          # Runners are ephemeral; removing the builder only adds 15-60s.
+          cleanup: false
 
       - name: Docker meta
         id: meta
@@ -935,8 +947,6 @@ jobs:
             REVISION=${{ needs.build-info.outputs.revision }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=ghcr.io/openwallet-foundation/eudiplo-client,push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=client-${{ matrix.arch }}
-          cache-to: type=gha,scope=client-${{ matrix.arch }},mode=max
 
       # --- Build to validate (PRs/workflow_dispatch only) ---
       - name: Build to validate
@@ -949,8 +959,6 @@ jobs:
           build-args: |
             VERSION=${{ needs.build-info.outputs.version }}
             REVISION=${{ needs.build-info.outputs.revision }}
-          cache-from: type=gha,scope=client-${{ matrix.arch }}
-          cache-to: type=gha,scope=client-${{ matrix.arch }},mode=max
 
       - name: Export digest
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
