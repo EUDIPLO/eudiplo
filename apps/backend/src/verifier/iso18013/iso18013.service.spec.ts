@@ -275,6 +275,7 @@ describe("Iso18013Service.processResponse presentation webhook", () => {
             docType: "org.iso.18013.5.1.mDL",
             claims: { family_name: "Mustermann" },
             missingClaims: [],
+            mismatchedClaims: [],
         });
 
         await expect(

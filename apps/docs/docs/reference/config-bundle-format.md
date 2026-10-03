@@ -14,7 +14,7 @@ Every portable resource is one JSON document:
 
 ```json
 {
-    "$schema": "https://eudiplo.dev/schemas/v2/PresentationConfigFile.schema.json",
+    "$schema": "https://eudiplo.dev/schemas/v3/PresentationConfigFile.schema.json",
     "metadata": { "generation": 3, "ownership": "file-managed" },
     "spec": { "id": "age-check" }
 }
@@ -47,13 +47,13 @@ rejects versions newer than its own.
 | `RegistrarConfig`    | `RegistrarConfigFile`         | 1               | yes       |
 | `IssuanceConfig`     | `IssuanceConfigFile`          | 2               | yes       |
 | `CredentialConfig`   | `CredentialConfigFile`        | 1               |           |
-| `PresentationConfig` | `PresentationConfigFile`      | 2               |           |
+| `PresentationConfig` | `PresentationConfigFile`      | 3               |           |
 | `AttributeProvider`  | `AttributeProviderConfigFile` | 1               |           |
 | `WebhookEndpoint`    | `WebhookEndpointConfigFile`   | 1               |           |
 | `TrustList`          | `TrustListConfigFile`         | 1               |           |
 | `StatusList`         | `StatusListConfigFile`        | 1               |           |
 
-Version 2 was introduced with EUDIPLO 9.0; 8.x cannot read it:
+Versions 2 and 3 were introduced with EUDIPLO 9.0; 8.x cannot read them:
 
 - **IssuanceConfig v2** adds the optional `offerLifetimeSeconds`. A v1 document
   is migrated unchanged.
@@ -61,6 +61,10 @@ Version 2 was introduced with EUDIPLO 9.0; 8.x cannot read it:
   with the registrar's `provides_attestations` (a list of credential type
   identifiers). The migration removes `provided_attestations` with the warning
   `PROVIDED_ATTESTATIONS_REMOVED`; set `provides_attestations` yourself.
+- **PresentationConfig v3** accepts integer and boolean DCQL claim `values`
+  besides strings and requires them to be non-empty. A v2 document is migrated
+  unchanged; an empty `values` array stops the migration with a validation
+  error.
 
 ## Tenant folder layout
 

@@ -180,6 +180,7 @@ describe("PresentationConfig v1 to v2", () => {
         expect(result.document.$schema).toBe(schemaUrl("PresentationConfig"));
         expect(result.migrations).toEqual([
             "presentation-config-v2-provides-attestations",
+            "presentation-config-v3-typed-claim-values",
         ]);
         expect(result.document.spec.registration_cert).toEqual({
             body: privacy,
@@ -246,5 +247,72 @@ describe("PresentationConfig v1 to v2", () => {
                 }),
             ),
         ).toEqual(unknownProperty("provided_attestations"));
+    });
+});
+
+describe("PresentationConfig v2 to v3", () => {
+    const withValues = (version: number, values: unknown[]) => ({
+        $schema: schemaUrl("PresentationConfig", version),
+        spec: {
+            id: "age",
+            dcql_query: {
+                credentials: [
+                    {
+                        id: "pid",
+                        format: "dc+sd-jwt",
+                        meta: { vct_values: ["urn:eudi:pid:de:1"] },
+                        claims: [{ path: ["age_equal_or_over", "18"], values }],
+                    },
+                ],
+            },
+        },
+    });
+
+    it("upgrades string claim values unchanged and only once", () => {
+        const v2 = withValues(2, ["gold", "platinum"]);
+        const result = migrateDocument(v2, validateConfigDocument);
+
+        expect(result.issues).toEqual([]);
+        expect(result.migrations).toEqual([
+            "presentation-config-v3-typed-claim-values",
+        ]);
+        expect(result.document.$schema).toBe(
+            schemaUrl("PresentationConfig", 3),
+        );
+        expect(result.document.spec).toEqual(v2.spec);
+        expect(
+            migrateDocument(result.document, validateConfigDocument).migrations,
+        ).toEqual([]);
+    });
+
+    it("accepts integer and boolean claim values only from v3 on", () => {
+        const typed = [true, 18, "18"];
+        expect(
+            validateConfigDocument(normalizeDocument(withValues(3, typed))),
+        ).toEqual([]);
+        expect(
+            validateConfigDocument(normalizeDocument(withValues(2, typed))),
+        ).not.toEqual([]);
+    });
+
+    it("stops the upgrade on empty claim values", () => {
+        const result = migrateDocument(
+            withValues(2, []),
+            validateConfigDocument,
+        );
+
+        expect(result.migrations).toEqual([]);
+        expect(result.document.$schema).toBe(
+            schemaUrl("PresentationConfig", 2),
+        );
+        expect(result.issues).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    severity: "error",
+                    path: "/spec/dcql_query/credentials/0/claims/0/values",
+                    message: "must NOT have fewer than 1 items",
+                }),
+            ]),
+        );
     });
 });

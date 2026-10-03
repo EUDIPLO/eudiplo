@@ -154,5 +154,5 @@ Differences from the OpenID4VP flows:
 - Every element is requested with intent to retain `false`, whatever `intent_to_retain` says.
 - `redirectUri`, `transaction_data` and `clientIdScheme` from the request are ignored; the configuration's `redirectUri` still applies after a successful presentation.
 - `expected_origin` must equal the origin of the page that calls the DC API, because the session transcript is bound to it.
-- Elements the wallet does not return are not rejected separately; check the claims in the result.
+- Elements the wallet does not return are not rejected separately, and `values` constraints are not checked; check the claims in the result.
 - Set [`readerAuth`](configure-verification.md#reader-authentication-iso-18013-7) to sign the request so the wallet can authenticate the verifier.

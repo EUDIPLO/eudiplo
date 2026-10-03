@@ -4,7 +4,7 @@ title: Configuration Schemas
 
 # Configuration schemas
 
-Configuration files name their format in `$schema`, for example `https://eudiplo.dev/schemas/v2/PresentationConfigFile.schema.json`. This page explains how these format versions work, how to bump one, and how the schemas are published. The file format itself is described in [Configuration as code](../operate/configuration-as-code.md).
+Configuration files name their format in `$schema`, for example `https://eudiplo.dev/schemas/v3/PresentationConfigFile.schema.json`. This page explains how these format versions work, how to bump one, and how the schemas are published. The file format itself is described in [Configuration as code](../operate/configuration-as-code.md).
 
 ## Format versions
 
@@ -14,6 +14,7 @@ Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eud
 | --- | --- | --- |
 | `IssuanceConfig` | v2 | Optional `offerLifetimeSeconds`. A v1 file is a valid v2 file. |
 | `PresentationConfig` | v2 | `registration_cert.body.provided_attestations` is replaced by the registrar's `provides_attestations` (string array). The v1 → v2 step drops the old field with a warning. |
+| `PresentationConfig` | v3 | DCQL claim `values` accept integers and booleans besides strings and must be non-empty. A v2 file is a valid v3 file unless it has an empty `values` array. |
 | All other resources | v1 | |
 
 The backend and the CLI bundle every published snapshot (`schemas/v*/`) and never fetch schema URLs from files. Older files are upgraded on import, one version step at a time, through `CONFIG_MIGRATIONS`: the startup import and bundle imports (`POST /api/config-bundles/plan` and `/import`) accept warnings and stop on issues that need input; `eudiplo config upgrade <file-or-folder>` does the same offline. A file with a newer version than the running release supports is rejected, so 9.0 exports cannot be imported into 8.x.

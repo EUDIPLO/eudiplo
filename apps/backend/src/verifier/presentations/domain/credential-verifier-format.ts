@@ -80,7 +80,13 @@ export type CredentialVerificationResult =
           provenance?: VerificationProvenance;
           /** Requested claims (dotted paths) that are not disclosed. Only checked without `claimSets`. */
           missingClaims: string[];
-          /** Whether one of the `claimSets` options is disclosed. Set only with `claimSets`. */
+          /**
+           * Disclosed claims (dotted paths) whose value is not one of the
+           * claim query's `values`. Without `claimSets` over all claims; with
+           * `claimSets` only when no option is satisfied, over all options.
+           */
+          mismatchedClaims: string[];
+          /** Whether one of the `claimSets` options is disclosed with requested values. Set only with `claimSets`. */
           claimSetSatisfied?: boolean;
       }
     | {

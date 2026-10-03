@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { SessionStatus } from "../../session/domain/session-state.js";
 import { SessionNotUsable } from "../../session/domain/session-usability.js";
-import { CredentialVerificationFailedError } from "../presentations/application/verify-presentation-response.js";
+import {
+    CredentialVerificationFailedError,
+    IncompletePresentationError,
+} from "../presentations/application/verify-presentation-response.js";
+import {
+    claimValueMismatchViolation,
+    missingClaimsViolation,
+} from "../presentations/domain/dcql-claim-policy.js";
 import { CompletePresentationResponse } from "./application/complete-presentation-response.js";
 import { FailPresentationResponse } from "./application/fail-presentation-response.js";
 import { ParseAuthorizationResponse } from "./application/parse-authorization-response.js";
@@ -546,6 +553,73 @@ describe("OID4VP verification failure reporting", () => {
                     { id: "mdl", verified: false, error: "verification_error" },
                 ],
             },
+        });
+    });
+
+    it("reports claim value mismatches with the claim_value_mismatch code", async () => {
+        const { service, session, update, publish, logFlowError } =
+            createService(
+                new IncompletePresentationError(
+                    claimValueMismatchViolation("pid", [
+                        "age_equal_or_over.18",
+                    ]),
+                ),
+            );
+
+        const error = await service
+            .getResponse({ response: "encrypted" }, "expected")
+            .catch((error) => error);
+
+        expect(error.getStatus()).toBe(400);
+        // Names the claim path, never the disclosed value.
+        const message =
+            "Disclosed claim values do not match the requested values for credential 'pid': age_equal_or_over.18";
+        const outcome = {
+            result: "failed",
+            error: "claim_value_mismatch",
+            message,
+        };
+        expect(update).toHaveBeenCalledExactlyOnceWith("tenant", "session", {
+            status: "failed",
+            errorReason: message,
+            failureCode: "claim_value_mismatch",
+            responseEncryptionPrivateJwk: null,
+            outcome,
+        });
+        expect(logFlowError).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.anything(),
+            {
+                action: "process_presentation_response",
+                errorCode: "claim_value_mismatch",
+            },
+        );
+        expect(publish).toHaveBeenCalledExactlyOnceWith({
+            webhook,
+            session,
+            status: "failed",
+            outcome,
+        });
+    });
+
+    it("keeps missing claims without a failure code", async () => {
+        const { service, update } = createService(
+            new IncompletePresentationError(
+                missingClaimsViolation("pid", ["given_name"]),
+            ),
+        );
+
+        await service
+            .getResponse({ response: "encrypted" }, "expected")
+            .catch(() => undefined);
+
+        const message =
+            "Missing required claims for credential 'pid': given_name";
+        expect(update.mock.calls[0][2]).toEqual({
+            status: "failed",
+            errorReason: message,
+            responseEncryptionPrivateJwk: null,
+            outcome: { result: "failed", message },
         });
     });
 

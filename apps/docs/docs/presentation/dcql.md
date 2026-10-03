@@ -46,13 +46,19 @@ For mDOC, `meta.doctype_value` names the document type and each claim path is `[
 
 ## Accept specific values
 
-`values` lists the accepted values of a claim. It is sent to the wallet, which only offers matching credentials:
+`values` lists the accepted values of a claim: strings, integers or booleans. It is sent to the wallet, which only offers matching credentials:
 
 ```json
 { "path": ["membership_level"], "values": ["gold", "platinum"] }
 ```
 
-EUDIPLO does not compare the presented value with `values` again. If the decision matters, check the claim in your backend.
+In OpenID4VP flows EUDIPLO checks the presented value again, because a wallet may ignore the constraint. The disclosed value must equal one of the listed values in type and value: `true` does not match `"true"`, and `18` does not match `"18"`. Otherwise the presentation fails with the code `claim_value_mismatch` ([failure codes](../reference/session-outcome.md#failure-codes)). A yes/no check, such as an age check, therefore only completes with the expected answer:
+
+```json
+{ "path": ["age_equal_or_over", "18"], "values": [true] }
+```
+
+With `claim_sets`, a set counts only if all its claims are disclosed with accepted values. If a path selects several array elements, one of them must match. mDOC values are compared by element name, like the presence check. [ISO 18013-7 requests](requests.md#iso-18013-7-annex-c) do not check `values`.
 
 ## Alternative claims
 

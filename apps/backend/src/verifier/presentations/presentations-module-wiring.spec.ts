@@ -16,6 +16,7 @@ describe("PresentationsModule wiring", () => {
             verified: true,
             claims: { age_over_18: true },
             missingClaims: [],
+            mismatchedClaims: [],
         });
         const resolveTrustListRefsForTenant = vi.fn().mockResolvedValue([]);
         const moduleRef = await Test.createTestingModule({

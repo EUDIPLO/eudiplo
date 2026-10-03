@@ -13,6 +13,7 @@ import type {
 import {
     claimSelections,
     claimSetNotSatisfied,
+    claimValueMismatchViolation,
     type DcqlCredentialQuery,
     type DcqlCredentialSetQuery,
     findMissingCredentials,
@@ -50,13 +51,18 @@ export type VerifiedPresentation = Array<{
     values: Record<string, unknown>[];
 }>;
 
-/** The response does not satisfy the DCQL query (missing credentials or claims). */
+/**
+ * The response does not satisfy the DCQL query: missing credentials or
+ * claims, or claims without a requested value.
+ */
 export class IncompletePresentationError extends Error {
+    readonly code: IncompletePresentation["code"];
     readonly details: IncompletePresentation["details"];
 
     constructor(violation: IncompletePresentation) {
         super(violation.message);
         this.name = "IncompletePresentationError";
+        this.code = violation.code;
         this.details = violation.details;
     }
 }
@@ -107,7 +113,8 @@ export class CredentialVerificationFailedError extends Error {
  * presentation unless the query allows `multiple`, its trusted authorities
  * resolve, its claim sets are well formed; then every presented value is
  * verified by its format and must disclose the requested claims (or one
- * claim set).
+ * claim set) with one of their requested `values`. A value mismatch is
+ * reported before missing claims.
  *
  * Throws the errors above, `UnknownClaimSetReferenceError`,
  * `UnsupportedCredentialVerifierFormat`, `InvalidTrustedAuthoritiesError`, or
@@ -232,6 +239,14 @@ export class VerifyPresentationResponse {
                                 credentialId,
                                 result.failure,
                                 { format, docType: result.docType },
+                            );
+                        }
+                        if (result.mismatchedClaims.length > 0) {
+                            throw new IncompletePresentationError(
+                                claimValueMismatchViolation(
+                                    credentialId,
+                                    result.mismatchedClaims,
+                                ),
                             );
                         }
                         if (result.claimSetSatisfied === false) {

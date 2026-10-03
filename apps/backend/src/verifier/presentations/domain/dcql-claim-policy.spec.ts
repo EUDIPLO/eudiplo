@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+    CLAIM_VALUE_MISMATCH,
     claimSelections,
     claimSetNotSatisfied,
+    claimValueMismatchViolation,
+    evaluateClaimSelection,
+    evaluateMdocClaimSelection,
     findMissingCredentials,
-    hasClaimPath,
-    matchesClaimSelection,
-    matchesMdocClaimSelection,
+    isClaimSelectionSatisfied,
     missingClaimsViolation,
-    missingMdocClaims,
     sdJwtRequiredClaimKeys,
+    selectClaimValues,
     UnknownClaimSetReferenceError,
 } from "./dcql-claim-policy.js";
 
@@ -60,14 +62,14 @@ describe("sdJwtRequiredClaimKeys", () => {
     });
 });
 
-describe("missing mdoc claims", () => {
+describe("mdoc claim evaluation", () => {
     it("reports absent elements with their full path", () => {
-        const missing = missingMdocClaims(
-            [{ path: ["ns", "given_name"] }, { path: ["ns", "age"] }],
-            { given_name: "Erika" },
-        );
-        expect(missing).toEqual(["ns.age"]);
-        expect(missingClaimsViolation("pid", missing)).toEqual({
+        const result = evaluateMdocClaimSelection({ given_name: "Erika" }, [
+            { path: ["ns", "given_name"] },
+            { path: ["ns", "age"] },
+        ]);
+        expect(result).toEqual({ missing: ["ns.age"], mismatched: [] });
+        expect(missingClaimsViolation("pid", result.missing)).toEqual({
             message: "Missing required claims for credential 'pid': ns.age",
             details: { missingClaims: { pid: ["ns.age"] } },
         });
@@ -75,9 +77,19 @@ describe("missing mdoc claims", () => {
 
     it("accepts present elements and empty claim queries", () => {
         expect(
-            missingMdocClaims([{ path: ["ns", "age"] }], { age: 0 }),
-        ).toEqual([]);
-        expect(missingMdocClaims(undefined, {})).toEqual([]);
+            evaluateMdocClaimSelection({ age: 0 }, [{ path: ["ns", "age"] }]),
+        ).toEqual({ missing: [], mismatched: [] });
+        expect(evaluateMdocClaimSelection({}, [])).toEqual({
+            missing: [],
+            mismatched: [],
+        });
+    });
+
+    it("does not treat inherited properties as disclosed elements", () => {
+        expect(
+            evaluateMdocClaimSelection({}, [{ path: ["ns", "toString"] }])
+                .missing,
+        ).toEqual(["ns.toString"]);
     });
 });
 
@@ -105,38 +117,31 @@ describe("claimSelections", () => {
     });
 });
 
-describe("claim selection matching", () => {
+describe("claim selection evaluation", () => {
     it("matches SD-JWT VC payloads on every selected path", () => {
         const payload = {
             address: { locality: "Berlin" },
             nationalities: ["DE"],
         };
-        const all = [{ path: ["address", "locality"] }, { path: ["age"] }];
-        expect(
-            matchesClaimSelection(payload, all, [
-                { path: ["address", "locality"] },
-                { path: ["nationalities", "0"] },
-            ]),
-        ).toBe(true);
-        expect(matchesClaimSelection(payload, all, [{ path: ["age"] }])).toBe(
-            false,
-        );
-    });
+        const satisfied = evaluateClaimSelection(payload, [
+            { path: ["address", "locality"] },
+            { path: ["nationalities", "0"] },
+        ]);
+        expect(satisfied).toEqual({ missing: [], mismatched: [] });
+        expect(isClaimSelectionSatisfied(satisfied)).toBe(true);
 
-    it("only matches an empty selection when the query has no claims", () => {
-        expect(matchesClaimSelection({}, [], [])).toBe(true);
-        expect(matchesClaimSelection({}, undefined, [{ path: ["a"] }])).toBe(
-            false,
-        );
+        const missing = evaluateClaimSelection(payload, [{ path: ["age"] }]);
+        expect(missing).toEqual({ missing: ["age"], mismatched: [] });
+        expect(isClaimSelectionSatisfied(missing)).toBe(false);
     });
 
     it("matches mdoc claims on element names", () => {
         expect(
-            matchesMdocClaimSelection({ age: 1 }, [{ path: ["ns", "age"] }]),
-        ).toBe(true);
+            evaluateMdocClaimSelection({ age: 1 }, [{ path: ["ns", "age"] }]),
+        ).toEqual({ missing: [], mismatched: [] });
         expect(
-            matchesMdocClaimSelection({ age: 1 }, [{ path: ["ns", "name"] }]),
-        ).toBe(false);
+            evaluateMdocClaimSelection({ age: 1 }, [{ path: ["ns", "name"] }]),
+        ).toEqual({ missing: ["ns.name"], mismatched: [] });
     });
 
     it("reports all claim paths when no claim set is satisfied", () => {
@@ -152,19 +157,142 @@ describe("claim selection matching", () => {
     });
 });
 
-describe("hasClaimPath", () => {
-    it("walks objects and array indices", () => {
-        const value = { a: [{ b: null }], c: 0 };
-        expect(hasClaimPath(value, ["a", "0", "b"])).toBe(true);
-        expect(hasClaimPath(value, ["c"])).toBe(true);
+describe("claim value constraints", () => {
+    const over18 = (values: Array<string | number | boolean>) => [
+        { path: ["age_equal_or_over", "18"], values },
+    ];
+    const mdocOver18 = (values: Array<string | number | boolean>) => [
+        { path: ["eu.europa.ec.eudi.pid.1", "age_over_18"], values },
+    ];
+
+    it("accepts a disclosed value that is one of the requested values", () => {
+        expect(
+            evaluateClaimSelection(
+                { age_equal_or_over: { "18": true } },
+                over18([true]),
+            ),
+        ).toEqual({ missing: [], mismatched: [] });
+        expect(
+            evaluateClaimSelection({ level: "gold" }, [
+                { path: ["level"], values: ["gold", "platinum"] },
+            ]),
+        ).toEqual({ missing: [], mismatched: [] });
+        expect(
+            evaluateMdocClaimSelection(
+                { age_over_18: true },
+                mdocOver18([true]),
+            ),
+        ).toEqual({ missing: [], mismatched: [] });
     });
 
-    it("rejects missing, undefined and non-traversable segments", () => {
+    it("rejects a disclosed value that is not requested", () => {
+        expect(
+            evaluateClaimSelection(
+                { age_equal_or_over: { "18": false } },
+                over18([true]),
+            ),
+        ).toEqual({ missing: [], mismatched: ["age_equal_or_over.18"] });
+        expect(
+            evaluateMdocClaimSelection(
+                { age_over_18: false },
+                mdocOver18([true]),
+            ),
+        ).toEqual({
+            missing: [],
+            mismatched: ["eu.europa.ec.eudi.pid.1.age_over_18"],
+        });
+    });
+
+    it("requires the requested type, not only an equal rendering", () => {
+        const sdJwt = (value: unknown) =>
+            evaluateClaimSelection({ age_equal_or_over: { "18": value } }, [
+                { path: ["age_equal_or_over", "18"], values: [true, 18] },
+            ]).mismatched;
+        expect(sdJwt("true")).toEqual(["age_equal_or_over.18"]);
+        expect(sdJwt("18")).toEqual(["age_equal_or_over.18"]);
+        expect(sdJwt(1)).toEqual(["age_equal_or_over.18"]);
+        expect(sdJwt(null)).toEqual(["age_equal_or_over.18"]);
+        expect(sdJwt(18)).toEqual([]);
+
+        expect(
+            evaluateMdocClaimSelection(
+                { age_over_18: "true" },
+                mdocOver18([true]),
+            ).mismatched,
+        ).toEqual(["eu.europa.ec.eudi.pid.1.age_over_18"]);
+        expect(
+            evaluateMdocClaimSelection(
+                { age_over_18: true },
+                mdocOver18(["true"]),
+            ).mismatched,
+        ).toEqual(["eu.europa.ec.eudi.pid.1.age_over_18"]);
+    });
+
+    it("reports an undisclosed constrained claim as missing", () => {
+        expect(evaluateClaimSelection({}, over18([true]))).toEqual({
+            missing: ["age_equal_or_over.18"],
+            mismatched: [],
+        });
+        expect(evaluateMdocClaimSelection({}, mdocOver18([true]))).toEqual({
+            missing: ["eu.europa.ec.eudi.pid.1.age_over_18"],
+            mismatched: [],
+        });
+    });
+
+    it("matches when one value selected by a null segment is requested", () => {
+        // OID4VP JSON form; configured paths have no null segments.
+        const claims = JSON.parse(
+            '[{ "path": ["nationalities", null], "values": ["DE"] }]',
+        );
+        expect(
+            evaluateClaimSelection({ nationalities: ["FR", "DE"] }, claims),
+        ).toEqual({ missing: [], mismatched: [] });
+        expect(
+            evaluateClaimSelection({ nationalities: ["FR"] }, claims)
+                .mismatched,
+        ).toHaveLength(1);
+    });
+
+    it("reports the mismatch without the disclosed value", () => {
+        const violation = claimValueMismatchViolation("pid", [
+            "age_equal_or_over.18",
+        ]);
+        expect(violation).toEqual({
+            code: CLAIM_VALUE_MISMATCH,
+            message:
+                "Disclosed claim values do not match the requested values for credential 'pid': age_equal_or_over.18",
+            details: { mismatchedClaims: { pid: ["age_equal_or_over.18"] } },
+        });
+        expect(CLAIM_VALUE_MISMATCH).toBe("claim_value_mismatch");
+    });
+});
+
+describe("selectClaimValues", () => {
+    it("walks objects and array indices", () => {
+        const value = { a: [{ b: null }], c: 0 };
+        expect(selectClaimValues(value, ["a", "0", "b"])).toEqual([null]);
+        expect(selectClaimValues(value, ["a", 0, "b"])).toEqual([null]);
+        expect(selectClaimValues(value, ["c"])).toEqual([0]);
+    });
+
+    it("selects every array element for a null segment", () => {
+        const value = { degrees: [{ type: "BSc" }, { type: "MSc" }, {}] };
+        expect(selectClaimValues(value, ["degrees", null, "type"])).toEqual([
+            "BSc",
+            "MSc",
+        ]);
+        expect(selectClaimValues({ a: {} }, ["a", null])).toEqual([]);
+    });
+
+    it("selects nothing for missing, undefined and non-traversable segments", () => {
         const value = { a: [1], b: undefined, c: "text" };
-        expect(hasClaimPath(value, ["a", "x"])).toBe(false);
-        expect(hasClaimPath(value, ["a", "-1"])).toBe(false);
-        expect(hasClaimPath(value, ["b"])).toBe(false);
-        expect(hasClaimPath(value, ["c", "length"])).toBe(false);
-        expect(hasClaimPath(value, ["missing"])).toBe(false);
+        expect(selectClaimValues(value, ["a", "x"])).toEqual([]);
+        expect(selectClaimValues(value, ["a", "-1"])).toEqual([]);
+        expect(selectClaimValues(value, ["a", ""])).toEqual([]);
+        expect(selectClaimValues(value, ["a", "1"])).toEqual([]);
+        expect(selectClaimValues(value, ["b"])).toEqual([]);
+        expect(selectClaimValues(value, ["c", "length"])).toEqual([]);
+        expect(selectClaimValues(value, ["missing"])).toEqual([]);
+        expect(selectClaimValues(value, ["toString"])).toEqual([]);
     });
 });

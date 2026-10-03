@@ -193,10 +193,23 @@
                           "description": "Path to the claim value in presented credentials."
                         },
                         "values": {
-                          "description": "Optional allowed values for the claim.",
+                          "description": "Optional allowed values for the claim. A disclosed value must equal one of them in type and value.",
+                          "minItems": 1,
                           "type": "array",
                           "items": {
-                            "type": "string"
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "boolean"
+                              }
+                            ]
                           }
                         }
                       },
@@ -361,10 +374,23 @@
                           "description": "Path to the claim value in presented credentials."
                         },
                         "values": {
-                          "description": "Optional allowed values for the claim.",
+                          "description": "Optional allowed values for the claim. A disclosed value must equal one of them in type and value.",
+                          "minItems": 1,
                           "type": "array",
                           "items": {
-                            "type": "string"
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              {
+                                "type": "boolean"
+                              }
+                            ]
                           }
                         },
                         "intent_to_retain": {
