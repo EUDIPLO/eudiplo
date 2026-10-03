@@ -568,9 +568,16 @@ export class Oid4vpService {
                     session.id,
                     origin,
                 );
-                this.sessionStore.updateForTenant(tenantId, values.session, {
-                    requestObject: signedJwt,
-                });
+                // Store the request object before the offer is returned, so
+                // the wallet (or a DC API caller reading the session) gets
+                // this exact JWT instead of racing the write.
+                await this.sessionStore.updateForTenant(
+                    tenantId,
+                    values.session,
+                    {
+                        requestObject: signedJwt,
+                    },
+                );
             }
         } else {
             await this.sessionStore.updateForTenant(tenantId, values.session, {
