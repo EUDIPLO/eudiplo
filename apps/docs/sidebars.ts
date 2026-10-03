@@ -15,9 +15,17 @@ const sidebars: SidebarsConfig = {
       label: '🚀 Cookbooks',
       link: {type: 'doc', id: 'cookbooks/index'},
       items: [
-        'cookbooks/foundation',
-        'cookbooks/first-credential',
-        'cookbooks/first-presentation',
+        {
+          // One recipe in three chapters; the other cookbooks are single pages.
+          type: 'category',
+          label: 'Issue and verify a credential',
+          collapsed: false,
+          items: [
+            'cookbooks/foundation',
+            'cookbooks/first-credential',
+            'cookbooks/first-presentation',
+          ],
+        },
         'cookbooks/integrate-backend',
         'cookbooks/issue-after-login',
         'cookbooks/revocable-credentials',
