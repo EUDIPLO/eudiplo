@@ -25,7 +25,7 @@ Set `statusManagement: true` on the credential configuration. Every credential i
 SD-JWT VCs carry it as the `status` claim, mDOCs in the Mobile Security Object. Credentials issued before you enabled the setting have no status entry and cannot be revoked.
 
 :::warning[Suspension needs 2 bits per entry]
-Status lists use 1 bit per entry by default (`STATUS_BITS=1`), which only distinguishes valid and revoked. If you want to suspend credentials, set `bits` to `2` or more in the tenant's status list settings (or `STATUS_BITS`) **before** issuing. The `bits` of an existing list cannot be changed.
+Status lists use 1 bit per entry by default (`STATUS_BITS=1`), which only distinguishes valid and revoked. Suspending a credential on such a list is rejected with `400`. If you want to suspend credentials, set `bits` to `2` or more in the tenant's status list settings (or `STATUS_BITS`) **before** issuing. The `bits` of an existing list cannot be changed.
 :::
 
 ## 2. Revoke or suspend
@@ -49,9 +49,9 @@ curl -X POST "$EUDIPLO_URL/api/session/revoke" \
 | `credentialConfigurationId` | no | Restrict the change to one credential type. Without it, all credentials of the session change. |
 | `status` | yes | `0` = valid, `1` = revoked, `2` = suspended. |
 
-- The call answers `204 No Content`. It updates every credential of the session and type, including all credentials of a batch. If the session has no status entry for the type, it answers `409`.
-- Allowed roles: `issuance:offer` or `presentation:request`.
-- EUDIPLO does not enforce transitions: `status: 0` lifts a suspension, but it also reinstates a revoked credential. Treat revocation as final in your own process.
+- The call answers `204 No Content`. It updates every credential of the session and type, including all credentials of a batch; without `credentialConfigurationId` it updates all credentials of the session. If the session has no status entry for the type, it answers `409`. A value that does not fit a list's bits per entry (for example `2` on a 1-bit list) is rejected with `400` before anything is changed.
+- Allowed roles: `issuance:offer` or `issuance:manage`.
+- Revocation is final: setting `0` or `2` on a revoked credential is rejected with `409`, and nothing is changed. A suspension can be lifted (`0`) or turned into a revocation (`1`).
 
 ## 3. Check the result
 

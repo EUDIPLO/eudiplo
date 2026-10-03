@@ -1937,7 +1937,7 @@ export type StatusUpdateDto = {
      */
     credentialConfigurationId?: string;
     /**
-     * New credential status: 0 = valid, 1 = revoked, 2 = suspended.
+     * New credential status: 0 = valid, 1 = revoked, 2 = suspended. The value must fit every status list the credentials use: suspension needs lists with at least 2 bits per entry, otherwise the request is rejected with 400 and no status is changed.
      */
     status: number;
 };

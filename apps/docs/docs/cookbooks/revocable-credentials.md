@@ -94,7 +94,7 @@ curl -s -X POST "$EUDIPLO/api/session/revoke" \
   -w '%{http_code}\n'
 ```
 
-`status` is `0` for valid, `1` for revoked and `2` for suspended. Without `credentialConfigurationId`, every credential of the session changes. The call needs the role `issuance:offer` or `presentation:request` and returns `204`. Then clear the cached status lists of the verifier, so you do not have to wait for the TTL:
+`status` is `0` for valid, `1` for revoked and `2` for suspended. Without `credentialConfigurationId`, every credential of the session changes. The call needs the role `issuance:offer` or `issuance:manage` and returns `204`. Then clear the cached status lists of the verifier, so you do not have to wait for the TTL:
 
 ```bash
 curl -s -X DELETE "$EUDIPLO/api/cache/status-list" -H "Authorization: Bearer $ADMIN_TOKEN" -w '%{http_code}\n'
@@ -117,9 +117,16 @@ curl -s "$EUDIPLO/api/session/<presentation session ID>" -H "Authorization: Bear
 
 ## Step 8: Suspend and reinstate
 
-Repeat step 6 with `"status": 2` to suspend, and with `"status": 0` to make the credential valid again. Clear the cache after each change and verify again: a suspended credential fails like a revoked one, and a valid one passes.
+Revocation is final: setting `0` or `2` on the credential you revoked in step 6 returns `409`. To try suspension, issue another credential as in step 4, delete the revoked one from the wallet, and set `SESSION` to the new issuance session. Then suspend it:
 
-EUDIPLO accepts every transition, including from revoked back to valid. If revocation must be final in your process, enforce that in your backend. Status management in detail: [Revocation](../issuance/revocation.md).
+```bash
+curl -s -X POST "$EUDIPLO/api/session/revoke" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d "{\"sessionId\": \"$SESSION\", \"credentialConfigurationId\": \"membership\", \"status\": 2}" \
+  -w '%{http_code}\n'
+```
+
+Clear the cache and verify: a suspended credential fails like a revoked one. Repeat the call with `"status": 0` to lift the suspension, clear the cache and verify again. Status management in detail: [Revocation](../issuance/revocation.md).
 
 **Checkpoint:** verification fails while the credential is suspended and passes after you set `0`.
 
@@ -141,7 +148,8 @@ EUDIPLO recognizes "the same person" by the issuer and subject that an **externa
 | ----------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | Revoke returns `409` "No status mapping found"        | The session's credential was issued without status management          | Issue a new credential after step 3 and use its session ID.                                       |
 | Verification still passes after revoking              | The wallet presented an older credential, or a cached status list was used | Delete old credentials from the wallet; clear the status-list cache; check the TTL.          |
-| Suspension shows wrong results                        | The list was created with 1 bit per status                             | Set **Bits per status** to 2 before the first credential with status is issued (step 1).        |
+| Suspend returns `400` "requires a status list with at least 2 bits" | The list was created with 1 bit per status | Set **Bits per status** to 2 (step 1), then issue a new credential; existing lists keep their bits. |
+| Suspend or reinstate returns `409` "revocation is final" | The credential is revoked | Revocation cannot be undone; issue a new credential. |
 | `403` on `/api/cache/status-list`                     | The token lacks `issuance:manage` or `presentation:manage`             | Use the `membership-demo-admin` token.                                                            |
 
 General problems are covered in [Troubleshooting](../troubleshooting.md).
