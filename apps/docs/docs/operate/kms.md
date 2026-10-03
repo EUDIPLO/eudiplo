@@ -1,430 +1,124 @@
 ---
-title: KMS Configuration
+title: Key Management (KMS)
 ---
 
-<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
-  - 'Configuration File' and the per-provider 'Configuration' schema blocks -> reference/kms-config.md (generated from kms-config.schema.ts)
--->
+# Key Management (KMS)
 
-# Key Management System (KMS) Configuration
+Choose where the private keys of signing key chains live and configure the
+provider in `kms.json`. By default every key is created by the `db` provider and
+stored encrypted in the database (see [Encryption keys](encryption-keys.md)).
+Every field of `kms.json` is listed in the [KMS config reference](../reference/kms-config.md).
 
-EUDIPLO supports pluggable KMS backends for cryptographic key storage and operations. This deep-dive covers technical configuration for each provider.
+## Choose a provider
 
-For key chain concepts and basic usage, see [Key Chains](../trust/keys-and-certificates.md).
+| `type`    | Private key lives in                          | Create | Import | Delete | Use it for                                           |
+| --------- | --------------------------------------------- | ------ | ------ | ------ | ---------------------------------------------------- |
+| `db`      | The EUDIPLO database, encrypted               | yes    | yes    | yes    | Development, small installations                     |
+| `vault`   | HashiCorp Vault Transit engine                | yes    | yes    | yes    | Self-hosted production                               |
+| `aws-kms` | AWS KMS (`ECC_NIST_P256`, `SIGN_VERIFY`)      | yes    | no     | yes (7-day deletion window) | Production on AWS                     |
+| `pkcs11`  | A hardware security module via PKCS#11        | yes    | no     | yes    | HSMs (SoftHSM, YubiHSM, CloudHSM, …)                 |
+| `http`    | Your own remote signing service               | yes    | if `canImport` | yes | Custom key management                         |
+| `csc`     | A Cloud Signature Consortium (CSC v2) service | yes    | no     | no     | Qualified remote signing                             |
 
-## KMS Architecture
+All providers sign with ES256 (P-256). Encryption keys for credential and
+response encryption always use the `db` provider. Keys that cannot be imported
+must be created in the provider, so plan the provider before you create key
+chains.
 
-EUDIPLO's KMS layer abstracts key operations across multiple backends:
+## Configure `kms.json`
 
-```text
-┌───────────────────────────────────────┐
-│         EUDIPLO Application            │
-├───────────────────────────────────────┤
-│         KMS Adapter Interface          │
-├───────────────────────────────────────┤
-│  DB  │ Vault │ AWS KMS │ PKCS#11 │... │
-└───────────────────────────────────────┘
-```
-
-Each backend implements the same interface:
-
-- `createKey()` — Generate a new key
-- `sign()` — Produce a signature
-- `deleteKey()` — Remove a key
-- `health()` — Health check
-
-## Configuration File
-
-KMS backends are configured in `kms.json` (global configuration):
+The global file is `<CONFIG_FOLDER>/kms.json` (`/app/config/config/kms.json` in
+the image, `config/kms.json` in CLI projects). It is read at startup:
 
 ```json title="kms.json"
 {
-    "defaultProvider": "db",
+    "defaultProvider": "vault",
     "providers": [
         { "id": "db", "type": "db" },
         {
             "id": "vault",
             "type": "vault",
             "description": "Production Vault",
-            "url": "${VAULT_ADDR}",
-            "token": "${VAULT_TOKEN}",
-            "transitMount": "transit"
+            "vaultUrl": "${VAULT_ADDR}",
+            "vaultToken": "${VAULT_TOKEN}"
         }
     ]
 }
 ```
 
-- `defaultProvider`: The provider ID used when no explicit `kmsProvider` is specified
-- `providers`: Array of available KMS backends
+Without the file, only the `db` provider exists. `defaultProvider` (default
+`db`) must match a provider `id`; provider IDs must be unique. Write secrets as
+`${VAR}` placeholders and set the variables in the backend's environment; an
+unset variable stops the startup. The schema is strict, so unknown fields are
+rejected.
 
-## Supported Providers
+**Checkpoint:** `GET /api/key-chain/providers` lists the providers and the
+default; `GET /api/key-chain/providers/health` reports `ok` for each, and
+`eudiplo doctor` includes the same check.
 
-| Provider        | Type      | Use Case                        | Private Key Location |
-| --------------- | --------- | ------------------------------- | -------------------- |
-| **Database**    | `db`      | Development, testing            | Encrypted in DB      |
-| **Vault**       | `vault`   | Production (self-hosted)        | Vault Transit        |
-| **AWS KMS**     | `aws-kms` | Production (AWS)                | AWS KMS              |
-| **PKCS#11**     | `pkcs11`  | HSM integration                 | Hardware module      |
-| **HTTP**        | `http`    | Remote microservice             | Remote KMS           |
-| **CSC**         | `csc`     | Cloud Signature Consortium      | CSC remote service   |
+## Provider notes
 
-## Database Provider (`db`)
+**Vault.** Only `vaultUrl` and `vaultToken` are supported; there is no AppRole
+login. Keys are created in the Transit engine mounted at `transit`, which the
+backend enables if it is missing; the mount path is not configurable. Give the
+token permissions on `transit/*` (and on `sys/mounts/transit` for the automatic
+mount). Since 9.0, Vault holds signing keys only through `kms.json`; the old
+`KM_TYPE`, `VAULT_NAMESPACE` and `VAULT_MOUNT_PATH` variables have no effect.
+The encryption key for data at rest is a separate setting
+([Encryption keys](encryption-keys.md#vault)).
 
-The default provider stores encrypted private keys in the database.
+**AWS KMS.** Omit `accessKeyId` and `secretAccessKey` to use the AWS SDK
+default credential chain (IAM role, IRSA). The backend calls `CreateKey` (with a
+tag, so `kms:TagResource` is needed as well), `GetPublicKey`, `Sign`,
+`ScheduleKeyDeletion` and, for the health check, `ListKeys`.
 
-### Configuration
+**PKCS#11.** The vendor's PKCS#11 library must be available in the backend
+container; `slot` is the slot index or the token label. `readOnly: true` opens a
+read-only session, which cannot create or delete keys.
 
-```json
-{
-    "id": "db",
-    "type": "db"
-}
-```
+**HTTP.** EUDIPLO calls your service for key generation, signing, deletion and
+health. Authenticate it with `auth` of type `bearer`, `oauth2-client-credentials`
+or `mtls` (or `none` on a trusted network). The endpoints your service must
+implement are specified in the
+[reference](../reference/kms-config.md#http-provider-api).
 
-No additional configuration needed.
+## Create a key in a provider
 
-### How It Works
-
-- Keys are generated using Node.js crypto (`generateKeyPair`)
-- Private keys are encrypted with AES-256-GCM before storage
-- Public JWKs are cached in database for fast access
-- Algorithm: **ES256 (ECDSA P-256)** only
-
-### Pros
-
-- ✅ Simple setup (no external dependencies)
-- ✅ Fast local operations
-- ✅ Suitable for development and testing
-
-### Cons
-
-- ⚠️ Private keys stored in database (encrypted)
-- ⚠️ Not FIPS-certified
-- ⚠️ Limited for high-security production use
-
-## HashiCorp Vault Provider (`vault`)
-
-Uses Vault's Transit Secrets Engine for key operations.
-
-### Configuration
-
-```json
-{
-    "id": "vault",
-    "type": "vault",
-    "url": "${VAULT_ADDR}",
-    "token": "${VAULT_TOKEN}",
-    "transitMount": "transit",
-    "roleId": "${VAULT_ROLE_ID}",
-    "secretId": "${VAULT_SECRET_ID}"
-}
-```
-
-| Field          | Required | Description                                                    |
-| -------------- | -------- | -------------------------------------------------------------- |
-| `url`          | Yes      | Vault server URL (e.g., `https://vault.example.com:8200`)      |
-| `token`        | No\*     | Vault token (either `token` or `roleId`/`secretId` required)   |
-| `transitMount` | No       | Transit mount path (default: `transit`)                        |
-| `roleId`       | No\*     | AppRole role ID (use with `secretId` instead of token)         |
-| `secretId`     | No\*     | AppRole secret ID (use with `roleId` instead of token)         |
-
-\*Either `token` or both `roleId` and `secretId` must be provided.
-
-### Setup Vault
+Choose the provider per key chain with `kmsProvider`; without it the
+`defaultProvider` is used:
 
 ```bash
-# Enable Transit engine
-vault secrets enable transit
-
-# Create a key
-vault write -f transit/keys/my-key type=ecdsa-p256
-```
-
-### How It Works
-
-- Keys are generated inside Vault Transit engine
-- Private keys **never leave Vault**
-- EUDIPLO stores only the key name and cached public JWK
-- Signing requests are sent to Vault's `/transit/sign` endpoint
-
-### Pros
-
-- ✅ Private keys never leave Vault
-- ✅ Centralized key management
-- ✅ Audit logging built-in
-- ✅ Key rotation support
-
-### Cons
-
-- ⚠️ Network latency for each signature operation
-- ⚠️ Requires Vault infrastructure
-
-## AWS KMS Provider (`aws-kms`)
-
-Delegates key operations to AWS Key Management Service.
-
-### Configuration
-
-```json
-{
-    "id": "aws",
-    "type": "aws-kms",
-    "region": "${AWS_REGION}",
-    "accessKeyId": "${AWS_ACCESS_KEY_ID}",
-    "secretAccessKey": "${AWS_SECRET_ACCESS_KEY}"
-}
-```
-
-| Field             | Required | Description                                                                   |
-| ----------------- | -------- | ----------------------------------------------------------------------------- |
-| `region`          | Yes      | AWS region where KMS keys will be created (e.g., `us-east-1`)                 |
-| `accessKeyId`     | No       | AWS access key ID (optional — uses SDK credential chain if not provided)      |
-| `secretAccessKey` | No       | AWS secret access key (optional — uses SDK credential chain if not provided) |
-
-### Authentication
-
-If `accessKeyId` and `secretAccessKey` are not provided, the adapter uses the [AWS SDK default credential chain](https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/setting-credentials-node.html), which supports:
-
-- Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
-- Shared credentials file (`~/.aws/credentials`)
-- IAM roles for EC2/ECS/Lambda
-- Web identity tokens (EKS IRSA)
-
-This is the recommended approach for production deployments.
-
-### Key Creation
-
-Keys are created as **asymmetric ECC_NIST_P256** keys with `SIGN_VERIFY` usage. Each key is tagged with:
-
-- `TenantId` — the tenant identifier
-- `LocalKeyId` — the local key ID stored in the database
-- `ManagedBy` — set to `eudiplo`
-
-### Key Deletion
-
-When deleting a key, AWS KMS schedules it for deletion with a **7-day pending window** (the minimum allowed by AWS). The local database reference is removed immediately.
-
-### Pros
-
-- ✅ HSM-backed keys (FIPS 140-2 Level 3)
-- ✅ AWS native integration
-- ✅ CloudTrail audit logging
-- ✅ Fine-grained IAM policies
-
-### Cons
-
-- ⚠️ Cannot import EC keys (use `create` only)
-- ⚠️ Network latency
-- ⚠️ AWS-specific
-
-## PKCS#11 (HSM) Provider (`pkcs11`)
-
-Integrates with Hardware Security Modules via PKCS#11.
-
-### Configuration
-
-```json
-{
-    "id": "hsm",
-    "type": "pkcs11",
-    "library": "/usr/lib/softhsm/libsofthsm2.so",
-    "slot": 0,
-    "pin": "${HSM_PIN}",
-    "readOnly": false
-}
-```
-
-| Field      | Required | Description                                                                                                                                                     |
-| ---------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `library`  | Yes      | Absolute path to the vendor-provided PKCS#11 shared library (`.so` on Linux, `.dylib` on macOS, `.dll` on Windows)                                              |
-| `slot`     | Yes      | Either the numeric slot index (e.g. `0`) **or** a token label string (e.g. `"eudiplo-token"`) — the adapter resolves labels via `C_GetTokenInfo`               |
-| `pin`      | Yes      | User PIN used for `C_Login(CKU_USER, …)`. Use environment-variable placeholders to keep it out of the config file                                               |
-| `readOnly` | No       | If `true`, the session is opened without `CKF_RW_SESSION`. Defaults to `false`. Set to `true` only when you do not need to create/delete keys |
-
-### Native Dependency
-
-The adapter is built on [`pkcs11js`](https://www.npmjs.com/package/pkcs11js), which is a native (N-API) Node.js binding. It is part of the regular backend dependencies and is built automatically on `pnpm install`.
-
-You still need the **vendor's PKCS#11 library** (`.so` / `.dylib` / `.dll`) installed on the host where the backend runs.
-
-### Examples
-
-**SoftHSM2** (local dev / CI):
-
-```bash
-softhsm2-util --init-token --slot 0 \
-    --label eudiplo --pin 1234 --so-pin 1234
-```
-
-```json
-{
-    "id": "softhsm",
-    "type": "pkcs11",
-    "library": "/usr/lib/softhsm/libsofthsm2.so",
-    "slot": "eudiplo",
-    "pin": "${SOFTHSM_PIN}"
-}
-```
-
-**YubiHSM 2** (via yubihsm-pkcs11):
-
-```json
-{
-    "id": "yubihsm",
-    "type": "pkcs11",
-    "library": "/usr/local/lib/pkcs11/yubihsm_pkcs11.dylib",
-    "slot": 0,
-    "pin": "${YUBIHSM_PIN}"
-}
-```
-
-**AWS CloudHSM** (via the CloudHSM PKCS#11 SDK):
-
-```json
-{
-    "id": "cloudhsm",
-    "type": "pkcs11",
-    "library": "/opt/cloudhsm/lib/libcloudhsm_pkcs11.so",
-    "slot": 0,
-    "pin": "${CLOUDHSM_USER}:${CLOUDHSM_PASSWORD}"
-}
-```
-
-### Pros
-
-- ✅ FIPS-certified hardware protection
-- ✅ Private keys never leave HSM
-- ✅ Vendor-neutral standard
-
-### Cons
-
-- ⚠️ Only ES256 supported
-- ⚠️ Requires hardware or VM-based HSM
-- ⚠️ Cannot import keys (generate only)
-
-## HTTP Remote KMS Provider (`http`)
-
-Delegates key operations to a remote microservice.
-
-### Configuration
-
-```json
-{
-    "id": "remote-kms",
-    "type": "http",
-    "baseUrl": "${KMS_SERVICE_URL}",
-    "apiKey": "${KMS_API_KEY}",
-    "keysPath": "/keys",
-    "healthPath": "/health",
-    "canImport": false
-}
-```
-
-### Remote Service API Contract
-
-The remote microservice must implement:
-
-#### `POST {keysPath}` — generate a key
-
-Request:
-
-```json
-{ "kid": "my-key-id", "alg": "ES256" }
-```
-
-Response:
-
-```json
-{ "publicJwk": { "kty": "EC", "crv": "P-256", "x": "...", "y": "..." } }
-```
-
-#### `POST {keysPath}/{kid}/sign` — produce a signature
-
-Request:
-
-```json
-{ "data": "<base64-encoded bytes>", "alg": "ES256" }
-```
-
-Response:
-
-```json
-{ "signature": "<base64url-encoded raw r‖s (64 bytes for P-256)>" }
-```
-
-#### `DELETE {keysPath}/{kid}` — delete a key
-
-Response: `204 No Content`
-
-#### `GET {healthPath}` — health check
-
-Response:
-
-```json
-{ "ok": true }
-```
-
-### Pros
-
-- ✅ Fully custom backend
-- ✅ No EUDIPLO source modifications
-
-### Cons
-
-- ⚠️ You must implement the remote service
-
-## CSC (Cloud Signature Consortium) Provider (`csc`)
-
-Integrates with remote signing services via CSC v2 API.
-
-### Configuration
-
-```json
-{
-    "id": "csc-main",
-    "type": "csc",
-    "baseUrl": "${CSC_URL}",
-    "apiPath": "/csc/v2",
-    "tokenUrl": "${CSC_TOKEN_URL}",
-    "clientId": "${CSC_CLIENT_ID}",
-    "clientSecret": "${CSC_CLIENT_SECRET}",
-    "scope": "service",
-    "userId": "${CSC_USER_ID}",
-    "credentialId": "${CSC_CREDENTIAL_ID}",
-    "useAuthorizeEndpoint": true,
-    "authorizeAuthData": [{ "id": "PIN", "value": "${CSC_PIN}" }]
-}
-```
-
-### Pros
-
-- ✅ Qualified remote signing
-- ✅ CSC-compliant providers
-
-### Cons
-
-- ⚠️ External dependencies
-- ⚠️ CSC credentials managed externally
-
-## Provider Selection
-
-When creating or importing a key, specify `kmsProvider`:
-
-```bash
-curl -X POST https://your-eudiplo-instance/keys \
-  -H "Authorization: Bearer <token>" \
+curl -X POST https://eudiplo.example.com/api/key-chain \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "vault-backed-key",
-    "usage": "attestation",
-    "kmsProvider": "vault"
+    "usageType": "attestation",
+    "type": "standalone",
+    "kmsProvider": "vault",
+    "description": "Credential signing key"
   }'
 ```
 
-If omitted, the `defaultProvider` from `kms.json` is used.
+`usageType` is one of `access`, `attestation`, `trustList`, `statusList` and
+`encrypt`; `type` is `standalone` or `internalChain`. Certificates, rotation and
+key import are covered in [Keys and certificates](../trust/keys-and-certificates.md).
+A key chain stays with its provider; to move it, create a new key chain in the
+target provider and switch the configurations that reference it.
 
-## Related Topics
+## Per-tenant providers
 
-- [Key Chains](../trust/keys-and-certificates.md) — Unified key management
-- [Certificates](../trust/keys-and-certificates.md#certificates) — Certificate lifecycle
-- [Database](database.md) — Data storage and encryption
+A tenant can add or override providers without touching the global file. Its
+`kms.json` is stored at `<CONFIG_FOLDER>/<tenant-id>/kms.json` and merged over
+the global one: providers with the same `id` replace the global entry, and the
+tenant's `defaultProvider` wins. Manage it through the API (roles
+`issuance:manage` or `presentation:manage`):
+
+| Request                                     | Effect                                                                    |
+| ------------------------------------------- | ------------------------------------------------------------------------- |
+| `GET /api/key-chain/providers/config`       | `tenantConfig` (the tenant file or `null`) and `effectiveConfig` (merged) |
+| `PUT /api/key-chain/providers/config`       | Validate and write the tenant file, body as in `kms.json`                 |
+| `DELETE /api/key-chain/providers/config`    | Remove the tenant file; the global configuration applies again            |
+
+The API needs `CONFIG_FOLDER` to be writable. The tenant `kms.json` is also part
+of [configuration bundles](configuration-as-code.md), with secrets exported as
+placeholders.

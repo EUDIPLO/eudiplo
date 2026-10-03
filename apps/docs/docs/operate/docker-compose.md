@@ -1,147 +1,120 @@
 ---
-title: Docker Compose
+title: Compose without the CLI
 ---
 
-<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
-  - trim to a short 'Compose without the CLI'; the CLI-driven setup lives in cookbooks/production-vm.md
--->
+# Compose without the CLI
 
-# Docker Compose Deployment
+Run EUDIPLO with the Compose file in `deployment/docker-compose` and manage it
+with `docker compose` yourself. If you prefer generated files and
+`eudiplo up`/`upgrade`/`doctor`, follow the
+[production VM cookbook](../cookbooks/production-vm.md) instead; the CLI uses
+the same Compose file.
 
-Deploy EUDIPLO using Docker Compose for local development, testing, and small-scale deployments.
+## Before you start
 
-## Quick Start
+- Docker with Compose v2, or Podman with `podman compose`
+- A checkout of the repository, or a copy of `deployment/docker-compose/`
+- A choice of [preset](index.md#presets-and-profiles): `minimal`, `standard` or `full`
 
-From the repository root:
+## 1. Create the environment file
 
 ```bash
-# Create environment file
-cp .env.example .env
-
-# Start services
-docker compose up -d
-
-# Access the API
-curl http://localhost:3000/health
+cd deployment/docker-compose
+cp .env.standard.example .env    # or .env.minimal.example, .env.full.example
 ```
 
-Access points:
+Replace every placeholder secret before the first start:
 
-- **Backend API**: [http://localhost:3000/api](http://localhost:3000/api)
-- **Client UI**: [http://localhost:4200](http://localhost:4200)
+```bash
+openssl rand -base64 32   # MASTER_SECRET
+openssl rand -base64 24   # AUTH_CLIENT_SECRET, DB_PASSWORD, RUSTFS_SECRET_KEY
+```
 
-For the complete Docker Compose deployment guide including minimal, standard, and full presets, see the [Server Setup Cookbook](../cookbooks/production-vm.md).
+`MASTER_SECRET`, `AUTH_CLIENT_ID` and `AUTH_CLIENT_SECRET` have no defaults; the
+backend does not start without them. In `standard` and `full`, set
+`S3_SECRET_ACCESS_KEY` to the same value as `RUSTFS_SECRET_KEY`. Set `PUBLIC_URL`
+to the URL wallets use to reach the backend.
 
-## Deployment Presets
+## 2. Start a profile
 
-EUDIPLO offers three Docker Compose deployment options:
+```bash
+docker compose up -d                       # minimal: backend and web client
+docker compose --profile standard up -d    # + PostgreSQL and RustFS
+docker compose --profile full up -d        # + Vault (development mode)
+```
 
-| Preset       | Database   | Storage            | Key Management  | Production Ready |
-| ------------ | ---------- | ------------------ | --------------- | ---------------- |
-| **Minimal**  | SQLite     | Local filesystem   | Database-backed | ⚠️ Limited       |
-| **Standard** | PostgreSQL | S3 via local RustFS | Database-backed | ✅ Yes (small)   |
-| **Full**     | PostgreSQL | S3 via local RustFS | Vault           | ✅ Yes           |
+Combine single components with `--profile postgres`, `--profile s3` and
+`--profile vault`. Use the same profile flags for every later `docker compose`
+command, otherwise Compose ignores the profile's services.
 
-## Environment Variables
+**Checkpoint:** `curl http://localhost:3000/health` returns
+`{"status":"ok",...}` and the web client opens at `http://localhost:4200`.
 
-Essential configuration for all presets:
+## Services
+
+| Service          | Profiles                    | Ports                  | Purpose                                              |
+| ---------------- | --------------------------- | ---------------------- | ---------------------------------------------------- |
+| `eudiplo`        | always                      | 3000                   | Backend                                              |
+| `eudiplo-client` | always                      | 4200 → 8080            | Web client. The browser calls the backend directly; `API_BASE_URL` only prefills the backend URL on the login page, so set it to a URL the browser can reach |
+| `postgres`       | `postgres`, `standard`, `full` | -                   | PostgreSQL 16; set `DB_HOST=postgres` in `.env`      |
+| `rustfs`         | `s3`, `standard`, `full`    | 9000 (S3), 9001 (console) | S3-compatible object storage                      |
+| `rustfs-init`    | `s3`, `standard`, `full`    | -                      | Creates `S3_BUCKET` once and exits                   |
+| `vault`          | `vault`, `full`             | 8200                   | HashiCorp Vault in development mode, token from `VAULT_TOKEN` (default `root`) |
+
+The Compose file also reads these variables from `.env`:
+
+| Variable                | Default                                              | Use                                                         |
+| ----------------------- | ---------------------------------------------------- | ----------------------------------------------------------- |
+| `EUDIPLO_IMAGE`         | `ghcr.io/openwallet-foundation/eudiplo:latest`        | Backend image; pin a release tag in production              |
+| `EUDIPLO_CLIENT_IMAGE`  | `ghcr.io/openwallet-foundation/eudiplo-client:latest` | Web client image; keep it on the same tag as the backend    |
+| `EUDIPLO_BIND_ADDRESS`  | `0.0.0.0`                                            | Host address for ports 3000 and 4200; `127.0.0.1` behind a local reverse proxy |
+| `EUDIPLO_CONFIG_MOUNT`  | named volume `eudiplo-config:/app/config`            | What is mounted at `/app/config`                            |
+| `EUDIPLO_ENV_FILE`      | `.env`                                               | Environment file passed to the backend                     |
+
+## Data and configuration folders
+
+The image sets `FOLDER=/app/config` and `CONFIG_FOLDER=/app/config/config`:
+
+- `FOLDER` holds the SQLite database (`service.db`) and, unless
+  `LOCAL_STORAGE_DIR` is set, the uploaded files. The example `.env` files set
+  `LOCAL_STORAGE_DIR=/app/uploads`, which is the `eudiplo-uploads` volume.
+- `CONFIG_FOLDER` holds the global `kms.json` and one folder per tenant for
+  [configuration import](configuration-as-code.md). Every directory in it is
+  treated as a tenant folder.
+
+To provision tenants from files, mount your config root and enable the import:
 
 ```env
-# Public URL (for OAuth redirects)
-PUBLIC_URL=http://localhost:3000
-
-# Internal backend URL for self-JWKS verification (default shown)
-# Change only when the backend is not listening on port 3000 in this container.
-INTERNAL_URL=http://127.0.0.1:3000
-
-# Environment
-NODE_ENV=production
-
-# Application Secrets
-MASTER_SECRET=your-secret-jwt-key-change-in-production
-AUTH_CLIENT_ID=your-client-id
-AUTH_CLIENT_SECRET=your-client-secret
+EUDIPLO_CONFIG_MOUNT=./config:/app/config
+CONFIG_FOLDER=/app/config
+CONFIG_IMPORT_MODE=create
 ```
 
-:::danger[Security Warning]
-**Never use default credentials in production!** Change all passwords, tokens, and secrets before deploying.
-:::
+With this mount the SQLite database is written to `./config/service.db`, which
+is how CLI-managed projects are laid out. Mounting the config folder at
+`/app/config` without setting `CONFIG_FOLDER=/app/config` makes the backend look
+for tenants in `./config/config/`.
 
-## Full Deployment Configuration
-
-For production deployments with PostgreSQL, RustFS, and optional Vault:
-
-```env
-# PostgreSQL Configuration
-DB_TYPE=postgres
-DB_HOST=database
-DB_PORT=5432
-DB_USERNAME=eudiplo_user
-DB_PASSWORD=strong-secure-password-here
-DB_DATABASE=eudiplo
-
-# RustFS (S3-compatible storage)
-RUSTFS_ACCESS_KEY=rustfsadmin
-RUSTFS_SECRET_KEY=rustfsadmin-secure-password
-```
-
-## Service Management
-
-View running services:
+## Day-to-day commands
 
 ```bash
-docker compose ps
+docker compose --profile standard ps
+docker compose --profile standard logs -f eudiplo
+docker compose --profile standard restart eudiplo
+docker compose --profile standard down
 ```
 
-View logs:
+`docker compose down -v` also deletes the volumes, including the database,
+uploads and RustFS data.
 
-```bash
-# All services
-docker compose logs -f
-
-# Specific service
-docker compose logs -f eudiplo
-```
-
-Restart a service:
-
-```bash
-docker compose restart eudiplo
-```
-
-Stop services:
-
-```bash
-docker compose down
-
-# Remove all data (volumes)
-docker compose down -v
-```
-
-## Related Topics
-
-- [Server Setup Cookbook](../cookbooks/production-vm.md) — Detailed setup instructions
-- [CLI Tool](./cli.md) — Deploy with EUDIPLO CLI
-- [Kubernetes Deployment](kubernetes.md) — Production deployment on K8s
-- [TLS Configuration](tls.md) — Enable HTTPS
+To upgrade, [back up](production-checklist.md#backups) the database and object
+storage, set the new tag in `EUDIPLO_IMAGE` and `EUDIPLO_CLIENT_IMAGE`, then run
+`docker compose --profile standard pull` and `up -d`. Database migrations run on
+the first start of the new backend; read the [upgrade guide](../upgrade/index.md)
+for every major version you cross.
 
 ## Migrating existing MinIO storage
 
-These templates now deploy RustFS 1.0.0 with a separate `rustfs-data` volume
-(or PVC). Existing MinIO data is not migrated automatically. Keep the old
-volumes and backups; do not mount a MinIO data directory directly into RustFS.
-
-1. Start RustFS with an empty volume alongside the existing storage service.
-2. Copy buckets and objects through the S3 API using a migration tool that
-   preserves the metadata, versions, and policies your deployment requires.
-3. Verify object counts, contents, and application reads before switching
-   `S3_ENDPOINT` to `http://rustfs:9000`.
-4. Replace `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` with `RUSTFS_ACCESS_KEY` /
-   `RUSTFS_SECRET_KEY`, and use the same values for `S3_ACCESS_KEY_ID` /
-   `S3_SECRET_ACCESS_KEY`. Bucket initialization now uses `S3_BUCKET`.
-5. Keep the old service and data available for rollback until the migration
-   is verified. Existing CLI projects need their Compose file and `.env`
-   updated as well; updating the CLI alone does not rewrite them.
-
-The bucket initialization job uses AWS CLI 2.34.0 and retains the previous
-public-download policy (`s3:GetObject`). Review that policy for private buckets.
+Since 9.0 the bundled object storage is RustFS instead of MinIO, with new
+service names, credentials and volumes; follow the
+[upgrade guide](../upgrade/index.md) to move existing objects.

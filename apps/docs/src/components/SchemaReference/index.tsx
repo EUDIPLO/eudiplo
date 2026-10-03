@@ -9,13 +9,15 @@ export interface SchemaReferenceProps {
     name: string;
     /** `body`: annotated JSONC sample; `table`: nested field table. */
     mode?: "body" | "table";
+    /** `table` only: show fields up to this nesting level (1 = top-level fields only). */
+    maxDepth?: number;
 }
 
 /**
  * Field reference generated at build time from a backend Zod schema
  * (apps/docs/scripts/generate-schema-docs.ts).
  */
-export default function SchemaReference({ name, mode = "table" }: SchemaReferenceProps): React.ReactElement {
+export default function SchemaReference({ name, mode = "table", maxDepth }: SchemaReferenceProps): React.ReactElement {
     const model = models[name] as SchemaField | undefined;
     if (!model) {
         // Fail the build instead of publishing an empty reference.
@@ -36,7 +38,7 @@ export default function SchemaReference({ name, mode = "table" }: SchemaReferenc
                 </tr>
             </thead>
             <tbody>
-                {schemaTableRows(model).map((row) => (
+                {schemaTableRows(model).filter((row) => maxDepth === undefined || row.depth < maxDepth).map((row) => (
                     <tr key={`${row.path}|${row.variant ?? ""}`}>
                         <td style={{ paddingLeft: `${0.75 + row.depth * 1.25}rem`, whiteSpace: "nowrap" }}>
                             <code>{row.path}</code>

@@ -8,18 +8,21 @@ import type { CommandContext } from "../../cli/src/types.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const outputPath = resolve(__dirname, "../docs/_generated/cli-reference.md");
 
-const GENERATED_WARNING = [
-    "> **Auto-generated.** Do not edit manually.",
-    "> Run `pnpm --filter @eudiplo/docs run prebuild` (apps/docs/scripts/generate-cli-reference.ts).",
-    "",
-].join("\n");
+/**
+ * The rendered reference starts with its own title and a "generated" note. The
+ * docs page (reference/cli.md) embeds it below its own title and intro, so both
+ * are dropped and the command sections become sections of that page.
+ */
+function withoutTitle(markdown: string): string {
+    return markdown.replace(/^# .*\n+(Generated from[^\n]*\n+)?/, "");
+}
 
 async function main(): Promise<void> {
     const context = documentationContext();
     const program = createProgram(context, () => undefined);
-    const markdown = renderCommandReference(program, "markdown");
+    const markdown = withoutTitle(renderCommandReference(program, "markdown"));
     await mkdir(dirname(outputPath), { recursive: true });
-    await writeFile(outputPath, `${GENERATED_WARNING}\n${markdown}`, "utf8");
+    await writeFile(outputPath, markdown, "utf8");
     console.log(`Generated ${outputPath}`);
 }
 

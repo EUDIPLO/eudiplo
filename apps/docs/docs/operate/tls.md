@@ -1,205 +1,158 @@
 ---
-title: TLS Configuration
+title: TLS and Reverse Proxy
 ---
 
-# TLS/HTTPS Configuration
+# TLS and Reverse Proxy
 
-EUDIPLO supports built-in TLS termination, allowing you to serve HTTPS directly from the application without requiring a reverse proxy.
+Serve EUDIPLO over HTTPS, either behind a TLS-terminating reverse proxy or with
+the backend's built-in TLS. Wallets require HTTPS for every issuer and verifier
+URL, so `PUBLIC_URL` must be the `https://` URL wallets reach.
 
-## Overview
+| Option          | Use it when                                                                                     |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| Reverse proxy   | Default. Certificate renewal, rate limits, IP filtering and the web client run in front of EUDIPLO |
+| Built-in TLS    | No proxy is available, for example a single container on a test host                            |
 
-| Method            | Best For                        | Complexity  | Recommendation               |
-| ----------------- | ------------------------------- | ----------- | ---------------------------- |
-| **Built-in TLS**  | Simple deployments, development | ⭐ Easy     | Small-scale, single instance |
-| **Reverse Proxy** | Production, load balancing      | ⭐⭐ Medium | Large-scale, multi-instance  |
+## Behind a reverse proxy
 
-## Built-in TLS Configuration
+The backend listens on plain HTTP (port 3000, or `PORT`). It builds every URL in
+offers, metadata and redirects from `PUBLIC_URL` and does not read
+`X-Forwarded-*` headers, so set `PUBLIC_URL` to the external URL:
 
-### Environment Variables
-
-import ConfigTable from "@site/src/components/ConfigTable";
-
-<ConfigTable group="tls" />
-
-### Basic Setup
-
-#### 1. Generate or obtain TLS certificates
-
-For development, you can generate a self-signed certificate:
-
-```bash
-# Generate a self-signed certificate valid for 365 days
-openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes \
-    -subj "/CN=localhost"
+```env
+PUBLIC_URL=https://eudiplo.example.com
+TLS_ENABLED=false
 ```
 
-For production, use certificates from a trusted Certificate Authority (CA) like Let's Encrypt.
+Requirements for the proxy:
 
-#### 2. Configure environment variables
+- Serve the backend at the root of its host name. Tenant IDs are path segments
+  of the protocol URLs (`/issuers/<tenant>/…`), so the backend cannot run under
+  a path prefix. Only the [web client](#serving-the-client-from-a-subpath) can.
+- Allow request bodies up to 50 MB if you import configuration ZIP bundles
+  (`POST /api/config-bundles/import/archive`); other requests stay below 10 MB.
+- Do not buffer server-sent events from `/api/session/:id/events`.
+- Bind the backend port to `127.0.0.1` (Compose: `EUDIPLO_BIND_ADDRESS=127.0.0.1`)
+  so it is only reachable through the proxy.
 
-Add the following to your `.env` file:
+### Caddy
 
-```bash
-TLS_ENABLED=true
-TLS_CERT_PATH=/path/to/cert.pem
-TLS_KEY_PATH=/path/to/key.pem
+Caddy obtains and renews certificates automatically:
 
-# Update PUBLIC_URL to use HTTPS
-PUBLIC_URL=https://your-domain.com:3000
+```text title="Caddyfile"
+eudiplo.example.com {
+    reverse_proxy 127.0.0.1:3000
+}
+
+console.example.com {
+    reverse_proxy 127.0.0.1:4200
+}
 ```
 
-#### 3. Start the application
-
-The application will automatically use HTTPS when TLS is enabled.
-
-### Docker Compose Example
-
-Mount your certificates as volumes:
-
-```yaml
-services:
-    eudiplo:
-        image: ghcr.io/openwallet-foundation/eudiplo:latest
-        ports:
-            - "3000:3000"
-        environment:
-            TLS_ENABLED: "true"
-            TLS_CERT_PATH: /certs/cert.pem
-            TLS_KEY_PATH: /certs/key.pem
-            PUBLIC_URL: https://your-domain.com:3000
-        volumes:
-            - ./certs:/certs:ro
-```
-
-### Using Let's Encrypt Certificates
-
-When using Let's Encrypt certificates (e.g., via Certbot):
-
-```bash
-TLS_ENABLED=true
-TLS_CERT_PATH=/etc/letsencrypt/live/your-domain.com/fullchain.pem
-TLS_KEY_PATH=/etc/letsencrypt/live/your-domain.com/privkey.pem
-```
-
-:::tip[Certificate Renewal]
-Let's Encrypt certificates expire every 90 days. Set up automatic renewal with Certbot and restart the application after renewal to pick up new certificates.
-:::
-
-### With CA Certificate Chain
-
-For mutual TLS (mTLS) or when you need to verify client certificates:
-
-```bash
-TLS_ENABLED=true
-TLS_CERT_PATH=/path/to/cert.pem
-TLS_KEY_PATH=/path/to/key.pem
-TLS_CA_PATH=/path/to/ca-chain.pem
-```
-
-### With Encrypted Private Key
-
-If your private key is encrypted with a passphrase:
-
-```bash
-TLS_ENABLED=true
-TLS_CERT_PATH=/path/to/cert.pem
-TLS_KEY_PATH=/path/to/encrypted-key.pem
-TLS_KEY_PASSPHRASE=your-key-passphrase
-```
-
-## Reverse Proxy Alternative
-
-For production deployments with multiple instances or advanced load balancing, consider using a reverse proxy:
-
-### Nginx Example
+### nginx
 
 ```nginx
 server {
-    listen 443 ssl http2;
-    server_name your-domain.com;
+    listen 443 ssl;
+    http2 on;
+    server_name eudiplo.example.com;
 
-    ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
-
-    # Modern TLS configuration
+    ssl_certificate     /etc/letsencrypt/live/eudiplo.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/eudiplo.example.com/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
-    ssl_prefer_server_ciphers off;
+
+    client_max_body_size 50m;
 
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
+        proxy_buffering off;   # session events (SSE)
+        proxy_read_timeout 1h;
     }
 }
 ```
 
-### Traefik Example (Docker Compose)
+When the web client runs on another origin than the backend, add that origin to
+`CORS_ORIGINS` if you restrict browser access to the management API (see the
+[production checklist](production-checklist.md#network-and-tls)).
 
-```yaml
+## Built-in TLS
+
+Set the certificate and key files; the backend then serves HTTPS on the same port:
+
+```env
+TLS_ENABLED=true
+TLS_CERT_PATH=/certs/fullchain.pem
+TLS_KEY_PATH=/certs/privkey.pem
+PUBLIC_URL=https://eudiplo.example.com:3000
+```
+
+```yaml title="Compose override"
 services:
-    traefik:
-        image: traefik:v3.0
-        command:
-            - "--providers.docker=true"
-            - "--entrypoints.websecure.address=:443"
-            - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
-            - "--certificatesresolvers.letsencrypt.acme.email=your-email@example.com"
-            - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
-        ports:
-            - "443:443"
-        volumes:
-            - "/var/run/docker.sock:/var/run/docker.sock:ro"
-            - "letsencrypt:/letsencrypt"
-
     eudiplo:
-        image: ghcr.io/openwallet-foundation/eudiplo:latest
-        labels:
-            - "traefik.enable=true"
-            - "traefik.http.routers.eudiplo.rule=Host(`your-domain.com`)"
-            - "traefik.http.routers.eudiplo.entrypoints=websecure"
-            - "traefik.http.routers.eudiplo.tls.certresolver=letsencrypt"
-        environment:
-            PUBLIC_URL: https://your-domain.com
-
-volumes:
-    letsencrypt:
+        volumes:
+            - ./certs:/certs:ro
 ```
 
-## Serving the Client from a Subpath
+Behavior since 9.0:
 
-When serving the EUDIPLO client behind a reverse proxy on a subpath (e.g., `https://example.com/eudiplo-client/`), two things are required:
+- **TLS fails closed.** With `TLS_ENABLED=true`, startup fails if `TLS_CERT_PATH`
+  or `TLS_KEY_PATH` is unset, a file cannot be read, or a file contains no PEM
+  certificate. The backend never falls back to plain HTTP.
+- **`TLS_CA_PATH` adds intermediate certificates.** The certificates in that file
+  are sent after the server certificate so clients can build the chain;
+  certificates that `TLS_CERT_PATH` already contains are not added twice. You do
+  not need it with a full chain such as Let's Encrypt's `fullchain.pem`. It does
+  not enable client certificate authentication (mTLS).
+- **Encrypted keys** need `TLS_KEY_PASSPHRASE`.
+- Certificates are read at startup. Restart the backend after renewing them.
 
-1. **Set `CLIENT_BASE_HREF`** on the client container so Angular resolves routes and assets correctly.
-2. **Configure the reverse proxy** to forward the subpath to the client container.
+The startup log reports `TLS: Enabled`. The variables are listed under
+[TLS](../reference/environment-variables.md#tls). For a quick local test, a
+self-signed certificate works with `curl -k`; wallets reject it.
 
-:::warning[Backend Subpath Not Supported]
-Only the **client** can be served from a subpath. The backend (OID4VCI/OID4VP endpoints) must be served from the root of its hostname, because the OID4VCI specification interprets path segments as tenant identifiers.
-:::
-
-### Client Container Configuration
-
-```yaml
-services:
-    eudiplo-client:
-        image: ghcr.io/openwallet-foundation/eudiplo-client:latest
-        environment:
-            API_BASE_URL: http://eudiplo:3000
-            CLIENT_BASE_HREF: /eudiplo-client/
+```bash
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+  -keyout key.pem -out cert.pem -days 30 -subj "/CN=localhost"
 ```
 
-:::note[Automatic Normalization]
-The `CLIENT_BASE_HREF` value is automatically normalized to ensure it starts and ends with `/`. For example, `eudiplo-client` becomes `/eudiplo-client/`.
-:::
+## Serving the client from a subpath
 
-## Related Topics
+The web client can run under a path, for example
+`https://example.com/eudiplo-client/`. Two settings are needed:
 
-- [Docker Compose Deployment](docker-compose.md) — Deploy with Docker
-- [Kubernetes Deployment](kubernetes.md) — Deploy on K8s
-- [Authentication](tenants-and-access.md#api-authentication) — Secure API access
+1. Set `CLIENT_BASE_HREF` on the client container. The container rewrites the
+   `<base href>` of the app at start, so routes and assets resolve under the
+   path. The value is normalized to start and end with `/` and may only contain
+   letters, digits, `-`, `_` and `/`.
+
+   ```yaml
+   services:
+       eudiplo-client:
+           image: ghcr.io/openwallet-foundation/eudiplo-client:latest
+           environment:
+               API_BASE_URL: https://eudiplo.example.com
+               CLIENT_BASE_HREF: /eudiplo-client/
+   ```
+
+2. Make the proxy strip the path before forwarding, because the client container
+   serves its files at `/`:
+
+   ```text title="Caddyfile"
+   example.com {
+       handle_path /eudiplo-client/* {
+           reverse_proxy 127.0.0.1:4200
+       }
+   }
+   ```
+
+   ```nginx
+   location /eudiplo-client/ {
+       proxy_pass http://127.0.0.1:4200/;   # trailing slash strips the prefix
+   }
+   ```
+
+The backend itself cannot be served from a subpath (see above).

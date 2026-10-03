@@ -4,197 +4,137 @@ title: Monitoring
 
 # Monitoring
 
-This guide shows how to set up observability for EUDIPLO using OpenTelemetry, Prometheus, Tempo, Loki, and Grafana.
-
-## Architecture
-
-EUDIPLO exports all telemetry signals (metrics, traces, logs) via **OpenTelemetry Protocol (OTLP)** to an OpenTelemetry Collector, which routes them to the appropriate backends:
+Collect EUDIPLO's metrics, traces and logs with OpenTelemetry and view them in
+Grafana. The backend pushes all three signals over OTLP/HTTP to a collector; it
+has no `/metrics` endpoint to scrape. The `monitor/` folder of the repository
+contains a ready-made stack.
 
 ```mermaid
 flowchart LR
-    Backend["Backend<br/>(OTLP)"] --> Collector["OTel Collector"]
-    Collector --> Prometheus["Prometheus<br/>(metrics)"]
-    Collector --> Tempo["Tempo<br/>(traces)"]
-    Collector --> Loki["Loki<br/>(logs)"]
+    Backend["EUDIPLO backend"] -- "OTLP/HTTP :4318" --> Collector["OTel Collector"]
+    Collector --> Prometheus["Prometheus (metrics)"]
+    Collector --> Tempo["Tempo (traces)"]
+    Collector --> Loki["Loki (logs)"]
     Prometheus --> Grafana
     Tempo --> Grafana
     Loki --> Grafana
 ```
 
-Grafana provides unified visualization with cross-signal correlation — jump from a trace to related logs, or from metrics to traces.
+## Configure the backend
 
-## Quick Start
-
-The monitoring stack in `monitor/` includes:
-
-| Service                     | URL                       | Purpose                  |
-| --------------------------- | ------------------------- | ------------------------ |
-| **OpenTelemetry Collector** | `localhost:4317` / `4318` | OTLP receiver            |
-| **Prometheus**              | [http://localhost:9090](http://localhost:9090)   | Metrics storage          |
-| **Tempo**                   | [http://localhost:3200](http://localhost:3200)   | Distributed tracing      |
-| **Loki**                    | [http://localhost:3100](http://localhost:3100)   | Log aggregation          |
-| **Grafana**                 | [http://localhost:3001](http://localhost:3001)   | Dashboards & exploration |
-
-### Start Monitoring Stack
-
-```bash
-cd monitor/
-docker-compose up -d
+```env
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318   # default http://localhost:4318
+OTEL_SERVICE_NAME=eudiplo-backend                        # default
 ```
 
-## Local Development Setup
+The exporter speaks OTLP over HTTP (protobuf) only; point it at the collector's
+port 4318, not the gRPC port 4317. Metrics are pushed every 30 seconds. Set
+`OTEL_SDK_DISABLED=true` to turn off all export, for example when no collector
+runs.
 
-When running EUDIPLO locally (outside Docker) with the monitoring stack:
+import ConfigTable from "@site/src/components/ConfigTable";
 
-### 1. Start the Monitoring Stack
+<ConfigTable group="observability" />
 
-```bash
-cd monitor/
-docker-compose up -d
-```
+With `GRAFANA_URL`, the web client links sessions to their traces and logs in
+Grafana; the datasource UIDs must match your Grafana setup.
 
-### 2. Start EUDIPLO Backend
-
-```bash
-# From project root
-pnpm --filter @eudiplo/backend dev
-```
-
-The backend exports telemetry to `http://localhost:4318` by default (the OTel Collector's HTTP endpoint).
-
-### 3. Verify Telemetry
-
-- **Metrics**: Open [http://localhost:9090/targets](http://localhost:9090/targets) — the `otel-collector` target should be UP
-- **Traces**: Open [http://localhost:3001](http://localhost:3001), go to Explore → Tempo, and search for recent traces
-- **Logs**: In Grafana, go to Explore → Loki and query `{service_name="eudiplo-backend"}`
-
-## Docker Container Setup
-
-When running EUDIPLO as a Docker container alongside the monitoring stack:
-
-### 1. Configure OTLP Endpoint
-
-Set the OTLP endpoint to the collector's container name:
+## Run the bundled stack
 
 ```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+cd monitor
+docker compose up -d
 ```
 
-### 2. Ensure Network Connectivity
+| Service          | Image                                   | Port                                     |
+| ---------------- | --------------------------------------- | ---------------------------------------- |
+| `otel-collector` | `otel/opentelemetry-collector-contrib`  | 4318 (OTLP/HTTP), 4317 (gRPC), 8889 (Prometheus exporter) |
+| `prometheus`     | `prom/prometheus`                       | 9090                                     |
+| `tempo`          | `grafana/tempo`                         | 3200                                     |
+| `loki`           | `grafana/loki`                          | 3100                                     |
+| `grafana`        | `grafana/grafana`                       | 3001 (user `admin`, password `admin`)    |
 
-Add EUDIPLO to the same Docker network as the monitoring stack, or use `host.docker.internal` if running separately.
+The services share the Compose network `monitoring`, which Docker names
+`monitor_monitoring` when started from the `monitor` folder. Attach the backend
+to it:
 
-Example in your application's `docker-compose.yml`:
-
-```yaml
+```yaml title="docker-compose.override.yml (next to your EUDIPLO Compose file)"
 services:
     eudiplo:
-        image: eudiplo/eudiplo:latest
-        ports:
-            - "3000:3000"
         environment:
-            - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+            OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
         networks:
-            - monitor_default # Join the monitor stack's network
+            - default
+            - monitoring
 
 networks:
-    monitor_default:
+    monitoring:
+        name: monitor_monitoring
         external: true
 ```
 
-### 3. Start Full Stack
+A backend running directly on the host reaches the collector at the default
+`http://localhost:4318`. Running the backend from source with `pnpm dev` is
+described in [Development setup](../contributing/development-setup.md).
 
-```bash
-# Start monitoring
-cd monitor/ && docker-compose up -d
+Grafana is provisioned from `monitor/grafana/provisioning/`: the datasources
+Prometheus (`prometheus`), Tempo (`tempo`) and Loki (`loki`) with trace-to-log
+and log-to-trace links, the alert rule below, and the **EUDIPLO overview**
+dashboard from `monitor/grafana/dashboards/`.
 
-# Start EUDIPLO (from project root or deployment folder)
-docker-compose up -d
+**Checkpoint:** `http://localhost:9090/targets` shows the `otel-collector`
+target as up, and after a few requests Grafana's **Explore > Loki** returns logs
+for `{service_name="eudiplo-backend"}`.
+
+## Metrics
+
+| Metric                                         | Type      | Labels                                                    | Meaning                                                    |
+| ---------------------------------------------- | --------- | --------------------------------------------------------- | ---------------------------------------------------------- |
+| `http_server_request_duration_seconds`         | histogram | `http_route`, `http_request_method`, `http_response_status_code` | Duration of handled HTTP requests                   |
+| `sessions`                                     | gauge     | `tenant_id`, `session_type` (`issuance`, `verification`), `status` (`active`, `fetched`, `completed`, `expired`, `failed`) | Current number of sessions in the database |
+| `tenant_total`                                 | gauge     | -                                                         | Number of tenants                                          |
+| `federation_trust_cache_hits_total`, `_misses_total`, `_stale_total` | counter | -                                 | OpenID Federation trust cache                              |
+| `federation_trust_fetches_total`               | counter   | -                                                         | Outbound federation entity configuration fetches           |
+| `oid4vci_as_metadata_cache_hits_total`, `_misses_total`, `_stale_total` | counter | -                              | Cache of external authorization server metadata            |
+| `oid4vci_as_metadata_fetches_total`            | counter   | -                                                         | Outbound authorization server metadata fetches             |
+| `chained_as_discovery_cache_hits_total`, `_misses_total`, `_stale_total` | counter | -                             | Cache of the chained authorization server's upstream discovery |
+| `chained_as_discovery_fetches_total`           | counter   | -                                                         | Outbound upstream discovery fetches                        |
+
+The backend also exports process and host metrics (CPU, memory) and the
+automatic Node.js instrumentation traces.
+
+Since 9.0, `sessions` is read from the database (at most every 30 seconds), so
+every replica reports the same values. Deduplicate with `max` before summing:
+
+```text
+sum by (tenant_id) (max by (tenant_id, session_type, status) (sessions{status="active"}))
 ```
 
-## Environment Variables
+## Alerts
 
-| Variable                       | Description                               | Default                 |
-| ------------------------------ | ----------------------------------------- | ----------------------- |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`  | OTLP collector endpoint                   | `http://localhost:4318` |
-| `OTEL_SERVICE_NAME`            | Service name in telemetry                 | `eudiplo-backend`       |
-| `OTEL_SDK_DISABLED`            | Disable OTel SDK entirely                 | `false`                 |
-| `GRAFANA_URL`                  | Grafana base URL for dashboard deep links | _(not set)_             |
-| `GRAFANA_DATASOURCE_TEMPO_UID` | UID of the Tempo datasource in Grafana    | `tempo`                 |
-| `GRAFANA_DATASOURCE_LOKI_UID`  | UID of the Loki datasource in Grafana     | `loki`                  |
+`monitor/prometheus/rules/eudiplo.yml`:
 
-Set `OTEL_SDK_DISABLED=true` for local development without a collector running.
+| Alert              | Fires when                                                         | Severity |
+| ------------------ | ------------------------------------------------------------------ | -------- |
+| `HighErrorRate`    | More than 0.1 responses per second with status 5xx, for 2 minutes  | warning  |
+| `ServiceDown`      | The collector's scrape target is down for 1 minute                 | critical |
+| `HighResponseTime` | 95th percentile of request duration above 2 s, for 5 minutes       | warning  |
+| `HighMemoryUsage`  | Host memory above 80 %; uses `node_memory_*` metrics from a node exporter, which the stack does not run, so it never fires as shipped | warning |
 
-## Available Metrics
+The file also defines the recording rule `tenant:active_sessions`. Prometheus
+has no Alertmanager configured (the `alerting` block in
+`monitor/prometheus/prometheus.yml` is commented out), so these alerts are only
+visible in Prometheus until you add one.
 
-### Auto-Instrumented (via OpenTelemetry)
+Grafana evaluates **High Session Error Rate**
+(`monitor/grafana/provisioning/alerting/session-alerts.yml`) every 5 minutes: it
+fires when more than 10 % of a tenant's finished sessions failed, for 2 minutes.
+Add a contact point in Grafana (**Alerting > Contact points**) to receive it.
 
-- `http_server_request_duration_seconds` — HTTP request duration histogram
-- `http_server_active_requests` — Currently active HTTP requests
-- Host metrics (CPU, memory, event loop) via `nestjs-otel`
+## Before production
 
-### Business Metrics
-
-- `sessions` — Active sessions by status and tenant
-- `tenant_total` — Total number of tenants
-
-## Access Dashboards
-
-### Grafana
-
-[http://localhost:3001](http://localhost:3001)
-
-- **Username**: `admin`
-- **Password**: `admin`
-
-Pre-configured datasources:
-
-- **Prometheus** — for metrics
-- **Tempo** — for traces
-- **Loki** — for logs
-
-Cross-signal correlation is enabled:
-
-- **Traces → Logs**: Jump from a span to correlated log lines in Loki
-- **Logs → Traces**: Extract `trace_id` from Pino log fields and link to Tempo
-
-### Prometheus
-
-[http://localhost:9090](http://localhost:9090)
-
-- View metrics and run PromQL queries
-- Check targets status at [http://localhost:9090/targets](http://localhost:9090/targets)
-
-## Alerting Rules
-
-Pre-configured alerts in `monitor/prometheus/rules/eudiplo.yml`:
-
-| Alert                | Condition                            |
-| -------------------- | ------------------------------------ |
-| **HighErrorRate**    | HTTP 5xx rate exceeds 5% of requests |
-| **ServiceDown**      | OTel Collector target is down        |
-| **HighResponseTime** | P95 response time exceeds 2 seconds  |
-
-### Add Custom Alerts
-
-1. Edit `monitor/prometheus/rules/eudiplo.yml`
-2. Restart Prometheus: `docker-compose restart prometheus`
-
-## Configuration Files
-
-All configuration files are in the `monitor/` directory:
-
-| File                                       | Purpose                    |
-| ------------------------------------------ | -------------------------- |
-| `otel-collector/otel-collector-config.yml` | Collector pipelines        |
-| `prometheus/prometheus.yml`                | Prometheus scrape config   |
-| `prometheus/rules/eudiplo.yml`             | Alerting rules             |
-| `tempo/tempo.yml`                          | Trace storage config       |
-| `loki/loki.yml`                            | Log aggregation config     |
-| `grafana/datasources/`                     | Grafana datasource configs |
-| `grafana/dashboards/`                      | Pre-built dashboards       |
-
-## Related Topics
-
-- [Database](database.md) — Database health metrics
-- [Tenants](tenants-and-access.md) — Tenant-scoped monitoring
+- Change the Grafana admin password and put Prometheus, Tempo and Loki behind
+  authentication; the bundled stack has none.
+- The stack stores data in local volumes; Prometheus keeps 200 hours. Use
+  object storage and retention settings that fit your needs for Tempo and Loki.
+- Pin the image versions; most services use `latest`.

@@ -4,28 +4,12 @@ title: Environment Variables
 
 # Environment Variables
 
-EUDIPLO is configured primarily through environment variables. This page documents all available configuration options organized by functional area.
-
-## Quick Reference
-
-The complete environment variable reference is organized into the following sections:
-
-- [Authentication](#authentication) — OAuth client credentials and token validation
-- [Configuration](#configuration) — File-based tenant configuration import
-- [Cryptography](#cryptography) — Key generation and cryptographic defaults
-- [Database](#database) — Database connection and type selection
-- [Encryption](#encryption) — At-rest encryption for database-backed keys
-- [General](#general) — Public URL, CORS, and operational settings
-- [Issuer](#issuer) — Credential issuance flow defaults
-- [Logging](#logging) — Log level and structured logging
-- [Observability](#observability) — OpenTelemetry tracing configuration
-- [Session](#session) — Session cleanup and retention policies
-- [Skip Flags](#skip-flags) — Development-only switches that turn off checks
-- [Status](#status) — Status list configuration
-- [Storage](#storage) — File storage provider (local/S3)
-- [TLS](#tls) — Built-in HTTPS termination
-- [Verifier](#verifier) — Presentation verification defaults
-- [Webhook](#webhook) — Outbound webhook security policies
+All environment variables of the EUDIPLO backend, generated from its validation
+schema. The backend refuses to start when a value is invalid or a required
+variable is missing. KMS providers and the registrar are configured in JSON
+files instead ([KMS config](kms-config.md), [Registrar](../trust/registrar.md));
+the variables of the `eudiplo` CLI are listed in the
+[CLI guide](../operate/cli.md#environment-variables).
 
 import ConfigTable from "@site/src/components/ConfigTable";
 
@@ -71,7 +55,9 @@ import ConfigTable from "@site/src/components/ConfigTable";
 
 ## Skip Flags
 
-Every switch that turns off a check of the normal, secure flow is named `SKIP_<CHECK>` and defaults to `false`. Active skip flags are listed as warnings in the startup log. Use them only for development and interoperability testing, never in production.
+Every switch that turns off a check of the normal flow is named `SKIP_<CHECK>`
+and defaults to `false`. The startup log lists active skip flags as warnings.
+Use them only for development and interoperability tests.
 
 <ConfigTable group="skip" />
 
@@ -94,7 +80,3 @@ Every switch that turns off a check of the normal, secure flow is named `SKIP_<C
 ## Webhook
 
 <ConfigTable group="webhook" />
-
-:::info
-Key Management System (KMS) and Registrar provider settings are configured via JSON files (`kms.json`, `registrar.json`), not environment variables — see [Key Management System (KMS)](../operate/kms.md) and [Registrar](../trust/registrar.md).
-:::

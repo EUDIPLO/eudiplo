@@ -4,64 +4,81 @@ title: Load Testing
 
 # Load Testing
 
-The k6 suite exercises authentication, pre-authorized credential issuance, OID4VP presentation requests, and status-list reads. It can start the repository's Docker Compose stack or target an EUDIPLO deployment that is already running.
+Measure how a deployment handles token requests, pre-authorized issuance,
+OID4VP presentation requests and status-list reads with the k6 suite in
+`scripts/load-test`. The runner can start the repository's Compose stack or
+target a deployment that is already running.
 
-## Prerequisites
+## Before you start
 
 - [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) 2.0 or newer
-- Docker, only when the runner should start the local stack
-- An OAuth client and tenant that exist in the target deployment
+- Docker, only if the runner should start the local stack
+- An OAuth client and a tenant with issuance and presentation configurations in
+  the target deployment
 
-Run a single iteration of every scenario against the local Compose stack:
+## Run against the local stack
 
 ```bash
 ./scripts/load-test/run-all.sh --once
 ```
 
-Results are written to `scripts/load-test/results/`. Each scenario produces a JSON summary and a log containing k6's end-of-run metrics.
+The runner starts `deployment/docker-compose` with the `standard` profile
+(`COMPOSE_PROFILE`, env file `K6_ENV_FILE`, default
+`deployment/docker-compose/.env`), waits for `/health` and runs every scenario
+once. Each scenario writes a JSON summary and a log with k6's end-of-run metrics
+to `scripts/load-test/results/`.
 
-## Test a Self-Hosted Deployment
+## Run against a deployment
 
-`--external` prevents the runner from starting Docker and requires an explicit target URL. Start with the `once` profile before applying sustained load:
+`--external` does not start Docker and requires an explicit target. Start with
+`--once` before applying sustained load:
 
 ```bash
 BASE_URL=https://eudiplo.example.com \
-TENANT_ID=production-like-test-tenant \
+TENANT_ID=load-test \
 CLIENT_ID=load-test-client \
-CLIENT_SECRET=replace-me \
+CLIENT_SECRET=<secret> \
 ./scripts/load-test/run-all.sh --external --once
 ```
 
-The target must be a dedicated test environment. The issuance and presentation scenarios create persistent data, and the load, stress, and spike profiles can generate substantial traffic.
+Use a dedicated test environment: the issuance and presentation scenarios create
+persistent sessions, and the `load`, `stress` and `spike` profiles generate
+substantial traffic. Use [least-privilege client roles](tenants-and-access.md#api-clients-with-least-privilege)
+for the test client.
 
-By default the runner waits for `BASE_URL/health`. Deployments that expose health checks through a different route can override it:
+The runner waits for `BASE_URL/health`. Set `HEALTH_URL` if health checks are
+exposed elsewhere, or `SKIP_HEALTH_CHECK=true` if a gateway hides them; the
+first request then serves as the connectivity check. For private certificate
+authorities, `K6_INSECURE_SKIP_TLS_VERIFY=true` disables certificate checks; use
+it only in a controlled test environment.
+
+## Profiles and scenarios
+
+| Variable            | Default                  | Meaning                                                     |
+| ------------------- | ------------------------ | ----------------------------------------------------------- |
+| `K6_PROFILE`        | `smoke`                  | `once`, `smoke`, `load`, `stress` or `spike` (`--once` forces `once`) |
+| `TENANT_ID`         | `demo`                   | Tenant used by the scenarios                                |
+| `CLIENT_ID`, `CLIENT_SECRET` | `test-client`, `test-client-secret` | OAuth client of that tenant              |
+| `CREDENTIAL_CONFIG_ID` | `pid`                 | Credential configuration offered by `pre-auth-issuance`     |
+| `REQUEST_ID`        | `age-over-18`            | Presentation configuration used by `oid4vp-presentation`    |
+| `MAX_LISTS`         | `5`                      | Maximum number of status lists fetched per iteration        |
+| `SUMMARY_DIR`       | `scripts/load-test/results` | Output directory                                         |
+| `CLEAN_RESULTS`     | `true`                   | Delete earlier results before the run                       |
+| `PROMETHEUS_RW_URL` | -                        | Also push k6 metrics to a Prometheus remote-write endpoint  |
+
+Without scenario arguments the runner executes all four. Name scenarios to run a
+subset:
 
 ```bash
-HEALTH_URL=https://status.example.com/eudiplo/ready \
-BASE_URL=https://eudiplo.example.com \
-./scripts/load-test/run-all.sh --external --once api-auth
+K6_PROFILE=load ./scripts/load-test/run-all.sh --external api-auth pre-auth-issuance
 ```
 
-If a gateway deliberately hides all health endpoints, set `SKIP_HEALTH_CHECK=true`. In that mode, the first scenario request is the connectivity check.
+| Scenario              | Exercises                                                          |
+| --------------------- | ------------------------------------------------------------------ |
+| `api-auth`            | `POST /api/oauth2/token`                                           |
+| `pre-auth-issuance`   | Offer, token, nonce and credential request of the pre-authorized flow, with a generated holder key |
+| `oid4vp-presentation` | Presentation request creation and request object retrieval (no wallet response) |
+| `status-list`         | Status list downloads; needs at least one issued status-managed credential |
 
-For private certificate authorities, use k6's standard `K6_INSECURE_SKIP_TLS_VERIFY=true` only in a controlled test environment.
-
-## Profiles and Scenarios
-
-Set `K6_PROFILE` to `once`, `smoke`, `load`, `stress`, or `spike`. With no scenario arguments, the runner executes all four scenarios. To run a subset, list their names after the flags:
-
-```bash
-K6_PROFILE=load ./scripts/load-test/run-all.sh \
-  --external api-auth pre-auth-issuance
-```
-
-Available scenarios:
-
-- `api-auth`
-- `pre-auth-issuance`
-- `oid4vp-presentation`
-- `status-list`
-
-The status-list scenario expects at least one status-managed credential to have been issued for the tenant. `CREDENTIAL_CONFIG_ID` defaults to `pid`, and `MAX_LISTS` limits how many status lists each iteration fetches.
-
-To retain previous results, set `CLEAN_RESULTS=false`. Set `SUMMARY_DIR` to write result files elsewhere. `PROMETHEUS_RW_URL` enables k6's experimental Prometheus remote-write output in addition to the local summaries.
+To see the backend side of a run, start the [monitoring stack](monitoring.md)
+and set `PROMETHEUS_RW_URL=http://localhost:9090/api/v1/write`.

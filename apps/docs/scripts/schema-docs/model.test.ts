@@ -27,6 +27,19 @@ test("changing schema metadata changes the generated description", () => {
     );
 });
 
+test("unions of one scalar type, e.g. a value or a ${ENV} placeholder, render as that type", () => {
+    const model = buildSchemaModel(
+        z.object({
+            url: z.union([z.string().url(), z.string().regex(/^\$\{[A-Z_]+\}$/)]).describe("Service URL."),
+            mode: z.union([z.literal("a"), z.literal("b")]),
+        }),
+    );
+    assert.equal(model.properties?.url.type, "string");
+    assert.equal(model.properties?.url.variants, undefined);
+    assert.equal(model.properties?.url.description, "Service URL.");
+    assert.deepEqual(model.properties?.mode.enum, ["a", "b"]);
+});
+
 test("extracted webhook schema keeps both auth branches and strict validation", () => {
     const base = { requestId: "config", response_type: "uri" };
     assert.equal(PresentationRequestSchema.safeParse({

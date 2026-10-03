@@ -1,218 +1,125 @@
 ---
-title: Keycloak Management SSO
+title: Keycloak SSO
 ---
 
-<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
-  - appended section 'Keycloak Chained AS' (from removed administration/keycloak-chained-as.md, outdated) -> rewrite as cookbooks/issue-after-login.md, then remove it here and point the /administration/keycloak-chained-as redirect to the cookbook
--->
+# Keycloak SSO
 
-# Keycloak Management SSO
+Use Keycloak as the identity provider of the management API: people sign in to
+the web client with their Keycloak account, and EUDIPLO creates tenant service
+clients and users in Keycloak. What changes in this mode is summarized in
+[Tenants and access](tenants-and-access.md#external-oidc-provider-and-human-users).
 
-This guide configures Keycloak for EUDIPLO management SSO, user management, and tenant service-client management. For Keycloak as the upstream authorization server in an OID4VCI issuance flow, see [Keycloak Chained AS](#keycloak-chained-as).
+Keycloak as the login for *wallet users* during credential issuance (chained
+authorization server) is a different setup, configured per tenant in the
+[authorization servers](../issuance/authorization-servers.md) guide.
 
-## Set Up Management SSO
+## Before you start
 
-In external OIDC mode, EUDIPLO needs two Keycloak clients:
+- Keycloak 22 or later, reachable from the EUDIPLO backend and from browsers
+- EUDIPLO and the web client deployed at their final HTTPS URLs
+- A realm for EUDIPLO, for example `eudiplo`
 
-| Client          | Type         | Purpose                                                                                                              | EUDIPLO setting                           |
-| --------------- | ------------ | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| `eudiplo-admin` | Confidential | Lets the backend call the Keycloak Admin API to create realm roles, manage users, and create tenant service clients. | `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET` |
-| `eudiplo-ui`    | Public       | Lets people sign in to the Angular management UI with Authorization Code flow and PKCE.                              | `OIDC_UI_CLIENT_ID`                       |
+EUDIPLO uses two Keycloak clients:
 
-Do not give a secret to the public UI client. Browser applications cannot protect client secrets.
+| Client          | Type         | Purpose                                                                         | Setting                                   |
+| --------------- | ------------ | ------------------------------------------------------------------------------- | ----------------------------------------- |
+| `eudiplo-admin` | Confidential | Backend access to the Keycloak admin API: realm roles, users, tenant clients     | `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`    |
+| `eudiplo-ui`    | Public       | Sign-in to the web client with authorization code and PKCE                      | `OIDC_UI_CLIENT_ID` (default `eudiplo-ui`) |
 
-### Prerequisites
+## 1. Create the admin client
 
-- A running Keycloak instance (tested with Keycloak 22+)
-- EUDIPLO and the web client deployed at their intended HTTPS URLs
-- A Keycloak realm dedicated to, or approved for, EUDIPLO
+1. In the realm, go to **Clients > Create client** and create the OpenID Connect
+   client `eudiplo-admin`.
+2. Enable **Client authentication** and **Service account roles**; disable
+   **Standard flow** and **Direct access grants**.
+3. Under **Service account roles**, assign the `realm-management` role
+   `realm-admin`. EUDIPLO creates realm roles and manages users, clients, client
+   secrets and service-account role mappings. To use a narrower role set, check
+   that it covers all of these.
+4. In the client's **Advanced** settings, enable
+   **Use refresh tokens for client credentials grant**. Without it, startup can
+   fail with `Cannot read properties of undefined (reading 'split')`.
+5. Copy the secret from the **Credentials** tab.
 
-### 1. Create the Realm
-
-1. Log in to the Keycloak Admin Console.
-2. Select **Create realm**.
-3. Enter a realm name, such as `eudiplo`, then select **Create**.
-
-### 2. Create the Backend Administration Client
-
-1. Go to **Clients** and select **Create client**.
-2. Create an OpenID Connect client with client ID `eudiplo-admin`.
-3. Enable **Client authentication** and **Service account roles**. Disable the standard flow and direct access grants.
-4. On the **Credentials** tab, copy the generated client secret.
-5. On **Service account roles**, assign the `realm-management` client's `realm-admin` role.
-
-`realm-admin` is required because EUDIPLO creates its realm roles and administers users and clients. For a least-privilege installation, replace it only after verifying that the service account has every permission required to manage realm roles, users, clients, client secrets, and service-account role mappings.
-
-When using Keycloak's current client-credentials behavior, enable **Use refresh tokens for client credentials grant** for this client. EUDIPLO refreshes the Keycloak admin session while it is running.
-
-### 3. Create the Public Web Client
-
-1. Go to **Clients** and select **Create client**.
-2. Create an OpenID Connect client with client ID `eudiplo-ui`.
-3. Disable **Client authentication** so the client is public.
-4. Enable **Standard flow** and leave **Direct access grants** disabled.
-5. Set **Valid redirect URIs** to the exact client URL, for example `https://console.example.com/*`.
-6. Set **Web origins** to the exact client origin, for example `https://console.example.com`.
-
-EUDIPLO creates or updates this public client at startup. At present, that startup setup sets its redirect URIs and web origins to `*`, so do not rely on manual restrictive values persisting after a restart. Restrict those settings at the network boundary until EUDIPLO supports configuring them. The EUDIPLO login page discovers the realm issuer and this client ID from the management API, then starts Authorization Code flow with PKCE.
-
-### 4. Configure EUDIPLO
-
-Set these environment variables for the backend:
+## 2. Configure EUDIPLO
 
 ```env
 OIDC=https://keycloak.example.com/realms/eudiplo
-OIDC_INTERNAL_ISSUER_URL=https://keycloak.example.com/realms/eudiplo
 OIDC_CLIENT_ID=eudiplo-admin
-OIDC_CLIENT_SECRET=replace-with-the-eudiplo-admin-secret
-OIDC_UI_CLIENT_ID=eudiplo-ui
-PUBLIC_URL=https://api.example.com
+OIDC_CLIENT_SECRET=<secret of eudiplo-admin>
+PUBLIC_URL=https://eudiplo.example.com
+MASTER_SECRET=<random, 32+ characters>   # derives the default encryption key
+# Optional, defaults shown
+# OIDC_UI_CLIENT_ID=eudiplo-ui
+# OIDC_SUB=tenant_id            # claim that carries the tenant
+# OIDC_ALGORITHM=RS256          # RS256, PS256 or ES256
+# OIDC_INTERNAL_ISSUER_URL=     # expected token issuer, defaults to OIDC
+# Optional: a Keycloak client with tenants:manage for automation
+AUTH_CLIENT_ID=root
+AUTH_CLIENT_SECRET=<secret>
 ```
 
-Use `OIDC_INTERNAL_ISSUER_URL` when the backend reaches Keycloak through a private URL that differs from the public issuer. The public `OIDC` value must remain the issuer URL embedded in Keycloak tokens and accessible to web browsers.
+EUDIPLO validates access tokens against the issuer `OIDC_INTERNAL_ISSUER_URL`
+(default: `OIDC`) and loads the signing keys from
+`<issuer>/protocol/openid-connect/certs`. Leave it unset unless the `iss` of
+your tokens differs from `OIDC`.
 
-Optionally set `AUTH_CLIENT_ID` and `AUTH_CLIENT_SECRET` to have EUDIPLO create a confidential bootstrap client with tenant-management access. This is for machine-to-machine administration and is separate from both `eudiplo-admin` and `eudiplo-ui`.
+On every start, EUDIPLO:
 
-### 5. Assign EUDIPLO Roles to People
+- creates the missing realm roles (the [EUDIPLO roles](../reference/roles.md)),
+- creates or updates the public client `eudiplo-ui`, with redirect URIs and web
+  origins set to `*`,
+- creates or updates the `AUTH_CLIENT_ID` client with `tenants:manage`, if both
+  `AUTH_CLIENT_ID` and `AUTH_CLIENT_SECRET` are set.
 
-On startup, EUDIPLO creates any missing realm roles. Assign those realm roles to people who sign in through `eudiplo-ui`; the access token must contain their roles and tenant context for EUDIPLO to authorize management API requests.
+Restrictive redirect URIs that you set on `eudiplo-ui` are overwritten at the next
+start, so restrict access to the web client at the network level if needed.
 
-- Use `tenants:manage` for an administrator who creates and manages tenants.
-- Assign the relevant issuance, presentation, key, registrar, or metrics roles for limited access.
-- Create tenant-scoped service clients through EUDIPLO when applications, rather than people, need API access. EUDIPLO adds their `tenant_id` and `roles` access-token claims.
+**Checkpoint:** the backend log shows `Mode: External OIDC`, and the web client's
+login page offers single sign-on after you enter the backend URL.
 
-Users created through EUDIPLO's user-management API are stored in Keycloak with a `tenant_id` user attribute. They receive a temporary password and are limited to their owning tenant. Avoid removing or changing that attribute directly in Keycloak, because EUDIPLO uses it to enforce tenant ownership when listing, updating, or deleting users.
+## 3. Put the tenant into user tokens
 
-### Verify Management SSO
+EUDIPLO reads the tenant from the `tenant_id` claim (`OIDC_SUB`) and the roles
+from `roles` or `realm_access.roles`. Service clients created through EUDIPLO
+get both claims automatically. For people, add the tenant claim once:
 
-1. Start or restart EUDIPLO with the preceding configuration.
-2. Open the web client and enter the management API URL.
-3. The login page should report that SSO is available and redirect to Keycloak.
-4. Sign in with a user that has EUDIPLO realm roles, then confirm that the dashboard loads and only authorized tenant data is visible.
+1. In Keycloak 24 or later, declare the user attribute `tenant_id` in
+   **Realm settings > User profile** (or enable unmanaged attributes), so Keycloak
+   keeps the attribute that EUDIPLO sets on users.
+2. Create a client scope, for example `eudiplo-tenant`, with a **User Attribute**
+   mapper: user attribute `tenant_id`, token claim name `tenant_id`, added to the
+   access token.
+3. Add the scope as a **Default** client scope of `eudiplo-ui`.
 
-## Related Topics
+Realm roles are in `realm_access.roles` by default.
 
-- [Authentication](tenants-and-access.md#api-authentication) — EUDIPLO authentication architecture
-- [Tenants](tenants-and-access.md) — Multi-tenant configuration
-- [Keycloak Chained AS](#keycloak-chained-as) — Keycloak for OID4VCI issuance authorization
+## 4. Give people access
 
-## Keycloak Chained AS
+- **Platform administrators:** assign the realm role `tenants:manage`. They do
+  not need a `tenant_id`.
+- **Tenant users:** create them in the web client or with `POST /api/user`
+  (role `users:manage`). EUDIPLO stores them in Keycloak with the `tenant_id`
+  attribute of the caller's tenant, assigns the requested roles and returns a
+  temporary password. Do not change that attribute in Keycloak; EUDIPLO uses it
+  to keep users in their tenant.
+- **Applications:** create service clients in the web client or with
+  `POST /api/client`. EUDIPLO creates them in Keycloak with mappers for
+  `tenant_id` and `roles`; they get tokens from Keycloak's token endpoint with
+  the client credentials grant.
 
-This guide configures Keycloak as the upstream authorization server for OID4VCI issuance. EUDIPLO remains the authorization-server facade for the wallet while Keycloak authenticates the person receiving the credential.
+Choose the roles from the [roles reference](../reference/roles.md), for example
+`issuance:manage` and `presentation:manage` for people who configure a tenant,
+and `clients:manage` and `users:manage` for tenant administrators.
 
-This is independent of [Keycloak Management SSO](keycloak.md). The two flows can use the same realm, but the Chained AS client is a separate confidential client.
+**Checkpoint:** sign in to the web client as a tenant user. The dashboard loads
+and shows only that tenant's data.
 
-### Why Use Chained AS?
+## Troubleshooting
 
-- Reuse existing Keycloak users and authentication flows.
-- Keep wallet-session correlation simple: EUDIPLO includes `issuer_state` in its tokens.
-- Pass Keycloak ID-token and access-token claims to a claims webhook.
-- Validate wallet attestations against configured trust lists.
-- Avoid custom Keycloak token mappers required by the External AS mode.
-
-### Prerequisites
-
-- A running Keycloak instance (tested with Keycloak 22+).
-- EUDIPLO deployed and accessible at a public URL.
-- A tenant configured in EUDIPLO.
-
-### 1. Configure Keycloak
-
-Create or select the realm that authenticates credential recipients, then create a confidential OpenID Connect client:
-
-| Setting               | Value                                            |
-| --------------------- | ------------------------------------------------ |
-| Client ID             | `eudiplo-chained-as`                             |
-| Client authentication | Enabled                                          |
-| Valid redirect URIs   | `https://your-eudiplo-url/*/chained-as/callback` |
-
-Copy the client secret from the **Credentials** tab.
-
-:::tip[Redirect URI Pattern]
-Use `*` for the tenant path or list exact tenants, such as `https://eudiplo.example.com/prod/chained-as/callback`.
-:::
-
-Ensure the client can request the standard `openid`, `profile`, and `email` scopes. To provide additional identity data, create a Keycloak client scope and mapper for the desired claims.
-
-### 2. Configure Issuance
-
-Add a Chained AS to the tenant's issuance configuration:
-
-```json
-{
-    "display": [{ "name": "My Issuer", "locale": "en" }],
-    "authorizationServers": [
-        {
-            "type": "chained",
-            "id": "chained-auth",
-            "enabled": true,
-            "upstream": {
-                "issuer": "https://keycloak.example.com/realms/eudiplo",
-                "clientId": "eudiplo-chained-as",
-                "clientSecret": "replace-with-the-client-secret",
-                "scopes": ["openid", "profile", "email"]
-            },
-            "requireDPoP": false,
-            "token": { "lifetimeSeconds": 3600 }
-        }
-    ]
-}
-```
-
-| Field                   | Description                                             |
-| ----------------------- | ------------------------------------------------------- |
-| `upstream.issuer`       | Keycloak realm URL, ending with `/realms/{realm-name}`. |
-| `upstream.clientId`     | The Chained AS client ID.                               |
-| `upstream.clientSecret` | The Chained AS client secret.                           |
-| `upstream.scopes`       | Scopes EUDIPLO requests from Keycloak.                  |
-
-### 3. Use Identity Claims
-
-To make authenticated Keycloak claims available while issuing, configure a claims webhook in the credential configuration:
-
-```json
-{
-    "credentialConfigurationId": "EmployeeBadge",
-    "claimsWebhook": {
-        "url": "https://your-backend.example.com/claims",
-        "auth": {
-            "type": "apiKey",
-            "config": {
-                "headerName": "X-API-Key",
-                "value": "your-secret-key"
-            }
-        }
-    }
-}
-```
-
-The webhook receives Keycloak claims in `identity.token_claims`, including values such as `email`, `preferred_username`, `given_name`, and `family_name`.
-
-### 4. Create and Test an Offer
-
-Create an authorization-code credential offer using the Chained AS:
-
-```bash
-curl -X POST https://eudiplo.example.com/api/offers \
-  -H "Content-Type: application/json" \
-  -H "X-Tenant-ID: prod" \
-  -d '{
-    "credentialConfigurationId": "EmployeeBadge",
-    "grant": "authorization_code",
-    "authorization_server": "chained-auth"
-  }'
-```
-
-When the wallet opens the offer, EUDIPLO redirects the person to Keycloak. Keycloak returns to EUDIPLO after sign-in, EUDIPLO issues a wallet access token, and the wallet requests the credential.
-
-Check the generated authorization-server metadata and JWKS:
-
-```bash
-curl https://eudiplo.example.com/prod/chained-as/.well-known/oauth-authorization-server
-curl https://eudiplo.example.com/prod/chained-as/.well-known/jwks.json
-```
-
-### Related Topics
-
-- [Keycloak Management SSO](keycloak.md) — Keycloak for EUDIPLO administration
-- [Issuance Configuration](../issuance/issuance-configuration.md) — Authorization server configuration
+| Symptom                                              | Cause                                                       | Fix                                                                                   |
+| ---------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Startup fails with `reading 'split'`                 | Refresh tokens for client credentials disabled on `eudiplo-admin` | Enable **Use refresh tokens for client credentials grant**                     |
+| API calls return 401 after login                     | Token `iss` differs from `OIDC_INTERNAL_ISSUER_URL`/`OIDC`, or wrong `OIDC_ALGORITHM` | Compare the `iss` and `alg` of a token with the configuration |
+| `This endpoint requires a tenant context`            | User token has no `tenant_id` claim                         | Add the mapper from [step 3](#3-put-the-tenant-into-user-tokens)                       |
+| `403` on an endpoint                                 | Missing realm role                                          | Assign the role listed for the endpoint in the [roles reference](../reference/roles.md#endpoints) |

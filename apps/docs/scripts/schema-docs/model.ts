@@ -25,7 +25,25 @@ type JsonSchema = {
     anyOf?: JsonSchema[];
 };
 
+/** A union whose branches are all the same plain scalar type (e.g. a string or a `${ENV}` placeholder string). */
+function scalarUnionType(variants: JsonSchema[] | undefined): string | undefined {
+    const [first] = variants ?? [];
+    const plain = (variant: JsonSchema) =>
+        variant.type !== undefined &&
+        variant.type !== "object" &&
+        variant.type !== "array" &&
+        variant.const === undefined &&
+        variant.enum === undefined;
+    return first && variants?.every((variant) => plain(variant) && variant.type === first.type)
+        ? first.type
+        : undefined;
+}
+
 function fieldFromJsonSchema(schema: JsonSchema, required: boolean): SchemaField {
+    const scalarType = scalarUnionType(schema.oneOf ?? schema.anyOf);
+    if (scalarType) {
+        return fieldFromJsonSchema({ ...schema, type: scalarType, oneOf: undefined, anyOf: undefined }, required);
+    }
     const variants = schema.oneOf ?? schema.anyOf;
     const allowed = variants?.every(
         (variant) => variant.const !== undefined && variant.type === "string",
