@@ -105,9 +105,7 @@ const config: Config = {
           {from: '/administration/tenants', to: '/operate/tenants-and-access'},
           {from: '/administration/authentication', to: '/operate/tenants-and-access'},
           {from: '/administration/keycloak', to: '/operate/keycloak'},
-          // The chained-AS content waits in operate/keycloak until the
-          // cookbooks/issue-after-login recipe replaces it; then point this there.
-          {from: '/administration/keycloak-chained-as', to: '/operate/keycloak'},
+          {from: '/administration/keycloak-chained-as', to: '/cookbooks/issue-after-login'},
           {from: '/administration/database', to: '/operate/database'},
           {from: '/administration/kms', to: '/operate/kms'},
           {from: '/administration/monitoring', to: '/operate/monitoring'},

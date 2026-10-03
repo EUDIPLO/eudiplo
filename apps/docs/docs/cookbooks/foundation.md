@@ -1,178 +1,116 @@
 ---
-title: Install and Connect
-sidebar_label: Install and connect
+title: "Cookbook: Install and Connect"
+sidebar_label: 1. Install and connect
 ---
 
-<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
-  - add a short wallet/certificate decision box (owner: trust/wallet-registrars.md)
-  - appended section 'Web Client' (from removed reference/web-client.md): fold the login steps into this cookbook
-  - 'Web Client > Hosting from a Subpath' -> operate/tls.md
-  - remaining 'Web Client' sections (dashboard, features, editing) -> drop or contributing/client.md
--->
+This is chapter 1 of the **Issue and verify** cookbook. You start EUDIPLO and the Web Client on your computer, make the backend reachable from your phone over HTTPS, and sign in as the root administrator.
 
-This is chapter 1 of the [issuance and verification cookbook](index.md). By the end, the backend and Web Client will be running, and your phone will be able to reach the backend.
+## What you will build
+
+A local EUDIPLO deployment created by the CLI: the backend on port `3000` with SQLite, local file storage and database-backed keys, plus the Web Client on port `4200`. An HTTPS tunnel forwards a public address to port `3000`, so the wallet on your phone can reach the backend.
+
+```mermaid
+flowchart LR
+    P[Wallet on phone] -->|HTTPS| T[Tunnel]
+    T --> B["Backend :3000"]
+    W["Web Client :4200"] -->|"http://localhost:3000"| B
+```
 
 ## Before you start
 
-Install the standalone `eudiplo` CLI with:
+- **Container runtime:** Docker with Docker Compose v2, or Podman with Podman Compose. Start it before you run the commands below.
+- **No other EUDIPLO stack on this machine:** the cookbook uses ports `3000` and `4200`. If you ran `eudiplo demo`, stop it with `eudiplo down --instance local`.
+- **A wallet on your phone** that supports SD-JWT VC, the pre-authorized code flow and OpenID4VP. See [Choosing a wallet](index.md#choosing-a-wallet).
+- **A tunnel tool** such as [ngrok](https://ngrok.com/docs/share-localhost/quickstart), Cloudflare Tunnel or localtunnel. Free plans can change the URL on restart; you need one stable URL for the whole cookbook.
+- **Starts from:** nothing.
+
+## Step 1: Install the CLI
 
 ```bash
 curl -fsSL https://eudiplo.dev/install.sh | bash
+eudiplo --version
 ```
 
-Install Docker with Docker Compose, or Podman with Podman Compose. Start the runtime before running the commands below. The standalone `eudiplo` CLI does not require Node.js; if you use the npm package instead, install Node.js 22+ and replace `eudiplo` with `npx @eudiplo/cli`. Use an empty directory so this recipe does not replace another deployment.
+The installer verifies the release checksum and puts the standalone binary in `~/.local/bin`. It does not need Node.js on Linux (x64, arm64) or Apple-silicon Macs. Watch for two cases:
 
-## Step 1: Get an HTTPS address for the backend
+- If `eudiplo` is not found afterwards, add the directory to your shell profile, as the installer prints: `export PATH="$HOME/.local/bin:$PATH"`.
+- On Intel Macs and other platforms without a standalone build, the installer falls back to `npm install -g @eudiplo/cli`. This needs Node.js 22.12 or later and npm. On Windows, use `npx @eudiplo/cli` instead of `eudiplo` in every command.
 
-A phone cannot use your computer's `localhost`: it would connect to the phone itself. Wallets also need to retrieve issuer metadata and send protocol responses to EUDIPLO.
+**Checkpoint:** `eudiplo --version` prints a version number.
 
-Set up an HTTPS tunnel to local port **3000**. For example, install and authenticate the ngrok agent using its [quickstart](https://ngrok.com/docs/share-localhost/quickstart), then run:
+## Step 2: Get an HTTPS address for the backend
+
+A phone cannot use your computer's `localhost`: it would connect to the phone itself. The wallet must fetch issuer metadata from EUDIPLO and send its responses there. Start a tunnel to local port `3000`, for example:
 
 ```bash
 ngrok http 3000
 ```
 
-> There may be other alternatives to ngrok, such as Cloudflare Tunnel or localtunnel. Choose the one that best fits your environment. Keep in mind some free plans may have changing URLs or limited session durations. Deploying on your own server with Let's Encrypt is another option for a stable HTTPS endpoint.
+Keep this terminal open. Below, `https://YOUR-HTTPS-HOST` stands for the forwarding URL, without a trailing slash. Use this exact address from now on: issued credentials and offers contain URLs that point back to it. If the address changes later, update the deployment and issue a fresh credential.
 
-Keep that terminal open. Copy the HTTPS forwarding URL; below, `https://YOUR-HTTPS-HOST` means that URL, without a trailing slash. A gateway error is expected until EUDIPLO starts.
+**Checkpoint:** the tunnel shows an HTTPS forwarding URL. Requests to it return a gateway error until EUDIPLO runs.
 
-Use this exact address for `PUBLIC_URL` from the beginning. Keep it unchanged through issuance and presentation: already-issued credentials can contain URLs pointing back to the issuer. If the address changes, update the deployment and issue a fresh test credential.
+## Step 3: Initialize and start EUDIPLO
 
-If you already have a reachable HTTPS backend, use that address and skip the local deployment commands. See [TLS configuration](../operate/tls.md) for a deployment without a tunnel.
-
-## Step 2: Initialize and start EUDIPLO
-
-In another terminal:
+In a second terminal, create an empty project directory and initialize it:
 
 ```bash
 mkdir eudiplo-cookbook
 cd eudiplo-cookbook
-eudiplo init . --target compose --preset minimal --no-demo-tenant --client --public-url https://YOUR-HTTPS-HOST --yes --start
+eudiplo init . --instance cookbook --preset minimal --no-demo-tenant --client \
+  --public-url https://YOUR-HTTPS-HOST --yes --start
 ```
 
-Replace `https://YOUR-HTTPS-HOST` before running the command. This creates a minimal deployment using SQLite, local storage, and database-backed keys, including the Web Client. It generates a root secret rather than using the predictable credentials from `demo` mode.
+This writes `eudiplo.compose.yaml`, `.eudiplo.env` and `config/kms.json`, registers the deployment as CLI instance `cookbook`, and starts it. Instead of the predictable demo credentials, it generates a root client secret and a `MASTER_SECRET`. Keep `.eudiplo.env` private. The SQLite database is stored in `config/`.
 
-The editable deployment files include `eudiplo.compose.yaml`, `.eudiplo.env`, and `config/kms.json`. Keep `.eudiplo.env` private: it contains `AUTH_CLIENT_ID`, `AUTH_CLIENT_SECRET`, and `MASTER_SECRET`.
+The cookbook passes `--instance cookbook` to every CLI command, so the commands reach this deployment even if another instance is your CLI default.
 
-**Expected result:** the backend listens on port `3000` and the Web Client is available at [http://localhost:4200](http://localhost:4200).
+**Checkpoint:** the command ends without errors, and `eudiplo ps --instance cookbook` lists the services `eudiplo` and `eudiplo-client` as running.
 
-<details>
-<summary>Only want to explore the UI locally?</summary>
-
-Run `eudiplo demo` in a separate directory. This imports sample configuration and prints demo credentials. Keep that setup local; the cookbook uses the initialization command above so it can start without bundled tenants or predictable demo secrets.
-
-</details>
-
-## Step 3: Check both network paths
-
-From the project directory:
+## Step 4: Check both network paths
 
 ```bash
-eudiplo status
+eudiplo status --instance cookbook
 curl http://localhost:3000/health
 curl https://YOUR-HTTPS-HOST/health
 ```
 
-**Expected result:** the health response is JSON with `status` equal to `ok`. The exact health-check fields can vary.
+`eudiplo status` checks the public URL you registered. Both `curl` calls return JSON with `"status":"ok"`.
 
-Also open `https://YOUR-HTTPS-HOST/health` in the **phone's browser**. It must return the health response with no certificate warning, tunnel login, or HTML confirmation page. Do not proceed to QR codes until this works.
+Then open `https://YOUR-HTTPS-HOST/health` in the **browser on your phone**. It must show the same JSON, without a certificate warning, tunnel login or confirmation page. Some free tunnels show such a page on the first visit; the wallet cannot click through it.
 
-Use `http://localhost:4200` only in the browser on your computer to administer EUDIPLO. The wallet must not connect to the Web Client: it communicates only with the public backend address in `PUBLIC_URL`.
+**Checkpoint:** the health response appears on both the computer and the phone. Do not continue to QR codes until it does.
 
-## Step 4: Sign in to the Web Client
+## Step 5: Sign in to the Web Client
 
-1. Open [http://localhost:4200](http://localhost:4200).
-2. Set **EUDIPLO Instance** to `http://localhost:3000`.
-3. Read `AUTH_CLIENT_ID` and `AUTH_CLIENT_SECRET` from the generated `.eudiplo.env` and enter them in **Client ID** and **Client Secret**.
-4. Click **Login**.
+1. Open [http://localhost:4200](http://localhost:4200), or run `eudiplo open --instance cookbook`.
+2. In **EUDIPLO Instance**, enter `http://localhost:3000`. The field can be prefilled with `http://eudiplo:3000`, the backend's address inside the Compose network, which your browser cannot reach.
+3. Read the root credentials from the project directory: `grep AUTH_CLIENT .eudiplo.env`.
+4. On the **Client ID and Secret** tab, enter `AUTH_CLIENT_ID` (by default `root`) as **Client ID** and `AUTH_CLIENT_SECRET` as **Client Secret**.
+5. Choose **Login with Client Credentials**.
 
-**Expected result:** you are signed in as the root administrator and can manage tenants. The next chapter creates a tenant for the recipe.
+The Web Client is for administration from your computer only. The wallet never talks to it; it uses the `PUBLIC_URL` of the backend.
 
-## If something goes wrong
+**Checkpoint:** the dashboard opens, and the navigation shows **Administration → Tenants**.
 
-| Symptom                                | Check                                                                                                                                                      |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Containers do not start                | Start Docker or Podman; check for another process already using ports 3000 or 4200. Run `eudiplo status`.                                                  |
-| Local health works, phone health fails | Check the tunnel target is port 3000, the tunnel is still running, and HTTPS works without an interstitial page.                                           |
-| Login fails                            | Use the generated values from `.eudiplo.env`, not `root` / `root` from demo mode.                                                                          |
-| Wallet URLs contain `localhost`        | Check `PUBLIC_URL` in `.eudiplo.env`. After correcting it, recreate the backend container with the generated Compose configuration and create a new offer. |
+## Which certificates does your wallet need?
 
-For example, after editing the environment file:
-
-```bash
-docker compose --env-file .eudiplo.env -f eudiplo.compose.yaml up -d --force-recreate
-```
-
-To stop this deployment later, run `eudiplo down` from the project directory. Keep it running for the remaining chapters.
-
-**Next: [Issue Your First Credential](first-credential.md).**
-
-## Web Client
-
-EUDIPLO provides a user-friendly web interface for credential management—no API expertise required. Simply enter your instance URL and credentials to get started. There's no need to deploy a separate client for each instance.
-
-There is no need to use the client to interact with EUDIPLO, but it offers a more intuitive way to manage the configurations.
-
-### Getting Started
-
-#### Accessing the Web Client
-
-After completing the [Quick Start setup](foundation.md):
-
-1. **Open your browser** and go to: [http://localhost:4200](http://localhost:4200)
-2. **Login** using the default credentials:
-   - **Username:** `root`
-   - **Password:** `root`
-
-#### Hosting from a Subpath
-
-If the client is served from a path such as `https://example.com/client/`, set `CLIENT_BASE_HREF=/client/` when starting the client. This updates the HTML base href and keeps routing and asset loading correct for the subpath.
-
-If you are using a reverse proxy, it must also forward `/client/` to the client container. See [Serving the Client from a Subpath](../operate/tls.md#serving-the-client-from-a-subpath) for a full example.
-
-:::warning[Important]
-Change the default credentials before using EUDIPLO in production. See [Authentication](../operate/tenants-and-access.md#api-authentication) for details.
+:::tip[Decide before chapter 2]
+The next chapter creates a signing key for credentials and an access certificate for presentation requests. Some wallet test setups (for example Paradym) accept self-signed certificates. The EU Reference Implementation and the German ecosystem need certificates from their registrar.
+Check your wallet's row in [Wallet and registrar requirements](../trust/wallet-registrars.md) and have those certificates ready.
 :::
 
-### Dashboard Overview
+## Troubleshooting
 
-The dashboard offers:
+| Symptom                                         | Cause                                                       | Fix                                                                                                                                                         |
+| ----------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `init` fails with "port is already allocated"   | The demo or another stack uses port `3000` or `4200`        | Stop the other stack (`eudiplo down --instance local` for the demo), then run `eudiplo up --instance cookbook`.                                             |
+| Local health works, phone health fails          | Tunnel stopped, wrong target port or an interstitial page   | Restart the tunnel to port `3000`; make sure the phone gets the JSON directly.                                                                              |
+| Offers or metadata contain `localhost` or an old tunnel URL | `PUBLIC_URL` in `.eudiplo.env` is wrong              | Edit `PUBLIC_URL`, run `eudiplo up --instance cookbook` (Compose recreates the backend with the new environment), then create a new offer.                   |
 
-- **Quick Actions:** One-click access to common tasks
-- **Statistics:** Usage metrics and activity summaries _(coming soon)_
+For login errors, `eudiplo: command not found` and other common problems, see [Troubleshooting](../troubleshooting.md).
 
-### Core Features
+## Next steps
 
-#### 🎫 Credential Issuance Management
-
-- Create, edit, import, or delete credential and issuance configurations
-- Import keys and certificates, and link them to configurations
-
-#### ✅ Credential Verification
-
-- Manage verification flows
-- Create, edit, import, or delete verification configurations
-
-#### 📋 Session Management
-
-- View and manage active issuance and verification sessions
-- Inspect session details, including parameters
-
-#### 🧑‍💼 Client Management
-
-- Create new tenants with client ID and secret (Keycloak only)
-- Not supported for other identity providers or when using EUDIPLO as IAM yet
-
-### Configuration Editing & Validation
-
-The web client is designed for intuitive and robust configuration management:
-
-- **Data Model & Validation:** The EUDIPLO service uses decorators on data transfer objects (DTOs) and entities to describe variables and their values, enabling server-side validation.
-- **OpenAPI Specification:** An OpenAPI spec is generated from these DTOs and entities, providing a standardized interface for backend interaction.
-- **SDK Integration:** The web client uses an SDK generated from the OpenAPI spec for seamless and type-safe communication with the backend.
-- **Editing Experience:**
-    - Simple variables (strings, numbers, booleans) are edited via text inputs, select options, or checkboxes.
-    - Complex data structures are managed using an integrated JSON editor (Monaco Editor), which leverages JSON schemas for each variable.
-
-- **Client-Side Validation & Guidance:** The JSON editor uses the provided JSON schemas to offer inline descriptions, auto-completion, and validation directly in the browser.
-- **Direct JSON Access:** Each configuration can be viewed and edited as raw JSON for advanced use cases.
+- Keep the deployment and the tunnel running. To stop it later, run `eudiplo down --instance cookbook`.
+- Continue with chapter 2: [Issue a membership credential](first-credential.md).

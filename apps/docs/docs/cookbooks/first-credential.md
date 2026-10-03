@@ -1,52 +1,74 @@
 ---
-title: Issue Your First Credential
-sidebar_label: Issue a membership credential
+title: "Cookbook: Issue a Membership Credential"
+sidebar_label: 2. Issue a credential
 ---
 
-This is chapter 3 of the [cookbook](index.md). You will create a membership credential containing `name: Max` and `member_id: M-001`, then store it in your wallet.
+This is chapter 2 of the **Issue and verify** cookbook. You create a tenant with its own keys and issuer identity, define a membership credential, and send it to the wallet on your phone.
 
-Before continuing, complete [Install and Connect](foundation.md) and [Wallet and Registrar Requirements](../trust/wallet-registrars.md): sign in as root, check the public health endpoint from your phone, and prepare the certificates required by your wallet. Keep the HTTPS tunnel running.
+## What you will build
+
+A tenant `membership-demo` that issues an SD-JWT VC of type `urn:example:membership:1` with the claims `name: Max` and `member_id: M-001`, using a pre-authorized offer that the wallet scans as a QR code.
+
+## Before you start
+
+- **Starts from:** [chapter 1, Install and connect](foundation.md). You are signed in to the Web Client as root, the tunnel is running, and the phone reaches `https://YOUR-HTTPS-HOST/health`.
+- You know which certificates your wallet needs ([Wallet and registrar requirements](../trust/wallet-registrars.md)).
 
 ## Step 1: Create a tenant for the recipe
 
-1. Open **Tenants** and choose **Create Tenant**.
-2. Use ID `membership-demo` and name `Membership Demo`.
-3. Enable the roles needed to manage issuance and presentation and to create offers and requests. For this isolated learning tenant, you can select all available roles.
-4. Save, copy the generated client credentials, and choose **Login as this Client**.
+1. Open **Administration → Tenants** and choose the **+** button (**Create New Tenant**).
+2. Enter **tenant ID** `membership-demo` and **Name** `Membership Demo`.
+3. Under **Initial Admin Client → Client Roles**, keep `clients:manage` and add exactly these roles:
 
-**Expected result:** you are working inside `membership-demo`. Create all subsequent resources in this tenant, not the root account. Save the generated secret; it is not displayed again. For the access model, see [Tenants](../operate/tenants-and-access.md).
+    | Role                   | Allows                                                        |
+    | ---------------------- | ------------------------------------------------------------- |
+    | `issuance:manage`      | Keys, issuer settings and credential types                    |
+    | `issuance:offer`       | Creating credential offers and viewing sessions               |
+    | `presentation:manage`  | Verification configurations                                   |
+    | `presentation:request` | Creating presentation requests and viewing sessions           |
 
-## Step 2: Prepare the signing and access keys
+    Add `registrar:manage` only if your wallet needs registrar certificates. Never give a tenant client `tenants:manage`: it controls **all** tenants of the instance.
 
-Open **Keys** and create these two key chains using the key wizard:
+4. Choose **Create tenant**. The dialog **Client Secret Generated** shows the client ID `membership-demo-admin` and its secret. Copy both and store them; the secret is not shown again.
+5. Choose **Login as this Client**.
 
-| Purpose                                  | Wizard choices                                                                              | Description                     |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------- |
-| Sign the issued credential               | **Credential Signing (Attestation)** → **Create Key Chain (Recommended)**                   | `Membership credential signing` |
-| Sign presentation requests to the wallet | **Access Certificate** → **Self-Signed Certificate**, or the wallet-specific registrar path | `Membership verifier access`    |
+**Checkpoint:** the menu at the top right shows **Client ID: membership-demo-admin**, and the navigation shows **Credential Issuance** and **Credential Verification**. Create everything that follows in this tenant. The role reference is in [Tenants and access](../operate/tenants-and-access.md).
 
-Use the `db` KMS provider from the minimal installation and keep the wizard's other generated-key defaults. For Paradym or another wallet test environment that accepts self-signed access certificates, use the self-signed choice shown above. For the EU Reference Implementation, import the access key and certificate supplied by its ecosystem operator. For a German wallet, either configure the German registrar and use **Registrar Enrollment**, or import a certificate already issued by the German registrar, as described in [Wallet and Registrar Requirements](../trust/wallet-registrars.md). Record the IDs of the resulting key chains; the wizard generates these IDs, so they may differ between installations.
+## Step 2: Create the signing and access keys
 
-**Expected result:** both chains have an active key and certificate. The first is selected when defining the credential; the second is used in the verification chapter. See [Key Chains](../trust/keys-and-certificates.md) for certificate import and other provisioning choices.
+Open **Cryptographic Assets → Keys**, choose **Create Key** and run the wizard twice:
 
-:::note[Test certificate trust]
-HTTPS transport certificates and credential/access certificates are different. A reachable HTTPS endpoint does not make a wallet trust a self-signed issuer or verifier. Use a wallet test environment that accepts these certificates. If your wallet requires ecosystem-issued certificates or registration, provision them through [Certificates](../trust/keys-and-certificates.md#certificates) and [Registration Certificates](../trust/registration-certificates.md) before proceeding.
+| Purpose                                  | Wizard choices                                                                     | Description                     |
+| ---------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------- |
+| Sign the issued credential               | **Credential Signing (Attestation)** → **Create Key Chain (Recommended)**          | `Membership credential signing` |
+| Sign presentation requests to the wallet | **Access Certificate** → the certificate source your wallet needs (see below)      | `Membership verifier access`    |
+
+Keep KMS provider `db` and the other defaults, then choose **Create Key Chain**. For the access certificate, pick the source that matches your wallet:
+
+- **Self-Signed Certificate** for wallet test setups that accept it, such as Paradym.
+- **External Certificate** to import a key and certificate chain issued elsewhere, such as the EU Reference Implementation's ecosystem operator. Paste the key into **External Private Key (JWK or PKCS#8 PEM)** and the chain into **Certificate Chain (PEM)**, then choose **Import Key & Certificate**.
+- **Registrar Enrollment** for the German ecosystem. It needs a saved registrar configuration under **Registrar → Registrar Config** and the `registrar:manage` role.
+
+**Checkpoint:** both key chains appear under **Keys**, each with an active key and certificate. The wizard generates their IDs; the next steps select them by description. Other provisioning options are in [Keys and certificates](../trust/keys-and-certificates.md).
+
+:::note[Two kinds of certificates]
+The HTTPS certificate of your tunnel and the credential and access certificates are unrelated. A reachable HTTPS endpoint does not make a wallet trust a self-signed issuer or verifier.
 :::
 
 ## Step 3: Set up the issuer
 
-Open **Credential Issuance → Issuer Settings → Use guided setup**.
+Open **Credential Issuance → Issuer Settings** and choose **Use guided setup**.
 
 1. **Identity:** enter name `Membership Demo` and locale `en-US`. A logo is optional.
-2. **Wallet access:** keep the enabled built-in authorization server. This recipe uses a pre-authorized offer, so it does not need an external login or presentation-based authorization. Keep batch size `1`; review the DPoP default under **Issuance behavior (advanced)** and use a wallet that supports it. Leave request and response encryption off for this recipe.
-3. **Trust:** leave wallet attestation optional and federation off for this test setup. Leave the registration certificate off only if your test wallet permits it; otherwise complete the wallet's trust prerequisites before continuing.
-4. **Review:** check the identity and built-in server, then choose **Save settings**.
+2. **Wallet access:** keep the enabled built-in authorization server and batch size `1`. Leave request and response encryption off. Under **Issuance behavior (advanced)**, check that your wallet supports the DPoP setting.
+3. **Trust:** leave wallet attestation optional and federation off. Leave the registration certificate off unless your wallet requires one.
+4. **Review:** choose **Save settings**.
 
-**Expected result:** the issuer overview shows `Membership Demo` and an enabled built-in authorization server. The full [issuer settings reference](../issuance/issuance-configuration.md) explains each option.
+**Checkpoint:** the issuer overview shows `Membership Demo` and an enabled built-in authorization server. Every option is explained in [Issuer settings](../issuance/issuance-configuration.md).
 
 ## Step 4: Define the membership credential
 
-Open **Credential Issuance → Credential Types** and choose **Create**. Use the same values below so the next chapter can request this credential without guessing its type or claim paths.
+Open **Credential Issuance → Credential Types** and choose **+** (**Create New Credential Configuration**). Use exactly these values; chapter 3 requests the credential by its VCT and claim paths.
 
 ### Basics
 
@@ -62,58 +84,56 @@ Choose **Continue**.
 
 ### Claims
 
-Use **Add Field** twice:
+Choose **Add Field** twice and enter the values as plain text, without JSON quotes:
 
 | Path        | Type     | Default Value | Mandatory | Selectively Disclosable |
 | ----------- | -------- | ------------- | --------- | ----------------------- |
 | `name`      | `string` | `Max`         | On        | On                      |
 | `member_id` | `string` | `M-001`       | On        | On                      |
 
-Enter `Max` and `M-001` as plain text, without JSON quotes. Defaults are example data; an offer can provide different values. Choose **Continue**.
+Choose **Continue**.
 
 ### Appearance
 
-Enter **Display Name** `Membership`, **Description** `Example membership card`, and **Locale** `en-US`. Leave colors and images at their defaults. Choose **Continue**.
+Enter **Display Name** `Membership`, **Description** `Example membership card` and **Locale** `en-US`. Choose **Continue**.
 
 ### Settings
 
-1. Expand **Signing, lifetime and trust** and select the attestation key chain you created in step 2.
-2. Use a lifetime of **1 day** so the credential remains usable while you work through the recipe. Keep SD-JWT trust format `x5c`.
-3. In **Credential Features**, keep holder/key binding enabled, turn **Status Management** off for this short-lived test credential, and select **JWT** as the supported proof type. This avoids requiring key attestation for the first run.
-4. Leave attribute providers, webhooks, authorization actions, and reuse policy unconfigured.
+1. Under **Signing, lifetime and trust**, select the key chain described as `Membership credential signing` in **Signing Key Chain**, set **Credential Lifetime** to **1 day** and keep **SD-JWT Trust Format** `x5c`.
+2. Under **Credential Features**, keep **Key Binding** on and turn **Status Management** off. Set **Supported Proof Types** to **JWT** only, so the first run does not need key attestation.
+3. Leave attribute providers, webhooks, authorization actions and reuse policy empty.
 
 Choose **Continue**, check the review, and choose **Create Configuration**.
 
-**Expected result:** `membership` appears under Credential Types, with VCT `urn:example:membership:1` and the two claim fields. See [Credential Configuration](../issuance/credential-configuration.md) for other formats and advanced settings.
+**Checkpoint:** `membership` appears under **Credential Types** with VCT `urn:example:membership:1` and the two claims. Other formats and settings are in [Credential configuration](../issuance/credential-configuration.md).
 
-:::note[Why status is off here]
-This removes status-list provisioning and wallet-specific status-certificate requirements from the first exercise. It is not a production recommendation. Add [Status Management](../issuance/revocation.md) once issuance and verification work.
+:::note[Why status management is off]
+It keeps status lists out of the first run. [Revocable credentials](revocable-credentials.md) turns it on.
 :::
 
 ## Step 5: Send an offer to the wallet
 
-1. Open **Credential Issuance → New Issuance** (or **Sessions → All Sessions → Issuance Offer**).
-2. In **Select Flow**, choose the pre-authorized code flow and continue.
-3. In **Select Credentials**, choose `membership` and continue.
-4. Review the claims for `membership`: `name` must be `Max` and `member_id` must be `M-001`. If the offer form does not populate the configured defaults, enter these values in its claim fields.
-5. Leave the optional transaction code and webhook unset for this synthetic-data exercise, then choose **Generate Offer**.
-6. Scan the resulting QR code using the wallet's credential-offer scanner. Approve adding the credential.
+1. Open **Credential Issuance → New Issuance**.
+2. In **Select Flow**, choose **Pre-Authorized Code** and **Next**.
+3. In **Select Credentials**, select `membership` under **Credential Configuration IDs** and continue.
+4. In **Configure Claims**, keep **Form Input** and choose **Use Pre-configured Default Values**. The form now shows `name: Max` and `member_id: M-001`.
+5. Leave **Transaction Code (Optional)** empty, then choose **Generate Offer**.
+6. Scan the QR code with the wallet's credential-offer scanner and accept the credential.
 
-**Expected result:** the wallet stores a `Membership` credential showing `Max` and `M-001`. Under **Sessions → All Sessions**, open the corresponding issuance session and confirm issuance completed. Generating a QR code alone does not mean the wallet received the credential.
+**Checkpoint:** the wallet shows a `Membership` credential with `Max` and `M-001`. Under **Sessions → All Sessions**, the issuance session has status `fetched` (the wallet received the credential) or `completed` (the wallet also confirmed it through the notification endpoint). A QR code alone does not mean that the wallet received the credential.
 
-## If something goes wrong
+## Troubleshooting
 
-| Symptom                                          | Check                                                                                                                                                                                                                                                 |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No `membership` credential in the offer selector | Confirm you saved it in the same tenant and did not configure interactive authorization actions for this pre-authorized recipe.                                                                                                                       |
-| Wallet cannot open the offer                     | Repeat the phone health check; check `PUBLIC_URL` and that the tunnel is still running. Generate a fresh offer after fixing the URL.                                                                                                                  |
-| Wallet rejects the issuer or certificate         | Check wallet trust requirements. A self-signed test certificate is not accepted by every wallet.                                                                                                                                                      |
-| Wallet shows an unclear error                    | Open the wallet's logs immediately after the failure and look for the rejected URL, certificate, metadata, or protocol step. The [wallet compatibility guide](../reference/wallet-compatibility.md) lists the log-export steps for supported wallets. |
-| Wallet requests attestation unexpectedly         | Check both issuer wallet-attestation settings and the credential's supported proof types. This recipe uses JWT proof and optional wallet attestation.                                                                                                 |
-| Wrong claim value                                | Check the offer's claim values, which can override configuration defaults. Changing a configuration does not update a credential already in the wallet; issue another one.                                                                            |
+| Symptom                                          | Cause                                                                  | Fix                                                                                                    |
+| ------------------------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `membership` is missing in the offer form        | Created in another tenant, or saved with authorization actions         | Check the client ID in the top-right menu; remove interactive authorization actions for this recipe.  |
+| **Credential Issuance** is missing in the menu   | The tenant client lacks `issuance:manage` or `issuance:offer`          | Open **Administration → API Clients**, add the roles to `membership-demo-admin`, then sign in again.  |
+| Wallet asks for an attestation                   | Proof type **Attestation** or required wallet attestation is set       | Use proof type **JWT** only and keep wallet attestation optional.                                      |
+| Wallet shows other claim values                  | The offer overrode the defaults, or the credential is an older one     | Generate a new offer with the default values; a wallet keeps the claims it was issued with.           |
 
-For the EU Reference Implementation, open **Setting → Retrieve Logs**. For Paradym Wallet, open **Settings → Export Logs**. Include the relevant wallet error and the corresponding EUDIPLO session details when investigating a failure, but remove credentials, tokens, private keys, and other personal data before sharing logs.
+Wallet connection, certificate and metadata errors are covered in [Troubleshooting](../troubleshooting.md).
 
-Keep the issued credential in the wallet and continue in the same tenant.
+## Next steps
 
-**Next: [Verify the Membership Credential](first-presentation.md).**
+- Keep the credential in the wallet and stay in tenant `membership-demo`.
+- Continue with chapter 3: [Verify the membership credential](first-presentation.md).

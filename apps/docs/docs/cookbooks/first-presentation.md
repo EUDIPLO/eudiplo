@@ -1,41 +1,41 @@
 ---
-title: Verify the Membership Credential
-sidebar_label: Request and verify claims
+title: "Cookbook: Verify the Membership Credential"
+sidebar_label: 3. Verify the credential
 ---
 
-This is chapter 4 of the [cookbook](index.md). You will request the `name` and `member_id` claims from the membership credential issued in [chapter 3](first-credential.md), then inspect the verified result.
+This is chapter 3 of the **Issue and verify** cookbook. You request the `name` and `member_id` claims of the membership credential from chapter 2, approve the request in the wallet, and inspect the verified result.
 
-Before continuing, confirm:
+## What you will build
 
-- The wallet contains the unexpired `Membership` credential with `Max` and `M-001`.
-- You are still signed in to tenant `membership-demo`.
-- The public HTTPS URL is unchanged and reachable from the phone.
-- The access key chain from chapter 3 has an active certificate accepted by your wallet's test environment.
+A presentation configuration `membership-check` with one DCQL credential query `membership`. It asks for the two claims of `urn:example:membership:1`, and the request is signed with the access certificate from chapter 2.
+
+## Before you start
+
+- **Starts from:** [chapter 2, Issue a membership credential](first-credential.md). The wallet holds the `Membership` credential with `Max` and `M-001`.
+- You are signed in as `membership-demo-admin`, and the public HTTPS URL is unchanged.
+- The access key chain `Membership verifier access` has a certificate that your wallet's test environment accepts.
 
 ## Step 1: Define what to request
 
-Open **Credential Verification → Verification Configs** and choose **Create**.
+Open **Credential Verification → Verification Configs** and choose **+** (**Create Configuration**).
 
-1. In **Name**, enter ID `membership-check` and description `Verify a membership name and ID`. Choose **Continue**.
-2. In **Credentials**, choose **Add credential** and enter:
+1. On **1. Name**, enter **ID** `membership-check` and **Description** `Verify a membership name and ID`. Choose **Continue**.
+2. On **2. Credentials**, choose **Add credential** and enter:
 
     | Field                 | Value                      |
     | --------------------- | -------------------------- |
     | Query ID              | `membership`               |
-    | Credential format     | `dc+sd-jwt`                |
+    | Credential format     | **SD-JWT VC**              |
     | Credential type (VCT) | `urn:example:membership:1` |
-    | First claim path      | `name`                     |
+    | Claim path            | `name`                     |
 
-3. Choose **Add claim** and enter `member_id` in the new claim-path field.
-4. Leave claim options and issuer trust constraints unconfigured for this first exercise. Keep **Require all selected credentials** under **Accepted credential combinations**. There is only one credential in this request.
-5. Choose **Continue**.
+3. Choose **Add claim** and enter `member_id` as the second **Claim path**.
+4. Leave **Issuer trust** empty and keep **Require all selected credentials** under **Accepted credential combinations**. Choose **Continue**.
 
-**Expected result:** the query requests exactly two claims from the same VCT you issued. The credential configuration ID alone is not enough to match a wallet credential; the VCT and claim paths must match.
+**Checkpoint:** the query asks for exactly two claims of the VCT you issued. The wallet matches on VCT and claim paths, not on the credential configuration ID.
 
 <details>
 <summary>Equivalent DCQL for API users</summary>
-
-The visual builder produces this query:
 
 ```json
 {
@@ -54,50 +54,56 @@ The visual builder produces this query:
 
 </details>
 
-For other credentials, **Import from Issuer** can populate the actual types and claim paths from issuer metadata. See the [visual query builder](../presentation/configure-verification.md#visual-query-builder-and-json) for trusted issuers, alternatives, and claim options.
+For other credentials, **Import from Issuer** fills in the types and claim paths from issuer metadata. See [DCQL](../presentation/dcql.md) for claim options and alternatives.
 
-## Step 2: Review verification settings
+## Step 2: Review the verification settings
 
-1. In **Settings**, keep the **300-second** request lifetime and strict credential status checks. The cookbook credential has no status entry because status management was disabled at issuance.
-2. In the access-key settings, select the **access** key chain created in chapter 3, or confirm the tenant default uses that chain. Do not select the attestation key used to sign credentials.
-3. Leave registration certificates unset only if your test wallet permits this. A reminder about a missing access certificate must be resolved before generating a request.
-4. Leave redirect, webhook, attachment, transaction-data, and verification overrides unset.
-5. Choose **Continue**, confirm the review lists `name` and `member_id`, then choose **Create Configuration**.
+On **3. Settings**:
 
-**Expected result:** `membership-check` is saved with one credential query and two requested claims. No issuer trust constraint is configured: successful cryptographic verification alone is not a business policy for which issuers you accept. Add [trusted authorities](../presentation/dcql.md) before using this request for real access decisions.
+1. Keep **Lifetime of the request** at `300` seconds and **Status List Check Mode** at **Strict**. The cookbook credential has no status entry, so there is nothing to check yet.
+2. In **Access Key Chain (optional)**, select `Membership verifier access`. Do not select the credential signing key.
+3. Leave the registration certificate empty unless your wallet requires one.
+4. Leave redirect URI, webhook and the other options empty.
+5. Choose **Continue**, check that the review lists `name` and `member_id`, then choose **Create Configuration**.
+
+**Checkpoint:** `membership-check` appears under **Verification Configs**. It has no issuer trust constraint yet: any correctly signed credential of this type passes. [Accept only trusted issuers](trusted-issuers.md) adds one.
 
 ## Step 3: Generate and approve a request
 
-1. On the saved configuration, choose **Create offer**, or open **Credential Verification → New Verification** and select `membership-check`.
+1. Open `membership-check` and choose the **Create offer** button, or open **Credential Verification → New Verification** and select `membership-check` as **Presentation Configuration**.
 2. Choose **Generate Request**.
-3. Scan the resulting QR code with the same wallet that received the credential.
-4. Confirm that the wallet offers your membership credential and requests its name and member ID. Approve disclosure before the request expires.
+3. Scan the QR code with the wallet that holds the credential.
+4. Check that the wallet offers the membership credential and asks for name and member ID, then approve before the request expires.
 
-**Expected result:** the wallet submits the presentation and EUDIPLO processes the response. Generating the QR code or approving in the wallet is not, by itself, proof that verification succeeded.
+**Checkpoint:** the wallet reports that the data was shared. That alone does not prove that verification succeeded; check the session in the next step.
 
 ## Step 4: Inspect the verified session
 
-Open **Sessions → All Sessions**, find the new presentation session, and open it. Confirm it completed successfully, then inspect the verified claims for query `membership`:
+Open **Sessions → All Sessions** and open the new presentation session. Its status chip shows `completed`. The **Credentials** tab shows the verified claims for query `membership`:
 
 | Claim       | Expected value |
 | ----------- | -------------- |
 | `name`      | `Max`          |
 | `member_id` | `M-001`        |
 
-The session view can include additional protocol and credential information. Check the verification outcome as well as the claim values; do not treat an unverified or failed response as successful.
+**Checkpoint:** the session is `completed` and shows both values. A `failed` session is never a success, even if the wallet reported that it shared the data.
 
-You have now completed the flow from installation to issuance and verification. For an application integration, use [Handling Results](../presentation/receive-results.md) and [Webhooks](../reference/webhooks.md) rather than manually reading the session view.
+You have now issued and verified a credential end to end. In an application, you receive this result by webhook instead of reading the session view; see [Integrate into your backend](integrate-backend.md).
 
-## If something goes wrong
+## Troubleshooting
 
-| Symptom                                                  | Check                                                                                                                                                                                                                                                                                                                          |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| No matching credential                                   | Compare the VCT and both claim paths with chapter 3; check the wallet holds the credential and it has not expired.                                                                                                                                                                                                             |
-| Access-certificate readiness warning                     | Check that the selected key chain has usage `access` and an active certificate.                                                                                                                                                                                                                                                |
-| Wallet rejects the verifier                              | Configure the certificate trust or registration required by that wallet ecosystem. Do not disable verification checks to bypass trust failures.                                                                                                                                                                                |
-| Request rejected for overasking                          | Check that the registration certificate authorizes the credential the user wants to present. Its `credentials` claim must include every credential in the effective DCQL query, including the requested format, claims, and metadata. Regenerate or update the certificate if it was created before this credential was added. |
-| Request expired                                          | Generate a new request and approve it within 300 seconds.                                                                                                                                                                                                                                                                      |
-| Wallet approved, but session failed                      | Inspect session details and wallet logs; verify public URL reachability, certificate trust, and the credential's validity period.                                                                                                                                                                                              |
-| Expected values changed in the editor but not the result | An existing wallet credential keeps the claims it was issued with. Issue a new credential, then generate another presentation request.                                                                                                                                                                                         |
+| Symptom                                     | Cause                                                                    | Fix                                                                                                               |
+| ------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Wallet finds no matching credential         | VCT or claim path differ from chapter 2, or the credential expired       | Compare `urn:example:membership:1`, `name` and `member_id` with the credential type; issue a fresh credential.    |
+| Reminder about a missing access certificate | No access key chain selected, or its certificate is not active           | Select `Membership verifier access` in **Access Key Chain (optional)**.                                           |
+| Request expired                             | Approved after the 300-second lifetime                                   | Generate a new request and approve it right away.                                                                 |
+| Changed claims do not show up               | A wallet credential keeps the claims it was issued with                  | Issue a new credential, then generate a new request.                                                              |
 
-**Next: [Extend the Flow](index.md#choose-your-next-outcome).**
+Verifier trust, overasking and failed-session errors are covered in [Troubleshooting](../troubleshooting.md#presentation).
+
+## Next steps
+
+- [Integrate into your backend](integrate-backend.md): create offers and requests from your code and receive the results by webhook.
+- [Revocable credentials](revocable-credentials.md): revoke the credential and watch verification fail.
+- [Accept only trusted issuers](trusted-issuers.md): restrict `membership-check` to issuers on your trust list.
+- [All recipes](index.md)
