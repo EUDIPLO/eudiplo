@@ -4,7 +4,7 @@ title: Trust Lists
 
 import SchemaReference from "@site/src/components/SchemaReference";
 
-A trust list names the issuers you accept. EUDIPLO uses Lists of Trusted Entities (LoTE, ETSI TS 119 602) as signed JWTs: it publishes lists you manage and reads lists published by others. ETSI TS 119 612 XML trusted lists are not supported.
+A trust list names the issuers you accept. EUDIPLO uses Lists of Trusted Entities (LoTE, ETSI TS 119 602) as signed JWTs: it publishes lists you manage and reads lists published by others. ETSI TS 119 612 XML trusted lists are not supported. For a complete walkthrough, follow the [trusted issuers cookbook](../cookbooks/trusted-issuers.md).
 
 ## How a trust list is used
 

@@ -32,7 +32,7 @@ A tenant `membership-demo` that issues an SD-JWT VC of type `urn:example:members
 4. Choose **Create tenant**. The dialog **Client Secret Generated** shows the client ID `membership-demo-admin` and its secret. Copy both and store them; the secret is not shown again.
 5. Choose **Login as this Client**.
 
-**Checkpoint:** the menu at the top right shows **Client ID: membership-demo-admin**, and the navigation shows **Credential Issuance** and **Credential Verification**. Create everything that follows in this tenant. The role reference is in [Tenants and access](../operate/tenants-and-access.md).
+**Checkpoint:** the menu at the top right shows **Client ID: membership-demo-admin**, and the navigation shows **Credential Issuance** and **Credential Verification**. Create everything that follows in this tenant. All roles are listed in the [roles reference](../reference/roles.md).
 
 ## Step 2: Create the signing and access keys
 

@@ -11,7 +11,8 @@ clients and users in Keycloak. What changes in this mode is summarized in
 
 Keycloak as the login for *wallet users* during credential issuance (chained
 authorization server) is a different setup, configured per tenant in the
-[authorization servers](../issuance/authorization-servers.md) guide.
+[authorization servers](../issuance/authorization-servers.md) guide; the
+[Issue after login](../cookbooks/issue-after-login.md) cookbook walks through it.
 
 ## Before you start
 

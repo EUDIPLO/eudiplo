@@ -61,3 +61,21 @@ test("extracted webhook schema keeps both auth branches and strict validation", 
         ...base, webhook: { url: "", auth: { type: "apiKey", config: { headerName: "", value: "" } } },
     }).success, true);
 });
+
+test("nullable fields keep their type and are marked nullable", () => {
+    const model = buildSchemaModel(
+        z.object({
+            label: z.string().nullable().describe("A label."),
+            nested: z.object({ value: z.string() }).nullable().optional(),
+            list: z.array(z.string()).nullable(),
+        }),
+    );
+    assert.equal(model.properties?.label.type, "string");
+    assert.equal(model.properties?.label.nullable, true);
+    assert.equal(model.properties?.label.description, "A label.");
+    assert.equal(model.properties?.nested.type, "object");
+    assert.equal(model.properties?.nested.nullable, true);
+    assert.equal(model.properties?.nested.properties?.value.required, true);
+    assert.equal(model.properties?.list.type, "array");
+    assert.equal(model.properties?.list.variants, undefined);
+});

@@ -158,7 +158,7 @@ More symptoms are listed in [Troubleshooting](../troubleshooting.md).
 
 ## Next steps
 
-- Work through the production checklist in [Operate](../operate/index.md) before you issue real credentials.
+- Work through the [production checklist](../operate/production-checklist.md) before you issue real credentials.
 - Create tenants and least-privilege API clients: [Tenants and access](../operate/tenants-and-access.md).
 - Keep keys outside the database: [Key management](../operate/kms.md).
 - Manage tenant configuration as files: [Configuration as code](../operate/configuration-as-code.md). To iterate on such files on your computer, see [Development setup](../contributing/development-setup.md).

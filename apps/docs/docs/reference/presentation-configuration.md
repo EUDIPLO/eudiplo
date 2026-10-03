@@ -8,7 +8,7 @@ Fields of a presentation configuration, as accepted by `POST /api/verifier/confi
 
 ## Fields
 
-The table is generated at build time from the Zod schema the backend validates with. The schema is strict: unknown fields are rejected. `dcql_query.credentials[]` has one shape per format (`mso_mdoc` and `dc+sd-jwt`); nullable objects such as `registration_cert` appear as two shapes, the second being `null`.
+The table is generated at build time from the Zod schema the backend validates with. The schema is strict: unknown fields are rejected. `dcql_query.credentials[]` has one shape per format (`mso_mdoc` and `dc+sd-jwt`).
 
 <SchemaReference name="presentation-configuration" mode="table" />
 

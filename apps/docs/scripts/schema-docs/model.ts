@@ -10,10 +10,12 @@ export interface SchemaField {
     properties?: Record<string, SchemaField>;
     items?: SchemaField;
     variants?: SchemaField[];
+    /** The field also accepts `null` (shown as "or null"). */
+    nullable?: boolean;
 }
 
 type JsonSchema = {
-    type?: string;
+    type?: string | string[];
     description?: string;
     enum?: unknown[];
     const?: unknown;
@@ -29,17 +31,49 @@ type JsonSchema = {
 function scalarUnionType(variants: JsonSchema[] | undefined): string | undefined {
     const [first] = variants ?? [];
     const plain = (variant: JsonSchema) =>
-        variant.type !== undefined &&
+        typeof variant.type === "string" &&
         variant.type !== "object" &&
         variant.type !== "array" &&
         variant.const === undefined &&
         variant.enum === undefined;
-    return first && variants?.every((variant) => plain(variant) && variant.type === first.type)
+    return first && typeof first.type === "string" && variants?.every((variant) => plain(variant) && variant.type === first.type)
         ? first.type
         : undefined;
 }
 
-function fieldFromJsonSchema(schema: JsonSchema, required: boolean): SchemaField {
+/**
+ * Moves `null` out of the type: `type: ["string", "null"]` and a `null` branch
+ * of a union both become the remaining type plus `nullable`.
+ */
+function withoutNull(schema: JsonSchema): { schema: JsonSchema; nullable: boolean } {
+    if (Array.isArray(schema.type) && schema.type.includes("null")) {
+        const types = schema.type.filter((type) => type !== "null");
+        return {
+            schema: { ...schema, type: types.length === 1 ? types[0] : types.join(" | ") },
+            nullable: true,
+        };
+    }
+    const variants = schema.oneOf ?? schema.anyOf;
+    const nonNull = variants?.filter((variant) => variant.type !== "null");
+    if (!variants || !nonNull || nonNull.length === variants.length) {
+        return { schema, nullable: false };
+    }
+    const { oneOf: _oneOf, anyOf: _anyOf, ...rest } = schema;
+    if (nonNull.length === 1) {
+        // Keep the parent's description, which Zod puts on the union.
+        return {
+            schema: { ...nonNull[0], ...(rest.description ? { description: rest.description } : {}) },
+            nullable: true,
+        };
+    }
+    return { schema: { ...rest, anyOf: nonNull }, nullable: true };
+}
+
+function fieldFromJsonSchema(input: JsonSchema, required: boolean): SchemaField {
+    const { schema, nullable } = withoutNull(input);
+    if (nullable) {
+        return { ...fieldFromJsonSchema(schema, required), nullable: true };
+    }
     const scalarType = scalarUnionType(schema.oneOf ?? schema.anyOf);
     if (scalarType) {
         return fieldFromJsonSchema({ ...schema, type: scalarType, oneOf: undefined, anyOf: undefined }, required);
@@ -51,7 +85,10 @@ function fieldFromJsonSchema(schema: JsonSchema, required: boolean): SchemaField
         ? variants.map((variant) => variant.const)
         : undefined;
     return {
-        type: allowed ? "string" : schema.type ?? (variants ? "union" : "unknown"),
+        type: allowed
+            ? "string"
+            : ((Array.isArray(schema.type) ? schema.type.join(" | ") : schema.type) ??
+              (variants ? "union" : "unknown")),
         required,
         ...(schema.description ? { description: schema.description } : {}),
         ...(schema.enum ? { enum: schema.enum } : {}),

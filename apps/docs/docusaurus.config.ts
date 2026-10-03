@@ -58,11 +58,6 @@ const config: Config = {
   themes: ['@docusaurus/theme-mermaid'],
   markdown: {
     mermaid: true,
-    // future.v4 disables MDX1-style HTML comments; keep them so pages can carry
-    // `<!-- RESTRUCTURE: ... -->` notes during the docs restructure.
-    mdx1Compat: {
-      comments: true,
-    },
   },
 
   plugins: [

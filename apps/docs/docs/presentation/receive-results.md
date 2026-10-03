@@ -87,7 +87,7 @@ Before you accept the result for this browser:
 2. Check that `status` is `completed` and that `responseCode` equals the `response_code` from the URL.
 3. Only then attach the verified claims to the browser's session.
 
-The check proves that this browser received the redirect, so an attacker cannot make a victim complete a session the attacker started ([OID4VP §13.3](../concepts/security-model.md)). EUDIPLO has no lookup by response code; always start from the session ID you stored when you created the request.
+The check proves that this browser received the redirect, so an attacker cannot make a victim complete a session the attacker started ([OID4VP §13.3](../concepts/sessions.md#session-binding-oid4vp-133)). EUDIPLO has no lookup by response code; always start from the session ID you stored when you created the request.
 
 If the presentation fails, the redirect carries `error` and `error_description` instead of a `response_code`. A declined request uses the wallet's error code, such as `access_denied`; a failed verification uses `invalid_request`. ISO 18013-7 requests redirect only after success.
 

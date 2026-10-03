@@ -28,7 +28,10 @@ export function renderSchemaBody(field: SchemaField, depth = 0): string {
     if (field.properties) {
         const entries = Object.entries(field.properties);
         const lines = entries.flatMap(([name, child], index) => {
-            const notes = [child.required ? "required" : "optional", child.type];
+            const notes = [
+                child.required ? "required" : "optional",
+                child.nullable ? `${child.type} or null` : child.type,
+            ];
             if (child.enum) notes.push(`allowed: ${child.enum.join(" | ")}`);
             if (child.minimum !== undefined) notes.push(`minimum: ${child.minimum}`);
             if (child.description) notes.push(child.description);
@@ -67,6 +70,10 @@ export interface SchemaTableRow {
 }
 
 function typeLabel(field: SchemaField): string {
+    return field.nullable ? `${baseTypeLabel(field)} or null` : baseTypeLabel(field);
+}
+
+function baseTypeLabel(field: SchemaField): string {
     if (field.variants) return `one of ${field.variants.length} shapes`;
     if (field.type === "array") return `array of ${field.items ? typeLabel(field.items) : "unknown"}`;
     if (field.type === "unknown") return "any";
