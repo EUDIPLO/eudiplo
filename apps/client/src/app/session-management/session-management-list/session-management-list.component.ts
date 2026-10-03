@@ -43,9 +43,9 @@ type SortField = NonNullable<SessionQueryParams['sortBy']>;
 
 /** Statuses of offers and requests a wallet has not finished yet. */
 const PENDING_STATUSES: SessionStatus[] = ['active', 'fetched'];
-const STATUSES: SessionStatus[] = ['active', 'fetched', 'completed', 'expired', 'failed'];
+const STATUSES = new Set<string>(['active', 'fetched', 'completed', 'expired', 'failed']);
 const DEFAULT_PAGE_SIZE = 25;
-const SORT_FIELDS: SortField[] = ['id', 'status', 'createdAt', 'updatedAt', 'requestId'];
+const SORT_FIELDS = new Set<string>(['id', 'status', 'createdAt', 'updatedAt', 'requestId']);
 
 /** Relative update windows, kept as is in the URL so a bookmark stays relative. */
 const UPDATED_WITHIN = {
@@ -188,9 +188,8 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
   private readonly router = inject(Router);
   private readonly credentialConfigService = inject(CredentialConfigService);
   private readonly presentationManagementService = inject(PresentationManagementService);
+  private readonly sessionManagementService = inject(SessionManagementService);
   private readonly refresh$ = new Subject<void>();
-
-  constructor(private sessionManagementService: SessionManagementService) {}
 
   ngOnInit(): void {
     this.restoreFilters(this.route.snapshot.queryParamMap);
@@ -358,26 +357,32 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
         type: type === 'issuance' || type === 'presentation' ? type : 'all',
         status: params
           .getAll('status')
-          .filter((status): status is SessionStatus => STATUSES.includes(status as SessionStatus)),
-        config: credentialConfigurationId
-          ? `issuance:${credentialConfigurationId}`
-          : requestId
-            ? `presentation:${requestId}`
-            : '',
+          .filter((status): status is SessionStatus => STATUSES.has(status)),
+        config: this.restoreConfig(credentialConfigurationId, requestId),
         createdFrom: fromDay(params.get('createdFrom')),
         createdTo: fromDay(params.get('createdTo')),
-        updated:
-          updatedWithin && updatedWithin in UPDATED_WITHIN
-            ? (updatedWithin as UpdatedWithin)
-            : updatedFrom || updatedTo
-              ? 'custom'
-              : '',
+        updated: this.restoreUpdated(updatedWithin, !!(updatedFrom || updatedTo)),
         updatedFrom,
         updatedTo,
         failureCode: params.get('failureCode') ?? '',
       },
       { emitEvent: false }
     );
+  }
+
+  private restoreConfig(
+    credentialConfigurationId: string | null,
+    requestId: string | null
+  ): string {
+    if (credentialConfigurationId) return `issuance:${credentialConfigurationId}`;
+    if (requestId) return `presentation:${requestId}`;
+    return '';
+  }
+
+  /** A known preset wins over a custom range; without either, any time. */
+  private restoreUpdated(updatedWithin: string | null, hasRange: boolean): UpdatedFilter {
+    if (updatedWithin && updatedWithin in UPDATED_WITHIN) return updatedWithin as UpdatedWithin;
+    return hasRange ? 'custom' : '';
   }
 
   /** Initial sort and page, bound to `matSort` and the paginator in the template. */
@@ -388,7 +393,7 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
     if (Number.isInteger(page) && page > 1) this.initialPageIndex = page - 1;
     const sortBy = params['sortBy'] as SortField;
     const sortOrder = params['sortOrder'];
-    if (SORT_FIELDS.includes(sortBy) && (sortOrder === 'asc' || sortOrder === 'desc')) {
+    if (SORT_FIELDS.has(sortBy) && (sortOrder === 'asc' || sortOrder === 'desc')) {
       this.initialSort = { active: sortBy === 'requestId' ? 'type' : sortBy, direction: sortOrder };
     }
   }

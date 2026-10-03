@@ -107,8 +107,13 @@
       <mat-form-field appearance="outline">
         <mat-label>Created</mat-label>
         <mat-date-range-input [rangePicker]="createdPicker">
-          <input matStartDate formControlName="createdFrom" placeholder="From" />
-          <input matEndDate formControlName="createdTo" placeholder="To" />
+          <input
+            matStartDate
+            formControlName="createdFrom"
+            placeholder="From"
+            aria-label="Created from"
+          />
+          <input matEndDate formControlName="createdTo" placeholder="To" aria-label="Created to" />
         </mat-date-range-input>
         <mat-datepicker-toggle matIconSuffix [for]="createdPicker"></mat-datepicker-toggle>
         <mat-date-range-picker #createdPicker></mat-date-range-picker>
@@ -130,8 +135,18 @@
         <mat-form-field appearance="outline">
           <mat-label>Updated Between</mat-label>
           <mat-date-range-input [rangePicker]="updatedPicker">
-            <input matStartDate formControlName="updatedFrom" placeholder="From" />
-            <input matEndDate formControlName="updatedTo" placeholder="To" />
+            <input
+              matStartDate
+              formControlName="updatedFrom"
+              placeholder="From"
+              aria-label="Updated from"
+            />
+            <input
+              matEndDate
+              formControlName="updatedTo"
+              placeholder="To"
+              aria-label="Updated to"
+            />
           </mat-date-range-input>
           <mat-datepicker-toggle matIconSuffix [for]="updatedPicker"></mat-datepicker-toggle>
           <mat-date-range-picker #updatedPicker></mat-date-range-picker>

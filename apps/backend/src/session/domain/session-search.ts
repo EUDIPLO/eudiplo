@@ -31,7 +31,7 @@ export function isUuidPrefix(value: string): boolean {
 export function uuidPrefixRange(prefix: string): [string, string] {
     const value = prefix.toLowerCase();
     const fill = (digit: string) =>
-        value + UUID_TEMPLATE.slice(value.length).replace(/x/g, digit);
+        value + UUID_TEMPLATE.slice(value.length).replaceAll("x", digit);
     return [fill("0"), fill("f")];
 }
 

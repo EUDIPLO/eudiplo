@@ -119,7 +119,7 @@ describe("Session list filters and search", () => {
         `requestId=${"a".repeat(256)}`,
         "tenantId=other",
     ])("rejects an invalid query: %s", async (query) => {
-        await list(query).expect(400);
+        expect((await list(query)).status).toBe(400);
     });
 
     test("never returns sessions of another tenant", async () => {
@@ -144,7 +144,8 @@ describe("Session list filters and search", () => {
     });
 
     test("rejects an over-long reference on both offer types", async () => {
-        await request(app.getHttpServer())
+        const reference = "x".repeat(256);
+        const issuanceOffer = await request(app.getHttpServer())
             .post("/issuer/offer")
             .trustLocalhost()
             .set("Authorization", `Bearer ${authToken}`)
@@ -152,18 +153,18 @@ describe("Session list filters and search", () => {
                 response_type: "uri",
                 credentialConfigurationIds: ["pid-no-key"],
                 flow: "pre_authorized_code",
-                reference: "x".repeat(256),
-            })
-            .expect(400);
-        await request(app.getHttpServer())
+                reference,
+            });
+        const presentationOffer = await request(app.getHttpServer())
             .post("/verifier/offer")
             .trustLocalhost()
             .set("Authorization", `Bearer ${authToken}`)
             .send({
                 response_type: ResponseType.URI,
                 requestId: "pid",
-                reference: "x".repeat(256),
-            })
-            .expect(400);
+                reference,
+            });
+        expect(issuanceOffer.status).toBe(400);
+        expect(presentationOffer.status).toBe(400);
     });
 });
