@@ -543,6 +543,8 @@ describe("OIDF - oid4vci-1_0-issuer-haip-test-plan", () => {
             variant: IssuerVariant,
         ) => string;
         waitOptions?: NonNullable<Parameters<OIDFSuite["waitForFinished"]>[1]>;
+        // Runs beside the variant's sequential chain instead of inside it.
+        runConcurrently?: boolean;
     };
 
     const DEFAULT_ISSUER_MODULE_CASE: Omit<IssuerModuleCase, "moduleName"> = {
@@ -551,10 +553,14 @@ describe("OIDF - oid4vci-1_0-issuer-haip-test-plan", () => {
     };
 
     // Modules that sleep until the code / request_uri lifetime (60s) elapsed.
-    const EXPIRY_WAIT_OPTIONS = {
-        maxAttempts: 1000,
-        noProgressAttempts: 600,
-        waitingNoProgressAttempts: 600,
+    // They run concurrently so the sleep does not add to the variant's chain.
+    const EXPIRY_MODULE_CASE: Partial<IssuerModuleCase> = {
+        waitOptions: {
+            maxAttempts: 1000,
+            noProgressAttempts: 600,
+            waitingNoProgressAttempts: 600,
+        },
+        runConcurrently: true,
     };
 
     const ISSUER_MODULE_CASE_OVERRIDES: Record<
@@ -568,10 +574,9 @@ describe("OIDF - oid4vci-1_0-issuer-haip-test-plan", () => {
             triggerOffer: false,
         },
         "fapi2-security-profile-final-ensure-token-endpoint-fails-with-expired-auth-code":
-            { waitOptions: EXPIRY_WAIT_OPTIONS },
-        "fapi2-security-profile-final-par-attempt-to-use-expired-request_uri": {
-            waitOptions: EXPIRY_WAIT_OPTIONS,
-        },
+            EXPIRY_MODULE_CASE,
+        "fapi2-security-profile-final-par-attempt-to-use-expired-request_uri":
+            EXPIRY_MODULE_CASE,
     };
 
     const buildIssuerModuleCase = (moduleName: string): IssuerModuleCase => {
@@ -713,7 +718,8 @@ describe("OIDF - oid4vci-1_0-issuer-haip-test-plan", () => {
     // Per-variant describes register one `it()` per module so vitest reports
     // a separate pass/fail line for every (variant, module) combination.
     // Each variant's `beforeAll` runs its modules sequentially against its
-    // dedicated plan; the four variant chains run in parallel via
+    // dedicated plan, except `runConcurrently` modules which start beside
+    // that chain; the four variant chains run in parallel via
     // `describe.concurrent`.
     for (const variant of ISSUER_VARIANT_MATRIX) {
         const variantLabel = `${variant.credential_format} / ${variant.vci_authorization_code_flow_variant}`;
@@ -733,21 +739,38 @@ describe("OIDF - oid4vci-1_0-issuer-haip-test-plan", () => {
                     return;
                 }
 
-                for (const moduleName of ISSUER_HAIP_MODULES) {
-                    const moduleCase = buildIssuerModuleCase(moduleName);
-                    if (buildSkipReason(moduleName, variant)) {
-                        continue;
-                    }
+                const runModule = async (moduleName: string) => {
                     outcomes.set(
                         moduleName,
                         await runModuleForVariant(
                             planEntry.planId,
                             variant,
                             moduleName,
-                            moduleCase,
+                            buildIssuerModuleCase(moduleName),
                         ),
                     );
-                }
+                };
+                const modules = ISSUER_HAIP_MODULES.filter(
+                    (moduleName) => !buildSkipReason(moduleName, variant),
+                );
+                const concurrentModules = modules.filter(
+                    (moduleName) =>
+                        buildIssuerModuleCase(moduleName).runConcurrently,
+                );
+                const sequentialModules = modules.filter(
+                    (moduleName) => !concurrentModules.includes(moduleName),
+                );
+
+                // runModuleForVariant records failures instead of throwing,
+                // so one module cannot abort the others.
+                await Promise.all([
+                    ...concurrentModules.map(runModule),
+                    (async () => {
+                        for (const moduleName of sequentialModules) {
+                            await runModule(moduleName);
+                        }
+                    })(),
+                ]);
             }, 3_600_000);
 
             for (const moduleName of ISSUER_HAIP_MODULES) {
