@@ -2,282 +2,93 @@
 title: Keys and Certificates
 ---
 
-## Key Chains
+A key chain is a signing key together with its certificate chain. Each tenant needs one per purpose: an access key chain to sign presentation requests, an attestation key chain to sign credentials, and optionally status list and trust list key chains. Create them in the Web Client under **Cryptographic Assets → Keys → Create Key**, or with the API below; where the private keys live is set by the [KMS provider](../operate/kms.md).
 
-A **key chain** is EUDIPLO's unified abstraction for managing cryptographic keys and their certificates together as a single entity. This eliminates orphaned keys and simplifies key lifecycle management.
+**Prerequisites:** the `issuance:manage` or `presentation:manage` role.
 
-### What Is a Key Chain?
+## Usage types
 
-A key chain encapsulates:
+| `usageType`   | Signs                                                                                          | Web Client option                 |
+| ------------- | ---------------------------------------------------------------------------------------------- | --------------------------------- |
+| `access`      | Presentation requests (it determines the `client_id`), signed issuer metadata, ISO 18013-7 `readerAuth` | Access Certificate                |
+| `attestation` | Issued credentials (SD-JWT VC and mDOC)                                                        | Credential Signing (Attestation)  |
+| `statusList`  | Status lists for [revocation](../issuance/revocation.md)                                       | Status List Signing               |
+| `trustList`   | [Trust lists](trust-lists.md) you publish                                                      | Trust List Signing                |
 
-- **Active signing key** with its certificate
-- **Optional root CA key** (for internal certificate chains / rotation)
-- **Previous key** (for grace period after rotation)
-- **Rotation policy** (automatic certificate renewal)
+`encrypt` is reserved for the tenant's encryption key, which EUDIPLO creates and manages itself; it is not listed with the other key chains.
 
-```mermaid
-flowchart TB
-  KC[Key Chain]
+## Key chain types
 
-  KC --> ROOT[Root CA]
-  ROOT --> ROOTKEY[CA Private Key]
-  ROOT --> ROOTCERT[CA Certificate]
+| Type              | Created with                                                         | Certificate                                                                                                   | On rotation                                    |
+| ----------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Standalone        | `POST /api/key-chain` with `"type": "standalone"`                    | Self-signed; subject is the tenant name, DNS name the host of `PUBLIC_URL`                                     | New key with a new self-signed certificate     |
+| Internal chain    | `POST /api/key-chain` with `"type": "internalChain"`                 | EUDIPLO creates a root CA (valid 10 years) and a leaf certificate signed by it                                | New leaf key signed by the same root           |
+| Imported key      | `POST /api/key-chain/import` without `rotationPolicy`                | Your chain from `crt` (leaf first), or a self-signed certificate if `crt` is omitted                           | New key with a self-signed certificate (see warning below) |
+| External CA chain | `POST /api/key-chain/import` with `"rotationPolicy": {"enabled": true}` | `key` is your CA key and the last `crt` entry its CA certificate; EUDIPLO generates leaf keys signed by it | New leaf key signed by your CA                 |
 
-  KC --> ACTIVE[Active Signing Key]
-  ACTIVE --> ACTIVECERT[Leaf Certificate]
+In the Web Client, attestation keys offer **Create Key Chain** (internal chain), **Standalone Key** and **External CA Chain**; access keys offer **Self-Signed Certificate**, **Registrar Enrollment** ([Registrar](registrar.md)) and **External Certificate** (import). The wizard accepts pasted PEM values and PEM, CRT, CER or DER files and checks that key and certificate match.
 
-  KC --> PREVIOUS[Previous Key]
-  PREVIOUS --> PREVCERT[Previous Certificate]
+Use an internal or external CA chain for attestation keys: trust lists publish the CA certificate, so entries stay valid when the leaf key rotates.
 
-  KC --> POLICY[Rotation Policy]
-
-  ROOTCERT -->|signs| ACTIVECERT
-  POLICY -->|rotates| ACTIVE
-  ACTIVE -. grace period .-> PREVIOUS
-```
-
-Each tenant can manage multiple key chains simultaneously. Each key chain has a unique ID and is isolated via the `tenant_id` field.
-
-### Usage Types
-
-Key chains are organized by usage type:
-
-| Usage         | Purpose                                 |
-| ------------- | --------------------------------------- |
-| `access`      | Access certificates for wallet requests |
-| `attestation` | Credential signing keys                 |
-| `trustList`   | Trust list signing keys                 |
-| `statusList`  | Status list signing keys                |
-| `encrypt`     | Encryption keys for response encryption |
-
-### Creating a Key Chain
-
-#### Via the Web UI
-
-1. Navigate to **Keys** in the sidebar
-2. Click **+ Create Key** to open the wizard
-3. Select the usage type
-4. Select how the key and certificate should be provisioned
-5. Enter a description and select the KMS provider
-6. Click **Create**
-
-For standalone keys, choose the external certificate option to provide an existing private EC
-JWK and certificate chain. The certificate's public key must match the private JWK. The wizard
-accepts pasted PEM values and PEM, CRT, CER, or DER certificate files.
-
-For an attestation key using an **External CA Chain**, provide the external CA private JWK and
-certificate chain. EUDIPLO imports the CA key, generates the active signing key, has the CA sign
-that key, and rotates the active signing key according to the configured policy. The last
-certificate in the supplied chain must be the CA certificate matching the private JWK and must
-have `CA=true`.
-
-#### Via the API
+## Create a key chain
 
 ```bash
-curl -X POST https://your-eudiplo-instance/keys \
-  -H "Authorization: Bearer <token>" \
+curl -X POST "$EUDIPLO_URL/api/key-chain" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "name": "my-key-chain",
-    "usage": "attestation"
+  --data '{
+    "usageType": "attestation",
+    "type": "internalChain",
+    "description": "Membership signing key",
+    "rotationPolicy": { "enabled": true, "intervalDays": 90, "certValidityDays": 365 }
   }'
 ```
 
-### KMS Provider Selection
+The response is `{ "id": "<key chain id>" }`. `kmsProvider` selects a provider ID from `kms.json`; without it the default provider is used. `certValidityDays` defaults to 365. Automatic rotation needs `rotationPolicy.enabled` and `intervalDays`; without them the key is only rotated on request.
 
-When creating or importing a key through the API, include the `kmsProvider` field to select a specific provider by its `id`. If omitted, the `defaultProvider` from `kms.json` is used.
+## Import a key and certificate
 
-Example with specific provider:
-
-```bash
-curl -X POST https://your-eudiplo-instance/keys \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "vault-backed-key",
-    "usage": "attestation",
-    "kmsProvider": "vault"
-  }'
-```
-
-### Key Rotation
-
-Key chains support automatic rotation based on certificate expiry. When a certificate approaches expiration, EUDIPLO generates a new key and certificate while keeping the previous key available during a grace period.
-
-This ensures uninterrupted service during key transitions.
-
-#### External CA Rotation
-
-An internal chain can use an external CA as its signing anchor. In this mode:
-
-- The imported private key and final certificate in `crt` represent the CA
-- EUDIPLO generates the active leaf signing key
-- The external CA signs the generated leaf certificate
-- EUDIPLO rotates the leaf key and certificate; the CA key remains the root signing anchor
-
-This mode is available through the web wizard for attestation key chains and through the key-chain
-import API with `rotationPolicy.enabled=true`.
-
-Example import payload:
+Import material issued by your own PKI or an ecosystem operator with `POST /api/key-chain/import`. Provide exactly one of `key` (EC private key as JWK) or `keyPem` (PKCS#8 PEM, P-256):
 
 ```json
 {
-    "usageType": "attestation",
-    "key": {
-        "kty": "EC",
-        "crv": "P-256",
-        "x": "<ca-public-x>",
-        "y": "<ca-public-y>",
-        "d": "<ca-private-d>",
-        "alg": "ES256"
-    },
-    "crt": ["<optional-intermediate-certificate-pem>", "<ca-certificate-pem>"],
-    "rotationPolicy": {
-        "enabled": true,
-        "intervalDays": 30,
-        "certValidityDays": 365
-    }
+    "usageType": "access",
+    "description": "Access certificate from the ecosystem operator",
+    "keyPem": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----",
+    "crt": [
+        "-----BEGIN CERTIFICATE-----\n<leaf>\n-----END CERTIFICATE-----",
+        "-----BEGIN CERTIFICATE-----\n<intermediate>\n-----END CERTIFICATE-----"
+    ]
 }
 ```
 
-The imported CA certificate is validated for `CA=true` and must match the supplied private key.
+The first certificate must contain the public key of the imported private key. For an **external CA chain**, add `"rotationPolicy": { "enabled": true, "intervalDays": 30, "certValidityDays": 365 }` and pass the CA key and a chain whose last certificate is the CA certificate (`CA=true`, matching the key). EUDIPLO then creates and rotates the signing leaf itself; `intervalDays` defaults to 90.
 
-### Where Keys Are Stored
+To provision key chains as files, put the same JSON into `config/<tenant>/key-chains/`; see [Configuration as Code](../operate/configuration-as-code.md). `GET /api/key-chain/{id}/export` returns a key chain in this format, including the private key for the `db` provider.
 
-EUDIPLO supports pluggable KMS backends:
+## Rotate keys
 
-- **Database (default)** — Keys stored encrypted in the database
-- **HashiCorp Vault** — Keys managed via Vault Transit engine
-- **AWS KMS** — Keys managed by AWS Key Management Service
-- **PKCS#11 (HSM)** — Hardware Security Module integration
-- **HTTP Remote KMS** — Delegated to a remote microservice
-- **CSC** — Cloud Signature Consortium remote signing
+- **Automatic:** once a day, every key chain with `rotationPolicy.enabled` and an `intervalDays` that has passed since creation or the last rotation is rotated.
+- **Manual:** `POST /api/key-chain/{id}/rotate` rotates immediately (`204`).
+- **Change the policy:** `PUT /api/key-chain/{id}` with `rotationPolicy` or `description`.
 
-The choice of KMS backend is configured globally in `kms.json`. See [KMS Configuration](../operate/kms.md) for technical details on each provider.
+Rotation creates a new key and certificate as listed in the table above. Credentials issued before keep their certificate chain in `x5c`; with an internal or external CA chain, old and new credentials chain to the same CA, so trust lists need no update.
 
-### Certificate Types
+:::warning[Rotating imported keys]
+Rotating a standalone or imported key chain replaces its certificate with a self-signed one. Do not rotate key chains whose certificate comes from a registrar or an external PKI; import the renewed key and certificate instead, or use an external CA chain.
+:::
 
-Key chains can contain different certificate types depending on how they're provisioned:
-
-- **Self-signed** — Generated by EUDIPLO for development/testing
-- **CA-issued** — Signed by a Certificate Authority
-- **Imported** — Brought in from external PKI systems
-- **Registrar-obtained** — Access certificates from EUDI Wallet registrar
-
-See [Certificates](#certificates) for details on certificate management.
-
-### External Certificate Import
-
-External certificate import is supported for standalone access, attestation, status-list, and
-trust-list key chains. The imported certificate chain is stored as the active certificate, and
-the first certificate is validated against the supplied private key.
-
-For internal attestation chains, use **External CA Chain** instead. This imports an external CA
-signing anchor while retaining EUDIPLO's rotating leaf-key lifecycle.
-
-### Best Practices
-
-- Use **separate key chains** for different purposes (issuance vs. status lists)
-- Enable **rotation policies** for production key chains
-- Use **Vault or AWS KMS** in production for enhanced security
-- Keep **backup key material** for disaster recovery (database provider only)
-- Never expose **private keys** outside the KMS backend
+There is no certificate signing request (CSR) export. To use certificates from your own CA, import the key with its certificate, or import the CA key as an external CA chain.
 
 ## Certificates
 
-EUDIPLO manages certificates for signing credentials, authorizing wallet access, and establishing trust. Certificates are always bound to key chains and can be self-signed, CA-issued, or imported from external systems.
+Certificates always belong to a key chain. Which one a wallet or verifier has to trust depends on its use:
 
-### Certificate Types
+| Certificate                 | Who checks it                                                                 | Typical source                                                                                  |
+| --------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Access certificate          | Wallets, when they receive a presentation request or signed issuer metadata    | Self-signed for development; registrar or ecosystem operator for production ([wallet requirements](wallet-registrars.md)) |
+| Attestation certificate     | Wallets and verifiers, through the `x5c` chain in each credential and a trust list | Internal or external CA chain; your issuer PKI                                              |
+| Status list certificate     | Verifiers, as the revocation certificate of your trust list entry             | Standalone or internal chain                                                                    |
+| Trust list certificate      | Consumers of your trust list, who pin it as `verifierX509Der`                  | Standalone or internal chain                                                                    |
 
-#### Self-Signed Certificates
-
-Generated by EUDIPLO for development and testing. These certificates are not trusted by production wallets but are useful for:
-
-- Local development
-- Integration testing
-- Sandbox environments
-
-Self-signed certificates are created automatically when generating a new key chain.
-
-#### CA-Issued Certificates
-
-Signed by a trusted Certificate Authority (CA). Required for production deployments where credentials must be accepted by production wallets.
-
-To use CA-issued certificates:
-
-1. Generate a key chain in EUDIPLO
-2. Export the Certificate Signing Request (CSR)
-3. Submit the CSR to your CA
-4. Import the CA-signed certificate back into the key chain
-
-#### Imported Certificates
-
-Bring existing certificates from external PKI systems. Useful when:
-
-- Migrating from another credential system
-- Using certificates from corporate PKI
-- Integrating with existing key management infrastructure
-
-Imported certificates must include both the certificate and private key material (for database-backed keys) or reference existing keys (for Vault/AWS KMS).
-
-When importing a certificate chain, provide the leaf certificate first and any issuing
-certificates after it. For an external CA-backed rotating internal chain, provide the CA
-certificate last. The CA certificate must have `CA=true` and match the supplied private key.
-
-The web key-creation wizard supports pasted PEM values and PEM, CRT, CER, or DER certificate
-files. It validates the key/certificate relationship before the key chain is created.
-
-For an attestation internal chain backed by an external CA, EUDIPLO uses the imported CA key to
-sign newly generated active leaf keys. Leaf keys and certificates rotate according to the key
-chain's rotation policy; the external CA key remains the signing anchor.
-
-### Access Certificates vs Attestation Certificates
-
-EUDIPLO uses certificates for different purposes:
-
-| Type                        | Purpose                       | Obtained From     |
-| --------------------------- | ----------------------------- | ----------------- |
-| **Access Certificate**      | Grants access to EUDI Wallet  | Registrar         |
-| **Attestation Certificate** | Signs verifiable credentials  | Self-signed or CA |
-| **Status Certificate**      | Signs credential status lists | Self-signed or CA |
-| **Trust List Certificate**  | Signs trust list publications | Self-signed or CA |
-
-### Certificate Chains
-
-For CA-issued certificates, EUDIPLO supports certificate chains:
-
-- **Leaf certificate** — The end-entity certificate used for signing
-- **Intermediate certificates** — CA certificates in the chain
-- **Root CA certificate** — The trust anchor
-
-When importing or creating certificates, EUDIPLO validates the entire chain to ensure proper trust establishment.
-
-### Certificate Lifecycle
-
-1. **Creation** — Generate a new key chain with self-signed cert or import existing
-2. **Active Use** — Certificate is used for signing operations
-3. **Near Expiry** — Rotation policy triggers new certificate generation
-4. **Grace Period** — Both old and new certificates are valid
-5. **Retirement** — Old certificate expires and is archived
-
-### Working with Registrar Certificates
-
-Access certificates for EUDI Wallets are obtained from a registrar service. See [Registrar](registrar.md) for the complete workflow.
-
-Registration certificates authorize credential requests and are managed separately. See [Registration Certificates](registration-certificates.md) for details.
-
-### Certificate Storage
-
-Certificates are stored within key chains in the database. Private key material is stored according to the selected KMS provider:
-
-- **Database provider** — Encrypted private keys in database
-- **Vault/AWS KMS** — Private keys never leave the KMS
-- **PKCS#11 (HSM)** — Private keys protected by hardware
-
-See [KMS Configuration](../operate/kms.md) for detailed security considerations.
-
-### Related Topics
-
-- [Key Chains](keys-and-certificates.md) — Unified key and certificate management
-- [Registrar](registrar.md) — Obtaining access certificates
-- [Trust Lists](trust-lists.md) — Publishing trusted issuer certificates
+A presentation configuration uses the access key chain in `accessKeyChainId`, or an access key chain of the tenant when it is not set. Registration certificates are JWTs issued by a registrar, not key chains; see [Registration Certificates](registration-certificates.md).

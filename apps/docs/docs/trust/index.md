@@ -1,37 +1,28 @@
 ---
-title: Trust Management
+title: Trust
 ---
 
-# Trust Management
+Wallets and verifiers only accept EUDIPLO if they trust its certificates, and EUDIPLO only accepts credentials and wallets it can trust. This section covers both directions. Pick the page for your task:
 
-Trust is the foundation of verifiable credential systems. EUDIPLO provides comprehensive trust management through key chains, certificates, registrar integration, and trust lists.
+| I want to...                                                                                    | Read                                                              |
+| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Create or import the keys that sign credentials, status lists, trust lists and requests        | [Keys and Certificates](keys-and-certificates.md)                 |
+| Know which certificates a specific wallet needs                                                 | [Wallet and Registrar Requirements](wallet-registrars.md)         |
+| Get access and registration certificates from the German registrar, publish schema metadata    | [Registrar](registrar.md)                                         |
+| Tell wallets what my verifier may request or which credentials my issuer provides               | [Registration Certificates](registration-certificates.md)         |
+| Accept credentials only from specific issuers, or publish a list of my own issuers             | [Trust Lists](trust-lists.md)                                     |
+| Decide trust through OpenID Federation trust anchors                                            | [OpenID Federation](federation.md)                                |
+| Issue only to trusted wallet apps and to keys with a certain security level                     | [Wallet and Key Attestation](attestation.md)                      |
 
-## Key Concepts
+## Who proves what to whom
 
-EUDIPLO's trust infrastructure ensures that:
+| Direction                      | What is presented                                                                                                                       | Checked against                                                       |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| EUDIPLO as verifier → wallet   | Presentation requests signed with the **access certificate**, optionally with a **registration certificate** that authorizes the requested data | The wallet's trust in the access certificate's issuer and the registrar |
+| EUDIPLO as issuer → wallet     | Credentials signed with an **attestation** key chain; optionally signed issuer metadata (access certificate) and a registration certificate in `issuer_info` | Trust lists or the ecosystem's trust anchors, in the wallet           |
+| Wallet → EUDIPLO as verifier   | Credentials with the issuer's certificate chain, status lists signed by the issuer's revocation certificate                              | [Trust lists](trust-lists.md) or [federation](federation.md) in `trusted_authorities` |
+| Wallet → EUDIPLO as issuer     | **Wallet attestation** at the authorization server, **key attestation** for holder keys                                                  | [Wallet-provider trust lists](attestation.md)                         |
 
-- **Credentials are signed** by authorized entities with proper key management
-- **Wallets are authenticated** using registration certificates
-- **Issuers are trusted** through verifiable trust lists
-- **Keys are protected** with pluggable KMS backends
+Wallets never present registration certificates; issuers and verifiers present theirs to wallets.
 
-## Trust Components
-
-- **[Key Chains](keys-and-certificates.md)** — Unified key and certificate management abstraction
-- **[Certificates](keys-and-certificates.md#certificates)** — Self-signed, CA-issued, and imported certificates
-- **[Registrar](registrar.md)** — EUDI Wallet access and registration certificates
-- **[Registration Certificates](registration-certificates.md)** — Authorization for credential requests
-- **[Trust Lists](trust-lists.md)** — ETSI TS 119 602 compliant trusted entity registries
-
-## Why Trust Matters
-
-Every credential issuance and verification flow in EUDIPLO relies on cryptographic trust:
-
-1. **Issuers** sign credentials with keys from key chains
-2. **Verifiers** validate credentials against trusted issuer certificates in trust lists
-3. **Wallets** present registration certificates to prove authorization
-4. **Status lists** are signed by trusted revocation certificates
-
-Without proper trust configuration, credentials may be rejected by wallets or verifiers.
-
-For deep technical details on KMS backends (Vault, AWS KMS, PKCS#11, HTTP, CSC), see [KMS Configuration](../operate/kms.md).
+Where keys are stored (database, Vault, AWS KMS, HSM and others) is an operator decision: see [KMS](../operate/kms.md).

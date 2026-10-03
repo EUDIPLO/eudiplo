@@ -1,318 +1,94 @@
 ---
-title: Handling Results
+title: Receive Results
 ---
 
-<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
-  - keep the how-to part (webhook, SSE, polling, same-device redirect)
-  - 'Session Status > Session States' and 'Error Responses' (states, failure codes, outcome) -> reference/session-outcome.md
-  - 'Security Considerations > Direct Post Security Model (OID4VP §13.3)' -> concepts/security-model.md (link only)
-  - 'Single-Use Enforcement', 'Session Cleanup' duplicate concepts/sessions.md -> link only
--->
+After you [create a presentation request](requests.md), the result arrives in the session whose ID the request returned. Your backend can be called by a webhook, follow a stream of status events, or poll the session; same-device flows also return the user's browser to you. States, failure codes and the `outcome` structure are listed in the [session outcome reference](../reference/session-outcome.md).
 
-After creating a presentation request, you need to retrieve the verified claims and determine whether the presentation succeeded. EUDIPLO provides multiple methods for tracking session status and accessing results.
+| Method                                          | Use when                                                                 |
+| ----------------------------------------------- | ------------------------------------------------------------------------ |
+| [Webhook](#webhook)                             | Your backend should be told about every completed or failed presentation. |
+| [Server-Sent Events](#server-sent-events)       | A page or service waits for one session, for example next to a QR code.  |
+| [Polling](#polling)                             | You cannot receive webhooks or keep a stream open.                       |
+| [Same-device redirect](#same-device-redirect)   | The wallet runs on the same device and should return the user to your page. |
 
-## Overview
+## Webhook
 
-EUDIPLO offers two primary methods for handling presentation results:
+EUDIPLO calls a webhook when a presentation reaches `completed` or `failed`. It uses the inline `webhook` of the request if present, otherwise the webhook endpoint referenced by the configuration's `webhookEndpointId` ([Configure Verification](configure-verification.md#send-results-to-your-backend)). Expiry does not trigger a webhook.
 
-1. **Webhooks** — Receive asynchronous callbacks when presentations complete (recommended for production)
-2. **Polling/SSE** — Query session status or subscribe to real-time updates
-
-## Webhooks (Recommended)
-
-Configure webhooks in your presentation configuration or override them at request time to receive verified claims automatically when the presentation completes.
+The body always contains `status`, `outcome` and `session`, plus `transaction_data` if the request used it. Only a completed presentation also carries `credentials`, the disclosed claims per DCQL credential query ID:
 
 ```json
 {
-    "id": "pid-verification",
-    "dcql_query": { ... },
-    "webhook": {
-        "url": "https://verifier.example.com/presentation-callback",
-        "auth": {
-            "type": "apiKey",
-            "value": "your-api-key"
-        }
-    }
-}
-```
-
-When the presentation completes, EUDIPLO sends a POST request to your webhook URL with the verified claims.
-
-For details on webhook configuration, authentication types, and request format, see [Webhooks](../reference/webhooks.md#presentation-webhook).
-
-## Session Status
-
-Sessions track the presentation request lifecycle from creation through completion or expiration.
-
-### Session States
-
-| Status      | Description                                         |
-| ----------- | --------------------------------------------------- |
-| `active`    | Session created, waiting for wallet interaction     |
-| `fetched`   | Presentation request fetched by wallet              |
-| `completed` | Session successfully completed with verified claims |
-| `expired`   | Session expired before completion                   |
-| `failed`    | Session failed due to an error                      |
-
-### Retrieving Session Status
-
-Query the session status endpoint:
-
-```http
-GET /session/{sessionId}
-Authorization: Bearer YOUR_JWT_TOKEN
-```
-
-Response:
-
-```json
-{
-    "id": "session-uuid",
     "status": "completed",
-    "type": "presentation",
-    "createdAt": "2026-01-25T12:00:00.000Z",
-    "updatedAt": "2026-01-25T12:01:00.000Z",
-    "consumedAt": "2026-01-25T12:01:00.000Z",
-    "verifiedClaims": {
-        "pid-mso-mdoc": {
-            "given_name": "Jane",
-            "family_name": "Doe",
-            "age_over_18": true
-        }
-    }
+    "outcome": { "result": "success", "credentials": [{ "id": "membership", "verified": true }] },
+    "credentials": [{ "id": "membership", "values": [{ "name": "Max", "member_id": "M-001" }] }],
+    "session": "3f0c1d9e-4c1b-4f63-9a59-2f4f0b6a2c11"
 }
 ```
 
-## Real-Time Updates (Server-Sent Events)
+A failed presentation, for example because the user declined, sends `"status": "failed"` with the reason in `outcome` and no credentials. The complete payload is described in [Webhooks](../reference/webhooks.md).
 
-For real-time session status updates, subscribe to the SSE endpoint:
+- **Raw tokens:** list credential query IDs in `includeRawTokensFor` of an inline request `webhook` to also receive the presented token (for example the SD-JWT) as `rawToken`. Webhook endpoints have no such option.
+- **Redirect override:** answer with `{ "redirectUri": "https://shop.example.com/done" }` to send the user there instead of the configured `redirectUri`. This works for completed and, for OpenID4VP, failed presentations.
+- **Delivery:** EUDIPLO sends one request and does not retry. A failed delivery is logged and does not change the session, so reconcile missed results by [polling](#polling). Webhook URLs must pass the [outbound URL policy](../reference/webhooks.md).
 
-```http
-GET /session/{sessionId}/events?token=JWT_TOKEN
-```
+## Server-Sent Events
 
-### Authentication
-
-The SSE endpoint requires JWT authentication via a query parameter. This is because the browser's `EventSource` API does not support custom headers.
-
-| Parameter | Type   | Required | Description                    |
-| --------- | ------ | -------- | ------------------------------ |
-| `id`      | string | Yes      | The session ID to subscribe to |
-| `token`   | string | Yes      | Valid JWT access token         |
-
-### Response Format
-
-The endpoint returns a stream of Server-Sent Events. Each event contains:
-
-```json
-{
-    "id": "session-uuid",
-    "status": "active|fetched|completed|expired|failed",
-    "updatedAt": "2024-01-15T12:00:00.000Z"
-}
-```
-
-### JavaScript Example
+Subscribe to `GET /api/session/{id}/events?token=<access token>`. The token goes into the query string because the browser's `EventSource` cannot send headers; any valid access token of the session's tenant works. Use a short-lived token, as URLs can end up in proxy logs.
 
 ```javascript
-// Get a valid JWT token first
-const token = await getAccessToken();
-
-// Create EventSource with token as query parameter
-const eventSource = new EventSource(
-    `/session/${sessionId}/events?token=${token}`,
+const events = new EventSource(
+    `${eudiploUrl}/api/session/${sessionId}/events?token=${encodeURIComponent(token)}`,
 );
-
-// Handle incoming status updates
-eventSource.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    console.log(`Session ${data.id} status: ${data.status}`);
-
-    // Close connection when session reaches terminal state
-    if (["completed", "expired", "failed"].includes(data.status)) {
-        eventSource.close();
-
-        // Fetch final result if completed
-        if (data.status === "completed") {
-            fetchSessionResult(data.id);
-        }
+events.onmessage = (message) => {
+    const { status } = JSON.parse(message.data);
+    if (["completed", "failed", "expired"].includes(status)) {
+        events.close();
+        // Fetch the result from your backend, which reads GET /api/session/{id}.
     }
 };
-
-// Handle connection errors
-eventSource.onerror = (error) => {
-    console.error("SSE connection error:", error);
-    eventSource.close();
-};
 ```
 
-### Connection Behavior
+- The first event carries the current status, so a late subscriber does not miss a result.
+- Each event has the form `{ "id": "<session id>", "status": "fetched", "updatedAt": "<ISO timestamp>" }`; every status is sent once.
+- The stream ends after `completed`, `failed` or `expired`. Changes processed by another replica arrive within a few seconds.
+- A missing or invalid token returns `401`, an unknown session `404`.
 
-- **Initial Event**: Upon connection, the endpoint immediately sends the current session status.
-- **Auto-reconnect**: Browsers automatically reconnect if the connection drops.
-- **Keep-alive**: The server maintains the connection until the client disconnects or the session reaches a terminal state.
+## Polling
 
-## Same-Device Redirect Flows
-
-For same-device flows that use a `redirect_uri`, EUDIPLO generates a one-time `response_code` and appends it to the redirect URI after the wallet submits its response.
-
-The verifier's frontend receives this code via the redirect and uses it to retrieve the session result. This ensures the browser that initiated the flow is the same one that receives the result.
-
-:::warning[Same-device flows with redirect]
-For same-device flows that use a `redirect_uri`, the `response_code` is the **only safe way** to retrieve the session result. The verifier must extract it from the redirect URL and use it to look up the completed session.
-:::
-
-Example redirect:
-
-```text
-https://verifier.example.com/callback?response_code=abc123
-```
-
-The frontend extracts `response_code` and queries:
-
-```http
-GET /session/by-code/{response_code}
-Authorization: Bearer YOUR_JWT_TOKEN
-```
-
-## Single-Use Enforcement
-
-All presentation requests are **single-use and non-replayable**. Once a wallet submits a presentation response:
-
-- The request is marked as consumed
-- `consumedAt` timestamp records when the request was first used
-- Any subsequent attempts to submit presentations for the same request are rejected with `400 Bad Request`
-
-This prevents presentation request replay attacks where an attacker could reuse an intercepted request to submit fraudulent credentials.
-
-## Session Cleanup
-
-Sessions are automatically cleaned up based on tenant-specific retention policies. You can configure:
-
-- **TTL (Time-to-Live)**: How long completed/expired sessions are retained
-- **Cleanup Mode**:
-    - `full` (default): Deletes the entire session record
-    - `anonymize`: Keeps metadata (ID, status, timestamps) but removes personal data
-
-For details on session cleanup configuration, see [Sessions](../concepts/sessions.md#session-cleanup).
-
-## Security Considerations
-
-### Direct Post Security Model (OID4VP §13.3)
-
-EUDIPLO implements the `direct_post.jwt` response mode with the full security model defined in [OID4VP Section 13.3](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-13.3). This model separates identifiers across different actors to prevent session fixation and cross-reference attacks.
-
-**Key security fields:**
-
-| Identifier      | Purpose                                                                                                  |
-| --------------- | -------------------------------------------------------------------------------------------------------- |
-| `session.id`    | Internal (backend / verifier) session identifier — never exposed to the wallet                           |
-| `walletNonce`   | Wallet-facing identifier used as `state` in the authorization request — cannot be linked to `session.id` |
-| `nonce`         | Binds the VP Token to this specific request — prevents replay attacks                                    |
-| `response_code` | One-time code appended to `redirect_uri` during same-device redirect — prevents session fixation         |
-
-### Best Practices
-
-1. **Use webhooks for production** — More reliable than polling for asynchronous flows
-2. **Validate session state** — Check `status: "completed"` before trusting verified claims
-3. **Close SSE connections** — Always close `EventSource` when session reaches terminal state
-4. **Handle timeouts** — Set appropriate timeout values and handle expired sessions gracefully
-5. **Use response_code safely** — For same-device flows, only use `response_code` from the redirect
-6. **Implement token refresh** — Ensure JWT tokens have sufficient lifetime for expected session duration
-
-## Error Responses
-
-### Session Endpoint Errors
-
-| Status Code | Description                  |
-| ----------- | ---------------------------- |
-| 401         | Missing or invalid JWT token |
-| 404         | Session not found            |
-
-### SSE Endpoint Errors
-
-| Status Code | Description                  |
-| ----------- | ---------------------------- |
-| 401         | Missing or invalid JWT token |
-| 404         | Session not found            |
-
-### Verification Failures
-
-When a presentation fails verification, EUDIPLO returns a **structured error**:
-a stable, machine-readable code plus a short, user-facing message. Verbose
-diagnostic detail (certificate subjects, thumbprints, configured trust-list
-URLs) is never returned to the caller — it stays in the server logs and the
-audit trail.
-
-The classification happens in the shared chain validator, so the same codes are
-produced for mDOC (ISO/IEC 18013-5) and SD-JWT-VC credentials, and whether the
-trust list is a LoTE (ETSI TS 119 602, JSON) or a Trusted List
-(ETSI TS 119 612, XML). The list format only matters at the load boundary;
-every downstream decision runs on the normalized trust store.
-
-Failures are returned as HTTP `400 Bad Request`:
+Read the session with `GET /api/session/{id}`. The caller needs the `presentation:request` role (or `issuance:offer`). Poll every one or two seconds until `status` is `completed`, `failed` or `expired`:
 
 ```json
 {
-    "statusCode": 400,
-    "timestamp": "2026-07-20T12:34:56.000Z",
-    "path": "/...",
-    "error": "trust_chain_not_trusted",
-    "message": "The credential issuer is not in the trusted list."
+    "id": "3f0c1d9e-4c1b-4f63-9a59-2f4f0b6a2c11",
+    "status": "completed",
+    "requestId": "membership-check",
+    "expiresAt": "2026-10-03T10:05:00.000Z",
+    "consumedAt": "2026-10-03T10:01:12.000Z",
+    "responseCode": "6b1f0d0e-1c4e-4a54-8f7e-0b8f1c2d3e4f",
+    "credentials": [{ "id": "membership", "values": [{ "name": "Max", "member_id": "M-001" }] }],
+    "outcome": { "result": "success", "credentials": [{ "id": "membership", "verified": true }] }
 }
 ```
 
-Branch on `error`; treat `message` as display text. The same short message is
-stored in the session's `errorReason` and the session status is set to
-`failed`.
+The response contains further session fields; the result fields are explained in the [session outcome reference](../reference/session-outcome.md). A request that runs out its lifetime is rejected immediately, but its status changes to `expired` only when the session maintenance job runs (`SESSION_TIDY_UP_INTERVAL`, default one hour). Stop waiting once `expiresAt` has passed.
 
-| `error`                  | `message`                                                                    | When it is returned                                                                                                                                    |
-| ------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `signature_invalid`      | The credential signature is invalid.                                         | The issuer (`IssuerAuth`) or device (`deviceAuth`) COSE signature does not validate — a tampered credential, wrong session transcript, or key mismatch. |
-| `no_trust_chain_to_root` | The credential issuer does not chain to a trusted root.                      | No X.509 path can be built from the presented leaf certificate up to a configured trust anchor.                                                         |
-| `trust_chain_not_trusted`| The credential issuer is not in the trusted list.                            | A chain is built, but no certificate in it matches an entity in the configured trust list — for example an acceptance issuer against a production list. |
-| `trust_list_unavailable` | The trusted list could not be loaded, so the credential could not be validated. | A configured trust list could not be fetched, parsed or signature-verified, or it is stale (`NextUpdate` in the past). EUDIPLO fails closed.          |
-| `certificate_expired`    | The credential issuer certificate is expired or not yet valid.               | A certificate in the chain is outside its `notBefore`/`notAfter` validity window.                                                                       |
-| `x5c_missing`            | The credential is missing its issuer certificate chain.                      | The policy requires an `x5c` chain but the credential does not include one in its `IssuerAuth`.                                                         |
-| `verification_error`     | The credential could not be verified.                                        | Generic fallback for any other cause, including malformed `x5c`, federation-trust failures and unexpected errors.                                       |
+## Same-device redirect
 
-The HTTP status is always `400`; only `error` and `message` vary.
-`trust_list_unavailable` is a **verifier-side** condition (misconfiguration or
-outage) rather than a problem with the presented credential, and is kept
-distinct from `trust_chain_not_trusted` so operators can tell the two apart.
-Detailed diagnostics for every failure are written to the audit log with the
-`error` code attached, so an operator can correlate a user-facing failure with
-the full reason without exposing it.
+When the request has a `redirectUri`, the wallet sends the user's browser back to it after the presentation. EUDIPLO replaces `{sessionId}` and appends a one-time `response_code`:
 
-### Wallet Error Responses
+```text
+https://shop.example.com/verified?session=3f0c1d9e-4c1b-4f63-9a59-2f4f0b6a2c11&response_code=6b1f0d0e-1c4e-4a54-8f7e-0b8f1c2d3e4f
+```
 
-When the wallet does not return a presentation — for example because the user
-declined the request — it sends an OAuth 2.0 error response
-([OID4VP 1.0 §8.5](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-error-response))
-instead of a `vp_token`. EUDIPLO accepts it both as plain form parameters and,
-for `direct_post.jwt`, inside the encrypted `response`.
+Before you accept the result for this browser:
 
-Per OID4VP 1.0 §8.2 a processed error response is answered with HTTP `200`.
-The session status is set to `failed` and the wallet's error is recorded:
+1. Read the session with `GET /api/session/{id}` from your backend.
+2. Check that `status` is `completed` and that `responseCode` equals the `response_code` from the URL.
+3. Only then attach the verified claims to the browser's session.
 
-| Field         | Value                                                                  |
-| ------------- | ---------------------------------------------------------------------- |
-| `failureCode` | The wallet's `error` code, e.g. `access_denied`                        |
-| `outcome`     | `{ "result": "failed", "error": "<code>", "message": "<errorReason>" }` |
-| `errorReason` | `Wallet error: <error>: <error_description>`                           |
+The check proves that this browser received the redirect, so an attacker cannot make a victim complete a session the attacker started ([OID4VP §13.3](../concepts/security-model.md)). EUDIPLO has no lookup by response code; always start from the session ID you stored when you created the request.
 
-Common codes are `access_denied` (the user declined), `invalid_request`,
-`vp_formats_not_supported` and `wallet_unavailable`. They come from the wallet,
-not from EUDIPLO's verification taxonomy above.
+If the presentation fails, the redirect carries `error` and `error_description` instead of a `response_code`. A declined request uses the wallet's error code, such as `access_denied`; a failed verification uses `invalid_request`. ISO 18013-7 requests redirect only after success.
 
-If a `redirect_uri` is configured, the wallet is redirected to it with the
-wallet's `error` and `error_description` appended as query parameters, and
-without a `response_code`.
-
-## Related Documentation
-
-- [Webhooks](../reference/webhooks.md) — Webhook integration patterns
-- [Sessions](../concepts/sessions.md) — Session lifecycle and cleanup
-- [Presentation Configuration](configure-verification.md) — Configuring webhooks
-- [Presentation Requests](requests.md) — Creating requests and redirect URIs
-- [API Reference](../reference/api.md) — Session API endpoints
+Requests are single-use, and sessions are deleted or anonymized after the tenant's retention time; see [Sessions](../concepts/sessions.md).

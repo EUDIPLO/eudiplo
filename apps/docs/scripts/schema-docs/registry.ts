@@ -3,6 +3,8 @@ import { CreateAttributeProviderSchema } from "../../../backend/src/issuer/confi
 import { CredentialConfigCreateSchema } from "../../../backend/src/issuer/configuration/credentials/schemas/credential-config.schema.js";
 import { OfferRequestSchema } from "../../../backend/src/issuer/issuance/oid4vci/dto/offer-request.schema.js";
 import { PresentationRequestSchema } from "../../../backend/src/verifier/oid4vp/dto/presentation-request.schema.js";
+import { PresentationConfigCreateSchema } from "../../../backend/src/verifier/presentations/schemas/presentation-config.schema.js";
+import { TrustListCreateSchema } from "../../../backend/src/issuer/trust-list/schemas/trust-list.schema.js";
 
 export interface SchemaDoc {
     /** File name of the model (`docs/_generated/schemas/<name>.json`) and the `name` prop of `<SchemaReference>`. */
@@ -24,4 +26,6 @@ export const schemaDocs: SchemaDoc[] = [
     { name: "credential-field", schema: CredentialConfigCreateSchema.shape.fields.element },
     { name: "offer-request", schema: OfferRequestSchema },
     { name: "attribute-provider", schema: CreateAttributeProviderSchema },
+    { name: "presentation-configuration", schema: PresentationConfigCreateSchema },
+    { name: "trust-list", schema: TrustListCreateSchema },
 ];

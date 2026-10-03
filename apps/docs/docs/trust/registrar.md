@@ -2,46 +2,20 @@
 title: Registrar
 ---
 
-# Registrar
-
-Depending on the EUDI Wallet and its test or production ecosystem, one or both of these certificate types may be required:
-
-- **Access Certificate** — Grants access to the EUDI Wallet
-- **Registration Certificate** — Authorizes data requests from the EUDI Wallet
-
-You can still use EUDIPLO without these certificates, but it may result in warnings when making requests to the EUDI Wallet.
+EUDIPLO can talk to the German EUDI wallet registrar to obtain access certificates, issue registration certificates and publish schema metadata. Each tenant uses its own registrar account. Other ecosystems are not supported by this integration: import their certificates instead ([Wallet and Registrar Requirements](wallet-registrars.md)).
 
 ## Prerequisites
 
-:::warning[Role Required]
-To see the **Registrar** menu in the client, your tenant must have the `registrar:manage` role assigned. When creating a tenant, make sure to select this role (or select "All roles" for a full setup).
-:::
+- The `registrar:manage` role; without it the **Registrar** menu is hidden.
+- Registrar URL, OIDC realm URL, client ID (and secret, if any), username and password from the registrar operator.
 
-## Step 1: Configure Registrar Credentials
+## 1. Connect the registrar
 
-The integrated registrar connection currently supports the German registrar. Each tenant can configure its own German registrar connection with OIDC credentials and use different credentials for each tenant. For other wallet ecosystems, obtain the required key and certificate material from the ecosystem operator and import it into EUDIPLO; do not expect the integrated enrollment API to work with those registrars.
+In the Web Client, open **Registrar → Registrar Config**. Pick the **German Sandbox** preset or enter the URLs, then the account credentials. Optionally set **Registration Certificate Defaults**: privacy policy URL, support URI and intermediary RP ID, used for every registration certificate of the tenant. Saving checks the credentials against the OIDC endpoint and fails if they are rejected (`400`) or the endpoint is unreachable (`503`).
 
-### Via the Web UI
+The same configuration via the API (`POST /api/registrar/config` creates or replaces it, `PATCH` changes fields, `DELETE` removes it) or as file:
 
-1. Navigate to **Registrar** in the sidebar
-2. Select a preset (e.g., "German Sandbox") or manually enter the registrar details:
-    - **Registrar URL**: The base URL of the registrar API
-    - **OIDC URL**: The OpenID Connect realm URL for authentication
-    - **Client ID**: The OIDC client ID
-    - **Client Secret**: Optional OIDC client secret
-    - **Username**: Your registrar account username
-    - **Password**: Your registrar account password
-3. Click **Save Configuration**
-
-:::info[Credential Validation]
-When you save the configuration, EUDIPLO validates your credentials by attempting to authenticate with the registrar's OIDC endpoint. If authentication fails, you'll receive an error message and the configuration will not be saved.
-:::
-
-### Via Configuration File
-
-You can also configure the registrar by placing a `registrar.json` file in the tenant's configuration folder:
-
-```json title="config/{tenant-id}/registrar.json"
+```json title="config/<tenant>/registrar.json"
 {
     "registrarUrl": "https://sandbox.eudi-wallet.org/api",
     "oidcUrl": "https://auth.sandbox.eudi-wallet.org/realms/sandbox-registrar",
@@ -49,145 +23,68 @@ You can also configure the registrar by placing a `registrar.json` file in the t
     "username": "your-username",
     "password": "your-password",
     "registrationCertificateDefaults": {
-        "privacy_policy": "https://verifier.example/privacy",
-        "support_uri": "mailto:support@verifier.example"
+        "privacy_policy": "https://shop.example.com/privacy",
+        "support_uri": "mailto:support@shop.example.com"
     }
 }
 ```
 
-:::note[File Import Behavior]
-When importing from a configuration file during startup, credentials are **not** validated (the registrar might not be reachable during initial setup). Make sure your credentials are correct before relying on the configuration.
+File imports are not checked against the registrar, because it may be unreachable at startup.
+
+:::warning[Stored credentials]
+The password and client secret are stored unencrypted in the database. The API never returns the password but does return the client secret. Use a registrar account dedicated to this tenant.
 :::
 
-## Step 2: Create an Access Certificate
+EUDIPLO acts as one relying party at the registrar. If the account has none yet, EUDIPLO registers one on first use; otherwise it uses the first relying party of the account.
 
-Once the registrar is configured, you can create access certificates via the Key Creation Wizard.
+## 2. Get an access certificate
 
-### Via the Key Creation Wizard
+In **Cryptographic Assets → Keys → Create Key**, choose **Access Certificate → Registrar Enrollment**. EUDIPLO creates an access key chain, sends a certificate request for its key to the registrar and stores the returned certificate on the key chain.
 
-1. Navigate to **Keys** in the sidebar
-2. Click **+ Create Key** to open the wizard
-3. Select **Access Certificate** as the key usage
-4. Select **Registrar Enrollment** as the access source
-5. Enter a name for the key chain
-6. Click **Create**
-
-For the integrated German registrar workflow, the wizard will:
-
-- Create a new key chain
-- Generate a signing key
-- Request an access certificate from the registrar
-- Store the certificate in the key chain
-
-### Import an Existing German Registrar Certificate
-
-If the German registrar has already issued the access key and certificate, you can use the key wizard's import option instead. Select **Access Certificate**, choose the import source, and provide the key and certificate material. Configuring the registrar connection is not required for this path.
-
-### Via the API
+Via the API, create a standalone `access` key chain ([Keys and Certificates](keys-and-certificates.md#create-a-key-chain)) and enroll it:
 
 ```bash
-curl -X POST "https://your-eudiplo-instance/registrar/access-certificate" \
-  -H "Authorization: Bearer <token>" \
+curl -X POST "$EUDIPLO_URL/api/registrar/access-certificate" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"keyChainId": "your-key-chain-id"}'
+  --data '{ "keyId": "<access key chain id>" }'
 ```
 
-The response includes:
+The response contains `id` (the certificate ID at the registrar), `certId` (the key chain that now holds the certificate) and `crt` (the certificate as PEM).
 
-- `id`: The registrar's certificate ID
-- `keyChainId`: The local EUDIPLO key chain ID
-- `crt`: The certificate content
+If the registrar already issued a key and certificate to you, import them as an **External Certificate** instead; no registrar configuration is needed for that. Do not rotate a key chain with a registrar certificate: rotation replaces it with a self-signed certificate. Enroll a new key chain instead.
 
-## Next Steps
+## 3. Registration certificates
 
-After obtaining access certificates, configure registration certificates for presentation requests. See [Registration Certificates](registration-certificates.md) for details.
+With a registrar configuration, EUDIPLO creates registration certificates on demand:
 
-## Related Topics
+- **Verifier:** for each presentation configuration with `registration_cert`; the `purpose` comes from the configuration, privacy policy and support URI from the defaults above.
+- **Issuer:** in the issuance configuration (`registrationCertificate.mode: "generate"`), listing the schema metadata of your credential types.
 
-- [Registration Certificates](registration-certificates.md) — Authorization for credential requests
-- [Key Chains](keys-and-certificates.md) — Managing certificates and keys
-- [Certificates](keys-and-certificates.md#certificates) — Certificate types and lifecycle
+Strategies, caching and the overasking check are described in [Registration Certificates](registration-certificates.md).
 
-## Schema Metadata (TS11)
+### Overasking check
 
-Schema Metadata is a **registrar-managed artifact** that describes an attestation schema (version, supported formats, trust authorities, and rulebook references).
+EUDIPLO only sends a registration certificate whose authorized `credentials` cover the request exactly. Each credential query of the DCQL query must equal one authorized credential in `format`, `meta` and the ordered list of claim paths; claim IDs, `values` and `intent_to_retain` are ignored. Requesting fewer claims than authorized also fails. Otherwise creating the request fails with `400` ("Registration certificate does not authorize the requested DCQL credentials").
 
-It is intentionally managed separately from Credential Configuration so one schema metadata entry can be reused by multiple credential configurations.
+When EUDIPLO creates the certificate from `registration_cert.body` without `credentials`, it derives the authorized credentials from the DCQL query, so they match, and it creates a new certificate after the DCQL query changes. A certificate you import (`jwt`) or reuse (`id`) must already match. For development and interoperability tests only, `SKIP_OVERASKING_CHECK=true` disables the check; see [Skip Flags](../reference/environment-variables.md#skip-flags).
 
-:::warning[Unstable Feature]
-This feature is based on the TS11 specification, which is still in **draft status**. The schema metadata structure, API endpoints, and UI may change as the specification evolves. Please report feedback and issues to help shape the final specification.
+## Schema metadata (TS11)
+
+Schema metadata describes an attestation type for relying parties: version, formats and schemas, rulebook, level of assurance and the trusted issuers. The registrar signs and publishes it; EUDIPLO prepares it from your credential types and trust lists.
+
+:::warning[Draft specification]
+TS11 is still a draft. Fields, endpoints and screens can change.
 :::
 
-### Why It Is Separate
+1. Create the credential type in **Credential Issuance → Credential Types** and the trust list of your issuers in **Trust Lists**.
+2. Open **Registrar → Schema → Create** and fill in **Version** (semantic version, for example `1.0.0`), **Rulebook URI**, **Attestation LoS**, **Binding Type** and **Name**; category and tags are optional.
+3. Under **Schema URIs**, select the credential types the schema covers. If you select exactly one, its `schemaMeta` is linked to the new schema metadata ID.
+4. Under **Trusted Authorities**, select trust lists or add root certificates (base64 DER).
+5. Choose **Submit**. EUDIPLO uploads the schemas and the rulebook, the registrar signs the result.
 
-- **Single source of truth**: schema metadata is versioned and managed centrally.
-- **Reusability**: multiple credential configurations can reference the same schema metadata.
-- **Consistency**: avoids duplicated metadata drifting across credential configs.
+EUDIPLO downloads the rulebook and schema URLs before uploading them, under the [outbound URL policy](../reference/webhooks.md): HTTPS only and no private addresses by default, at most 5 MB and three redirects per file.
 
-### Why It Matters
+Schema metadata is versioned: the list groups versions by ID, and a new version is published from the existing entry. Via the API, `POST /api/schema-metadata/publish` and `POST /api/schema-metadata/publish-version` publish (role `issuance:manage`); the other `/api/schema-metadata` endpoints list, read, update and deprecate entries (role `registrar:manage`).
 
-By publishing schema metadata, **relying parties (wallets, verifiers) will use it as a root of trust** to consume your attestations. The schema metadata establishes:
-
-- **Schema definitions**: what claims are included and their format
-- **Supported formats**: which credential formats (e.g., SD-JWT, mDoc) are supported
-- **Trust authorities**: which entities are authorized to issue attestations under this schema
-- **Rulebook references**: business rules and validation logic for claim processing
-
-Publishing accurate and well-maintained schema metadata ensures relying parties can correctly validate and interpret your issued credentials.
-
-### Web Client Flow
-
-1. Create or update your credential configuration in **Issuance → Credential Configs**.
-2. Go to **Schema Metadata** in the sidebar.
-3. Click **Create**.
-4. Fill in:
-    - `version` (semantic version, e.g. `1.0.0`)
-    - `rulebookURI`
-    - `attestationLoS`
-    - `bindingType`
-    - Select one or more **credential configs** in **Schema URIs**
-    - Select one or more **trust lists** in **Trusted Authorities**
-5. Submit and review the created entry.
-
-If you start creation from a linked credential configuration, EUDIPLO can associate the created schema metadata with that credential configuration using the registrar-assigned ID.
-
-#### Current Import Behavior
-
-- In the UI, Schema URIs and Trusted Authorities are selected from existing entities.
-- Manual entry of schema format/URI and trust list URLs is not required in the current flow.
-- On submit, EUDIPLO sends references (`credentialConfigId`, `trustListId`) and resolves details server-side.
-- The backend uploads schema assets to the registrar, resolves trust list verification data, and computes integrity values during signing.
-- The backend downloads the `rulebookURI` (and any schema URIs given by URL) before uploading them. These downloads follow the [outbound URL policy](../concepts/security-model.md#https-and-tls): HTTPS only and no private or loopback targets by default, at most 5 MB each, and every redirect is checked.
-
-### Versioning
-
-- Versions follow **semantic versioning**.
-- The Schema Metadata list groups entries by ID and shows all versions.
-- The details page supports switching between versions.
-
-### Usage in Presentation Configurations
-
-The schema metadata URL can also be used to configure presentation configurations, enabling wallets and verifiers to reference the same schema metadata for consistent validation rules and claim definitions.
-
-### Usage in Issuance Registration Certificate Generation
-
-Schema metadata entries can also be selected in issuance configuration for registration certificate generation (`registrationCertificate.mode = "generate"`).
-
-In this mode, EUDIPLO derives provided attestations from the selected schema metadata entries and uses them when generating the registration certificate that can be published in issuer metadata (`issuer_info`).
-
-See [Issuance Configuration](../issuance/issuance-configuration.md#registration-certificate-in-issuer-metadata) for configuration details and generation timing behavior.
-
-### Regional Availability
-
-:::info[German Registrar Only]
-This feature is currently only available for companies participating with the **German registrar**. Support for additional registrars may be added in future releases.
-:::
-
-### Notes for Integrators
-
-Schema Metadata helps with interoperability, but is usually not sufficient alone for full issuance integration. Issuer-specific business rules, claim sourcing, and operational settings still need to be configured in issuance-related components.
-
-### Related Documentation
-
-- [Credential Configuration](../issuance/credential-configuration.md) — Credential structure and field definitions
-- [Issuance Configuration](../issuance/issuance-configuration.md) — Registration certificate generation with schema metadata
+The `schemaMeta` of each credential configuration determines the `provides_attestations` of the [issuer registration certificate](registration-certificates.md#issuer-registration-certificate). Verifiers can start a presentation configuration from schema metadata with **Import from Schema** ([Configure Verification](../presentation/configure-verification.md)).
