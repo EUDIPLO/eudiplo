@@ -157,7 +157,7 @@ describe("eudiplo upgrade", () => {
         );
 
         expect(output.stdout).toContain(
-            "https://docs.eudiplo.dev/migration/8.x-to-9.0",
+            "https://docs.eudiplo.dev/upgrade/8.x-to-9.0",
         );
     });
 

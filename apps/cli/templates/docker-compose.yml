@@ -7,7 +7,7 @@
 #   docker compose --profile postgres --profile s3 up  # Custom components
 #
 # For more information, see the documentation:
-# https://docs.eudiplo.dev/deployment/docker-compose/
+# https://docs.eudiplo.dev/operate/docker-compose/
 
 services:
   # =============================================================================
@@ -66,7 +66,7 @@ services:
   # =============================================================================
 
   postgres:
-    image: postgres:18
+    image: postgres:16
     restart: always
     profiles: ['postgres', 'standard', 'full']
     environment:

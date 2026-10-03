@@ -2,240 +2,157 @@
 title: Development Setup
 ---
 
-# Running Locally
+# Development setup
 
-This guide will help you run the project locally for development or testing purposes.
-
-EUDIPLO is organized as a **monorepo workspace** containing:
-
-- **Backend** (`apps/backend/`) - NestJS API server
-- **Client** (`apps/client/`) - Angular web interface
-- **Webhook** (`apps/webhook/`) - Cloudflare Worker for testing
+This page gets the repository running from source: backend, web client and documentation. To run a released version instead, follow the [Foundation cookbook](../cookbooks/foundation.md).
 
 ## Prerequisites
 
-Before you start, make sure you have the following tools installed:
+- **Node.js 22.22.3 or newer** (the backend's `engines` field; CI and the Docker images use Node 26).
+- **pnpm** in the version pinned by `packageManager` in the root `package.json`. Enable it with `corepack enable`. Node 25 and newer no longer ship Corepack: run `npm install -g corepack` first.
+- **Git**.
+- **Docker** (optional): needed for the PostgreSQL, Vault and S3 E2E suites, the OIDF conformance tests and the Compose setup.
 
-- [Node.js](https://nodejs.org/) (version 22+ recommended)
-- [pnpm](https://pnpm.io/) (package manager for monorepo workspaces)
-- [Git](https://git-scm.com/)
-- [ngrok](https://ngrok.com/) (optional, for exposing a public URL)
-- [Docker](https://www.docker.com/) (optional, for supporting services or containerized deployment)
+No local Node.js? Use the [dev container](#dev-container).
 
-:::tip[No Node.js installation required]
-If you can't or prefer not to install Node.js locally, you can use **Dev Containers** to develop entirely inside a Docker container. See [Dev Container Setup](#dev-container-setup) below.
-:::
-
-## 1. Clone the Repository
+## 1. Install
 
 ```bash
-git clone https://github.com/openwallet-foundation/eudiplo
+git clone https://github.com/openwallet-foundation/eudiplo.git
 cd eudiplo
-```
-
-## 2. Install Dependencies
-
-Install all workspace dependencies:
-
-```bash
 corepack enable
 pnpm install
 ```
 
-This will install dependencies for all applications in the workspace.
+`pnpm install` also installs the Husky Git hooks described in [Code quality](./code-quality.md#git-hooks).
 
-## 3. Set Up Environment Variables
+## 2. Build the shared packages
 
-Create a `.env` file in the root of the project:
-
-```bash
-cp .env.example .env
-```
-
-To allow your wallet to interact with your service, a **public HTTPS URL** is required. You can use **ngrok** to expose your local server:
-
-:::note
-TODO: check if it also runs in a local network when using wallets.
-:::
+The backend and the CLI import `@eudiplo/config-format`, the client imports `@eudiplo/sdk-core`. Both are consumed from their `dist/` build:
 
 ```bash
-ngrok http 3000
+pnpm --filter @eudiplo/config-format build
+pnpm --filter @eudiplo/sdk-core build
 ```
 
-ngrok will display a public HTTPS URL like:
+Rebuild a package after you change it.
+
+## 3. Configure the backend
+
+The backend reads `.env` from its working directory. For `pnpm dev:backend` that is `apps/backend/.env`:
+
+```bash
+cp .env.example apps/backend/.env
+```
+
+Set `MASTER_SECRET` (for example `openssl rand -base64 32`), `AUTH_CLIENT_ID` and `AUTH_CLIENT_SECRET`. The defaults use SQLite and local file storage. Every variable is listed in the [environment variable reference](../reference/environment-variables.md).
+
+Settings you often need locally:
+
+| Variable | Purpose |
+| --- | --- |
+| `PUBLIC_URL` | URL wallets use to reach the backend (`.env.example`: `http://localhost:3000`). A wallet on a phone needs a public HTTPS URL; the [Foundation cookbook](../cookbooks/foundation.md) shows how to get one with a tunnel. |
+| `OUTBOUND_URL_ALLOW_HTTP=true`, `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK=true` | Webhooks, attribute providers, metadata imports and schema metadata downloads reject HTTP and private or loopback targets by default. Enable both to call services on your machine. The dev container sets both. |
+| `CONFIG_IMPORT_MODE=upsert` | Imports the tenant configuration in `CONFIG_FOLDER` (default: `assets/config`, the demo tenant) on every start. The default is `disabled`. |
+| `SKIP_*` | Turn off a check of the normal flow for interoperability testing. Active flags are logged as warnings on startup. See [skip flags](../reference/environment-variables.md#skip-flags). |
+
+## 4. Run the applications
+
+| Command | Starts | URL |
+| --- | --- | --- |
+| `pnpm dev:backend` | Backend (`nest start --watch`) | `http://localhost:3000`, Swagger UI at `/api/docs` |
+| `pnpm dev:client` | Web client (`ng serve`; runs `gen:api` first) | `http://localhost:4200` |
+| `pnpm --filter test-rp dev` | Example webhooks and attribute provider (Cloudflare Worker) | `http://localhost:8787` |
+| `pnpm --filter kms-reference dev` | Reference service for the HTTP KMS adapter | `http://localhost:8788` |
+| `pnpm --filter @eudiplo/docs start` | Documentation with live reload ([run `prebuild` once first](./documentation.md#run-it-locally)) | `http://127.0.0.1:3003` |
+
+`pnpm dev` starts every package that has a `dev` script in parallel (backend, client, both workers and the SDK in watch mode). Other backend scripts: `start` (no watch), `start:debug` (watch with the Node inspector), `start:prod` (runs `dist/main.js`).
+
+To run the published images instead of your source, use the root `docker-compose.yml` (`docker compose up -d`); it reads the root `.env` and mounts `./assets` as configuration.
+
+## 5. Regenerate generated code
+
+| Command | Regenerates | When |
+| --- | --- | --- |
+| `pnpm gen:api` | JSON schemas from the backend Zod/DTO schemas: `schemas/*.schema.json`, the client's `utils/schemas.json`, the CLI validator registry and `.vscode/settings.json` | After changing a configuration or import schema. Runs automatically before the client's `dev`, `build` and `test`. Does not need a running backend. |
+| `pnpm gen:sdk` | `packages/eudiplo-sdk-core/src/api` from `http://localhost:3000/api/docs-json`, then builds the SDK | After changing a management endpoint or DTO. **Needs a running backend.** |
+| `pnpm gen:all` | Both, in that order | |
+
+Commit the regenerated files with the change that caused them. Format snapshots under `schemas/v*/` are not regenerated; see [Configuration schemas](./configuration-schemas.md).
+
+## Database migrations
+
+The backend applies pending migrations on startup (`DB_MIGRATIONS_RUN=true`, the default). To work with migrations manually, run from `apps/backend`:
+
+```bash
+pnpm migration:generate --name=AddMyColumn   # from entity changes
+pnpm migration:create --name=AddMyColumn     # empty migration
+pnpm migration:run
+pnpm migration:revert                        # reverts the last migration
+pnpm migration:show
+```
+
+The TypeORM CLI reads `apps/backend/.env` and the root `.env` (`src/database/data-source.ts`). How to write a migration that works on SQLite and PostgreSQL: [Backend architecture](./backend-architecture.md#a-database-migration).
+
+## Iterate on tenant configuration
+
+Against the backend from source:
+
+1. Edit the files under `CONFIG_FOLDER/<tenant-id>/` (for example `assets/config/demo/`).
+2. Validate them with the CLI from source:
+
+    ```bash
+    pnpm --filter @eudiplo/cli assets:sync   # once; the CLI bundles the schemas
+    pnpm --filter @eudiplo/cli dev config validate tenant ../../assets/config/demo
+    ```
+
+3. Restart the backend so the startup import runs again (`CONFIG_IMPORT_MODE=upsert` applies changed files).
+
+Against an instance managed by the CLI (`eudiplo init`), the loop is:
+
+```bash
+eudiplo config tenant validate acme   # files in config/acme/
+eudiplo down && eudiplo up            # restart so the startup import runs again
+eudiplo doctor                        # reachability and health
+eudiplo logs --follow                 # backend and client logs
+```
+
+The CLI project keeps its runtime environment in `.eudiplo.env`, the Compose file in `eudiplo.compose.yaml` and the configuration in `config/` (`config/kms.json`, `config/<tenant-id>/…`). Restart after changing `.eudiplo.env`. Command details: [CLI](../operate/cli.md).
+
+## Dev container
+
+The repository ships a VS Code dev container (`.devcontainer/`) with Node.js, pnpm, Git and the recommended extensions. Open the folder in VS Code and run **Dev Containers: Reopen in Container**; `pnpm install` runs automatically. GitHub Codespaces uses the same configuration. The container sets `PUBLIC_URL`, `MASTER_SECRET`, `AUTH_CLIENT_SECRET` and both `OUTBOUND_URL_ALLOW_*` flags and forwards ports 3000 and 4200. Details: [`.devcontainer/README.md`](https://github.com/openwallet-foundation/eudiplo/blob/main/.devcontainer/README.md).
+
+## Repository layout
 
 ```text
-https://f8e3-84-123-45-67.ngrok.io
+.
+├── apps/
+│   ├── backend/        # @eudiplo/backend: NestJS API and protocol implementation
+│   ├── client/         # @eudiplo/client: Angular web client
+│   ├── cli/            # @eudiplo/cli: the eudiplo command-line tool
+│   ├── docs/           # @eudiplo/docs: this documentation site (Docusaurus)
+│   ├── webhook/        # test-rp: example webhooks and attribute provider (Cloudflare Worker)
+│   ├── kms-reference/  # kms-reference: reference service for the HTTP KMS adapter
+│   └── website/        # @eudiplo/website: eudiplo.dev, CLI installer and published config schemas
+├── packages/
+│   ├── eudiplo-config-format/  # @eudiplo/config-format: config envelope, format versions, migrations
+│   └── eudiplo-sdk-core/       # @eudiplo/sdk-core: generated API client and helpers (published to npm)
+├── schemas/            # generated JSON schemas; schemas/v*/ holds the published, immutable snapshots
+├── assets/config/demo/ # demo tenant configuration (startup import, `eudiplo demo` template)
+├── deployment/         # Docker Compose and Kubernetes examples
+├── monitor/            # Prometheus, Grafana, Loki and Tempo stack
+└── scripts/            # schema generation, release and CI helpers
 ```
 
-Use this value in your `.env`:
+Add a dependency to the package that uses it (`pnpm --filter @eudiplo/backend add <name>`). The root `package.json` only holds tooling shared by several packages.
 
-```env
-PUBLIC_URL=https://f8e3-84-123-45-67.ngrok.io
-```
+## Troubleshooting
 
-:::tip[Environment Variable Validation]
-The project validates your environment variables on startup using Joi. If `PUBLIC_URL` is missing or invalid, the app may fail to register with external services.
-:::
-
-:::note[Outbound calls to local services]
-Webhooks, attribute providers, metadata imports and schema metadata publishing (rulebook and schema URLs) reject HTTP and private or loopback targets by default, also in development. To call services running on your machine, enable `OUTBOUND_URL_ALLOW_HTTP=true` and `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK=true` in your `.env`. The dev container sets both.
-:::
-
-:::caution[Skip flags]
-`SKIP_*` variables (for example `SKIP_OVERASKING_CHECK`) turn off checks of the normal flow for development and interoperability testing. The backend lists active ones as warnings on startup. See [Skip Flags](../deployment/environment-variables.md#skip-flags).
-:::
-
-Check out the [Key Management System (KMS)](../administration/kms.md) or [Database](../administration/database.md) sections for more information on how to configure key storage and database options beyond the default settings.
-
-## 4. Start the Applications
-
-### Option A: Start All Services with Docker Compose
-
-```bash
-# Start both backend and client
-docker compose up -d
-
-# View logs
-docker compose logs -f
-```
-
-### Option B: Start Individual Applications
-
-**Start the Backend (NestJS API):**
-
-```bash
-pnpm --filter @eudiplo/backend run dev
-```
-
-**Start the Client (Angular UI) - in another terminal:**
-
-```bash
-pnpm --filter @eudiplo/client run dev
-```
-
-**Start the Webhook (for testing) - in another terminal:**
-
-```bash
-pnpm --filter test-rp run dev
-```
-
-### Option C: Start All Applications Locally
-
-```bash
-# Start all applications in development mode
-pnpm run dev
-```
-
-This will:
-
-- Compile and watch your TypeScript code
-- Reload on changes
-- Use your `.env` configuration for keys, database, and registrar access
-
-Make sure any external services (like PostgreSQL or Vault) are available, either locally or through Docker.
-
-## 5. Access the Services
-
-Once running, the applications are accessible at:
-
-**Backend API:**
-
-```
-http://localhost:3000
-```
-
-**Client Web Interface:**
-
-```
-http://localhost:4200
-```
-
-**Or via the public URL configured with ngrok:**
-
-```
-https://f8e3-84-123-45-67.ngrok.io
-```
-
----
-
-## Dev Container Setup
-
-If you can't install Node.js locally (e.g., restricted environment) or prefer a consistent development environment, you can use **VS Code Dev Containers** to develop entirely inside a Docker container.
-
-### Prerequisites
-
-- [Docker](https://docs.docker.com/get-docker/) installed and running
-- [Visual Studio Code](https://code.visualstudio.com/) with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-
-### Quick Start with Dev Containers
-
-1. **Clone and open in VS Code:**
-
-    ```bash
-    git clone https://github.com/openwallet-foundation/eudiplo.git
-    cd eudiplo
-    code .
-    ```
-
-2. **Reopen in Container:**
-    - Press <kbd>F1</kbd> and select **"Dev Containers: Reopen in Container"**
-    - Or click the green button in the bottom-left corner → "Reopen in Container"
-
-3. **Wait for setup** - The container builds and dependencies install automatically (first run takes a few minutes)
-
-4. **Start development:**
-
-    ```bash
-    pnpm dev          # Start both backend and client
-    # Or run separately:
-    pnpm dev:backend  # Start backend only (port 3000)
-    pnpm dev:client   # Start client only (port 4200)
-    ```
-
-### GitHub Codespaces
-
-You can also use [GitHub Codespaces](https://github.com/features/codespaces) for cloud-based development:
-
-1. Go to the [repository on GitHub](https://github.com/openwallet-foundation/eudiplo)
-2. Click **Code** → **Codespaces** → **Create codespace on main**
-
-The codespace automatically uses the devcontainer configuration.
-
-### What's Included
-
-The development container includes:
-
-| Tool     | Version | Purpose              |
-| -------- | ------- | -------------------- |
-| Node.js  | 24      | JavaScript runtime   |
-| pnpm     | latest  | Package manager      |
-| Python 3 | system  | Documentation tools  |
-| Git      | system  | Version control      |
-| Zsh      | system  | Shell with Oh My Zsh |
-
-Pre-configured VS Code extensions:
-
-- ESLint & Biome (linting/formatting)
-- Angular Language Service
-- Docker extension
-- GitLens
-- REST Client
-
-### Port Forwarding
-
-Ports are automatically forwarded:
-
-| Port | Service     |
-| ---- | ----------- |
-| 3000 | Backend API |
-| 4200 | Client UI   |
-
----
-
-## 6. Troubleshooting
-
-- Double-check `.env` values for typos or missing entries. Changes in the `.env` file require a restart of the application.
-- Ensure required external services (e.g. Vault, PostgreSQL) are running.
-- Clear NestJS cache with `rm -rf dist node_modules && pnpm install`.
-- If ngrok fails, make sure port 3000 isn't blocked or already in use.
+| Symptom | Fix |
+| --- | --- |
+| Backend exits with a configuration validation error | A required variable is missing in `apps/backend/.env`; the message names it. |
+| `Cannot find module '@eudiplo/config-format'` or `@eudiplo/sdk-core` | Build the shared packages ([step 2](#2-build-the-shared-packages)). |
+| Webhook or attribute provider on `localhost` is rejected | Set both `OUTBOUND_URL_ALLOW_*` flags. |
+| `pnpm gen:sdk` fails to fetch the spec | Start the backend first; the generator reads `http://localhost:3000/api/docs-json`. |
+| Port 3000 is busy | Stop the other backend or Compose stack; E2E tests also need the port. |

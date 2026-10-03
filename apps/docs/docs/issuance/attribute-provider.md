@@ -1,314 +1,74 @@
 ---
-title: Attribute Providers
+title: Attribute providers
 ---
 
-Attribute Providers are external HTTPS endpoints that EUDIPLO calls during credential issuance to dynamically fetch claim values. They provide a centralized, reusable way to configure claim sources at the tenant level.
+Fetch claim values from your backend at the moment the wallet requests a credential. An attribute provider is a tenant resource with your endpoint's URL and authentication; credential configurations and offers reference it by ID. The request and response format is specified in the [Attribute provider API](../reference/attribute-provider-api.md).
 
-## Overview
+**Prerequisites:** a client with the `issuance:manage` role and an HTTPS endpoint in your backend. For local development against HTTP or private addresses, set `OUTBOUND_URL_ALLOW_HTTP` or `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK`.
 
-Instead of repeating claim source settings on each credential configuration, you can:
+## 1. Implement the endpoint
 
-1. Create an Attribute Provider with the endpoint URL and authentication settings
-2. Reference the Attribute Provider by ID in one or more credential configurations
+EUDIPLO posts the session, the requested credential configuration and the identity of the authenticated user. Return the claims under the configuration ID:
 
-This approach offers several benefits:
-
-- **Reusability** – One Attribute Provider can serve multiple credential configurations
-- **Centralized management** – Update the URL or authentication in one place
-- **Separation of concerns** – Keep credential structure separate from data source configuration
-- **Security** – API keys and authentication details are stored once and referenced by ID
-
-## API Endpoints
-
-Attribute Providers are managed via the `/issuer/attribute-providers` endpoint:
-
-| Method   | Endpoint                           | Description                       |
-| -------- | ---------------------------------- | --------------------------------- |
-| `GET`    | `/issuer/attribute-providers`      | List all Attribute Providers      |
-| `GET`    | `/issuer/attribute-providers/{id}` | Get a specific Attribute Provider |
-| `POST`   | `/issuer/attribute-providers`      | Create a new Attribute Provider   |
-| `PATCH`  | `/issuer/attribute-providers/{id}` | Update an Attribute Provider      |
-| `DELETE` | `/issuer/attribute-providers/{id}` | Delete an Attribute Provider      |
-
-## Configuration
-
-### Required Fields
-
-| Field  | Type   | Description                                  |
-| ------ | ------ | -------------------------------------------- |
-| `id`   | string | Unique identifier for the Attribute Provider |
-| `name` | string | Human-readable name                          |
-| `url`  | string | HTTPS endpoint URL that returns claims       |
-
-### Optional Fields
-
-| Field         | Type   | Description                              |
-| ------------- | ------ | ---------------------------------------- |
-| `description` | string | Human-readable description               |
-| `auth`        | object | Authentication configuration (see below) |
-
-### Authentication Options
-
-#### No Authentication
-
-```json
-{
-    "auth": {
-        "type": "none"
-    }
-}
+```ts
+app.post("/claims", (req, res) => {
+    const { session, credential_configuration_id, identity, credentials } = req.body;
+    const member = members.findBySubject(identity.iss, identity.sub);
+    if (!member) return res.status(404).end(); // fails the credential request
+    res.json({
+        [credential_configuration_id]: { name: member.name, member_id: member.id },
+    });
+});
 ```
 
-#### API Key Authentication
+- `identity` describes the user behind the wallet's access token; what it contains per flow is listed in [Claims](claims.md#identity-passed-to-attribute-providers).
+- After a presentation (OID4VP authorization server or interactive authorization), `credentials` holds the verified presented claims, so you can derive the new credential from a PID.
+- Return every claim of the credential; the response replaces the static defaults and is validated against the configuration's `fields`.
+- To issue later, for example after a manual review, answer `{ "deferred": true }` and follow [Deferred issuance](deferred-issuance.md).
+- Any error status fails the credential request. EUDIPLO does not retry.
 
-Sends an API key in a request header:
-
-```json
-{
-    "auth": {
-        "type": "apiKey",
-        "config": {
-            "headerName": "x-api-key",
-            "value": "your-secret-api-key"
-        }
-    }
-}
-```
-
-## Example
-
-### Creating an Attribute Provider
+## 2. Register the provider
 
 ```bash
-POST /issuer/attribute-providers
-Content-Type: application/json
-Authorization: Bearer <your-token>
-
-{
-    "id": "employee-claims-api",
-    "name": "Employee Claims API",
-    "description": "Fetches employee data from HR system",
-    "url": "https://hr-api.example.com/claims",
+curl -X POST "$EUDIPLO_URL/api/issuer/attribute-providers" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "member-db",
+    "name": "Member database",
+    "url": "https://backend.example.com/claims",
     "auth": {
-        "type": "apiKey",
-        "config": {
-            "headerName": "Authorization",
-            "value": "Bearer hr-api-secret-token"
-        }
+      "type": "apiKey",
+      "config": { "headerName": "x-api-key", "value": "change-me" }
     }
-}
+  }'
 ```
 
-### Referencing in Credential Configuration
+`auth` is required: use `{ "type": "none" }` or an API key that EUDIPLO sends in the named header. Check it in your endpoint. In the web client, open **Attribute Providers**.
 
-Once created, reference the Attribute Provider in your credential configuration:
+## 3. Use it
+
+Reference the provider in the [credential configuration](credential-configuration.md) so that every issuance of this type uses it:
 
 ```json
 {
-    "id": "employee-badge",
-    "description": "Employee Badge Credential",
-    "config": {
-        "format": "dc+sd-jwt",
-        "display": [
-            {
-                "name": "Employee Badge",
-                "locale": "en-US"
-            }
-        ]
-    },
-    "attributeProviderId": "employee-claims-api"
+    "id": "membership",
+    "attributeProviderId": "member-db"
 }
 ```
 
-## Request and Response
-
-When EUDIPLO calls your Attribute Provider endpoint, it sends a POST request with issuance session context.
-
-### Request Format
+To use a different source for a single offer, set `credentialClaims` in the [offer request](credential-offers.md#choose-the-claim-source):
 
 ```json
 {
-    "session": "a6318799-dff4-4b60-9d1d-58703611bd23",
-    "credential_configuration_id": "employee-badge",
-    "identity": {
-        "iss": "https://idp.example.com/realms/myrealm",
-        "sub": "user-uuid-from-idp",
-        "token_claims": {
-            "email": "user@example.com",
-            "preferred_username": "jdoe",
-            "given_name": "John",
-            "family_name": "Doe"
-        }
-    }
-}
-```
-
-| Field                         | Type   | Description                                                                               |
-| ----------------------------- | ------ | ----------------------------------------------------------------------------------------- |
-| `session`                     | string | The session ID identifying the issuance request                                           |
-| `credential_configuration_id` | string | The ID of the credential configuration being requested                                    |
-| `identity`                    | object | Identity context from the authorization flow (see below)                                  |
-| `credentials`                 | array  | Verified presented credentials (only for OID4VP authorization servers, omitted otherwise) |
-
-### Identity Object
-
-The `identity` object contains information about the authenticated user. Its contents depend on the authorization flow used:
-
-| Field          | Type   | Description                                                              |
-| -------------- | ------ | ------------------------------------------------------------------------ |
-| `iss`          | string | The issuer URL of the authorization server                               |
-| `sub`          | string | The subject identifier (user ID) from the authorization server           |
-| `token_claims` | object | All available claims from the access token (and ID token for Chained AS) |
-
-#### Identity Sources by Flow
-
-| Flow                  | Identity Source                                                                                            |
-| --------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **External AS**       | Claims from the external authorization server's access token                                               |
-| **Chained AS**        | Claims from the upstream OIDC provider (merged ID token + access token)                                    |
-| **OID4VP AS**         | Access token claims of the tenant's OID4VP authorization server. The presented claims are in `credentials` |
-| **Pre-authenticated** | Not available (no user authentication)                                                                     |
-| **IAE**               | Identity from the IAE interaction (presentation or web redirect)                                           |
-
-### Presentation-Based Authorization
-
-When the wallet authorizes through an [OID4VP authorization server](authorization.md#oid4vp-authorization-server), the Attribute Provider receives the verified claims of the presented credentials in the `credentials` array. There is one entry per credential ID of the presentation's DCQL query. `values` is an array with the disclosed claims of each presented credential, because a query with `multiple: true` can match more than one credential:
-
-```json
-{
-    "session": "a6318799-dff4-4b60-9d1d-58703611bd23",
-    "credential_configuration_id": "citizen-credential",
-    "identity": {
-        "iss": "https://issuer.example.com/issuers/my-tenant/authorization-servers/pid-auth",
-        "sub": "wallet-client-id",
-        "token_claims": {
-            "issuer_state": "a6318799-dff4-4b60-9d1d-58703611bd23"
-        }
-    },
-    "credentials": [
-        {
-            "id": "pid",
-            "values": [
-                {
-                    "given_name": "John",
-                    "family_name": "Doe",
-                    "birthdate": "1990-01-15"
-                }
-            ]
-        }
-    ]
-}
-```
-
-Your Attribute Provider can use the presented credentials to derive or transform claims for the new credential being issued.
-
-:::note
-The `openid4vp_presentation` action of [Interactive Authorization (IAE)](../architecture/extension-points/iae.md) does not verify the presented credentials, so they are not forwarded in `credentials`.
-:::
-
-### Response Format
-
-#### Immediate Issuance
-
-Return the claims keyed by the credential configuration ID:
-
-```json
-{
-    "employee-badge": {
-        "employee_id": "EMP-12345",
-        "department": "Engineering",
-        "hire_date": "2023-01-15"
-    }
-}
-```
-
-#### Deferred Issuance
-
-To defer credential issuance (e.g., for background verification), return:
-
-```json
-{
-    "deferred": true,
-    "interval": 5
-}
-```
-
-See the [Architecture documentation](../architecture/extension-points/attribute-providers.md) for details on deferred issuance handling.
-
-## Offer-time Override
-
-You can override the Attribute Provider at offer creation time. For complete examples and usage patterns, see the [Claims](claims.md) page, which explains the priority system in detail.
-
-### Reference a Different Attribute Provider
-
-```json
-{
-    "flow": "pre_authorized_code",
-    "credentialConfigurationIds": ["employee-badge"],
     "credentialClaims": {
-        "employee-badge": {
-            "type": "attributeProvider",
-            "attributeProviderId": "staging-claims-api"
-        }
+        "membership": { "type": "attributeProvider", "attributeProviderId": "member-db-staging" }
     }
 }
 ```
 
-### Provide an Inline Webhook
+An offer can also define a one-off `webhook` source with the same contract. Offer sources take precedence over the configuration's provider; see [Claims](claims.md#sources-and-priority).
 
-```json
-{
-    "flow": "pre_authorized_code",
-    "credentialConfigurationIds": ["employee-badge"],
-    "credentialClaims": {
-        "employee-badge": {
-            "type": "webhook",
-            "webhook": {
-                "url": "https://test-api.example.com/claims",
-                "auth": {
-                    "type": "none"
-                }
-            }
-        }
-    }
-}
-```
+**Check:** issue a credential through an [offer](credential-offers.md) and inspect the request your endpoint received. A failing or unreachable endpoint makes the wallet's credential request fail with `invalid_credential_request`.
 
-### Provide Inline Claims
-
-```json
-{
-    "flow": "pre_authorized_code",
-    "credentialConfigurationIds": ["employee-badge"],
-    "credentialClaims": {
-        "employee-badge": {
-            "type": "inline",
-            "claims": {
-                "employee_id": "EMP-99999",
-                "department": "Test Department"
-            }
-        }
-    }
-}
-```
-
-## Best Practices
-
-1. **Use descriptive IDs** – Choose IDs that indicate the purpose (e.g., `hr-employee-data`, `kyc-verification-api`)
-
-2. **Secure your endpoints** – Always use HTTPS and configure authentication for production Attribute Providers
-
-3. **Handle errors gracefully** – Your endpoint should return appropriate HTTP status codes:
-    - `200` – Success with claims
-    - `404` – User not found (will result in issuance failure)
-    - `5xx` – Server error (EUDIPLO will retry or fail the issuance)
-
-4. **Log session IDs** – Include the `session` field in your logs for debugging and correlation
-
-5. **Test with inline webhooks** – Use offer-time webhook overrides during development and testing
-
-## Related Documentation
-
-- [Claims](claims.md) — Claims priority and resolution
-- [Credential Offers](credential-offers.md) — Offer-level overrides
-- [Architecture: Webhooks](../architecture/extension-points/webhooks.md) — Webhook integration patterns
+Attribute providers only supply claims. To learn whether the wallet stored the credential, use [notifications](notifications.md).

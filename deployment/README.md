@@ -3,7 +3,7 @@
 This directory contains deployment configurations for EUDIPLO with multiple profiles to match your infrastructure needs.
 
 **📖 For comprehensive deployment documentation, visit:**  
-**[https://docs.eudiplo.dev/deployment/](https://docs.eudiplo.dev/deployment/)**
+**[https://docs.eudiplo.dev/operate/](https://docs.eudiplo.dev/operate/)**
 
 ## Deployment Options
 
@@ -66,9 +66,9 @@ deployment/
 
 | Deployment         | Path                    | Documentation                                                                                                  | Use Case      |
 | ------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------- | ------------- |
-| **Quick Start**    | `../docker-compose.yml` | [Docker Compose Guide](https://docs.eudiplo.dev/deployment/docker-compose/) | Quick testing |
-| **Docker Compose** | `docker-compose/`       | [Docker Compose Guide](https://docs.eudiplo.dev/deployment/docker-compose/) | Development   |
-| **Kubernetes**     | `k8s/`                  | [Kubernetes Guide](https://docs.eudiplo.dev/deployment/kubernetes/)         | Production    |
+| **Quick Start**    | `../docker-compose.yml` | [Docker Compose Guide](https://docs.eudiplo.dev/operate/docker-compose/) | Quick testing |
+| **Docker Compose** | `docker-compose/`       | [Docker Compose Guide](https://docs.eudiplo.dev/operate/docker-compose/) | Development   |
+| **Kubernetes**     | `k8s/`                  | [Kubernetes Guide](https://docs.eudiplo.dev/operate/kubernetes/)         | Production    |
 
 ## Service Access
 

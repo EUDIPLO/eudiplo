@@ -1,43 +1,16 @@
-# Website
+# EUDIPLO documentation
 
-This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
+Docusaurus site published at [docs.eudiplo.dev](https://docs.eudiplo.dev). Pages live in `docs/`, the sidebar in `sidebars.ts`.
 
-## Installation
-
-```bash
-npm install
-```
-
-**Note**: feel free to use the package manager of your choice.
-
-## Local Development
+How to write and structure pages, the generated references and the deployment are described in [Contributing: Documentation](docs/contributing/documentation.md).
 
 ```bash
-npm run start
+pnpm --filter @eudiplo/config-format build    # once; needed by the generators
+pnpm --filter @eudiplo/docs run prebuild       # generate docs/_generated (env vars, CLI, schemas)
+pnpm --filter @eudiplo/docs start              # dev server on http://127.0.0.1:3003
+pnpm --filter @eudiplo/docs lint               # markdownlint
+pnpm --filter @eudiplo/docs test               # sidebar orphan check + generator tests
+pnpm --filter @eudiplo/docs typecheck          # site (run prebuild first)
+pnpm --filter @eudiplo/docs typecheck:scripts  # generator scripts
+pnpm --filter @eudiplo/docs build              # prebuild + production build (broken links and anchors fail)
 ```
-
-This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
-
-## Build
-
-```bash
-npm run build
-```
-
-This command generates static content into the `build` directory and can be served using any static contents hosting service.
-
-## Deployment
-
-Using SSH:
-
-```bash
-USE_SSH=true npm run deploy
-```
-
-Not using SSH:
-
-```bash
-GIT_USER=<Your GitHub username> npm run deploy
-```
-
-If you are using GitHub Pages for hosting, this command is a convenient way to build the website and push to the `gh-pages` branch.

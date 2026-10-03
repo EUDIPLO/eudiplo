@@ -143,8 +143,8 @@ describe("migration notes", () => {
 
     it("links the guide for every major version crossed", () => {
         expect(migrationNotes("6.2.0", "8.0.0")).toEqual([
-            "Major version 7: read https://docs.eudiplo.dev/migration/6.x-to-7.0 first.",
-            "Major version 8: read https://docs.eudiplo.dev/migration/7.x-to-8.0 first.",
+            "Major version 7: read https://docs.eudiplo.dev/upgrade/6.x-to-7.0 first.",
+            "Major version 8: read https://docs.eudiplo.dev/upgrade/7.x-to-8.0 first.",
         ]);
     });
 

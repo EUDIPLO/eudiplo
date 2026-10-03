@@ -95,3 +95,9 @@ updates:
       docker-compose-version:
         applies-to: version-updates
         patterns: ["*"]
+
+    # A PostgreSQL major upgrade needs a data migration (and postgres:18 moved
+    # its volume to /var/lib/postgresql), so majors are upgraded deliberately.
+    ignore:
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]

@@ -4,87 +4,37 @@ title: Contributing
 
 # Contributing
 
-EUDIPLO is organized as a **monorepo workspace** containing multiple applications and shared packages. This section guides you through the contributor journey from development setup to submitting changes.
+This section is for people who change EUDIPLO itself. Pick the task below; the process rules (issues, pull requests, DCO sign-off, commit messages) live in [`CONTRIBUTING.MD`](https://github.com/openwallet-foundation/eudiplo/blob/main/CONTRIBUTING.MD).
 
-## Contributor Journey
+| I want to… | Read |
+| --- | --- |
+| Set up the repository and run everything locally | [Development setup](./development-setup.md) |
+| Change the backend (endpoint, migration, env var, adapter) | [Backend architecture](./backend-architecture.md) |
+| Change the web client | [Client development](./client.md) |
+| Change the CLI | [CLI development](./cli.md) |
+| Change a configuration file format | [Configuration schemas](./configuration-schemas.md) |
+| Run or write tests (unit, E2E, OIDF conformance) | [Testing](./testing.md) |
+| Format and lint my change | [Code quality](./code-quality.md) |
+| Write or fix documentation | [Documentation](./documentation.md) |
+| Cut a release | [Releases](./releases.md) |
 
-1. **[Development Setup](./development-setup.md)** — Install dependencies, configure environment variables, and run locally
-2. **[Architecture Overview](../architecture/index.md)** — Understand the system architecture and design principles
-3. **[Repository Structure](./repository-structure.md)** — Navigate the monorepo layout and workspace conventions
-4. **[Backend Development](./backend.md)** — Build and extend the NestJS API server
-5. **[Client Development](./client.md)** — Work with the Angular management UI
-6. **[CLI Development](./cli.md)** — Develop and test the command-line interface
-7. **[Testing](./testing.md)** — Write and run unit tests
-8. **[E2E Testing](./e2e-testing.md)** — Integration and end-to-end test workflows
-9. **[Conformance Testing](./conformance-testing.md)** — OIDF conformance suite integration
-10. **[Documentation](./documentation.md)** — Contributing to documentation
-11. **[Releases](./releases.md)** — Versioning, release process, and backward compatibility
-12. **[Code Quality](./code-quality.md)** — Formatting, linting, and style guidelines
-13. **[Logging Configuration](./logging-configuration.md)** — Debugging with logs and observability
-
-## Quick Start
+## Quick start
 
 ```bash
-# Install all dependencies
 pnpm install
+pnpm --filter @eudiplo/config-format build
+pnpm --filter @eudiplo/sdk-core build
+cp .env.example apps/backend/.env   # then set MASTER_SECRET, AUTH_CLIENT_ID, AUTH_CLIENT_SECRET
 
-# Start all applications
-pnpm run dev
-
-# Or start specific applications
-pnpm --filter @eudiplo/backend run start:dev
-pnpm --filter @eudiplo/client run dev
+pnpm dev:backend   # NestJS API on http://localhost:3000 (nest start --watch)
+pnpm dev:client    # Angular client on http://localhost:4200
 ```
 
-## Backend (NestJS)
+The backend package also has `start` (no watch) and `start:debug` (watch with the Node inspector). [Development setup](./development-setup.md) explains each step.
 
-The backend is built with [NestJS](https://nestjs.com/), a progressive Node.js framework for building efficient, scalable server-side applications using TypeScript.
+## Before you open a pull request
 
-### Source Code Structure
-
-Each module typically contains its own:
-
-- `controller.ts` — API endpoints
-- `service.ts` — Business logic
-- `dto/` — Data Transfer Objects
-- `entities/` — TypeORM entities (if needed)
-
-## Useful Development Scripts
-
-```bash
-# Development
-pnpm --filter @eudiplo/backend run dev
-pnpm --filter @eudiplo/backend run start:debug
-pnpm --filter @eudiplo/backend run build
-
-# Testing
-pnpm run test             # Run unit tests
-pnpm --filter @eudiplo/backend run test:watch
-pnpm --filter @eudiplo/backend run test:e2e
-pnpm --filter @eudiplo/backend exec vitest run --coverage --config ./vitest.config.ts
-pnpm --filter @eudiplo/backend run test:debug
-
-# Code Quality
-pnpm -r run format        # Format all files with each package formatter
-pnpm -r run format:check  # Check formatting without changes
-pnpm run lint             # Run linting checks
-pnpm run lint:fix         # Fix linting issues automatically
-
-# Documentation
-pnpm --filter @eudiplo/docs start  # Serve Docusaurus with live reload
-pnpm --filter @eudiplo/docs build  # Build documentation
-```
-
-## General Guidelines
-
-- Follow the coding standards in [Code Quality](./code-quality.md)
-- Write tests for new features (see [Testing](./testing.md))
-- Update documentation when changing behavior
-- Use [Conventional Commits](https://www.conventionalcommits.org/) for commit messages
-- All commits must be signed (see [Releases](./releases.md))
-
-For detailed contribution guidelines, see the [CONTRIBUTING.md](https://github.com/openwallet-foundation/eudiplo/blob/main/CONTRIBUTING.md) file in the repository root.
-
-## Contributions Welcome
-
-Feel free to contribute by improving documentation, fixing bugs, or extending functionality. Make sure to follow the coding standards and write tests where applicable.
+- Run the checks of the packages you touched: `pnpm run lint`, `pnpm run format:check` and the relevant tests.
+- Sign off every commit (`git commit -s`) and use [Conventional Commits](https://www.conventionalcommits.org/).
+- A breaking change needs a `!` or a `BREAKING CHANGE:` footer and an entry in the [upgrade guide](../upgrade/index.md) of the next major.
+- Update the documentation page that owns the behavior you changed.

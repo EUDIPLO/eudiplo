@@ -1,169 +1,69 @@
 ---
-title: Claims Resolution
+title: Claim sources
+sidebar_label: Claims
 ---
 
-EUDIPLO provides multiple methods for supplying credential claims during issuance. Understanding how these sources interact is essential for building flexible issuance flows.
+Decide where the claim values of a credential come from. EUDIPLO picks exactly one source per credential, validates the result against the credential configuration and only then signs.
 
-## Claims Sources
+## Sources and priority
 
-Credentials can receive claim values from three sources:
+For each credential configuration in an offer, EUDIPLO uses the first source that applies:
 
-1. **Configuration-level static claims** — Default values defined in the credential configuration's `fields[]`
-2. **Configuration-level Attribute Provider** — Dynamic claims fetched from an external endpoint via `attributeProviderId`
-3. **Offer-level claims** — Claims provided at offer creation time via `credentialClaims`
+| Priority | Source | Where it is set |
+| --- | --- | --- |
+| 1 | **Offer claims** (`credentialClaims`): `inline` values, an `attributeProvider` reference or a one-off `webhook` | [Offer request](credential-offers.md#choose-the-claim-source) |
+| 2 | **Configuration attribute provider** | `attributeProviderId` of the [credential configuration](credential-configuration.md) |
+| 3 | **Static defaults** | `defaultValue` of each entry in `fields[]` |
 
-## Priority Order
+Sources are not merged. If an offer passes inline claims, the configuration's attribute provider is not called and the static defaults are ignored; if an attribute provider answers, its claims replace all defaults. Return every claim from the source you use, including fixed values such as the issuing country.
 
-When multiple claim sources are available, EUDIPLO uses the following priority order (highest to lowest):
+An attribute provider or webhook may also answer that the credential is not ready yet; see [Deferred issuance](deferred-issuance.md).
 
-1. **Offer-level claims** — Inline claims, webhook, or attribute provider reference passed at offer time
-2. **Configuration-level attribute provider** — The `attributeProviderId` on the credential configuration
-3. **Configuration-level static claims** — The `defaultValue` fields in the credential configuration's `fields[]`
+### When to use which source
 
-:::warning[Claims are not merged]
-Higher priority sources **completely override** lower priority sources. If offer-level claims are provided, the configuration-level attribute provider will not be called, and static defaults will not be used.
+- **Static defaults:** demos, tests and credentials whose values never change.
+- **Inline offer claims:** your backend already knows the values when it creates the offer, typically with the pre-authorized code flow.
+- **Attribute provider:** the values depend on who authenticated (authorization code flow) or on a previous presentation, or you do not want claim values in the offer. Configure it once on the credential configuration; override it per offer with `credentialClaims` only when needed. See [Attribute providers](attribute-provider.md).
 
-This is an all-or-nothing replacement, not a merge operation.
-:::
+## External authorization servers need a dynamic source
 
-## When to Use Each Method
+When the wallet's access token comes from an [external authorization server](authorization-servers.md#external), static defaults are not accepted: the claims must come from the offer (`credentialClaims`) or from the configuration's attribute provider. Otherwise the credential request fails. All other flows fall back to the static defaults.
 
-### Configuration-Level Static Claims
+## Identity passed to attribute providers
 
-Use static defaults in the credential configuration's `fields[]` when:
+Attribute providers and offer webhooks receive an `identity` object with `iss`, `sub` and `token_claims`. It always describes the access token that the wallet presented at the credential endpoint, with one exception for the chained authorization server:
 
-- Claims are fixed metadata that never changes (e.g., issuing country, issuing authority)
-- You want default values for all credentials of this type
-- You're building test/demo credentials with fixed sample data
+| Flow | `iss` | `sub` | `token_claims` |
+| --- | --- | --- | --- |
+| Pre-authorized code, built-in authorization server, [interactive authorization](interactive-authorization.md) | EUDIPLO credential issuer URL | Session ID | Claims of EUDIPLO's access token |
+| [External](authorization-servers.md#external) | External authorization server | Subject of its token | Claims of the external access token |
+| [Chained](authorization-servers.md#chained) | Upstream OpenID provider | Upstream user ID | Upstream ID token claims merged over the upstream access token claims |
+| [OID4VP](authorization-servers.md#oid4vp) | OID4VP authorization server URL | The wallet's `client_id` | Claims of EUDIPLO's access token |
 
-**Example:**
+After a presentation (OID4VP authorization server or an interactive authorization presentation step), the request also contains the verified presented claims in `credentials`. The exact request and response format is in the [Attribute provider API](../reference/attribute-provider-api.md).
 
-```json
-{
-    "fields": [
-        {
-            "path": ["issuing_country"],
-            "type": "string",
-            "defaultValue": "DE",
-            "mandatory": true
-        }
-    ]
-}
-```
+## Validation
 
-### Configuration-Level Attribute Provider
+When a credential configuration defines `fields`, EUDIPLO derives a JSON schema from them and validates the final claims of every source right before signing. Since 9.0, this also covers claims returned by attribute providers and webhooks and claims supplied when completing a [deferred transaction](deferred-issuance.md). Inline offer claims are additionally checked when the offer is created; invalid ones are rejected with `409`.
 
-Use an Attribute Provider in the credential configuration when:
+A credential is not issued if the claims:
 
-- Claims should be fetched from an external system or database
-- Claims depend on the authenticated user's identity
-- Claims are personalized based on the authorization context
-- You want all credentials of this type to use the same data source
+- miss a claim marked `mandatory: true`,
+- contain a value of a different `type`,
+- contain a claim that is not defined in `fields` (at the top level or inside an object with `children`), or
+- contain an invalid nested structure.
 
-**Example:**
+The wallet receives `credential_request_denied` with the affected paths, for example `/address/street_address: must be string`. Claim values are never included in the message.
+
+To allow additional properties inside an object, set `additionalProperties` in its `constraints`. An `object` field without `children` accepts any properties.
 
 ```json
 {
-    "id": "employee-badge",
-    "attributeProviderId": "hr-claims-api",
-    "fields": [/* field definitions */]
+    "path": ["metadata"],
+    "type": "object",
+    "constraints": { "additionalProperties": true },
+    "children": [{ "path": ["source"], "type": "string" }]
 }
 ```
 
-For details on creating and configuring Attribute Providers, see [Attribute Providers](attribute-provider.md).
-
-### Offer-Level Claims
-
-Use offer-level claims when:
-
-- Claim values are already known at offer creation time
-- You want to override the configuration-level behavior for a specific issuance
-- You're testing with specific test data
-- Different offers should use different data sources
-
-**Example (inline claims):**
-
-```json
-{
-    "flow": "pre_authorized_code",
-    "credentialConfigurationIds": ["employee-badge"],
-    "credentialClaims": {
-        "employee-badge": {
-            "type": "inline",
-            "claims": {
-                "employee_id": "EMP-99999",
-                "department": "Test Department"
-            }
-        }
-    }
-}
-```
-
-**Example (webhook override):**
-
-```json
-{
-    "flow": "pre_authorized_code",
-    "credentialConfigurationIds": ["employee-badge"],
-    "credentialClaims": {
-        "employee-badge": {
-            "type": "webhook",
-            "webhook": {
-                "url": "https://staging-api.example.com/claims",
-                "auth": {
-                    "type": "apiKey",
-                    "config": {
-                        "headerName": "x-api-key",
-                        "value": "staging-key"
-                    }
-                }
-            }
-        }
-    }
-}
-```
-
-For complete offer request syntax, see [Credential Offers](credential-offers.md#passing-claims).
-
-## Conflict Handling
-
-Since claims sources completely override each other (no merging), conflicts between sources cannot occur. The highest-priority source wins.
-
-**Example scenario:**
-
-- Configuration defines `given_name: "Default"` in static fields
-- Configuration also has `attributeProviderId: "hr-api"`
-- Offer provides inline claims with `given_name: "Alice"`
-
-**Result:** The credential receives `given_name: "Alice"`. The configuration-level Attribute Provider is never called, and the static default is ignored.
-
-## Identity Context
-
-When using Attribute Providers or offer-level webhooks, the endpoint receives identity context from the authorization flow. The contents depend on the flow type:
-
-| Flow                  | Identity Source                                                         |
-| --------------------- | ----------------------------------------------------------------------- |
-| **External AS**       | Claims from the external authorization server's access token            |
-| **Chained AS**        | Claims from the upstream OIDC provider (merged ID token + access token) |
-| **Pre-authenticated** | Not available (no user authentication)                                  |
-| **IAE**               | Identity from the IAE interaction (presentation or web redirect)        |
-
-For request/response format details, see [Attribute Providers](attribute-provider.md#request-and-response).
-
-## Best Practices
-
-1. **Use static claims for fixed metadata** — Values like issuing country, schema version, or credential type that never change.
-
-2. **Use configuration-level Attribute Providers as the default** — When all credentials of a type should fetch from the same source.
-
-3. **Use offer-level overrides sparingly** — Only when you need per-offer customization or testing.
-
-4. **Keep claim keys consistent** — Use the same claim names across all sources to avoid confusion.
-
-5. **Document your claim sources** — Make it clear where each claim comes from in your integration documentation.
-
-## Related Documentation
-
-- [Attribute Providers](attribute-provider.md) — External claim sources
-- [Credential Offers](credential-offers.md) — Offer-level claim overrides
-- [Credential Configuration](credential-configuration.md) — Static field defaults
+Configurations without `fields` are not validated.

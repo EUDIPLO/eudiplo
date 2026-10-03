@@ -1,22 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { createZodDto } from "nestjs-zod";
-import { z } from "zod";
 import type { SessionOfferRequest } from "../../../../session/domain/session-data.js";
-import {
-    ResponseType,
-    type ResponseTypeValue,
-} from "../../../../verifier/oid4vp/dto/presentation-request.dto.js";
-import {
-    WebhookConfig,
-    WebhookConfigSchema,
-} from "../../../../webhook/webhook.dto.js";
+import type { ResponseTypeValue } from "../../../../verifier/oid4vp/dto/presentation-request.dto.js";
+import type { WebhookConfig } from "../../../../webhook/webhook.dto.js";
+import { type FlowType, OfferRequestSchema } from "./offer-request.schema.js";
 
-export const FlowType = {
-    AUTH_CODE: "authorization_code",
-    PRE_AUTH_CODE: "pre_authorized_code",
-} as const;
-
-export type FlowType = (typeof FlowType)[keyof typeof FlowType];
+export { FlowType } from "./offer-request.schema.js";
 
 /**
  * Inline claims source - claims provided directly in the request.
@@ -26,72 +15,6 @@ class InlineClaimsSource {
 
     claims!: Record<string, any>;
 }
-
-const InlineClaimsSourceSchema = z
-    .object({
-        type: z.literal("inline"),
-        claims: z.record(z.string(), z.unknown()),
-    })
-    .strict();
-
-const AttributeProviderClaimsSourceSchema = z
-    .object({
-        type: z.literal("attributeProvider"),
-        attributeProviderId: z.string(),
-    })
-    .strict();
-
-const WebhookClaimsSourceSchema = z
-    .object({
-        type: z.literal("webhook"),
-        webhook: WebhookConfigSchema,
-    })
-    .strict();
-
-const ClaimsSourceSchema = z.union([
-    InlineClaimsSourceSchema,
-    AttributeProviderClaimsSourceSchema,
-    WebhookClaimsSourceSchema,
-]);
-
-const OfferRequestSchema = z
-    .object({
-        response_type: z.union([
-            z.literal(ResponseType.URI),
-            z.literal(ResponseType.DC_API),
-            z.literal(ResponseType.ISO_18013_7),
-        ]),
-        flow: z.union([
-            z.literal(FlowType.AUTH_CODE),
-            z.literal(FlowType.PRE_AUTH_CODE),
-        ]),
-        tx_code: z.string().optional(),
-        tx_code_description: z.string().optional(),
-        credentialConfigurationIds: z.array(z.string()),
-        authorization_server: z.string().optional(),
-        credentialClaims: z.record(z.string(), ClaimsSourceSchema).optional(),
-        webhookEndpointId: z.string().optional(),
-        offerLifetimeSeconds: z.coerce.number().int().min(1).optional(),
-    })
-    .strict()
-    .superRefine((data, ctx) => {
-        if (!data.credentialClaims) {
-            return;
-        }
-
-        const allowed = new Set(data.credentialConfigurationIds);
-        const invalidKeys = Object.keys(data.credentialClaims).filter(
-            (key) => !allowed.has(key),
-        );
-
-        if (invalidKeys.length > 0) {
-            ctx.addIssue({
-                code: "custom",
-                path: ["credentialClaims"],
-                message: `credentialClaims contains keys [${invalidKeys.join(", ")}] that are not in credentialConfigurationIds [${data.credentialConfigurationIds.join(", ")}]`,
-            });
-        }
-    });
 
 interface OfferRequestData {
     response_type: ResponseTypeValue;

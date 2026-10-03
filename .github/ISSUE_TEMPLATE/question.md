@@ -47,7 +47,7 @@ Please complete the following information:
 Have you checked the following resources?
 
 - [ ] README.md
-- [ ] Documentation in `/docs`
+- [ ] Documentation at https://docs.eudiplo.dev
 - [ ] API documentation
 - [ ] Existing issues/discussions
 

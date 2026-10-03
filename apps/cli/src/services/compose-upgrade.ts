@@ -117,7 +117,7 @@ function compareVersions(a: Version, b: Version): number {
     return a.major - b.major || a.minor - b.minor || a.patch - b.patch;
 }
 
-const migrationBaseUrl = "https://docs.eudiplo.dev/migration";
+const migrationBaseUrl = "https://docs.eudiplo.dev/upgrade";
 
 /**
  * Notes to show before an upgrade: the migration guide for every major

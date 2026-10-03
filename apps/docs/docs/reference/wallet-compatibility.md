@@ -1,131 +1,96 @@
 ---
 title: Wallet Compatibility
+description: Wallets tested with EUDIPLO, their supported features and how to test a new wallet.
 ---
 
-EUDIPLO is designed to work with **EUDI-compliant wallets** that implement the supported protocols ([OID4VCI](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html), [OID4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html), and [SD-JWT VC](https://www.ietf.org/archive/id/draft-ietf-oauth-selective-disclosure-jwt-08.html)).
+# Wallet compatibility
 
-This page provides information about tested wallets, compatibility status, and guidance for testing new wallets with EUDIPLO.
+This page records which wallets have been tested with EUDIPLO and which features worked. EUDIPLO itself is tested against the [OpenID Foundation conformance suite](https://openid.net/certification/about-conformance-suite/) for OID4VCI and OID4VP with every change, so a wallet that passes the same suite should work without wallet-specific configuration.
 
-## Conformance Testing
+If a conformant wallet does not work with EUDIPLO, [open an issue](https://github.com/openwallet-foundation/eudiplo/issues/new).
 
-With the rapidly evolving EUDI wallet ecosystem and frequent updates across multiple wallets, it is not feasible to manually test every wallet with every EUDIPLO release. Instead, EUDIPLO ensures interoperability through **automated conformance testing**.
+## Tested wallets
 
-EUDIPLO is tested with every code change against the [OpenID Foundation Conformance Test Suite](https://openid.net/certification/about-conformance-suite/) for both **issuance (OID4VCI)** and **presentation (OID4VP)**. This ensures that EUDIPLO consistently adheres to the official specifications.
-
-:::tip[Compatibility Guarantee]
-Any wallet that also passes the OIDF Conformance Test Suite should be compatible with EUDIPLO out of the box. If you encounter issues with a conformant wallet, please [report it](https://github.com/openwallet-foundation/eudiplo/issues/new) so we can investigate.
-:::
-
-## Tested Wallets
-
-The following wallets have been tested and verified to work with EUDIPLO:
-
-| Wallet                      | Provider                                                                       | Download                                                                                                                                              | Features                                |
+| Wallet                      | Provider                                                                       | Download                                                                                                                                              | Details                                 |
 | --------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
 | EU Reference Implementation | [EC](https://github.com/eu-digital-identity-wallet/eudi-app-android-wallet-ui) | [Android](https://github.com/eu-digital-identity-wallet/eudi-app-android-wallet-ui/releases)                                                          | [Details](#reference-implementation)    |
 | Paradym Wallet              | [Animo](https://animo.id)                                                      | [Android](https://play.google.com/store/apps/details?id=id.paradym.wallet) / [iOS](https://apps.apple.com/nl/app/paradym-wallet/id6449846111?l=en-GB) | [Details](#paradym-wallet)              |
 | Multipaz                    | [Multipaz](https://multipaz.com)                                               | [Android](https://apps.multipaz.org/)                                                                                                                 | [Details](#multipaz)                    |
 | AV Reference Implementation | [EC](https://github.com/eu-digital-identity-wallet/av-app-android-wallet-ui)   | [Android](https://github.com/eu-digital-identity-wallet/av-app-android-wallet-ui/releases)                                                            | [Details](#av-reference-implementation) |
 
-### Feature Support Details
+### Feature matrix
 
-#### Feature Legend
+| Wallet                      | Auth | Pre | IAE | DPoP | Att | DC API | Annex C | SD-JWT | mdoc |
+| --------------------------- | ---- | --- | --- | ---- | --- | ------ | ------- | ------ | ---- |
+| Reference Implementation    | ✅   | ✅  | n/a | ✅   | ✅  | n/a    | —       | ✅     | ✅   |
+| Paradym Wallet              | ✅   | ✅  | n/a | ✅   | n/a | ✅     | —       | ✅     | ✅   |
+| Multipaz                    | ✅   | ✅  | n/a | ✅   | n/a | ✅     | —       | ✅     | ✅   |
+| AV Reference Implementation | —    | ✅  | n/a | —    | —   | —      | ✅      | n/a    | ✅   |
 
-- **Issuance (OID4VCI)**
-    - **Auth**: Authorization Code Flow
-    - **Pre**: Pre-authorized Code Flow
-    - **IAE**: Interactive Authorization Endpoint (IAE) support
-    - **DPoP**: DPoP proof of possession
-    - **Att**: Wallet attestation support
-- **Presentation (OID4VP)**
-    - **DC API**: Digital Credentials API support
-- **Presentation (ISO 18013-7)**
-    - **Annex C**: `org-iso-mdoc` protocol via the Digital Credentials API
-- **Credential Format**
-    - **SD-JWT**: SD-JWT VC support
+| Column  | Meaning                                                                                   |
+| ------- | ----------------------------------------------------------------------------------------- |
+| Auth    | OID4VCI authorization code flow                                                           |
+| Pre     | OID4VCI pre-authorized code flow                                                          |
+| IAE     | OID4VCI interactive authorization endpoint                                                |
+| DPoP    | DPoP-bound access tokens                                                                  |
+| Att     | Wallet attestation (OAuth client attestation)                                             |
+| DC API  | OID4VP over the Digital Credentials API                                                   |
+| Annex C | ISO 18013-7 Annex C (`org-iso-mdoc`) over the Digital Credentials API                     |
+| SD-JWT  | SD-JWT VC credentials (`dc+sd-jwt`)                                                       |
+| mdoc    | mdoc credentials (`mso_mdoc`)                                                             |
+| Values  | ✅ works · — not yet tested with EUDIPLO · n/a the wallet does not support the feature    |
 
-:::note[KISS: Keep It Simple, Stupid]
-The legend above explains the abbreviations used in the feature matrix below. If you think any other features should be tracked, please let us know!
-:::
+### Reference Implementation
 
-#### Feature Matrix
+- **Version tested:** 2026.02.26-Demo
+- **Last verified:** February 26, 2026
+- **Notes:** requires wallet attestation.
+- **Logs:** in the app, **Settings → Retrieve Logs**.
 
-| Wallet                      | Auth | Pre | IAE | DPoP | Att | DC API | Annex C | SD-JWT | Mdocs |
-| --------------------------- | ---- | --- | --- | ---- | --- | ------ | ------- | ------ | ----- |
-| Reference Implementation    | ✅   | ✅  | n/a | ✅   | ✅  | n/a    | —       | ✅     | ✅    |
-| Paradym Wallet              | ✅   | ✅  | n/a | ✅   | n/a | ✅     | —       | ✅     | ✅    |
-| Multipaz                    | ✅   | ✅  | n/a | ✅   | n/a | ✅     | —       | ✅     | ✅    |
-| AV Reference Implementation | —    | ✅  | n/a | —    | —   | —      | ✅      | n/a    | ✅    |
+### Paradym Wallet
 
-("—" means not yet tested against EUDIPLO.)
+- **Version tested:** 1.20.2
+- **Last verified:** September 21, 2026
+- **Notes:** the status list and the credential must be signed with the same certificate. The wallet cannot yet handle differing `trusted_authorities` in a DCQL query; such queries result in no match.
+- **Logs:** in the app, **Settings → Export Logs**.
 
-#### Individual Wallet Details
+### Multipaz
 
-##### Reference Implementation
+- **Version tested:** 2026.W24.0-impl-verification-links-17-git-6cfc8e8
+- **Last verified:** June 17, 2026
+- **Notes:** shows the credential's logo on the card.
 
-- **Version tested**: 2026.02.26-Demo
-- **Last verified**: February 26, 2026
-- **Notes**:
-    - Forces Wallet attestation
-- **Log access**: Inside the app, go to "Setting" > "Retrieve Logs"
+### AV Reference Implementation
 
-##### Paradym Wallet
+- **Version tested:** July 2026 demo build (Android, Digital Credentials API in Chrome)
+- **Last verified:** July 9, 2026
+- **Notes:**
+    - Tested for ISO 18013-7 Annex C: mdoc issuance with the pre-authorized code flow, and `org-iso-mdoc` presentation over the Digital Credentials API, including HPKE response decryption and DeviceAuth verification.
+    - mdoc-only wallet; SD-JWT VC does not apply.
+    - Its reference IACA and document signer certificates carry a malformed `issuerAltName` extension. EUDIPLO parses them with a tolerant X.509 extension parser (reported upstream).
 
-- **Version tested**: 1.20.2
-- **Last verified**: Sep 21, 2026
-- **Notes**:
-    - Needs to use the same certificate for status list and signed credential. Cannot handle different `trusted_authorities` in the DCQL during presentation yet (which result in no match).
-- **Log access**: Inside the app, go to "Settings" > "Export Logs"
+## Testing a new wallet
 
-:::note[Help us expand this list!]
-If you have successfully tested EUDIPLO with a wallet not listed here, please [reach out to us](https://github.com/openwallet-foundation/eudiplo/issues/new?template=wallet-compatibility.md) so we can add it to this list.
-:::
+Protocol conformance is tested automatically; wallet-specific behavior still needs a manual run.
 
-##### Multipaz
+1. **Set up EUDIPLO.** Follow [Foundation](../cookbooks/foundation.md) and [Issue your first credential](../cookbooks/first-credential.md). A mobile wallet needs a public HTTPS URL, so set `PUBLIC_URL` to a tunnel or public host. Without the CLI, a minimal container is:
 
-- **Version tested**: 2026.W24.0-impl-verification-links-17-git-6cfc8e8
-- **Last verified**: June 17, 2026
-- **Notes**:
-    - Using the logo for the card of a credential
+   ```bash
+   docker run -d --name eudiplo -p 3000:3000 \
+     -e PUBLIC_URL=https://your-public-host.example \
+     -e MASTER_SECRET="$(openssl rand -base64 32)" \
+     -e AUTH_CLIENT_ID=root \
+     -e AUTH_CLIENT_SECRET="$(openssl rand -base64 24)" \
+     ghcr.io/openwallet-foundation/eudiplo:latest
+   ```
 
-##### AV Reference Implementation
+2. **Start with a known-good configuration.** Create a credential configuration from a template (for example PID as SD-JWT VC), make sure the tenant has signing keys and certificates, and leave DPoP off for the first run.
+3. **Test issuance.** The pre-authorized code flow is required: create an offer, scan it, and confirm the credential is stored. Then test the authorization code flow if the wallet supports it, and confirm that a redeemed or expired offer is rejected.
+4. **Test presentation.** Create a request from a presentation configuration and run it cross-device (QR code on another device) and, if supported, same-device. Confirm the session completes with the expected claims, then repeat with a query that requests fewer claims to check selective disclosure.
+5. **Record the result.** Note the wallet name and exact version, device and OS version, which flows passed or failed, configuration changes you needed (for example DPoP off), and error messages or wallet logs.
 
-- **Version tested**: July 2026 demo build (Android, via Chrome DC API)
-- **Last verified**: July 9, 2026
-- **Notes**:
-    - Tested for the ISO 18013-7 Annex C flow: mdoc issuance (pre-authorized code flow) and `org-iso-mdoc` presentation via the Digital Credentials API, including HPKE response decryption and DeviceAuth verification.
-    - mdoc-only wallet; SD-JWT VC is not applicable.
-    - Its reference IACA/DS certificates carry a malformed `issuerAltName` extension; EUDIPLO parses them through a tolerant X.509 extension parser registered at startup (reported upstream).
+## Report results
 
-## Testing New Wallets
-
-EUDIPLO validates protocol interoperability automatically (OIDF conformance), but wallet-specific behavior should still be verified manually.
-
-The following workflow is the recommended way to test a new wallet end-to-end.
-
-### 1. Setup a Test Environment
-
-1. Start EUDIPLO using the [Quick Start](../getting-started/quick-start.md).
-2. Complete the initial tenant and credential setup from [Issue Your First Credential](../getting-started/first-credential.md).
-3. For testing with a mobile wallet, expose EUDIPLO on a public HTTPS URL and set `PUBLIC_URL` to that URL (for example via ngrok as described in [Running Locally](../contributing/development-setup.md)).
-
-Minimal backend example:
-
-```bash
-docker run -d \
-  --name eudiplo \
-  -p 3000:3000 \
-  -e PUBLIC_URL=https://your-public-host.example \
-  -e MASTER_SECRET=$(openssl rand -base64 32) \
-  -e AUTH_CLIENT_ID=demo \
-  -e AUTH_CLIENT_SECRET=demo-secret \
-  ghcr.io/openwallet-foundation-labs/eudiplo:latest
-```
-
-### 2. Prepare Wallet-Compatible Test Data
-
-Use a minimal, known-good configuration first:
-
-1. Create a credential configuration from a template (for example PID SD-JWT VC).
-2. Configure issuance with **DPoP disabled** for initial compatibility checks.
-3. Ensure signing keys/certificates are available for the tenant.
+- **Wallet works:** open an issue with the [wallet compatibility template](https://github.com/openwallet-foundation/eudiplo/issues/new?template=wallet-compatibility.md) and include the results from step 5, so the wallet can be added to this page.
+- **Wallet fails:** check the notes above, then open an [issue](https://github.com/openwallet-foundation/eudiplo/issues/new) with reproduction steps, EUDIPLO and wallet versions, and the [session logs](../operate/logging.md).
+- **Questions:** ask in the [Discord community](https://discord.gg/58ys8XfXDu).

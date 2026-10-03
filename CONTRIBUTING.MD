@@ -1,190 +1,138 @@
 # Contributing to EUDIPLO
 
-Thanks for your interest in contributing to **EUDIPLO** – your help is highly appreciated! 🎉
-
-This guide will walk you through the steps to report issues, suggest features, and contribute code or documentation.
+Thanks for your interest in contributing to **EUDIPLO**! This file describes the process: issues, pull requests and commit rules. The technical guides (setup, architecture, tests, documentation, releases) are in the [Contributing section of the documentation](https://docs.eudiplo.dev/contributing) (`apps/docs/docs/contributing/`).
 
 ---
 
-## Reporting Issues
+## Reporting issues
 
-If you find a bug, glitch, or unclear behavior:
+1. **Search** the existing [issues](https://github.com/openwallet-foundation/eudiplo/issues) to avoid duplicates.
+2. If there is none, **open a new issue** with:
+   - a short description,
+   - steps to reproduce,
+   - the EUDIPLO version (image tag or commit) and your environment,
+   - logs or screenshots, with secrets and personal data removed.
 
-1. **Search** existing [issues](https://github.com/openwallet-foundation/eudiplo/issues) to avoid duplicates.
-2. If not found, **open a new issue** and include:
-   - A short description
-   - Steps to reproduce
-   - Your environment (OS, Docker version, etc.)
-   - Logs or screenshots if possible
+Report security vulnerabilities privately as described in [SECURITY.md](SECURITY.md), not in a public issue.
 
----
+## Suggesting enhancements
 
-## Suggesting Enhancements
+Open an issue with the `feature request` label and describe the problem you want to solve, the proposed solution and the alternatives you considered.
 
-Have an idea to improve EUDIPLO?
+## Finding something to work on
 
-- Check if a [feature request](https://github.com/openwallet-foundation/eudiplo/issues) already exists
-- Open a new issue with a `feature request` label and describe:
-  - The problem you want to solve
-  - The proposed solution
-  - Alternatives considered (if any)
+- Issues labeled [`good first issue`](https://github.com/openwallet-foundation/eudiplo/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+- Findings on the [SonarCloud dashboard](https://sonarcloud.io/project/overview?id=openwallet-foundation_eudiplo) (code smells, bugs, security hotspots). They are self-contained and a good way to learn the codebase.
+- For backend refactoring, the [refactoring plan](apps/backend/docs/refactoring-plan.md). Pick one bounded slice before you start.
 
 ---
 
-## Finding Issues to Work On
+## Getting started
 
-Looking for a good first contribution? Here are some places to start:
-
-### Good First Issues
-
-Check our [GitHub issues labeled `good first issue`](https://github.com/openwallet-foundation/eudiplo/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for beginner-friendly tasks.
-
-### SonarCloud Code Quality Issues
-
-Our [SonarCloud dashboard](https://sonarcloud.io/project/overview?id=openwallet-foundation_eudiplo) shows code quality issues that make excellent first contributions:
-
-- **Code Smells** – Small improvements to code readability and maintainability
-- **Bugs** – Potential issues detected by static analysis
-- **Security Hotspots** – Areas that need security review
-
-These issues are self-contained, have clear guidance, and help you learn the codebase while improving code quality.
-
----
-
-## Getting Started
-
-### Option A: Local Development
-
-1. **Fork the repo** and clone it locally:
-
-   ```bash
-   git clone https://github.com/your-username/eudiplo.git
-   cd eudiplo
-   ```
-
-2. **Install dependencies** for the entire workspace:
-
-   ```bash
-   corepack enable
-   pnpm install
-   ```
-
-3. **Set up your environment** for development:
-
-   ```bash
-   cp .env.example .env
-   
-   # Then set MASTER_SECRET, AUTH_CLIENT_ID and AUTH_CLIENT_SECRET
-   ```
-
-4. **Start the application(s)** you want to work on:
-
-   ```bash
-   # Option I:
-   # Start just the backend
-   pnpm run dev:backend
-   
-   # Start the generation of the SDK & API (requires a started backend)
-   pnpm run gen:all
-
-   # Start just the client (requires a generated SDK & API)
-   pnpm run dev:client
-
-   # Option II:
-   # Or start all with Docker Compose
-   docker compose up -d
-   ```
-
-### Option B: Dev Container (No Node.js Installation Required)
-
-If you can't or don't want to install Node.js locally, use VS Code Dev Containers:
-
-1. **Prerequisites**: Install [Docker](https://docs.docker.com/get-docker/) and [VS Code](https://code.visualstudio.com/) with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-
-2. **Clone and open in VS Code**:
-
-   ```bash
-   git clone https://github.com/your-username/eudiplo.git
-   cd eudiplo
-   code .
-   ```
-
-3. **Reopen in Container**: Press `F1` → "Dev Containers: Reopen in Container"
-
-4. **Start development**: Dependencies install automatically, then run `pnpm dev`
-
-See [.devcontainer/README.md](.devcontainer/README.md) for more details.
-
----
-
-## Backend Architecture
-
-See the [Backend Development guide](apps/docs/docs/contributing/backend.md), the [target architecture](apps/docs/docs/architecture/backend-architecture.md) (where code goes, reference implementations) and the [refactoring plan](apps/docs/docs/architecture/refactoring-plan.md) (status, open findings, and how to continue the migration). Pick one bounded slice before implementation. Run the backend E2E suite locally with `pnpm --filter @eudiplo/backend test:e2e:local` ([E2E testing](apps/docs/docs/contributing/e2e-testing.md)).
-
-## Code Quality
-
-This project uses [Biome](https://biomejs.dev/) for code formatting and linting:
+Fork the repository, clone your fork and follow the [development setup](apps/docs/docs/contributing/development-setup.md). In short:
 
 ```bash
-# Format your code
-pnpm run format
+corepack enable
+pnpm install
+pnpm --filter @eudiplo/config-format build
+pnpm --filter @eudiplo/sdk-core build
+cp .env.example apps/backend/.env   # then set MASTER_SECRET, AUTH_CLIENT_ID and AUTH_CLIENT_SECRET
 
-# Check for linting issues
-pnpm run lint
-
-# Fix linting issues automatically
-pnpm run lint:fix
+pnpm dev:backend   # http://localhost:3000
+pnpm dev:client    # http://localhost:4200
 ```
 
-See [Code Quality Standards](apps/docs/docs/contributing/code-quality.md) for detailed guidelines.
+No local Node.js? Use the dev container (`.devcontainer/`, see [.devcontainer/README.md](.devcontainer/README.md)).
+
+Generated code:
+
+- `pnpm gen:api` regenerates the JSON schemas from the backend schemas. It runs automatically before the client's `dev`, `build` and `test`, and needs no running backend.
+- `pnpm gen:sdk` regenerates `@eudiplo/sdk-core` from the OpenAPI spec of a **running** backend (`http://localhost:3000/api/docs-json`). Run it after changing a management endpoint or DTO.
+- `pnpm gen:all` runs both.
+
+Where to read next:
+
+- Backend: [backend architecture](apps/docs/docs/contributing/backend-architecture.md) (where code goes, boundaries, how to add an endpoint, migration or env var).
+- Tests: [testing](apps/docs/docs/contributing/testing.md). The backend E2E suite runs locally with `pnpm --filter @eudiplo/backend test:e2e:local`.
+- Formatting and linting: [code quality](apps/docs/docs/contributing/code-quality.md).
 
 ---
 
-## Pull Request Checklist
+## Commits
 
-Before submitting:
+### Sign-off and signatures
 
-- [ ] Code is tested and builds without errors
-- [ ] Code formatting passes (`pnpm run format:check`)
-- [ ] Linting passes (`pnpm run lint`)
-- [ ] You've added/updated documentation as needed
-- [ ] PR is focused on a single topic
+Every commit must
 
-Please **create your PR against the `main` branch**.
+- carry a **DCO sign-off** (`Signed-off-by:` trailer), certifying the [Developer Certificate of Origin](https://developercertificate.org/). Add it with `git commit -s`;
+- be **cryptographically signed** (GPG, SSH or S/MIME) so GitHub shows it as verified. Configure signing once, for example with `git config --global commit.gpgsign true`, or commit with `git commit -S -s`.
+
+To fix the last commit: `git commit --amend -S -s --no-edit`. For several commits: `git rebase --signoff -S <base>`.
+
+### Commit messages
+
+Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). semantic-release derives the next version from them:
+
+| Commit | Release |
+| --- | --- |
+| `fix: …`, `perf: …`, `refactor: …` | patch |
+| `feat: …` | minor |
+| a `BREAKING CHANGE:` footer (with `!` in the header) | major |
+| `docs: …`, `test: …`, `chore: …`, `ci: …`, `build: …` | no release |
+
+A **breaking change** is anything that makes an existing installation, integration or configuration stop working: removed or renamed API fields and endpoints, changed defaults, new required environment variables, stricter validation, changed configuration file formats. For a breaking change:
+
+1. Mark the header with `!` **and** add a `BREAKING CHANGE:` footer that states what changed and what users must do. The footer is what triggers the major release (the Angular preset used by semantic-release does not parse `!`) and appears in the release notes.
+
+   ```text
+   fix(verifier)!: report failed presentations to webhooks
+
+   BREAKING CHANGE: presentation webhooks also fire for failed and declined
+   presentations; consumers must check the new `status` field.
+   ```
+
+2. Add the change to the upgrade guide of the next major version in `apps/docs/docs/upgrade/` (what changed and what to do). A breaking change without an upgrade note is not merged.
+3. Fill in the "Breaking Changes" section of the pull request and add the `breaking-change` label.
 
 ---
 
-## Documentation Contributions
+## Pull requests
 
-Documentation is a Docusaurus site in `apps/docs/`. To work with documentation:
+Create pull requests against `main` and keep each one focused on a single topic.
+
+Checklist:
+
+- [ ] Every commit is signed off (`-s`) and signed (`-S`).
+- [ ] Commit messages follow Conventional Commits; breaking changes use `!` and a `BREAKING CHANGE:` footer.
+- [ ] Code builds, and the tests of the touched packages pass (`pnpm test` or the package's `test` script; E2E for protocol, wiring or persistence changes).
+- [ ] `pnpm run lint` and `pnpm run format:check` pass.
+- [ ] Generated files are regenerated and committed (`pnpm gen:api`, `pnpm gen:sdk`, schema snapshots).
+- [ ] The documentation page that owns the changed behavior is updated, and breaking changes have an upgrade note.
+
+CI runs linting, formatting, builds, unit and E2E tests, the OIDF conformance tests and the documentation build on every pull request.
+
+---
+
+## Documentation contributions
+
+The documentation is a Docusaurus site in `apps/docs/`:
 
 ```bash
-# Build documentation
-pnpm run build:docs
-
-# Serve documentation with live reload
-pnpm run dev:docs
+pnpm --filter @eudiplo/docs run prebuild   # generate reference content (once)
+pnpm --filter @eudiplo/docs start          # live reload on http://127.0.0.1:3003
+pnpm --filter @eudiplo/docs build          # production build; fails on broken links
 ```
 
-The documentation includes:
-
-- Getting started guides in `apps/docs/docs/getting-started/`
-- Issuance and Presentation guides in `apps/docs/docs/issuance/` and `apps/docs/docs/presentation/`
-- Contributor guides in `apps/docs/docs/contributing/`
-- API documentation generated from code (Compodoc + OpenAPI)
-- Architecture documentation in `apps/docs/docs/architecture/`
+Content is organized into cookbooks, guides (`issuance/`, `presentation/`, `trust/`, `operate/`), reference, concepts, contributing and upgrade. The rules for page types, generated references and checks are in the [documentation guide](apps/docs/docs/contributing/documentation.md).
 
 ---
 
-## Community & Conduct
+## Community and conduct
 
-We follow a [Code of Conduct](CODE_OF_CONDUCT.md) to foster an inclusive and respectful environment. Please be kind and constructive.
+We follow a [Code of Conduct](CODE_OF_CONDUCT.md). Please be kind and constructive.
 
----
+## Need help?
 
-## Need Help?
-
-- Open a discussion or issue on [GitHub](https://github.com/openwallet-foundation/eudiplo/issues)
-- Contact the maintainers for guidance
+Open a discussion or issue on [GitHub](https://github.com/openwallet-foundation/eudiplo/issues), join the [Discord](https://discord.gg/58ys8XfXDu), or contact the [maintainers](MAINTAINERS.md).
 
 Thanks for helping improve EUDIPLO!
