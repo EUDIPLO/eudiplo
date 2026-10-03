@@ -6,6 +6,7 @@ import {
     Injectable,
     Logger,
     NotFoundException,
+    type OnApplicationBootstrap,
     ServiceUnavailableException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -23,6 +24,7 @@ import { JwtPayload } from "@sd-jwt/core";
 import {
     DataSource,
     EntityManager,
+    In,
     IsNull,
     type QueryRunner,
     Repository,
@@ -39,6 +41,15 @@ import {
 } from "../../platform/config-import/config-import-orchestrator.service.js";
 import type { SessionData as Session } from "../../session/domain/session-data.js";
 import type { CredentialConfiguration } from "../configuration/credentials/domain/credential-configuration.js";
+import {
+    assertStatusTransitionAllowed,
+    assertStatusValueFits,
+    findOutOfRangeStatusIndexes,
+    RevokedStatusIsFinal,
+    STATUS_REVOKED,
+    StatusListValuesOutOfRange,
+    StatusValueOutOfRange,
+} from "./domain/status-value.js";
 import { StatusListImportSchema } from "./dto/status-list.schema.js";
 import { StatusListImportDto } from "./dto/status-list-import.dto.js";
 import { StatusUpdateDto } from "./dto/status-update.dto.js";
@@ -58,12 +69,6 @@ type StatusEntryPolicy = Pick<
     "activeCredentials" | "statusManagement"
 >;
 
-/**
- * Status list value meaning "revoked", per the convention documented on
- * {@link StatusUpdateDto}: 0 = valid, 1 = revoked, 2 = suspended.
- */
-const STATUS_REVOKED = 1;
-
 interface EntryAllocationOptions {
     tenantId: string;
     sessionId: string;
@@ -78,11 +83,33 @@ interface AllocatedStatusEntry {
     uri: string;
 }
 
+/** One status list entry to change, as recorded by a {@link StatusMapping}. */
+type StatusEntryRef = Pick<StatusMapping, "statusListId" | "index">;
+
+/**
+ * Entries of a stored status list whose values do not fit the list's bits per
+ * entry, with the sessions they were allocated to.
+ */
+export interface OutOfRangeStatusEntries {
+    tenantId: string;
+    listId: string;
+    bits: number;
+    entries: {
+        index: number;
+        value: number;
+        sessionId?: string;
+        credentialConfigurationId?: string;
+    }[];
+}
+
+/** Indexes per query when resolving out-of-range entries to their sessions. */
+const MAPPING_LOOKUP_CHUNK_SIZE = 500;
+
 /** Upper bound for status list capacity; each list is held in memory while it is created. */
 export const MAX_STATUS_LIST_CAPACITY = 1_000_000;
 
 @Injectable()
-export class StatusListService {
+export class StatusListService implements OnApplicationBootstrap {
     private readonly logger = new Logger(StatusListService.name);
     private readonly maxRetries = 3;
 
@@ -267,8 +294,27 @@ export class StatusListService {
      * - `aggregation_uri`: URI to fetch all status list URIs (OPTIONAL, per RFC Section 9)
      *
      * Uses optimistic locking to prevent stale token values from overwriting newer state.
+     *
+     * @throws StatusListValuesOutOfRange when a stored value does not fit the
+     * list's bits per entry. The encoder of `@owf/token-status-list` would
+     * spill such a value into the neighbouring entries, so the list is not
+     * published at all rather than published with wrong statuses.
      */
     async createListJWT(entry: StatusListEntity): Promise<boolean> {
+        const outOfRange = findOutOfRangeStatusIndexes(
+            entry.elements,
+            entry.bits,
+        );
+        if (outOfRange.length > 0) {
+            const error = new StatusListValuesOutOfRange(
+                entry.id,
+                entry.bits,
+                outOfRange,
+            );
+            this.logger.error(`[${entry.tenantId}] ${error.message}`);
+            throw error;
+        }
+
         // Get TTL from tenant config or global default
         const effectiveConfig =
             await this.statusListConfigService.getEffectiveConfig(
@@ -815,14 +861,7 @@ export class StatusListService {
             issuanceSetId,
         });
 
-        for (const entry of entries) {
-            await this.setEntry(
-                entry.statusListId,
-                entry.index,
-                STATUS_REVOKED,
-                tenantId,
-            );
-        }
+        await this.setEntries(tenantId, entries, STATUS_REVOKED);
     }
 
     /**
@@ -1222,7 +1261,29 @@ export class StatusListService {
             const effectiveConfig =
                 await this.statusListConfigService.getEffectiveConfig(tenantId);
             if (effectiveConfig.immediateUpdate) {
-                await this.regenerateListTokens(tenantId, listId);
+                await this.regenerateListTokensAfterUpdate(tenantId, listId);
+            }
+        }
+    }
+
+    /**
+     * Regenerate a list's tokens after a committed status update.
+     *
+     * A list that still stores values written before status values were
+     * checked against its bits cannot be published until those entries are
+     * corrected ({@link createListJWT} logs them). The update itself is stored
+     * by then, so it is not reported as failed: that would also break the
+     * updates an operator makes to correct those entries one by one.
+     */
+    private async regenerateListTokensAfterUpdate(
+        tenantId: string,
+        listId: string,
+    ): Promise<void> {
+        try {
+            await this.regenerateListTokens(tenantId, listId);
+        } catch (error) {
+            if (!(error instanceof StatusListValuesOutOfRange)) {
+                throw error;
             }
         }
     }
@@ -1256,6 +1317,13 @@ export class StatusListService {
                     `Status list ${listId} not found for tenant ${tenantId}`,
                 );
             }
+
+            // Every write path ends here, so a value wider than the list's
+            // bits can never be stored, whichever caller asked for it.
+            this.assertValueFitsLists(value, [entry]);
+            // Checked again here, where the read is part of the versioned
+            // write; a domain error so the concurrency retry does not retry it.
+            assertStatusTransitionAllowed(entry.elements[index] ?? 0, value);
 
             // Modify the elements array
             const updatedElements = [...entry.elements];
@@ -1298,6 +1366,8 @@ export class StatusListService {
      * Update the status of a session and its credential configuration.
      * @param value The status update DTO.
      * @param tenantId The tenant ID.
+     * @throws BadRequestException when the status does not fit one of the
+     * session's status lists; no entry is changed then.
      */
     async updateStatus(
         value: StatusUpdateDto,
@@ -1306,21 +1376,188 @@ export class StatusListService {
         const entries = await this.statusMappingRepository.findBy({
             tenantId,
             sessionId: value.sessionId,
-            credentialConfigurationId: value.credentialConfigurationId,
+            // TypeORM rejects undefined where values; without a configuration
+            // every credential of the session is updated.
+            ...(value.credentialConfigurationId !== undefined && {
+                credentialConfigurationId: value.credentialConfigurationId,
+            }),
         });
         if (entries.length === 0) {
             throw new ConflictException(
                 `No status mapping found for session ${value.sessionId} and credential configuration ${value.credentialConfigurationId}`,
             );
         }
-        for (const entry of entries) {
-            await this.setEntry(
-                entry.statusListId,
-                entry.index,
-                value.status,
-                tenantId,
+        await this.setEntries(tenantId, entries, value.status);
+    }
+
+    /**
+     * Set `value` on every given entry. The value is checked against the bits
+     * per entry of every list involved before the first entry is written, so
+     * an update spanning several credential configurations or lists is applied
+     * to all of them or to none.
+     */
+    private async setEntries(
+        tenantId: string,
+        entries: readonly StatusEntryRef[],
+        value: number,
+    ): Promise<void> {
+        const listIds = [
+            ...new Set(entries.map((entry) => entry.statusListId)),
+        ];
+        if (listIds.length === 0) {
+            return;
+        }
+        const lists = await this.statusListRepository.find({
+            select: { id: true, tenantId: true, bits: true, elements: true },
+            where: { tenantId, id: In(listIds) },
+        });
+        this.assertValueFitsLists(value, lists);
+
+        try {
+            // Revocation is final. Checked for every entry before the first
+            // write, so an update touching several entries is all or nothing.
+            const elementsById = new Map(
+                lists.map((list) => [list.id, list.elements]),
+            );
+            for (const entry of entries) {
+                assertStatusTransitionAllowed(
+                    elementsById.get(entry.statusListId)?.[entry.index] ?? 0,
+                    value,
+                );
+            }
+            for (const entry of entries) {
+                await this.setEntry(
+                    entry.statusListId,
+                    entry.index,
+                    value,
+                    tenantId,
+                );
+            }
+        } catch (error) {
+            if (error instanceof RevokedStatusIsFinal) {
+                throw new ConflictException(error.message);
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * @throws BadRequestException naming every list whose bits per entry are
+     * too few for `value`
+     */
+    private assertValueFitsLists(
+        value: number,
+        lists: readonly Pick<StatusListEntity, "id" | "bits">[],
+    ): void {
+        try {
+            assertStatusValueFits(value, lists);
+        } catch (error) {
+            if (error instanceof StatusValueOutOfRange) {
+                throw new BadRequestException(error.message);
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Log every stored status list that holds values its bits per entry cannot
+     * encode, with the sessions those entries belong to. Such values were
+     * written before status updates were checked against the list, and their
+     * lists are not published until the entries are corrected. Runs in the
+     * background so that a large installation does not delay startup.
+     */
+    onApplicationBootstrap(): void {
+        this.reportOutOfRangeEntries().catch((error: unknown) => {
+            this.logger.error(
+                `Could not check status lists for values that do not fit their bits per entry: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        });
+    }
+
+    private async reportOutOfRangeEntries(): Promise<void> {
+        for (const list of await this.findOutOfRangeEntries()) {
+            const entries = list.entries
+                .map(
+                    (entry) =>
+                        `index ${entry.index} = ${entry.value} (session ${entry.sessionId ?? "unknown"}, credential configuration ${entry.credentialConfigurationId ?? "unknown"})`,
+                )
+                .join("; ");
+            this.logger.warn(
+                `[${list.tenantId}] Status list ${list.listId} uses ${list.bits} bit(s) per entry but stores values it cannot encode: ${entries}. Its status list token is not published until each of these entries is set to a value the list can hold, for example 1 (revoked) with POST /api/session/revoke.`,
             );
         }
+    }
+
+    /**
+     * Find stored entries whose values do not fit their list's bits per entry,
+     * with the sessions they were allocated to. Lists are loaded one at a time,
+     * so memory use is bounded by the largest list.
+     */
+    async findOutOfRangeEntries(): Promise<OutOfRangeStatusEntries[]> {
+        const layouts = await this.statusListRepository.find({
+            select: { id: true, tenantId: true },
+            order: { createdAt: "ASC" },
+        });
+        const affected: OutOfRangeStatusEntries[] = [];
+        for (const layout of layouts) {
+            const list = await this.statusListRepository.findOne({
+                select: {
+                    id: true,
+                    tenantId: true,
+                    bits: true,
+                    elements: true,
+                },
+                where: { id: layout.id, tenantId: layout.tenantId },
+            });
+            if (!list) {
+                continue;
+            }
+            const indexes = findOutOfRangeStatusIndexes(
+                list.elements,
+                list.bits,
+            );
+            if (indexes.length > 0) {
+                affected.push({
+                    tenantId: list.tenantId,
+                    listId: list.id,
+                    bits: list.bits,
+                    entries: await this.describeEntries(list, indexes),
+                });
+            }
+        }
+        return affected;
+    }
+
+    private async describeEntries(
+        list: Pick<StatusListEntity, "id" | "tenantId" | "elements">,
+        indexes: readonly number[],
+    ): Promise<OutOfRangeStatusEntries["entries"]> {
+        const mappings = new Map<number, StatusMapping>();
+        for (
+            let start = 0;
+            start < indexes.length;
+            start += MAPPING_LOOKUP_CHUNK_SIZE
+        ) {
+            const found = await this.statusMappingRepository.findBy({
+                tenantId: list.tenantId,
+                statusListId: list.id,
+                index: In(
+                    indexes.slice(start, start + MAPPING_LOOKUP_CHUNK_SIZE),
+                ),
+            });
+            for (const mapping of found) {
+                mappings.set(mapping.index, mapping);
+            }
+        }
+        return indexes.map((index) => ({
+            index,
+            value: list.elements[index],
+            sessionId: mappings.get(index)?.sessionId,
+            credentialConfigurationId:
+                mappings.get(index)?.credentialConfigurationId,
+        }));
     }
 
     /**

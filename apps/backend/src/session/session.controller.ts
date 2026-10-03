@@ -97,7 +97,24 @@ export class SessionController {
      * @returns
      */
     @Post("revoke")
-    @ApiResponse({ status: 204, description: "All sessions revoked" })
+    // Changing credential status is an issuer action; verifier-only clients
+    // (presentation:request) may not call it.
+    @Secured([Role.IssuanceOffer, Role.Issuances])
+    @ApiOperation({
+        summary: "Change the status of the credentials issued in a session",
+        description:
+            "Revokes (1), suspends (2) or reinstates (0) all credentials issued in the session, optionally only those of one credential configuration. Revocation is final.",
+    })
+    @ApiResponse({ status: 204, description: "Status updated" })
+    @ApiResponse({
+        status: 400,
+        description: "The status does not fit the status list's bits per entry",
+    })
+    @ApiResponse({
+        status: 409,
+        description:
+            "No status entry for the session, or a revoked credential would be reinstated or suspended",
+    })
     @HttpCode(204)
     revokeAll(@Body() value: StatusUpdateDto, @Token() user: TokenPayload) {
         return this.statusListService.updateStatus(value, user.entity!.id);

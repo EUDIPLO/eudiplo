@@ -3,6 +3,7 @@ import { DataSource } from "typeorm";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ClientEntity } from "../../auth/client/entities/client.entity.js";
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
+import { StatusListValuesOutOfRange } from "./domain/status-value.js";
 import { ActiveCredentialSlot } from "./entities/active-credential-slot.entity.js";
 import { StatusListEntity } from "./entities/status-list.entity.js";
 import { StatusMapping } from "./entities/status-mapping.entity.js";
@@ -350,6 +351,266 @@ describe("StatusListService SQLite concurrency", () => {
             .getRepository(StatusListEntity)
             .findOneByOrFail({ id: "list-1", tenantId: "tenant-1" });
         expect(list.elements).toEqual([1, 1, 0, 0]);
+    });
+
+    describe("status values wider than a list's bits per entry", () => {
+        const mapping = (
+            sessionId: string,
+            statusListId: string,
+            index: number,
+            credentialConfigurationId: string,
+        ) => ({
+            tenantId: "tenant-1",
+            sessionId,
+            statusListId,
+            index,
+            list: `https://issuer.example/issuers/tenant-1/status-management/status-list/${statusListId}`,
+            credentialConfigurationId,
+        });
+
+        const elementsOf = async (id: string) =>
+            (
+                await dataSource
+                    .getRepository(StatusListEntity)
+                    .findOneByOrFail({ id, tenantId: "tenant-1" })
+            ).elements;
+
+        const signJWT = vi.fn().mockResolvedValue("jwt");
+
+        beforeEach(async () => {
+            signJWT.mockClear();
+            await dataSource.getRepository(StatusListEntity).save({
+                id: "list-2",
+                tenantId: "tenant-1",
+                credentialConfigurationId: null,
+                elements: [0, 0],
+                stack: [],
+                bits: 2,
+            });
+            Object.assign(service as object, {
+                statusListConfigService: {
+                    getEffectiveConfig: vi.fn().mockResolvedValue({
+                        immediateUpdate: true,
+                        ttl: 300,
+                        enableAggregation: false,
+                    }),
+                },
+                certService: {
+                    find: vi.fn().mockResolvedValue({
+                        keyId: "status-list-key",
+                        crt: [],
+                    }),
+                    getLeafCertBase64: vi.fn().mockReturnValue(["certificate"]),
+                },
+                keyChainService: { signJWT },
+                signStatusListCwt: vi.fn().mockResolvedValue(Uint8Array.of(1)),
+            });
+        });
+
+        test("rejects a suspension on a 1-bit list without changing any of the session's entries", async () => {
+            // The wide list's entry comes first, so writing entry by entry
+            // without checking every list up front would change it.
+            await dataSource
+                .getRepository(StatusMapping)
+                .insert([
+                    mapping("x", "list-2", 0, "config-wide"),
+                    mapping("x", "list-1", 0, "config-narrow"),
+                ]);
+
+            await expect(
+                service.updateStatus(
+                    { sessionId: "x", status: 2 } as never,
+                    "tenant-1",
+                ),
+            ).rejects.toMatchObject({
+                status: 400,
+                message:
+                    "Status 2 (suspended) requires a status list with at least 2 bits per entry; list list-1 uses 1 bit.",
+            });
+
+            expect(await elementsOf("list-1")).toEqual([0, 0]);
+            expect(await elementsOf("list-2")).toEqual([0, 0]);
+            expect(signJWT).not.toHaveBeenCalled();
+        });
+
+        test("refuses to reinstate or suspend a revoked credential, changing no entry", async () => {
+            await dataSource
+                .getRepository(StatusListEntity)
+                .update(
+                    { id: "list-2", tenantId: "tenant-1" },
+                    { elements: [1, 0] },
+                );
+            // The still valid entry comes first, so writing entry by entry
+            // without checking every entry up front would change it.
+            await dataSource
+                .getRepository(StatusMapping)
+                .insert([
+                    mapping("x", "list-1", 0, "config-narrow"),
+                    mapping("x", "list-2", 0, "config-wide"),
+                ]);
+
+            for (const status of [0, 2]) {
+                await expect(
+                    service.updateStatus(
+                        {
+                            sessionId: "x",
+                            credentialConfigurationId: "config-wide",
+                            status,
+                        } as never,
+                        "tenant-1",
+                    ),
+                ).rejects.toMatchObject({ status: 409 });
+            }
+            await expect(
+                service.updateStatus(
+                    { sessionId: "x", status: 0 } as never,
+                    "tenant-1",
+                ),
+            ).rejects.toMatchObject({
+                status: 409,
+                message:
+                    "A revoked credential cannot be reinstated: revocation is final.",
+            });
+
+            expect(await elementsOf("list-1")).toEqual([0, 0]);
+            expect(await elementsOf("list-2")).toEqual([1, 0]);
+        });
+
+        test("lifts a suspension", async () => {
+            await dataSource
+                .getRepository(StatusListEntity)
+                .update(
+                    { id: "list-2", tenantId: "tenant-1" },
+                    { elements: [0, 2] },
+                );
+            await dataSource
+                .getRepository(StatusMapping)
+                .insert([mapping("x", "list-2", 1, "config-wide")]);
+
+            await service.updateStatus(
+                {
+                    sessionId: "x",
+                    credentialConfigurationId: "config-wide",
+                    status: 0,
+                } as never,
+                "tenant-1",
+            );
+
+            expect(await elementsOf("list-2")).toEqual([0, 0]);
+        });
+
+        test("stores a suspension on a list with 2 bits per entry", async () => {
+            await dataSource
+                .getRepository(StatusMapping)
+                .insert([
+                    mapping("x", "list-2", 1, "config-wide"),
+                    mapping("x", "list-1", 0, "config-narrow"),
+                ]);
+
+            await service.updateStatus(
+                {
+                    sessionId: "x",
+                    credentialConfigurationId: "config-wide",
+                    status: 2,
+                } as never,
+                "tenant-1",
+            );
+
+            expect(await elementsOf("list-2")).toEqual([0, 2]);
+            expect(await elementsOf("list-1")).toEqual([0, 0]);
+        });
+
+        test("guards the write itself, whichever caller asks for it", async () => {
+            const setEntry = (
+                service as unknown as {
+                    setEntry: (
+                        listId: string,
+                        index: number,
+                        value: number,
+                        tenantId: string,
+                    ) => Promise<void>;
+                }
+            ).setEntry.bind(service);
+
+            await expect(
+                setEntry("list-1", 1, 2, "tenant-1"),
+            ).rejects.toMatchObject({ status: 400 });
+            expect(await elementsOf("list-1")).toEqual([0, 0]);
+        });
+
+        test("refuses to encode a stored list holding values it cannot represent", async () => {
+            await dataSource
+                .getRepository(StatusListEntity)
+                .update(
+                    { id: "list-1", tenantId: "tenant-1" },
+                    { elements: [0, 2] },
+                );
+            const snapshot = await dataSource
+                .getRepository(StatusListEntity)
+                .findOneByOrFail({ id: "list-1", tenantId: "tenant-1" });
+
+            await expect(service.createListJWT(snapshot)).rejects.toThrow(
+                StatusListValuesOutOfRange,
+            );
+            await expect(service.createListJWT(snapshot)).rejects.toThrow(
+                "Status list list-1 stores values that do not fit its 1 bit per entry at index 1.",
+            );
+            expect(signJWT).not.toHaveBeenCalled();
+        });
+
+        test("keeps an update that corrects an entry while other entries still prevent publishing", async () => {
+            await dataSource
+                .getRepository(StatusListEntity)
+                .update(
+                    { id: "list-1", tenantId: "tenant-1" },
+                    { elements: [2, 2] },
+                );
+            await dataSource
+                .getRepository(StatusMapping)
+                .insert(mapping("y", "list-1", 1, "config-narrow"));
+
+            await service.updateStatus(
+                { sessionId: "y", status: 1 } as never,
+                "tenant-1",
+            );
+
+            expect(await elementsOf("list-1")).toEqual([2, 1]);
+            expect(signJWT).not.toHaveBeenCalled();
+        });
+
+        test("reports stored values that do not fit with the sessions they belong to", async () => {
+            await dataSource
+                .getRepository(StatusListEntity)
+                .update(
+                    { id: "list-1", tenantId: "tenant-1" },
+                    { elements: [0, 2] },
+                );
+            await dataSource
+                .getRepository(StatusListEntity)
+                .update(
+                    { id: "list-2", tenantId: "tenant-1" },
+                    { elements: [2, 3] },
+                );
+            await dataSource
+                .getRepository(StatusMapping)
+                .insert(mapping("x", "list-1", 1, "config-narrow"));
+
+            await expect(service.findOutOfRangeEntries()).resolves.toEqual([
+                {
+                    tenantId: "tenant-1",
+                    listId: "list-1",
+                    bits: 1,
+                    entries: [
+                        {
+                            index: 1,
+                            value: 2,
+                            sessionId: "x",
+                            credentialConfigurationId: "config-narrow",
+                        },
+                    ],
+                },
+            ]);
+        });
     });
 
     test.each([

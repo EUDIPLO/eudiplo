@@ -4119,7 +4119,7 @@ export const StatusUpdateDtoSchema = {
             type: 'integer',
             minimum: 0,
             maximum: 2,
-            description: 'New credential status: 0 = valid, 1 = revoked, 2 = suspended.'
+            description: 'New credential status: 0 = valid, 1 = revoked, 2 = suspended. The value must fit every status list the credentials use: suspension needs lists with at least 2 bits per entry, otherwise the request is rejected with 400 and no status is changed.'
         }
     },
     required: [
