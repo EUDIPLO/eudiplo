@@ -18,7 +18,9 @@ export function runConfigShow(
     }
 
     context.stdout.write(`Config: ${configPath}\n`);
-    context.stdout.write(`Default instance: ${config.defaultInstance ?? "none"}\n`);
+    context.stdout.write(
+        `Default instance: ${config.defaultInstance ?? "none"}\n`,
+    );
     const instances = Object.entries(config.instances).sort(([left], [right]) =>
         left.localeCompare(right),
     );
@@ -29,14 +31,18 @@ export function runConfigShow(
 
     context.stdout.write("Instances:\n");
     for (const [name, instance] of instances) {
-        const defaultLabel = name === config.defaultInstance ? " (default)" : "";
+        const defaultLabel =
+            name === config.defaultInstance ? " (default)" : "";
         context.stdout.write(`- ${name}${defaultLabel}\n`);
         writeInstance(instance, context);
     }
     return 0;
 }
 
-function writeInstance(instance: InstanceConfig, context: CommandContext): void {
+function writeInstance(
+    instance: InstanceConfig,
+    context: CommandContext,
+): void {
     for (const [key, value] of Object.entries(instance)) {
         if (value !== undefined) {
             context.stdout.write(

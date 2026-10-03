@@ -78,7 +78,7 @@ After deployment, access the services at:
 | --------------------- | --------------------------------------- |
 | **Backend API**       | <http://localhost:3000>                 |
 | **Client Web UI**     | <http://localhost:4200>                 |
-| **API Documentation** | <http://localhost:3000/api-docs>        |
+| **API Documentation** | <http://localhost:3000/api/docs>        |
 | **RustFS Console**     | <http://localhost:9001/rustfs/console/> (standard/full) |
 | **Vault UI**          | <http://localhost:8200> (full)          |
 

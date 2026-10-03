@@ -88,6 +88,8 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 - URL: http://localhost:9090
 - Targets: http://localhost:9090/targets
 - Scrapes the OTel Collector's Prometheus exporter on port 8889
+- The backend has no `/metrics` endpoint: whether it runs locally or in a
+  container, its metrics reach Prometheus only through the collector
 - Config: `prometheus/prometheus.yml`
 - Alert rules: `prometheus/rules/eudiplo.yml`
 

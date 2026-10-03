@@ -1,16 +1,16 @@
 import {
-        ClaimsWebhookRequest,
-        hasCredentials,
-        hasIdentity,
-        NotificationWebhookRequest,
-        validateClaimsWebhookRequest,
-        validateNotificationWebhookRequest,
+    ClaimsWebhookRequest,
+    hasCredentials,
+    hasIdentity,
+    NotificationWebhookRequest,
+    validateClaimsWebhookRequest,
+    validateNotificationWebhookRequest,
 } from "./schemas";
 import {
-        ClaimsWebhookResponse,
-        createClaimsResponse,
-        createDeferredResponse,
-        createNotificationSuccess,
+    ClaimsWebhookResponse,
+    createClaimsResponse,
+    createDeferredResponse,
+    createNotificationSuccess,
 } from "./types";
 
 /**
@@ -45,7 +45,10 @@ function handleNotification(data: NotificationWebhookRequest): Response {
     );
 
     const response = createNotificationSuccess();
-    console.log("Outgoing notification response:", JSON.stringify(response, null, 2));
+    console.log(
+        "Outgoing notification response:",
+        JSON.stringify(response, null, 2),
+    );
     return Response.json(response, { status: 200 });
 }
 
@@ -53,7 +56,9 @@ function handleNotification(data: NotificationWebhookRequest): Response {
  * Sample values for claims the presented credential cannot provide, per
  * credential configuration. Presented values take precedence.
  */
-function sampleClaims(credentialConfigurationId: string): Record<string, unknown> {
+function sampleClaims(
+    credentialConfigurationId: string,
+): Record<string, unknown> {
     const today = new Date();
     const isoDate = (date: Date) => date.toISOString().slice(0, 10);
     const inYears = (years: number) => {
@@ -195,7 +200,10 @@ function handleUnifiedClaims(data: ClaimsWebhookRequest): Response {
             data.credential_configuration_id,
             { ...sampleClaims(data.credential_configuration_id), ...claims },
         );
-        console.log("Outgoing unified claims response:", JSON.stringify(response, null, 2));
+        console.log(
+            "Outgoing unified claims response:",
+            JSON.stringify(response, null, 2),
+        );
         return Response.json(response, { status: 200 });
     }
 
@@ -217,7 +225,10 @@ function handleDeferredClaims(): Response {
     );
 
     const response = createDeferredResponse(10); // Poll every 10 seconds
-    console.log("Outgoing deferred response:", JSON.stringify(response, null, 2));
+    console.log(
+        "Outgoing deferred response:",
+        JSON.stringify(response, null, 2),
+    );
     return Response.json(response, { status: 200 });
 }
 

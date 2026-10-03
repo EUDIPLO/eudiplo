@@ -680,7 +680,8 @@ describe("EUDIPLO CLI", () => {
         expect(env).toContain("AUTH_CLIENT_SECRET=example-secret");
         expect(env).toContain("DB_TYPE=postgres");
         expect(env).toContain("STORAGE_DRIVER=s3");
-        expect(env).toContain("KM_TYPE=db");
+        expect(env).not.toContain("KM_TYPE");
+        expect(env).not.toContain("VAULT_ADDR=");
 
         const config = JSON.parse(await readFile(configPath, "utf8"));
         expect(config.instances.local.url).toBe("https://eudiplo.example.com");
@@ -710,7 +711,8 @@ describe("EUDIPLO CLI", () => {
         const env = await readFile(join(cwd, ".eudiplo.env"), "utf8");
         expect(env).toContain("DB_TYPE=postgres");
         expect(env).toContain("STORAGE_DRIVER=local");
-        expect(env).toContain("KM_TYPE=vault");
+        expect(env).not.toContain("KM_TYPE");
+        expect(env).toContain("VAULT_ADDR=http://vault:8200");
 
         const config = JSON.parse(await readFile(configPath, "utf8"));
         expect(config.instances.local.composeProfiles).toEqual([
