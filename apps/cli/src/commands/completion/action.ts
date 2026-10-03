@@ -73,7 +73,8 @@ function resolveCommand(root: Command, words: string[]): Command {
             continue;
         }
         const child = current.commands.find(
-            (command) => command.name() === word || command.aliases().includes(word),
+            (command) =>
+                command.name() === word || command.aliases().includes(word),
         );
         if (child) {
             current = child;
@@ -82,7 +83,10 @@ function resolveCommand(root: Command, words: string[]): Command {
     return current;
 }
 
-function staticCandidates(current: Command, lastWord: string | undefined): string[] {
+function staticCandidates(
+    current: Command,
+    lastWord: string | undefined,
+): string[] {
     const candidates = ["-h", "--help"];
     for (const command of current.commands) {
         if (command.name() !== "_complete") {
@@ -113,7 +117,10 @@ async function instanceCandidates(context: CommandContext): Promise<string[]> {
     }
 }
 
-function findOption(command: Command, word: string | undefined): Option | undefined {
+function findOption(
+    command: Command,
+    word: string | undefined,
+): Option | undefined {
     if (!word) {
         return undefined;
     }
@@ -177,7 +184,7 @@ function powershellCompletion(): string {
         "    if ($wordToComplete -and $arguments.Count -gt 0) {",
         "        $arguments = @($arguments | Select-Object -First ($arguments.Count - 1))",
         "    }",
-        "    eudiplo _complete @arguments 2>$null | Where-Object { $_ -like \"$wordToComplete*\" } | ForEach-Object {",
+        '    eudiplo _complete @arguments 2>$null | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {',
         "        [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)",
         "    }",
         "}",

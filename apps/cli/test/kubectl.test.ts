@@ -177,21 +177,22 @@ describe("workload replica counts", () => {
     });
 
     it("defaults desired replicas to one when spec omits it", () => {
-        expect(
-            readReplicaCounts(deployment({ readyReplicas: 1 }, {})),
-        ).toEqual({ ready: 1, desired: 1 });
+        expect(readReplicaCounts(deployment({ readyReplicas: 1 }, {}))).toEqual(
+            { ready: 1, desired: 1 },
+        );
     });
 
     it("reads a scaled-to-zero deployment", () => {
-        expect(
-            readReplicaCounts(deployment({}, { replicas: 0 })),
-        ).toEqual({ ready: 0, desired: 0 });
+        expect(readReplicaCounts(deployment({}, { replicas: 0 }))).toEqual({
+            ready: 0,
+            desired: 0,
+        });
     });
 
     it("rejects a payload with no status", () => {
-        expect(() => readReplicaCounts(JSON.stringify({ kind: "Pod" }))).toThrow(
-            /Unexpected workload payload/,
-        );
+        expect(() =>
+            readReplicaCounts(JSON.stringify({ kind: "Pod" })),
+        ).toThrow(/Unexpected workload payload/);
     });
 });
 
@@ -247,9 +248,9 @@ describe("service endpoint readiness", () => {
     });
 
     it("treats a slice with no endpoints as unready", () => {
-        expect(unreadyEndpoints(slices([{ service: "eudiplo", ready: [] }]))).toEqual([
-            "eudiplo",
-        ]);
+        expect(
+            unreadyEndpoints(slices([{ service: "eudiplo", ready: [] }])),
+        ).toEqual(["eudiplo"]);
     });
 
     it("treats an omitted ready condition as ready", () => {
@@ -291,7 +292,9 @@ describe("configuration value validation", () => {
         expect(() => assertNamespace("Eudiplo", "namespace")).toThrow();
         expect(() => assertNamespace("eudiplo prod", "namespace")).toThrow();
         expect(() => assertNamespace("eudiplo-", "namespace")).toThrow();
-        expect(() => assertNamespace("eudiplo-prod", "namespace")).not.toThrow();
+        expect(() =>
+            assertNamespace("eudiplo-prod", "namespace"),
+        ).not.toThrow();
     });
 
     it("rejects context names that could be read as flags", () => {
@@ -299,7 +302,10 @@ describe("configuration value validation", () => {
         expect(() => assertContextName("", "context")).toThrow();
         expect(() => assertContextName("prod cluster", "context")).toThrow();
         expect(() =>
-            assertContextName("arn:aws:eks:eu-central-1:123:cluster/prod", "context"),
+            assertContextName(
+                "arn:aws:eks:eu-central-1:123:cluster/prod",
+                "context",
+            ),
         ).not.toThrow();
     });
 

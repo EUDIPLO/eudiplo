@@ -10,7 +10,7 @@
     "lint": "pnpm -r lint",
     "lint:fix": "pnpm -r lint:fix",
     "format": "pnpm -r format",
-    "format:check": "pnpm -r format",
+    "format:check": "pnpm -r format:check",
     "test": "pnpm -r test",
     "clean": "pnpm -r clean",
     "release:dry": "set -a && source .env && set +a && npx semantic-release --dry-run 2>&1",

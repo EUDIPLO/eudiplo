@@ -27,6 +27,8 @@ If this is a breaking change, list what is affected:
 - **Config import format**: (e.g., changed JSON structure, renamed folders)
 - **Database**: (e.g., migration included? manual steps needed?)
 
+> Ensure the commit message includes `BREAKING CHANGE:` in the footer and the
+> [migration guide](apps/docs/docs/migration/index.md) is updated.
 > Mark the commit with `!` (for example `fix(api)!: …`) and a `BREAKING CHANGE:`
 > footer, add the change to the
 > [upgrade guide](https://github.com/openwallet-foundation/eudiplo/tree/main/apps/docs/docs/upgrade)

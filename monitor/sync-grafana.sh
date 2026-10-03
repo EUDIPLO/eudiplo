@@ -5,8 +5,12 @@
 
 set -e
 
-GRAFANA_CONTAINER="grafana"
-LOCAL_BASE="/Users/mirko/Projects/service/monitor/grafana"
+# Paths are resolved relative to this script, so it works from any directory.
+# Override GRAFANA_CONTAINER or GRAFANA_LOCAL_DIR to use a different setup.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
+GRAFANA_CONTAINER="${GRAFANA_CONTAINER:-grafana}"
+LOCAL_BASE="${GRAFANA_LOCAL_DIR:-$SCRIPT_DIR/grafana}"
 GRAFANA_BASE="/etc/grafana"
 
 # Colors for output
@@ -30,7 +34,7 @@ print_error() {
 
 # Check if Grafana container is running
 check_grafana_running() {
-    if ! docker ps | grep -q $GRAFANA_CONTAINER; then
+    if ! docker ps --format '{{.Names}}' | grep -qx "$GRAFANA_CONTAINER"; then
         print_error "Grafana container '$GRAFANA_CONTAINER' is not running"
         exit 1
     fi
@@ -71,7 +75,7 @@ reload_grafana() {
     print_status "Reloading Grafana configuration..."
     
     # Send HUP signal to reload configuration
-    docker exec $GRAFANA_CONTAINER kill -HUP 1
+    docker exec "$GRAFANA_CONTAINER" kill -HUP 1
     
     print_status "Grafana configuration reloaded"
 }
@@ -80,7 +84,7 @@ reload_grafana() {
 restart_grafana() {
     print_status "Restarting Grafana container..."
     
-    docker-compose restart grafana
+    docker-compose -f "$COMPOSE_FILE" restart grafana
     
     print_status "Grafana restarted"
 }
