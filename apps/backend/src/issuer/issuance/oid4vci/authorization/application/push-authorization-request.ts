@@ -5,10 +5,12 @@ import {
 } from "@openid4vc/oauth2";
 import { v4 } from "uuid";
 import type { CreateSession } from "../../../../../session/application/create-session.js";
+import { SessionNotFound } from "../../../../../session/application/session-errors.js";
 import type { SessionStore } from "../../../../../session/application/session-store.js";
 import type { SessionAuthorization } from "../../../../../session/domain/session-data.js";
 import type { DpopProofReplayRegistry } from "../../ports/dpop-proof-replay-registry.js";
 import { OAuthError } from "../domain/oauth-error.js";
+import { assertOfferRedeemable } from "../domain/offer-redemption.js";
 import {
     assertValidPushedAuthorizationRequest,
     PAR_REQUEST_URI_LIFETIME_SECONDS,
@@ -42,7 +44,10 @@ export interface PushedAuthorizationRequest {
 export class PushAuthorizationRequest {
     constructor(
         private readonly servers: OAuthAuthorizationServerFactory,
-        private readonly sessions: Pick<SessionStore, "updateForTenant">,
+        private readonly sessions: Pick<
+            SessionStore,
+            "getForTenant" | "updateForTenant"
+        >,
         private readonly createSession: Pick<CreateSession, "execute">,
         private readonly configuration: BuiltInAuthorizationServerConfiguration,
         private readonly metadata: Pick<
@@ -110,6 +115,19 @@ export class PushAuthorizationRequest {
             .catch((err) => {
                 throw oauthErrorFromLibrary(err);
             });
+
+        // An issuer_state names the offer this request redeems.
+        const offerSession = body.issuer_state
+            ? await this.sessions
+                  .getForTenant(tenantId, body.issuer_state)
+                  .catch((error: unknown) => {
+                      if (error instanceof SessionNotFound) return undefined;
+                      throw error;
+                  })
+            : undefined;
+        if (offerSession) {
+            assertOfferRedeemable(offerSession, new Date(), "invalid_request");
+        }
 
         const request_uri = `${pushedAuthorizationRequestUriPrefix}${randomUUID()}`;
         const parValues = {

@@ -5,7 +5,6 @@ import {
 } from "@nestjs/common";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { CleanupSessions } from "../application/cleanup-sessions.js";
-import { InitializeSessionMetrics } from "../application/initialize-session-metrics.js";
 
 export const SESSION_MAINTENANCE_SETTINGS = Symbol(
     "SESSION_MAINTENANCE_SETTINGS",
@@ -20,7 +19,6 @@ export class SessionMaintenanceJob implements OnApplicationBootstrap {
     constructor(
         private readonly scheduler: SchedulerRegistry,
         private readonly cleanup: CleanupSessions,
-        private readonly initializeMetrics: InitializeSessionMetrics,
         @Inject(SESSION_MAINTENANCE_SETTINGS)
         private readonly settings: SessionMaintenanceSettings,
     ) {}
@@ -30,7 +28,6 @@ export class SessionMaintenanceJob implements OnApplicationBootstrap {
             void this.cleanup.execute();
         }, this.settings.cleanupIntervalMs);
         this.scheduler.addInterval("tidyUpSessions", interval);
-        await this.initializeMetrics.execute();
         await this.cleanup.execute();
     }
 }

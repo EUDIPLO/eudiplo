@@ -189,6 +189,65 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
             });
         });
 
+        it("stores expiresAt with its time of day", async () => {
+            const expiresAt = new Date("2030-05-06T07:08:09.123Z");
+            await adapter.updateForTenant("tenant-a", sessionId, {
+                expiresAt,
+            });
+            expect(
+                (await adapter.findForTenant("tenant-a", sessionId))?.expiresAt,
+            ).toEqual(expiresAt);
+        });
+
+        it.each([
+            SessionStatus.Completed,
+            SessionStatus.Failed,
+            SessionStatus.Expired,
+        ])(
+            "does not apply an unconsumed update to a %s session",
+            async (status) => {
+                await adapter.updateForTenant("tenant-a", sessionId, {
+                    status,
+                });
+                await expect(
+                    adapter.updateUnconsumedForTenant("tenant-a", sessionId, {
+                        status: SessionStatus.Completed,
+                        consumed: true,
+                        responseCode: "late",
+                    }),
+                ).resolves.toBe(false);
+                expect(
+                    await adapter.findForTenant("tenant-a", sessionId),
+                ).toMatchObject({ status, consumed: false });
+            },
+        );
+
+        it("applies an unconsumed update only before the session expires", async () => {
+            await adapter.updateForTenant("tenant-a", sessionId, {
+                status: SessionStatus.Fetched,
+                expiresAt: new Date(Date.now() - 1_000),
+            });
+            await expect(
+                adapter.updateUnconsumedForTenant("tenant-a", sessionId, {
+                    status: SessionStatus.Completed,
+                    consumed: true,
+                }),
+            ).resolves.toBe(false);
+            expect(
+                await adapter.findForTenant("tenant-a", sessionId),
+            ).toMatchObject({ status: SessionStatus.Fetched, consumed: false });
+
+            await adapter.updateForTenant("tenant-a", sessionId, {
+                expiresAt: new Date(Date.now() + 60_000),
+            });
+            await expect(
+                adapter.updateUnconsumedForTenant("tenant-a", sessionId, {
+                    status: SessionStatus.Completed,
+                    consumed: true,
+                }),
+            ).resolves.toBe(true);
+        });
+
         it("keeps token and PAR lookups tenant scoped and matches only the requested identifier", async () => {
             await adapter.updateForTenant("tenant-a", sessionId, {
                 authorization_code: "code",
@@ -538,12 +597,13 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
             ).resolves.toBeUndefined();
         });
 
-        it("finds only overdue active/fetched presentations across tenants, without returning entities or sensitive data", async () => {
+        it("finds overdue open presentations and unredeemed offers across tenants, without returning entities or sensitive data", async () => {
             const repository = getDataSource().getRepository(Session);
             const past = new Date("2025-01-01");
             const future = new Date("2025-01-03");
             const active = randomUUID();
             const fetched = randomUUID();
+            const offer = randomUUID();
             await repository.save([
                 {
                     id: active,
@@ -564,9 +624,29 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
                     status: SessionStatus.Fetched,
                 },
                 {
+                    id: offer,
+                    tenantId: "tenant-a",
+                    expiresAt: past,
+                    status: SessionStatus.Active,
+                },
+                // Redeemed offers: the wallet holds tokens or credentials.
+                {
                     id: randomUUID(),
                     tenantId: "tenant-a",
                     expiresAt: past,
+                    status: SessionStatus.Active,
+                    consumed: true,
+                },
+                {
+                    id: randomUUID(),
+                    tenantId: "tenant-a",
+                    expiresAt: past,
+                    status: SessionStatus.Fetched,
+                },
+                {
+                    id: randomUUID(),
+                    tenantId: "tenant-a",
+                    expiresAt: future,
                     status: SessionStatus.Active,
                 },
                 {
@@ -586,22 +666,31 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
                     SessionStatus.Completed,
                     SessionStatus.Failed,
                     SessionStatus.Expired,
-                ].map((status) => ({
-                    id: randomUUID(),
-                    tenantId: "tenant-a",
-                    requestId: "terminal",
-                    expiresAt: past,
-                    status,
-                })),
+                ].flatMap((status) => [
+                    {
+                        id: randomUUID(),
+                        tenantId: "tenant-a",
+                        requestId: "terminal",
+                        expiresAt: past,
+                        status,
+                    },
+                    {
+                        id: randomUUID(),
+                        tenantId: "tenant-a",
+                        expiresAt: past,
+                        status,
+                    },
+                ]),
             ]);
-            const result = await adapter.findExpiredPresentationsForMaintenance(
+            const result = await adapter.findExpiredSessionsForMaintenance(
                 new Date("2025-01-02T12:00:00Z"),
             );
-            expect(result).toHaveLength(2);
+            expect(result).toHaveLength(3);
             expect(result).toEqual(
                 expect.arrayContaining([
                     { id: active, tenantId: "tenant-a", requestId: "a" },
                     { id: fetched, tenantId: "tenant-b", requestId: "b" },
+                    { id: offer, tenantId: "tenant-a", requestId: null },
                 ]),
             );
             expect(result[0]).not.toBeInstanceOf(Session);
@@ -767,34 +856,39 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
                     status: SessionStatus.Active,
                 },
             ]);
-            await expect(
-                adapter.countSessionsForMaintenance(
-                    "tenant-a",
-                    "issuance",
-                    SessionStatus.Active,
-                ),
-            ).resolves.toBe(1);
-            await expect(
-                adapter.countSessionsForMaintenance(
-                    "tenant-a",
-                    "verification",
-                    SessionStatus.Active,
-                ),
-            ).resolves.toBe(2);
-            await expect(
-                adapter.countSessionsForMaintenance(
-                    "tenant-a",
-                    "verification",
-                    SessionStatus.Completed,
-                ),
-            ).resolves.toBe(1);
-            await expect(
-                adapter.countSessionsForMaintenance(
-                    "tenant-a",
-                    "verification",
-                    SessionStatus.Failed,
-                ),
-            ).resolves.toBe(0);
+            const counts = await adapter.countSessionsByStatus();
+            // The session from beforeEach is an active issuance of tenant-a.
+            expect(counts).toHaveLength(4);
+            expect(counts).toEqual(
+                expect.arrayContaining([
+                    {
+                        tenantId: "tenant-a",
+                        kind: "issuance",
+                        status: SessionStatus.Active,
+                        count: 1,
+                    },
+                    {
+                        tenantId: "tenant-a",
+                        kind: "verification",
+                        status: SessionStatus.Active,
+                        count: 2,
+                    },
+                    {
+                        tenantId: "tenant-a",
+                        kind: "verification",
+                        status: SessionStatus.Completed,
+                        count: 1,
+                    },
+                    {
+                        tenantId: "tenant-b",
+                        kind: "verification",
+                        status: SessionStatus.Active,
+                        count: 1,
+                    },
+                ]),
+            );
+            await repository.clear();
+            await expect(adapter.countSessionsByStatus()).resolves.toEqual([]);
         });
 
         it("maps current tenant retention settings to a plain maintenance view and reloads changes", async () => {
@@ -886,6 +980,63 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
             });
         });
 
+        it("changes the state only from an expected status, within the tenant scope", async () => {
+            const repository = getDataSource().getRepository(Session);
+            const key = { kty: "oct", k: "test-key-material" };
+            await repository.update(sessionId, {
+                responseEncryptionPrivateJwk: key,
+            });
+            await expect(
+                adapter.changeStateFrom(
+                    "tenant-b",
+                    sessionId,
+                    [SessionStatus.Active],
+                    stateUpdate(SessionStatus.Fetched),
+                ),
+            ).resolves.toBe(false);
+            await expect(
+                adapter.changeStateFrom(
+                    "tenant-a",
+                    sessionId,
+                    [SessionStatus.Fetched],
+                    stateUpdate(SessionStatus.Expired),
+                ),
+            ).resolves.toBe(false);
+            await expect(
+                adapter.changeStateFrom(
+                    "tenant-a",
+                    sessionId,
+                    [],
+                    stateUpdate(SessionStatus.Expired),
+                ),
+            ).resolves.toBe(false);
+            const results = await Promise.all(
+                Array.from({ length: 4 }, () =>
+                    adapter.changeStateFrom(
+                        "tenant-a",
+                        sessionId,
+                        [SessionStatus.Active],
+                        stateUpdate(SessionStatus.Fetched),
+                    ),
+                ),
+            );
+            expect(results.filter(Boolean)).toHaveLength(1);
+            await expect(
+                adapter.changeStateFrom(
+                    "tenant-a",
+                    sessionId,
+                    [SessionStatus.Active, SessionStatus.Fetched],
+                    stateUpdate(SessionStatus.Expired),
+                ),
+            ).resolves.toBe(true);
+            expect(
+                await repository.findOneByOrFail({ id: sessionId }),
+            ).toMatchObject({
+                status: SessionStatus.Expired,
+                responseEncryptionPrivateJwk: null,
+            });
+        });
+
         it("retains the existing no-op update behavior for a missing session", async () => {
             await expect(
                 adapter.changeState(
@@ -901,8 +1052,20 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
                 "tenant-a",
                 sessionId,
             );
-            expect(view).toEqual({ offer });
+            expect(view).toEqual({ offer, status: SessionStatus.Active });
             expect(view).not.toBeInstanceOf(Session);
+            const expiresAt = new Date("2030-01-01T00:00:00.000Z");
+            await adapter.updateForTenant("tenant-a", sessionId, {
+                status: SessionStatus.Fetched,
+                expiresAt,
+            });
+            await expect(
+                adapter.findCredentialOffer("tenant-a", sessionId),
+            ).resolves.toEqual({
+                offer,
+                status: SessionStatus.Fetched,
+                expiresAt,
+            });
             const raw = await getDataSource()
                 .getRepository(Session)
                 .createQueryBuilder("s")
@@ -921,7 +1084,7 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
             ).resolves.toBe(false);
             await expect(
                 adapter.findCredentialOffer("tenant-a", sessionId),
-            ).resolves.toEqual({ offer });
+            ).resolves.toEqual({ offer, status: SessionStatus.Active });
         });
 
         it("distinguishes a missing session from a session without an offer", async () => {
@@ -936,7 +1099,7 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
                 .update(sessionId, { offer: null });
             await expect(
                 adapter.findCredentialOffer("tenant-a", sessionId),
-            ).resolves.toEqual({ offer: null });
+            ).resolves.toEqual({ offer: null, status: SessionStatus.Active });
             await expect(
                 adapter.consumeCredentialOffer("tenant-a", sessionId),
             ).resolves.toBe(false);

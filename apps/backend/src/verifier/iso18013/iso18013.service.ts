@@ -31,7 +31,12 @@ import type {
     SessionData,
     SessionUpdate,
 } from "../../session/domain/session-data.js";
+import type { SessionOutcome } from "../../session/domain/session-outcome.js";
 import { SessionStatus } from "../../session/domain/session-state.js";
+import {
+    assertSessionUsable,
+    SessionNotUsable,
+} from "../../session/domain/session-usability.js";
 import { SessionAuditService } from "../../session/logging/session-audit.service.js";
 import {
     DEFAULT_VERIFIER_SKEW_SECONDS,
@@ -40,12 +45,14 @@ import {
 } from "../../trust/types.js";
 import {
     PRESENTATION_RESULT_PUBLISHER,
+    type PresentationResult,
     type PresentationResultPublisher,
+    type PresentationResultReport,
 } from "../../webhook/ports/presentation-result-publisher.js";
 import { WebhookConfig } from "../../webhook/webhook.dto.js";
 import { CredentialVerifierFormatRegistry } from "../presentations/application/credential-verifier-format-registry.js";
 import { PresentationConfigService } from "../presentations/configuration/presentation-config.service.js";
-import { shortVerificationMessage } from "../presentations/credential/verification-failure.js";
+import { verificationFailureDetails } from "../presentations/credential/verification-failure.js";
 import {
     trustListAuthorities,
     verifierTrustOptions,
@@ -94,19 +101,77 @@ export class Iso18013Service {
         private readonly changeSessionState: ChangeSessionState,
     ) {}
 
-    /** Persists a failed outcome and announces the terminal transition. */
+    /**
+     * Persists a failed outcome, announces the terminal transition and
+     * reports the failure to the presentation webhook.
+     */
     private async failSession(
         session: SessionData,
-        update: Omit<SessionUpdate, "status">,
+        update: Omit<SessionUpdate, "status" | "outcome"> & {
+            outcome: SessionOutcome;
+        },
     ): Promise<void> {
-        const updated = await this.sessionStore.updateForTenant(
+        // Conditional, so a completed or expired session keeps its state.
+        const updated = await this.sessionStore.updateIfUnconsumed(
             session.tenantId,
             session.id,
             { ...update, status: SessionStatus.Failed },
         );
-        if (updated > 0) {
-            this.changeSessionState.announce(session, SessionStatus.Failed);
+        if (!updated) {
+            return;
         }
+        this.changeSessionState.announce(session, SessionStatus.Failed);
+
+        // Failures are answered without a redirect, so a redirectUri the
+        // webhook returns is not used here.
+        const webhook = await this.resolveSessionWebhook(session).catch(
+            (err: any) => {
+                this.logger.warn(
+                    { sessionId: session.id },
+                    `Webhook lookup failed: ${err?.message ?? err}`,
+                );
+                return undefined;
+            },
+        );
+        if (webhook) {
+            await this.publishResult(webhook, session, {
+                status: SessionStatus.Failed,
+                outcome: update.outcome,
+            });
+        }
+    }
+
+    /** The request's inline webhook, else the configured webhook endpoint. */
+    private async resolveSessionWebhook(
+        session: SessionData,
+    ): Promise<WebhookConfig | undefined> {
+        return (
+            session.parsedWebhook ??
+            (await this.resolveWebhookFromEndpoint(
+                session.webhookEndpointId,
+                session.tenantId,
+            ))
+        );
+    }
+
+    /**
+     * Sends the presentation result to the webhook. Best effort: a failed
+     * delivery never changes the session result.
+     */
+    private publishResult(
+        webhook: WebhookConfig,
+        session: SessionData,
+        result: PresentationResultReport,
+    ): Promise<PresentationResult | undefined> {
+        return this.presentationResultPublisher
+            .publish({ webhook, session, ...result })
+            .catch((err: any) => {
+                this.logger.warn(
+                    { sessionId: session.id },
+                    `Webhook delivery failed: ${err?.message ?? err}`,
+                );
+                return undefined;
+            });
     }
 
     private async resolveWebhookFromEndpoint(
@@ -341,6 +406,14 @@ export class Iso18013Service {
                 "The presentation offer has already been used",
             );
         }
+        try {
+            assertSessionUsable(session, new Date());
+        } catch (error) {
+            if (error instanceof SessionNotUsable) {
+                throw new BadRequestException(error.message);
+            }
+            throw error;
+        }
 
         const logContext = {
             sessionId: session.id,
@@ -400,6 +473,10 @@ export class Iso18013Service {
             this.logger.warn({ sessionId }, reason);
             await this.failSession(session, {
                 errorReason: reason,
+                outcome: {
+                    result: "failed",
+                    message: "HPKE decryption failed",
+                },
             });
             this.auditLogService.logFlowError(logContext, err as Error, {
                 stage: "hpke_decryption",
@@ -473,10 +550,8 @@ export class Iso18013Service {
             // Machine-readable code + short message for the caller/UI; the
             // verbose failureReason (certificate subjects, thumbprints,
             // configured lists) is kept to logs/audit only.
-            const errorCode = verifyResult.failure.type ?? "verification_error";
-            const shortMessage = shortVerificationMessage(
-                verifyResult.failure.type,
-            );
+            const { code: errorCode, message: shortMessage } =
+                verificationFailureDetails(verifyResult.failure.type);
             const verboseReason =
                 verifyResult.failure.reason ?? "mDOC verification failed";
 
@@ -520,6 +595,18 @@ export class Iso18013Service {
         ];
 
         const responseCode = randomUUID();
+        const outcome: SessionOutcome = {
+            result: "success",
+            credentials: [
+                {
+                    id: mdocCred.id,
+                    format: "mso_mdoc",
+                    docType: verifyResult.docType,
+                    verified: true,
+                    trust: verifyResult.provenance,
+                },
+            ],
+        };
 
         // Complete atomically with the single-use flag so a concurrent
         // response cannot also complete (and announce) the session.
@@ -532,18 +619,7 @@ export class Iso18013Service {
                 responseCode,
                 consumed: true,
                 consumedAt: new Date(),
-                outcome: {
-                    result: "success",
-                    credentials: [
-                        {
-                            id: mdocCred.id,
-                            format: "mso_mdoc",
-                            docType: verifyResult.docType,
-                            verified: true,
-                            trust: verifyResult.provenance,
-                        },
-                    ],
-                },
+                outcome,
             },
         );
         if (!completed) {
@@ -553,26 +629,13 @@ export class Iso18013Service {
         }
         this.changeSessionState.announce(session, SessionStatus.Completed);
 
-        const webhook =
-            session.parsedWebhook ??
-            (await this.resolveWebhookFromEndpoint(
-                session.webhookEndpointId,
-                session.tenantId,
-            ));
+        const webhook = await this.resolveSessionWebhook(session);
         if (webhook) {
-            const webhookResponse = await this.presentationResultPublisher
-                .publish({
-                    webhook,
-                    session,
-                    credentials,
-                })
-                .catch((err: any) => {
-                    this.logger.warn(
-                        { sessionId },
-                        `Webhook delivery failed: ${err?.message ?? err}`,
-                    );
-                    return undefined;
-                });
+            const webhookResponse = await this.publishResult(webhook, session, {
+                status: SessionStatus.Completed,
+                outcome,
+                credentials,
+            });
 
             if (webhookResponse?.redirectUri) {
                 session.redirectUri = webhookResponse.redirectUri;

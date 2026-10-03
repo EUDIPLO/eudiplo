@@ -189,12 +189,19 @@ describe("VerifyPresentationResponse", () => {
         const { run } = setup([{ id: "pid" }], {
             verified: false,
             failure: { type: "signature_invalid", message: "invalid" },
+            docType: "eu.europa.ec.eudi.pid.1",
         } as Partial<CredentialVerificationResult>);
 
         const error = await run({ pid: ["vp"] }).catch((e) => e);
         expect(error).toBeInstanceOf(CredentialVerificationFailedError);
         expect(error.message).toBe("invalid");
         expect(error.failure.type).toBe("signature_invalid");
+        // The requested format and docType feed the per-credential outcome.
+        expect(error.credentialId).toBe("pid");
+        expect(error.credential).toEqual({
+            format: "dc+sd-jwt",
+            docType: "eu.europa.ec.eudi.pid.1",
+        });
     });
 
     it("rejects undisclosed claims and unsatisfied claim sets", async () => {

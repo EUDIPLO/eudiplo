@@ -612,6 +612,19 @@
           "type": "null"
         }
       ]
+    },
+    "offerLifetimeSeconds": {
+      "description": "Default lifetime of credential offers in seconds. Can be overridden per offer request. Null or unset: offers do not expire.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [

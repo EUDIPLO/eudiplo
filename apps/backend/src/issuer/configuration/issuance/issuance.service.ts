@@ -469,6 +469,7 @@ export class IssuanceService {
             credentialResponseEncryption: config.credentialResponseEncryption,
             credentialRequestEncryption: config.credentialRequestEncryption,
             txCodeMaxAttempts: config.txCodeMaxAttempts,
+            offerLifetimeSeconds: config.offerLifetimeSeconds,
         };
     }
 

@@ -1,5 +1,6 @@
 import type { ChangeSessionState } from "../../../session/application/change-session-state.js";
 import type { SessionStore } from "../../../session/application/session-store.js";
+import type { SessionOutcome } from "../../../session/domain/session-outcome.js";
 import { SessionStatus } from "../../../session/domain/session-state.js";
 
 export interface CompletePresentationResponseInput {
@@ -30,9 +31,22 @@ export class CompletePresentationResponse {
      * Completes the session atomically with its single-use flag, so concurrent
      * responses for the same request cannot both succeed. Only the winning
      * call publishes the status event and records metrics.
+     * @returns the outcome persisted on the session
      * @throws PresentationAlreadyConsumed when another response won
      */
-    async execute(input: CompletePresentationResponseInput): Promise<void> {
+    async execute(
+        input: CompletePresentationResponseInput,
+    ): Promise<SessionOutcome> {
+        const outcome: SessionOutcome = {
+            result: "success",
+            credentials: input.credentials.map((credential: any) => ({
+                id:
+                    typeof credential?.id === "string"
+                        ? credential.id
+                        : undefined,
+                verified: true,
+            })),
+        };
         const completed = await this.sessions.updateIfUnconsumed(
             input.tenantId,
             input.sessionId,
@@ -43,16 +57,7 @@ export class CompletePresentationResponse {
                 consumed: true,
                 consumedAt: input.consumedAt ?? new Date(),
                 responseEncryptionPrivateJwk: null,
-                outcome: {
-                    result: "success",
-                    credentials: input.credentials.map((credential: any) => ({
-                        id:
-                            typeof credential?.id === "string"
-                                ? credential.id
-                                : undefined,
-                        verified: true,
-                    })),
-                },
+                outcome,
             },
         );
         if (!completed) throw new PresentationAlreadyConsumed();
@@ -64,5 +69,6 @@ export class CompletePresentationResponse {
             },
             SessionStatus.Completed,
         );
+        return outcome;
     }
 }

@@ -21,6 +21,16 @@ export const SESSION_REPOSITORY = Symbol("SESSION_REPOSITORY");
 /** The offer view is deliberately independent of the persisted Session entity. */
 export interface SessionCredentialOffer {
     offer: CredentialOfferObject | null;
+    status: SessionStatus;
+    expiresAt?: Date;
+}
+
+/** Number of sessions of a tenant per kind and status. */
+export interface SessionCount {
+    tenantId: string;
+    kind: "issuance" | "verification";
+    status: SessionStatus;
+    count: number;
 }
 
 /** Migrated session operations. Extend by use case, never with ORM query types. */
@@ -32,8 +42,9 @@ export interface SessionRepository {
         update: SessionUpdate,
     ): Promise<number>;
     /**
-     * Apply the update only while the session is not yet consumed. Exactly one
-     * of several concurrent callers wins; return whether this call did.
+     * Apply the update only while the session is not yet consumed, still open
+     * (not in a terminal status) and not past `expiresAt`. Exactly one of
+     * several concurrent callers wins; return whether this call did.
      */
     updateUnconsumedForTenant(
         tenantId: string,
@@ -91,15 +102,16 @@ export interface SessionRepository {
     /** Missing sessions and sessions owned by another tenant are both no-ops. */
     deleteForTenant(tenantId: string, sessionId: string): Promise<void>;
 
-    /** Privileged cross-tenant selection: only overdue active/fetched presentations. */
-    findExpiredPresentationsForMaintenance(
+    /**
+     * Privileged cross-tenant selection of sessions overdue before `before`:
+     * open presentations, and issuance offers that were never redeemed
+     * (active and not consumed).
+     */
+    findExpiredSessionsForMaintenance(
         before: Date,
     ): Promise<SessionLifecycleContext[]>;
-    countSessionsForMaintenance(
-        tenantId: string,
-        kind: "issuance" | "verification",
-        status: SessionStatus,
-    ): Promise<number>;
+    /** Privileged cross-tenant counts; tenants without sessions are omitted. */
+    countSessionsByStatus(): Promise<SessionCount[]>;
     deleteSessionsCreatedBefore(
         tenantId: string,
         cutoff: Date,
@@ -120,6 +132,16 @@ export interface SessionRepository {
         sessionId: string,
         update: SessionStateUpdate,
     ): Promise<void>;
+    /**
+     * Compare-and-set: apply the state update only while the status is one of
+     * `from`. Return whether this call changed the session.
+     */
+    changeStateFrom(
+        tenantId: string,
+        sessionId: string,
+        from: readonly SessionStatus[],
+        update: SessionStateUpdate,
+    ): Promise<boolean>;
 
     findCredentialOffer(
         tenantId: string,

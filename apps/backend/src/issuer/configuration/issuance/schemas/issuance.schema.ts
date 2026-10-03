@@ -392,6 +392,15 @@ export const IssuanceConfigSchema = z
             .describe(
                 "Maximum verification attempts for transaction codes. Null resets to defaults.",
             ),
+        offerLifetimeSeconds: z.coerce
+            .number()
+            .int()
+            .min(1)
+            .nullable()
+            .optional()
+            .describe(
+                "Default lifetime of credential offers in seconds. Can be overridden per offer request. Null or unset: offers do not expire.",
+            ),
     })
     .describe("Issuer issuance configuration.")
     .strict();

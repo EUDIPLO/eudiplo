@@ -71,6 +71,7 @@ const OfferRequestSchema = z
         authorization_server: z.string().optional(),
         credentialClaims: z.record(z.string(), ClaimsSourceSchema).optional(),
         webhookEndpointId: z.string().optional(),
+        offerLifetimeSeconds: z.coerce.number().int().min(1).optional(),
     })
     .strict()
     .superRefine((data, ctx) => {
@@ -101,6 +102,7 @@ interface OfferRequestData {
     authorization_server?: string;
     credentialClaims?: Record<string, ClaimsSource>;
     webhookEndpointId?: string;
+    offerLifetimeSeconds?: number;
 }
 
 type OfferRequestConstructor = new () => OfferRequestData;
@@ -239,6 +241,18 @@ export class OfferRequestDto
      * ID of the webhook endpoint to notify about the status of the issuance process.
      */
     webhookEndpointId?: string;
+
+    /**
+     * Lifetime of this offer in seconds, overriding `offerLifetimeSeconds` of
+     * the issuance configuration.
+     */
+    @ApiPropertyOptional({
+        description:
+            "Lifetime of this offer in seconds. Overrides offerLifetimeSeconds of the issuance configuration. Without both, the offer does not expire.",
+        minimum: 1,
+        example: 600,
+    })
+    offerLifetimeSeconds?: number;
 }
 
 export class OfferResponse {

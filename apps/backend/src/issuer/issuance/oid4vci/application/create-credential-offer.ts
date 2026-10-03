@@ -1,6 +1,7 @@
 import type { CreateSession } from "../../../../session/application/create-session.js";
 import type { SessionStore } from "../../../../session/application/session-store.js";
 import type { SessionOfferRequest } from "../../../../session/domain/session-data.js";
+import type { IssuanceConfigRepository } from "../../../configuration/issuance/ports/issuance-config.repository.js";
 import type { CredentialOfferProtocol } from "../ports/credential-offer-protocol.js";
 import { BuildCredentialOfferGrants } from "./build-credential-offer-grants.js";
 import type { SelectAuthorizationServer } from "./select-authorization-server.js";
@@ -15,6 +16,10 @@ export class CreateCredentialOffer {
         >,
         private readonly protocol: CredentialOfferProtocol,
         private readonly newId: () => string,
+        private readonly issuanceConfigs: Pick<
+            IssuanceConfigRepository,
+            "getForTenant"
+        >,
     ) {}
     async execute(
         tenantId: string,
@@ -47,6 +52,12 @@ export class CreateCredentialOffer {
                         : Promise.resolve(),
             ),
         );
+        // The request overrides the configured lifetime; without both the
+        // offer does not expire (only the session retention removes it).
+        const lifetimeSeconds =
+            request.offerLifetimeSeconds ??
+            (await this.issuanceConfigs.getForTenant(tenantId))
+                .offerLifetimeSeconds;
         const session = await this.sessions.execute({
             id,
             tenantId,
@@ -54,6 +65,11 @@ export class CreateCredentialOffer {
             authorization_code: authorizationCode,
             webhookEndpointId: request.webhookEndpointId,
             authorizationServerId: selection.sessionServerId,
+            ...(lifetimeSeconds
+                ? {
+                      expiresAt: new Date(Date.now() + lifetimeSeconds * 1000),
+                  }
+                : {}),
         });
         const offer = await this.protocol.encode(
             session,

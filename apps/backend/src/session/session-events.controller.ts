@@ -15,7 +15,7 @@ import {
     ApiResponse,
     ApiTags,
 } from "@nestjs/swagger";
-import { Observable, startWith } from "rxjs";
+import { Observable } from "rxjs";
 import { JwtService } from "../auth/jwt.service.js";
 import { SessionStore } from "./application/session-store.js";
 import { SessionEventsService } from "./session-events.service.js";
@@ -65,12 +65,17 @@ export class SessionEventsController {
      * The EventSource API in browsers doesn't support custom headers, so the
      * token must be passed as a query parameter.
      *
-     * The stream emits events whenever the session status changes:
+     * The stream starts with the current status and emits an event whenever
+     * the session status changes:
      * - active: Session created, waiting for wallet interaction
      * - fetched: Credential offer/presentation request fetched by wallet
      * - completed: Session successfully completed
      * - expired: Session expired
      * - failed: Session failed
+     *
+     * After a terminal status (completed, expired, failed) the stream ends.
+     * Changes processed by another backend instance arrive within a few
+     * seconds.
      *
      * @param id - The session ID to subscribe to
      * @param token - JWT access token for authentication
@@ -82,6 +87,8 @@ export class SessionEventsController {
         summary: "Subscribe to session status updates",
         description:
             "Server-Sent Events endpoint for real-time session status updates. " +
+            "The first event carries the current status; the stream ends after " +
+            "a terminal status (completed, expired, failed). " +
             "Requires JWT authentication via query parameter.",
     })
     @ApiParam({
@@ -138,17 +145,10 @@ export class SessionEventsController {
 
             this.logger.debug(`Client subscribed to session ${id} events`);
 
-            // Return the event stream, starting with the current status
-            return this.sessionEventsService.getSessionEvents(id).pipe(
-                startWith(
-                    new MessageEvent("message", {
-                        data: JSON.stringify({
-                            id: session.id,
-                            status: session.status,
-                            updatedAt: session.updatedAt.toISOString(),
-                        }),
-                    }),
-                ),
+            // The stream starts with the current status itself.
+            return this.sessionEventsService.getSessionEvents(
+                tenantId,
+                session.id,
             );
         } catch {
             throw new NotFoundException(`Session ${id} not found`);

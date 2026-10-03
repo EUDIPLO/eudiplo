@@ -1,8 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import type { SessionData } from "../session/domain/session-data.js";
-import type { WebhookConfiguration } from "./domain/webhook-configuration.js";
+import { SessionStatus } from "../session/domain/session-state.js";
 import type {
     PresentationResult,
+    PresentationResultPublication,
     PresentationResultPublisher,
 } from "./ports/presentation-result-publisher.js";
 import { WebhookService } from "./webhook.service.js";
@@ -13,18 +13,22 @@ export class WebhookPresentationResultPublisher
 {
     constructor(private readonly webhooks: WebhookService) {}
 
-    async publish(values: {
-        webhook: WebhookConfiguration;
-        session: SessionData;
-        credentials?: unknown[];
-        rawPresentationPayload?: unknown;
-    }): Promise<PresentationResult> {
+    async publish(
+        values: PresentationResultPublication,
+    ): Promise<PresentationResult> {
         const response = await this.webhooks.sendWebhook({
-            ...values,
-            credentials: values.credentials as any[] | undefined,
-            rawPresentationPayload: values.rawPresentationPayload as
-                | Record<string, unknown>
-                | undefined,
+            webhook: values.webhook,
+            session: values.session,
+            result: { status: values.status, outcome: values.outcome },
+            // Failure results never carry credentials or raw tokens.
+            ...(values.status === SessionStatus.Completed
+                ? {
+                      credentials: values.credentials as any[] | undefined,
+                      rawPresentationPayload: values.rawPresentationPayload as
+                          | Record<string, unknown>
+                          | undefined,
+                  }
+                : {}),
             expectResponse: false,
         });
         return response?.redirectUri

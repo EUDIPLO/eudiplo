@@ -20,14 +20,18 @@ import { CredentialFormat } from "../../issuer/configuration/credentials/entitie
 import { WebhookEndpointEntity } from "../../issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
 import { OfferResponse } from "../../issuer/issuance/oid4vci/dto/offer-request.dto.js";
 import { RegistrarService } from "../../registrar/registrar.service.js";
-import { ChangeSessionState } from "../../session/application/change-session-state.js";
 import { CreateSession } from "../../session/application/create-session.js";
 import { SessionStore } from "../../session/application/session-store.js";
 import type { SessionData } from "../../session/domain/session-data.js";
-import { SessionStatus } from "../../session/domain/session-state.js";
+import type { SessionOutcomeCredential } from "../../session/domain/session-outcome.js";
+import {
+    assertSessionUsable,
+    SessionNotUsable,
+} from "../../session/domain/session-usability.js";
 import { AuditLogContext } from "../../session/logging/session-audit.service.js";
 import { SessionLoggerService } from "../../session/logging/session-logger.service.js";
 import { DEFAULT_VERIFIER_SKEW_SECONDS } from "../../trust/types.js";
+import type { WebhookConfiguration } from "../../webhook/domain/webhook-configuration.js";
 import {
     CredentialVerificationFailedError,
     IncompletePresentationError,
@@ -39,8 +43,7 @@ import {
 } from "../presentations/application/verify-presentation-response.js";
 import { PresentationConfigService } from "../presentations/configuration/presentation-config.service.js";
 import { PresentationRegistrationCertificateService } from "../presentations/configuration/presentation-registration-certificate.service.js";
-import { SdJwtVerificationError } from "../presentations/credential/sdjwtvcverifier/sdjwtvcverifier.service.js";
-import { shortVerificationMessage } from "../presentations/credential/verification-failure.js";
+import { verificationFailureDetails } from "../presentations/credential/verification-failure.js";
 import { UnsupportedCredentialVerifierFormat } from "../presentations/domain/credential-verifier-format.js";
 import { UnknownClaimSetReferenceError } from "../presentations/domain/dcql-claim-policy.js";
 import { AuthResponse } from "../presentations/dto/auth-response.dto.js";
@@ -90,7 +93,6 @@ export class Oid4vpService {
         private readonly webhookEndpointRepo: Repository<WebhookEndpointEntity>,
         private readonly cryptoImplementationService: CryptoImplementationService,
         private readonly traceService: TraceService,
-        private readonly changeSessionState: ChangeSessionState,
     ) {}
 
     private async resolveWebhookFromEndpoint(
@@ -115,6 +117,44 @@ export class Oid4vpService {
         }
 
         return { url: endpoint.url, auth: endpoint.auth };
+    }
+
+    /**
+     * Resolves the presentation webhook for a failure outside the verification
+     * flow, with the same precedence as in getResponse. Best effort: a lookup
+     * error must not change how the failure is recorded.
+     */
+    private async resolveFailureWebhook(
+        session: SessionData,
+    ): Promise<WebhookConfiguration | undefined> {
+        if (session.parsedWebhook) {
+            return session.parsedWebhook;
+        }
+        try {
+            const webhookEndpointId =
+                session.webhookEndpointId ??
+                (session.requestId
+                    ? (
+                          await this.presentationConfigService.getPresentationConfig(
+                              session.requestId,
+                              session.tenantId,
+                          )
+                      ).webhookEndpointId
+                    : undefined);
+            return await this.resolveWebhookFromEndpoint(
+                webhookEndpointId,
+                session.tenantId,
+            );
+        } catch (error) {
+            this.logger.warn(
+                {
+                    sessionId: session.id,
+                    errorMessage: (error as Error)?.message,
+                },
+                "Could not resolve the webhook for a failed presentation",
+            );
+            return undefined;
+        }
     }
 
     /**
@@ -152,17 +192,21 @@ export class Oid4vpService {
             "oid4vp.cached": !!session.requestObject,
         });
 
-        return this.retrievePresentationRequest.execute(
-            session,
-            origin,
-            noRedirect,
-            (sessionId, requestOrigin, shouldNotRedirect) =>
-                this.createAuthorizationRequest(
-                    sessionId,
-                    requestOrigin,
-                    shouldNotRedirect,
-                ),
-        );
+        return this.retrievePresentationRequest
+            .execute(
+                session,
+                origin,
+                noRedirect,
+                (sessionId, requestOrigin, shouldNotRedirect) =>
+                    this.createAuthorizationRequest(
+                        sessionId,
+                        requestOrigin,
+                        shouldNotRedirect,
+                    ),
+            )
+            .catch((error: unknown) => {
+                throw sessionNotUsableException(error);
+            });
     }
 
     /**
@@ -546,9 +590,10 @@ export class Oid4vpService {
 
     /**
      * Records an OAuth 2.0 error response from the wallet (e.g. the user
-     * declined) and marks the session as failed. Per OID4VP 1.0 §8.2 a
-     * successfully processed Authorization Error Response is answered with
-     * HTTP 200, optionally carrying a redirect_uri.
+     * declined), marks the session as failed and reports the failure to the
+     * presentation webhook. Per OID4VP 1.0 §8.2 a successfully processed
+     * Authorization Error Response is answered with HTTP 200, optionally
+     * carrying a redirect_uri.
      */
     private async handleWalletError(
         session: SessionData,
@@ -577,38 +622,42 @@ export class Oid4vpService {
 
         // The wallet's OAuth error code (e.g. `access_denied`) is already a
         // stable, spec-defined code, so it becomes the session's failure code.
-        // Conditional on `consumed` so a late error response cannot overwrite
-        // a session a concurrent presentation already completed.
+        // The failure is recorded conditionally, so a late error response
+        // cannot overwrite a session that already finished or expired.
         const reason = `Wallet error: ${errorMessage}`;
-        const updated = await this.sessionStore.updateIfUnconsumed(
-            session.tenantId,
-            session.id,
-            {
-                status: SessionStatus.Failed,
-                errorReason: reason,
-                failureCode: walletError.error,
-                outcome: {
-                    result: "failed",
-                    error: walletError.error,
-                    message: reason,
-                },
-                responseEncryptionPrivateJwk: null,
-            },
-        );
-        if (!updated) {
+        const webhook = await this.resolveFailureWebhook(session);
+        const failure = await this.failPresentationResponse.execute({
+            tenantId: session.tenantId,
+            sessionId: session.id,
+            requestId: session.requestId,
+            message: reason,
+            code: walletError.error,
+            publish: webhook ? { webhook, session } : undefined,
+        });
+        if (!failure.failed) {
             throw new BadRequestException(
                 "The presentation offer has already been used",
             );
         }
-        this.changeSessionState.announce(session, SessionStatus.Failed);
+        if (failure.publicationFailed) {
+            this.auditLogger.logFlowError(
+                logContext,
+                failure.publicationError as Error,
+                { action: "webhook_callback" },
+            );
+        }
 
-        if (!session.redirectUri) {
+        // As on success, a redirectUri returned by the webhook replaces the
+        // configured one.
+        const redirectUri = failure.redirectUri || session.redirectUri;
+        if (!redirectUri) {
             return {};
         }
 
-        const processedRedirectUri = decodeURIComponent(
-            session.redirectUri,
-        ).replaceAll("{sessionId}", session.id);
+        const processedRedirectUri = decodeURIComponent(redirectUri).replaceAll(
+            "{sessionId}",
+            session.id,
+        );
         const separator = processedRedirectUri.includes("?") ? "&" : "?";
         return {
             redirect_uri: `${processedRedirectUri}${separator}error=${encodeURIComponent(walletError.error)}${walletError.error_description ? `&error_description=${encodeURIComponent(walletError.error_description)}` : ""}`,
@@ -644,6 +693,11 @@ export class Oid4vpService {
             throw new BadRequestException(
                 "The presentation offer has already been used",
             );
+        }
+        try {
+            assertSessionUsable(session, new Date());
+        } catch (error) {
+            throw sessionNotUsableException(error);
         }
 
         // Add session context to span for trace correlation
@@ -823,16 +877,10 @@ export class Oid4vpService {
                 "OID4VP presentation response processing failed",
             );
 
-            // Structured verification failures carry a machine-readable code and
-            // a short, safe message; keep the verbose reason to logs/audit only.
-            const structured =
-                error instanceof SdJwtVerificationError
-                    ? {
-                          code: error.failureType,
-                          message: shortVerificationMessage(error.failureType),
-                          verbose: error.verboseReason,
-                      }
-                    : undefined;
+            // Structured verification failures (SD-JWT VC and mdoc) carry a
+            // machine-readable code and a short, safe message; keep the verbose
+            // reason to logs/audit only.
+            const structured = classifyVerificationFailure(error);
 
             this.auditLogger.logFlowError(
                 logContext,
@@ -855,19 +903,29 @@ export class Oid4vpService {
                   ? error.message
                   : `Presentation validation failed: ${error.message}`;
 
-            await this.failPresentationResponse.execute({
+            const failure = await this.failPresentationResponse.execute({
                 tenantId: session.tenantId,
                 sessionId: session.id,
                 requestId: session.requestId,
                 message: errorMessage,
                 code: structured?.code,
+                credentials: structured ? [structured.credential] : undefined,
+                publish: webhook ? { webhook, session } : undefined,
             });
+            if (failure.publicationFailed) {
+                this.auditLogger.logFlowError(
+                    logContext,
+                    failure.publicationError as Error,
+                    { action: "webhook_callback" },
+                );
+            }
 
-            // If redirect_uri is configured, return it with error parameter,
-            // while propagating HTTP 400.
-            if (session.redirectUri) {
+            // If redirect_uri is configured (or returned by the webhook),
+            // return it with error parameter, while propagating HTTP 400.
+            const redirectUri = failure.redirectUri || session.redirectUri;
+            if (redirectUri) {
                 const processedRedirectUri = decodeURIComponent(
-                    session.redirectUri,
+                    redirectUri,
                 ).replaceAll("{sessionId}", session.id);
 
                 // Append error query parameter to redirect URI
@@ -921,6 +979,13 @@ export class Oid4vpService {
     }
 }
 
+/** An expired or finished presentation request is a client error (HTTP 400). */
+function sessionNotUsableException(error: unknown): unknown {
+    return error instanceof SessionNotUsable
+        ? new BadRequestException(error.message)
+        : error;
+}
+
 /** Maps presentation verification errors to the HTTP exceptions of the OID4VP API. */
 function presentationVerificationException(error: unknown): unknown {
     if (error instanceof IncompletePresentationError) {
@@ -937,8 +1002,11 @@ function presentationVerificationException(error: unknown): unknown {
             `Unsupported credential type: ${error.format}`,
         );
     }
+    if (error instanceof CredentialVerificationFailedError) {
+        // The cause keeps the structured failure for the session outcome.
+        return new BadRequestException(error.message, { cause: error });
+    }
     if (
-        error instanceof CredentialVerificationFailedError ||
         error instanceof MultiplePresentationsNotAllowedError ||
         error instanceof InvalidTrustedAuthoritiesError ||
         error instanceof UnknownClaimSetReferenceError
@@ -946,6 +1014,38 @@ function presentationVerificationException(error: unknown): unknown {
         return new BadRequestException(error.message);
     }
     return error;
+}
+
+/**
+ * Code, short message, verbose reason and per-credential outcome of a
+ * credential verification failure (SD-JWT VC or mdoc), also when wrapped in
+ * the HTTP exception of presentationVerificationException. Undefined for
+ * other errors.
+ */
+function classifyVerificationFailure(error: unknown) {
+    const failed =
+        error instanceof CredentialVerificationFailedError
+            ? error
+            : error instanceof Error &&
+                error.cause instanceof CredentialVerificationFailedError
+              ? error.cause
+              : undefined;
+    if (!failed) {
+        return undefined;
+    }
+    const details = verificationFailureDetails(
+        failed.failure.type,
+        failed.failure.reason,
+    );
+    const credential: SessionOutcomeCredential = {
+        id: failed.credentialId,
+        format: failed.credential.format,
+        docType: failed.credential.docType,
+        verified: false,
+        error: details.code,
+        message: details.message,
+    };
+    return { ...details, credential };
 }
 
 /** OAuth 2.0 Authorization Error Response sent by the wallet (OID4VP 1.0 §8.5). */

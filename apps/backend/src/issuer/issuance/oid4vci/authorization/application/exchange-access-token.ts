@@ -15,6 +15,7 @@ import type { SessionData } from "../../../../../session/domain/session-data.js"
 import type { Oid4vciSettings } from "../../oid4vci-settings.js";
 import type { DpopProofReplayRegistry } from "../../ports/dpop-proof-replay-registry.js";
 import { OAuthError } from "../domain/oauth-error.js";
+import { assertOfferRedeemable } from "../domain/offer-redemption.js";
 import { checkPkce } from "../domain/pkce.js";
 import {
     describeLibraryError,
@@ -127,6 +128,11 @@ export class ExchangeAccessToken {
                 "invalid_grant",
                 "The credential offer has already been used",
             );
+        }
+        // The offer lifetime limits redeeming the code only; refresh tokens
+        // keep their own lifetime after the session is fetched or completed.
+        if (!isRefreshGrant) {
+            assertOfferRedeemable(session, new Date(), "invalid_grant");
         }
 
         const issuanceConfig =

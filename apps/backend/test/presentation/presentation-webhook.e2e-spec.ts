@@ -5,6 +5,7 @@ import {
 } from "@openid4vc/openid4vp";
 import { CryptoKey } from "jose";
 import nock from "nock";
+import request from "supertest";
 import { App } from "supertest/types";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { StatusListService } from "../../src/issuer/status-list/status-list.service.js";
@@ -46,6 +47,8 @@ describe("Presentation - Webhook Integration", () => {
         includeRawTokensFor?: string[];
         privateKey: CryptoKey;
         issuerCert: string;
+        /** Overrides the key-binding nonce, e.g. to make verification fail. */
+        nonce?: string;
     }) {
         const requestBody: PresentationRequest = {
             response_type: ResponseType.URI,
@@ -84,7 +87,8 @@ describe("Presentation - Webhook Integration", () => {
             {
                 iat: Math.floor(Date.now() / 1000),
                 aud: resolved.authorizationRequestPayload.client_id as string,
-                nonce: resolved.authorizationRequestPayload.nonce,
+                nonce:
+                    values.nonce ?? resolved.authorizationRequestPayload.nonce,
             },
             values.privateKey,
             x5c,
@@ -144,6 +148,11 @@ describe("Presentation - Webhook Integration", () => {
             .post("/consume", (body) => {
                 expect(body).toBeDefined();
                 expect(body.session).toBeDefined();
+                expect(body.status).toBe("completed");
+                expect(body.outcome).toEqual({
+                    result: "success",
+                    credentials: [{ id: "pid", verified: true }],
+                });
                 expect(body.credentials).toBeDefined();
                 expect(body.credentials[0].id).toBe("pid");
                 expect(body.credentials[0].values).toBeDefined();
@@ -222,5 +231,121 @@ describe("Presentation - Webhook Integration", () => {
         expect(submitRes).toBeDefined();
         expect(submitRes.response.status).toBe(200);
         expect(nock.isDone()).toBe(true);
+    });
+
+    test("declined presentation is reported to the webhook", async () => {
+        let received: Record<string, unknown> | undefined;
+        nock("http://localhost:8787")
+            .post("/declined", (body) => {
+                received = body;
+                return true;
+            })
+            .reply(200, { redirectUri: "https://rp.example/declined" });
+
+        const res = await createPresentationRequest(app, authToken, {
+            response_type: ResponseType.URI,
+            requestId: "pid",
+            webhook: {
+                url: "http://localhost:8787/declined",
+                auth: { type: AuthConfig.NONE },
+            },
+        });
+        const sessionId = res.body.session;
+
+        const errorResponse = await request(app.getHttpServer())
+            .post(`/presentations/${sessionId}/oid4vp`)
+            .trustLocalhost()
+            .send({
+                error: "access_denied",
+                error_description: "User declined",
+                state: sessionId,
+            })
+            .expect(200);
+
+        expect(nock.isDone()).toBe(true);
+        // Failure webhooks carry status and outcome, never credentials.
+        expect(received).toEqual({
+            status: "failed",
+            outcome: {
+                result: "failed",
+                error: "access_denied",
+                message: "Wallet error: access_denied: User declined",
+            },
+            session: sessionId,
+            transaction_data: null,
+        });
+        // The webhook's redirectUri replaces the configured one.
+        expect(errorResponse.body).toEqual({
+            redirect_uri:
+                "https://rp.example/declined?error=access_denied&error_description=User%20declined",
+        });
+    });
+
+    test("failed verification is reported to the webhook without credentials", async () => {
+        let received: Record<string, any> | undefined;
+        nock("http://localhost:8787")
+            .post("/failed", (body) => {
+                received = body;
+                return true;
+            })
+            .reply(200);
+
+        const { res, submitRes } = await submitPresentation({
+            requestId: "pid",
+            privateKey: privateIssuerKey,
+            issuerCert,
+            credentialId: "pid",
+            webhookUrl: "http://localhost:8787/failed",
+            includeRawTokensFor: ["pid"],
+            nonce: "not-the-request-nonce",
+        });
+
+        expect(submitRes.response.status).toBe(400);
+        expect(nock.isDone()).toBe(true);
+        expect(received).toMatchObject({
+            status: "failed",
+            outcome: { result: "failed" },
+            session: res.body.session,
+        });
+        expect(received?.outcome.message).toEqual(expect.any(String));
+        expect(received).not.toHaveProperty("credentials");
+
+        // Delivery happens after the failure is recorded on the session.
+        const sessionRes = await request(app.getHttpServer())
+            .get(`/session/${res.body.session}`)
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        expect(sessionRes.body.status).toBe("failed");
+        expect(sessionRes.body.outcome).toEqual(received?.outcome);
+    });
+
+    test("an unreachable failure webhook does not change the session result", async () => {
+        nock("http://localhost:8787").post("/broken").reply(500);
+
+        const res = await createPresentationRequest(app, authToken, {
+            response_type: ResponseType.URI,
+            requestId: "pid",
+            webhook: {
+                url: "http://localhost:8787/broken",
+                auth: { type: AuthConfig.NONE },
+            },
+        });
+        const sessionId = res.body.session;
+
+        await request(app.getHttpServer())
+            .post(`/presentations/${sessionId}/oid4vp`)
+            .trustLocalhost()
+            .send({ error: "access_denied", state: sessionId })
+            .expect(200);
+
+        expect(nock.isDone()).toBe(true);
+        const sessionRes = await request(app.getHttpServer())
+            .get(`/session/${sessionId}`)
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        expect(sessionRes.body.status).toBe("failed");
+        expect(sessionRes.body.failureCode).toBe("access_denied");
     });
 });

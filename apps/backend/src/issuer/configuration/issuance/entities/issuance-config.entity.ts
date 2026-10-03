@@ -248,6 +248,21 @@ export class IssuanceConfig {
     txCodeMaxAttempts?: number;
 
     /**
+     * Default lifetime of credential offers in seconds. After it, the offer
+     * (credential offer URI, pre-authorized code, authorization flow) can no
+     * longer be redeemed; tokens already issued keep their own lifetimes.
+     * An offer request can override it. Unset: offers do not expire.
+     */
+    @ApiPropertyOptional({
+        description:
+            "Default lifetime of credential offers in seconds. Can be overridden per offer request. Unset: offers do not expire.",
+        nullable: true,
+        minimum: 1,
+    })
+    @Column("int", { nullable: true })
+    offerLifetimeSeconds?: number | null;
+
+    /**
      * The timestamp when the VP request was created.
      */
     @CreateDateColumn()

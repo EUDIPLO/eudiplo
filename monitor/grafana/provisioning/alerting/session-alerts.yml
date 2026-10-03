@@ -10,6 +10,9 @@ groups:
         title: High Session Error Rate
         condition: C
         data:
+          # Share of failed sessions among finished ones per tenant. Every
+          # replica reports the same database-derived `sessions` gauge, so
+          # each series is deduplicated with max before summing.
           - refId: A
             queryType: ''
             relativeTimeRange:
@@ -17,19 +20,26 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: sessions{status="error"}
+              expr: >-
+                sum by (tenant_id) (max by (tenant_id, session_type, status) (sessions{status="failed"}))
+                / sum by (tenant_id) (max by (tenant_id, session_type, status) (sessions{status=~"completed|failed"}))
+              instant: true
               interval: ''
               refId: A
           - refId: B
             queryType: ''
             relativeTimeRange:
-              from: 300
+              from: 0
               to: 0
-            datasourceUid: prometheus
+            datasourceUid: __expr__
             model:
-              expr: sessions{status=~"completed|error"}
-              interval: ''
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              reducer: last
               refId: B
+              type: reduce
           - refId: C
             queryType: ''
             relativeTimeRange:
@@ -42,29 +52,17 @@ groups:
                     params:
                       - 0.1
                     type: gt
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - A
-                  reducer:
-                    params: []
-                    type: last
-                  type: query
               datasource:
                 type: __expr__
                 uid: __expr__
-              expression: A / B
-              hide: false
-              intervalMs: 1000
-              maxDataPoints: 43200
+              expression: B
               refId: C
-              type: math
+              type: threshold
         noDataState: NoData
         execErrState: Alerting
         for: 2m
         annotations:
-          description: 'Session error rate is {{ printf "%.2f" $values.C.Value }}% for tenant {{ $labels.tenant_id }}'
+          description: 'Session failure rate is {{ humanizePercentage $values.B.Value }} for tenant {{ $labels.tenant_id }}'
           summary: High session error rate detected
         labels:
           severity: warning

@@ -69,6 +69,8 @@ describe("Oid4vciService credential request error mapping", () => {
         resolveSession?: () => Promise<unknown>;
         issue?: () => Promise<unknown>;
         authorizationDetails?: unknown;
+        updateForTenant?: ReturnType<typeof vi.fn>;
+        executeFrom?: ReturnType<typeof vi.fn>;
     }) {
         const session = {
             id: "session",
@@ -76,6 +78,10 @@ describe("Oid4vciService credential request error mapping", () => {
             notifications: [],
         };
         return service({
+            changeSessionState: {
+                executeFrom:
+                    overrides.executeFrom ?? vi.fn().mockResolvedValue(true),
+            },
             sdk: {
                 issuer: () => ({
                     getKnownCredentialConfigurationsSupported: () => ({
@@ -133,7 +139,9 @@ describe("Oid4vciService credential request error mapping", () => {
                     overrides.issue ??
                     vi.fn().mockResolvedValue([{ credential: "credential" }]),
             },
-            sessionStore: { updateForTenant: vi.fn() },
+            sessionStore: {
+                updateForTenant: overrides.updateForTenant ?? vi.fn(),
+            },
         });
     }
 
@@ -141,6 +149,39 @@ describe("Oid4vciService credential request error mapping", () => {
         await expect(
             setup({}).getCredential(request, "tenant"),
         ).resolves.toEqual({ credentialResponse: {} });
+    });
+
+    it("stores the notification and marks only an active session as fetched", async () => {
+        const order: string[] = [];
+        const updateForTenant = vi.fn(async () => {
+            order.push("notification");
+        });
+        const executeFrom = vi.fn(async () => {
+            order.push("fetched");
+            return true;
+        });
+        await setup({ updateForTenant, executeFrom }).getCredential(
+            request,
+            "tenant",
+        );
+        expect(updateForTenant).toHaveBeenCalledExactlyOnceWith(
+            "tenant",
+            "session",
+            {
+                notifications: [
+                    {
+                        id: expect.any(String),
+                        credentialConfigurationId: "pid",
+                    },
+                ],
+            },
+        );
+        expect(executeFrom).toHaveBeenCalledExactlyOnceWith(
+            expect.objectContaining({ id: "session", tenantId: "tenant" }),
+            ["active"],
+            "fetched",
+        );
+        expect(order).toEqual(["notification", "fetched"]);
     });
 
     it("maps InvalidCredentialProof to invalid_proof", async () => {

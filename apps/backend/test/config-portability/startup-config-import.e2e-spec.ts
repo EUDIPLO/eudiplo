@@ -13,6 +13,7 @@ import {
     CONFIG_SINGLETON_IDS,
     normalizeDocument,
     resourceId,
+    schemaUrl,
 } from "@eudiplo/config-format/config-format.js";
 import type { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -237,13 +238,12 @@ describe("startup configuration reconciliation", () => {
         const bundle = await service.exportBundle("demo");
         expect(bundle.manifest.formatVersion).toBe(2);
         for (const document of bundle.documents) {
-            expect(document.$schema).toMatch(
-                /^https:\/\/eudiplo\.dev\/schemas\/v1\//,
-            );
             expect(document.kind).toBeUndefined();
             expect(document.apiVersion).toBeUndefined();
             expect(document.metadata).not.toHaveProperty("id");
             const { kind } = normalizeDocument(document);
+            // Each resource is exported in its current format version.
+            expect(document.$schema).toBe(schemaUrl(kind));
             if (!CONFIG_SINGLETON_IDS[kind]) {
                 expect(
                     document.spec[kind === "Client" ? "clientId" : "id"],

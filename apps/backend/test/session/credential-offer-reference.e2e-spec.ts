@@ -16,7 +16,10 @@ describe.each([false, true])(
         let app: INestApplication;
         let folder: string;
         let db: DataSource;
-        let seed: (hasOffer?: boolean) => Promise<string>;
+        let seed: (
+            hasOffer?: boolean,
+            values?: { expiresAt?: Date; status?: string },
+        ) => Promise<string>;
         const offer = {
             credential_issuer: "https://issuer.example/tenant-a",
             credential_configuration_ids: ["pid"],
@@ -46,12 +49,13 @@ describe.each([false, true])(
             await app.listen(0, "127.0.0.1");
             db = app.get(DataSource);
             await db.getRepository(TenantEntity).save({ id: "tenant-a" });
-            seed = async (hasOffer = true) => {
+            seed = async (hasOffer = true, values = {}) => {
                 const id = randomUUID();
                 await db.getRepository(Session).save({
                     id,
                     tenantId: "tenant-a",
                     offer: hasOffer ? offer : null,
+                    ...(values as object),
                 });
                 return id;
             };
@@ -128,6 +132,32 @@ describe.each([false, true])(
             expect(
                 responses.filter((response) => response.status === 404),
             ).toHaveLength(multiple ? 0 : 3);
+        });
+
+        it("serves an offer until its lifetime ends, then answers 404", async () => {
+            const valid = await seed(true, {
+                expiresAt: new Date(Date.now() + 60_000),
+            });
+            await request(app.getHttpServer())
+                .get(`/issuers/tenant-a/vci/credential-offers/${valid}`)
+                .expect(200);
+            const expired = await seed(true, {
+                expiresAt: new Date(Date.now() - 1000),
+            });
+            const response = await request(app.getHttpServer())
+                .get(`/issuers/tenant-a/vci/credential-offers/${expired}`)
+                .expect(404);
+            expect(response.body.message).toBe("The session has expired");
+        });
+
+        it("answers 404 for an offer whose session is finished", async () => {
+            const id = await seed(true, { status: "completed" });
+            const response = await request(app.getHttpServer())
+                .get(`/issuers/tenant-a/vci/credential-offers/${id}`)
+                .expect(404);
+            expect(response.body.message).toBe(
+                "The session is already completed",
+            );
         });
     },
 );

@@ -452,5 +452,16 @@ describe("Presentation - SD-JWT Credential", () => {
         expect(sessionRes.body.errorReason).toMatch(
             /trust|chain|no_trusted_entity_match|Invalid.*Signature/i,
         );
+        // Classified failures name the failing credential in the outcome.
+        expect(sessionRes.body.failureCode).toEqual(expect.any(String));
+        expect(sessionRes.body.outcome.credentials).toEqual([
+            {
+                id: "pid",
+                format: "dc+sd-jwt",
+                verified: false,
+                error: sessionRes.body.failureCode,
+                message: sessionRes.body.errorReason,
+            },
+        ]);
     });
 });

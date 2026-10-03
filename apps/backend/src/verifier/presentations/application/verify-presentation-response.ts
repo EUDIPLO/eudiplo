@@ -90,6 +90,8 @@ export class CredentialVerificationFailedError extends Error {
     constructor(
         readonly credentialId: string,
         readonly failure: CredentialVerificationFailure,
+        /** Format and, when known, mdoc docType of the failed credential. */
+        readonly credential: { format?: string; docType?: string } = {},
     ) {
         super(failure.message);
         this.name = "CredentialVerificationFailedError";
@@ -229,6 +231,7 @@ export class VerifyPresentationResponse {
                             throw new CredentialVerificationFailedError(
                                 credentialId,
                                 result.failure,
+                                { format, docType: result.docType },
                             );
                         }
                         if (result.claimSetSatisfied === false) {

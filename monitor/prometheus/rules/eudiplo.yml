@@ -47,6 +47,7 @@ groups:
 
   - name: tenant.rules
     rules:
-      # Per-tenant active sessions
+      # Per-tenant active sessions. Every replica reports the same
+      # database-derived gauge, so deduplicate with max before summing.
       - record: tenant:active_sessions
-        expr: sessions{status="active"}
+        expr: sum by (tenant_id) (max by (tenant_id, session_type, status) (sessions{status="active"}))

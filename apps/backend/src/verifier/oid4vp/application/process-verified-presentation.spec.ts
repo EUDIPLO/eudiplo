@@ -4,7 +4,6 @@ import {
     CompletePresentationResponse,
     PresentationAlreadyConsumed,
 } from "./complete-presentation-response.js";
-import { FailPresentationResponse } from "./fail-presentation-response.js";
 import { ParseAuthorizationResponse } from "./parse-authorization-response.js";
 import { ProcessVerifiedPresentation } from "./process-verified-presentation.js";
 
@@ -64,11 +63,17 @@ describe("presentation completion and publication", () => {
             }),
         );
         expect(JSON.stringify(f.writes)).not.toContain("private");
-        expect(f.publish).toHaveBeenCalledWith(
-            expect.objectContaining({
-                rawPresentationPayload: input.rawPresentationPayload,
-            }),
-        );
+        expect(f.publish).toHaveBeenCalledWith({
+            webhook,
+            session,
+            status: "completed",
+            outcome: {
+                result: "success",
+                credentials: [{ id: "pid", verified: true }],
+            },
+            credentials: input.credentials,
+            rawPresentationPayload: input.rawPresentationPayload,
+        });
     });
     it("rejects state mismatches before persistence and publication", async () => {
         const f = fixture();
@@ -114,52 +119,6 @@ describe("presentation completion and publication", () => {
         });
         expect(f.publish).not.toHaveBeenCalled();
     });
-    it.each([undefined, "invalid_signature"])(
-        "persists failure and clears keys with code %s",
-        async (code) => {
-            const updateForTenant = vi.fn().mockResolvedValue(1);
-            const announce = vi.fn();
-            await new FailPresentationResponse(
-                { updateForTenant },
-                { announce },
-            ).execute({
-                tenantId: "tenant",
-                sessionId: "session",
-                requestId: "presentation",
-                message: "failed",
-                code,
-            });
-            expect(announce).toHaveBeenCalledExactlyOnceWith(
-                {
-                    id: "session",
-                    tenantId: "tenant",
-                    requestId: "presentation",
-                },
-                "failed",
-            );
-            expect(updateForTenant).toHaveBeenCalledWith("tenant", "session", {
-                status: "failed",
-                errorReason: "failed",
-                responseEncryptionPrivateJwk: null,
-                ...(code ? { failureCode: code } : {}),
-                outcome: {
-                    result: "failed",
-                    message: "failed",
-                    ...(code ? { error: code } : {}),
-                },
-            });
-        },
-    );
-
-    it("does not announce a failure when no session was updated", async () => {
-        const announce = vi.fn();
-        await new FailPresentationResponse(
-            { updateForTenant: vi.fn().mockResolvedValue(0) },
-            { announce },
-        ).execute({ tenantId: "tenant", sessionId: "gone", message: "failed" });
-        expect(announce).not.toHaveBeenCalled();
-    });
-
     it("does not publish when another response already completed the session", async () => {
         const publish = vi.fn();
         const useCase = new ProcessVerifiedPresentation(

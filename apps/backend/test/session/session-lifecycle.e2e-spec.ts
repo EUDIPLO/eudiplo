@@ -7,7 +7,7 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { Test } from "@nestjs/testing";
 import { Oauth2ServerErrorResponseError } from "@openid4vc/oauth2";
-import { firstValueFrom, timeout } from "rxjs";
+import { lastValueFrom, timeout, toArray } from "rxjs";
 import { DataSource } from "typeorm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -379,10 +379,12 @@ describe("session lifecycle module wiring", () => {
             tenantId: "tenant-a",
             responseEncryptionPrivateJwk: { kty: "oct", k: "private-material" },
         });
-        const nextEvent = firstValueFrom(
+        // The stream starts with the stored status and completes after the
+        // terminal one, so its last event is the transition under test.
+        const nextEvent = lastValueFrom(
             app
                 .get(events.SessionEventsService)
-                .getSessionEvents(id)
+                .getSessionEvents("tenant-a", id)
                 .pipe(timeout(2000)),
         );
         const emitted: unknown[] = [];
@@ -421,6 +423,61 @@ describe("session lifecycle module wiring", () => {
             });
         } finally {
             emitter.off(eventPort.SESSION_STATUS_CHANGED, listener);
+        }
+    });
+
+    it("streams the stored status first and completes on a change made without an in-process event", async () => {
+        const { SESSION_EVENTS_POLL_INTERVAL_MS } = events;
+        const id = randomUUID();
+        const repository = db.getRepository(entities.Session);
+        await repository.save({
+            id,
+            tenantId: "tenant-a",
+            status: domain.SessionStatus.Fetched,
+        });
+        try {
+            const stream = lastValueFrom(
+                app
+                    .get(events.SessionEventsService)
+                    .getSessionEvents("tenant-a", id)
+                    .pipe(
+                        toArray(),
+                        timeout(SESSION_EVENTS_POLL_INTERVAL_MS * 3),
+                    ),
+            );
+            // Another replica completes the session: only the database changes.
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            await repository.update(
+                { id },
+                { status: domain.SessionStatus.Failed },
+            );
+            const statuses = (await stream).map(
+                (message) => JSON.parse(message.data).status,
+            );
+            expect(statuses).toEqual(["fetched", "failed"]);
+
+            // A late subscriber gets the terminal status and the end of stream.
+            const late = await lastValueFrom(
+                app
+                    .get(events.SessionEventsService)
+                    .getSessionEvents("tenant-a", id)
+                    .pipe(toArray(), timeout(2000)),
+            );
+            expect(late.map((message) => JSON.parse(message.data))).toEqual([
+                { id, status: "failed", updatedAt: expect.any(String) },
+            ]);
+
+            // Reads are tenant-scoped: another tenant's stream ends at once.
+            await expect(
+                lastValueFrom(
+                    app
+                        .get(events.SessionEventsService)
+                        .getSessionEvents("tenant-b", id)
+                        .pipe(toArray(), timeout(2000)),
+                ),
+            ).resolves.toEqual([]);
+        } finally {
+            await repository.delete({ id });
         }
     });
 
@@ -519,10 +576,12 @@ describe("session lifecycle module wiring", () => {
             expiresAt: new Date("2020-01-01"),
             responseEncryptionPrivateJwk: { kty: "oct", k: "private-material" },
         });
-        const nextEvent = firstValueFrom(
+        // The stream starts with the stored status and completes after the
+        // terminal one, so its last event is the transition under test.
+        const nextEvent = lastValueFrom(
             app
                 .get(events.SessionEventsService)
-                .getSessionEvents(id)
+                .getSessionEvents("tenant-a", id)
                 .pipe(timeout(2000)),
         );
         await app.get(cleanup.CleanupSessions).execute();
@@ -532,6 +591,180 @@ describe("session lifecycle module wiring", () => {
             responseEncryptionPrivateJwk: null,
         });
     });
+    it("expires by time of day and only unredeemed issuance offers", async () => {
+        const repository = db.getRepository(entities.Session);
+        const ids = {
+            laterToday: randomUUID(),
+            overdueOffer: randomUUID(),
+            redeemedOffer: randomUUID(),
+            fetchedOffer: randomUUID(),
+        };
+        await repository.save([
+            {
+                // A date-only column stored midnight, so this expired early.
+                id: ids.laterToday,
+                tenantId: "tenant-a",
+                requestId: "presentation",
+                expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+            },
+            {
+                id: ids.overdueOffer,
+                tenantId: "tenant-a",
+                expiresAt: new Date(Date.now() - 1000),
+            },
+            {
+                id: ids.redeemedOffer,
+                tenantId: "tenant-a",
+                expiresAt: new Date(Date.now() - 1000),
+                consumed: true,
+            },
+            {
+                id: ids.fetchedOffer,
+                tenantId: "tenant-a",
+                expiresAt: new Date(Date.now() - 1000),
+                status: domain.SessionStatus.Fetched,
+            },
+        ]);
+        try {
+            await app.get(cleanup.CleanupSessions).execute();
+            const status = async (id: string) =>
+                (await repository.findOneByOrFail({ id })).status;
+            expect(await status(ids.laterToday)).toBe("active");
+            expect(await status(ids.overdueOffer)).toBe("expired");
+            expect(await status(ids.redeemedOffer)).toBe("active");
+            expect(await status(ids.fetchedOffer)).toBe("fetched");
+        } finally {
+            await repository.delete(Object.values(ids));
+        }
+    });
+
+    it("keeps an expired presentation expired when a late response arrives", async () => {
+        const { CompletePresentationResponse, PresentationAlreadyConsumed } =
+            await import(
+                "../../src/verifier/oid4vp/application/complete-presentation-response.js"
+            );
+        const { FailPresentationResponse } = await import(
+            "../../src/verifier/oid4vp/application/fail-presentation-response.js"
+        );
+        const repository = db.getRepository(entities.Session);
+        const markedExpired = randomUUID();
+        const overdue = randomUUID();
+        await repository.save([
+            {
+                id: markedExpired,
+                tenantId: "tenant-a",
+                requestId: "presentation",
+                status: domain.SessionStatus.Expired,
+            },
+            {
+                id: overdue,
+                tenantId: "tenant-a",
+                requestId: "presentation",
+                expiresAt: new Date(Date.now() - 1000),
+            },
+        ]);
+        const emitted: string[] = [];
+        const listener = (event: { sessionId: string }) => {
+            if (
+                ([markedExpired, overdue] as string[]).includes(event.sessionId)
+            )
+                emitted.push(event.sessionId);
+        };
+        const emitter = app.get(EventEmitter2);
+        emitter.on(eventPort.SESSION_STATUS_CHANGED, listener);
+        try {
+            for (const sessionId of [markedExpired, overdue]) {
+                await expect(
+                    app
+                        .get(CompletePresentationResponse, { strict: false })
+                        .execute({
+                            tenantId: "tenant-a",
+                            sessionId,
+                            requestId: "presentation",
+                            credentials: [],
+                            responseCode: "late",
+                        }),
+                ).rejects.toBeInstanceOf(PresentationAlreadyConsumed);
+                await app
+                    .get(FailPresentationResponse, { strict: false })
+                    .execute({
+                        tenantId: "tenant-a",
+                        sessionId,
+                        requestId: "presentation",
+                        message: "late",
+                    });
+            }
+            expect(emitted).toEqual([]);
+            expect(
+                await repository.findOneByOrFail({ id: markedExpired }),
+            ).toMatchObject({ status: "expired", consumed: false });
+            expect(
+                await repository.findOneByOrFail({ id: overdue }),
+            ).toMatchObject({ status: "active", consumed: false });
+        } finally {
+            emitter.off(eventPort.SESSION_STATUS_CHANGED, listener);
+            await repository.delete([markedExpired, overdue]);
+        }
+    });
+
+    it("reports database session counts through the sessions gauge, including deletions", async () => {
+        const { OtelSessionMetrics } = await import(
+            "../../src/session/adapters/otel-session-metrics.js"
+        );
+        const metrics = app.get(OtelSessionMetrics);
+        const repository = db.getRepository(entities.Session);
+        const tenantId = `metrics-${randomUUID()}`;
+        const { TenantEntity } = await import(
+            "../../src/auth/tenant/entities/tenant.entity.js"
+        );
+        await db.getRepository(TenantEntity).save({ id: tenantId });
+        const collect = () => {
+            const observed: Record<string, number> = {};
+            metrics.observe({
+                observe: (
+                    value: number,
+                    attributes: Record<string, string>,
+                ) => {
+                    if (attributes.tenant_id === tenantId)
+                        observed[
+                            `${attributes.session_type}/${attributes.status}`
+                        ] = value;
+                },
+            } as never);
+            return observed;
+        };
+        const ids = [randomUUID(), randomUUID(), randomUUID()];
+        await repository.save([
+            { id: ids[0], tenantId },
+            { id: ids[1], tenantId, requestId: "presentation" },
+            {
+                id: ids[2],
+                tenantId,
+                requestId: "presentation",
+                status: domain.SessionStatus.Fetched,
+            },
+        ]);
+        try {
+            await metrics.refresh();
+            expect(collect()).toMatchObject({
+                "issuance/active": 1,
+                "verification/active": 1,
+                "verification/fetched": 1,
+                "verification/completed": 0,
+            });
+            await repository.delete(ids[1]);
+            await metrics.refresh();
+            expect(collect()).toMatchObject({
+                "issuance/active": 1,
+                "verification/active": 0,
+                "verification/fetched": 1,
+            });
+        } finally {
+            await repository.delete(ids);
+            await db.getRepository(TenantEntity).delete({ id: tenantId });
+        }
+    });
+
     it("applies tenant retention overrides through the production wiring and reloads policy changes", async () => {
         const { TenantEntity } = await import(
             "../../src/auth/tenant/entities/tenant.entity.js"

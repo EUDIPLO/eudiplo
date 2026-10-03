@@ -1,7 +1,8 @@
-FROM node:24@sha256:6dac556d980b7f0e5498d08f08cee0ca67798b4ad6c23964a9214920e67758d0 AS base
+FROM node:26@sha256:a723b54c35a76e947095a20a67d39585bb09c862e6b1adeb8a9f518f95e34fb0 AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
+# Node 25 and later no longer bundle corepack, so install it before enabling it.
+RUN npm install -g corepack@0.36.0 && corepack enable
 
 FROM base AS build
 COPY . /usr/src/app
@@ -66,7 +67,7 @@ RUN chmod +x /docker-entrypoint.sh
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD [ "node", "dist/main.js" ]
 
-FROM nginx:alpine@sha256:72ba65eb42c10344912a84ff42408db7d34f2feb642204570ab8fc5ffd29f1d3 AS client
+FROM nginx:alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2 AS client
 # Copy the Angular build output into the nginx html directory.
 # The Angular output path is configured as apps/client/dist/apps/client in angular.json.
 COPY --from=build-frontend /usr/src/app/apps/client/dist/apps/client/browser /usr/share/nginx/html

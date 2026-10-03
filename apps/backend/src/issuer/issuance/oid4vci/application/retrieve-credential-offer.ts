@@ -1,5 +1,6 @@
 import type { CredentialOfferObject } from "@openid4vc/openid4vci";
 import type { SessionStore } from "../../../../session/application/session-store.js";
+import { assertSessionUsable } from "../../../../session/domain/session-usability.js";
 
 export interface CredentialOfferSettings {
     allowMultipleConsumption: boolean;
@@ -21,6 +22,10 @@ export class RetrieveCredentialOffer {
         private readonly settings: CredentialOfferSettings,
     ) {}
 
+    /**
+     * @throws CredentialOfferNotFound when the session or its offer is missing
+     * @throws SessionNotUsable when the offer expired or the session is finished
+     */
     async execute(
         tenantId: string,
         sessionId: string,
@@ -33,6 +38,7 @@ export class RetrieveCredentialOffer {
                 throw new CredentialOfferNotFound({ cause });
             });
         if (!session) throw new CredentialOfferNotFound();
+        assertSessionUsable(session, new Date());
 
         if (!this.settings.allowMultipleConsumption) {
             if (

@@ -12,6 +12,7 @@ import { MetricService, TraceService } from "nestjs-otel";
 import { v4 } from "uuid";
 import { KeyChainService } from "../../../../../crypto/key/key-chain.service.js";
 import { SessionStore } from "../../../../../session/application/session-store.js";
+import { assertSessionUsable } from "../../../../../session/domain/session-usability.js";
 import { FederationTrustService } from "../../../../../trust/federation-trust.service.js";
 import { FederationTrustSource } from "../../../../../trust/types.js";
 import { WalletAttestationService } from "../../../../../trust/wallet-attestation.service.js";
@@ -374,9 +375,12 @@ export class ChainedAsService {
         // Find the session for the issuer_state (if provided)
         let issuerState = request.issuer_state;
         if (issuerState) {
-            // Verify the issuer_state exists in our session store
+            // The issuer_state must name an offer that can still be redeemed
             try {
-                await this.sessionStore.getForTenant(tenantId, issuerState);
+                assertSessionUsable(
+                    await this.sessionStore.getForTenant(tenantId, issuerState),
+                    new Date(),
+                );
             } catch {
                 throw new BadRequestException("Invalid issuer_state");
             }

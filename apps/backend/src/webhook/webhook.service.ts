@@ -7,6 +7,7 @@ import type {
     Notification,
     SessionData as Session,
 } from "../session/domain/session-data.js";
+import type { SessionOutcome } from "../session/domain/session-outcome.js";
 import { OutboundUrlPolicyService } from "./outbound-url-policy.service.js";
 import { WebhookConfig } from "./webhook.dto.js";
 import { extractRawTokenFromSubmission } from "./webhook.utils.js";
@@ -43,6 +44,15 @@ export interface WebhookResponse {
 }
 
 /**
+ * Terminal status and structured outcome of a presentation, sent with every
+ * presentation webhook (`completed` with credentials, `failed` without).
+ */
+interface PresentationWebhookResult {
+    status: string;
+    outcome: SessionOutcome;
+}
+
+/**
  * Service for handling webhooks in the application.
  * HTTP calls are auto-instrumented by OpenTelemetry for distributed tracing.
  */
@@ -59,6 +69,7 @@ export class WebhookService {
 
     /**
      * Sends a webhook with the optional provided credentials, return the response data.
+     * Presentation results pass `result`, which adds `status` and `outcome`.
      * @returns WebhookResponse containing claims data or deferred issuance indicator
      */
     sendWebhook(values: {
@@ -67,6 +78,7 @@ export class WebhookService {
         credentials?: any[];
         expectResponse: boolean;
         rawPresentationPayload?: any;
+        result?: PresentationWebhookResult;
     }): Promise<WebhookResponse> {
         return this.outboundUrlPolicyService
             .assertSafeUrl(values.webhook.url)
@@ -79,6 +91,7 @@ export class WebhookService {
         credentials?: any[];
         expectResponse: boolean;
         rawPresentationPayload?: any;
+        result?: PresentationWebhookResult;
     }): Promise<WebhookResponse> {
         const headers: Record<string, string> = {};
 
@@ -121,6 +134,12 @@ export class WebhookService {
             this.httpService.post(
                 values.webhook.url,
                 {
+                    ...(values.result
+                        ? {
+                              status: values.result.status,
+                              outcome: values.result.outcome,
+                          }
+                        : {}),
                     credentials: payloadCredentials,
                     session: values.session.id,
                     transaction_data: values.session.transaction_data,

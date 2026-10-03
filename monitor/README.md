@@ -124,7 +124,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 
 ### Business Metrics
 
-- `sessions` — Active sessions by status and tenant
+- `sessions` — Current number of sessions per `tenant_id`, `session_type` and `status`, read from the database (refreshed at most every 30 s). Every replica reports the same values, so aggregate with `max by (tenant_id, session_type, status)` before summing.
 - `tenant_total` — Total number of tenants
 
 ## Alerting Rules

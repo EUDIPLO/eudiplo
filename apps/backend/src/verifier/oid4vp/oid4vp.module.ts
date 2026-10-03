@@ -62,9 +62,16 @@ import { OID4VP_SETTINGS } from "./oid4vp-settings.js";
         },
         {
             provide: FailPresentationResponse,
-            inject: [SessionStore, ChangeSessionState],
-            useFactory: (sessions: SessionStore, state: ChangeSessionState) =>
-                new FailPresentationResponse(sessions, state),
+            inject: [
+                SessionStore,
+                ChangeSessionState,
+                PRESENTATION_RESULT_PUBLISHER,
+            ],
+            useFactory: (
+                sessions: SessionStore,
+                state: ChangeSessionState,
+                publisher: PresentationResultPublisher,
+            ) => new FailPresentationResponse(sessions, state, publisher),
         },
         {
             provide: CompletePresentationResponse,
@@ -74,9 +81,9 @@ import { OID4VP_SETTINGS } from "./oid4vp-settings.js";
         },
         {
             provide: RetrievePresentationRequest,
-            inject: [SessionStore],
-            useFactory: (sessions: SessionStore) =>
-                new RetrievePresentationRequest(sessions),
+            inject: [SessionStore, ChangeSessionState],
+            useFactory: (sessions: SessionStore, state: ChangeSessionState) =>
+                new RetrievePresentationRequest(sessions, state),
         },
     ],
     exports: [Oid4vpService],

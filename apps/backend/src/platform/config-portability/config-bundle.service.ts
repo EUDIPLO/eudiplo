@@ -945,6 +945,8 @@ export class ConfigBundleService {
                     credentialRequestEncryption:
                         entity.credentialRequestEncryption,
                     txCodeMaxAttempts: entity.txCodeMaxAttempts,
+                    offerLifetimeSeconds:
+                        entity.offerLifetimeSeconds ?? undefined,
                 };
             case "CredentialConfig":
                 return {

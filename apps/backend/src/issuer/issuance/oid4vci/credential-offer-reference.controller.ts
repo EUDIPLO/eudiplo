@@ -1,5 +1,6 @@
 import { Controller, Get, NotFoundException, Param } from "@nestjs/common";
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { SessionNotUsable } from "../../../session/domain/session-usability.js";
 import {
     CredentialOfferNotFound,
     RetrieveCredentialOffer,
@@ -17,7 +18,11 @@ export class CredentialOfferReferenceController {
     @ApiOperation({ summary: "Resolve a credential offer by reference" })
     @ApiParam({ name: "sessionId", required: true })
     @ApiResponse({ status: 200, description: "Credential offer" })
-    @ApiResponse({ status: 404, description: "Credential offer not found" })
+    @ApiResponse({
+        status: 404,
+        description:
+            "Credential offer not found, already used, expired or its session is finished",
+    })
     async credentialOfferByReference(
         @Param("tenantId") tenantId: string,
         @Param("sessionId") sessionId: string,
@@ -28,7 +33,10 @@ export class CredentialOfferReferenceController {
                 sessionId,
             );
         } catch (error) {
-            if (error instanceof CredentialOfferNotFound) {
+            if (
+                error instanceof CredentialOfferNotFound ||
+                error instanceof SessionNotUsable
+            ) {
                 throw new NotFoundException(error.message);
             }
             throw error;

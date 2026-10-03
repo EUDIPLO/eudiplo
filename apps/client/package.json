@@ -22,26 +22,26 @@
     "e2e:ng": "ng e2e"
   },
   "dependencies": {
-    "@angular/cdk": "22.1.7",
+    "@angular/cdk": "22.2.0",
     "@angular/common": "^22.1.4",
     "@angular/compiler": "^22.1.4",
     "@angular/core": "^22.1.4",
     "@angular/forms": "^22.1.4",
-    "@angular/material": "22.1.7",
+    "@angular/material": "22.2.0",
     "@angular/platform-browser": "^22.1.4",
     "@angular/router": "^22.1.4",
     "@badgateway/oauth2-client": "^3.3.1",
     "@eudiplo/sdk-core": "workspace:*",
     "@fontsource/roboto": "^5.3.0",
-    "@ngx-formly/core": "^7.1.0",
-    "@ngx-formly/material": "^7.1.0",
+    "@ngx-formly/core": "^8.0.0",
+    "@ngx-formly/material": "^8.0.0",
     "@types/qrcode": "^1.5.6",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "jose": "^6.2.10",
     "keycloak-js": "^26.2.4",
     "material-icons": "^1.13.14",
-    "monaco-editor": "^0.56.0",
+    "monaco-editor": "^0.57.0",
     "ngx-flexible-layout": "^22.0.0",
     "ngx-monaco-editor-v2": "^22.0.5",
     "qrcode": "^1.5.4",
@@ -66,8 +66,8 @@
     "playwright-ng-schematics": "22.1.2",
     "prettier": "^3.9.6",
     "typescript": "~6.0.3",
-    "typescript-eslint": "8.70.0",
-    "vitest": "^4.1.11"
+    "typescript-eslint": "8.70.1",
+    "vitest": "^5.0.2"
   },
   "packageManager": "pnpm@10.13.1+sha512.37ebf1a5c7a30d5fabe0c5df44ee8da4c965ca0c5af3dbab28c3a1681b70a256218d05c81c9c0dcf767ef6b8551eb5b960042b9ed4300c59242336377e01cfad"
 }

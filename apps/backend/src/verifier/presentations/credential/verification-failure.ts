@@ -72,3 +72,28 @@ export function shortVerificationMessage(
             return "The credential could not be verified.";
     }
 }
+
+/** Caller-facing view of a verification failure, shared by all presentation flows. */
+interface VerificationFailureDetails {
+    /** Stable code for `failureCode` and the outcome's `error` fields. */
+    code: VerificationFailureType;
+    /** Short message, safe to show in a UI. */
+    message: string;
+    /** Verbose reason for logs/audit only. */
+    verbose?: string;
+}
+
+/**
+ * Structured code and short message of a verification failure. An unknown
+ * failure type falls back to the generic `verification_error`.
+ */
+export function verificationFailureDetails(
+    failureType?: VerificationFailureType,
+    verboseReason?: string,
+): VerificationFailureDetails {
+    return {
+        code: failureType ?? "verification_error",
+        message: shortVerificationMessage(failureType),
+        verbose: verboseReason,
+    };
+}
