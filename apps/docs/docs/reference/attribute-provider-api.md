@@ -1,294 +1,97 @@
 ---
-title: Attribute Providers
+title: Attribute provider API
+sidebar_label: Attribute provider API
+description: Contract between EUDIPLO and attribute providers or offer webhooks that supply credential claims.
 ---
 
-<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
-  - 'Deferred Issuance' -> issuance/deferred-issuance.md
-  - 'Usage' (how-to) -> issuance/attribute-provider.md
-  - merge the contract parts of issuance/attribute-provider.md here
--->
+import SchemaReference from "@site/src/components/SchemaReference";
 
-# Attribute Providers
+The HTTP contract EUDIPLO uses to fetch claims from your backend during issuance. It applies to attribute providers and to `webhook` claim sources of an offer. For setup, see [Attribute providers](../issuance/attribute-provider.md); for when a provider is called, see [Claims](../issuance/claims.md).
 
-**Attribute Providers** are tenant-level resources that define how EUDIPLO fetches claims from your backend services during credential issuance.
+## Resource
 
-:::info[Attribute Providers vs Webhooks]
+Attribute providers are tenant resources managed with the `issuance:manage` role:
 
-**Attribute Providers** are designed to **fetch data IN** — retrieving claims from your backend to include in credentials.
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/issuer/attribute-providers` | List providers |
+| `GET` | `/api/issuer/attribute-providers/{id}` | Get one provider |
+| `POST` | `/api/issuer/attribute-providers` | Create a provider |
+| `PATCH` | `/api/issuer/attribute-providers/{id}` | Update fields of a provider |
+| `DELETE` | `/api/issuer/attribute-providers/{id}` | Delete a provider |
 
-**Webhooks** are designed to **send data OUT** — notifying your backend when events occur (e.g., presentation completed, credential accepted by the wallet).
+<SchemaReference name="attribute-provider" mode="table" />
 
-For sending notifications, see [Webhooks](./webhooks.md).
+An offer `webhook` source has the shape `{ "url", "auth", "includeRawTokensFor"? }` with the same `auth` options; see [Webhooks](webhooks.md).
 
-:::
+## Request
 
-## Overview
-
-When issuing credentials, EUDIPLO needs to populate the credential with claims (attributes). These claims can come from several sources:
-
-1. **Static claims** — Defined in the credential configuration or passed at offer time
-2. **Attribute Providers** — Fetched dynamically from your backend via HTTP
-
-Attribute Providers are the recommended approach for production deployments because they:
-
-- **Centralize configuration** — Define once, reuse across multiple credential configurations
-- **Improve security** — Sensitive data is fetched just-in-time, not stored in offers
-- **Enable dynamic claims** — Claims can be computed or retrieved from external systems
-- **Support deferred issuance** — Your backend can signal that processing is needed
-
-## How It Works
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Wallet as EUDI Wallet
-    participant EUDIPLO as Middleware
-    participant AP as Attribute Provider
-
-    Wallet->>EUDIPLO: Credential Request
-    EUDIPLO->>AP: POST (session, credential_configuration_id, identity)
-    AP-->>EUDIPLO: { "<credentialConfigId>": { ... } }
-    EUDIPLO->>EUDIPLO: Validate claims against fields
-    EUDIPLO-->>Wallet: Credential with claims
-```
-
-1. The wallet requests a credential from EUDIPLO
-2. EUDIPLO calls the configured Attribute Provider with identity context
-3. Your backend returns the claims to include in the credential, keyed by credential configuration ID
-4. EUDIPLO validates the claims against the credential configuration's `fields`
-5. EUDIPLO issues the credential with those claims
-
-## Configuration
-
-An Attribute Provider is a tenant-level resource with:
-
-| Field         | Type   | Description                                                |
-| ------------- | ------ | ---------------------------------------------------------- |
-| `id`          | string | Unique identifier within the tenant                        |
-| `name`        | string | Human-readable name                                        |
-| `description` | string | Optional description                                       |
-| `url`         | string | Endpoint EUDIPLO calls with `POST` to fetch claims         |
-| `auth`        | object | Authentication: `none` or `apiKey` (`headerName`, `value`) |
-
-Attribute Providers are managed via `/api/issuer/attribute-providers`.
-
-### Example
+EUDIPLO sends `POST <url>` with `Content-Type: application/json` and, for `apiKey` authentication, the configured header. It calls the provider when the wallet requests the credential, once per credential request.
 
 ```json
 {
-    "id": "employee-claims-api",
-    "name": "Employee Claims API",
-    "url": "https://hr.example.com/api/claims",
-    "auth": {
-        "type": "apiKey",
-        "config": {
-            "headerName": "x-api-key",
-            "value": "your-api-key"
-        }
-    }
-}
-```
-
-### Request and Response
-
-EUDIPLO sends a `POST` request to the provider's `url`:
-
-```json
-{
-    "session": "sess_abc123",
-    "credential_configuration_id": "EmployeeBadge",
+    "session": "a6318799-dff4-4b60-9d1d-58703611bd23",
+    "credential_configuration_id": "membership",
     "identity": {
-        "iss": "https://auth.example.com",
-        "sub": "user-123",
-        "token_claims": { "sub": "user-123" }
-    }
-}
-```
-
-`identity` is optional. When present, it carries the issuer (`iss`), subject (`sub`) and claims (`token_claims`) of the access token presented with the credential request; for chained or external authorization servers, these describe the upstream identity.
-
-Your backend returns the claims keyed by the credential configuration ID:
-
-```json
-{
-    "EmployeeBadge": {
-        "given_name": "John",
-        "family_name": "Doe",
-        "employee_id": "EMP-12345"
-    }
-}
-```
-
-### Claim Validation
-
-Before signing, EUDIPLO validates the final claims against the credential configuration's `fields`. This applies to every claim source: static defaults, inline claims from the offer, Attribute Providers, and claims supplied when completing a deferred transaction. Missing mandatory claims, claims with the wrong type, and claims not defined in `fields` are rejected, and the credential is not issued. Configurations without `fields` entries are not validated.
-
-## Usage
-
-Reference an Attribute Provider in your credential configuration:
-
-```json
-{
-    "id": "EmployeeBadge",
-    "attributeProviderId": "employee-claims-api",
-    "vct": "EmployeeBadge",
-    "config": {
-        "format": "dc+sd-jwt",
-        "display": [{ "name": "Employee Badge", "locale": "en-US" }]
+        "iss": "https://keycloak.example.com/realms/eudiplo",
+        "sub": "f3b1c2d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        "token_claims": {
+            "email": "max@example.com",
+            "preferred_username": "max"
+        }
     },
-    "fields": [
-        { "path": ["given_name"], "type": "string", "mandatory": true },
-        { "path": ["family_name"], "type": "string", "mandatory": true },
-        { "path": ["employee_id"], "type": "string", "mandatory": true }
+    "credentials": [
+        {
+            "id": "pid",
+            "values": [
+                { "given_name": "Max", "family_name": "Mustermann", "birthdate": "1990-01-15" }
+            ]
+        }
     ]
 }
 ```
 
-Or override at offer time:
+| Field | Present | Description |
+| --- | --- | --- |
+| `session` | always | Issuance session ID. It equals the `session` returned when the offer was created. |
+| `credential_configuration_id` | always | Credential configuration the wallet requested. |
+| `identity` | always | `iss`, `sub` and `token_claims` of the authorization behind the wallet's access token. What they contain per flow is listed in [Claims](../issuance/claims.md#identity-passed-to-attribute-providers). |
+| `credentials` | after a presentation | Verified claims the wallet presented to an [OID4VP authorization server](../issuance/authorization-servers.md#oid4vp) or in an [interactive authorization](../issuance/interactive-authorization.md) presentation step. One entry per credential query ID of the presentation's DCQL query; `values` holds the disclosed claims of each matching credential (several with `multiple: true`). |
+
+## Response
+
+### Claims
+
+Answer `200` with the claims under the requested credential configuration ID:
 
 ```json
 {
-    "credentialClaims": {
-        "EmployeeBadge": {
-            "type": "attributeProvider",
-            "attributeProviderId": "employee-claims-api"
-        }
+    "membership": {
+        "name": "Max",
+        "member_id": "M-001"
     }
 }
 ```
 
-## Deferred Issuance
+The claims replace the static defaults of the configuration completely and are validated against its `fields` before signing; see [Claims](../issuance/claims.md#validation).
 
-**Deferred issuance** allows your Attribute Provider to signal that the credential cannot be issued immediately. This is useful when:
+### Deferred
 
-- Background verification is required (e.g., KYC, identity proofing)
-- An approval workflow must be completed
-- External data sources need time to respond
-- The credential requires asynchronous processing
-
-### How It Works
-
-When your Attribute Provider returns a **deferred response**, EUDIPLO:
-
-1. Stores the pending request with a `transaction_id`
-2. Returns HTTP 202 (Accepted) to the wallet with the `transaction_id`
-3. The wallet polls the **deferred credential endpoint** (`POST /issuers/{tenantId}/vci/deferred_credential`) until the credential is ready
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Wallet as EUDI Wallet
-    participant EUDIPLO as Middleware
-    participant AP as Attribute Provider
-
-    Wallet->>EUDIPLO: Credential Request
-    EUDIPLO->>AP: POST (session, credential_configuration_id, identity)
-    AP-->>EUDIPLO: { "deferred": true, "interval": 5 }
-    EUDIPLO-->>Wallet: HTTP 202 + transaction_id
-
-    loop Polling (every interval seconds)
-        Wallet->>EUDIPLO: POST /deferred_credential
-        alt Credential not ready
-            EUDIPLO-->>Wallet: { "error": "issuance_pending", "interval": 5 }
-        else Credential ready
-            EUDIPLO-->>Wallet: { "credential": "..." }
-        end
-    end
-```
-
-### Deferred Response Format
-
-To trigger deferred issuance, your Attribute Provider should return:
+To issue later, answer `200` with:
 
 ```json
-{
-    "deferred": true,
-    "interval": 5
-}
+{ "deferred": true, "interval": 5 }
 ```
 
-| Field      | Type    | Description                                          |
-| ---------- | ------- | ---------------------------------------------------- |
-| `deferred` | boolean | Set to `true` to defer the credential issuance       |
-| `interval` | number  | Recommended polling interval in seconds (default: 5) |
+| Field | Description |
+| --- | --- |
+| `deferred` | `true` defers the credential. |
+| `interval` | Polling interval in seconds suggested to the wallet. Default `5`. |
 
-### Completing Deferred Issuance
+EUDIPLO answers the wallet with a `transaction_id`. Completing or failing the transaction is described in [Deferred issuance](../issuance/deferred-issuance.md).
 
-Once your backend has completed processing, call EUDIPLO's API to provide the claims:
+## Errors
 
-```bash
-# Complete the deferred transaction with claims
-POST /api/issuer/deferred/{transactionId}/complete
-Content-Type: application/json
-Authorization: Bearer <your-token>
-
-{
-    "claims": {
-        "given_name": "John",
-        "family_name": "Doe",
-        "employee_id": "EMP-12345"
-    }
-}
-```
-
-Or, if the issuance failed:
-
-```bash
-# Mark the deferred transaction as failed
-POST /api/issuer/deferred/{transactionId}/fail
-Content-Type: application/json
-Authorization: Bearer <your-token>
-
-{
-    "error": "KYC verification failed"
-}
-```
-
-### Deferred Credential Errors
-
-When the wallet polls the deferred credential endpoint, it may receive:
-
-| Error Code               | HTTP Status | Description                                           |
-| ------------------------ | ----------- | ----------------------------------------------------- |
-| `issuance_pending`       | 400         | Credential is still being processed. Retry later.     |
-| `invalid_transaction_id` | 400         | Transaction not found, expired, or already retrieved. |
-
-The `issuance_pending` error includes an `interval` field indicating when to retry:
-
-```json
-{
-    "error": "issuance_pending",
-    "error_description": "The credential issuance is still pending",
-    "interval": 5
-}
-```
-
-### Transaction Lifecycle
-
-Deferred transactions have the following states:
-
-| Status      | Description                                      |
-| ----------- | ------------------------------------------------ |
-| `pending`   | Waiting for your backend to complete processing  |
-| `ready`     | Credential is ready for wallet retrieval         |
-| `retrieved` | Wallet has successfully retrieved the credential |
-| `expired`   | Transaction expired (default: 24 hours)          |
-| `failed`    | Issuance failed due to an error                  |
-
-:::info[Transaction Expiry]
-
-Deferred transactions expire after 24 hours by default. Expired transactions are automatically cleaned up hourly.
-
-:::
-
-## Detailed Documentation
-
-For complete documentation including:
-
-- API endpoints for managing Attribute Providers
-- Request/response formats
-- Identity context and token claims
-- Integration with Interactive Authorization (IAE)
-- Error handling and best practices
-
-See the [Attribute Provider Getting Started Guide](../issuance/attribute-provider.md).
+- Any non-`2xx` status or network error fails the credential request. The wallet receives HTTP `400` with `invalid_credential_request`; claims that do not match the configuration lead to `credential_request_denied`.
+- EUDIPLO does not retry and sets no timeout of its own. The wallet's credential request waits for your answer, so answer quickly or defer.
+- The provider URL must pass the outbound URL policy: HTTPS and public addresses only, unless `OUTBOUND_URL_ALLOW_HTTP` or `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` is set (both `false` by default since 9.0). See [Webhooks](webhooks.md).

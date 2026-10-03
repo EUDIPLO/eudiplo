@@ -1,194 +1,90 @@
 ---
-title: Status Management
+title: Revoke and suspend credentials
+sidebar_label: Revocation
 ---
 
-EUDIPLO provides comprehensive status management for issued credentials through the OAuth Token Status List specification (RFC 9528). This allows issuers to revoke or suspend credentials without requiring direct communication with the credential holder.
+Revoke or suspend credentials you issued, using Token Status Lists ([draft-ietf-oauth-status-list](https://datatracker.ietf.org/doc/draft-ietf-oauth-status-list/)). EUDIPLO assigns every credential an entry in a signed status list that verifiers fetch; you change entries per issuance session. For an end-to-end walkthrough, see the [revocable credentials cookbook](../cookbooks/revocable-credentials.md).
 
-## Overview
+**Prerequisites:** a [credential configuration](credential-configuration.md) and a client with the `issuance:manage` role (configuration) and `issuance:offer` (revocation).
 
-Status management enables credential lifecycle operations such as:
+## 1. Enable status management
 
-- **Revocation** — Permanently invalidate a credential
-- **Suspension** — Temporarily disable a credential (can be reinstated)
-- **Status verification** — Verifiers can check credential validity in real-time
-
-Status lists are privacy-preserving: verifiers can check if a credential is valid without learning which specific credential is being checked (beyond the list index).
-
-## Enabling Status on Credential Configurations
-
-To enable status management for a credential, configure the `status` field in the credential configuration:
+Set `statusManagement: true` on the credential configuration. Every credential issued afterwards carries a status reference:
 
 ```json
 {
-    "id": "employee-badge",
-    "description": "Employee Badge Credential",
-    "config": {
-        "format": "dc+sd-jwt"
-        /* ... other config fields ... */
-    },
     "status": {
-        "enabled": true,
-        "bits": 1,
-        "credentialConfigurationBound": false
+        "status_list": {
+            "idx": 4711,
+            "uri": "https://eudiplo.example.com/issuers/membership-demo/status-management/status-list/3f1c…"
+        }
     }
 }
 ```
 
-### Status Configuration Fields
+SD-JWT VCs carry it as the `status` claim, mDOCs in the Mobile Security Object. Credentials issued before you enabled the setting have no status entry and cannot be revoked.
 
-| Field                          | Type    | Required | Description                                                                                   |
-| ------------------------------ | ------- | -------- | --------------------------------------------------------------------------------------------- |
-| `enabled`                      | boolean | Yes      | Enables status management for this credential type.                                           |
-| `bits`                         | number  | No       | Bits per status entry (1, 2, 4, or 8). Default: 1. More bits allow more status values.        |
-| `credentialConfigurationBound` | boolean | No       | If `true`, create dedicated status lists for this credential type. Default: `false` (shared). |
-
-### Bits Per Status
-
-The `bits` parameter determines how many distinct status values are possible:
-
-| Bits | Values      | Use Case                            |
-| ---- | ----------- | ----------------------------------- |
-| 1    | 2 (0-1)     | Simple valid/revoked                |
-| 2    | 4 (0-3)     | Valid, suspended, revoked, reserved |
-| 4    | 16 (0-15)   | Multiple suspension reasons         |
-| 8    | 256 (0-255) | Complex status workflows            |
-
-### Binding to Credential Configurations
-
-Status lists can be:
-
-- **Shared** (default) — Used by any credential configuration in the tenant
-- **Bound** — Exclusively used by a specific credential configuration
-
-Set `credentialConfigurationBound: true` when:
-
-- Different credential types have different revocation policies
-- You want separate capacity management per credential type
-- Compliance requires isolated status tracking
-
-## Automatic Status List Management
-
-When issuing a credential with status management enabled, EUDIPLO automatically:
-
-1. Finds an available status list for the credential configuration
-2. Creates a new **shared** status list if none have capacity
-3. Assigns the next available index to the credential
-
-:::note Capacity Exhaustion
-When a shared status list runs out of available indexes, EUDIPLO automatically creates a new shared status list and continues issuance seamlessly. No manual intervention is required.
-
-For bound lists, if a list reaches capacity, EUDIPLO falls back to using shared lists if available.
+:::warning[Suspension needs 2 bits per entry]
+Status lists use 1 bit per entry by default (`STATUS_BITS=1`), which only distinguishes valid and revoked. If you want to suspend credentials, set `bits` to `2` or more in the tenant's status list settings (or `STATUS_BITS`) **before** issuing. The `bits` of an existing list cannot be changed.
 :::
 
-## Revoking or Suspending Credentials
+## 2. Revoke or suspend
 
-Use the Status Management API to update credential status:
+Use the session ID returned when you [created the offer](credential-offers.md):
 
 ```bash
-PATCH /{tenant}/status-management/status-list/{listId}/entry/{index}
-Content-Type: application/json
-
-{
-    "value": 1
-}
+curl -X POST "$EUDIPLO_URL/api/session/revoke" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sessionId": "a6318799-dff4-4b60-9d1d-58703611bd23",
+    "credentialConfigurationId": "membership",
+    "status": 1
+  }'
 ```
 
-**Status Values:**
+| Field | Required | Description |
+| --- | --- | --- |
+| `sessionId` | yes | Issuance session that issued the credentials. |
+| `credentialConfigurationId` | no | Restrict the change to one credential type. Without it, all credentials of the session change. |
+| `status` | yes | `0` = valid, `1` = revoked, `2` = suspended. |
 
-- `0` — Valid
-- `1` — Revoked (for 1-bit lists)
+- The call answers `204 No Content`. It updates every credential of the session and type, including all credentials of a batch. If the session has no status entry for the type, it answers `409`.
+- Allowed roles: `issuance:offer` or `presentation:request`.
+- EUDIPLO does not enforce transitions: `status: 0` lifts a suspension, but it also reinstates a revoked credential. Treat revocation as final in your own process.
 
-For lists with more than 1 bit:
+## 3. Check the result
 
-- `0` — Valid
-- `1` — Suspended
-- `2` — Revoked
-- `3+` — Custom states
+Verifiers resolve `status_list.uri` and read the bit at `idx`. Status list tokens are cached:
 
-See the [API Reference](../reference/api.md) for complete endpoint documentation.
+- By default a token is re-signed only after its `ttl` has passed (`STATUS_TTL`, 3600 seconds). A change becomes visible to verifiers within that time.
+- With `immediateUpdate: true` (tenant setting or `STATUS_IMMEDIATE_UPDATE`), EUDIPLO re-signs the list after every change.
 
-## Status List Token Caching and TTL
+Verifiers may cache the token themselves until its `exp`.
 
-EUDIPLO serves status list tokens as signed JWTs (or CWTs for mDoc) at a public endpoint:
+## Public endpoints
 
-```http
-GET /{tenant}/status-management/status-list/{listId}
-```
+These endpoints are wallet- and verifier-facing and have no `/api` prefix.
 
-The token includes time-based claims for caching:
+| Endpoint | Response |
+| --- | --- |
+| `GET /issuers/{tenant}/status-management/status-list/{listId}` | Status list token. JWT (`application/statuslist+jwt`) by default; CWT (`application/statuslist+cwt`) when the `Accept` header contains `application/statuslist+cwt`. |
+| `GET /issuers/{tenant}/status-management/status-list-aggregation` | `{"status_lists": ["<uri>", …]}` with all lists of the tenant. |
 
-```json
-{
-    "iat": 1704067200,
-    "exp": 1704070800,
-    "ttl": 3600,
-    "status_list": {/* ... */}
-}
-```
+The JWT has `typ: statuslist+jwt` and the signing certificate in `x5c`; its payload contains `sub` (the list URI), `iat`, `exp` (`iat` + `ttl`), `ttl` and `status_list` (`bits`, compressed `lst`). With aggregation enabled (`STATUS_ENABLE_AGGREGATION`, default `true`), tokens include `aggregation_uri` and the authorization server metadata advertises `status_list_aggregation_endpoint`.
 
-### Regeneration Modes
+## Manage status lists
 
-EUDIPLO supports two token regeneration strategies:
+EUDIPLO allocates entries automatically: first from lists bound to the credential configuration, then from shared lists, and when all are full it creates a new shared list. Indices are assigned in random order. You only need the management API to pre-create, bind or re-key lists. All endpoints require `issuance:manage`.
 
-**Lazy Mode (Default):** The token is regenerated only when a verifier requests the status list AND the current token has expired.
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/status-lists`, `GET /api/status-lists/{listId}` | List status lists with `bits`, `capacity`, `usedEntries`, `availableEntries`, `uri` and token `expiresAt`. |
+| `POST /api/status-lists` | Create a list: `credentialConfigurationId` (bind it to one type; omit for a shared list), `keyChainId` (signing key; default: the tenant's status list key, else its attestation key), `bits` (1, 2, 4 or 8), `capacity` (1000 to 1,000,000). |
+| `PATCH /api/status-lists/{listId}` | Change `credentialConfigurationId` or `keyChainId` (`null` resets to shared or default). `bits` and `capacity` are fixed. |
+| `DELETE /api/status-lists/{listId}` | Delete an unused list. Lists with entries answer `409`. |
+| `GET`, `PUT`, `DELETE /api/status-list-config` | Tenant defaults: `capacity` (minimum 100), `bits`, `ttl` (minimum 60 seconds), `immediateUpdate`, `enableAggregation`. `PUT` replaces the whole object; omitted fields fall back to the environment defaults. `DELETE` resets to them. |
 
-**Immediate Mode:** When `immediateUpdate` is enabled in tenant status configuration, the token is regenerated immediately whenever a status entry changes.
+The environment defaults are `STATUS_CAPACITY` (10000), `STATUS_BITS` (1), `STATUS_TTL` (3600), `STATUS_IMMEDIATE_UPDATE` (`false`) and `STATUS_ENABLE_AGGREGATION` (`true`); see [Environment variables](../reference/environment-variables.md#status). `capacity` and `bits` apply to lists created afterwards. Status lists can also be managed as files; see [Configuration as code](../operate/configuration-as-code.md). In the web client, open **Status Lists**.
 
-Configure the default mode in [Tenant Settings](../operate/tenants-and-access.md) or via environment variables.
-
-:::warning[Performance Consideration]
-Immediate mode can impact performance with frequent status changes. Consider lazy mode with shorter TTLs for high-volume scenarios.
-:::
-
-## Verifier Integration
-
-Verifiers check credential status by:
-
-1. Extracting the `status` claim from the credential
-2. Fetching the status list token from the URI in the `status` claim
-3. Decompressing the status list payload
-4. Checking the bit at the credential's `status_list.idx`
-
-The status list token can be cached according to the `exp` and `ttl` claims.
-
-## Web Client
-
-The web client provides a user-friendly interface for status management:
-
-### Status List Overview
-
-Navigate to **Status Lists** to see all status lists with:
-
-- Capacity and usage statistics
-- JWT expiration status (Valid, Expiring, Expired)
-- Bound credential configuration
-- Certificate assignment
-
-### Creating Status Lists
-
-Click **Create** to manually create a status list with:
-
-- Optional credential configuration binding
-- Optional certificate pinning
-
-### Configuration
-
-Click **Settings** (⚙️) to configure tenant defaults:
-
-- Default bits per status
-- Default capacity
-- TTL for JWT caching
-- Immediate update mode
-
-## Best Practices
-
-1. **Use 1-bit lists for simple revocation** — Most use cases only need valid/revoked
-2. **Set appropriate TTLs** — Shorter for high-security credentials (5-15 minutes), longer for low-change scenarios (24 hours)
-3. **Monitor capacity** — The web client shows capacity usage; create new lists before reaching capacity
-4. **Use binding sparingly** — Shared lists simplify management; only bind when needed for isolation
-5. **Test with verifiers** — Ensure your verifiers correctly fetch and cache status lists
-
-## Related Documentation
-
-- [Credential Configuration](credential-configuration.md) — Enabling status on credential configs
-- [OpenAPI Reference](../reference/api.md) — Status Management API endpoints
+To keep only one valid credential per person, combine status management with [`activeCredentials`](credential-configuration.md#keep-one-active-credential-per-subject).

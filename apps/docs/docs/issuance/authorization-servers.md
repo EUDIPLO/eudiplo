@@ -1,450 +1,149 @@
 ---
-title: Authorization Servers
+title: Authorization servers
 ---
 
-<!-- RESTRUCTURE: content that belongs elsewhere or needs restructuring in the next phase (remove this comment when done):
-  - merged from issuance/authorization.md and architecture/authorization.md: keep the user parts of 'Authorization' (modes, configuration, endpoints, upstream provider requirements)
-  - 'Authorization > Architecture', 'Session Flow States', 'Token Structure' (internals) -> concepts/issuance.md
-  - add refresh tokens (from issuance/issuance-configuration.md) and the DPoP/PKCE model
--->
+Configure how wallets obtain the access token they present at the credential endpoint. Authorization servers are entries of `authorizationServers` in the [issuance configuration](issuance-configuration.md); an offer selects one by `id`.
 
-## Authorization Servers
+## Choose a type
 
-Authorization servers define how wallets authenticate before receiving credentials. EUDIPLO supports four types: `external`, `oid4vp`, `chained`, and `built-in`.
+| | `built-in` | `external` | `chained` | `oid4vp` |
+| --- | --- | --- | --- | --- |
+| User authentication | None (optionally [interactive authorization](interactive-authorization.md)) | Your OAuth 2.0 server | Login at an upstream OpenID provider, brokered by EUDIPLO | Presentation of a credential the wallet already holds |
+| Access token issued by | EUDIPLO | Your server | EUDIPLO | EUDIPLO |
+| Flows | Pre-authorized code; authorization code, also wallet-initiated | Authorization code offer | Authorization code offer | Authorization code offer |
+| Claim source | Any ([Claims](claims.md)) | Offer claims or attribute provider (required) | Any; identity is the upstream user | Any; presented claims are passed on |
+| Refresh tokens, DPoP, wallet attestation | EUDIPLO | Your server | EUDIPLO | EUDIPLO |
+| Issuer URL | `/issuers/{tenant}` | Your `issuer` | `/issuers/{tenant}/chained-as` | `/issuers/{tenant}/authorization-servers/{id}` |
 
-### Overview
+Typical choices: `built-in` when your backend already knows the user and creates pre-authorized offers; `chained` to issue after a login at your identity provider ([cookbook](../cookbooks/issue-after-login.md)); `oid4vp` to issue after a PID presentation; `external` when your OAuth server already issues JWT access tokens and can carry the EUDIPLO session ID.
 
-The `authorizationServers` array in [Issuance Configuration](issuance-configuration.md) manages all available authorization server options for a tenant. Each entry defines a distinct authentication method that can be selected at offer creation time.
+## Configure entries
 
-**Key Concepts:**
+```json
+{
+    "authorizationServers": [
+        { "type": "built-in", "id": "issuer-built-in" },
+        {
+            "type": "oid4vp",
+            "id": "pid-login",
+            "presentationConfigId": "pid",
+            "requireDPoP": true
+        }
+    ]
+}
+```
 
-- Define one or more authorization servers in the issuance configuration
-- Reference a specific server by `id` when creating an offer
-- Each server type has its own configuration requirements and behavior
-- Authorization servers can be enabled/disabled without removal
+- Every entry needs a unique `id`; `built-in` and `chained-as` are reserved. `label` is shown in the web client; `enabled: false` disables an entry.
+- At least one entry is required, at most one `built-in`. Only the first enabled `chained` entry is used. A new tenant starts with `{ "type": "built-in", "id": "issuer-built-in" }`.
+- EUDIPLO publishes the issuer URLs of all enabled entries, in order, as `authorization_servers` in the credential issuer metadata.
+- An offer selects an entry with `authorization_server`; without it, the first enabled entry is used. The offer tells the wallet which server to use, also for pre-authorized codes. Only the built-in server redeems pre-authorized codes, so pre-authorized offers must select it (explicitly or as the first enabled entry).
 
-### Authorization Server Types
+Entries of the types `built-in`, `chained` and `oid4vp` accept:
 
-| Type       | Purpose                                                                                       |
-| ---------- | --------------------------------------------------------------------------------------------- |
-| `external` | Uses a remote OAuth/OIDC AS via issuer URL discovery.                                         |
-| `oid4vp`   | Creates a tenant-local AS facade at `/issuers/{tenant}/authorization-servers/{id}`.           |
-| `chained`  | Creates a tenant-local chained AS facade at `/issuers/{tenant}/chained-as` via upstream OIDC. |
-| `built-in` | Uses issuer-local authorization endpoints provided by EUDIPLO.                                |
+| Field | Default | Description |
+| --- | --- | --- |
+| `token.lifetimeSeconds` | `300` (built-in), `3600` (chained, OID4VP) | Access token lifetime, minimum 60. |
+| `token.signingKeyId` | Tenant default key | Key chain that signs access tokens. The built-in server falls back to the issuance configuration's `signingKeyId` first. |
+| `token.refreshTokenEnabled` | `true` | See [Refresh tokens](#refresh-tokens). |
+| `token.refreshTokenExpiresInSeconds` | `2592000` (30 days) | Minimum 60. |
+| `requireDPoP` | `false` | See [DPoP](#dpop). |
+| `walletAttestationRequired`, `walletProviderTrustLists` | Issuance configuration values | Wallet attestation at PAR and token endpoints; see [Wallet and key attestation](../trust/attestation.md). |
 
-### Common Fields
+## Built-in
 
-These fields apply to all authorization server types:
+EUDIPLO's own authorization server at `/issuers/{tenant}/authorize/*` (`par`, `authorize`, `token`, `interactive`), with metadata at `/.well-known/oauth-authorization-server/issuers/{tenant}`. It redeems pre-authorized codes and issues authorization codes without a login step. Wallets may also start an authorization code flow without an offer; they then select credentials with `authorization_details`. The access token's `sub` is the issuance session ID.
 
-| Field                   | Type    | Required                | Description                                                                             |
-| ----------------------- | ------- | ----------------------- | --------------------------------------------------------------------------------------- |
-| `id`                    | string  | Yes                     | Unique identifier used to reference this AS in offer requests (`authorization_server`). |
-| `type`                  | string  | Yes                     | One of `external`, `oid4vp`, `chained`, `built-in`.                                     |
-| `label`                 | string  | No                      | Optional UI label.                                                                      |
-| `enabled`               | boolean | No                      | Enables/disables this entry. Default `true`.                                            |
-| `requireDPoP`           | boolean | No (`oid4vp`/`chained`) | Require DPoP proofs on token requests for this AS.                                      |
-| `token.lifetimeSeconds` | number  | No (`oid4vp`/`chained`) | Access token lifetime for this AS.                                                      |
-| `token.signingKeyId`    | string  | No (`oid4vp`/`chained`) | Key used to sign AS-issued tokens.                                                      |
+## External
 
-:::note
-The `id` values `built-in` and `chained-as` are reserved and cannot be used for custom authorization servers.
-:::
-
-### External Authorization Server
-
-External authorization servers delegate authentication to a remote OAuth 2.0 or OpenID Connect provider.
-
-#### Configuration
+Use your own OAuth 2.0 authorization server. EUDIPLO validates its access tokens and maps them to the offer's issuance session.
 
 ```json
 {
     "type": "external",
-    "id": "external-corp-idp",
-    "label": "Corporate IdP",
-    "enabled": true,
-    "issuer": "https://auth.example.com",
-    "sessionBinding": {
-        "method": "access_token_claim",
-        "claim": "issuer_state"
-    }
+    "id": "corporate-idp",
+    "issuer": "https://auth.example.com/realms/corp",
+    "sessionBinding": { "method": "access_token_claim", "claim": "issuer_state" }
 }
 ```
 
-#### Type-Specific Fields
+Requirements for your server:
 
-| Field                   | Type   | Required | Description                                           |
-| ----------------------- | ------ | -------- | ----------------------------------------------------- |
-| `issuer`                | string | Yes      | External AS issuer URL.                               |
-| `sessionBinding`        | object | Yes\*    | Session correlation configuration (see below).        |
-| `sessionBinding.method` | string | Yes      | Must be `access_token_claim`.                         |
-| `sessionBinding.claim`  | string | Yes      | Access-token claim containing the EUDIPLO session ID. |
+1. It publishes OAuth authorization server or OpenID Connect discovery metadata for `issuer`, including `jwks_uri`.
+2. It issues JWT access tokens (`typ: at+jwt`) with `iss`, `sub`, `aud`, `exp`, `iat` and `jti`. `aud` must contain `{PUBLIC_URL}/issuers/{tenant}`.
+3. It copies the offer's `issuer_state` (the EUDIPLO session ID) unchanged into the access token claim named in `sessionBinding.claim`.
 
-\*Required for external token-backed issuance.
+Every token must point to an active offer session that was created for this authorization server; EUDIPLO never creates a session from an external token. With the first credential request, EUDIPLO binds the token's `iss` and `sub` to the session, and later tokens must carry the same identity. The claims must come from the offer or an attribute provider, see [Claims](claims.md#external-authorization-servers-need-a-dynamic-source). External entries do not accept `token`, `requireDPoP` or wallet attestation settings; your server handles those.
 
-#### Session Binding
-
-External access tokens must be bound to the issuance session created for the credential offer. The configured claim in the access token must contain the EUDIPLO issuance session ID.
-
-**For standard authorization-code flow**, this is the `issuer_state` value from the credential offer. The external authorization server must copy that value into the access token without modification.
-
-**Validation Behavior:**
-
-1. EUDIPLO validates the access token signature and expiration
-2. Verifies the issuer matches the configured `issuer` URL
-3. Reads the configured claim value
-4. Resolves exactly one existing issuance session
-
-**Tokens are rejected when:**
-
-- The configured claim is missing or empty
-- The claim value points to an unknown session
-- The session belongs to a different tenant or authorization server
-
-:::warning[Important]
-EUDIPLO does not create a new issuance session from an external token and does not implicitly use the token `sub` claim for session correlation. The configured claim must explicitly contain the EUDIPLO session ID.
+:::caution[Offer selection]
+EUDIPLO currently binds external tokens only to offers that selected the external server as the default: list it as the first enabled entry of `authorizationServers` and create the offer without `authorization_server`.
 :::
 
-#### Usage in Offers
+## Chained
 
-When creating an offer with an external authorization server, reference it by `id`:
-
-```json
-{
-    "response_type": "uri",
-    "flow": "authorization_code",
-    "credentialConfigurationIds": ["pid"],
-    "authorization_server": "external-corp-idp"
-}
-```
-
-### OID4VP Authorization Server
-
-OID4VP authorization servers use OpenID for Verifiable Presentations (OID4VP) as the authentication mechanism. The wallet presents existing credentials to prove identity instead of traditional username/password authentication.
-
-#### Configuration
-
-```json
-{
-    "type": "oid4vp",
-    "id": "pid-auth",
-    "label": "PID Authentication",
-    "enabled": true,
-    "presentationConfigId": "pid-verification",
-    "immediateWalletRedirect": true,
-    "requireDPoP": true,
-    "token": {
-        "lifetimeSeconds": 3600,
-        "signingKeyId": "default"
-    }
-}
-```
-
-#### Type-Specific Fields
-
-| Field                     | Type    | Required | Description                                     |
-| ------------------------- | ------- | -------- | ----------------------------------------------- |
-| `presentationConfigId`    | string  | Yes      | Presentation config used for the VP flow.       |
-| `immediateWalletRedirect` | boolean | No       | Redirect browser immediately to wallet request. |
-
-#### Behavior
-
-When a wallet initiates the authorization flow with an OID4VP authorization server:
-
-1. EUDIPLO exposes a tenant-local AS facade at `/issuers/{tenant}/authorization-servers/{id}`
-2. The wallet is redirected to the OID4VP presentation flow using the referenced presentation configuration
-3. After successful presentation verification, EUDIPLO issues an access token for credential issuance
-4. The claims from the presented credentials are sent to the Attribute Provider in the `credentials` field (see [Presentation-Based Authorization](attribute-provider.md#presentation-based-authorization))
-
-This flow is commonly used for higher-assurance issuance where the user must prove they already hold a trusted credential (such as a PID) before receiving a new credential.
-
-### Chained Authorization Server
-
-Chained authorization servers federate authentication through an upstream OpenID Connect provider while maintaining a tenant-local token endpoint.
-
-#### Configuration
+EUDIPLO acts as the authorization server towards the wallet and delegates the login to an upstream OpenID provider, such as Keycloak. The upstream provider needs no EUDIPLO-specific changes.
 
 ```json
 {
     "type": "chained",
-    "id": "chained-auth",
-    "label": "Enterprise SSO",
-    "enabled": true,
+    "id": "keycloak-login",
     "upstream": {
         "issuer": "https://keycloak.example.com/realms/eudiplo",
         "clientId": "eudiplo-chained-as",
-        "clientSecret": "your-client-secret",
+        "clientSecret": "change-me",
         "scopes": ["openid", "profile", "email"]
     },
-    "requireDPoP": true,
-    "token": {
-        "lifetimeSeconds": 3600,
-        "signingKeyId": "default"
-    }
+    "requireDPoP": true
 }
 ```
 
-#### Type-Specific Fields
+- Register `{PUBLIC_URL}/issuers/{tenant}/chained-as/callback` as redirect URI of the upstream client.
+- EUDIPLO uses OpenID Connect discovery, the authorization code flow with PKCE (`S256`), and sends `client_id` and `client_secret` in the token request body. Omit `clientSecret` for a public client. `scopes` defaults to `["openid"]`.
+- Attribute providers receive the upstream user as `identity`: `iss` and `sub` of the upstream ID token and the ID token claims merged over the upstream access token claims.
+- EUDIPLO's access token contains `issuer_state`, `client_id`, `upstream_iss` and `upstream_sub`; its `sub` is the wallet's `client_id`.
+- Endpoints: `/issuers/{tenant}/chained-as/{par,authorize,callback,token}`, metadata at `/.well-known/oauth-authorization-server/issuers/{tenant}/chained-as`, keys at `/.well-known/jwks.json/issuers/{tenant}/chained-as`.
 
-| Field                   | Type   | Required | Description                             |
-| ----------------------- | ------ | -------- | --------------------------------------- |
-| `upstream.issuer`       | string | Yes      | Upstream OIDC issuer URL.               |
-| `upstream.clientId`     | string | Yes      | Client ID at upstream provider.         |
-| `upstream.clientSecret` | string | No       | Client secret for confidential clients. |
-| `upstream.scopes`       | array  | No       | Scopes requested upstream.              |
+Start chained flows from an authorization code offer; the wallet must send the offer's `issuer_state` in its pushed authorization request.
 
-#### Behavior
+## OID4VP
 
-When enabled, EUDIPLO:
-
-1. Exposes a tenant-local chained AS at `/{tenant}/chained-as/*`
-2. Publishes this issuer in the `authorization_servers` metadata
-3. Redirects authentication to the upstream OIDC provider
-4. Exchanges the upstream authorization code for tokens
-5. Merges claims from the upstream ID token and access token
-6. Issues a tenant-local access token for credential issuance
-
-**Identity Context:**
-
-Attribute Providers receive merged claims from both the upstream ID token and access token in the `identity.token_claims` field.
-
-### Built-in Authorization Server
-
-The built-in authorization server uses EUDIPLO's internal authentication system. This is primarily intended for testing and development scenarios.
-
-#### Configuration
+The wallet authorizes by presenting a credential, for example a PID, that matches a [presentation configuration](../presentation/configure-verification.md).
 
 ```json
-{
-    "type": "built-in",
-    "id": "local-dev-auth",
-    "label": "Local Development",
-    "enabled": true
-}
+{ "type": "oid4vp", "id": "pid-login", "presentationConfigId": "pid", "requireDPoP": true }
 ```
 
-#### Behavior
+1. The wallet sends a pushed authorization request to `/issuers/{tenant}/authorization-servers/{id}/par` and opens `…/authorize`. This returns a page with an **Open wallet** link to the presentation request.
+2. After a successful presentation, EUDIPLO stores the verified claims on the issuance session, redirects with an authorization code, and issues tokens at `…/token`.
+3. Attribute providers receive the presented claims in `credentials`, see the [Attribute provider API](../reference/attribute-provider-api.md).
 
-Built-in authorization servers use EUDIPLO's internal user authentication. This mode is not recommended for production deployments and is primarily used for:
+Metadata is at `/.well-known/oauth-authorization-server/issuers/{tenant}/authorization-servers/{id}`. Like chained flows, OID4VP flows start from an authorization code offer. `immediateWalletRedirect` is accepted but has no effect.
 
-- Local development and testing
-- Demo environments
-- Proof-of-concept implementations
+The VP-backed chained server (`chained-as-vp`) was removed in 9.0; use the `oid4vp` type. See the [upgrade guide](../upgrade/8.x-to-9.0.md).
 
-For production deployments, use external, OID4VP, or chained authorization servers.
+## Refresh tokens
 
-### Selecting Authorization Server for Offers
+The built-in, chained and OID4VP servers share one policy (9.0):
 
-At offer creation time, set `authorization_server` to an enabled authorization server `id`:
+- Refresh tokens are enabled by default and valid for 30 days (`token.refreshTokenEnabled`, `token.refreshTokenExpiresInSeconds`).
+- A refresh token never lives unbounded. Tokens stored without an expiry by older versions expire 30 days (or the configured lifetime) after their session was created.
+- Refreshing keeps the original expiry. Chained and OID4VP servers rotate the refresh token; the built-in server keeps the original one.
+- With `refreshTokenEnabled: false`, the token endpoint answers `unsupported_grant_type` and the metadata omits the `refresh_token` grant.
 
-```json
-{
-    "response_type": "uri",
-    "flow": "authorization_code",
-    "credentialConfigurationIds": ["pid"],
-    "authorization_server": "pid-auth"
-}
-```
+Refresh only helps while the issuance session exists: sessions are removed after the session retention time (`SESSION_TTL`, 24 hours by default, or the tenant's session settings). Expired chained and OID4VP authorization sessions are removed every `SESSION_TIDY_UP_INTERVAL`.
 
-**Selection Rules:**
+## DPoP
 
-- The `authorization_server` value must match the `id` of an enabled entry in `authorizationServers`
-- If omitted, EUDIPLO uses the first enabled authorization server
-- For pre-authorized flows (`flow: "pre_authorized_code"`), the `authorization_server` field is ignored
+Two settings control DPoP ([RFC 9449](https://www.rfc-editor.org/rfc/rfc9449)):
 
-### Migration from Legacy Configuration
+| Setting | Default | Enforced at |
+| --- | --- | --- |
+| Issuance `dPopRequired` | `true` | Built-in token endpoint (all grants) and the credential, deferred credential and notification endpoints. When `true`, these endpoints accept only `DPoP` tokens, no `Bearer`. |
+| Per server `requireDPoP` | `false` | Built-in: PAR must carry a DPoP proof or `dpop_jkt`. Chained and OID4VP: PAR and token requests must carry a proof. |
 
-:::warning[Migration Note]
-`authServers` and `chainedAs` are legacy fields from version 4.x. New configurations should use `authorizationServers` only.
+Because `dPopRequired` applies at the credential endpoint for every server, set `requireDPoP: true` on chained and OID4VP servers while `dPopRequired` is `true`; otherwise they may issue `Bearer` tokens that the credential endpoint rejects. A key bound at PAR must sign the proofs at the token and refresh requests. Since 9.0, EUDIPLO verifies every proof: algorithm `ES256`, `ES384` or `ES512`, at most 5 minutes old, `jti` used once, no private key material. Failures answer `invalid_dpop_proof`.
 
-For migration guidance, see [Migrating from 4.x to 5.0](https://github.com/openwallet-foundation/eudiplo/blob/v8.1.0/apps/docs/docs/migration/4.x-to-5.0.md).
-:::
+## PKCE, PAR and authorization codes
 
-### Related Documentation
-
-- [Issuance Configuration](issuance-configuration.md) — Parent configuration structure
-- [Credential Offers](credential-offers.md) — Creating offers with authorization server selection
-- [Attribute Providers](attribute-provider.md) — Identity context from authorization flows
-
-## Authorization
-
-The authorization layer in EUDIPLO determines how wallets authenticate to receive credentials. EUDIPLO supports four authorization server types for credential issuance (`built-in`, `external`, `chained`, `oid4vp`), each suited to different deployment scenarios and security requirements.
-
-### Authorization Modes
-
-EUDIPLO can act as:
-
-1. **Built-in Authorization Server** (`built-in`) — EUDIPLO issues authorization codes itself, without an external identity provider
-2. **External Authorization Server** (`external`) — Delegate to an existing OAuth 2.0/OIDC provider (e.g., Keycloak, Azure AD)
-3. **Chained Authorization Server** (`chained`) — EUDIPLO acts as an AS facade, delegating authentication to upstream OIDC while issuing its own tokens
-4. **OID4VP-Based Authorization Server** (`oid4vp`) — EUDIPLO acts as an AS facade that authorizes the wallet via an OID4VP presentation (configured `presentationConfigId`) and issues its own tokens. Each entry is served at `/issuers/{tenant}/authorization-servers/{id}` (`par`, `authorize`, `vp-callback`, `token`)
-
-For detailed protocol extension points and integration patterns, see:
-
-- [Interactive Authorization Endpoint (IAE)](./interactive-authorization.md) — Multi-step authorization flows with user interaction
-- [OpenID Federation](../trust/federation.md) — Federation-based trust evaluation
-
-### Chained Authorization Server
-
-The **Chained Authorization Server (Chained AS)** is an optional mode where EUDIPLO acts as an OAuth 2.0 Authorization Server facade. Instead of implementing user authentication directly, it delegates to an upstream OIDC provider while issuing its own access tokens with custom claims for session correlation.
-
-#### Overview
-
-In credential issuance flows using the authorization code grant, the wallet needs an access token to request credentials. Typically, this token comes from either:
-
-1. **EUDIPLO's built-in AS** - Simple setup, but it does not authenticate the user against an identity provider
-2. **External AS (e.g., Keycloak)** - Uses existing identity infrastructure, but requires the AS to put the EUDIPLO session ID into the access token claim configured as `sessionBinding.claim`
-
-The **Chained AS** provides another option: EUDIPLO acts as the AS but delegates authentication to an upstream OIDC provider. This combines the benefits of both approaches without requiring modifications to your existing OIDC provider.
-
-#### Architecture
-
-```mermaid
-flowchart TB
-    subgraph Wallet
-        W[EUDI Wallet]
-    end
-
-    subgraph EUDIPLO
-        subgraph ChainedAS["Chained AS"]
-            PAR[PAR Endpoint]
-            AUTH[Authorize]
-            CB[Callback]
-            TOK[Token]
-        end
-        VCI[OID4VCI Endpoints]
-        SM[Session Manager]
-    end
-
-    subgraph Upstream["Upstream OIDC Provider"]
-        UA["/authorize"]
-        UT["/token"]
-    end
-
-    W -->|1. PAR| PAR
-    PAR -->|2. Create session| SM
-    W -->|3. Authorize| AUTH
-    AUTH -->|4. Redirect| UA
-    UA -->|5. User authenticates| UA
-    UA -->|6. Callback| CB
-    CB -->|7. Exchange code| UT
-    CB -->|8. Store identity| SM
-    W -->|9. Token request| TOK
-    TOK -->|10. Issue token| W
-    W -->|11. Credential request| VCI
-    VCI -->|12. Lookup session| SM
-```
-
-#### Session Flow States
-
-The Chained AS maintains session state through the OAuth flow:
-
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING_AUTHORIZE: PAR Request
-    PENDING_AUTHORIZE --> PENDING_UPSTREAM_CALLBACK: Wallet visits /authorize (upstream OIDC)
-    PENDING_AUTHORIZE --> PENDING_VP_CALLBACK: Wallet visits /authorize (OID4VP)
-    PENDING_UPSTREAM_CALLBACK --> AUTHORIZED: Upstream callback received
-    PENDING_VP_CALLBACK --> AUTHORIZED: Presentation verified
-    AUTHORIZED --> TOKEN_ISSUED: Token exchanged
-    TOKEN_ISSUED --> TOKEN_ISSUED: Refresh token exchanged
-    TOKEN_ISSUED --> [*]
-
-    PENDING_AUTHORIZE --> EXPIRED: Session lifetime exceeded
-    PENDING_UPSTREAM_CALLBACK --> EXPIRED: Upstream error or code exchange failed
-    PENDING_VP_CALLBACK --> EXPIRED: Presentation failed
-    AUTHORIZED --> EXPIRED: Authorization code expired
-    EXPIRED --> [*]
-```
-
-The same session model is used by the OID4VP-based authorization servers (`PENDING_VP_CALLBACK` instead of `PENDING_UPSTREAM_CALLBACK`).
-
-A VP-backed variant of the chained AS also exists at `/issuers/{tenant}/chained-as-vp` (`par`, `authorize`, `vp-callback`, `token`, with metadata and JWKS under the matching `.well-known/.../chained-as-vp` paths). It is selected by a `chained` entry with `vp.enabled` and `vp.presentationConfigId`, which the current `chained` configuration schema does not accept; use the `oid4vp` type for presentation-based authorization.
-
-#### Token Structure
-
-Access tokens issued by the Chained AS are JWTs signed by EUDIPLO containing:
-
-| Claim                   | Description                                                          |
-| ----------------------- | -------------------------------------------------------------------- |
-| `iss`                   | Chained AS issuer URL (`{PUBLIC_URL}/issuers/{tenant}/chained-as`)   |
-| `sub`                   | Client ID of the requesting wallet                                   |
-| `aud`                   | EUDIPLO credential issuer URL (`{PUBLIC_URL}/issuers/{tenant}`)      |
-| `iat` / `exp`           | Issued-at and expiry (`token.lifetimeSeconds`, default 3600 seconds) |
-| `jti`                   | Unique token identifier                                              |
-| `issuer_state`          | Session ID for credential offer correlation                          |
-| `client_id`             | Wallet's client identifier                                           |
-| `authorization_details` | Authorization details from the pushed authorization request (if any) |
-| `upstream_sub`          | Subject from upstream ID token (if the upstream returned one)        |
-| `upstream_iss`          | Issuer from upstream ID token (if the upstream returned one)         |
-| `cnf.jkt`               | DPoP key thumbprint (if DPoP is used)                                |
-
-With the example host and tenant, `iss` is `https://eudiplo.example.com/issuers/tenant1/chained-as`.
-
-#### Comparison with Other Modes
-
-| Feature                  | Built-in AS                  | External AS                              | Chained AS        | OID4VP-based AS     |
-| ------------------------ | ---------------------------- | ---------------------------------------- | ----------------- | ------------------- |
-| User authentication      | No login step (IAE optional) | External provider                        | External provider | OID4VP presentation |
-| Token issuer             | EUDIPLO                      | External                                 | EUDIPLO           | EUDIPLO             |
-| Session ID in token      | ✅ `sub` (automatic)         | ⚠️ Configured `sessionBinding.claim`     | ✅ `issuer_state` | ✅ `issuer_state`   |
-| Session correlation      | ✅ Native                    | ⚠️ Via configured `sessionBinding.claim` | ✅ Native         | ✅ Native           |
-| Modify external provider | N/A                          | Required (to emit the binding claim)     | Not required      | N/A                 |
-| DPoP support             | ✅                           | Depends on provider                      | ✅                | ✅                  |
-| Wallet attestation       | ✅                           | ❌ Not possible                          | ✅                | ✅                  |
-
-#### Security Considerations
-
-##### Client Secret Management
-
-The upstream client secret (`upstream.clientSecret`) is optional and stored in the issuance configuration. If it is omitted, EUDIPLO authenticates to the upstream token endpoint as a public client and relies on PKCE. If you use a secret, consider:
-
-- Using environment variables for secrets in production
-- Rotating secrets periodically
-- Using a secrets manager for enterprise deployments
-
-##### PKCE
-
-The request from EUDIPLO to the upstream provider always uses PKCE with `S256`.
-
-On the wallet leg, PKCE with `S256` is required, as mandated by HAIP: a PAR request without a `code_challenge`, or with a `code_challenge_method` other than `S256`, is rejected with `invalid_request`. The token request must include the matching `code_verifier`. The AS metadata advertises only `S256`.
-
-##### DPoP
-
-When `requireDPoP` is enabled, wallets must provide a DPoP proof with their PAR and token requests. The thumbprint of the DPoP key presented at PAR is bound to the access token via the `cnf.jkt` claim.
-
-##### State Parameter
-
-The Chained AS generates a cryptographically random state parameter for the upstream authorization request, preventing CSRF attacks.
-
-#### Configuration
-
-See [Issuance: Authorization](authorization-servers.md) for configuration details and examples.
-
-#### Endpoints Reference
-
-All endpoints are tenant-scoped:
-
-| Endpoint                                                              | Method | Auth | Description                                                                  |
-| --------------------------------------------------------------------- | ------ | ---- | ---------------------------------------------------------------------------- |
-| `/issuers/{tenant}/chained-as/par`                                    | POST   | None | Pushed Authorization Request - initiates the flow                            |
-| `/issuers/{tenant}/chained-as/authorize`                              | GET    | None | Authorization endpoint - redirects to upstream                               |
-| `/issuers/{tenant}/chained-as/callback`                               | GET    | None | Handles upstream callback                                                    |
-| `/issuers/{tenant}/chained-as/token`                                  | POST   | None | Exchanges code (`authorization_code`) or `refresh_token` for an access token |
-| `/.well-known/oauth-authorization-server/issuers/{tenant}/chained-as` | GET    | None | AS metadata discovery                                                        |
-| `/.well-known/jwks.json/issuers/{tenant}/chained-as`                  | GET    | None | Public keys for token verification                                           |
-
-#### Upstream Provider Requirements
-
-The upstream OIDC provider must:
-
-1. **Support OIDC Discovery** - Publish `.well-known/openid-configuration`
-2. **Support Authorization Code Flow** - With `response_type=code`
-3. **Client Registration** - A confidential client (the secret is sent as `client_secret` in the token request) or, if `upstream.clientSecret` is omitted, a public client using PKCE
-4. **Return ID Tokens** - Include `sub` and `iss` claims
-
-Tested providers:
-
-- Keycloak
-- Auth0
-- Azure AD / Entra ID
-- Google Identity Platform
+- **PKCE:** every authorization code requires `S256`, at the built-in, chained, OID4VP and interactive endpoints and on the upstream leg. A missing `code_challenge` or another method answers `invalid_request`.
+- **PAR:** the built-in server requires pushed authorization requests with `client_id` and `redirect_uri` (9.0). Its `request_uri` is single use and valid for 60 seconds, its authorization codes for 60 seconds. Chained and OID4VP servers use 600 and 300 seconds.
+- **Grant binding (9.0):** a pre-authorized code is redeemable only with the `pre-authorized_code` grant, every other code only with `authorization_code`; otherwise the answer is `invalid_grant`. Codes are single use, bound to the client of the PAR request and, if sent, to its `redirect_uri`.

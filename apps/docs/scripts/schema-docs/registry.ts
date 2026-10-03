@@ -1,4 +1,7 @@
 import type { z } from "zod";
+import { CreateAttributeProviderSchema } from "../../../backend/src/issuer/configuration/attribute-provider/schemas/attribute-provider.schema.js";
+import { CredentialConfigCreateSchema } from "../../../backend/src/issuer/configuration/credentials/schemas/credential-config.schema.js";
+import { OfferRequestSchema } from "../../../backend/src/issuer/issuance/oid4vci/dto/offer-request.schema.js";
 import { PresentationRequestSchema } from "../../../backend/src/verifier/oid4vp/dto/presentation-request.schema.js";
 
 export interface SchemaDoc {
@@ -16,4 +19,9 @@ export interface SchemaDoc {
  */
 export const schemaDocs: SchemaDoc[] = [
     { name: "presentation-request", schema: PresentationRequestSchema },
+    { name: "credential-configuration", schema: CredentialConfigCreateSchema },
+    // One entry of `fields[]`; recursive (`children`), so it gets its own table.
+    { name: "credential-field", schema: CredentialConfigCreateSchema.shape.fields.element },
+    { name: "offer-request", schema: OfferRequestSchema },
+    { name: "attribute-provider", schema: CreateAttributeProviderSchema },
 ];
