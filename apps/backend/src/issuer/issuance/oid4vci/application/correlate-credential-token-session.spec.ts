@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { SessionNotFound } from "../../../../session/application/session-errors.js";
-import { CorrelateCredentialTokenSession } from "./correlate-credential-token-session.js";
+import {
+    CorrelateCredentialTokenSession,
+    CredentialSessionAuthorizationDenied,
+} from "./correlate-credential-token-session.js";
 
 function fixture(boundSession: Record<string, unknown> = {}) {
     const sources = {
@@ -85,6 +88,73 @@ describe("CorrelateCredentialTokenSession.execute", () => {
             "external",
         );
         expect(f.sessions.getForTenant).not.toHaveBeenCalled();
+    });
+});
+
+describe("CorrelateCredentialTokenSession.resolveSession", () => {
+    it.each([
+        [{ iss: "local", sub: "session" }],
+        [{ iss: "chained", sub: "x", issuer_state: "session" }],
+        [{ iss: "managed", sub: "x", issuer_state: "session" }],
+        [external],
+    ])("loads the session of the token %j", async (token) => {
+        const f = fixture();
+        await expect(
+            f.useCase.resolveSession("tenant", token),
+        ).resolves.toMatchObject({ id: "session" });
+        expect(f.sessions.getForTenant).toHaveBeenCalledExactlyOnceWith(
+            "tenant",
+            "session",
+        );
+    });
+
+    it.each([
+        [{ iss: "chained", sub: "session" }],
+        [{ iss: "external", sub: "user" }],
+    ])("denies a token naming no session %j", async (token) => {
+        const f = fixture();
+        await expect(f.useCase.resolveSession("tenant", token)).rejects.toThrow(
+            CredentialSessionAuthorizationDenied,
+        );
+        expect(f.sessions.getForTenant).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        { externalSubject: "someone-else" },
+        { externalIssuer: "other-issuer" },
+        { authorizationServerId: "other-as" },
+        { externalIssuer: undefined, externalSubject: undefined },
+    ])(
+        "denies an external token not bound to the session %j",
+        async (bound) => {
+            const f = fixture(bound);
+            await expect(
+                f.useCase.resolveSession("tenant", external),
+            ).rejects.toThrow(CredentialSessionAuthorizationDenied);
+        },
+    );
+
+    it("denies a session that does not match the token", async () => {
+        const f = fixture({ id: "other" });
+        await expect(
+            f.useCase.resolveSession("tenant", {
+                iss: "local",
+                sub: "session",
+            }),
+        ).rejects.toThrow(CredentialSessionAuthorizationDenied);
+    });
+
+    it("propagates a missing session", async () => {
+        const f = fixture();
+        const notFound = new SessionNotFound();
+        f.sessions.getForTenant.mockRejectedValue(notFound);
+        await expect(
+            f.useCase.resolveSession("tenant", {
+                iss: "chained",
+                sub: "x",
+                issuer_state: "session",
+            }),
+        ).rejects.toBe(notFound);
     });
 });
 

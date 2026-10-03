@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+    ACTIVE_CREDENTIALS_REQUIRE_STATUS_MANAGEMENT,
+    activeCredentialsLackStatusManagement,
+} from "../domain/active-credential-policy.js";
 
 const FieldDisplaySchema = z
     .object({
@@ -522,12 +526,11 @@ export const CredentialConfigCreateSchema = z
     })
     .strict()
     .superRefine((value, context) => {
-        if (value.activeCredentials?.enabled && !value.statusManagement) {
+        if (activeCredentialsLackStatusManagement(value)) {
             context.addIssue({
                 code: "custom",
                 path: ["statusManagement"],
-                message:
-                    "statusManagement must be enabled when activeCredentials is enabled.",
+                message: ACTIVE_CREDENTIALS_REQUIRE_STATUS_MANAGEMENT,
             });
         }
     })

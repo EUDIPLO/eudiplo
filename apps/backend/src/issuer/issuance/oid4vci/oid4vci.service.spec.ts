@@ -5,8 +5,15 @@ import {
 } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { SessionNotFound } from "../../../session/application/session-errors.js";
-import { CredentialSessionAuthorizationDenied } from "./application/correlate-credential-token-session.js";
+import {
+    CorrelateCredentialTokenSession,
+    CredentialSessionAuthorizationDenied,
+} from "./application/correlate-credential-token-session.js";
 import { HandleCredentialNotification } from "./application/handle-credential-notification.js";
+import {
+    CredentialNotificationNotFound,
+    RecordCredentialNotification,
+} from "./application/record-credential-notification.js";
 import {
     CredentialAuthorizationError,
     ResolveAuthorizedCredentialConfiguration,
@@ -342,8 +349,8 @@ describe("OID4VCI notification endpoint lookup", () => {
             accessTokens: {
                 verify: vi.fn().mockResolvedValue({ sub: "session" }),
             },
-            sessionStore: {
-                getForTenant: vi.fn().mockResolvedValue(session),
+            tokenSessions: {
+                resolveSession: vi.fn().mockResolvedValue(session),
             },
             handleCredentialNotification: new HandleCredentialNotification(
                 {
@@ -419,5 +426,133 @@ describe("OID4VCI notification endpoint lookup", () => {
             test.notification,
         );
         expect(test.order).toEqual(["record", "lookup", "publish", "state"]);
+    });
+});
+
+describe("OID4VCI notification endpoint session resolution", () => {
+    function setup(token: Record<string, unknown>) {
+        const session = {
+            id: "session",
+            tenantId: "tenant",
+            notifications: [
+                { id: "notification", credentialConfigurationId: "pid" },
+            ],
+            authorizationServerId: "external-as",
+            externalIssuer: "external",
+            externalSubject: "user",
+        };
+        const sessions = {
+            getForTenant: vi
+                .fn()
+                .mockImplementation(async (_tenantId: string, id?: string) => {
+                    if (id !== session.id) throw new SessionNotFound();
+                    return session;
+                }),
+        };
+        const tokenSessions = new CorrelateCredentialTokenSession(
+            {
+                tokenIssuers: vi.fn().mockResolvedValue({
+                    localIssuer: "local",
+                    chainedIssuer: "chained",
+                    hasChainedAuthorizationServer: true,
+                    managedAuthorizationServerIssuers: new Set(["managed"]),
+                }),
+                externalServer: vi.fn().mockResolvedValue({
+                    advertised: true,
+                    configuration: {
+                        id: "external-as",
+                        bindingClaim: "binding",
+                    },
+                }),
+            },
+            sessions,
+        );
+        const changeState = vi.fn();
+        const oid4vci = service({
+            issuanceService: {
+                getIssuanceConfiguration: vi.fn().mockResolvedValue({}),
+            },
+            accessTokens: { verify: vi.fn().mockResolvedValue(token) },
+            tokenSessions,
+            handleCredentialNotification: new HandleCredentialNotification(
+                new RecordCredentialNotification({ updateForTenant: vi.fn() }),
+                { findForTenant: vi.fn() },
+                { publish: vi.fn() },
+                { execute: changeState },
+            ),
+            auditLogger: { logError: vi.fn() },
+        });
+        const notify = (notificationId = "notification") =>
+            oid4vci.handleNotification(
+                {
+                    method: "POST",
+                    url: "/notification",
+                    headers: {},
+                    contentType: "application/json",
+                    body: {},
+                },
+                {
+                    notification_id: notificationId,
+                    event: "credential_accepted",
+                },
+                "tenant",
+            );
+        return { notify, changeState, session };
+    }
+
+    function invalidNotificationId(error: unknown, notificationId: string) {
+        expect(error).toBeInstanceOf(CredentialNotificationNotFound);
+        expect((error as CredentialNotificationNotFound).notificationId).toBe(
+            notificationId,
+        );
+    }
+
+    it.each([
+        ["local", { iss: "local", sub: "session" }],
+        [
+            "chained",
+            { iss: "chained", sub: "upstream-user", issuer_state: "session" },
+        ],
+        [
+            "managed (OID4VP)",
+            { iss: "managed", sub: "wallet", issuer_state: "session" },
+        ],
+        ["external", { iss: "external", sub: "user", binding: "session" }],
+    ])("completes the session of a %s token", async (_kind, token) => {
+        const test = setup(token);
+        await test.notify();
+        expect(test.session.notifications[0]).toMatchObject({
+            event: "credential_accepted",
+        });
+        expect(test.changeState).toHaveBeenCalledWith(
+            test.session,
+            "completed",
+        );
+    });
+
+    it.each([
+        ["of an unknown session", { iss: "local", sub: "other" }],
+        ["without issuer_state", { iss: "chained", sub: "session" }],
+        [
+            "bound to another identity",
+            { iss: "external", sub: "someone-else", binding: "session" },
+        ],
+        [
+            "without the binding claim",
+            { iss: "external", sub: "user", issuer_state: "session" },
+        ],
+    ])("rejects a token %s", async (_case, token) => {
+        const test = setup(token);
+        invalidNotificationId(await rejection(test.notify()), "notification");
+        expect(test.changeState).not.toHaveBeenCalled();
+    });
+
+    it("rejects a notification_id not issued in the session", async () => {
+        const test = setup({ iss: "local", sub: "session" });
+        invalidNotificationId(await rejection(test.notify("other")), "other");
+        expect(test.session.notifications).toEqual([
+            { id: "notification", credentialConfigurationId: "pid" },
+        ]);
+        expect(test.changeState).not.toHaveBeenCalled();
     });
 });

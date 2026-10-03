@@ -19,6 +19,13 @@ describe("CredentialConfigCreateSchema active credential policy", () => {
         });
 
         expect(result.success).toBe(false);
+        expect(result.error?.issues).toEqual([
+            expect.objectContaining({
+                path: ["statusManagement"],
+                message:
+                    "statusManagement must be enabled when activeCredentials is enabled.",
+            }),
+        ]);
     });
 
     test("accepts the single-active-credential policy", () => {

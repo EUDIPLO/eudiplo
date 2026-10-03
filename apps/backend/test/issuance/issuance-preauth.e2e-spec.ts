@@ -170,6 +170,20 @@ describe("Issuance - Pre-authorized Code Flow", () => {
         );
         expect(notificationObj).toBeDefined();
         expect(notificationObj.event).toBe("credential_accepted");
+
+        // A notification_id that was not issued in the token's session
+        const unknownNotification = await request(app.getHttpServer())
+            .post(
+                new URL(issuerMetadata.credentialIssuer.notification_endpoint!)
+                    .pathname,
+            )
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${accessTokenResponse.access_token}`)
+            .send({ notification_id: "unknown", event: "credential_accepted" });
+        expect(unknownNotification.status).toBe(400);
+        expect(unknownNotification.body).toMatchObject({
+            error: "invalid_notification_id",
+        });
     });
 
     test("rejects a replayed DPoP proof at the credential endpoint", async () => {

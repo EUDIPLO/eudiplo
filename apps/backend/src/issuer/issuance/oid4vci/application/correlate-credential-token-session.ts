@@ -1,5 +1,6 @@
 import { SessionNotFound } from "../../../../session/application/session-errors.js";
 import type { SessionStore } from "../../../../session/application/session-store.js";
+import type { SessionData } from "../../../../session/domain/session-data.js";
 import type { CredentialAuthorizationSources } from "../ports/credential-authorization-sources.js";
 import { ClassifyAuthorizationServerToken } from "./classify-authorization-server-token.js";
 
@@ -100,9 +101,32 @@ export class CorrelateCredentialTokenSession {
     }
 
     /**
-     * Whether the token belongs to the given session of the tenant. External
-     * tokens must match the identity already bound to that session; nothing is
-     * re-bound, so this also works after the session is no longer active.
+     * Loads the tenant session the token belongs to, for requests made after
+     * the credential was issued. External tokens must match the identity
+     * already bound to that session; nothing is re-bound, so this also works
+     * after the session is no longer active.
+     * @throws CredentialSessionAuthorizationDenied when the token names no session or is not bound to it.
+     * @throws SessionNotFound when the named session does not exist in the tenant.
+     */
+    async resolveSession(
+        tenantId: string,
+        token: VerifiedCredentialToken,
+    ): Promise<SessionData> {
+        const reference = await this.execute(tenantId, token);
+        const session = await this.sessions.getForTenant(
+            tenantId,
+            reference.sessionId,
+        );
+        if (!isBoundTo(reference, token, session))
+            throw new CredentialSessionAuthorizationDenied(
+                "The access token is not associated with a valid session",
+            );
+        return session;
+    }
+
+    /**
+     * Whether the token belongs to the given session of the tenant, with the
+     * same rules as {@link resolveSession}.
      */
     async belongsToSession(
         tenantId: string,
@@ -124,15 +148,25 @@ export class CorrelateCredentialTokenSession {
                 tenantId,
                 sessionId,
             );
-            return (
-                session.authorizationServerId ===
-                    reference.authorizationServerId &&
-                session.externalIssuer === token.iss &&
-                session.externalSubject === token.sub
-            );
+            return isBoundTo(reference, token, session);
         } catch (error) {
             if (error instanceof SessionNotFound) return false;
             throw error;
         }
     }
+}
+
+/** External tokens must carry the identity bound to the session. */
+function isBoundTo(
+    reference: CredentialTokenSessionReference,
+    token: VerifiedCredentialToken,
+    session: SessionData,
+): boolean {
+    if (session.id !== reference.sessionId) return false;
+    if (reference.kind !== "external") return true;
+    return (
+        session.authorizationServerId === reference.authorizationServerId &&
+        session.externalIssuer === token.iss &&
+        session.externalSubject === token.sub
+    );
 }
