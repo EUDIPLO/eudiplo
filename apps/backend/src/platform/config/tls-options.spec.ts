@@ -104,13 +104,14 @@ async function servedChain(
     try {
         const { port } = server.address() as AddressInfo;
         return await new Promise((resolve, reject) => {
-            // Inspect instead of rejecting so a broken chain is observable.
+            // Validation stays on: only the root is trusted, so the handshake
+            // fails with a verification error unless the server sends the
+            // intermediate.
             const socket = connect(
                 {
                     port,
                     ca: trustedRoot,
                     servername: "localhost",
-                    rejectUnauthorized: false,
                 },
                 () => {
                     const subjects: string[] = [];
