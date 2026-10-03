@@ -127,4 +127,17 @@ describe("Status List - status updates", () => {
         expect(await publishedStatus(wideListId, wideIndex)).toBe(1);
         expect(await publishedStatus(narrowListId, neighbourIndex)).toBe(0);
     });
+
+    test("keeps a revoked credential revoked", async () => {
+        const response = await updateStatus({
+            sessionId: SESSION_ID,
+            status: 0,
+        }).expect(409);
+
+        expect(response.body.message).toBe(
+            "A revoked credential cannot be reinstated: revocation is final.",
+        );
+        expect(await publishedStatus(narrowListId, narrowIndex)).toBe(1);
+        expect(await publishedStatus(wideListId, wideIndex)).toBe(1);
+    });
 });

@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
+    assertStatusTransitionAllowed,
     assertStatusValueFits,
     findOutOfRangeStatusIndexes,
+    RevokedStatusIsFinal,
     StatusListValuesOutOfRange,
     StatusValueOutOfRange,
+    statusTransitionAllowed,
     statusValueFits,
 } from "./status-value.js";
 
@@ -91,6 +94,29 @@ describe("StatusListValuesOutOfRange", () => {
 
         expect(error.message).toContain(
             "at indexes 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 and 5 more.",
+        );
+    });
+});
+
+describe("statusTransitionAllowed", () => {
+    test.each([
+        [0, 1, true],
+        [0, 2, true],
+        [2, 0, true],
+        [2, 1, true],
+        [1, 1, true],
+        [1, 0, false],
+        [1, 2, false],
+    ])("%i -> %i allowed: %s", (current, next, allowed) => {
+        expect(statusTransitionAllowed(current, next)).toBe(allowed);
+    });
+
+    test("names the rejected transition", () => {
+        expect(() => assertStatusTransitionAllowed(1, 0)).toThrow(
+            new RevokedStatusIsFinal(0),
+        );
+        expect(() => assertStatusTransitionAllowed(1, 2)).toThrow(
+            "A revoked credential cannot be suspended: revocation is final.",
         );
     });
 });

@@ -433,6 +433,72 @@ describe("StatusListService SQLite concurrency", () => {
             expect(signJWT).not.toHaveBeenCalled();
         });
 
+        test("refuses to reinstate or suspend a revoked credential, changing no entry", async () => {
+            await dataSource
+                .getRepository(StatusListEntity)
+                .update(
+                    { id: "list-2", tenantId: "tenant-1" },
+                    { elements: [1, 0] },
+                );
+            // The still valid entry comes first, so writing entry by entry
+            // without checking every entry up front would change it.
+            await dataSource
+                .getRepository(StatusMapping)
+                .insert([
+                    mapping("x", "list-1", 0, "config-narrow"),
+                    mapping("x", "list-2", 0, "config-wide"),
+                ]);
+
+            for (const status of [0, 2]) {
+                await expect(
+                    service.updateStatus(
+                        {
+                            sessionId: "x",
+                            credentialConfigurationId: "config-wide",
+                            status,
+                        } as never,
+                        "tenant-1",
+                    ),
+                ).rejects.toMatchObject({ status: 409 });
+            }
+            await expect(
+                service.updateStatus(
+                    { sessionId: "x", status: 0 } as never,
+                    "tenant-1",
+                ),
+            ).rejects.toMatchObject({
+                status: 409,
+                message:
+                    "A revoked credential cannot be reinstated: revocation is final.",
+            });
+
+            expect(await elementsOf("list-1")).toEqual([0, 0]);
+            expect(await elementsOf("list-2")).toEqual([1, 0]);
+        });
+
+        test("lifts a suspension", async () => {
+            await dataSource
+                .getRepository(StatusListEntity)
+                .update(
+                    { id: "list-2", tenantId: "tenant-1" },
+                    { elements: [0, 2] },
+                );
+            await dataSource
+                .getRepository(StatusMapping)
+                .insert([mapping("x", "list-2", 1, "config-wide")]);
+
+            await service.updateStatus(
+                {
+                    sessionId: "x",
+                    credentialConfigurationId: "config-wide",
+                    status: 0,
+                } as never,
+                "tenant-1",
+            );
+
+            expect(await elementsOf("list-2")).toEqual([0, 0]);
+        });
+
         test("stores a suspension on a list with 2 bits per entry", async () => {
             await dataSource
                 .getRepository(StatusMapping)

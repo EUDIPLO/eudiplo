@@ -78,6 +78,40 @@ export function assertStatusValueFits(
 }
 
 /**
+ * Whether an entry may change from `current` to `next`. Revocation is final:
+ * a revoked entry can only be set to revoked again. A suspension can be
+ * lifted (0) or turned into a revocation (1).
+ */
+export function statusTransitionAllowed(
+    current: number,
+    next: number,
+): boolean {
+    return current !== STATUS_REVOKED || next === STATUS_REVOKED;
+}
+
+/** A status update tried to reinstate or suspend a revoked credential. */
+export class RevokedStatusIsFinal extends Error {
+    constructor(next: number) {
+        super(
+            `A revoked credential cannot be ${next === 0 ? "reinstated" : "suspended"}: revocation is final.`,
+        );
+        this.name = "RevokedStatusIsFinal";
+    }
+}
+
+/**
+ * @throws RevokedStatusIsFinal when `current` is revoked and `next` is not
+ */
+export function assertStatusTransitionAllowed(
+    current: number,
+    next: number,
+): void {
+    if (!statusTransitionAllowed(current, next)) {
+        throw new RevokedStatusIsFinal(next);
+    }
+}
+
+/**
  * Indexes of stored entries whose value does not fit `bits` bits, in
  * ascending order. Empty for a list that can be encoded as stored.
  */

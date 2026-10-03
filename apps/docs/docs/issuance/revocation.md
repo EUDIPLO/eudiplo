@@ -50,8 +50,8 @@ curl -X POST "$EUDIPLO_URL/api/session/revoke" \
 | `status` | yes | `0` = valid, `1` = revoked, `2` = suspended. |
 
 - The call answers `204 No Content`. It updates every credential of the session and type, including all credentials of a batch; without `credentialConfigurationId` it updates all credentials of the session. If the session has no status entry for the type, it answers `409`. A value that does not fit a list's bits per entry (for example `2` on a 1-bit list) is rejected with `400` before anything is changed.
-- Allowed roles: `issuance:offer` or `presentation:request`.
-- EUDIPLO does not enforce transitions: `status: 0` lifts a suspension, but it also reinstates a revoked credential. Treat revocation as final in your own process.
+- Allowed roles: `issuance:offer` or `issuance:manage`.
+- Revocation is final: setting `0` or `2` on a revoked credential is rejected with `409`, and nothing is changed. A suspension can be lifted (`0`) or turned into a revocation (`1`).
 
 ## 3. Check the result
 

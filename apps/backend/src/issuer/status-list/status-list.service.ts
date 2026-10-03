@@ -42,8 +42,10 @@ import {
 import type { SessionData as Session } from "../../session/domain/session-data.js";
 import type { CredentialConfiguration } from "../configuration/credentials/domain/credential-configuration.js";
 import {
+    assertStatusTransitionAllowed,
     assertStatusValueFits,
     findOutOfRangeStatusIndexes,
+    RevokedStatusIsFinal,
     STATUS_REVOKED,
     StatusListValuesOutOfRange,
     StatusValueOutOfRange,
@@ -1319,6 +1321,9 @@ export class StatusListService implements OnApplicationBootstrap {
             // Every write path ends here, so a value wider than the list's
             // bits can never be stored, whichever caller asked for it.
             this.assertValueFitsLists(value, [entry]);
+            // Checked again here, where the read is part of the versioned
+            // write; a domain error so the concurrency retry does not retry it.
+            assertStatusTransitionAllowed(entry.elements[index] ?? 0, value);
 
             // Modify the elements array
             const updatedElements = [...entry.elements];
@@ -1403,18 +1408,36 @@ export class StatusListService implements OnApplicationBootstrap {
             return;
         }
         const lists = await this.statusListRepository.find({
-            select: { id: true, tenantId: true, bits: true },
+            select: { id: true, tenantId: true, bits: true, elements: true },
             where: { tenantId, id: In(listIds) },
         });
         this.assertValueFitsLists(value, lists);
 
-        for (const entry of entries) {
-            await this.setEntry(
-                entry.statusListId,
-                entry.index,
-                value,
-                tenantId,
+        try {
+            // Revocation is final. Checked for every entry before the first
+            // write, so an update touching several entries is all or nothing.
+            const elementsById = new Map(
+                lists.map((list) => [list.id, list.elements]),
             );
+            for (const entry of entries) {
+                assertStatusTransitionAllowed(
+                    elementsById.get(entry.statusListId)?.[entry.index] ?? 0,
+                    value,
+                );
+            }
+            for (const entry of entries) {
+                await this.setEntry(
+                    entry.statusListId,
+                    entry.index,
+                    value,
+                    tenantId,
+                );
+            }
+        } catch (error) {
+            if (error instanceof RevokedStatusIsFinal) {
+                throw new ConflictException(error.message);
+            }
+            throw error;
         }
     }
 
