@@ -51,10 +51,6 @@ describe("SelectAuthorizationServer", () => {
             { type: "chained", id: "c", upstream: { issuer: "u" } },
             `${base}/chained-as`,
         ],
-        [
-            { type: "chained", id: "c", vp: { enabled: true } },
-            `${base}/chained-as-vp`,
-        ],
     ])("resolves an explicit selection of %o", async (server, issuer) => {
         await expect(
             select([{ type: "built-in", id: "other" }, server]).execute(
@@ -68,8 +64,10 @@ describe("SelectAuthorizationServer", () => {
         const servers = [
             { type: "built-in", id: "off", enabled: false },
             { type: "chained", id: "incomplete" },
+            // Removed in 9.0: OID4VP-backed chained server (`chained-as-vp`).
+            { type: "chained", id: "legacy-vp", vp: { enabled: true } },
         ];
-        for (const id of ["missing", "off", "incomplete"]) {
+        for (const id of ["missing", "off", "incomplete", "legacy-vp"]) {
             await expect(select(servers).execute("tenant", id)).rejects.toThrow(
                 new AuthorizationServerNotConfigured(
                     `Authorization server '${id}' is not configured or enabled`,

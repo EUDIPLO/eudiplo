@@ -23,6 +23,7 @@ import {
     OID4VCI_SETTINGS,
     type Oid4vciSettings,
 } from "../../oid4vci-settings.js";
+import { refreshTokenPolicy } from "../domain/token-grant-rules.js";
 import {
     CHAINED_AS_SESSION_REPOSITORY,
     type ChainedAsSessionRepository,
@@ -46,6 +47,7 @@ import {
     resolveSessionForTokenRequest,
     resolveTokenBinding,
     resolveWalletAttestationPolicy,
+    retainSessionForIssuedTokens,
 } from "../shared/index.js";
 
 type Oid4VpManagedAuthorizationServerConfig =
@@ -512,6 +514,7 @@ export class AuthorizationServersService {
             this.sessionRepository,
             tenantId,
             request,
+            refreshTokenPolicy(config.token),
         );
         await assertTokenRequestSessionValid(
             this.sessionRepository,
@@ -560,7 +563,12 @@ export class AuthorizationServersService {
         session.accessTokenJti = jti;
         const refreshToken = issueRefreshTokenIfEnabled(
             session,
-            config.token ?? {},
+            config.token,
+            request.grant_type,
+        );
+        retainSessionForIssuedTokens(
+            session,
+            new Date(Date.now() + tokenLifetime * 1000),
         );
 
         await this.sessionRepository.save(session);
@@ -597,7 +605,7 @@ export class AuthorizationServersService {
             issuanceConfig,
             config,
         );
-        const refreshTokensEnabled = config.token?.refreshTokenEnabled ?? true;
+        const refreshTokensEnabled = refreshTokenPolicy(config.token).enabled;
 
         return buildAuthorizationServerMetadata({
             issuer: baseUrl,

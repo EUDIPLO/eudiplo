@@ -5,7 +5,7 @@ import {
     JwtSignerJwk,
 } from "@openid4vc/oauth2";
 import { Openid4vciClient } from "@openid4vc/openid4vci";
-import { exportJWK, generateKeyPair } from "jose";
+import { decodeProtectedHeader, exportJWK, generateKeyPair } from "jose";
 import request from "supertest";
 import { App } from "supertest/types";
 import { Agent, setGlobalDispatcher } from "undici";
@@ -236,5 +236,105 @@ describe("Issuance - Refresh Token Flow", () => {
             .expect(400);
 
         expect(refreshResponse.body.error).toBe("invalid_grant");
+    });
+
+    test("built-in authorization server honors its token settings", async () => {
+        // Status list key chain of the fixtures, not the tenant default key.
+        const signingKeyId = "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746";
+        await request(app.getHttpServer())
+            .post("/issuer/config")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                authorizationServers: [
+                    {
+                        id: "issuer-built-in",
+                        type: "built-in",
+                        walletAttestationRequired: false,
+                        token: {
+                            lifetimeSeconds: 900,
+                            signingKeyId,
+                            refreshTokenEnabled: false,
+                        },
+                    },
+                ],
+            })
+            .expect(201);
+
+        const offerResponse = await request(app.getHttpServer())
+            .post("/issuer/offer")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                response_type: "uri",
+                credentialConfigurationIds: ["pid-no-key"],
+                flow: "pre_authorized_code",
+            })
+            .expect(201);
+
+        const holderKeyPair = await generateKeyPair("ES256", {
+            extractable: true,
+        });
+        const holderPrivateKeyJwk = await exportJWK(holderKeyPair.privateKey);
+        const holderPublicKeyJwk = await exportJWK(holderKeyPair.publicKey);
+
+        const client = new Openid4vciClient({
+            callbacks: {
+                ...callbacks,
+                clientAuthentication: clientAuthenticationAnonymous(),
+                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+            },
+        });
+
+        const credentialOffer = await client.resolveCredentialOffer(
+            offerResponse.body.uri,
+        );
+        const issuerMetadata = await client.resolveIssuerMetadata(
+            credentialOffer.credential_issuer,
+        );
+        expect(
+            issuerMetadata.authorizationServers?.[0]?.grant_types_supported,
+        ).not.toContain("refresh_token");
+
+        const { accessTokenResponse } =
+            await client.retrievePreAuthorizedCodeAccessTokenFromOffer({
+                credentialOffer,
+                issuerMetadata,
+            });
+
+        expect(accessTokenResponse.expires_in).toBe(900);
+        expect(accessTokenResponse.refresh_token).toBeUndefined();
+        // The header carries the kid of the key chain's active key.
+        expect(
+            decodeProtectedHeader(accessTokenResponse.access_token).kid,
+        ).toMatch(new RegExp(`^${signingKeyId}-`));
+
+        // The credential endpoint verifies the token with the published key.
+        const nonceResponse = await client.requestNonce({ issuerMetadata });
+        const { jwt: proofJwt } = await client.createCredentialRequestJwtProof({
+            issuerMetadata,
+            signer: {
+                method: "jwk",
+                alg: "ES256",
+                publicJwk: holderPublicKeyJwk,
+            } as JwtSignerJwk,
+            clientId,
+            issuedAt: new Date(),
+            credentialConfigurationId:
+                credentialOffer.credential_configuration_ids[0],
+            nonce: nonceResponse.c_nonce,
+        });
+        const credentialResponse = await client.retrieveCredentials({
+            accessToken: accessTokenResponse.access_token,
+            credentialConfigurationId:
+                credentialOffer.credential_configuration_ids[0],
+            issuerMetadata,
+            proofs: {
+                jwt: [proofJwt],
+            },
+        });
+        expect(
+            credentialResponse.credentialResponse.credentials?.length,
+        ).toBeGreaterThan(0);
     });
 });

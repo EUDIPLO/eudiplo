@@ -11,6 +11,7 @@ import {
     Res,
 } from "@nestjs/common";
 import {
+    ApiBody,
     ApiConsumes,
     ApiHeader,
     ApiOperation,
@@ -23,6 +24,7 @@ import { Public } from "../../../../../auth/public.decorator.js";
 import {
     ChainedAsAuthorizeQueryDto,
     ChainedAsErrorResponseDto,
+    ChainedAsParRequestDto,
     ChainedAsParResponseDto,
     ChainedAsTokenRequestDto,
     ChainedAsTokenResponseDto,
@@ -59,6 +61,7 @@ export class AuthorizationServersController {
         required: false,
         description: "Wallet attestation proof-of-possession JWT",
     })
+    @ApiBody({ type: ChainedAsParRequestDto })
     @ApiResponse({ status: 201, type: ChainedAsParResponseDto })
     @ApiResponse({ status: 400, type: ChainedAsErrorResponseDto })
     async par(

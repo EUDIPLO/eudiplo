@@ -64,7 +64,6 @@ import { AuthorizationModule } from "./oid4vci/authorization/authorization.modul
 import { AuthorizationServersService } from "./oid4vci/authorization/authorization-servers/authorization-servers.service.js";
 import { AuthorizeService } from "./oid4vci/authorization/authorize/authorize.service.js";
 import { ChainedAsService } from "./oid4vci/authorization/chained-as/chained-as.service.js";
-import { ChainedAsVpService } from "./oid4vci/authorization/chained-as-vp/chained-as-vp.service.js";
 import { CredentialAccessTokenVerifier } from "./oid4vci/credential-access-token.verifier.js";
 import { CredentialNonceModule } from "./oid4vci/credential-nonce.module.js";
 import { CredentialOfferReferenceController } from "./oid4vci/credential-offer-reference.controller.js";
@@ -194,19 +193,16 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
                 AuthorizeService,
                 AuthorizationServersService,
                 ChainedAsService,
-                ChainedAsVpService,
             ],
             useFactory: (
                 builtIn: AuthorizeService,
                 oid4vp: AuthorizationServersService,
                 chainedAs: ChainedAsService,
-                chainedAsVp: ChainedAsVpService,
             ) =>
                 new HostedAuthorizationServerMetadataAdapter(
                     builtIn,
                     oid4vp,
                     chainedAs,
-                    chainedAsVp,
                 ),
         },
         {

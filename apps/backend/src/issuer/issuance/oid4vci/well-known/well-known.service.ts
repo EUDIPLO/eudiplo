@@ -9,7 +9,7 @@ import { BuildIssuerMetadata } from "../application/build-issuer-metadata.js";
 import { AuthorizationServersService } from "../authorization/authorization-servers/authorization-servers.service.js";
 import { AuthorizeService } from "../authorization/authorize/authorize.service.js";
 import { ChainedAsService } from "../authorization/chained-as/chained-as.service.js";
-import { ChainedAsVpService } from "../authorization/chained-as-vp/chained-as-vp.service.js";
+import { builtInAccessTokenSettings } from "../authorization/domain/token-grant-rules.js";
 import { WellKnownException } from "../exceptions/index.js";
 import { Oid4vciSdkFactory } from "../oid4vci-sdk.factory.js";
 import { CredentialIssuerMetadataDto } from "./dto/credential-issuer-metadata.dto.js";
@@ -35,7 +35,6 @@ export class WellKnownService {
         private readonly cryptoImplementationService: CryptoImplementationService,
         private readonly authorizationServersService: AuthorizationServersService,
         private readonly chainedAsService: ChainedAsService,
-        private readonly chainedAsVpService: ChainedAsVpService,
         private readonly issuanceService: IssuanceService,
     ) {}
 
@@ -113,8 +112,9 @@ export class WellKnownService {
 
     /**
      * Returns the JSON Web Key Set (JWKS) for a given tenant.
-     * Resolves the signing key from issuance config (or default) and
-     * includes the `kid` so that JWT verification can match keys.
+     * Resolves the access token signing key of the built-in authorization
+     * server (or the default) and includes the `kid` so that JWT
+     * verification can match keys.
      * @returns
      */
     async getJwks(tenantId: string): Promise<JwksResponseDto> {
@@ -123,7 +123,7 @@ export class WellKnownService {
                 await this.issuanceService.getIssuanceConfiguration(tenantId);
 
             const signingKeyId =
-                issuanceConfig.signingKeyId ||
+                builtInAccessTokenSettings(issuanceConfig).signingKeyId ||
                 (await this.keyChainService.getKid(tenantId));
 
             const publicKey = await this.keyChainService.getPublicKey(
@@ -188,44 +188,6 @@ export class WellKnownService {
             }
             throw new WellKnownException(
                 `Failed to retrieve Chained AS JWKS for tenant ${tenantId}: ${error instanceof Error ? error.message : "Unknown error"}`,
-                HttpStatus.INTERNAL_SERVER_ERROR,
-            );
-        }
-    }
-
-    /**
-     * Returns the OAuth 2.0 Authorization Server metadata for the VP-backed Chained AS.
-     */
-    async getChainedAsVpMetadata(
-        tenantId: string,
-    ): Promise<Record<string, unknown>> {
-        try {
-            return await this.chainedAsVpService.getMetadata(tenantId);
-        } catch (error) {
-            if (error instanceof WellKnownException) {
-                throw error;
-            }
-            throw new WellKnownException(
-                `Failed to retrieve VP Chained AS metadata for tenant ${tenantId}: ${error instanceof Error ? error.message : "Unknown error"}`,
-                HttpStatus.INTERNAL_SERVER_ERROR,
-            );
-        }
-    }
-
-    /**
-     * Returns the JSON Web Key Set (JWKS) for the VP-backed Chained Authorization Server.
-     */
-    async getChainedAsVpJwks(
-        tenantId: string,
-    ): Promise<{ keys: Record<string, unknown>[] }> {
-        try {
-            return await this.chainedAsVpService.getJwks(tenantId);
-        } catch (error) {
-            if (error instanceof WellKnownException) {
-                throw error;
-            }
-            throw new WellKnownException(
-                `Failed to retrieve VP Chained AS JWKS for tenant ${tenantId}: ${error instanceof Error ? error.message : "Unknown error"}`,
                 HttpStatus.INTERNAL_SERVER_ERROR,
             );
         }

@@ -156,7 +156,7 @@ describe("OpenAPI contract", () => {
 
         const chainedAsParOperation = getOperation(
             document,
-            "/api/issuers/{tenantId}/chained-as-vp/par",
+            "/issuers/{tenantId}/authorization-servers/{authorizationServerId}/par",
             "post",
         );
         expect(
@@ -345,15 +345,13 @@ describe("OpenAPI contract", () => {
             attributeProviderDeleteOperation.responses["204"].content,
         ).toBeUndefined();
 
-        const chainedAsVpAuthorizeOperation = getOperation(
+        const oid4vpAuthorizeOperation = getOperation(
             document,
-            "/api/issuers/{tenantId}/chained-as-vp/authorize",
+            "/issuers/{tenantId}/authorization-servers/{authorizationServerId}/authorize",
             "get",
         );
         expect(
-            chainedAsVpAuthorizeOperation.responses["200"].content?.[
-                "text/html"
-            ],
+            oid4vpAuthorizeOperation.responses["200"].content?.["text/html"],
         ).toBeTruthy();
 
         const sessionEventsOperation = getOperation(

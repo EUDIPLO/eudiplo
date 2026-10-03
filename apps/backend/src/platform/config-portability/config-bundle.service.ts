@@ -21,6 +21,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { compare as compareSecret } from "bcrypt";
 import { Repository } from "typeorm";
 import { KmsTenantConfigService } from "../../crypto/key/kms/kms-tenant-config.service.js";
+import { withoutRemovedChainedVp } from "../../issuer/configuration/issuance/domain/removed-authorization-servers.js";
 import { FileEntity } from "../../storage/entities/files.entity.js";
 import { FilesService } from "../../storage/files.service.js";
 import { ConfigBundleRepositories } from "./config-bundle-repositories.service.js";
@@ -934,7 +935,13 @@ export class ConfigBundleService {
                     walletProviderTrustLists:
                         entity.walletProviderTrustLists ?? undefined,
                     signingKeyId: entity.signingKeyId ?? undefined,
-                    authorizationServers: entity.authorizationServers,
+                    // Removed authorization server options are not exported.
+                    authorizationServers: Array.isArray(
+                        entity.authorizationServers,
+                    )
+                        ? withoutRemovedChainedVp(entity.authorizationServers)
+                              .servers
+                        : entity.authorizationServers,
                     federation: entity.federation,
                     registrationCertificate: entity.registrationCertificate,
                     display: entity.display,

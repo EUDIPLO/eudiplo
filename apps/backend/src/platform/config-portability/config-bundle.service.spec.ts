@@ -80,3 +80,42 @@ describe("ConfigBundleService secret handling", () => {
         });
     });
 });
+
+describe("ConfigBundleService issuance export", () => {
+    const service = Object.create(
+        ConfigBundleService.prototype,
+    ) as ConfigBundleService;
+
+    it("does not export the removed 'vp' option of chained authorization servers", () => {
+        const canonicalEntitySpec = Reflect.get(
+            service,
+            "canonicalEntitySpec",
+        ) as (
+            kind: ConfigResourceKind,
+            entity: Record<string, unknown>,
+        ) => Record<string, unknown>;
+        const upstream = { issuer: "https://idp.example", clientId: "c" };
+
+        const spec = canonicalEntitySpec.call(service, "IssuanceConfig", {
+            authorizationServers: [
+                { type: "built-in", id: "built-in" },
+                {
+                    type: "chained",
+                    id: "legacy-vp",
+                    vp: { enabled: true, presentationConfigId: "pid" },
+                },
+                {
+                    type: "chained",
+                    id: "chained",
+                    upstream,
+                    vp: { enabled: false, presentationConfigId: "pid" },
+                },
+            ],
+        });
+
+        expect(spec.authorizationServers).toEqual([
+            { type: "built-in", id: "built-in" },
+            { type: "chained", id: "chained", upstream },
+        ]);
+    });
+});

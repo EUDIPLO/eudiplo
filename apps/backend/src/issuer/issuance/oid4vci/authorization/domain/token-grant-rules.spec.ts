@@ -1,13 +1,21 @@
 import { calculateJwkThumbprint } from "jose";
 import { describe, expect, it } from "vitest";
-import { assertS256CodeChallenge, checkPkce } from "./pkce.js";
+import {
+    assertS256CodeChallenge,
+    assertS256CodeChallengeIfPresent,
+    checkPkce,
+} from "./pkce.js";
 import { assertValidPushedAuthorizationRequest } from "./pushed-authorization-request.js";
 import {
     assertIssuedToClient,
     authorizationDetailsForToken,
+    builtInAccessTokenSettings,
     clientInstanceKeyThumbprint,
+    enforcedRefreshTokenExpiry,
     findBuiltInAuthorizationServer,
     isTxCodeLocked,
+    refreshTokenExpiresAt,
+    refreshTokenPolicy,
     resolveRefreshTokenPolicy,
 } from "./token-grant-rules.js";
 
@@ -62,6 +70,91 @@ describe("assertS256CodeChallenge", () => {
     });
 });
 
+describe("assertS256CodeChallengeIfPresent", () => {
+    const s256 = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+
+    it("accepts a request without PKCE parameters", () => {
+        expect(() =>
+            assertS256CodeChallengeIfPresent(undefined, undefined),
+        ).not.toThrow();
+    });
+
+    it("accepts an S256 challenge", () => {
+        expect(() =>
+            assertS256CodeChallengeIfPresent(s256, "S256"),
+        ).not.toThrow();
+    });
+
+    it("rejects plain, a challenge without method and a method without challenge", () => {
+        for (const [challenge, method] of [
+            [s256, "plain"],
+            [s256, undefined],
+            [undefined, "S256"],
+            [undefined, "plain"],
+        ]) {
+            expect(() =>
+                assertS256CodeChallengeIfPresent(challenge, method),
+            ).toThrow(expect.objectContaining({ code: "invalid_request" }));
+        }
+    });
+});
+
+describe("refreshTokenPolicy", () => {
+    it("is enabled with 30 days without settings", () => {
+        expect(refreshTokenPolicy(undefined)).toEqual({
+            enabled: true,
+            expiresInSeconds: 2592000,
+        });
+        expect(refreshTokenPolicy({ lifetimeSeconds: 600 })).toEqual({
+            enabled: true,
+            expiresInSeconds: 2592000,
+        });
+    });
+
+    it("is only disabled by refreshTokenEnabled false", () => {
+        expect(refreshTokenPolicy({ refreshTokenEnabled: false }).enabled).toBe(
+            false,
+        );
+        expect(refreshTokenPolicy({ refreshTokenEnabled: true }).enabled).toBe(
+            true,
+        );
+    });
+
+    it("uses the configured lifetime", () => {
+        expect(
+            refreshTokenPolicy({ refreshTokenExpiresInSeconds: 120 })
+                .expiresInSeconds,
+        ).toBe(120);
+    });
+});
+
+describe("refresh token expiry", () => {
+    const policy = { enabled: true, expiresInSeconds: 60 };
+    const createdAt = new Date("2026-01-01T00:00:00Z");
+
+    it("counts the lifetime from issuance", () => {
+        expect(refreshTokenExpiresAt(policy, createdAt)).toEqual(
+            new Date("2026-01-01T00:01:00Z"),
+        );
+    });
+
+    it("enforces the stored expiry", () => {
+        const stored = new Date("2026-02-01T00:00:00Z");
+        expect(enforcedRefreshTokenExpiry(stored, createdAt, policy)).toBe(
+            stored,
+        );
+    });
+
+    it("bounds tokens stored without an expiry by the session creation", () => {
+        expect(
+            enforcedRefreshTokenExpiry(undefined, createdAt, policy),
+        ).toEqual(new Date("2026-01-01T00:01:00Z"));
+        expect(enforcedRefreshTokenExpiry(null, createdAt, policy)).toEqual(
+            new Date("2026-01-01T00:01:00Z"),
+        );
+    });
+});
+
 describe("resolveRefreshTokenPolicy", () => {
     it("defaults to enabled with 30 days", () => {
         expect(resolveRefreshTokenPolicy({})).toEqual({
@@ -70,23 +163,107 @@ describe("resolveRefreshTokenPolicy", () => {
         });
     });
 
-    it("uses the first enabled non-external server with token settings", () => {
+    it("uses the token settings of the enabled built-in server only", () => {
+        const servers = [
+            {
+                type: "oid4vp",
+                token: {
+                    refreshTokenEnabled: false,
+                    refreshTokenExpiresInSeconds: 60,
+                },
+            },
+            {
+                type: "built-in",
+                enabled: false,
+                token: { refreshTokenEnabled: false },
+            },
+        ];
+        expect(
+            resolveRefreshTokenPolicy({ authorizationServers: servers }),
+        ).toEqual({ enabled: true, expiresInSeconds: 2592000 });
         expect(
             resolveRefreshTokenPolicy({
                 authorizationServers: [
-                    { type: "external", token: { refreshTokenEnabled: false } },
+                    ...servers,
                     {
                         type: "built-in",
-                        enabled: false,
-                        token: { refreshTokenEnabled: false },
-                    },
-                    {
-                        type: "oid4vp",
-                        token: { refreshTokenExpiresInSeconds: 60 },
+                        token: { refreshTokenExpiresInSeconds: 120 },
                     },
                 ],
             }),
-        ).toEqual({ enabled: true, expiresInSeconds: 60 });
+        ).toEqual({ enabled: true, expiresInSeconds: 120 });
+    });
+});
+
+describe("builtInAccessTokenSettings", () => {
+    it("defaults to five minutes, the default key and no DPoP", () => {
+        expect(builtInAccessTokenSettings({})).toEqual({
+            lifetimeSeconds: 300,
+            signingKeyId: undefined,
+            dpopRequired: false,
+        });
+    });
+
+    it("uses the token settings and requireDPoP of the built-in server", () => {
+        expect(
+            builtInAccessTokenSettings({
+                signingKeyId: "issuance-key",
+                authorizationServers: [
+                    {
+                        type: "built-in",
+                        token: {
+                            lifetimeSeconds: 900,
+                            signingKeyId: "as-key",
+                        },
+                        requireDPoP: true,
+                    },
+                ],
+            }),
+        ).toEqual({
+            lifetimeSeconds: 900,
+            signingKeyId: "as-key",
+            dpopRequired: true,
+        });
+    });
+
+    it("falls back to the issuance signing key and dPopRequired", () => {
+        expect(
+            builtInAccessTokenSettings({
+                signingKeyId: "issuance-key",
+                dPopRequired: true,
+                authorizationServers: [
+                    {
+                        type: "chained",
+                        token: { signingKeyId: "chained-key" },
+                        requireDPoP: false,
+                    },
+                    { type: "built-in" },
+                ],
+            }),
+        ).toEqual({
+            lifetimeSeconds: 300,
+            signingKeyId: "issuance-key",
+            dpopRequired: true,
+        });
+    });
+
+    it("ignores a disabled built-in server", () => {
+        expect(
+            builtInAccessTokenSettings({
+                authorizationServers: [
+                    {
+                        type: "built-in",
+                        enabled: false,
+                        token: { lifetimeSeconds: 900 },
+                        requireDPoP: true,
+                    },
+                ],
+            }),
+        ).toEqual({
+            lifetimeSeconds: 300,
+            signingKeyId: undefined,
+            dpopRequired: false,
+        });
     });
 });
 

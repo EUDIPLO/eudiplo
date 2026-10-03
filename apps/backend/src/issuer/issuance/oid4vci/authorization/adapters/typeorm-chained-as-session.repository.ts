@@ -1,8 +1,9 @@
-import { LessThan, type Repository } from "typeorm";
+import { IsNull, LessThan, type Repository } from "typeorm";
 import {
     type ChainedAsSession,
     ChainedAsSessionStatus,
 } from "../domain/chained-as-session.js";
+import { DEFAULT_REFRESH_TOKEN_LIFETIME_SECONDS } from "../domain/token-grant-rules.js";
 import type {
     ChainedAsSessionRepository,
     NewChainedAsSession,
@@ -63,9 +64,21 @@ export class TypeOrmChainedAsSessionRepository
     }
 
     async deleteExpired(now: Date): Promise<number> {
-        const result = await this.sessions.delete({
-            expiresAt: LessThan(now),
-        });
+        const expired = LessThan(now);
+        // Refresh tokens stored without an expiry (issued before EUDIPLO 9.0)
+        // are kept for the default refresh token lifetime.
+        const legacyRefreshCutoff = new Date(
+            now.getTime() - DEFAULT_REFRESH_TOKEN_LIFETIME_SECONDS * 1000,
+        );
+        const result = await this.sessions.delete([
+            { expiresAt: expired, refreshToken: IsNull() },
+            { expiresAt: expired, refreshTokenExpiresAt: expired },
+            {
+                expiresAt: expired,
+                refreshTokenExpiresAt: IsNull(),
+                createdAt: LessThan(legacyRefreshCutoff),
+            },
+        ]);
         return result.affected || 0;
     }
 }

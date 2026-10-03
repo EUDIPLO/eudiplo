@@ -416,6 +416,22 @@ describe("Interactive Authorization Endpoint (IAE)", () => {
             expect(response.body.error).toBe("invalid_grant");
             expect(response.body.error_description).toContain("code_verifier");
         });
+
+        test("should reject code_challenge_method plain", async () => {
+            const response = await request(app.getHttpServer())
+                .post(`/issuers/${tenantId}/authorize/interactive`)
+                .send({
+                    response_type: "code",
+                    client_id: "test-wallet",
+                    interaction_types_supported: "redirect_to_web",
+                    code_challenge: "plain-code-verifier",
+                    code_challenge_method: "plain",
+                })
+                .expect(400);
+
+            expect(response.body.error).toBe("invalid_request");
+            expect(response.body.error_description).toContain("S256");
+        });
     });
 
     describe("Complete Web Auth Endpoint", () => {
