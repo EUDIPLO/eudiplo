@@ -353,10 +353,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
       walletProviderTrustLists: this.fb.array([]),
       federation: this.fb.group({
         enabled: [false],
-        role: ['leaf'],
         mode: ['hybrid'],
         entityId: [''],
-        enforceSigningPolicy: [true],
         cacheTtlSeconds: [300],
         trustAnchors: this.fb.array([]),
       }),
@@ -637,10 +635,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
     this.trustAnchors.clear();
     this.federation.patchValue({
       enabled: false,
-      role: 'leaf',
       mode: 'hybrid',
       entityId: '',
-      enforceSigningPolicy: true,
       cacheTtlSeconds: 300,
     });
     // Load Federation config if present
@@ -664,10 +660,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
       this.form.patchValue({
         federation: {
           enabled: this.trustAnchors.length > 0,
-          role: (federation.role as 'trust_anchor' | 'intermediate' | 'leaf') ?? 'leaf',
           mode: this.normalizeFederationMode(federation.mode),
           entityId: federation.entityId ?? '',
-          enforceSigningPolicy: federation.enforceSigningPolicy ?? true,
           cacheTtlSeconds: federation.cacheTtlSeconds ?? 300,
         },
       });
@@ -894,13 +888,12 @@ export class IssuanceConfigCreateComponent implements OnInit {
     if (!enabled || !Array.isArray(trustAnchors) || trustAnchors.length === 0) {
       return null;
     }
-    const role = (fVal['role'] as string) ?? 'leaf';
     const mode = this.normalizeFederationMode(fVal['mode']);
+    // `role` and `enforceSigningPolicy` are not sent: EUDIPLO only acts as a
+    // leaf entity and always enforces federation checks.
     return {
-      role: role as 'trust_anchor' | 'intermediate' | 'leaf',
       mode,
       entityId: (fVal['entityId'] as string) ?? undefined,
-      enforceSigningPolicy: fVal['enforceSigningPolicy'] !== false,
       cacheTtlSeconds: (fVal['cacheTtlSeconds'] as number) ?? 300,
       trustAnchors: trustAnchors as {
         entityId: string;

@@ -1,3 +1,4 @@
+import * as x509 from "@peculiar/x509";
 import type { MetricService } from "nestjs-otel";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EvaluateFederationTrustChain } from "./application/evaluate-federation-trust-chain.js";
@@ -155,5 +156,59 @@ describe("FederationTrustService caching & deduplication", () => {
             trustSource,
         );
         expect(resolver.resolveEntityConfiguration).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe("FederationTrustService certificate entity ids", () => {
+    async function certificate(name: string): Promise<string> {
+        x509.cryptoProvider.set(globalThis.crypto);
+        const keys = await globalThis.crypto.subtle.generateKey(
+            { name: "ECDSA", namedCurve: "P-256" },
+            true,
+            ["sign", "verify"],
+        );
+        const cert = await x509.X509CertificateGenerator.createSelfSigned({
+            serialNumber: "01",
+            name,
+            notBefore: new Date(),
+            notAfter: new Date(Date.now() + 86_400_000),
+            signingAlgorithm: { name: "ECDSA", hash: "SHA-256" },
+            keys,
+        });
+        return cert.toString("base64");
+    }
+
+    it.each([
+        "CN=https://issuer.example.org",
+        "C=DE, O=Example, CN=https://issuer.example.org",
+    ])("takes the entity id from the CN of %s", async (name) => {
+        const service = new FederationTrustService(
+            new EvaluateFederationTrustChain({
+                resolveEntityConfiguration: vi.fn(),
+            } as unknown as FederationResolver),
+        );
+        const evaluateEntityTrust = vi
+            .spyOn(service, "evaluateEntityTrust")
+            .mockResolvedValue({ trusted: true, reason: "test" });
+        const source: FederationTrustSource = {
+            mode: "federation-only",
+            trustAnchors: [
+                {
+                    entityId: "https://anchor.example.org",
+                    entityConfigurationUri:
+                        "https://anchor.example.org/.well-known/openid-federation",
+                },
+            ],
+        };
+
+        await service.evaluateCertificateEntityTrust(
+            [await certificate(name)],
+            source,
+        );
+
+        expect(evaluateEntityTrust).toHaveBeenCalledWith(
+            "https://issuer.example.org",
+            source,
+        );
     });
 });

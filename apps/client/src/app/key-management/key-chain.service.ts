@@ -21,6 +21,23 @@ import {
   keyChainControllerUpdate,
   keyChainControllerUpdateTenantKmsConfig,
 } from '@eudiplo/sdk-core';
+import type { Role } from '../services/jwt.service';
+
+/**
+ * Roles allowed to export key material and to manage the tenant KMS provider
+ * configuration (which contains provider credentials). The same roles as for
+ * the configuration export.
+ */
+export const KEY_ADMIN_ROLES: Role[] = ['tenant:admin', 'tenants:manage'];
+
+/** Message shown when the backend rejects a key administration request. */
+export const KEY_ADMIN_FORBIDDEN_MESSAGE =
+  'This action requires the tenant:admin or tenants:manage role';
+
+/** True when the SDK error is the backend's 403 response. */
+export function isForbidden(error: unknown): boolean {
+  return (error as { statusCode?: number } | undefined)?.statusCode === 403;
+}
 
 /**
  * Service for managing unified key chains.
@@ -68,11 +85,13 @@ export class KeyChainService {
     );
   }
 
+  /** Requires one of {@link KEY_ADMIN_ROLES}. */
   async getTenantKmsConfig(): Promise<KmsTenantConfigResponseDto> {
     const response = await keyChainControllerGetTenantKmsConfig();
     return response.data as KmsTenantConfigResponseDto;
   }
 
+  /** Requires one of {@link KEY_ADMIN_ROLES}. */
   async updateTenantKmsConfig(config: KmsConfigDto): Promise<KmsTenantConfigResponseDto> {
     const response = await keyChainControllerUpdateTenantKmsConfig({
       body: config,
@@ -80,6 +99,7 @@ export class KeyChainService {
     return response.data as KmsTenantConfigResponseDto;
   }
 
+  /** Requires one of {@link KEY_ADMIN_ROLES}. */
   async deleteTenantKmsConfig(): Promise<void> {
     await keyChainControllerDeleteTenantKmsConfig();
   }
@@ -136,7 +156,8 @@ export class KeyChainService {
   }
 
   /**
-   * Export a key chain in config-import-compatible format (includes private key).
+   * Export a key chain in config-import-compatible format (includes the private
+   * key of database-held keys). Requires the tenant:admin or tenants:manage role.
    */
   async export(id: string): Promise<Record<string, unknown>> {
     const response = await keyChainControllerExport({ path: { id } });

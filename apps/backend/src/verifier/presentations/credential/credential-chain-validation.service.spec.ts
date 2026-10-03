@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrustListSource } from "../../../trust/types.js";
+import { FederationTrustService } from "../../../trust/federation-trust.service.js";
 import { CredentialChainValidationService } from "./credential-chain-validation.service.js";
 
 /**
@@ -30,6 +31,7 @@ describe("CredentialChainValidationService — trust list availability", () => {
             shouldUseFederation: vi.fn().mockReturnValue(false),
             shouldUseLote: vi.fn().mockReturnValue(true),
             getMode: vi.fn().mockReturnValue("hybrid"),
+            isEnabled: vi.fn().mockReturnValue(false),
             evaluateCertificateEntityTrust: vi.fn(),
         };
         x509v = {
@@ -90,4 +92,86 @@ describe("CredentialChainValidationService — trust list availability", () => {
             service.getTrustedCertificateBuffers(LOTE_SOURCE),
         ).resolves.toEqual([]);
     });
+});
+
+describe("CredentialChainValidationService — OpenID Federation without a trust list", () => {
+    const FEDERATION = {
+        trustAnchors: [
+            {
+                entityId: "https://ta.example.org",
+                entityConfigurationUri:
+                    "https://ta.example.org/.well-known/openid-federation",
+            },
+        ],
+    } as const;
+
+    function serviceWith(evaluation: { trusted: boolean; reason: string }) {
+        // Real mode handling, only the remote federation evaluation is faked.
+        const federationTrustService = Object.assign(
+            new FederationTrustService({} as never),
+            {
+                evaluateCertificateEntityTrust: vi
+                    .fn()
+                    .mockResolvedValue(evaluation),
+            },
+        );
+        const trustStore = { getTrustStore: vi.fn() };
+        const service = new CredentialChainValidationService(
+            trustStore as any,
+            federationTrustService,
+            { parseX5c: vi.fn().mockReturnValue([{ subject: "leaf" }]) } as any,
+            {} as any,
+            {
+                setContext: vi.fn(),
+                error: vi.fn(),
+                warn: vi.fn(),
+                debug: vi.fn(),
+            } as any,
+        );
+        return { service, trustStore };
+    }
+
+    it.each(["hybrid", "federation-only"] as const)(
+        "rejects an issuer outside the federation in %s mode",
+        async (mode) => {
+            const { service, trustStore } = serviceWith({
+                trusted: false,
+                reason: "entity did not chain to configured trust anchor",
+            });
+
+            const result = await service.validateChain(["<cert>"], undefined, {
+                federationTrustSource: {
+                    ...FEDERATION,
+                    mode,
+                    trustAnchors: [...FEDERATION.trustAnchors],
+                },
+            });
+
+            expect(result).toMatchObject({
+                verified: false,
+                error: "federation_trust_failed",
+            });
+            expect(trustStore.getTrustStore).not.toHaveBeenCalled();
+        },
+    );
+
+    it.each(["hybrid", "federation-only"] as const)(
+        "accepts an issuer that chains to the federation in %s mode",
+        async (mode) => {
+            const { service } = serviceWith({
+                trusted: true,
+                reason: "entity authority_hints chain to configured trust anchor",
+            });
+
+            const result = await service.validateChain(["<cert>"], undefined, {
+                federationTrustSource: {
+                    ...FEDERATION,
+                    mode,
+                    trustAnchors: [...FEDERATION.trustAnchors],
+                },
+            });
+
+            expect(result.verified).toBe(true);
+        },
+    );
 });

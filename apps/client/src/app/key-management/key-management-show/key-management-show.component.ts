@@ -11,11 +11,17 @@ import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { KeyChainResponseDto, CertificateInfoDto } from '@eudiplo/sdk-core';
 import { MatDialog } from '@angular/material/dialog';
-import { KeyChainService } from '../key-chain.service';
+import {
+  KEY_ADMIN_FORBIDDEN_MESSAGE,
+  KEY_ADMIN_ROLES,
+  KeyChainService,
+  isForbidden,
+} from '../key-chain.service';
 import { Subscription } from 'rxjs';
 import { JsonViewDialogComponent } from '../../issuance/credential-config/credential-config-create/json-view-dialog/json-view-dialog.component';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-ownership-notice.component';
+import { JwtService } from '../../services/jwt.service';
 
 @Component({
   selector: 'app-key-management-show',
@@ -46,7 +52,8 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     private readonly route: ActivatedRoute,
     private readonly snackBar: MatSnackBar,
     private readonly router: Router,
-    private readonly dialog: MatDialog
+    private readonly dialog: MatDialog,
+    private readonly jwtService: JwtService
   ) {}
 
   ngOnInit(): void {
@@ -187,30 +194,40 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     return this.keyChain?.rotationPolicy?.enabled || false;
   }
 
-  async viewAsJson(): Promise<void> {
+  /**
+   * Show the key chain as JSON. Uses the public representation so that no
+   * private key material is rendered on screen.
+   */
+  viewAsJson(): void {
     if (!this.keyChain) return;
 
-    try {
-      const exportData = await this.keyChainService.export(this.keyChain.id);
-      this.dialog.open(JsonViewDialogComponent, {
-        data: {
-          title: 'Key Chain JSON',
-          jsonData: exportData,
-          readonly: true,
-        },
-        disableClose: false,
-        minWidth: '60vw',
-        maxWidth: '95vw',
-        maxHeight: '95vh',
-      });
-    } catch (error) {
-      this.snackBar.open('Failed to load key chain JSON', 'Close', { duration: 3000 });
-      console.error('View JSON error:', error);
-    }
+    this.dialog.open(JsonViewDialogComponent, {
+      data: {
+        title: 'Key Chain JSON',
+        jsonData: this.keyChain,
+        readonly: true,
+      },
+      disableClose: false,
+      minWidth: '60vw',
+      maxWidth: '95vw',
+      maxHeight: '95vh',
+    });
+  }
+
+  /**
+   * Exporting returns private key material, which the backend only allows for
+   * tenant administrators.
+   */
+  get canExport(): boolean {
+    return this.jwtService.hasRole(KEY_ADMIN_ROLES);
   }
 
   async exportKeyChain(): Promise<void> {
     if (!this.keyChain) return;
+    if (!this.canExport) {
+      this.showExportForbidden();
+      return;
+    }
 
     try {
       const exportData = await this.keyChainService.export(this.keyChain.id);
@@ -224,8 +241,16 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
       URL.revokeObjectURL(url);
       this.snackBar.open('Key chain exported', 'Close', { duration: 3000 });
     } catch (error) {
+      if (isForbidden(error)) {
+        this.showExportForbidden();
+        return;
+      }
       this.snackBar.open('Failed to export key chain', 'Close', { duration: 3000 });
       console.error('Export error:', error);
     }
+  }
+
+  private showExportForbidden(): void {
+    this.snackBar.open(KEY_ADMIN_FORBIDDEN_MESSAGE, 'Close', { duration: 5000 });
   }
 }

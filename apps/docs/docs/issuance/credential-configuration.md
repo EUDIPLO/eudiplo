@@ -83,7 +83,7 @@ Images use `uri`. To host them in EUDIPLO, see [Object storage](../operate/objec
 ## 4. Choose key binding and proofs
 
 - `keyBinding: true` puts the wallet's key into the SD-JWT VC (`cnf`), so the holder must prove possession when presenting. mDOCs always carry the device key.
-- Wallets prove their key at the credential endpoint with a JWT proof or a key attestation. `config.proofTypesSupported` limits the accepted proof types (`jwt`, `attestation`; default both). `config.keyAttestationsRequired` publishes `key_attestations_required` under both `jwt` and `attestation` in `proof_types_supported`. With the `attestation` proof type, one key attestation may carry up to `batchSize` keys and yields one credential per key. How key attestations are verified and trusted is described in [Wallet and key attestation](../trust/attestation.md).
+- Wallets prove their key at the credential endpoint with a JWT proof or a key attestation. `config.proofTypesSupported` limits the accepted proof types (`jwt`, `attestation`; default both). `config.keyAttestationsRequired` requires a trusted key attestation with an accepted `key_storage` and `user_authentication` level for every proof, and publishes it as `key_attestations_required` under both `jwt` and `attestation` in `proof_types_supported`. With the `attestation` proof type, one key attestation may carry up to `batchSize` keys and yields one credential per key. How key attestations are verified and trusted is described in [Wallet and key attestation](../trust/attestation.md).
 
 ## 5. Set the lifetime and signing key
 

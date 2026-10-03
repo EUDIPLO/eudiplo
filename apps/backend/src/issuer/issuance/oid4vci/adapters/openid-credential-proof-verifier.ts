@@ -8,6 +8,10 @@ import {
     validateAttestationProofTrust,
     validateJwtProofAttestationTrust,
 } from "../attestation-proof-trust.util.js";
+import type {
+    VerifiedCredentialProof,
+    VerifiedKeyAttestation,
+} from "../domain/key-attestation-requirements.js";
 import type { Oid4vciSdkFactory } from "../oid4vci-sdk.factory.js";
 import type {
     CredentialProofVerifier,
@@ -36,7 +40,7 @@ export class OpenIdCredentialProofVerifier implements CredentialProofVerifier {
             verify: async (
                 proof: string,
                 type: IssuanceProofType,
-            ): Promise<Jwk[]> => {
+            ): Promise<VerifiedCredentialProof> => {
                 const expectedNonce = decodeJwt(proof).nonce as string;
                 if (type === "jwt") {
                     const verified =
@@ -45,12 +49,21 @@ export class OpenIdCredentialProofVerifier implements CredentialProofVerifier {
                             issuerMetadata,
                             jwt: proof,
                         });
+                    // The library verified the key attestation signature and
+                    // that the proof is signed with one of the attested keys.
                     await validateJwtProofAttestationTrust(
                         proof,
                         trustLists,
                         trust,
                     );
-                    return [verified.signer.publicJwk];
+                    return {
+                        holderKeys: [verified.signer.publicJwk],
+                        keyAttestation: verified.keyAttestation
+                            ? toVerifiedKeyAttestation(
+                                  verified.keyAttestation.payload,
+                              )
+                            : undefined,
+                    };
                 }
                 const verified =
                     await issuer.verifyCredentialRequestAttestationProof({
@@ -59,8 +72,26 @@ export class OpenIdCredentialProofVerifier implements CredentialProofVerifier {
                         keyAttestationJwt: proof,
                     });
                 await validateAttestationProofTrust(proof, trustLists, trust);
-                return verified.payload.attested_keys as Jwk[];
+                const keyAttestation = toVerifiedKeyAttestation(
+                    verified.payload,
+                );
+                return {
+                    holderKeys: keyAttestation.attestedKeys,
+                    keyAttestation,
+                };
             },
         };
     }
+}
+
+function toVerifiedKeyAttestation(payload: {
+    attested_keys: unknown[];
+    key_storage?: string[];
+    user_authentication?: string[];
+}): VerifiedKeyAttestation {
+    return {
+        attestedKeys: payload.attested_keys as Jwk[],
+        keyStorage: payload.key_storage,
+        userAuthentication: payload.user_authentication,
+    };
 }

@@ -270,8 +270,9 @@ export class FederationTrustService {
                 }
             }
 
+            // Node renders the subject as one RDN per line.
             const cnMatch = cert.subject
-                .split(",")
+                .split("\n")
                 .map((part) => part.trim())
                 .find((part) => part.startsWith("CN="));
 

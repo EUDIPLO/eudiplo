@@ -78,6 +78,7 @@ describe("Oid4vciService credential request error mapping", () => {
         authorizationDetails?: unknown;
         updateForTenant?: ReturnType<typeof vi.fn>;
         executeFrom?: ReturnType<typeof vi.fn>;
+        keyAttestationsRequired?: Record<string, string[]>;
     }) {
         const session = {
             id: "session",
@@ -120,9 +121,13 @@ describe("Oid4vciService credential request error mapping", () => {
             resolveAuthorizedCredentialConfiguration:
                 new ResolveAuthorizedCredentialConfiguration(),
             credentialsService: {
-                getSupportedProofTypesForCredentialConfig: vi
+                getProofRequirementsForCredentialConfig: vi
                     .fn()
-                    .mockResolvedValue(["jwt"]),
+                    .mockResolvedValue({
+                        proofTypes: ["jwt"],
+                        keyAttestationsRequired:
+                            overrides.keyAttestationsRequired,
+                    }),
             },
             resolveCredentialSession: {
                 execute:
@@ -189,6 +194,19 @@ describe("Oid4vciService credential request error mapping", () => {
             "fetched",
         );
         expect(order).toEqual(["notification", "fetched"]);
+    });
+
+    it("passes the key attestation requirements of the credential configuration to proof verification", async () => {
+        const issue = vi.fn().mockResolvedValue([{ credential: "credential" }]);
+        await setup({
+            issue,
+            keyAttestationsRequired: { key_storage: ["iso_18045_high"] },
+        }).getCredential(request, "tenant");
+        expect(issue).toHaveBeenCalledWith(
+            expect.objectContaining({
+                keyAttestationsRequired: { key_storage: ["iso_18045_high"] },
+            }),
+        );
     });
 
     it("maps InvalidCredentialProof to invalid_proof", async () => {

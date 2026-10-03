@@ -101,6 +101,12 @@ Typical role sets:
 | Person who configures a tenant           | `issuance:manage`, `presentation:manage`, `clients:manage`, `users:manage` |
 | Platform operator                        | `tenants:manage`, on a client without a tenant                |
 
+`issuance:manage` and `presentation:manage` create, import, rotate and delete
+key chains, but exporting a key chain with its private key
+(`GET /api/key-chain/{id}/export`) and the tenant KMS provider configuration
+(`/api/key-chain/providers/config`), which contains provider credentials, need
+`tenant:admin` or `tenants:manage`, like configuration bundles.
+
 Only a caller that has `tenants:manage` can grant `tenants:manage` or
 `tenant:admin`, to clients, users or through an imported bundle.
 

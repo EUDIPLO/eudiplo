@@ -1015,6 +1015,186 @@ describe("Issuance - Pre-authorized Code Flow", () => {
         }
     });
 
+    test("enforces the key attestation requirements of the credential configuration", async () => {
+        const trust = await configureTrustedAttestationProvider(app, authToken);
+        const baseConfig = (
+            await request(app.getHttpServer())
+                .get("/issuer/credentials/pid-no-key")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200)
+        ).body;
+        const configId = `pid-key-attestation-${Date.now()}`;
+        await request(app.getHttpServer())
+            .post("/issuer/credentials")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                id: configId,
+                description: baseConfig.description,
+                config: {
+                    ...baseConfig.config,
+                    proofTypesSupported: ["attestation", "jwt"],
+                    keyAttestationsRequired: {
+                        key_storage: ["iso_18045_high"],
+                    },
+                },
+                fields: baseConfig.fields,
+                attributeProviderId: baseConfig.attributeProviderId,
+                webhookEndpointId: baseConfig.webhookEndpointId,
+                vct: baseConfig.vct,
+                keyBinding: baseConfig.keyBinding,
+                keyChainId: baseConfig.keyChainId,
+                embeddedDisclosurePolicy: baseConfig.embeddedDisclosurePolicy,
+                schemaMeta: baseConfig.schemaMeta,
+                iaeActions: baseConfig.iaeActions,
+            })
+            .expect(201);
+
+        const providerPrivateJwk = await exportJWK(trust.provider.privateKey);
+        const providerPublicJwk = await exportJWK(trust.provider.publicKey);
+
+        /** Run a pre-authorized flow and send the proofs built for its nonce. */
+        const requestCredential = async (
+            proofType: "jwt" | "attestation",
+            keyStorage?: string[],
+        ) => {
+            const offerResponse = await request(app.getHttpServer())
+                .post("/issuer/offer")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    response_type: "uri",
+                    credentialConfigurationIds: [configId],
+                    flow: "pre_authorized_code",
+                })
+                .expect(201);
+            const client = new Openid4vciClient({
+                callbacks: {
+                    ...callbacks,
+                    clientAuthentication: clientAuthenticationAnonymous(),
+                },
+            });
+            const credentialOffer = await client.resolveCredentialOffer(
+                offerResponse.body.uri,
+            );
+            const issuerMetadata = await client.resolveIssuerMetadata(
+                credentialOffer.credential_issuer,
+            );
+            const { accessTokenResponse } =
+                await client.retrievePreAuthorizedCodeAccessTokenFromOffer({
+                    credentialOffer,
+                    issuerMetadata,
+                });
+            const { c_nonce: nonce } = await client.requestNonce({
+                issuerMetadata,
+            });
+            const holder = await generateKeyPair("ES256", {
+                extractable: true,
+            });
+            const holderPublicJwk = await exportJWK(holder.publicKey);
+
+            const keyAttestation = keyStorage
+                ? await addX5cHeaderToKeyAttestationJwt(
+                      await createKeyAttestationJwt({
+                          callbacks: {
+                              ...callbacks,
+                              signJwt: getSignJwtCallback([
+                                  providerPrivateJwk as Jwk,
+                              ]),
+                          },
+                          signer: {
+                              method: "jwk",
+                              alg: "ES256",
+                              publicJwk: providerPublicJwk,
+                          } as JwtSignerJwk,
+                          issuedAt: new Date(),
+                          expiresAt: new Date(Date.now() + 300_000),
+                          use:
+                              proofType === "jwt"
+                                  ? "proof_type.jwt"
+                                  : "proof_type.attestation",
+                          attestedKeys: [holderPublicJwk as Jwk],
+                          keyStorage,
+                          nonce,
+                      }),
+                      trust.provider.privateKey,
+                      trust.provider.certificate,
+                  )
+                : undefined;
+            const proofs =
+                proofType === "attestation"
+                    ? { attestation: [keyAttestation!] }
+                    : {
+                          jwt: [
+                              await new SignJWT({ nonce })
+                                  .setProtectedHeader({
+                                      alg: "ES256",
+                                      typ: "openid4vci-proof+jwt",
+                                      jwk: holderPublicJwk,
+                                      ...(keyAttestation && {
+                                          key_attestation: keyAttestation,
+                                      }),
+                                  })
+                                  .setAudience(
+                                      credentialOffer.credential_issuer,
+                                  )
+                                  .setIssuedAt()
+                                  .sign(holder.privateKey),
+                          ],
+                      };
+            return client.retrieveCredentials({
+                accessToken: accessTokenResponse.access_token,
+                credentialConfigurationId: configId,
+                issuerMetadata,
+                proofs,
+            });
+        };
+        const errorOf = (promise: Promise<unknown>) =>
+            promise.then(
+                () => {
+                    throw new Error("Expected the credential request to fail");
+                },
+                (error: Openid4vciRetrieveCredentialsError) =>
+                    error.response.credentialErrorResponseResult?.data,
+            );
+
+        try {
+            await expect(errorOf(requestCredential("jwt"))).resolves.toEqual({
+                error: "invalid_proof",
+                error_description: expect.stringContaining(
+                    "requires a key attestation",
+                ),
+            });
+            await expect(
+                errorOf(
+                    requestCredential("attestation", ["iso_18045_moderate"]),
+                ),
+            ).resolves.toEqual({
+                error: "invalid_proof",
+                error_description: expect.stringContaining("key_storage"),
+            });
+            await expect(
+                errorOf(requestCredential("jwt", ["iso_18045_moderate"])),
+            ).resolves.toMatchObject({ error: "invalid_proof" });
+
+            for (const proofType of ["jwt", "attestation"] as const) {
+                const response = await requestCredential(proofType, [
+                    "iso_18045_high",
+                ]);
+                expect(
+                    response.credentialResponse.credentials?.length,
+                ).toBeGreaterThan(0);
+            }
+        } finally {
+            await request(app.getHttpServer())
+                .delete(`/issuer/credentials/${configId}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`);
+            await trust.restore();
+        }
+    });
+
     test("pre auth flow with webhook claims", async () => {
         const town = "Köln";
         // Mock the webhook server response

@@ -3,6 +3,7 @@ import {
     schemaUrl,
 } from "@eudiplo/config-format/config-format.js";
 import { Injectable } from "@nestjs/common";
+import { KMS_SECRET_PATHS } from "../../crypto/key/schemas/kms-config.schema.js";
 import type { ConfigResourceKind } from "./config-resource.types.js";
 
 export interface ConfigResourceDefinition {
@@ -42,16 +43,7 @@ const DEFINITIONS: Omit<ConfigResourceDefinition, "slug" | "currentVersion">[] =
             legacyFolders: ["kms.json"],
             bundlePath: "kms.json",
             singletonId: "kms",
-            sensitivePaths: [
-                "providers.*.vaultToken",
-                "providers.*.secretAccessKey",
-                "providers.*.pin",
-                "providers.*.clientSecret",
-                "providers.*.sad",
-                "providers.*.authorizeAuthData.*.value",
-                "providers.*.auth.token",
-                "providers.*.auth.clientSecret",
-            ],
+            sensitivePaths: [...KMS_SECRET_PATHS],
         },
         {
             kind: "KeyChain",

@@ -132,6 +132,36 @@ describe("CredentialsService proof_types_supported generation", () => {
         );
     });
 
+    it("requires a key attestation without constraints for an empty requirement", async () => {
+        const proofTypes = await getProofTypes(
+            buildEntity({
+                proofTypesSupported: [
+                    CredentialProofType.ATTESTATION,
+                    CredentialProofType.JWT,
+                ],
+                keyAttestationsRequired: {
+                    key_storage: [],
+                    user_authentication: ["iso_18045_high"],
+                },
+            }),
+        );
+
+        expect(proofTypes.jwt.key_attestations_required).toEqual({
+            user_authentication: ["iso_18045_high"],
+        });
+        expect(proofTypes.attestation.key_attestations_required).toEqual({
+            user_authentication: ["iso_18045_high"],
+        });
+
+        const unconstrained = await getProofTypes(
+            buildEntity({
+                proofTypesSupported: [CredentialProofType.JWT],
+                keyAttestationsRequired: {},
+            }),
+        );
+        expect(unconstrained.jwt.key_attestations_required).toEqual({});
+    });
+
     it("omits key_attestations_required for unconstrained attestation proofs", async () => {
         const entities = [
             buildEntity({}),

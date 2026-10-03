@@ -47,4 +47,50 @@ describe("IssuanceConfigSchema", () => {
         );
         expect(JSON.stringify(result.error?.issues)).not.toContain("oid4vp");
     });
+
+    it.each([
+        [{ role: "trust_anchor" }, ["federation", "role"]],
+        [
+            { enforceSigningPolicy: false },
+            ["federation", "enforceSigningPolicy"],
+        ],
+    ])("rejects the unsupported federation option %o", (option, path) => {
+        const result = IssuanceConfigSchema.safeParse({
+            authorizationServers: [{ type: "built-in", id: "built-in" }],
+            federation: {
+                trustAnchors: [
+                    {
+                        entityId: "https://ta.example.org",
+                        entityConfigurationUri:
+                            "https://ta.example.org/.well-known/openid-federation",
+                    },
+                ],
+                ...option,
+            },
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues).toContainEqual(
+            expect.objectContaining({ code: "custom", path }),
+        );
+    });
+
+    it("accepts the leaf role with an enforced signing policy", () => {
+        const result = IssuanceConfigSchema.safeParse({
+            authorizationServers: [{ type: "built-in", id: "built-in" }],
+            federation: {
+                role: "leaf",
+                enforceSigningPolicy: true,
+                trustAnchors: [
+                    {
+                        entityId: "https://ta.example.org",
+                        entityConfigurationUri:
+                            "https://ta.example.org/.well-known/openid-federation",
+                    },
+                ],
+            },
+        });
+
+        expect(result.error?.issues).toBeUndefined();
+    });
 });

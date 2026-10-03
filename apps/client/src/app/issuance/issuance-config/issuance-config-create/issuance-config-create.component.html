@@ -983,18 +983,6 @@
                       </mat-slide-toggle>
 
                       @if (federationEnabled) {
-                        <!-- Entity Role -->
-                        <mat-form-field>
-                          <mat-label>Entity Role</mat-label>
-                          <mat-select formControlName="role">
-                            <mat-option value="trust_anchor">Trust Anchor</mat-option>
-                            <mat-option value="intermediate">Intermediate</mat-option>
-                            <mat-option value="leaf">Leaf (default)</mat-option>
-                          </mat-select>
-                          <mat-icon matSuffix>category</mat-icon>
-                          <mat-hint>This entity's role in the federation topology</mat-hint>
-                        </mat-form-field>
-
                         <!-- Trust Mode -->
                         <mat-form-field>
                           <mat-label>Trust Decision Mode</mat-label>
@@ -1040,17 +1028,6 @@
                             seconds)</mat-hint
                           >
                         </mat-form-field>
-
-                        <!-- Enforce Signing Policy -->
-                        <mat-slide-toggle formControlName="enforceSigningPolicy">
-                          <div fxLayout="column">
-                            <span><strong>Enforce Signing Policy</strong></span>
-                            <span class="toggle-description"
-                              >Require federation trust checks to pass for upstream metadata and
-                              signing decisions</span
-                            >
-                          </div>
-                        </mat-slide-toggle>
 
                         <!-- Trust Anchors -->
                         <div formArrayName="trustAnchors">

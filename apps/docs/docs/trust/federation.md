@@ -8,9 +8,9 @@ EUDIPLO can use [OpenID Federation](https://openid.net/specs/openid-federation-1
 
 Federation support is not yet a full OpenID Federation trust-chain resolution ([#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046)). Treat federation trust as unauthenticated and prefer LoTE [trust lists](trust-lists.md) in production:
 
-- Entity configurations and subordinate statements are not verified against the trust anchor. EUDIPLO only checks that the entity's `sub` matches and that its `authority_hints` lead to a configured trust anchor. A JWT entity configuration is only verified against the certificate in its own `x5c` header, if present, and its `exp` is not checked.
+- Entity configurations and subordinate statements are not verified against the trust anchor. EUDIPLO only checks that the entity's `sub` matches and that its `authority_hints` lead to a configured trust anchor. A JWT entity configuration is only verified against the certificate in its own `x5c` header, if present, and its `exp` is not checked. Membership is therefore self-asserted: any entity whose entity configuration names your trust anchor in `authority_hints` is trusted.
 - For credentials, the entity ID is taken from the credential's leaf certificate (SAN or CN); the signing key is not bound to the entity's federation metadata.
-- In presentation verification, federation trust anchors in `trusted_authorities` do not decide trust: if the credential query also has an `etsi_tl` trust list, that list decides; if it has none, the issuer is not checked at all.
+- In presentation verification, the credential's certificate chain is not checked when federation decides; only the entity ID in its leaf certificate is.
 - Federation fetches do not use the outbound URL policy, and TLS certificates are not checked outside `NODE_ENV=production`.
 - EUDIPLO does not publish its own entity configuration yet ([#1047](https://github.com/openwallet-foundation/eudiplo/issues/1047)).
 
@@ -19,7 +19,7 @@ Federation support is not yet a full OpenID Federation trust-chain resolution ([
 | Check                                                    | Configured in                                     | Behavior                                                                                         |
 | -------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | External authorization servers, chained upstream provider | `federation` of the issuance configuration       | The server must chain to a trust anchor; there is no LoTE fallback. Without `federation`, no check. |
-| Credential issuers in presentations                       | `openid_federation` in DCQL `trusted_authorities` | See the limitation above: the `etsi_tl` trust list of the same query decides.                    |
+| Credential issuers in presentations                       | `openid_federation` in DCQL `trusted_authorities` | Without an `etsi_tl` entry in the same query, the issuer must chain to one of the listed trust anchors. With one, the trust list decides and the federation entry is not evaluated. |
 
 `mode` accepts `hybrid` (default) and `federation-only`; both check authorization servers the same way. For LoTE-only behavior, leave `federation` unset or `null`.
 
@@ -49,7 +49,8 @@ Set `federation` in the issuance configuration (`POST /api/issuer/config`, or **
 | `trustAnchors[].entityConfigurationUri` | Required by the schema but not used.                                                                             |
 | `entityId`                              | Your issuer's entity ID; used as `iss` of SD-JWT VCs with the `federation` trust format (below).                |
 | `cacheTtlSeconds`                       | How long trust decisions are cached; default 300, at least 5.                                                    |
-| `enforceSigningPolicy`, `role`          | Stored, currently without effect.                                                                                |
+| `role`                                  | Only `leaf` (the default) is accepted; EUDIPLO does not act as a trust anchor or intermediate.                  |
+| `enforceSigningPolicy`                  | Only `true` (the default) is accepted; federation checks are always enforced.                                    |
 
 With this configuration, external authorization servers are checked before EUDIPLO fetches their metadata, and a chained authorization server's upstream provider before its discovery document is fetched.
 
@@ -59,7 +60,7 @@ A credential configuration can sign SD-JWT VCs for federation instead of X.509: 
 
 ## Reference trust anchors in DCQL
 
-Add an `openid_federation` entry with trust anchor entity IDs to `trusted_authorities`. The entry is sent to the wallet unchanged; see the limitation above for how EUDIPLO uses it during verification.
+Add an `openid_federation` entry with trust anchor entity IDs to `trusted_authorities`. The entry is sent to the wallet unchanged. If it is the only entry, EUDIPLO accepts only issuers that chain to one of these trust anchors. Entries of a query are alternatives for the wallet, but because federation membership is not yet authenticated ([limitations](#limitations)), an `etsi_tl` entry in the same query takes precedence: the issuer must then be in the trust list.
 
 ```json
 {
@@ -77,6 +78,7 @@ Add an `openid_federation` entry with trust anchor entity IDs to `trusted_author
 | Chained authorization server        | `400`: `Upstream issuer is not trusted by OpenID Federation policy: <reason>`                             |
 | External authorization server       | `400`: `Authorization server is not trusted by OpenID Federation policy: <reason>`                        |
 | Credential verification             | Failure code `verification_error`; the reason is in the server log                                        |
+| Issuance configuration              | `400`: `Only the federation role 'leaf' is supported ...` or `enforceSigningPolicy cannot be disabled ...` |
 
 Common reasons:
 

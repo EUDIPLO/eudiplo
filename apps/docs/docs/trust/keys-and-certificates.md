@@ -64,7 +64,7 @@ Import material issued by your own PKI or an ecosystem operator with `POST /api/
 
 The first certificate must contain the public key of the imported private key. For an **external CA chain**, add `"rotationPolicy": { "enabled": true, "intervalDays": 30, "certValidityDays": 365 }` and pass the CA key and a chain whose last certificate is the CA certificate (`CA=true`, matching the key). EUDIPLO then creates and rotates the signing leaf itself; `intervalDays` defaults to 90.
 
-To provision key chains as files, put the same JSON into `config/<tenant>/key-chains/`; see [Configuration as Code](../operate/configuration-as-code.md). `GET /api/key-chain/{id}/export` returns a key chain in this format, including the private key for the `db` provider.
+To provision key chains as files, put the same JSON into `config/<tenant>/key-chains/`; see [Configuration as Code](../operate/configuration-as-code.md). `GET /api/key-chain/{id}/export` returns a key chain in this format and needs `tenant:admin` or `tenants:manage`. For the `db` provider it contains the private key; for an external KMS only the public key, because the private key never leaves the KMS, so that file cannot be imported again.
 
 ## Rotate keys
 
