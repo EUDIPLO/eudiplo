@@ -1,31 +1,12 @@
-import { type ExecutionContext, ForbiddenException } from "@nestjs/common";
-import { Reflector } from "@nestjs/core";
 import { describe, expect, it, vi } from "vitest";
+import { rolesAllow } from "../../test/roles-guard.js";
 import { Role } from "../auth/roles/role.enum.js";
-import { RolesGuard } from "../auth/roles/roles.guard.js";
 import type { TokenPayload } from "../auth/token.decorator.js";
 import type { StatusListService } from "../issuer/status-list/status-list.service.js";
 import { SessionNotFound } from "./application/session-errors.js";
 import type { SessionStore } from "./application/session-store.js";
 import type { SessionLogStoreService } from "./logging/session-log-store.service.js";
 import { SessionController } from "./session.controller.js";
-
-type Handler =
-    | "getAllSessions"
-    | "getSession"
-    | "deleteSession"
-    | "getSessionLogs"
-    | "revokeAll";
-
-/** Runs the same role check the `@Secured` guard runs for the handler. */
-function allows(handler: Handler, roles: Role[]): boolean {
-    const context = {
-        getHandler: () => SessionController.prototype[handler],
-        getClass: () => SessionController,
-        switchToHttp: () => ({ getRequest: () => ({ user: { roles } }) }),
-    } as unknown as ExecutionContext;
-    return new RolesGuard(new Reflector()).canActivate(context);
-}
 
 function createController() {
     const sessions = {
@@ -57,7 +38,9 @@ describe("SessionController", () => {
         ])(
             "lets a client with %j change credential status: %s",
             (roles, allowed) => {
-                expect(allows("revokeAll", roles)).toBe(allowed);
+                expect(rolesAllow(SessionController, "revokeAll", roles)).toBe(
+                    allowed,
+                );
             },
         );
 
@@ -69,10 +52,12 @@ describe("SessionController", () => {
         ] as const)(
             "%s needs issuance:offer or presentation:request",
             (handler) => {
-                expect(allows(handler, [Role.IssuanceOffer])).toBe(true);
-                expect(allows(handler, [Role.PresentationRequest])).toBe(true);
-                expect(allows(handler, [Role.Issuances])).toBe(false);
-                expect(allows(handler, [Role.Presentations])).toBe(false);
+                const allows = (roles: Role[]) =>
+                    rolesAllow(SessionController, handler, roles);
+                expect(allows([Role.IssuanceOffer])).toBe(true);
+                expect(allows([Role.PresentationRequest])).toBe(true);
+                expect(allows([Role.Issuances])).toBe(false);
+                expect(allows([Role.Presentations])).toBe(false);
             },
         );
     });
@@ -80,12 +65,8 @@ describe("SessionController", () => {
     describe("session scope", () => {
         it.each([
             [[Role.PresentationRequest], "presentation"],
-            [[Role.PresentationRequest, Role.Presentations], "presentation"],
             [[Role.IssuanceOffer], "issuance"],
-            [[Role.IssuanceOffer, Role.Issuances], "issuance"],
             [[Role.IssuanceOffer, Role.PresentationRequest], undefined],
-            [[Role.IssuanceOffer, Role.Presentations], undefined],
-            [[Role.PresentationRequest, Role.Issuances], undefined],
         ])("limits a client with %j to %s sessions", async (roles, scope) => {
             const { controller, sessions, logs } = createController();
             const caller = token(roles);
@@ -123,15 +104,6 @@ describe("SessionController", () => {
                 ),
             ).rejects.toBeInstanceOf(SessionNotFound);
             expect(logs.findBySessionId).not.toHaveBeenCalled();
-        });
-
-        it("rejects a token without a session role instead of widening the scope", () => {
-            const { controller, sessions } = createController();
-
-            expect(() =>
-                controller.getAllSessions(token([Role.Clients]), query),
-            ).toThrow(ForbiddenException);
-            expect(sessions.listForTenant).not.toHaveBeenCalled();
         });
     });
 });

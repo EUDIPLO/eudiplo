@@ -2,6 +2,7 @@ import { client } from './api/client.gen';
 import {
   credentialOfferControllerGetOffer,
   sessionControllerGetSession,
+  sessionEventsControllerSubscribeToSessionEvents,
   verifierOfferControllerGetOffer,
 } from './api/sdk.gen';
 import type {
@@ -98,6 +99,11 @@ function mapDcApiPresentationResult(result: any): DcApiPresentationResult {
     response: result,
     redirectUri: result?.redirect_uri,
   };
+}
+
+/** Statuses after which a session no longer changes; its event stream ends. */
+function isTerminalStatus(status: SessionStatusEvent['status']): boolean {
+  return status === 'completed' || status === 'expired' || status === 'failed';
 }
 
 /**
@@ -561,17 +567,16 @@ export class EudiploClient {
   /**
    * Subscribe to real-time session status updates via Server-Sent Events.
    *
-   * This is more efficient than polling and provides instant updates.
-   * The connection remains open until closed or the session reaches a terminal state.
+   * The stream is read with `fetch` and the client's access token in the
+   * `Authorization` header, so it works in browsers and in Node.js 18+. The
+   * first event carries the current status; the stream ends after a terminal
+   * status. Failed connections are retried up to three times in total.
    *
    * @example
    * ```typescript
    * const subscription = await client.subscribeToSession(sessionId, {
    *   onStatusChange: (event) => {
    *     console.log(`Status: ${event.status}`);
-   *     if (['completed', 'expired', 'failed'].includes(event.status)) {
-   *       subscription.close();
-   *     }
    *   },
    *   onError: (error) => console.error('SSE error:', error)
    * });
@@ -584,45 +589,33 @@ export class EudiploClient {
     sessionId: string,
     options: SessionSubscriptionOptions = {}
   ): Promise<SessionSubscription> {
-    await this.ensureAuthenticated();
-
-    const token = this.accessToken;
-    if (!token) {
-      throw new Error('No access token available');
-    }
-
-    // Check if EventSource is available (browser environment)
-    if (typeof EventSource === 'undefined') {
-      throw new Error(
-        'EventSource is not available in this environment. ' +
-        'Use polling with waitForSession() instead, or provide a polyfill.'
-      );
-    }
-
-    // Management endpoint: served under the global /api prefix.
-    const url = `${this.config.baseUrl}/api/session/${encodeURIComponent(sessionId)}/events?token=${encodeURIComponent(token)}`;
-    const eventSource = new EventSource(url);
-
-    eventSource.onopen = () => {
-      options.onOpen?.();
-    };
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data) as SessionStatusEvent;
-        options.onStatusChange?.(data);
-      } catch (error) {
-        options.onError?.(new Error(`Failed to parse SSE event: ${error}`));
+    const abort = new AbortController();
+    const report = (error: unknown) => {
+      if (!abort.signal.aborted) {
+        options.onError?.(error instanceof Error ? error : new Error(String(error)));
       }
     };
+    const stream = await this.sessionEvents(sessionId, abort.signal, report);
 
-    eventSource.onerror = () => {
-      // EventSource automatically reconnects, but we report the error
-      options.onError?.(new Error('SSE connection error'));
-    };
+    void (async () => {
+      let opened = false;
+      try {
+        for await (const event of stream) {
+          if (!opened) {
+            opened = true;
+            options.onOpen?.();
+          }
+          options.onStatusChange?.(event);
+          if (isTerminalStatus(event.status)) return;
+        }
+        report(new Error(`Session event stream for ${sessionId} ended before a final status`));
+      } catch (error) {
+        report(error);
+      }
+    })();
 
     return {
-      close: () => eventSource.close(),
+      close: () => abort.abort(),
     };
   }
 
@@ -630,7 +623,7 @@ export class EudiploClient {
    * Subscribe to session and wait for completion via SSE.
    *
    * Returns a Promise that resolves when the session completes,
-   * or rejects if it fails/expires.
+   * or rejects if it fails/expires or the stream cannot be read.
    *
    * @example
    * ```typescript
@@ -646,30 +639,39 @@ export class EudiploClient {
     sessionId: string,
     options: Pick<SessionSubscriptionOptions, 'onStatusChange'> = {}
   ): Promise<SessionStatusEvent> {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const subscription = await this.subscribeToSession(sessionId, {
-          onStatusChange: (event) => {
-            options.onStatusChange?.(event);
-
-            if (event.status === 'completed') {
-              subscription.close();
-              resolve(event);
-            } else if (event.status === 'expired' || event.status === 'failed') {
-              subscription.close();
-              reject(new Error(`Session ${event.status}: ${sessionId}`));
-            }
-          },
-          onError: (error) => {
-            // Don't reject on SSE errors as EventSource reconnects automatically
-            // Only log or pass to caller's handler
-            console.warn('SSE connection error, reconnecting...', error);
-          },
-        });
-      } catch (error) {
-        reject(error);
-      }
+    let lastError: unknown;
+    const stream = await this.sessionEvents(sessionId, undefined, (error) => {
+      lastError = error;
     });
+    for await (const event of stream) {
+      options.onStatusChange?.(event);
+      if (event.status === 'completed') return event;
+      if (isTerminalStatus(event.status)) {
+        throw new Error(`Session ${event.status}: ${sessionId}`);
+      }
+    }
+    throw new Error(
+      `Session event stream for ${sessionId} ended before a final status` +
+        (lastError ? `: ${lastError instanceof Error ? lastError.message : String(lastError)}` : '')
+    );
+  }
+
+  /** Opens the event stream of a session with the current access token. */
+  private async sessionEvents(
+    sessionId: string,
+    signal: AbortSignal | undefined,
+    onError: (error: unknown) => void
+  ): Promise<AsyncGenerator<SessionStatusEvent>> {
+    await this.ensureAuthenticated();
+    const { stream } = await sessionEventsControllerSubscribeToSessionEvents({
+      path: { id: sessionId },
+      signal,
+      // The stream starts with the current status, so a reconnect misses
+      // nothing. 401, 403 and 404 do not go away, so stop retrying soon.
+      sseMaxRetryAttempts: 3,
+      onSseError: onError,
+    });
+    return stream as unknown as AsyncGenerator<SessionStatusEvent>;
   }
 
   /**

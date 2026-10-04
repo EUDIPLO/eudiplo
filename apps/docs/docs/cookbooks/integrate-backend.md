@@ -149,7 +149,7 @@ Webhooks are delivered once and not retried. Read the result from the session at
 ```bash
 curl -s "$EUDIPLO/api/session/$SESSION" -H "Authorization: Bearer $TOKEN" \
   | jq '{status, failureCode, outcome}'
-curl -N "$EUDIPLO/api/session/$SESSION/events?token=$TOKEN"
+curl -N "$EUDIPLO/api/session/$SESSION/events" -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Step 4: Issue a credential

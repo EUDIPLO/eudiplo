@@ -34,25 +34,28 @@ A failed presentation, for example because the user declined, sends `"status": "
 
 ## Server-Sent Events
 
-Subscribe to `GET /api/session/{id}/events?token=<access token>`. The token goes into the query string because the browser's `EventSource` cannot send headers; any valid access token of the session's tenant works. Use a short-lived token, as URLs can end up in proxy logs.
+Subscribe from your backend to `GET /api/session/{id}/events` with the access token in the `Authorization` header. The stream is authorized like `GET /api/session/{id}`, so presentation sessions need `presentation:request`. Tokens in the URL are not accepted, which keeps management tokens out of access logs. The browser's `EventSource` cannot send headers: read the stream in your backend and pass the status on to your page, and never hand the management token to the browser.
+
+```bash
+curl -N "$EUDIPLO/api/session/$SESSION/events" -H "Authorization: Bearer $TOKEN"
+```
+
+With [`@eudiplo/sdk-core`](../reference/api.md#eudiplosdk-core), `subscribeToSession()` reads the stream with `fetch` and the client's token:
 
 ```javascript
-const events = new EventSource(
-    `${eudiploUrl}/api/session/${sessionId}/events?token=${encodeURIComponent(token)}`,
-);
-events.onmessage = (message) => {
-    const { status } = JSON.parse(message.data);
-    if (["completed", "failed", "expired"].includes(status)) {
-        events.close();
-        // Fetch the result from your backend, which reads GET /api/session/{id}.
-    }
-};
+const subscription = await client.subscribeToSession(sessionId, {
+    onStatusChange: ({ status }) => {
+        if (["completed", "failed", "expired"].includes(status)) {
+            // Read the result with GET /api/session/{id} and tell your page.
+        }
+    },
+});
 ```
 
 - The first event carries the current status, so a late subscriber does not miss a result.
 - Each event has the form `{ "id": "<session id>", "status": "fetched", "updatedAt": "<ISO timestamp>" }`; every status is sent once.
 - The stream ends after `completed`, `failed` or `expired`. Changes processed by another replica arrive within a few seconds.
-- A missing or invalid token returns `401`, an unknown session `404`.
+- A missing or invalid token returns `401`, a token without a session role `403`, an unknown session or one of the other type than the client's roles cover `404`.
 
 ## Polling
 

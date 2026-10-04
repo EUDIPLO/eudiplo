@@ -6529,13 +6529,15 @@ export type SessionEventsControllerSubscribeToSessionEventsData = {
          */
         id: string;
     };
-    query: {
-        /**
-         * JWT access token for authentication
-         */
-        token: string;
-    };
+    query?: never;
     url: '/api/session/{id}/events';
+};
+
+export type SessionEventsControllerSubscribeToSessionEventsErrors = {
+    /**
+     * No session with this ID in the tenant, or a session of the other type than the client's roles cover
+     */
+    404: unknown;
 };
 
 export type SessionEventsControllerSubscribeToSessionEventsResponses = {
