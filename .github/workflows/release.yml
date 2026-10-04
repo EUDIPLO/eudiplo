@@ -8,6 +8,11 @@ on:
         required: false
         type: string
         default: ''
+      deploy_site_only:
+        description: 'Deploy the website and docs of main to production without a release (fails if a release is pending)'
+        required: false
+        type: boolean
+        default: false
 
   push:
     branches: [main]
@@ -218,9 +223,17 @@ jobs:
           fi
 
       - name: Abort when no release is pending
-        if: steps.version_check.outputs.has_release != 'true'
+        if: steps.version_check.outputs.has_release != 'true' && !inputs.deploy_site_only
         run: |
           echo "No releasable commits were found since the latest version."
+          echo "To deploy documentation-only changes, run this workflow with deploy_site_only."
+          exit 1
+
+      - name: Abort a site-only deploy when a release is pending
+        if: steps.version_check.outputs.has_release == 'true' && inputs.deploy_site_only
+        run: |
+          echo "main contains releasable commits, so its documentation may describe unreleased behavior."
+          echo "Run this workflow without deploy_site_only to release; the release deploys the website and docs."
           exit 1
 
       - name: Abort if major release not confirmed
@@ -326,7 +339,6 @@ jobs:
       packages: write
       pull-requests: write
       actions: read
-      pages: write
       id-token: write
       attestations: write
     steps:
@@ -439,49 +451,27 @@ jobs:
           echo "new_release=true" >> "$GITHUB_OUTPUT"
           echo "version=${EXPECTED_TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Create major-version docs snapshot
-        if: steps.semantic_release.outputs.new_release == 'true' && needs.prepare-release.outputs.is_major == 'true'
-        env:
-          VERSION: ${{ needs.prepare-release.outputs.next_version }}
-        run: |
-          MAJOR_VERSION="${VERSION%%.*}"
-          echo "Creating Docusaurus docs snapshot for major version ${MAJOR_VERSION}"
-          VERSION="$MAJOR_VERSION" pnpm --filter @eudiplo/docs run version:release
-
-      - name: Build and deploy release docs
-        if: steps.semantic_release.outputs.new_release == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          for var in ALGOLIA_APP_ID ALGOLIA_SEARCH_API_KEY ALGOLIA_INDEX_NAME DOCSEARCH_AGENT_ID; do
-            test -n "${!var}" || { echo "$var is not configured"; exit 1; }
-          done
-
-          pnpm --filter @eudiplo/docs run build
-
-          test -s apps/website/install.sh
-          bash -n apps/website/install.sh
-
-          test -n "$CLOUDFLARE_API_TOKEN" || { echo "CLOUDFLARE_API_TOKEN is not configured"; exit 1; }
-          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "CLOUDFLARE_ACCOUNT_ID is not configured"; exit 1; }
-          pnpm --filter @eudiplo/docs run pages:deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_PAGES_BRANCH: production
-          ALGOLIA_APP_ID: ${{ secrets.ALGOLIA_APP_ID }}
-          ALGOLIA_SEARCH_API_KEY: ${{ secrets.ALGOLIA_SEARCH_API_KEY }}
-          ALGOLIA_INDEX_NAME: ${{ secrets.ALGOLIA_INDEX_NAME }}
-          DOCSEARCH_AGENT_ID: ${{ secrets.DOCSEARCH_AGENT_ID }}
-
-      - name: Deploy release website to Cloudflare Pages
-        if: steps.semantic_release.outputs.new_release == 'true'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_PAGES_BRANCH: production
-        run: |
-          test -n "$CLOUDFLARE_API_TOKEN" || { echo "CLOUDFLARE_API_TOKEN is not configured"; exit 1; }
-          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "CLOUDFLARE_ACCOUNT_ID is not configured"; exit 1; }
-          pnpm --filter @eudiplo/website run deploy
+  # Production deploy of the website and documentation: after a published
+  # release, or for deploy_site_only. prepare-release only lets the latter pass
+  # when no release is pending, so main differs from the latest release only by
+  # commits that need none (docs, test, chore, ci, build) and its documentation
+  # matches the released code.
+  deploy-site:
+    name: Deploy Website & Documentation
+    needs: [prepare-release, publish-release]
+    if: >-
+      !cancelled() &&
+      needs.prepare-release.result == 'success' &&
+      (needs.publish-release.result == 'success' || inputs.deploy_site_only)
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deploy-site.yml
+    with:
+      environment: production
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      ALGOLIA_APP_ID: ${{ secrets.ALGOLIA_APP_ID }}
+      ALGOLIA_SEARCH_API_KEY: ${{ secrets.ALGOLIA_SEARCH_API_KEY }}
+      ALGOLIA_INDEX_NAME: ${{ secrets.ALGOLIA_INDEX_NAME }}
+      DOCSEARCH_AGENT_ID: ${{ secrets.DOCSEARCH_AGENT_ID }}

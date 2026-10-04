@@ -5,7 +5,7 @@
     "scripts": {
         "build": "node ../../scripts/build-website.mjs",
         "serve": "pnpm run build && python3 -m http.server 3000 --directory dist",
-        "deploy": "pnpm run build && npx wrangler pages deploy dist --project-name eudiplo-website --branch \"${CLOUDFLARE_PAGES_BRANCH:-main}\" --commit-dirty=true"
+        "deploy": "pnpm run build && npx wrangler pages deploy dist --project-name eudiplo-website --branch \"${CLOUDFLARE_PAGES_BRANCH:-preview}\" --commit-dirty=true"
     },
     "engines": {
         "node": ">=20.0"

@@ -36,7 +36,7 @@ There is no alpha or beta channel. The `:main` images carry unreleased database 
 
 1. Check that the *CI / Docker* run for the `main` commit you want to release succeeded. The release workflow refuses commits without one.
 2. In GitHub Actions, run **Versioned Release** (`.github/workflows/release.yml`) on `main`.
-3. For a major version, enter `CONFIRM` in `confirm_major`. Without it the workflow stops after detecting the major bump. It also stops when there are no releasable commits.
+3. For a major version, enter `CONFIRM` in `confirm_major`. Without it the workflow stops after detecting the major bump. It also stops when there are no releasable commits. To deploy documentation-only changes without a release, check `deploy_site_only` instead (see [Documentation](./documentation.md#deployment-and-versions)).
 
 The workflow then:
 

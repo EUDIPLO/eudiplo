@@ -81,11 +81,16 @@ The build is configured with `onBrokenLinks: 'throw'` and `onBrokenAnchors: 'thr
 
 ## Deployment and versions
 
+Both workflows deploy the website and the documentation together with `.github/workflows/deploy-site.yml`.
+
 | Trigger | Built from | Deployed to |
 | --- | --- | --- |
 | Push to `main` (CI job *Deploy Preview Website & Documentation*) | `main` | Cloudflare Pages project `eudiplo-docs`, branch `preview` |
 | Release (*Versioned Release* workflow) | The release commit | Cloudflare Pages project `eudiplo-docs`, branch `production`, served at [docs.eudiplo.dev](https://docs.eudiplo.dev/) |
+| *Versioned Release* with `deploy_site_only` | `main`, only when no release is pending | Same as a release |
 
-So docs.eudiplo.dev describes the latest release, and the preview describes `main`. The repository keeps no per-version copies (`versioned_docs/` is not committed). For a major release the workflow runs `docs:version` in its own checkout before building; that snapshot is not committed. Documentation of an older release is the `apps/docs/docs` folder at its git tag, which is how the [upgrade overview](../upgrade/index.md) links to old upgrade guides.
+So docs.eudiplo.dev describes the latest release, and the preview describes `main`. A `docs:` commit triggers no release, so documentation-only changes reach production by running *Versioned Release* with `deploy_site_only`. It refuses to deploy while a release is pending, because `main` could then document unreleased behavior; release first in that case.
+
+The site has no per-version copies (`versioned_docs/` does not exist). Documentation of an older release is the `apps/docs/docs` folder at its git tag, which is how the [upgrade overview](../upgrade/index.md) links to old upgrade guides.
 
 Document the behavior of `main`. A change that breaks existing setups also needs an entry in the upgrade guide of the next major (see [Releases](./releases.md#commit-messages)).
