@@ -40,6 +40,7 @@ export async function configureTrustedAttestationProvider(
         })
         .expect(201);
     nock("http://localhost:8787")
+        .persist()
         .get(path)
         .reply(
             200,

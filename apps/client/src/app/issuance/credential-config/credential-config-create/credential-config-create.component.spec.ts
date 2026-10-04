@@ -58,6 +58,62 @@ describe('CredentialConfigCreateComponent', () => {
     expect(save).toHaveBeenCalledOnce();
   });
 
+  it('keeps status management on while Single Active Credential is enabled', () => {
+    basics();
+    component.displayConfigs.at(0).patchValue({ name: 'Membership', description: 'Member card' });
+    const statusManagement = component.form.get('statusManagement')!;
+    statusManagement.setValue(false);
+    component.form.get('activeCredentialsEnabled')!.setValue(true);
+    expect(statusManagement.value).toBe(true);
+    expect(statusManagement.disabled).toBe(true);
+    expect(component.settingsSummary).toContain('Status management: On');
+
+    for (let i = 0; i < 5; i++) component.submitCredential();
+    expect(save).toHaveBeenCalledOnce();
+    expect(save.mock.calls[0][0]).toMatchObject({
+      statusManagement: true,
+      activeCredentials: { enabled: true },
+    });
+
+    component.form.get('activeCredentialsEnabled')!.setValue(false);
+    expect(statusManagement.enabled).toBe(true);
+    statusManagement.setValue(false);
+    expect((component as any).buildConfigurationPayload()).toMatchObject({
+      statusManagement: false,
+      activeCredentials: { enabled: false },
+    });
+  });
+
+  it('loads Single Active Credential without status management as a valid combination', () => {
+    const statusManagement = component.form.get('statusManagement')!;
+    (component as any).patchFormFromConfig({
+      id: 'member',
+      description: 'Membership',
+      vct: 'urn:member',
+      statusManagement: false,
+      activeCredentials: { enabled: true },
+      config: { format: 'dc+sd-jwt', display: [{ name: 'Membership', locale: 'en-US' }] },
+      fields: [],
+    });
+    expect(statusManagement.value).toBe(true);
+    expect(statusManagement.disabled).toBe(true);
+    expect((component as any).buildConfigurationPayload()).toMatchObject({
+      statusManagement: true,
+      activeCredentials: { enabled: true },
+    });
+
+    (component as any).patchFormFromConfig({
+      id: 'member',
+      description: 'Membership',
+      vct: 'urn:member',
+      statusManagement: false,
+      config: { format: 'dc+sd-jwt', display: [{ name: 'Membership', locale: 'en-US' }] },
+      fields: [],
+    });
+    expect(statusManagement.value).toBe(false);
+    expect(statusManagement.enabled).toBe(true);
+  });
+
   it('returns to an invalid earlier step before review or save', () => {
     basics();
     component.displayConfigs.at(0).patchValue({ name: 'Membership', description: 'Member card' });

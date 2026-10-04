@@ -13,7 +13,11 @@ import {
 import { v4 } from "uuid";
 import { CryptoService } from "../../../../../crypto/crypto.service.js";
 import { CreateSession } from "../../../../../session/application/create-session.js";
+import { SessionNotFound } from "../../../../../session/application/session-errors.js";
 import { SessionStore } from "../../../../../session/application/session-store.js";
+import type { SessionData } from "../../../../../session/domain/session-data.js";
+import { SessionStatus } from "../../../../../session/domain/session-state.js";
+import type { AuthorizationResponse } from "../../../../../verifier/oid4vp/dto/authorization-response.dto.js";
 import { Oid4vpService } from "../../../../../verifier/oid4vp/oid4vp.service.js";
 import { PresentationConfigService } from "../../../../../verifier/presentations/configuration/presentation-config.service.js";
 import { CredentialsService } from "../../../../configuration/credentials/credentials.service.js";
@@ -33,7 +37,9 @@ import {
     InteractiveAuthSessionStatus,
 } from "../domain/interactive-auth-session.js";
 import { OAuthError } from "../domain/oauth-error.js";
-import { assertS256CodeChallengeIfPresent, checkPkce } from "../domain/pkce.js";
+import { assertOfferRedeemable } from "../domain/offer-redemption.js";
+import { assertS256CodeChallenge, checkS256Pkce } from "../domain/pkce.js";
+import { AUTHORIZATION_CODE_LIFETIME_SECONDS } from "../domain/pushed-authorization-request.js";
 import {
     INTERACTIVE_AUTH_SESSION_REPOSITORY,
     type InteractiveAuthSessionRepository,
@@ -299,10 +305,11 @@ export class InteractiveAuthorizationService {
             };
         }
 
-        // PKCE stays optional for openid4vp_presentation, but only with S256
-        // (HAIP 1.0 Section 4), as on the pushed authorization request.
+        // PKCE with S256 is mandatory for every interaction (HAIP 1.0
+        // Section 4): the token endpoint only redeems the issued code with the
+        // matching code_verifier.
         try {
-            assertS256CodeChallengeIfPresent(
+            assertS256CodeChallenge(
                 request.code_challenge,
                 request.code_challenge_method,
             );
@@ -314,6 +321,16 @@ export class InteractiveAuthorizationService {
                 };
             }
             throw error;
+        }
+
+        if (request.issuer_state) {
+            const offerError = await this.offerRedemptionError(
+                tenantId,
+                request.issuer_state,
+            );
+            if (offerError) {
+                return offerError;
+            }
         }
 
         // Parse supported interaction types
@@ -476,12 +493,35 @@ export class InteractiveAuthorizationService {
             return validationResult;
         }
         const authSessionEntity = validationResult as InteractiveAuthSession;
+        // An auth_session yields a single authorization code.
+        if (authSessionEntity.authorizationCode) {
+            return {
+                error: Oauth2ErrorCodes.InvalidRequest,
+                error_description: "The auth_session was already used",
+            };
+        }
 
         // Parse session context
         const sessionContext = this.parseSessionContext(authSessionEntity);
+        // A step is only completed by the interaction it requested.
+        const expectedInteraction = currentInteraction(
+            authSessionEntity,
+            sessionContext,
+        );
+        const interactionError = (interaction: InteractionType) =>
+            expectedInteraction === interaction
+                ? undefined
+                : {
+                      error: Oauth2ErrorCodes.InvalidRequest,
+                      error_description: `The current step does not expect a ${interaction} response`,
+                  };
 
         // Handle OpenID4VP response
         if (request.openid4vp_response) {
+            const error = interactionError(
+                InteractionType.OPENID4VP_PRESENTATION,
+            );
+            if (error) return error;
             return this.processOpenid4vpFollow(
                 request.openid4vp_response,
                 authSessionEntity,
@@ -493,6 +533,8 @@ export class InteractiveAuthorizationService {
 
         // Handle code_verifier for redirect_to_web flow
         if (request.code_verifier) {
+            const error = interactionError(InteractionType.REDIRECT_TO_WEB);
+            if (error) return error;
             return this.processCodeVerifierFollow(
                 request.code_verifier,
                 authSessionEntity,
@@ -650,34 +692,126 @@ export class InteractiveAuthorizationService {
     }
 
     /**
-     * Handle OpenID4VP response from wallet.
-     * Validates and stores the VP data, returns success or error.
+     * Verify the wallet's OpenID4VP authorization response against the
+     * presentation request created for this auth session, with the verifier's
+     * direct_post pipeline: decryption with the request's ephemeral key,
+     * nonce, client_id/audience, DCQL completeness and issuer trust. A
+     * response the wallet already posted to the request's response_uri counts
+     * as well. Only a verified presentation completes the step.
      */
     private async handleOpenid4vpResponse(
         openid4vpResponse: string,
         authSession: InteractiveAuthSession,
     ): Promise<{ success: true } | InteractiveAuthorizationResponse> {
-        try {
-            JSON.parse(openid4vpResponse);
-
-            // Update session status
-            await this.authSessionRepository.update(authSession.id, {
-                status: "presentation_received",
-                presentationData: openid4vpResponse,
-            });
-
-            // The response is not verified here, so it is not stored as the
-            // session's credentials, which are forwarded to attribute providers.
-
-            // Return success indicator (auth code will be issued by advanceOrComplete)
-            return { success: true };
-        } catch (error) {
-            this.logger.error("Failed to process OpenID4VP response:", error);
+        const response = parseAuthorizationResponse(openid4vpResponse);
+        if (!response) {
             return {
                 error: Oauth2ErrorCodes.InvalidRequest,
                 error_description: "Invalid openid4vp_response format",
             };
         }
+
+        const { tenantId } = authSession;
+        const presentation = await this.presentationSession(
+            tenantId,
+            authSession.authSession,
+        );
+        if (!presentation) {
+            return {
+                error: Oauth2ErrorCodes.InvalidRequest,
+                error_description:
+                    "No presentation was requested for this auth_session",
+            };
+        }
+        if (presentation.status !== SessionStatus.Completed) {
+            try {
+                await this.oid4vpService.getResponse(
+                    response,
+                    presentation.walletNonce ?? presentation.id,
+                );
+            } catch (error) {
+                this.logger.warn(
+                    `OpenID4VP response of auth_session ${authSession.authSession} was rejected: ${error instanceof Error ? error.message : String(error)}`,
+                );
+            }
+        }
+        const verified = await this.presentationSession(
+            tenantId,
+            authSession.authSession,
+        );
+        if (verified?.status !== SessionStatus.Completed) {
+            return {
+                error: Oauth2ErrorCodes.AccessDenied,
+                error_description: "The presentation could not be verified",
+            };
+        }
+
+        await this.authSessionRepository.update(authSession.id, {
+            status: "presentation_received",
+            presentationData: openid4vpResponse,
+        });
+
+        // Verified credentials are forwarded to attribute providers like
+        // those of the OID4VP authorization server.
+        if (authSession.issuerState && verified.credentials) {
+            await this.sessionStore.updateForTenant(
+                tenantId,
+                authSession.issuerState,
+                { credentials: verified.credentials },
+            );
+        }
+
+        // Return success indicator (auth code will be issued by advanceOrComplete)
+        return { success: true };
+    }
+
+    /** Verifier session of the presentation request of an auth session. */
+    private presentationSession(
+        tenantId: string,
+        authSession: string,
+    ): Promise<SessionData | undefined> {
+        return this.sessionStore
+            .getForTenant(tenantId, authSession)
+            .catch((error: unknown) => {
+                if (error instanceof SessionNotFound) return undefined;
+                throw error;
+            });
+    }
+
+    /**
+     * Error response when `issuer_state` does not name an authorization code
+     * offer that can still be redeemed. The issued code, its PKCE binding and
+     * the verified credentials are bound to that offer, so a pre-authorized
+     * offer (redeemable with its tx_code only) is rejected as well.
+     */
+    private async offerRedemptionError(
+        tenantId: string,
+        issuerState: string,
+    ): Promise<InteractiveAuthorizationResponse | undefined> {
+        const offer = await this.sessionStore
+            .getForTenant(tenantId, issuerState)
+            .catch((error: unknown) => {
+                if (error instanceof SessionNotFound) return undefined;
+                throw error;
+            });
+        if (!offer || offer.credentialPayload?.flow === "pre_authorized_code") {
+            return {
+                error: Oauth2ErrorCodes.InvalidRequest,
+                error_description: "Invalid issuer_state",
+            };
+        }
+        try {
+            assertOfferRedeemable(offer, new Date(), "invalid_request");
+        } catch (error) {
+            if (error instanceof OAuthError) {
+                return {
+                    error: error.code,
+                    error_description: error.description,
+                };
+            }
+            throw error;
+        }
+        return undefined;
     }
 
     /**
@@ -699,9 +833,11 @@ export class InteractiveAuthorizationService {
 
         // The initial request only accepts S256 challenges.
         const verifierValid =
-            authSession.codeChallengeMethod === "S256" &&
-            checkPkce(authSession.codeChallenge, "S256", codeVerifier) ===
-                "valid";
+            checkS256Pkce(
+                authSession.codeChallenge,
+                authSession.codeChallengeMethod,
+                codeVerifier,
+            ) === "valid";
 
         if (!verifierValid) {
             return {
@@ -809,6 +945,14 @@ export class InteractiveAuthorizationService {
         label?: string,
     ): Promise<InteractiveAuthorizationResponse> {
         try {
+            // The verifier session must exist before the request is created,
+            // which stores the wallet-facing nonce the request_uri refers to.
+            await this.createSession.execute({
+                id: authSession,
+                tenantId,
+                requestId: presentationConfigId,
+            });
+
             // Create the presentation request
             const presentationResult = await this.oid4vpService.createRequest(
                 presentationConfigId,
@@ -817,13 +961,6 @@ export class InteractiveAuthorizationService {
                 false, // useDcApi
                 origin,
             );
-
-            // Store the session for later use
-            await this.createSession.execute({
-                id: authSession,
-                tenantId,
-                requestId: presentationConfigId,
-            });
 
             // Create the OpenID4VP request object
             const openid4vpRequest: Openid4vpRequestDto = {
@@ -906,6 +1043,18 @@ export class InteractiveAuthorizationService {
                     authSession.issuerState,
                     {
                         authorization_code: authorizationCode,
+                        // Short-lived like codes of the authorization endpoint.
+                        authorization_code_expires_at: new Date(
+                            Date.now() +
+                                AUTHORIZATION_CODE_LIFETIME_SECONDS * 1000,
+                        ),
+                        // The token endpoint verifies the code_verifier
+                        // against this challenge (RFC 7636 Section 4.6).
+                        auth_queries: {
+                            code_challenge: authSession.codeChallenge,
+                            code_challenge_method:
+                                authSession.codeChallengeMethod,
+                        },
                     },
                 );
             } catch (error) {
@@ -923,13 +1072,27 @@ export class InteractiveAuthorizationService {
     }
 
     /**
-     * Mark a web authorization as completed.
-     * Called when user completes web-based authorization.
+     * Mark the web authorization of an auth session as completed. Called by
+     * the issuer's backend (authenticated at the controller) once the user
+     * finished the web interaction; only an unexpired auth session whose
+     * current step is `redirect_to_web` can be completed.
      */
     async completeWebAuthorization(
         authSession: string,
         tenantId: string,
     ): Promise<boolean> {
+        const session = await this.authSessionRepository.findForTenant(
+            tenantId,
+            authSession,
+        );
+        if (
+            !session ||
+            session.expiresAt < new Date() ||
+            currentInteraction(session, this.parseSessionContext(session)) !==
+                InteractionType.REDIRECT_TO_WEB
+        ) {
+            return false;
+        }
         return this.authSessionRepository.updateForTenant(
             tenantId,
             authSession,
@@ -949,4 +1112,62 @@ export class InteractiveAuthorizationService {
             error_description: errorDescription,
         };
     }
+}
+
+/**
+ * Interaction the current step of an auth session expects: the type of the
+ * configured action, otherwise the one the initial request chose
+ * (`openid4vp_presentation` when the wallet supports it, else
+ * `redirect_to_web`).
+ */
+function currentInteraction(
+    authSession: Pick<InteractiveAuthSession, "currentStepIndex">,
+    context: { iaeActions?: IaeAction[]; supportedTypes: InteractionType[] },
+): InteractionType | undefined {
+    if (context.iaeActions) {
+        const action = context.iaeActions[authSession.currentStepIndex];
+        if (!action) return undefined;
+        return action.type === IaeActionType.OPENID4VP_PRESENTATION
+            ? InteractionType.OPENID4VP_PRESENTATION
+            : InteractionType.REDIRECT_TO_WEB;
+    }
+    return [
+        InteractionType.OPENID4VP_PRESENTATION,
+        InteractionType.REDIRECT_TO_WEB,
+    ].find((type) => context.supportedTypes.includes(type));
+}
+
+const AUTHORIZATION_RESPONSE_FIELDS = [
+    "response",
+    "error",
+    "error_description",
+    "error_uri",
+    "state",
+] as const;
+
+/**
+ * The OpenID4VP authorization response the wallet sends as
+ * `openid4vp_response`: a JSON object with the encrypted `response`
+ * (`direct_post.jwt`) or an error response. `undefined` when malformed.
+ */
+function parseAuthorizationResponse(
+    value: string,
+): AuthorizationResponse | undefined {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(value);
+    } catch {
+        return undefined;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return undefined;
+    }
+    const response: AuthorizationResponse = {};
+    for (const field of AUTHORIZATION_RESPONSE_FIELDS) {
+        const fieldValue = (parsed as Record<string, unknown>)[field];
+        if (fieldValue === undefined) continue;
+        if (typeof fieldValue !== "string") return undefined;
+        response[field] = fieldValue;
+    }
+    return response;
 }

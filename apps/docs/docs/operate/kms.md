@@ -111,13 +111,28 @@ A tenant can add or override providers without touching the global file. Its
 `kms.json` is stored at `<CONFIG_FOLDER>/<tenant-id>/kms.json` and merged over
 the global one: providers with the same `id` replace the global entry, and the
 tenant's `defaultProvider` wins. Manage it through the API (roles
-`issuance:manage` or `presentation:manage`):
+`tenant:admin` or `tenants:manage`, because the configuration contains provider
+credentials):
 
 | Request                                     | Effect                                                                    |
 | ------------------------------------------- | ------------------------------------------------------------------------- |
 | `GET /api/key-chain/providers/config`       | `tenantConfig` (the tenant file or `null`) and `effectiveConfig` (merged) |
 | `PUT /api/key-chain/providers/config`       | Validate and write the tenant file, body as in `kms.json`                 |
 | `DELETE /api/key-chain/providers/config`    | Remove the tenant file; the global configuration applies again            |
+
+The API never returns credentials (`vaultToken`, `secretAccessKey`, `pin`,
+`auth.token`, `auth.clientSecret`, `clientSecret`, `sad` and
+`authorizeAuthData[].value`); it returns `<redacted>` instead. In
+`tenantConfig`, a credential stored as a `${ENV_VAR}` placeholder is returned as
+the placeholder. Providers of the global file appear in `effectiveConfig` with
+their non-secret settings only.
+
+A `PUT` replaces the whole tenant file. To keep a stored credential, send
+`<redacted>` back unchanged: it is replaced by the stored value of the provider
+with the same `id` and `type`. Any other value, including a placeholder,
+replaces the credential. `<redacted>` for a credential the tenant file does not
+store, for example of a global provider copied from `effectiveConfig`, is
+rejected with `400`.
 
 The API needs `CONFIG_FOLDER` to be writable. The tenant `kms.json` is also part
 of [configuration bundles](configuration-as-code.md), with secrets exported as

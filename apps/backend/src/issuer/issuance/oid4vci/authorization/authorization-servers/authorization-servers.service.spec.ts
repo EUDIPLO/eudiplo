@@ -70,6 +70,8 @@ function service(
         {} as any,
         {} as any,
         sessionRepository as any,
+        { getCallbackContext: vi.fn().mockReturnValue({}) } as any,
+        { register: vi.fn().mockResolvedValue(true) },
     );
     return { authorizationServers, sessionRepository };
 }

@@ -49,7 +49,10 @@ export async function runInstanceAdd(
     return 0;
 }
 
-export function runInstanceList(config: CliConfig, context: CommandContext): number {
+export function runInstanceList(
+    config: CliConfig,
+    context: CommandContext,
+): number {
     const instances = Object.entries(config.instances).sort(([left], [right]) =>
         left.localeCompare(right),
     );
@@ -60,7 +63,8 @@ export function runInstanceList(config: CliConfig, context: CommandContext): num
 
     context.stdout.write("Configured instances:\n");
     for (const [name, instance] of instances) {
-        const defaultLabel = name === config.defaultInstance ? " (default)" : "";
+        const defaultLabel =
+            name === config.defaultInstance ? " (default)" : "";
         context.stdout.write(
             `- ${name}${defaultLabel}: ${instance.target} ${instance.url}\n`,
         );
@@ -75,7 +79,9 @@ export function runInstanceShow(
 ): number {
     const name = parsed.positionals[0] ?? config.defaultInstance;
     if (!name) {
-        throw new Error("No instance selected. Specify a name or add an instance first.");
+        throw new Error(
+            "No instance selected. Specify a name or add an instance first.",
+        );
     }
     const instance = config.instances[name];
     if (!instance) {

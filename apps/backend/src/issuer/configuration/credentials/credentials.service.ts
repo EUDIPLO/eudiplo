@@ -185,15 +185,27 @@ export class CredentialsService {
     /**
      * Builds `proof_types_supported` for a credential configuration.
      *
-     * Both proof types only carry `key_attestations_required` when constraints are
-     * configured, otherwise wallets are not required to attach a key attestation.
+     * Both proof types only carry `key_attestations_required` when key attestations
+     * are configured as required, otherwise wallets are not required to attach a
+     * key attestation. Credential requests are checked against the same
+     * requirements.
      */
     private buildProofTypesSupported(
         config: CredentialConfig["config"],
         algs: string[],
     ): BuildCredentialConfigOptions["proofTypesSupported"] {
         const supportedProofTypes = this.resolveConfiguredProofTypes(config);
-        const configuredKeyAttestations = config.keyAttestationsRequired;
+        // An empty key_storage / user_authentication list means "no
+        // constraint"; the metadata only allows non-empty arrays, so it is
+        // omitted (an empty object still requires a key attestation).
+        const configuredKeyAttestations = config.keyAttestationsRequired
+            ? Object.fromEntries(
+                  Object.entries(config.keyAttestationsRequired).filter(
+                      ([, values]) =>
+                          Array.isArray(values) && values.length > 0,
+                  ),
+              )
+            : undefined;
         const proofTypesSupported: Record<string, Record<string, unknown>> = {};
 
         if (supportedProofTypes.includes(CredentialProofType.ATTESTATION)) {
@@ -238,10 +250,18 @@ export class CredentialsService {
         return Object.keys(metadata).length > 0 ? metadata : undefined;
     }
 
-    async getSupportedProofTypesForCredentialConfig(
+    /**
+     * Proof requirements of a credential configuration: the supported proof
+     * types and, when configured, the key attestation requirements every
+     * proof has to meet.
+     */
+    async getProofRequirementsForCredentialConfig(
         tenantId: string,
         credentialConfigurationId: string,
-    ): Promise<CredentialProofType[]> {
+    ): Promise<{
+        proofTypes: CredentialProofType[];
+        keyAttestationsRequired?: CredentialConfig["config"]["keyAttestationsRequired"];
+    }> {
         const config =
             await this.credentialConfigurationRepository.findForTenant(
                 tenantId,
@@ -254,7 +274,11 @@ export class CredentialsService {
             );
         }
 
-        return this.resolveConfiguredProofTypes(config.config);
+        return {
+            proofTypes: this.resolveConfiguredProofTypes(config.config),
+            keyAttestationsRequired:
+                config.config.keyAttestationsRequired ?? undefined,
+        };
     }
 
     /**

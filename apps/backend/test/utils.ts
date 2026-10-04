@@ -442,6 +442,45 @@ export async function getToken(
         .then((res) => res.body.access_token);
 }
 
+/**
+ * Create a tenant whose client holds `tenant:admin` besides `roles`, and
+ * return that client's access token. Uses the root client credentials.
+ */
+export async function getTenantAdminToken(
+    app: INestApplication,
+    clientId: string,
+    clientSecret: string,
+    tenantId: string,
+    roles: Role[] = [Role.Issuances],
+): Promise<string> {
+    const bootstrap = await request(app.getHttpServer())
+        .post("/api/oauth2/token")
+        .send({
+            grant_type: "client_credentials",
+            client_id: clientId,
+            client_secret: clientSecret,
+        })
+        .expect(201);
+    const tenant = await request(app.getHttpServer())
+        .post("/tenant")
+        .set("Authorization", `Bearer ${bootstrap.body.access_token}`)
+        .send({
+            id: tenantId,
+            name: `${tenantId} tenant`,
+            roles: [...roles, Role.TenantAdmin],
+        })
+        .expect(201);
+    return request(app.getHttpServer())
+        .post("/api/oauth2/token")
+        .send({
+            grant_type: "client_credentials",
+            client_id: tenant.body.client.clientId,
+            client_secret: tenant.body.client.clientSecret,
+        })
+        .expect(201)
+        .then((res) => res.body.access_token);
+}
+
 export function getDefaultSecret(input: string): string {
     const pattern = /\$\{([A-Z0-9_]+)(?::([^}]*))?\}/g;
     return input.replaceAll(

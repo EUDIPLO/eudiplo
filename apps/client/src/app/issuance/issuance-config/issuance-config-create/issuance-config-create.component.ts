@@ -25,7 +25,10 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { IssuanceConfig, UpdateIssuanceDto } from '@eudiplo/sdk-core';
-import { IssuanceConfigService } from '../issuance-config.service';
+import {
+  defaultAccessTokenLifetimeSeconds,
+  IssuanceConfigService,
+} from '../issuance-config.service';
 import { issuanceConfigSchema } from '../../../utils/schemas';
 import { JsonViewDialogComponent } from '../../credential-config/credential-config-create/json-view-dialog/json-view-dialog.component';
 import { MatDialog } from '@angular/material/dialog';
@@ -353,10 +356,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
       walletProviderTrustLists: this.fb.array([]),
       federation: this.fb.group({
         enabled: [false],
-        role: ['leaf'],
         mode: ['hybrid'],
         entityId: [''],
-        enforceSigningPolicy: [true],
         cacheTtlSeconds: [300],
         trustAnchors: this.fb.array([]),
       }),
@@ -549,7 +550,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
                 scopes: server.upstream?.scopes ?? ['openid', 'profile', 'email'],
               },
               token: {
-                lifetimeSeconds: server.token?.lifetimeSeconds ?? 3600,
+                lifetimeSeconds:
+                  server.token?.lifetimeSeconds ?? defaultAccessTokenLifetimeSeconds(server.type),
                 signingKeyId: server.token?.signingKeyId ?? '',
                 refreshTokenEnabled: server.token?.refreshTokenEnabled ?? true,
                 refreshTokenExpiresInSeconds: server.token?.refreshTokenExpiresInSeconds ?? 2592000,
@@ -567,7 +569,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
               walletAttestationRequired: server.walletAttestationRequired ?? 'inherit',
               walletProviderTrustLists: server.walletProviderTrustLists,
               token: {
-                lifetimeSeconds: server.token?.lifetimeSeconds ?? 3600,
+                lifetimeSeconds:
+                  server.token?.lifetimeSeconds ?? defaultAccessTokenLifetimeSeconds('built-in'),
                 signingKeyId: server.token?.signingKeyId ?? '',
                 refreshTokenEnabled: server.token?.refreshTokenEnabled ?? true,
                 refreshTokenExpiresInSeconds: server.token?.refreshTokenExpiresInSeconds ?? 2592000,
@@ -637,10 +640,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
     this.trustAnchors.clear();
     this.federation.patchValue({
       enabled: false,
-      role: 'leaf',
       mode: 'hybrid',
       entityId: '',
-      enforceSigningPolicy: true,
       cacheTtlSeconds: 300,
     });
     // Load Federation config if present
@@ -664,10 +665,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
       this.form.patchValue({
         federation: {
           enabled: this.trustAnchors.length > 0,
-          role: (federation.role as 'trust_anchor' | 'intermediate' | 'leaf') ?? 'leaf',
           mode: this.normalizeFederationMode(federation.mode),
           entityId: federation.entityId ?? '',
-          enforceSigningPolicy: federation.enforceSigningPolicy ?? true,
           cacheTtlSeconds: federation.cacheTtlSeconds ?? 300,
         },
       });
@@ -749,7 +748,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
                     : undefined,
                 walletProviderTrustLists,
                 token: {
-                  lifetimeSeconds: server.token?.lifetimeSeconds || 3600,
+                  lifetimeSeconds:
+                    server.token?.lifetimeSeconds || defaultAccessTokenLifetimeSeconds('built-in'),
                   signingKeyId: server.token?.signingKeyId || undefined,
                   refreshTokenEnabled: server.token?.refreshTokenEnabled ?? true,
                   refreshTokenExpiresInSeconds: server.token?.refreshTokenEnabled
@@ -774,7 +774,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
                   : undefined,
               walletProviderTrustLists,
               token: {
-                lifetimeSeconds: server.token?.lifetimeSeconds || 3600,
+                lifetimeSeconds:
+                  server.token?.lifetimeSeconds || defaultAccessTokenLifetimeSeconds(server.type),
                 signingKeyId: server.token?.signingKeyId || undefined,
                 refreshTokenEnabled: server.token?.refreshTokenEnabled ?? true,
                 refreshTokenExpiresInSeconds: server.token?.refreshTokenEnabled
@@ -894,13 +895,12 @@ export class IssuanceConfigCreateComponent implements OnInit {
     if (!enabled || !Array.isArray(trustAnchors) || trustAnchors.length === 0) {
       return null;
     }
-    const role = (fVal['role'] as string) ?? 'leaf';
     const mode = this.normalizeFederationMode(fVal['mode']);
+    // `role` and `enforceSigningPolicy` are not sent: EUDIPLO only acts as a
+    // leaf entity and always enforces federation checks.
     return {
-      role: role as 'trust_anchor' | 'intermediate' | 'leaf',
       mode,
       entityId: (fVal['entityId'] as string) ?? undefined,
-      enforceSigningPolicy: fVal['enforceSigningPolicy'] !== false,
       cacheTtlSeconds: (fVal['cacheTtlSeconds'] as number) ?? 300,
       trustAnchors: trustAnchors as {
         entityId: string;
@@ -959,7 +959,10 @@ export class IssuanceConfigCreateComponent implements OnInit {
         requireDPoP: [value?.requireDPoP ?? false],
         ...this.createAuthorizationServerWalletAttestationControls(value),
         token: this.fb.group({
-          lifetimeSeconds: [value?.token?.lifetimeSeconds ?? 3600, Validators.min(60)],
+          lifetimeSeconds: [
+            value?.token?.lifetimeSeconds ?? defaultAccessTokenLifetimeSeconds('built-in'),
+            Validators.min(60),
+          ],
           signingKeyId: [value?.token?.signingKeyId ?? ''],
           refreshTokenEnabled: [value?.token?.refreshTokenEnabled ?? true],
           refreshTokenExpiresInSeconds: [
@@ -988,7 +991,10 @@ export class IssuanceConfigCreateComponent implements OnInit {
         scopes: [value?.chained?.scopes ?? ['openid', 'profile', 'email']],
       }),
       token: this.fb.group({
-        lifetimeSeconds: [value?.token?.lifetimeSeconds ?? 3600, Validators.min(60)],
+        lifetimeSeconds: [
+          value?.token?.lifetimeSeconds ?? defaultAccessTokenLifetimeSeconds(value?.type),
+          Validators.min(60),
+        ],
         signingKeyId: [value?.token?.signingKeyId ?? ''],
         refreshTokenEnabled: [value?.token?.refreshTokenEnabled ?? true],
         refreshTokenExpiresInSeconds: [
@@ -1052,7 +1058,26 @@ export class IssuanceConfigCreateComponent implements OnInit {
       nextValue.label = 'Built-in Authorization Server';
     }
 
+    // Built-in and hosted servers have different token lifetime defaults; carry over only a
+    // lifetime the user changed, not the previous type's default.
+    const lifetime = current.token?.lifetimeSeconds;
+    const lifetimeEdited = this.authorizationServers.at(index).get('token.lifetimeSeconds')?.dirty;
+    const isDefaultLifetime =
+      lifetime == null ||
+      lifetime === defaultAccessTokenLifetimeSeconds('built-in') ||
+      lifetime === defaultAccessTokenLifetimeSeconds('oid4vp');
+    if (current.token && !lifetimeEdited && isDefaultLifetime) {
+      nextValue.token = {
+        ...current.token,
+        lifetimeSeconds: defaultAccessTokenLifetimeSeconds(type),
+      };
+    }
+
     this.authorizationServers.setControl(index, this.createAuthorizationServerGroup(nextValue));
+  }
+
+  accessTokenLifetimeDefault(type: string | undefined): number {
+    return defaultAccessTokenLifetimeSeconds(type);
   }
 
   hasBuiltInAuthorizationServer(excludeIndex?: number): boolean {

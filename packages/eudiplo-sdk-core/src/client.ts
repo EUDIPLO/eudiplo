@@ -225,6 +225,13 @@ export interface OfferResult {
   sessionId: string;
 }
 
+/** Removes trailing slashes in linear time (a `/\/+$/` regex can backtrack). */
+function withoutTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === '/') end--;
+  return url.slice(0, end);
+}
+
 /**
  * Framework-agnostic EUDIPLO client for demos and integrations.
  *
@@ -258,11 +265,13 @@ export class EudiploClient {
     this.config = {
       autoRefresh: true,
       ...config,
+      // Hand-written URLs append paths with a leading slash.
+      baseUrl: withoutTrailingSlashes(config.baseUrl),
     };
 
     // Configure the underlying API client
     client.setConfig({
-      baseUrl: config.baseUrl,
+      baseUrl: this.config.baseUrl,
       fetch: config.fetch,
     });
   }
@@ -590,7 +599,8 @@ export class EudiploClient {
       );
     }
 
-    const url = `${this.config.baseUrl}/session/${sessionId}/events?token=${encodeURIComponent(token)}`;
+    // Management endpoint: served under the global /api prefix.
+    const url = `${this.config.baseUrl}/api/session/${encodeURIComponent(sessionId)}/events?token=${encodeURIComponent(token)}`;
     const eventSource = new EventSource(url);
 
     eventSource.onopen = () => {
@@ -728,7 +738,8 @@ export class EudiploClient {
     }
 
     const nonceOrId = session.walletNonce ?? session.id;
-    const requestObjectUrl = `${this.config.baseUrl}/api/presentations/${encodeURIComponent(nonceOrId)}/oid4vp/request`;
+    // Wallet-facing protocol endpoint: excluded from the /api prefix.
+    const requestObjectUrl = `${this.config.baseUrl}/presentations/${encodeURIComponent(nonceOrId)}/oid4vp/request`;
     const fetchImpl = this.config.fetch ?? fetch;
     const requestObjectResponse = await fetchImpl(requestObjectUrl, {
       method: 'GET',

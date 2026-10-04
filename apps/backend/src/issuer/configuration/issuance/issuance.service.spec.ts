@@ -59,4 +59,53 @@ describe("IssuanceService.storeIssuanceConfiguration", () => {
             }),
         );
     });
+
+    it.each([
+        [{ role: "trust_anchor" }, /role 'leaf'/],
+        [{ role: "intermediate" }, /role 'leaf'/],
+        [{ enforceSigningPolicy: false }, /always enforced/],
+    ])(
+        "rejects the unsupported federation option %o",
+        async (option, message) => {
+            const { issuance, save } = service();
+
+            const result = issuance.storeIssuanceConfiguration("tenant-1", {
+                federation: {
+                    trustAnchors: [
+                        {
+                            entityId: "https://ta.example.org",
+                            entityConfigurationUri:
+                                "https://ta.example.org/.well-known/openid-federation",
+                        },
+                    ],
+                    ...option,
+                },
+            } as any);
+
+            await expect(result).rejects.toBeInstanceOf(BadRequestException);
+            await expect(result).rejects.toThrow(message);
+            expect(save).not.toHaveBeenCalled();
+        },
+    );
+
+    it("accepts the supported federation options", async () => {
+        const { issuance, save } = service();
+
+        await issuance.storeIssuanceConfiguration("tenant-1", {
+            authorizationServers: [{ type: "built-in", id: "issuer-built-in" }],
+            federation: {
+                role: "leaf",
+                enforceSigningPolicy: true,
+                trustAnchors: [
+                    {
+                        entityId: "https://ta.example.org",
+                        entityConfigurationUri:
+                            "https://ta.example.org/.well-known/openid-federation",
+                    },
+                ],
+            },
+        } as any);
+
+        expect(save).toHaveBeenCalledOnce();
+    });
 });

@@ -10,6 +10,7 @@ import {
 import { decodeJwt } from "jose";
 import { MetricService, TraceService } from "nestjs-otel";
 import { v4 } from "uuid";
+import { CryptoService } from "../../../../../crypto/crypto.service.js";
 import { KeyChainService } from "../../../../../crypto/key/key-chain.service.js";
 import { SessionStore } from "../../../../../session/application/session-store.js";
 import { assertSessionUsable } from "../../../../../session/domain/session-usability.js";
@@ -24,6 +25,10 @@ import {
     OID4VCI_SETTINGS,
     type Oid4vciSettings,
 } from "../../oid4vci-settings.js";
+import {
+    DPOP_PROOF_REPLAY_REGISTRY,
+    type DpopProofReplayRegistry,
+} from "../../ports/dpop-proof-replay-registry.js";
 import { refreshTokenPolicy } from "../domain/token-grant-rules.js";
 import {
     CHAINED_AS_SESSION_REPOSITORY,
@@ -38,6 +43,7 @@ import {
     buildAuthorizationServerMetadata,
     buildJwksResponse,
     buildWalletAttestationMetadata,
+    type ChainedAsDpopVerification,
     ChainedAsParRequestDto,
     ChainedAsParResponseDto,
     type ChainedAsSession,
@@ -50,6 +56,7 @@ import {
     resolveTokenBinding,
     resolveWalletAttestationPolicy,
     retainSessionForIssuedTokens,
+    verifyChainedAsDpopProof,
 } from "../shared/index.js";
 import {
     OIDC_DISCOVERY_RESOLVER,
@@ -119,6 +126,9 @@ export class ChainedAsService {
         private readonly traceService: TraceService,
         @Inject(CHAINED_AS_SESSION_REPOSITORY)
         private readonly sessionRepository: ChainedAsSessionRepository,
+        private readonly cryptoService: CryptoService,
+        @Inject(DPOP_PROOF_REPLAY_REGISTRY)
+        private readonly dpopProofs: DpopProofReplayRegistry,
         @Optional() private readonly metricService?: MetricService,
     ) {
         this.discoveryHitsCounter = this.metricService?.getCounter(
@@ -157,6 +167,15 @@ export class ChainedAsService {
     private getChainedAsBaseUrl(tenantId: string): string {
         const publicUrl = this.settings.publicUrl;
         return `${publicUrl}/issuers/${tenantId}/chained-as`;
+    }
+
+    /** Verification of DPoP proofs sent to this tenant's Chained AS. */
+    private dpopVerification(tenantId: string): ChainedAsDpopVerification {
+        return {
+            issuer: this.getChainedAsBaseUrl(tenantId),
+            callbacks: this.cryptoService.getCallbackContext(tenantId),
+            replayRegistry: this.dpopProofs,
+        };
     }
 
     /**
@@ -331,7 +350,7 @@ export class ChainedAsService {
     async handlePar(
         tenantId: string,
         request: ChainedAsParRequestDto,
-        dpopJkt?: string,
+        dpopJwt?: string,
         clientAttestation?: {
             clientAttestationJwt: string;
             clientAttestationPopJwt: string;
@@ -355,6 +374,12 @@ export class ChainedAsService {
             request.code_challenge_method,
         );
 
+        // RFC 9449 Section 10: a valid DPoP proof binds the code to its key.
+        const dpopJkt = await verifyChainedAsDpopProof(
+            this.dpopVerification(tenantId),
+            "par",
+            dpopJwt,
+        );
         if (config.requireDPoP && !dpopJkt) {
             throw new BadRequestException("DPoP is required");
         }
@@ -771,7 +796,8 @@ export class ChainedAsService {
             request,
         );
 
-        const { tokenType, dpopJkt } = resolveTokenBinding(
+        const { tokenType, dpopJkt } = await resolveTokenBinding(
+            this.dpopVerification(tenantId),
             config.requireDPoP,
             session,
             dpopJwt,

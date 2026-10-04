@@ -66,14 +66,19 @@ Key attestations are configured per credential type, in the credential configura
 ```
 
 - `proofTypesSupported` limits the accepted proof types, `jwt` and `attestation` (default: both). A proof of another type is rejected with `invalid_proof`.
-- `keyAttestationsRequired` is published as `key_attestations_required` for every supported proof type in the issuer metadata; an empty object announces a key attestation without constraints. EUDIPLO does not check the attested levels against it.
+- `keyAttestationsRequired` is published as `key_attestations_required` for every supported proof type in the issuer metadata and enforced at the credential endpoint:
+    - Every proof must carry a key attestation: an `attestation` proof or a `jwt` proof with `key_attestation`.
+    - Every key the proof proves must be listed in the attestation's `attested_keys`.
+    - For a non-empty `key_storage` or `user_authentication` list, the attestation must state at least one of the listed values in the claim of the same name.
+
+    An empty object requires a key attestation without level constraints; empty lists add no constraint and are not published. A proof that fails is rejected with `invalid_proof`. Without `keyAttestationsRequired`, a key attestation is optional.
 
 Wallets send key attestations in two ways:
 
 - **`attestation` proof** (`proofs.attestation`): the key attestation JWT itself. EUDIPLO issues one credential per key in its `attested_keys`, at most the issuance `batchSize`.
 - **`jwt` proof with `key_attestation` header**: a holder proof whose signing key must be one of the attested keys.
 
-Every presented key attestation must be signed by a wallet provider in the issuance-level `walletProviderTrustLists`; lists on an authorization server are not used for keys. A `jwt` proof without `key_attestation` is accepted even when `keyAttestationsRequired` is set. To require a key attestation, allow only the `attestation` proof type.
+Every presented key attestation must be signed by a wallet provider in the issuance-level `walletProviderTrustLists`, whether it is required or not; lists on an authorization server are not used for keys.
 
 ## Troubleshooting
 
@@ -82,4 +87,7 @@ Every presented key attestation must be signed by a wallet provider in the issua
 | `Wallet attestation is required but not provided`              | The wallet sends no attestation headers. Use a wallet that supports wallet attestation, or set `walletAttestationRequired: false`. |
 | `No wallet provider trust lists configured ...`                | Neither the authorization server nor the issuance configuration has `walletProviderTrustLists` (for key attestations: the issuance configuration). |
 | `... signer is not trusted by configured wallet provider trust lists` | The provider's certificate is not in the lists, or listed without a `WalletSolution` service type.             |
+| `The credential configuration requires a key attestation ...`  | The wallet sent a `jwt` proof without `key_attestation`. Use a wallet that sends key attestations, or remove `keyAttestationsRequired`. |
+| `The key attestation does not state an accepted key_storage value ...` (or `user_authentication`) | The attested level is not in the configured list. Add the level your wallets attest, if it meets your requirements. |
+| `The proof contains a key that is not listed in attested_keys ...` | The `jwt` proof is signed with a key the attestation does not cover.                                          |
 | `Wallet attestation verification failed: ...` or `Attestation proof x5c chain could not be validated` | Often a trust list problem: the list cannot be fetched or its signature does not match `verifierX509Der`/`verifierKey`. Check the server log for the reason. |

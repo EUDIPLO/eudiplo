@@ -37,7 +37,7 @@ function issuanceSession(overrides: Partial<SessionData> = {}): SessionData {
         tenantId: "tenant-1",
         createdAt: new Date(NOW.getTime() - DAY_MS),
         authorization_code: "code",
-        credentialPayload: {},
+        credentialPayload: { flow: "pre_authorized_code" },
         ...overrides,
     } as SessionData;
 }

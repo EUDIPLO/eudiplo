@@ -58,6 +58,7 @@ import { DeferredCredentialService } from "./deferred-credential.service.js";
 import { AuthorizationServerError } from "./domain/authorization-server-errors.js";
 import { InvalidCredentialOffer } from "./domain/credential-offer-errors.js";
 import { InvalidCredentialProof } from "./domain/credential-proof-errors.js";
+import type { KeyAttestationRequirements } from "./domain/key-attestation-requirements.js";
 import { DeferredCredentialRequestDto } from "./dto/deferred-credential-request.dto.js";
 import { NotificationRequestDto } from "./dto/notification-request.dto.js";
 import { OfferRequestDto, OfferResponse } from "./dto/offer-request.dto.js";
@@ -232,23 +233,28 @@ export class Oid4vciService {
         );
     }
 
+    /**
+     * Reject proof types the credential configuration does not support and
+     * return its key attestation requirements, which every proof must meet.
+     */
     private async enforceProofTypePolicy(
         tenantId: string,
         credentialConfigurationId: string,
         proofType: SupportedCredentialProofType,
-    ): Promise<void> {
-        const supportedProofTypes =
-            await this.credentialsService.getSupportedProofTypesForCredentialConfig(
+    ): Promise<KeyAttestationRequirements | undefined> {
+        const { proofTypes, keyAttestationsRequired } =
+            await this.credentialsService.getProofRequirementsForCredentialConfig(
                 tenantId,
                 credentialConfigurationId,
             );
 
-        if (!supportedProofTypes.includes(proofType as CredentialProofType)) {
+        if (!proofTypes.includes(proofType as CredentialProofType)) {
             throw new CredentialRequestException(
                 "invalid_proof",
                 `Proof type '${proofType}' is not supported for credential_configuration_id '${credentialConfigurationId}'`,
             );
         }
+        return keyAttestationsRequired;
     }
 
     /**
@@ -433,8 +439,9 @@ export class Oid4vciService {
             throw error;
         }
 
+        let keyAttestationsRequired: KeyAttestationRequirements | undefined;
         try {
-            await this.enforceProofTypePolicy(
+            keyAttestationsRequired = await this.enforceProofTypePolicy(
                 tenantId,
                 credentialConfigurationId,
                 parsedProofs.proofType,
@@ -498,6 +505,7 @@ export class Oid4vciService {
                         tenantId,
                         interval: claimsResult.interval,
                         issuanceSetId,
+                        keyAttestationsRequired,
                     })
                     .catch((error: unknown) => {
                         throw toHttpError(error);
@@ -523,6 +531,7 @@ export class Oid4vciService {
                 issuanceSetId,
                 batchSize: issuanceConfig.batchSize,
                 trustLists: issuanceConfig.walletProviderTrustLists ?? [],
+                keyAttestationsRequired,
                 onIssued: (credentialSize) =>
                     this.auditLogger.logCredentialIssuance(
                         logContext,

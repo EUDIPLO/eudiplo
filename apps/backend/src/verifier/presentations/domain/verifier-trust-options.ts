@@ -26,6 +26,14 @@ export function trustListAuthorities(
  * Trust options for verifying a presented credential: the resolved trust
  * lists, OpenID Federation trust anchors, revocation policy and clock skew.
  * Issuers must be listed as PID or EAA issuance services.
+ *
+ * Which `trusted_authorities` entry decides:
+ * - an `etsi_tl` trust list: the issuer must be listed in it. An
+ *   `openid_federation` entry of the same query does not widen it, because
+ *   federation trust is not yet authenticated against the trust anchor.
+ * - only `openid_federation`: the issuer must chain to one of its trust
+ *   anchors (`federation-only`).
+ * - none: the issuer is not checked.
  */
 export function verifierTrustOptions(input: {
     trustLists: TrustListRef[];
@@ -35,14 +43,17 @@ export function verifierTrustOptions(input: {
     statusCheckMode?: RevocationCheckMode;
     skewSeconds: number | undefined;
 }): VerifierOptions {
-    const federationAuthorities = input.authorities?.find(
-        (
-            auth,
-        ): auth is Extract<
-            DcqlTrustedAuthority,
-            { type: "openid_federation" }
-        > => auth.type === "openid_federation",
-    );
+    const federationAnchors =
+        input.authorities?.find(
+            (
+                auth,
+            ): auth is Extract<
+                DcqlTrustedAuthority,
+                { type: "openid_federation" }
+            > => auth.type === "openid_federation",
+        )?.values ?? [];
+    const federationDecides =
+        federationAnchors.length > 0 && input.trustLists.length === 0;
 
     return {
         trustListSource: {
@@ -55,10 +66,10 @@ export function verifierTrustOptions(input: {
                 ? { tenantId: input.tenantId }
                 : {}),
         },
-        federationTrustSource: federationAuthorities?.values.length
+        federationTrustSource: federationDecides
             ? {
-                  mode: "hybrid",
-                  trustAnchors: federationAuthorities.values.map((value) => ({
+                  mode: "federation-only",
+                  trustAnchors: federationAnchors.map((value) => ({
                       entityId: value,
                       entityConfigurationUri: `${value.replace(/\/$/, "")}/.well-known/openid-federation`,
                   })),

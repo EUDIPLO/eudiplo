@@ -42,9 +42,8 @@ export async function loadBundledConfigSchemaTexts(): Promise<
 }
 
 async function readSchemaManifest(): Promise<string[]> {
-    const text = await readCliTextAsset(
-        manifestAssetKey,
-        () => templateAssetUrl("schemas.manifest.json"),
+    const text = await readCliTextAsset(manifestAssetKey, () =>
+        templateAssetUrl("schemas.manifest.json"),
     );
     const parsed = JSON.parse(text);
     if (

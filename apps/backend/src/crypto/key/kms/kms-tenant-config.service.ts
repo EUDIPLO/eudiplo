@@ -1,13 +1,22 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { atomicWriteFileSync } from "@eudiplo/config-format/config-io.js";
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+    BadRequestException,
+    Injectable,
+    NotFoundException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ConfigMigrationService } from "../../../platform/config-portability/config-migration.service.js";
 import {
     type KmsConfig,
     parseRawKmsConfig,
 } from "../schemas/kms-config.schema.js";
+import {
+    KmsSecretNotStoredError,
+    redactKmsConfig,
+    restoreKmsSecrets,
+} from "./kms-config-secrets.js";
 import { KmsConfigService } from "./kms-config.service.js";
 import { KmsProviderRegistry } from "./kms-provider.registry.js";
 
@@ -55,6 +64,65 @@ export class KmsTenantConfigService {
 
     getEffectiveConfig(tenantId: string): KmsConfig {
         return this.kmsConfigService.getConfig(tenantId);
+    }
+
+    /**
+     * The tenant configuration for API responses: credentials are redacted,
+     * `${ENV_VAR}` placeholders of the stored file are kept.
+     */
+    getTenantConfigView(tenantId: string): KmsConfig | null {
+        const config = this.getTenantConfig(tenantId);
+        return config && redactKmsConfig(config, { keepEnvPlaceholders: true });
+    }
+
+    /**
+     * The effective configuration for API responses. Tenant providers are
+     * shown as stored (credentials redacted, placeholders kept); providers of
+     * the global configuration only with their non-secret settings.
+     */
+    getEffectiveConfigView(tenantId: string): KmsConfig {
+        const effective = this.getEffectiveConfig(tenantId);
+        const tenantProviders = new Map(
+            (this.getTenantConfig(tenantId)?.providers ?? []).map(
+                (provider) => [provider.id, provider],
+            ),
+        );
+        const view = redactKmsConfig(effective, {
+            keepEnvPlaceholders: false,
+        });
+        const tenantView = redactKmsConfig(
+            { providers: [...tenantProviders.values()] },
+            { keepEnvPlaceholders: true },
+        );
+        return {
+            ...view,
+            providers: view.providers.map(
+                (provider) =>
+                    tenantView.providers.find(
+                        (entry) => entry.id === provider.id,
+                    ) ?? provider,
+            ),
+        };
+    }
+
+    /**
+     * Replace the tenant configuration from an API request. A credential sent
+     * as the redaction marker keeps the stored value of the same provider.
+     */
+    updateTenantConfig(tenantId: string, config: KmsConfig): KmsConfig {
+        let restored: KmsConfig;
+        try {
+            restored = restoreKmsSecrets(
+                config,
+                this.getTenantConfig(tenantId),
+            );
+        } catch (error) {
+            if (error instanceof KmsSecretNotStoredError) {
+                throw new BadRequestException(error.message);
+            }
+            throw error;
+        }
+        return this.saveTenantConfig(tenantId, restored);
     }
 
     saveTenantConfig(tenantId: string, config: KmsConfig): KmsConfig {

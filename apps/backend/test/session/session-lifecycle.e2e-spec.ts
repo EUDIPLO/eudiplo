@@ -207,7 +207,7 @@ describe("session lifecycle module wiring", () => {
             id,
             tenantId: "tenant-a",
             authorization_code: id,
-            credentialPayload: { tx_code: "1234" },
+            credentialPayload: { flow: "pre_authorized_code", tx_code: "1234" },
         });
         // Rejections use the real library error shape (code in errorResponse).
         const verification = vi.fn().mockRejectedValue(

@@ -50,7 +50,9 @@ function createContext(
                     undefined,
                 body: typeof init?.body === "string" ? init.body : undefined,
             });
-            const route = routes[url.pathname] ?? { status: 200, body: {} };
+            // Like the backend, unknown paths are not found, so a wrong
+            // path shows up as a skipped check instead of passing.
+            const route = routes[url.pathname] ?? { status: 404, body: {} };
             return new Response(JSON.stringify(route.body ?? {}), {
                 status: route.status ?? 200,
             });
@@ -194,8 +196,8 @@ describe("authenticated doctor checks", () => {
         const { context, requests } = createContext(
             {
                 "/api/oauth2/token": { body: { access_token: "token-123" } },
-                "/version": { body: { version: packageJson.version } },
-                "/key-chain/providers/health": {
+                "/api/version": { body: { version: packageJson.version } },
+                "/api/key-chain/providers/health": {
                     body: [
                         {
                             providerId: "db",
@@ -217,24 +219,87 @@ describe("authenticated doctor checks", () => {
             requests.filter((request) => request.url.includes("token")),
         ).toHaveLength(1);
         expect(
-            requests.find((request) => request.url === "/version")
-                ?.authorization,
-        ).toBe("Bearer token-123");
+            requests
+                .filter((request) => request.authorization)
+                .map((request) => [request.url, request.authorization]),
+        ).toEqual([
+            ["/api/version", "Bearer token-123"],
+            ["/api/key-chain/providers/health", "Bearer token-123"],
+        ]);
+    });
+
+    it("keeps a path prefix of the instance URL for every request", async () => {
+        const { context, requests } = createContext(
+            {
+                "/eudiplo/api/oauth2/token": {
+                    body: { access_token: "token-123" },
+                },
+                "/eudiplo/api/version": {
+                    body: { version: packageJson.version },
+                },
+                "/eudiplo/api/key-chain/providers/health": { body: [] },
+                "/eudiplo/api/docs": {},
+                "/eudiplo/health": {},
+                "/console/": {},
+            },
+            credentials,
+        );
+
+        const checks = await runDoctor(
+            {
+                ...instance,
+                url: "https://eudiplo.example.com/eudiplo",
+                clientUrl: "https://eudiplo.example.com/console",
+            },
+            context,
+            [],
+        );
+
+        expect(requests.map((request) => request.url).sort()).toEqual([
+            "/console/",
+            "/eudiplo/api/docs",
+            "/eudiplo/api/key-chain/providers/health",
+            "/eudiplo/api/oauth2/token",
+            "/eudiplo/api/version",
+            "/eudiplo/health",
+        ]);
+        expect(find(checks, "API reachability").status).toBe("pass");
+        expect(find(checks, "health endpoint").status).toBe("pass");
+        expect(find(checks, "version compatibility").status).toBe("pass");
+        expect(find(checks, "client connectivity").status).toBe("pass");
     });
 
     it("skips when the backend is too old to have the endpoints", async () => {
         const { context } = createContext(
             {
                 "/api/oauth2/token": { body: { access_token: "token-123" } },
-                "/version": { status: 404 },
-                "/key-chain/providers/health": { status: 404 },
+                "/api/version": { status: 404 },
+                "/api/key-chain/providers/health": { status: 404 },
             },
             credentials,
         );
 
         const checks = await runDoctor(instance, context, []);
 
-        expect(find(checks, "version compatibility").status).toBe("skip");
+        expect(find(checks, "version compatibility")).toMatchObject({
+            status: "skip",
+            message: expect.stringContaining("/api/version"),
+        });
+        expect(find(checks, "KMS providers").status).toBe("skip");
+    });
+
+    it("skips only the KMS check on a backend without provider health", async () => {
+        const { context } = createContext(
+            {
+                "/api/oauth2/token": { body: { access_token: "token-123" } },
+                "/api/version": { body: { version: packageJson.version } },
+            },
+            credentials,
+        );
+
+        const checks = await runDoctor(instance, context, []);
+
+        expect(find(checks, "version compatibility").status).toBe("pass");
         expect(find(checks, "KMS providers").status).toBe("skip");
     });
 
@@ -242,7 +307,7 @@ describe("authenticated doctor checks", () => {
         const { context } = createContext(
             {
                 "/api/oauth2/token": { body: { access_token: "token-123" } },
-                "/version": { status: 500 },
+                "/api/version": { status: 500 },
             },
             credentials,
         );

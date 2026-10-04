@@ -49,6 +49,14 @@ const ATTESTATION = jwt({
 });
 const ATTESTATION_POP = jwt({ iss: "wallet-client", aud: ISSUER });
 
+const CODE_VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+/** PKCE binding of an authorization code issued by PAR or the IAE. */
+const PKCE = {
+    code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+    code_challenge_method: "S256",
+};
+
+/** Session of an authorization code bound to {@link PKCE}. */
 function session(overrides: Partial<SessionData> = {}): SessionData {
     return {
         id: "session-1",
@@ -61,8 +69,20 @@ function session(overrides: Partial<SessionData> = {}): SessionData {
         txCodeFailedAttempts: 0,
         consumed: false,
         authorization_code: "code-1",
+        auth_queries: PKCE,
         ...overrides,
     } as SessionData;
+}
+
+/** Session of a pre-authorized code offer. */
+function preAuthorizedSession(
+    overrides: Partial<SessionData> = {},
+): SessionData {
+    return session({
+        auth_queries: undefined,
+        credentialPayload: { flow: "pre_authorized_code" } as never,
+        ...overrides,
+    });
 }
 
 function request(headers: Record<string, string> = {}, url = "/token") {
@@ -271,6 +291,11 @@ describe("Built-in authorization server token endpoint", () => {
     let h: Harness;
     const token = (body: Record<string, unknown>, headers = {}) =>
         outcome(h.service.validateTokenRequest(body, request(headers), TENANT));
+    const codeGrant = {
+        grant_type: "authorization_code",
+        code: "c",
+        code_verifier: CODE_VERIFIER,
+    };
 
     beforeEach(() => {
         h = createHarness();
@@ -434,9 +459,7 @@ describe("Built-in authorization server token endpoint", () => {
             h.sessions.getByAuthorizationCode.mockResolvedValue(
                 session({ expiresAt: new Date(Date.now() + 60_000) }),
             );
-            expect(
-                await token({ grant_type: "authorization_code", code: "c" }),
-            ).toEqual({
+            expect(await token(codeGrant)).toEqual({
                 value: expect.objectContaining({
                     access_token: "access-token",
                 }),
@@ -462,6 +485,45 @@ describe("Built-in authorization server token endpoint", () => {
                     access_token: "access-token",
                 }),
             });
+        });
+
+        it("rejects a pre-authorized code redeemed with the authorization_code grant", async () => {
+            h.sessions.getByAuthorizationCode.mockResolvedValue(
+                preAuthorizedSession({ auth_queries: PKCE }),
+            );
+            expect(
+                await token({
+                    grant_type: "authorization_code",
+                    code: "code-1",
+                    code_verifier: CODE_VERIFIER,
+                }),
+            ).toEqual(
+                tokenError(
+                    "invalid_grant",
+                    "The provided code was not issued for this grant_type",
+                ),
+            );
+            expect(
+                h.oauth.verifyAuthorizationCodeAccessTokenRequest,
+            ).not.toHaveBeenCalled();
+        });
+
+        it("rejects an authorization code redeemed with the pre-authorized_code grant", async () => {
+            expect(
+                await token({
+                    grant_type:
+                        "urn:ietf:params:oauth:grant-type:pre-authorized_code",
+                    "pre-authorized_code": "code-1",
+                }),
+            ).toEqual(
+                tokenError(
+                    "invalid_grant",
+                    "The provided code was not issued for this grant_type",
+                ),
+            );
+            expect(
+                h.oauth.verifyPreAuthorizedCodeAccessTokenRequest,
+            ).not.toHaveBeenCalled();
         });
 
         it("allows a consumed session for the refresh grant", async () => {
@@ -604,7 +666,9 @@ describe("Built-in authorization server token endpoint", () => {
 
         it("does not check the client binding for pre-authorized codes", async () => {
             h.sessions.getByAuthorizationCode.mockResolvedValue(
-                session({ auth_queries: { client_id: "client-a" } }),
+                preAuthorizedSession({
+                    auth_queries: { client_id: "client-a" },
+                }),
             );
             const result = await token({
                 grant_type:
@@ -618,14 +682,7 @@ describe("Built-in authorization server token endpoint", () => {
 
     describe("PKCE", () => {
         const challenged = () =>
-            session({
-                auth_queries: {
-                    client_id: "client-a",
-                    code_challenge:
-                        "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-                    code_challenge_method: "S256",
-                },
-            });
+            session({ auth_queries: { client_id: "client-a", ...PKCE } });
 
         it("rejects a missing code_verifier", async () => {
             h.sessions.getByAuthorizationCode.mockResolvedValue(challenged());
@@ -653,26 +710,34 @@ describe("Built-in authorization server token endpoint", () => {
             const result = await token({
                 grant_type: "authorization_code",
                 code: "c",
-                code_verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+                code_verifier: CODE_VERIFIER,
             });
             expect(result).toHaveProperty("value");
         });
 
-        it("compares plain challenges literally", async () => {
+        it.each([
+            ["without code_challenge (e.g. issued by the IAE)", {}],
+            [
+                "with a plain code_challenge",
+                {
+                    code_challenge: "verifier",
+                    code_challenge_method: "plain",
+                },
+            ],
+        ])("rejects an authorization code %s", async (_, authQueries) => {
             h.sessions.getByAuthorizationCode.mockResolvedValue(
-                session({
-                    auth_queries: {
-                        code_challenge: "verifier",
-                        code_challenge_method: "plain",
-                    },
-                }),
+                session({ auth_queries: authQueries }),
             );
-            const result = await token({
-                grant_type: "authorization_code",
-                code: "c",
-                code_verifier: "verifier",
-            });
-            expect(result).toHaveProperty("value");
+            expect(
+                await token({
+                    grant_type: "authorization_code",
+                    code: "c",
+                    code_verifier: "verifier",
+                }),
+            ).toEqual(tokenError("invalid_grant", "PKCE verification failed"));
+            expect(
+                h.oauth.verifyAuthorizationCodeAccessTokenRequest,
+            ).not.toHaveBeenCalled();
         });
     });
 
@@ -682,6 +747,7 @@ describe("Built-in authorization server token endpoint", () => {
                 auth_queries: {
                     client_id: "client-a",
                     redirect_uri: "https://wallet.example/cb?keep=1",
+                    ...PKCE,
                 },
             });
         const codeRequest = (extra: Record<string, unknown> = {}) =>
@@ -689,6 +755,7 @@ describe("Built-in authorization server token endpoint", () => {
                 grant_type: "authorization_code",
                 code: "c",
                 client_id: "client-a",
+                code_verifier: CODE_VERIFIER,
                 ...extra,
             });
 
@@ -729,7 +796,7 @@ describe("Built-in authorization server token endpoint", () => {
 
         it("ignores redirect_uri when the code has none bound", async () => {
             h.sessions.getByAuthorizationCode.mockResolvedValue(
-                session({ auth_queries: { client_id: "client-a" } }),
+                session({ auth_queries: { client_id: "client-a", ...PKCE } }),
             );
             expect(
                 await codeRequest({ redirect_uri: "https://any.example/cb" }),
@@ -737,7 +804,9 @@ describe("Built-in authorization server token endpoint", () => {
         });
 
         it("does not compare redirect_uri for pre-authorized codes", async () => {
-            h.sessions.getByAuthorizationCode.mockResolvedValue(bound());
+            h.sessions.getByAuthorizationCode.mockResolvedValue(
+                preAuthorizedSession({ auth_queries: bound().auth_queries }),
+            );
             expect(
                 await token({
                     grant_type:
@@ -756,10 +825,19 @@ describe("Built-in authorization server token endpoint", () => {
             ...(tx_code ? { tx_code } : {}),
         });
         const withTxCode = (txCodeFailedAttempts = 0) =>
-            session({
-                credentialPayload: { tx_code: "1234" } as never,
+            preAuthorizedSession({
+                credentialPayload: {
+                    flow: "pre_authorized_code",
+                    tx_code: "1234",
+                } as never,
                 txCodeFailedAttempts,
             });
+
+        beforeEach(() => {
+            h.sessions.getByAuthorizationCode.mockResolvedValue(
+                preAuthorizedSession(),
+            );
+        });
 
         it("rejects a locked session before verifying", async () => {
             h.sessions.getByAuthorizationCode.mockResolvedValue(withTxCode(5));
@@ -784,7 +862,7 @@ describe("Built-in authorization server token endpoint", () => {
 
         it("ignores the counter when the offer has no tx_code", async () => {
             h.sessions.getByAuthorizationCode.mockResolvedValue(
-                session({ txCodeFailedAttempts: 10 }),
+                preAuthorizedSession({ txCodeFailedAttempts: 10 }),
             );
             expect(await token(preAuth())).toHaveProperty("value");
         });
@@ -861,7 +939,7 @@ describe("Built-in authorization server token endpoint", () => {
         it("expires the pre-authorized code with the tenant's session lifetime", async () => {
             const createdAt = new Date("2026-01-01T00:00:00.000Z");
             h.sessions.getByAuthorizationCode.mockResolvedValue(
-                session({ createdAt }),
+                preAuthorizedSession({ createdAt }),
             );
             h.sessionConfig.getEffectiveTtlSeconds.mockResolvedValue(600);
             await token(preAuth());
@@ -996,7 +1074,6 @@ describe("Built-in authorization server token endpoint", () => {
         );
 
         it("does not count invalid_grant when no tx_code is expected", async () => {
-            h.sessions.getByAuthorizationCode.mockResolvedValue(session());
             h.oauth.verifyPreAuthorizedCodeAccessTokenRequest.mockRejectedValue(
                 libraryError(
                     "invalid_grant",
@@ -1023,9 +1100,7 @@ describe("Built-in authorization server token endpoint", () => {
                     },
                 },
             );
-            expect(
-                await token({ grant_type: "authorization_code", code: "c" }),
-            ).toEqual(
+            expect(await token(codeGrant)).toEqual(
                 tokenError(
                     "invalid_dpop_proof",
                     "DPoP jkt mismatch second line",
@@ -1037,18 +1112,18 @@ describe("Built-in authorization server token endpoint", () => {
             h.oauth.verifyAuthorizationCodeAccessTokenRequest.mockRejectedValue(
                 { cause: { message: "inner" } },
             );
-            expect(
-                await token({ grant_type: "authorization_code", code: "c" }),
-            ).toEqual(tokenError("invalid_request", "inner"));
+            expect(await token(codeGrant)).toEqual(
+                tokenError("invalid_request", "inner"),
+            );
         });
 
         it("omits the description when nothing is known", async () => {
             h.oauth.verifyAuthorizationCodeAccessTokenRequest.mockRejectedValue(
                 {},
             );
-            expect(
-                await token({ grant_type: "authorization_code", code: "c" }),
-            ).toEqual(tokenError("invalid_request"));
+            expect(await token(codeGrant)).toEqual(
+                tokenError("invalid_request"),
+            );
         });
 
         it("maps refresh token errors", async () => {
@@ -1071,9 +1146,7 @@ describe("Built-in authorization server token endpoint", () => {
             h.oauth.createAccessTokenResponse.mockRejectedValue(
                 new Error("kms down"),
             );
-            expect(
-                await token({ grant_type: "authorization_code", code: "c" }),
-            ).toEqual(
+            expect(await token(codeGrant)).toEqual(
                 tokenError(
                     "invalid_request",
                     "Failed to create access token response",
@@ -1086,9 +1159,7 @@ describe("Built-in authorization server token endpoint", () => {
     describe("concurrent redemption", () => {
         it("rejects the request that loses the atomic single-use update", async () => {
             h.sessions.updateIfUnconsumed.mockResolvedValue(false);
-            expect(
-                await token({ grant_type: "authorization_code", code: "c" }),
-            ).toEqual(
+            expect(await token(codeGrant)).toEqual(
                 tokenError(
                     "invalid_grant",
                     "The credential offer has already been used",
@@ -1112,16 +1183,13 @@ describe("Built-in authorization server token endpoint", () => {
                             },
                             { type: "other", credential_configuration_id: "x" },
                         ]),
+                        ...PKCE,
                     },
                 }),
             );
             const before = Date.now();
             const result = await token(
-                {
-                    grant_type: "authorization_code",
-                    code: "c",
-                    client_id: "wallet-client",
-                },
+                { ...codeGrant, client_id: "wallet-client" },
                 {
                     "oauth-client-attestation": ATTESTATION,
                     "oauth-client-attestation-pop": ATTESTATION_POP,
@@ -1209,8 +1277,9 @@ describe("Built-in authorization server token endpoint", () => {
                 ],
             });
             h.sessions.getByAuthorizationCode.mockResolvedValue(
-                session({
+                preAuthorizedSession({
                     credentialPayload: {
+                        flow: "pre_authorized_code",
                         credentialConfigurationIds: ["a", 1, "b"],
                     } as never,
                 }),
