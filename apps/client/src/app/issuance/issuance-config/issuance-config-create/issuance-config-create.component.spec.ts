@@ -137,4 +137,45 @@ describe('issuer settings guided setup', () => {
     expect(component.stepError).toContain('unique');
     expect(service.saveConfiguration).not.toHaveBeenCalled();
   });
+
+  it('defaults the built-in token lifetime to 300 s and keeps explicit values', async () => {
+    await component.loadConfigForEdit();
+    expect(component.authorizationServers.at(0).get('token.lifetimeSeconds')!.value).toBe(300);
+    component.onSubmit();
+    expect(service.saveConfiguration.mock.calls[0][0].authorizationServers[0].token).toMatchObject({
+      lifetimeSeconds: 300,
+    });
+
+    service.getConfig.mockResolvedValue({
+      ...config,
+      authorizationServers: [
+        { ...config.authorizationServers[0], token: { lifetimeSeconds: 900 } },
+      ],
+    });
+    await component.loadConfigForEdit();
+    const payload = (component as any).buildConfigurationPayload();
+    expect(payload.authorizationServers[0].token).toMatchObject({ lifetimeSeconds: 900 });
+  });
+
+  it('switches token lifetime defaults with the server type unless the user edited it', async () => {
+    await component.loadConfigForEdit();
+    component.removeAuthorizationServer(0);
+    component.addAuthorizationServer();
+    const lifetime = () => component.authorizationServers.at(0).get('token.lifetimeSeconds')!;
+    expect(lifetime().value).toBe(3600);
+
+    component.authorizationServers.at(0).get('type')!.setValue('built-in');
+    component.onAuthorizationServerTypeChange(0, 'built-in');
+    expect(lifetime().value).toBe(300);
+
+    component.authorizationServers.at(0).get('type')!.setValue('chained');
+    component.onAuthorizationServerTypeChange(0, 'chained');
+    expect(lifetime().value).toBe(3600);
+
+    lifetime().setValue(1200);
+    lifetime().markAsDirty();
+    component.authorizationServers.at(0).get('type')!.setValue('built-in');
+    component.onAuthorizationServerTypeChange(0, 'built-in');
+    expect(lifetime().value).toBe(1200);
+  });
 });

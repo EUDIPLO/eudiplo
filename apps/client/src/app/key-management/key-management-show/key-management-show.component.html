@@ -32,9 +32,15 @@
         <button mat-icon-button (click)="viewAsJson()" matTooltip="View as JSON">
           <mat-icon>code</mat-icon>
         </button>
-        <button mat-icon-button (click)="exportKeyChain()" matTooltip="Export as config JSON">
-          <mat-icon>download</mat-icon>
-        </button>
+        @if (canExport) {
+          <button
+            mat-icon-button
+            (click)="exportKeyChain()"
+            matTooltip="Export as config JSON (includes the private key)"
+          >
+            <mat-icon>download</mat-icon>
+          </button>
+        }
         <button
           mat-icon-button
           (click)="deleteKey()"

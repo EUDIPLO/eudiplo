@@ -217,7 +217,16 @@ export class CredentialChainValidationService {
             throw error;
         }
         if (!store) {
-            if (enforceFederationPolicy) {
+            // Without a trust list to check against, configured federation
+            // trust anchors decide. Accepting the issuer here would skip the
+            // only configured issuer check.
+            if (
+                enforceFederationPolicy ||
+                (useFederation &&
+                    this.federationTrustService.isEnabled(
+                        federationTrustSource,
+                    ))
+            ) {
                 return {
                     verified: Boolean(federationTrustResult?.trusted),
                     matchedEntity: null,

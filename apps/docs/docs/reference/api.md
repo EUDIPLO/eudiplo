@@ -54,7 +54,7 @@ The endpoint accepts the credentials in the form or JSON body or as HTTP Basic a
 
 When `OIDC` is set, for example to use [Keycloak](../operate/keycloak.md), `/api/oauth2/token` is disabled and tokens come from the external provider.
 
-The session event stream `GET /api/session/{id}/events` is the one exception: browsers cannot set headers on an `EventSource`, so it takes the token as the `token` query parameter.
+This includes the session event stream `GET /api/session/{id}/events`, which does not accept tokens in the URL. Browsers cannot set headers on an `EventSource`, so read the stream from your backend.
 
 ## `@eudiplo/sdk-core`
 

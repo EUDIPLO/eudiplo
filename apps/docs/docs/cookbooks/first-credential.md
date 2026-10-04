@@ -20,12 +20,12 @@ A tenant `membership-demo` that issues an SD-JWT VC of type `urn:example:members
 2. Enter **tenant ID** `membership-demo` and **Name** `Membership Demo`.
 3. Under **Initial Admin Client → Client Roles**, keep `clients:manage` and add exactly these roles:
 
-    | Role                   | Allows                                                        |
-    | ---------------------- | ------------------------------------------------------------- |
-    | `issuance:manage`      | Keys, issuer settings and credential types                    |
-    | `issuance:offer`       | Creating credential offers and viewing sessions               |
-    | `presentation:manage`  | Verification configurations                                   |
-    | `presentation:request` | Creating presentation requests and viewing sessions           |
+    | Role                   | Allows                                                           |
+    | ---------------------- | ---------------------------------------------------------------- |
+    | `issuance:manage`      | Keys, issuer settings and credential types                       |
+    | `issuance:offer`       | Creating credential offers and viewing issuance sessions         |
+    | `presentation:manage`  | Verification configurations                                      |
+    | `presentation:request` | Creating presentation requests and viewing presentation sessions |
 
     Add `registrar:manage` only if your wallet needs registrar certificates. Never give a tenant client `tenants:manage`: it controls **all** tenants of the instance.
 

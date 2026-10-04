@@ -17,7 +17,12 @@ import {
 } from "./application/resolve-authorized-credential-configuration.js";
 import { ResolveDeferredCredentialRetrieval } from "./application/resolve-deferred-credential-retrieval.js";
 import { CredentialAccessTokenVerifier } from "./credential-access-token.verifier.js";
+import { InvalidCredentialProof } from "./domain/credential-proof-errors.js";
 import { DeferredTransactionStatus } from "./domain/deferred-transaction-status.js";
+import {
+    assertKeyAttestationRequirements,
+    type KeyAttestationRequirements,
+} from "./domain/key-attestation-requirements.js";
 import { DeferredCredentialRequestDto } from "./dto/deferred-credential-request.dto.js";
 import {
     CredentialRequestException,
@@ -58,6 +63,8 @@ export interface CreateDeferredTransactionParams {
     interval?: number;
     /** Opaque access-token fingerprint for active-credential batch grouping */
     issuanceSetId?: string;
+    /** Key attestation requirements of the requested credential configuration */
+    keyAttestationsRequired?: KeyAttestationRequirements;
 }
 
 /**
@@ -101,6 +108,7 @@ export class DeferredCredentialService {
             tenantId,
             interval = 5,
             issuanceSetId,
+            keyAttestationsRequired,
         } = params;
 
         this.traceService.getSpan()?.setAttributes({
@@ -154,10 +162,11 @@ export class DeferredCredentialService {
             tenantId,
             issuanceConfig.walletProviderTrustLists ?? [],
         );
-        const holderKeys = await verifier.verify(
+        const verified = await verifier.verify(
             proof,
             parsedCredentialRequest.proofType,
         );
+        const holderKeys = verified.holderKeys;
         if (parsedCredentialRequest.proofType === "attestation") {
             if (!Array.isArray(holderKeys) || holderKeys.length === 0) {
                 throw new CredentialRequestException(
@@ -171,6 +180,17 @@ export class DeferredCredentialService {
                     "Deferred issuance supports exactly one attested key",
                 );
             }
+        }
+        try {
+            assertKeyAttestationRequirements(keyAttestationsRequired, verified);
+        } catch (error) {
+            if (error instanceof InvalidCredentialProof) {
+                throw new CredentialRequestException(
+                    "invalid_proof",
+                    error.message,
+                );
+            }
+            throw error;
         }
         const holderCnf = holderKeys[0] as Jwk;
 

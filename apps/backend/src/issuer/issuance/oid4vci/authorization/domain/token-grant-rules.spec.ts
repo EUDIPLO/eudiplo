@@ -1,12 +1,9 @@
 import { calculateJwkThumbprint } from "jose";
 import { describe, expect, it } from "vitest";
-import {
-    assertS256CodeChallenge,
-    assertS256CodeChallengeIfPresent,
-    checkPkce,
-} from "./pkce.js";
+import { assertS256CodeChallenge, checkPkce, checkS256Pkce } from "./pkce.js";
 import { assertValidPushedAuthorizationRequest } from "./pushed-authorization-request.js";
 import {
+    assertCodeIssuedForGrant,
     assertIssuedToClient,
     authorizationDetailsForToken,
     builtInAccessTokenSettings,
@@ -44,6 +41,68 @@ describe("checkPkce", () => {
     });
 });
 
+describe("checkS256Pkce", () => {
+    const verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+    const s256 = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+
+    it("verifies the code_verifier against an S256 challenge", () => {
+        expect(checkS256Pkce(s256, "S256", verifier)).toBe("valid");
+        expect(checkS256Pkce(s256, "S256", "other")).toBe("mismatch");
+        expect(checkS256Pkce(s256, "S256", undefined)).toBe("missing_verifier");
+    });
+
+    it("never accepts a code without an S256 challenge", () => {
+        expect(checkS256Pkce(undefined, undefined, verifier)).toBe(
+            "missing_challenge",
+        );
+        expect(checkS256Pkce(undefined, "S256", undefined)).toBe(
+            "missing_challenge",
+        );
+        expect(checkS256Pkce(verifier, "plain", verifier)).toBe(
+            "missing_challenge",
+        );
+        expect(checkS256Pkce(s256, undefined, verifier)).toBe(
+            "missing_challenge",
+        );
+    });
+});
+
+describe("assertCodeIssuedForGrant", () => {
+    const preAuthorized =
+        "urn:ietf:params:oauth:grant-type:pre-authorized_code";
+
+    it("accepts each code with the grant it was issued for", () => {
+        expect(() =>
+            assertCodeIssuedForGrant(preAuthorized, "pre_authorized_code"),
+        ).not.toThrow();
+        expect(() =>
+            assertCodeIssuedForGrant(
+                "authorization_code",
+                "authorization_code",
+            ),
+        ).not.toThrow();
+        // Wallet-initiated authorization without a credential offer.
+        expect(() =>
+            assertCodeIssuedForGrant("authorization_code", undefined),
+        ).not.toThrow();
+    });
+
+    it("rejects switching the grant type", () => {
+        expect(() =>
+            assertCodeIssuedForGrant(
+                "authorization_code",
+                "pre_authorized_code",
+            ),
+        ).toThrow(expect.objectContaining({ code: "invalid_grant" }));
+        expect(() =>
+            assertCodeIssuedForGrant(preAuthorized, "authorization_code"),
+        ).toThrow(expect.objectContaining({ code: "invalid_grant" }));
+        expect(() =>
+            assertCodeIssuedForGrant(preAuthorized, undefined),
+        ).toThrow(expect.objectContaining({ code: "invalid_grant" }));
+    });
+});
+
 describe("assertS256CodeChallenge", () => {
     const s256 = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
 
@@ -67,35 +126,6 @@ describe("assertS256CodeChallenge", () => {
         expect(() => assertS256CodeChallenge(s256, undefined)).toThrow(
             expect.objectContaining({ code: "invalid_request" }),
         );
-    });
-});
-
-describe("assertS256CodeChallengeIfPresent", () => {
-    const s256 = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
-
-    it("accepts a request without PKCE parameters", () => {
-        expect(() =>
-            assertS256CodeChallengeIfPresent(undefined, undefined),
-        ).not.toThrow();
-    });
-
-    it("accepts an S256 challenge", () => {
-        expect(() =>
-            assertS256CodeChallengeIfPresent(s256, "S256"),
-        ).not.toThrow();
-    });
-
-    it("rejects plain, a challenge without method and a method without challenge", () => {
-        for (const [challenge, method] of [
-            [s256, "plain"],
-            [s256, undefined],
-            [undefined, "S256"],
-            [undefined, "plain"],
-        ]) {
-            expect(() =>
-                assertS256CodeChallengeIfPresent(challenge, method),
-            ).toThrow(expect.objectContaining({ code: "invalid_request" }));
-        }
     });
 });
 

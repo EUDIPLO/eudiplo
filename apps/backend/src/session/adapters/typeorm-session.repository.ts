@@ -21,6 +21,7 @@ import type {
 import type {
     SessionListQuery,
     SessionSummary,
+    SessionType,
 } from "../domain/session-list.js";
 import {
     parseSessionSearch,
@@ -39,6 +40,13 @@ import type {
     SessionCredentialOffer,
     SessionRepository,
 } from "../ports/session.repository.js";
+
+/** Where clause selecting one session type; any type when omitted. */
+function typeWhere(type?: SessionType): FindOptionsWhere<Session> {
+    if (type === "issuance") return { requestId: IsNull() };
+    if (type === "presentation") return { requestId: Not(IsNull()) };
+    return {};
+}
 
 @Injectable()
 export class TypeOrmSessionRepository implements SessionRepository {
@@ -104,8 +112,8 @@ export class TypeOrmSessionRepository implements SessionRepository {
         return (result.affected ?? 0) > 0;
     }
 
-    findForTenant(tenantId: string, id: string) {
-        return this.findSession({ tenantId, id });
+    findForTenant(tenantId: string, id: string, type?: SessionType) {
+        return this.findSession({ tenantId, id, ...typeWhere(type) });
     }
 
     findByIdForInternalFlow(id: string) {
@@ -332,8 +340,16 @@ export class TypeOrmSessionRepository implements SessionRepository {
         });
     }
 
-    async deleteForTenant(tenantId: string, sessionId: string): Promise<void> {
-        await this.sessions.delete({ id: sessionId, tenantId });
+    async deleteForTenant(
+        tenantId: string,
+        sessionId: string,
+        type?: SessionType,
+    ): Promise<void> {
+        await this.sessions.delete({
+            id: sessionId,
+            tenantId,
+            ...typeWhere(type),
+        });
     }
 
     async findExpiredSessionsForMaintenance(

@@ -11,6 +11,14 @@ import {
   UpdateIssuanceDto,
 } from '@eudiplo/sdk-core';
 
+/**
+ * Access token lifetime (seconds) applied when an authorization server has no
+ * `token.lifetimeSeconds`. The built-in AS issues short-lived (FAPI-style) access tokens.
+ */
+export function defaultAccessTokenLifetimeSeconds(type: string | undefined): number {
+  return type === 'built-in' ? 300 : 3600;
+}
+
 @Injectable({
   providedIn: 'root',
 })

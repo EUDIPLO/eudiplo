@@ -1,4 +1,5 @@
 import type { HttpException } from "@nestjs/common";
+import type { Jwk } from "@openid4vc/oauth2";
 import type { IssuerMetadataResult } from "@openid4vc/openid4vci";
 import { describe, expect, it, vi } from "vitest";
 import type { SessionData } from "../../../session/domain/session-data.js";
@@ -6,6 +7,10 @@ import { ResolveAuthorizedCredentialConfiguration } from "./application/resolve-
 import { ResolveDeferredCredentialRetrieval } from "./application/resolve-deferred-credential-retrieval.js";
 import { DeferredCredentialService } from "./deferred-credential.service.js";
 import { DeferredTransactionStatus } from "./domain/deferred-transaction-status.js";
+import type {
+    KeyAttestationRequirements,
+    VerifiedKeyAttestation,
+} from "./domain/key-attestation-requirements.js";
 import type { DeferredTransactionData } from "./ports/deferred-transaction.repository.js";
 
 const proof = (payload: Record<string, unknown>) =>
@@ -26,6 +31,7 @@ const transaction: DeferredTransactionData = {
 function setup(
     options: {
         holderKeys?: unknown[];
+        keyAttestation?: VerifiedKeyAttestation;
         nonceDeleted?: boolean;
         stored?: DeferredTransactionData | null;
         markRetrieved?: boolean;
@@ -41,7 +47,10 @@ function setup(
         markRetrieved: vi.fn(async () => options.markRetrieved ?? true),
         markExpired: vi.fn(),
     };
-    const verify = vi.fn(async () => options.holderKeys ?? [{ kty: "EC" }]);
+    const verify = vi.fn(async () => ({
+        holderKeys: (options.holderKeys ?? [{ kty: "EC" }]) as Jwk[],
+        keyAttestation: options.keyAttestation,
+    }));
     const prepare = vi.fn(async () => ({ verify }));
     const nonces = {
         delete: vi.fn(async () => options.nonceDeleted ?? true),
@@ -97,6 +106,7 @@ describe("DeferredCredentialService.createDeferredTransaction", () => {
         service: DeferredCredentialService,
         proofType: "jwt" | "attestation",
         proofs = [proof({ nonce: "n-1" })],
+        keyAttestationsRequired?: KeyAttestationRequirements,
     ) =>
         service.createDeferredTransaction({
             parsedCredentialRequest: {
@@ -107,6 +117,7 @@ describe("DeferredCredentialService.createDeferredTransaction", () => {
             session: { id: "session" } as SessionData,
             tenantId: "tenant",
             issuanceSetId: "set",
+            keyAttestationsRequired,
         });
 
     it("consumes the nonce, verifies the proof with the shared verifier and stores the holder key", async () => {
@@ -172,6 +183,44 @@ describe("DeferredCredentialService.createDeferredTransaction", () => {
                 "Deferred issuance supports exactly one attested key",
         });
         expect(many.transactions.create).not.toHaveBeenCalled();
+    });
+
+    it("enforces the key attestation requirements of the credential configuration", async () => {
+        const holderKey = { kty: "EC", crv: "P-256", x: "x", y: "y" };
+        const unattested = setup({ holderKeys: [holderKey] });
+        expect(
+            await protocolError(
+                create(unattested.service, "jwt", undefined, {}),
+            ),
+        ).toMatchObject({ error: "invalid_proof" });
+        expect(unattested.transactions.create).not.toHaveBeenCalled();
+
+        const moderate = setup({
+            holderKeys: [holderKey],
+            keyAttestation: {
+                attestedKeys: [holderKey],
+                keyStorage: ["iso_18045_moderate"],
+            },
+        });
+        expect(
+            await protocolError(
+                create(moderate.service, "jwt", undefined, {
+                    key_storage: ["iso_18045_high"],
+                }),
+            ),
+        ).toMatchObject({ error: "invalid_proof" });
+
+        const high = setup({
+            holderKeys: [holderKey],
+            keyAttestation: {
+                attestedKeys: [holderKey],
+                keyStorage: ["iso_18045_high"],
+            },
+        });
+        await create(high.service, "jwt", undefined, {
+            key_storage: ["iso_18045_high"],
+        });
+        expect(high.transactions.create).toHaveBeenCalledOnce();
     });
 });
 

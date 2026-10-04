@@ -109,10 +109,15 @@ describe("Presentation - OpenID Federation", () => {
         await app?.close();
     });
 
-    test("verifier processes SD-JWT when OpenID Federation trusted authority is configured", async () => {
-        const federationEntityId = "https://wallet-fed.example.org";
-        const trustAnchor = "https://ta-fed.example.org";
-
+    /**
+     * Present a PID signed by a self-signed issuer certificate for
+     * `issuerEntityId` whose entity configuration names `authorityHint`, and
+     * return the resulting session status.
+     */
+    async function presentFederationCredential(
+        issuerEntityId: string,
+        authorityHint: string,
+    ): Promise<string> {
         x509Lib.cryptoProvider.set(globalThis.crypto);
         const fedKeyPair = await generateKeyPair("ES256", {
             extractable: true,
@@ -121,7 +126,7 @@ describe("Presentation - OpenID Federation", () => {
         const fedCert = await x509Lib.X509CertificateGenerator.createSelfSigned(
             {
                 serialNumber: "01",
-                name: `C=DE, CN=${federationEntityId}`,
+                name: `C=DE, CN=${issuerEntityId}`,
                 notBefore: new Date(),
                 notAfter: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
                 signingAlgorithm: { name: "ECDSA", hash: "SHA-256" },
@@ -134,11 +139,11 @@ describe("Presentation - OpenID Federation", () => {
 
         const fedX5c = [fedCert.toString("base64")];
 
-        const _fedScope = nock(/wallet-fed\.example\.org/)
+        nock(new URL(issuerEntityId).origin)
             .get(/\/\.well-known\/openid-federation\/?$/)
             .reply(200, {
-                sub: federationEntityId,
-                authority_hints: [trustAnchor],
+                sub: issuerEntityId,
+                authority_hints: [authorityHint],
             });
 
         const presentationReq: PresentationRequest = {
@@ -186,14 +191,12 @@ describe("Presentation - OpenID Federation", () => {
                 ...callbacks,
             });
 
-        const submitRes = await client.submitOpenid4vpAuthorizationResponse({
+        await client.submitOpenid4vpAuthorizationResponse({
             authorizationResponsePayload:
                 authorizationResponse.authorizationResponsePayload,
             authorizationRequestPayload:
                 resolved.authorizationRequestPayload as Openid4vpAuthorizationRequest,
         });
-
-        expect(submitRes.response.status).toBe(200);
 
         const sessionRes = await request(app.getHttpServer())
             .get(`/session/${sessionId}`)
@@ -201,6 +204,31 @@ describe("Presentation - OpenID Federation", () => {
             .set("Authorization", `Bearer ${authToken}`)
             .expect(200);
 
-        expect(["completed", "failed"]).toContain(sessionRes.body.status);
+        return sessionRes.body.status;
+    }
+
+    test("accepts an SD-JWT whose issuer chains to the configured federation trust anchor", async () => {
+        await expect(
+            presentFederationCredential(
+                "https://wallet-fed.example.org",
+                "https://ta-fed.example.org",
+            ),
+        ).resolves.toBe("completed");
+    });
+
+    test("rejects an SD-JWT whose issuer is not in the configured federation", async () => {
+        // Only an openid_federation trusted authority is configured: the
+        // federation must decide, there is no trust list to fall back to.
+        // The issuer belongs to another federation whose anchor has no
+        // superior.
+        nock("https://other-ta.example.net")
+            .get(/\/\.well-known\/openid-federation\/?$/)
+            .reply(200, { sub: "https://other-ta.example.net" });
+        await expect(
+            presentFederationCredential(
+                "https://rogue-issuer.example.net",
+                "https://other-ta.example.net",
+            ),
+        ).resolves.toBe("failed");
     });
 });

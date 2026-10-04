@@ -2,7 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { KeyUsageType } from "../types/key-usage-type.js";
 
 /**
- * EC JWK including private key material for export.
+ * EC JWK for export. Includes the private key for database-held keys only.
  */
 class ExportEcJwk {
     @ApiProperty({ description: "Key type", example: "EC" })
@@ -17,8 +17,11 @@ class ExportEcJwk {
     @ApiProperty({ description: "Y coordinate (base64url)" })
     y!: string;
 
-    @ApiProperty({ description: "Private key (base64url)" })
-    d!: string;
+    @ApiPropertyOptional({
+        description:
+            "Private key (base64url). Only present for keys held in the database (`db` provider); external KMS keys are exported without private material.",
+    })
+    d?: string;
 
     @ApiPropertyOptional({ description: "Algorithm", example: "ES256" })
     alg?: string;
@@ -60,7 +63,10 @@ export class KeyChainExportDto {
     })
     usageType!: KeyUsageType;
 
-    @ApiProperty({ description: "The private key in JWK format (EC)." })
+    @ApiProperty({
+        description:
+            "The key in JWK format (EC). Contains the private key for database-held keys and only the public key for external KMS providers.",
+    })
     key!: ExportEcJwk;
 
     @ApiPropertyOptional({

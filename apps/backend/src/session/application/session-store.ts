@@ -1,5 +1,9 @@
 import type { SessionData, SessionUpdate } from "../domain/session-data.js";
-import type { SessionListQuery, SessionPage } from "../domain/session-list.js";
+import type {
+    SessionListQuery,
+    SessionPage,
+    SessionType,
+} from "../domain/session-list.js";
 import type {
     SessionCredentialOffer,
     SessionRepository,
@@ -35,6 +39,9 @@ type SessionStoreRepository = Pick<
  * matches, and never queries with an empty key: an absent column value in a
  * TypeORM `where` clause would otherwise match any session.
  * Every resolved session is bound to the current request's context.
+ *
+ * The management methods take an optional `scope`: the only session type the
+ * caller may access. Sessions of the other type then read as missing.
  */
 export class SessionStore {
     constructor(
@@ -45,9 +52,10 @@ export class SessionStore {
     getForTenant(
         tenantId: string,
         sessionId: string | undefined,
+        scope?: SessionType,
     ): Promise<SessionData> {
         return this.lookup(sessionId, (id) =>
-            this.sessions.findForTenant(tenantId, id),
+            this.sessions.findForTenant(tenantId, id, scope),
         );
     }
 
@@ -132,11 +140,16 @@ export class SessionStore {
     async listForTenant(
         tenantId: string,
         query: SessionListQuery,
+        scope?: SessionType,
     ): Promise<SessionPage> {
-        const { items, total } = await this.sessions.listForTenant(
-            tenantId,
-            query,
-        );
+        // A type filter outside the scope matches no session.
+        const { items, total } =
+            scope && query.type && query.type !== scope
+                ? { items: [], total: 0 }
+                : await this.sessions.listForTenant(tenantId, {
+                      ...query,
+                      type: query.type ?? scope,
+                  });
         return {
             items,
             total,
@@ -146,9 +159,13 @@ export class SessionStore {
         };
     }
 
-    /** Missing sessions and sessions owned by another tenant are both no-ops. */
-    deleteForTenant(tenantId: string, sessionId: string): Promise<void> {
-        return this.sessions.deleteForTenant(tenantId, sessionId);
+    /** Missing sessions, other tenants' sessions and sessions outside `scope` are no-ops. */
+    deleteForTenant(
+        tenantId: string,
+        sessionId: string,
+        scope?: SessionType,
+    ): Promise<void> {
+        return this.sessions.deleteForTenant(tenantId, sessionId, scope);
     }
 
     async findCredentialOffer(

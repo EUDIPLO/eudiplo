@@ -1,5 +1,8 @@
 import type { SessionStatus } from "./session-state.js";
 
+/** Presentation sessions have a `requestId`; issuance sessions have none. */
+export type SessionType = "issuance" | "presentation";
+
 export const SESSION_SORT_FIELDS = [
     "id",
     "status",
@@ -13,7 +16,7 @@ export interface SessionListQuery {
     pageSize: number;
     /** Matches any of the listed statuses. */
     status?: SessionStatus[];
-    type?: "issuance" | "presentation";
+    type?: SessionType;
     createdFrom?: Date;
     createdTo?: Date;
     updatedFrom?: Date;

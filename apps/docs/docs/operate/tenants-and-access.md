@@ -92,6 +92,14 @@ put in offers, `allowedPresentationConfigs` the presentation configurations it
 may request. Other IDs are rejected with `403`; an empty or missing list allows
 all.
 
+The session endpoints (`/api/session`) need `issuance:offer` or
+`presentation:request` and show a client only the sessions of its side:
+issuance sessions with `issuance:offer` or `issuance:manage`, presentation
+sessions with `presentation:request` or `presentation:manage`. Other sessions
+are left out of the list, answer `404` and are not deleted. Changing credential
+status (`POST /api/session/revoke`) needs `issuance:offer` or
+`issuance:manage`.
+
 Typical role sets:
 
 | Caller                                   | Roles                                                         |
@@ -100,6 +108,12 @@ Typical role sets:
 | CI pipeline that imports configuration   | `tenant:admin`                                                |
 | Person who configures a tenant           | `issuance:manage`, `presentation:manage`, `clients:manage`, `users:manage` |
 | Platform operator                        | `tenants:manage`, on a client without a tenant                |
+
+`issuance:manage` and `presentation:manage` create, import, rotate and delete
+key chains, but exporting a key chain with its private key
+(`GET /api/key-chain/{id}/export`) and the tenant KMS provider configuration
+(`/api/key-chain/providers/config`), which contains provider credentials, need
+`tenant:admin` or `tenants:manage`, like configuration bundles.
 
 Only a caller that has `tenants:manage` can grant `tenants:manage` or
 `tenant:admin`, to clients, users or through an imported bundle.

@@ -52,25 +52,8 @@ const tokenRoute = {
   }),
 };
 
-class FakeEventSource {
-  static instances: FakeEventSource[] = [];
-  onopen: (() => void) | null = null;
-  onmessage: ((event: { data: string }) => void) | null = null;
-  onerror: (() => void) | null = null;
-  closed = false;
-
-  constructor(readonly url: string) {
-    FakeEventSource.instances.push(this);
-  }
-
-  close() {
-    this.closed = true;
-  }
-}
-
 afterEach(() => {
   vi.unstubAllGlobals();
-  FakeEventSource.instances = [];
 });
 
 describe("EudiploClient URLs", () => {
@@ -120,51 +103,33 @@ describe("EudiploClient URLs", () => {
     expect(requests).toEqual([{ method: "GET", url: `${baseUrl}/health` }]);
   });
 
-  it("subscribes to session events under /api/session/:id/events", async () => {
-    vi.stubGlobal("EventSource", FakeEventSource);
-    const { fetch } = createFetch(tokenRoute);
-    const client = new EudiploClient({
-      baseUrl,
-      clientId: "client",
-      clientSecret: "secret",
-      fetch,
-    });
-
-    const subscription = await client.subscribeToSession("session-1");
-
-    expect(FakeEventSource.instances).toHaveLength(1);
-    expect(FakeEventSource.instances[0].url).toBe(
-      `${baseUrl}/api/session/session-1/events?token=token%20value`,
-    );
-    subscription.close();
-    expect(FakeEventSource.instances[0].closed).toBe(true);
-  });
-
-  it("resolves waitForSessionWithSse on a completed event", async () => {
-    vi.stubGlobal("EventSource", FakeEventSource);
-    const { fetch } = createFetch(tokenRoute);
-    const client = new EudiploClient({
-      baseUrl,
-      clientId: "client",
-      clientSecret: "secret",
-      fetch,
-    });
-
-    const result = client.waitForSessionWithSse("session-1");
-    await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1));
-    const source = FakeEventSource.instances[0];
-    expect(source.url).toBe(
-      `${baseUrl}/api/session/session-1/events?token=token%20value`,
-    );
+  it("streams session events from /api/session/:id/events without a token in the URL", async () => {
     const event = {
       id: "session-1",
       status: "completed",
       updatedAt: "2026-01-01T00:00:00.000Z",
     };
-    source.onmessage?.({ data: JSON.stringify(event) });
+    const { fetch, requests } = createFetch({
+      ...tokenRoute,
+      [`GET ${baseUrl}/api/session/session-1/events`]: new Response(
+        `data: ${JSON.stringify(event)}\n\n`,
+        { headers: { "Content-Type": "text/event-stream" } },
+      ),
+    });
+    const client = new EudiploClient({
+      baseUrl,
+      clientId: "client",
+      clientSecret: "secret",
+      fetch,
+    });
 
-    await expect(result).resolves.toEqual(event);
-    expect(source.closed).toBe(true);
+    await expect(client.waitForSessionWithSse("session-1")).resolves.toEqual(
+      event,
+    );
+    expect(requests).toContainEqual({
+      method: "GET",
+      url: `${baseUrl}/api/session/session-1/events`,
+    });
   });
 
   it("fetches a missing DC API request object from the unprefixed wallet endpoint", async () => {

@@ -206,7 +206,11 @@ const session = await client.waitForSession(sessionId, {
 ### `subscribeToSession(sessionId, options)`
 
 Subscribe to real-time session status updates via Server-Sent Events (SSE).
-This is more efficient than polling and provides instant updates.
+This is more efficient than polling and provides instant updates. The stream
+is read with `fetch` and the client's access token in the `Authorization`
+header, so it works in Node.js 18+ and in browsers. The client holds your
+client secret: use it in your backend, not in a web page. Failed connections
+are retried up to three times in total.
 
 ```typescript
 const subscription = await client.subscribeToSession(sessionId, {
@@ -227,7 +231,8 @@ subscription.close();
 ### `waitForSessionWithSse(sessionId, options)`
 
 Wait for session completion using SSE instead of polling. Returns a Promise
-that resolves when the session completes.
+that resolves when the session completes and rejects when it fails or expires,
+or when the stream cannot be opened.
 
 ```typescript
 try {

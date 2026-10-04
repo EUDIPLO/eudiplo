@@ -37,7 +37,10 @@ import {
     ISSUANCE_CONFIG_REPOSITORY,
     type IssuanceConfigRepository,
 } from "./ports/issuance-config.repository.js";
-import { IssuanceConfigSchema } from "./schemas/issuance.schema.js";
+import {
+    IssuanceConfigSchema,
+    unsupportedFederationOption,
+} from "./schemas/issuance.schema.js";
 /**
  * Service for managing issuance configurations.
  * It provides methods to get, store, and delete issuance configurations.
@@ -296,6 +299,14 @@ export class IssuanceService {
         const filteredValue = Object.fromEntries(
             Object.entries(value).filter(([, v]) => v !== undefined),
         );
+
+        // The HTTP API does not validate `federation` against the schema.
+        const federationProblem = unsupportedFederationOption(
+            (filteredValue as Partial<IssuanceDto>).federation,
+        );
+        if (federationProblem) {
+            throw new BadRequestException(federationProblem);
+        }
 
         const hasIncomingAuthorizationServers =
             Object.prototype.hasOwnProperty.call(

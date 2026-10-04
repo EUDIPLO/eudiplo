@@ -137,14 +137,17 @@ describe("session lifecycle module wiring", () => {
         const { SessionController } = await import(
             "../../src/session/session.controller.js"
         );
+        const { Role } = await import("../../src/auth/roles/role.enum.js");
         const controller = app.get(SessionController);
         const repository = db.getRepository(entities.Session);
         const id = randomUUID();
         await repository.save({ id, tenantId: "tenant-a" });
-        const token = { entity: { id: "tenant-a" } } as Parameters<
+        // The role guard does not run here; give the roles it would require.
+        const roles = [Role.IssuanceOffer, Role.PresentationRequest];
+        const token = { entity: { id: "tenant-a" }, roles } as Parameters<
             typeof controller.getAllSessions
         >[0];
-        const otherTenant = { entity: { id: "tenant-b" } } as Parameters<
+        const otherTenant = { entity: { id: "tenant-b" }, roles } as Parameters<
             typeof controller.getAllSessions
         >[0];
         const query = { page: 1, pageSize: 25 };
@@ -207,7 +210,7 @@ describe("session lifecycle module wiring", () => {
             id,
             tenantId: "tenant-a",
             authorization_code: id,
-            credentialPayload: { tx_code: "1234" },
+            credentialPayload: { flow: "pre_authorized_code", tx_code: "1234" },
         });
         // Rejections use the real library error shape (code in errorResponse).
         const verification = vi.fn().mockRejectedValue(
@@ -337,7 +340,11 @@ describe("session lifecycle module wiring", () => {
             await sessionStore.updateForTenant("tenant-a", id, {
                 requestObject: "request",
             });
-            const token = { entity: { id: "tenant-a" } } as Parameters<
+            const { Role } = await import("../../src/auth/roles/role.enum.js");
+            const token = {
+                entity: { id: "tenant-a" },
+                roles: [Role.IssuanceOffer, Role.PresentationRequest],
+            } as Parameters<
                 InstanceType<typeof SessionController>["getSession"]
             >[1];
             const detail = await app

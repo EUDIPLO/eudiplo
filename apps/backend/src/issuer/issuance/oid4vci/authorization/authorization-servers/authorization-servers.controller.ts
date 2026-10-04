@@ -28,7 +28,6 @@ import {
     ChainedAsParResponseDto,
     ChainedAsTokenRequestDto,
     ChainedAsTokenResponseDto,
-    extractDpopJkt,
     renderWalletInvocationPage,
 } from "../shared/index.js";
 import { AuthorizationServersService } from "./authorization-servers.service.js";
@@ -73,7 +72,6 @@ export class AuthorizationServersController {
         @Headers("oauth-client-attestation-pop")
         clientAttestationPopJwt?: string,
     ): Promise<ChainedAsParResponseDto> {
-        const dpopJkt = dpopJwt ? extractDpopJkt(dpopJwt) : undefined;
         const clientAttestation =
             clientAttestationJwt && clientAttestationPopJwt
                 ? { clientAttestationJwt, clientAttestationPopJwt }
@@ -83,7 +81,7 @@ export class AuthorizationServersController {
             tenantId,
             authorizationServerId,
             body,
-            dpopJkt,
+            dpopJwt,
             clientAttestation,
         );
     }

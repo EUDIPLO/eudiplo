@@ -14,7 +14,13 @@ import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { KmsConfigDto, KmsProviderInfoDto } from '@eudiplo/sdk-core';
 import { JsonViewDialogComponent } from '../../issuance/credential-config/credential-config-create/json-view-dialog/json-view-dialog.component';
 import { kmsConfigSchema } from '../../utils/schemas';
-import { KeyChainService } from '../key-chain.service';
+import {
+  KEY_ADMIN_FORBIDDEN_MESSAGE,
+  KEY_ADMIN_ROLES,
+  KeyChainService,
+  isForbidden,
+} from '../key-chain.service';
+import { JwtService } from '../../services/jwt.service';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-ownership-notice.component';
 
@@ -74,8 +80,17 @@ export class KeyManagementProvidersComponent implements OnInit {
   constructor(
     private readonly keyChainService: KeyChainService,
     private readonly snackBar: MatSnackBar,
-    private readonly dialog: MatDialog
+    private readonly dialog: MatDialog,
+    private readonly jwtService: JwtService
   ) {}
+
+  /**
+   * The tenant KMS configuration contains provider credentials and is only
+   * available to tenant administrators.
+   */
+  get canManageTenantConfig(): boolean {
+    return this.jwtService.hasRole(KEY_ADMIN_ROLES);
+  }
 
   ngOnInit(): void {
     this.loadProviders();
@@ -103,7 +118,9 @@ export class KeyManagementProvidersComponent implements OnInit {
         this.toRow(provider, healthByProvider.get(provider.name))
       );
 
-      await this.loadTenantConfigEditor();
+      if (this.canManageTenantConfig) {
+        await this.loadTenantConfigEditor();
+      }
     } catch (error) {
       console.error('Failed to load KMS providers:', error);
       this.snackBar.open('Failed to load KMS providers', 'Dismiss', { duration: 4000 });
@@ -140,12 +157,18 @@ export class KeyManagementProvidersComponent implements OnInit {
     try {
       const result = await this.keyChainService.updateTenantKmsConfig(config);
       this.hasTenantConfig = !!result.tenantConfig;
-      this.tenantConfig = (result.tenantConfig ?? result.effectiveConfig) as KmsConfigDto;
+      this.tenantConfig = this.editableConfig(result.tenantConfig);
       this.snackBar.open('Tenant KMS configuration saved', 'Dismiss', { duration: 3000 });
       await this.loadProviders();
     } catch (error) {
       console.error('Failed to save tenant KMS config:', error);
-      this.snackBar.open('Failed to save tenant KMS configuration', 'Dismiss', { duration: 4000 });
+      this.snackBar.open(
+        isForbidden(error)
+          ? KEY_ADMIN_FORBIDDEN_MESSAGE
+          : 'Failed to save tenant KMS configuration',
+        'Dismiss',
+        { duration: 4000 }
+      );
     } finally {
       this.isSavingConfig = false;
     }
@@ -161,7 +184,13 @@ export class KeyManagementProvidersComponent implements OnInit {
       await this.loadProviders();
     } catch (error) {
       console.error('Failed to reset tenant KMS config:', error);
-      this.snackBar.open('Failed to reset tenant KMS configuration', 'Dismiss', { duration: 4000 });
+      this.snackBar.open(
+        isForbidden(error)
+          ? KEY_ADMIN_FORBIDDEN_MESSAGE
+          : 'Failed to reset tenant KMS configuration',
+        'Dismiss',
+        { duration: 4000 }
+      );
     } finally {
       this.isSavingConfig = false;
     }
@@ -170,7 +199,17 @@ export class KeyManagementProvidersComponent implements OnInit {
   private async loadTenantConfigEditor(): Promise<void> {
     const config = await this.keyChainService.getTenantKmsConfig();
     this.hasTenantConfig = !!config.tenantConfig;
-    this.tenantConfig = (config.tenantConfig ?? config.effectiveConfig) as KmsConfigDto;
+    this.tenantConfig = this.editableConfig(config.tenantConfig);
+  }
+
+  /**
+   * The editor holds only the tenant's own providers. Credentials arrive as
+   * `<redacted>`; sent back unchanged, the backend keeps the stored value.
+   * Global providers are not copied in: their credentials are not stored for
+   * the tenant, so saving them would be rejected.
+   */
+  private editableConfig(tenantConfig: unknown): KmsConfigDto {
+    return (tenantConfig as KmsConfigDto | null | undefined) ?? { providers: [] };
   }
 
   private toRow(provider: KmsProviderInfoDto, health?: ProviderHealthItem): ProviderRow {

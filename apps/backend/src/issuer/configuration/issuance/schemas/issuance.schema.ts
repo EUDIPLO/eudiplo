@@ -281,11 +281,41 @@ const FederationTrustAnchorConfigSchema = z
     .describe("Trust anchor reference for OpenID Federation.")
     .strict();
 
+const UNSUPPORTED_FEDERATION_ROLE =
+    "Only the federation role 'leaf' is supported: EUDIPLO does not act as a trust anchor or intermediate";
+const UNSUPPORTED_FEDERATION_SIGNING_POLICY =
+    "enforceSigningPolicy cannot be disabled: federation trust checks are always enforced";
+
+/**
+ * Federation options the schema accepts but EUDIPLO cannot honor: a role
+ * other than `leaf` (no entity configuration is published) and a disabled
+ * signing policy (federation checks are always enforced).
+ *
+ * @returns the reason, or `undefined` when the options are supported.
+ */
+export function unsupportedFederationOption(
+    federation:
+        | { role?: string | null; enforceSigningPolicy?: boolean | null }
+        | null
+        | undefined,
+): string | undefined {
+    if (federation?.role != null && federation.role !== "leaf") {
+        return UNSUPPORTED_FEDERATION_ROLE;
+    }
+    if (federation?.enforceSigningPolicy === false) {
+        return UNSUPPORTED_FEDERATION_SIGNING_POLICY;
+    }
+    return undefined;
+}
+
 const FederationConfigSchema = z
     .object({
         role: z
             .enum(["trust_anchor", "intermediate", "leaf"])
             .optional()
+            .refine((role) => !unsupportedFederationOption({ role }), {
+                message: UNSUPPORTED_FEDERATION_ROLE,
+            })
             .describe("Federation role for this issuer."),
         mode: z
             .enum(["federation-only", "hybrid"])
@@ -298,6 +328,11 @@ const FederationConfigSchema = z
         enforceSigningPolicy: z
             .boolean()
             .optional()
+            .refine(
+                (enforceSigningPolicy) =>
+                    !unsupportedFederationOption({ enforceSigningPolicy }),
+                { message: UNSUPPORTED_FEDERATION_SIGNING_POLICY },
+            )
             .describe("Enforce strict signing policy checks."),
         cacheTtlSeconds: z.coerce
             .number()

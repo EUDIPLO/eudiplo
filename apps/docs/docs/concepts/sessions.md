@@ -59,7 +59,7 @@ ISO 18013-7 responses are posted by your own page with the session ID, so these 
 
 ## Finding sessions
 
-`GET /api/session` lists the sessions of the caller's tenant, most recently updated first. All filters are optional, combined with AND, and always limited to the tenant.
+`GET /api/session` lists the sessions of the caller's tenant, most recently updated first. All filters are optional, combined with AND, and always limited to the tenant and to the session types the client's roles allow ([Tenants and access](../operate/tenants-and-access.md#api-clients-with-least-privilege)).
 
 | Parameter                   | Matches                                                                                                                         |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |

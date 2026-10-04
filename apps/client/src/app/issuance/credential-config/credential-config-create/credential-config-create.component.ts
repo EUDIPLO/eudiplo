@@ -321,6 +321,10 @@ export class CredentialConfigCreateComponent implements OnInit {
       vctStringControl?.updateValueAndValidity();
     });
 
+    this.form
+      .get('activeCredentialsEnabled')
+      ?.valueChanges.subscribe(() => this.syncStatusManagementWithActiveCredentials());
+
     if (this.route.snapshot.params['id']) {
       this.create = false;
       this.guidedMode = false;
@@ -572,6 +576,20 @@ export class CredentialConfigCreateComponent implements OnInit {
   }
 
   /**
+   * Single Active Credential revokes earlier credentials via the status list, so status
+   * management is forced on (and locked) while it is enabled.
+   */
+  private syncStatusManagementWithActiveCredentials(): void {
+    const statusManagement = this.form.get('statusManagement');
+    if (this.form.get('activeCredentialsEnabled')?.value) {
+      statusManagement?.setValue(true);
+      statusManagement?.disable();
+    } else {
+      statusManagement?.enable();
+    }
+  }
+
+  /**
    * Patch form with configuration data (reusable for edit mode and JSON load)
    */
   private patchFormFromConfig(config: CredentialConfigCreate): void {
@@ -639,6 +657,7 @@ export class CredentialConfigCreateComponent implements OnInit {
         (normalizedConfig.config as any)?.credentialReusePolicy?.options?.[0]
           ?.reissue_trigger_lifetime_left || 86400,
     } as any);
+    this.syncStatusManagementWithActiveCredentials();
 
     const flatFields = this.flattenFieldDefinitionsForForm(normalizedConfig.fields || []);
     this.fields.clear();
@@ -1101,6 +1120,11 @@ export class CredentialConfigCreateComponent implements OnInit {
       enabled: formValue.activeCredentialsEnabled,
       tracking: 'internal',
     };
+    // The status management toggle is disabled (and thus missing from form.value) while
+    // Single Active Credential is on, which requires it.
+    formValue.statusManagement = !!(
+      formValue.activeCredentialsEnabled || this.form.get('statusManagement')?.value
+    );
 
     formValue.fields = this.buildFieldsPayload(formValue.fields || []);
 

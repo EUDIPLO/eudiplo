@@ -11,6 +11,18 @@ import {
     withMeta,
 } from "../../../shared/common/zod/zod-schema.util.js";
 
+/**
+ * Fields that hold credentials. Their values are never returned by the API
+ * and are replaced by placeholders in configuration bundle exports; see
+ * {@link KMS_SECRET_PATHS}.
+ */
+const secretFields = new WeakSet<z.ZodType>();
+
+function secretField<T extends z.ZodType>(schema: T): T {
+    secretFields.add(schema);
+    return schema;
+}
+
 const KMS_PROVIDER_TYPES = [
     "db",
     "vault",
@@ -34,9 +46,11 @@ export const HttpAuthBearerConfigSchema = z.strictObject({
             "Static Bearer token sent as Authorization: Bearer <token>.",
         examples: ["bearer"],
     }),
-    token: textField(
-        "Bearer token value. Supports ${ENV_VAR} placeholders.",
-        "${KMS_API_KEY}",
+    token: secretField(
+        textField(
+            "Bearer token value. Supports ${ENV_VAR} placeholders.",
+            "${KMS_API_KEY}",
+        ),
     ),
 });
 
@@ -54,9 +68,11 @@ export const HttpAuthOauth2ConfigSchema = z.strictObject({
         "OAuth 2.0 client ID. Supports ${ENV_VAR} placeholders.",
         "${KMS_CLIENT_ID}",
     ),
-    clientSecret: textField(
-        "OAuth 2.0 client secret. Supports ${ENV_VAR} placeholders.",
-        "${KMS_CLIENT_SECRET}",
+    clientSecret: secretField(
+        textField(
+            "OAuth 2.0 client secret. Supports ${ENV_VAR} placeholders.",
+            "${KMS_CLIENT_SECRET}",
+        ),
     ),
     scope: optionalTextField(
         "Space-separated list of OAuth 2.0 scopes to request. Optional.",
@@ -123,9 +139,11 @@ export const VaultKmsConfigSchema = BaseKmsProviderConfigSchema.extend({
         "URL of the HashiCorp Vault instance. Supports ${ENV_VAR} placeholders.",
         "${VAULT_URL}",
     ),
-    vaultToken: textField(
-        "Authentication token for HashiCorp Vault. Supports ${ENV_VAR} placeholders.",
-        "${VAULT_TOKEN}",
+    vaultToken: secretField(
+        textField(
+            "Authentication token for HashiCorp Vault. Supports ${ENV_VAR} placeholders.",
+            "${VAULT_TOKEN}",
+        ),
     ),
 });
 
@@ -142,9 +160,11 @@ export const AwsKmsConfigSchema = BaseKmsProviderConfigSchema.extend({
         "AWS access key ID. Optional — uses SDK credential chain if not provided. Supports ${ENV_VAR} placeholders.",
         "${AWS_ACCESS_KEY_ID}",
     ),
-    secretAccessKey: optionalTextField(
-        "AWS secret access key. Optional — uses SDK credential chain if not provided. Supports ${ENV_VAR} placeholders.",
-        "${AWS_SECRET_ACCESS_KEY}",
+    secretAccessKey: secretField(
+        optionalTextField(
+            "AWS secret access key. Optional — uses SDK credential chain if not provided. Supports ${ENV_VAR} placeholders.",
+            "${AWS_SECRET_ACCESS_KEY}",
+        ),
     ),
 });
 
@@ -162,9 +182,11 @@ export const Pkcs11KmsConfigSchema = BaseKmsProviderConfigSchema.extend({
             "Slot selection. Either the numeric slot index (as a string for ENV interpolation, or a number) or the token label. Supports ${ENV_VAR} placeholders.",
         examples: ["${PKCS11_SLOT}"],
     }),
-    pin: textField(
-        "User PIN used for C_Login. Supports ${ENV_VAR} placeholders.",
-        "${PKCS11_PIN}",
+    pin: secretField(
+        textField(
+            "User PIN used for C_Login. Supports ${ENV_VAR} placeholders.",
+            "${PKCS11_PIN}",
+        ),
     ),
     readOnly: booleanField(
         "Open the PKCS#11 session in read-only mode. Defaults to false.",
@@ -208,9 +230,11 @@ const CscAuthorizeAuthDataSchema = z.strictObject({
         "Authentication factor identifier expected by the CSC provider (e.g., PIN, OTP).",
         "PIN",
     ),
-    value: textField(
-        "Authentication factor value sent to CSC credentials/authorize.",
-        "123456",
+    value: secretField(
+        textField(
+            "Authentication factor value sent to CSC credentials/authorize.",
+            "123456",
+        ),
     ),
 });
 
@@ -231,9 +255,11 @@ export const CscKmsConfigSchema = BaseKmsProviderConfigSchema.extend({
         "OAuth2 client ID. Supports ${ENV_VAR} placeholders.",
         "${CSC_CLIENT_ID}",
     ),
-    clientSecret: textField(
-        "OAuth2 client secret. Supports ${ENV_VAR} placeholders.",
-        "${CSC_CLIENT_SECRET}",
+    clientSecret: secretField(
+        textField(
+            "OAuth2 client secret. Supports ${ENV_VAR} placeholders.",
+            "${CSC_CLIENT_SECRET}",
+        ),
     ),
     scope: optionalTextField(
         "OAuth2 scope to request during token acquisition.",
@@ -259,8 +285,10 @@ export const CscKmsConfigSchema = BaseKmsProviderConfigSchema.extend({
         "Signature algorithm OID for signatures/signHash. Defaults to ecdsa-with-SHA256 OID.",
         "1.2.840.10045.4.3.2",
     ),
-    sad: optionalTextField(
-        "Static SAD token. If set, the adapter sends it directly in signatures/signHash requests.",
+    sad: secretField(
+        optionalTextField(
+            "Static SAD token. If set, the adapter sends it directly in signatures/signHash requests.",
+        ),
     ),
     useAuthorizeEndpoint: booleanField(
         "When true and no static SAD is provided, the adapter calls credentials/authorize to obtain SAD before signatures/signHash.",
@@ -345,6 +373,44 @@ export const KmsConfigSchema = z
             });
         }
     });
+
+/**
+ * Paths of the credential fields declared with `secretField`, in dotted form
+ * with `*` for array items ("providers.*.vaultToken").
+ */
+function secretPaths(schema: z.ZodType, path: string[] = []): string[] {
+    if (secretFields.has(schema)) return [path.join(".")];
+    // Zod 4 schema definitions; only the wrappers used above are followed.
+    const def = (schema as unknown as { _zod: { def: Record<string, any> } })
+        ._zod.def;
+    switch (def.type) {
+        case "object":
+            return Object.entries(
+                def.shape as Record<string, z.ZodType>,
+            ).flatMap(([key, field]) => secretPaths(field, [...path, key]));
+        case "optional":
+        case "nullable":
+        case "default":
+            return secretPaths(def.innerType, path);
+        case "array":
+            return secretPaths(def.element, [...path, "*"]);
+        case "union":
+            return (def.options as z.ZodType[]).flatMap((option) =>
+                secretPaths(option, path),
+            );
+        default:
+            return [];
+    }
+}
+
+/**
+ * Credential fields of a KMS configuration (`providers.*.vaultToken`, ...),
+ * derived from the schema. Used to redact API responses and configuration
+ * bundle exports.
+ */
+export const KMS_SECRET_PATHS: readonly string[] = [
+    ...new Set(secretPaths(KmsConfigSchema)),
+];
 
 export type KmsProviderConfig = z.infer<typeof KmsProviderConfigSchema>;
 export type KmsConfig = z.infer<typeof KmsConfigSchema>;

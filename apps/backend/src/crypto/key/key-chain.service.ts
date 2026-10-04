@@ -301,14 +301,21 @@ export class KeyChainService {
 
     async export(tenantId: string, id: string): Promise<KeyChainExportDto> {
         const keyChain = await this.getEntity(tenantId, id);
+        const storedKey = keyChain.hasInternalCa()
+            ? keyChain.rootJwk!
+            : keyChain.activeJwk;
 
         const exportDto: KeyChainExportDto = {
             id: keyChain.id,
             description: keyChain.description,
             usageType: keyChain.usageType,
-            key: keyChain.hasInternalCa()
-                ? (keyChain.rootJwk as KeyChainExportDto["key"])
-                : (keyChain.activeJwk as KeyChainExportDto["key"]),
+            // Private key material is only exported for database-held keys.
+            // For external KMS providers the entity stores the public JWK;
+            // strip private components defensively so a key that belongs
+            // to a KMS can never leave through this endpoint.
+            key: (this.isDatabaseHeld(keyChain)
+                ? storedKey
+                : this.getPublicJwk(storedKey)) as KeyChainExportDto["key"],
             kmsProvider: keyChain.kmsProvider,
         };
 
@@ -678,6 +685,27 @@ export class KeyChainService {
             publicJwk: storedJwk,
             alg,
         };
+    }
+
+    /**
+     * True when the private key of the key chain is held in the database
+     * (`db` provider). Keys of external KMS providers are referenced by an
+     * external key id and their private material never leaves the KMS.
+     */
+    private isDatabaseHeld(keyChain: KeyChainEntity): boolean {
+        if (keyChain.externalKeyId || keyChain.rootExternalKeyId) {
+            return false;
+        }
+        try {
+            return (
+                this.kmsRegistry.resolve(
+                    keyChain.kmsProvider,
+                    keyChain.tenantId,
+                ).type === "db"
+            );
+        } catch {
+            return false;
+        }
     }
 
     private getPublicJwk(jwk: JWK): JWK {

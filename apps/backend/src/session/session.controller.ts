@@ -21,6 +21,7 @@ import { SessionLogEntryResponseDto } from "./dto/session-log-entry-response.dto
 import { SessionQueryDto } from "./dto/session-query.dto.js";
 import { Session } from "./entities/session.entity.js";
 import { SessionLogStoreService } from "./logging/session-log-store.service.js";
+import { sessionScope } from "./session-scope.js";
 
 @ApiTags("Session")
 @Secured([Role.IssuanceOffer, Role.PresentationRequest])
@@ -42,7 +43,11 @@ export class SessionController {
         @Token() token: TokenPayload,
         @Query() query: SessionQueryDto,
     ): Promise<PaginatedSessionResponseDto> {
-        return this.sessions.listForTenant(token.entity!.id, query);
+        return this.sessions.listForTenant(
+            token.entity!.id,
+            query,
+            sessionScope(token),
+        );
     }
 
     /**
@@ -56,7 +61,11 @@ export class SessionController {
         @Param("id") id: string,
         @Token() token: TokenPayload,
     ): Promise<SessionData> {
-        return this.sessions.getForTenant(token.entity!.id, id);
+        return this.sessions.getForTenant(
+            token.entity!.id,
+            id,
+            sessionScope(token),
+        );
     }
 
     /**
@@ -72,7 +81,11 @@ export class SessionController {
         @Param("id") id: string,
         @Token() user: TokenPayload,
     ): Promise<void> {
-        return this.sessions.deleteForTenant(user.entity!.id, id);
+        return this.sessions.deleteForTenant(
+            user.entity!.id,
+            id,
+            sessionScope(user),
+        );
     }
 
     /**
@@ -87,7 +100,11 @@ export class SessionController {
         @Param("id") id: string,
         @Token() token: TokenPayload,
     ): Promise<SessionLogEntryResponseDto[]> {
-        await this.sessions.getForTenant(token.entity!.id, id);
+        await this.sessions.getForTenant(
+            token.entity!.id,
+            id,
+            sessionScope(token),
+        );
         return this.logStoreService.findBySessionId(id);
     }
 
