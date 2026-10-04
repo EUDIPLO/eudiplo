@@ -5,14 +5,16 @@ import {
     PostgreSqlContainer,
     StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
-import { DataSource } from "typeorm";
+import { DataSource, MigrationInterface } from "typeorm";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { AddKeyUsageEntity1743000000000 } from "../src/database/migrations/1743000000000-AddKeyUsageEntity.js";
 import { FlattenKeyUsageType1746000000000 } from "../src/database/migrations/1746000000000-FlattenKeyUsageType.js";
 import { MigrateKeysToKeyChain1747000000000 } from "../src/database/migrations/1747000000000-MigrateKeysToKeyChain.js";
+import { AddOauthBindingsToSession1782000000000 } from "../src/database/migrations/1782000000000-AddOauthBindingsToSession.js";
 import { ChangeSessionExpiresAtToTimestamp1784000000000 } from "../src/database/migrations/1784000000000-ChangeSessionExpiresAtToTimestamp.js";
 import { AddOfferLifetimeToIssuanceConfig1784100000000 } from "../src/database/migrations/1784100000000-AddOfferLifetimeToIssuanceConfig.js";
 import { AddSessionListFilters1784300000000 } from "../src/database/migrations/1784300000000-AddSessionListFilters.js";
+import { ChangeSessionOauthBindingsToTimestamp1784400000000 } from "../src/database/migrations/1784400000000-ChangeSessionOauthBindingsToTimestamp.js";
 import { describeWithContainers } from "./container-runtime.js";
 
 /**
@@ -1121,6 +1123,141 @@ describe("Migration tests", () => {
                     },
                 ]);
                 expect(await drift()).toEqual(driftAfterSynchronize);
+            });
+        });
+    });
+
+    describe("AddOauthBindingsToSession1782000000000 and ChangeSessionOauthBindingsToTimestamp1784400000000", () => {
+        describeWithContainers("PostgreSQL", () => {
+            let dataSource: DataSource;
+            let postgresContainer: StartedPostgreSqlContainer;
+            let driftAfterSynchronize: string[];
+            const sessionId = "00000000-0000-4000-8000-000000000001";
+            const columns = [
+                "request_uri_expires_at",
+                "authorization_code_expires_at",
+            ];
+
+            const drift = async () =>
+                (await dataSource.driver.createSchemaBuilder().log()).upQueries
+                    .map((query) => query.query)
+                    .sort();
+            const columnTypes = async () =>
+                Promise.all(
+                    columns.map(
+                        async (column) =>
+                            (
+                                await dataSource.query(
+                                    `SELECT data_type FROM information_schema.columns WHERE table_name = 'session' AND column_name = $1`,
+                                    [column],
+                                )
+                            )[0]?.data_type,
+                    ),
+                );
+            const run = async (...migrations: MigrationInterface[]) => {
+                const queryRunner = dataSource.createQueryRunner();
+                for (const migration of migrations) {
+                    await migration.up(queryRunner);
+                }
+                await queryRunner.release();
+            };
+
+            beforeAll(async () => {
+                const [
+                    { Session },
+                    { SessionLogEntry },
+                    { TenantEntity },
+                    { ClientEntity },
+                ] = await Promise.all([
+                    import("../src/session/entities/session.entity.js"),
+                    import(
+                        "../src/session/entities/session-log-entry.entity.js"
+                    ),
+                    import("../src/auth/tenant/entities/tenant.entity.js"),
+                    import("../src/auth/client/entities/client.entity.js"),
+                ]);
+                postgresContainer = await new PostgreSqlContainer(
+                    "postgres:alpine",
+                ).start();
+                dataSource = new DataSource({
+                    type: "postgres",
+                    url: postgresContainer.getConnectionUri(),
+                    entities: [
+                        Session,
+                        SessionLogEntry,
+                        TenantEntity,
+                        ClientEntity,
+                    ],
+                    synchronize: true,
+                    logging: false,
+                });
+                await dataSource.initialize();
+                driftAfterSynchronize = await drift();
+
+                // Recreate the schema before the migrations.
+                const queryRunner = dataSource.createQueryRunner();
+                await new AddOauthBindingsToSession1782000000000().down(
+                    queryRunner,
+                );
+                await queryRunner.release();
+                await dataSource.query(
+                    `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't')`,
+                );
+                await dataSource.query(
+                    `INSERT INTO "session" ("id", "tenantId") VALUES ($1, 't')`,
+                    [sessionId],
+                );
+            }, 60_000);
+
+            afterAll(async () => {
+                await dataSource?.destroy();
+                await postgresContainer?.stop();
+            });
+
+            test("adds the expiry columns with the entity's type", async () => {
+                expect(await columnTypes()).toEqual([undefined, undefined]);
+                await run(new AddOauthBindingsToSession1782000000000());
+
+                expect(await columnTypes()).toEqual([
+                    "timestamp without time zone",
+                    "timestamp without time zone",
+                ]);
+                expect(await drift()).toEqual(driftAfterSynchronize);
+            });
+
+            test("converts columns created with a time zone and keeps their instants", async () => {
+                for (const column of columns) {
+                    await dataSource.query(
+                        `ALTER TABLE "session" ALTER COLUMN "${column}" TYPE timestamp with time zone`,
+                    );
+                }
+                await dataSource.query(
+                    `UPDATE "session" SET "request_uri_expires_at" = '2026-03-01T10:15:30.250Z', "authorization_code_expires_at" = '2026-03-01T10:16:00Z' WHERE "id" = $1`,
+                    [sessionId],
+                );
+
+                await run(
+                    new ChangeSessionOauthBindingsToTimestamp1784400000000(),
+                    new ChangeSessionOauthBindingsToTimestamp1784400000000(),
+                );
+
+                expect(await columnTypes()).toEqual([
+                    "timestamp without time zone",
+                    "timestamp without time zone",
+                ]);
+                expect(await drift()).toEqual(driftAfterSynchronize);
+                const { Session } = await import(
+                    "../src/session/entities/session.entity.js"
+                );
+                const session = await dataSource
+                    .getRepository(Session)
+                    .findOneByOrFail({ id: sessionId });
+                expect(session.request_uri_expires_at).toEqual(
+                    new Date("2026-03-01T10:15:30.250Z"),
+                );
+                expect(session.authorization_code_expires_at).toEqual(
+                    new Date("2026-03-01T10:16:00Z"),
+                );
             });
         });
     });

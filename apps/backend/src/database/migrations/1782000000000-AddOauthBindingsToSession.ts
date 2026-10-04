@@ -21,10 +21,9 @@ export class AddOauthBindingsToSession1782000000000
             return;
         }
 
+        // Match the entity's plain `Date` columns (`timestamp` on Postgres).
         const isPostgres = queryRunner.dataSource.options.type === "postgres";
-        const timestampType = isPostgres
-            ? "timestamp with time zone"
-            : "datetime";
+        const timestampType = isPostgres ? "timestamp" : "datetime";
 
         const columns: TableColumn[] = [
             new TableColumn({
