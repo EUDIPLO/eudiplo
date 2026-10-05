@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { BadRequestException } from "@nestjs/common";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { CertificateInfo } from "./cert.service.js";
 import { CertService } from "./cert.service.js";
 
@@ -34,5 +34,30 @@ describe("CertService.getCertDnsName", () => {
         expect(() =>
             certService.getCertDnsName(certificateInfo(certWithoutSan)),
         ).toThrow(BadRequestException);
+    });
+});
+
+describe("CertService.validateCertificate", () => {
+    it("passes the rest of the chain and the root CA to the CRL check", async () => {
+        const checkCertificateRevocation = vi
+            .fn()
+            .mockResolvedValue({ isValid: true });
+        const service = new CertService(
+            {} as never,
+            {} as never,
+            {
+                checkCertificateRevocation,
+            } as never,
+        );
+
+        await service.validateCertificate({
+            crt: [CERT_WITH_DNS_SAN, "intermediate"],
+            keyChain: { rootCertificate: "root" },
+        } as CertificateInfo);
+
+        expect(checkCertificateRevocation).toHaveBeenCalledWith(
+            CERT_WITH_DNS_SAN,
+            ["intermediate", "root"],
+        );
     });
 });

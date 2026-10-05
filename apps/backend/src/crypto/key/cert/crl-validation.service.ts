@@ -1,6 +1,4 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { AsnParser } from "@peculiar/asn1-schema";
-import { CertificateList } from "@peculiar/asn1-x509";
 import * as x509 from "@peculiar/x509";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
 
@@ -14,8 +12,8 @@ const CRL_MAX_REDIRECTS = 5;
  * Cached CRL with metadata.
  */
 interface CachedCrl {
-    /** The parsed CRL */
-    crl: CertificateList;
+    /** The parsed CRL, verified against its issuer when it was fetched */
+    crl: x509.X509Crl;
     /** When the cache entry was fetched */
     fetchedAt: number;
     /** Next update time from the CRL (if available) */
@@ -44,7 +42,13 @@ export interface CrlValidationResult {
  * This service:
  * - Extracts CRL Distribution Points from certificates
  * - Fetches and caches CRL data
+ * - Verifies that a CRL is signed by the CA that issued the certificate
  * - Checks if certificates are revoked
+ *
+ * CRLs are usually served over plain HTTP, so a CRL counts only if its
+ * issuer name matches the certificate's issuer and its signature verifies
+ * with the issuing CA's key. A CRL that fails these checks is treated like
+ * an unreachable one.
  */
 @Injectable()
 export class CrlValidationService {
@@ -75,11 +79,21 @@ export class CrlValidationService {
     /**
      * Check if a certificate is revoked according to its CRL.
      *
+     * The CRL must be signed by the CA that issued the certificate. That CA
+     * is looked up in `chainPems`: the certificate whose subject is the
+     * certificate's issuer and whose key verifies the certificate's
+     * signature. Without it, no CRL is fetched and the result is
+     * inconclusive (`isValid: false` without `revokedAt`).
+     *
+     * A self-signed certificate is not checked: no CA could have revoked it.
+     *
      * @param certPem - PEM-encoded certificate to check
+     * @param chainPems - PEM-encoded certificates that may include the issuing CA
      * @returns CRL validation result
      */
     async checkCertificateRevocation(
         certPem: string,
+        chainPems: string[] = [],
     ): Promise<CrlValidationResult> {
         try {
             const cert = new x509.X509Certificate(certPem);
@@ -107,10 +121,40 @@ export class CrlValidationService {
                 };
             }
 
+            if (await cert.isSelfSigned()) {
+                this.logger.debug(
+                    `Skipping CRL check for self-signed certificate ${cert.subject}`,
+                );
+                return {
+                    isValid: true,
+                    error: "Self-signed certificate; no CA to revoke it",
+                };
+            }
+
+            const issuer = await this.findIssuer(cert, chainPems);
+            if (!issuer) {
+                this.logger.warn(
+                    `Cannot check CRL for ${cert.subject}: the certificate of its issuer ${cert.issuer} is not in the chain`,
+                );
+                const noIssuerResult: CrlValidationResult = {
+                    isValid: false,
+                    error: `Issuer certificate not in the chain; cannot verify the CRL of ${cert.subject}`,
+                };
+                this.certValidationCache.set(cacheKey, {
+                    result: noIssuerResult,
+                    timestamp: Date.now(),
+                });
+                return noIssuerResult;
+            }
+
             // Try each CRL URL until we get a successful check
             for (const url of crlUrls) {
                 try {
-                    const result = await this.checkAgainstCrl(cert, url);
+                    const result = await this.checkAgainstCrl(
+                        cert,
+                        issuer,
+                        url,
+                    );
                     // Cache the result
                     this.certValidationCache.set(cacheKey, {
                         result,
@@ -248,69 +292,127 @@ export class CrlValidationService {
     }
 
     /**
+     * Find the certificate in `chainPems` that issued `cert`: its subject is
+     * `cert`'s issuer and its key verifies `cert`'s signature.
+     */
+    private async findIssuer(
+        cert: x509.X509Certificate,
+        chainPems: string[],
+    ): Promise<x509.X509Certificate | undefined> {
+        for (const pem of chainPems) {
+            let candidate: x509.X509Certificate;
+            try {
+                candidate = new x509.X509Certificate(pem);
+            } catch {
+                continue;
+            }
+            if (
+                candidate.subject === cert.issuer &&
+                (await cert.verify({
+                    publicKey: candidate,
+                    signatureOnly: true,
+                }))
+            ) {
+                return candidate;
+            }
+        }
+        return undefined;
+    }
+
+    /**
      * Check a certificate against a specific CRL URL.
      */
     private async checkAgainstCrl(
         cert: x509.X509Certificate,
+        issuer: x509.X509Certificate,
         crlUrl: string,
     ): Promise<CrlValidationResult> {
-        const crl = await this.fetchCrl(crlUrl);
-        const serialNumber = cert.serialNumber;
+        const { crl, fromCache } = await this.getVerifiedCrl(
+            crlUrl,
+            cert,
+            issuer,
+        );
 
-        // Check if the certificate is in the revoked certificates list
-        const revokedCerts = crl.tbsCertList.revokedCertificates;
-
-        if (!revokedCerts || revokedCerts.length === 0) {
-            return { isValid: true, fromCache: this.crlCache.has(crlUrl) };
+        const revoked = crl.findRevoked(cert);
+        if (!revoked) {
+            return { isValid: true, fromCache };
         }
 
-        for (const revoked of revokedCerts) {
-            // Convert serial numbers to comparable format
-            // userCertificate is an ArrayBuffer in @peculiar/asn1-x509
-            const revokedSerial = this.arrayBufferToHex(
-                revoked.userCertificate as unknown as ArrayBuffer,
-            );
-            const certSerial = serialNumber.toLowerCase().replaceAll(":", "");
-
-            if (revokedSerial === certSerial) {
-                const revokedAt = revoked.revocationDate.getTime();
-                let reason: string | undefined;
-
-                // Try to extract revocation reason from extensions
-                if (revoked.crlEntryExtensions) {
-                    for (const ext of revoked.crlEntryExtensions) {
-                        // Reason Code OID: 2.5.29.21
-                        if (ext.extnID === "2.5.29.21") {
-                            reason = this.parseReasonCode(
-                                ext.extnValue as unknown as ArrayBuffer,
-                            );
-                        }
-                    }
-                }
-
-                return {
-                    isValid: false,
-                    revokedAt: new Date(revokedAt),
-                    reason,
-                    fromCache: this.crlCache.has(crlUrl),
-                };
-            }
-        }
-
-        return { isValid: true, fromCache: this.crlCache.has(crlUrl) };
+        return {
+            isValid: false,
+            revokedAt: revoked.revocationDate,
+            reason:
+                revoked.reason === undefined
+                    ? undefined
+                    : (x509.X509CrlReason[revoked.reason] ??
+                      `unknown(${revoked.reason})`),
+            fromCache,
+        };
     }
 
     /**
-     * Fetch and parse a CRL from a URL, with caching.
+     * Return the CRL at `url`, verified against the certificate's issuer.
+     * Only verified CRLs are cached, so a forged response cannot displace
+     * the CA's CRL for the lifetime it claims.
      */
-    private async fetchCrl(url: string): Promise<CertificateList> {
-        // Check cache first
+    private async getVerifiedCrl(
+        url: string,
+        cert: x509.X509Certificate,
+        issuer: x509.X509Certificate,
+    ): Promise<{ crl: x509.X509Crl; fromCache: boolean }> {
         const cached = this.crlCache.get(url);
         if (cached && this.isCacheValid(cached)) {
             this.logger.debug(`Using cached CRL for ${url}`);
-            return cached.crl;
+            // Another certificate may name the same URL with a different issuer.
+            await this.verifyCrl(cached.crl, cert, issuer);
+            return { crl: cached.crl, fromCache: true };
         }
 
+        const crl = await this.fetchCrl(url);
+        await this.verifyCrl(crl, cert, issuer);
+        this.crlCache.set(url, {
+            crl,
+            fetchedAt: Date.now(),
+            nextUpdate: crl.nextUpdate,
+        });
+        return { crl, fromCache: false };
+    }
+
+    /**
+     * Throw unless `crl` was issued by `issuer` for certificates of `cert`'s
+     * issuer (RFC 5280, section 6.3.3): matching issuer name, cRLSign key
+     * usage if the issuer certificate restricts its key usage, and a
+     * signature that verifies with the issuer's key.
+     */
+    private async verifyCrl(
+        crl: x509.X509Crl,
+        cert: x509.X509Certificate,
+        issuer: x509.X509Certificate,
+    ): Promise<void> {
+        if (crl.issuer !== cert.issuer) {
+            throw new Error(
+                `CRL issuer "${crl.issuer}" does not match certificate issuer "${cert.issuer}"`,
+            );
+        }
+
+        const keyUsage = issuer.getExtension(x509.KeyUsagesExtension);
+        if (keyUsage && !(keyUsage.usages & x509.KeyUsageFlags.cRLSign)) {
+            throw new Error(
+                `Issuer certificate ${issuer.subject} lacks the cRLSign key usage`,
+            );
+        }
+
+        if (!(await crl.verify({ publicKey: issuer.publicKey }))) {
+            throw new Error(
+                `CRL signature does not verify with the key of ${issuer.subject}`,
+            );
+        }
+    }
+
+    /**
+     * Fetch and parse a CRL from a URL.
+     */
+    private async fetchCrl(url: string): Promise<x509.X509Crl> {
         this.logger.debug(`Fetching CRL from ${url}`);
 
         try {
@@ -336,22 +438,7 @@ export class CrlValidationService {
                 );
             }
 
-            const crl = AsnParser.parse(response.bytes, CertificateList);
-
-            // Extract nextUpdate for cache TTL
-            let nextUpdate: Date | undefined;
-            if (crl.tbsCertList.nextUpdate) {
-                nextUpdate = crl.tbsCertList.nextUpdate.getTime();
-            }
-
-            // Cache the CRL
-            this.crlCache.set(url, {
-                crl,
-                fetchedAt: Date.now(),
-                nextUpdate: nextUpdate ? new Date(nextUpdate) : undefined,
-            });
-
-            return crl;
+            return new x509.X509Crl(new Uint8Array(response.bytes));
         } catch (error: any) {
             throw new Error(
                 `Failed to fetch CRL from ${url}: ${error?.message || error}`,
@@ -372,46 +459,6 @@ export class CrlValidationService {
 
         // Otherwise use default TTL
         return now - cached.fetchedAt < this.defaultCacheTtlMs;
-    }
-
-    /**
-     * Convert ArrayBuffer to hex string.
-     */
-    private arrayBufferToHex(buffer: ArrayBuffer): string {
-        return Array.from(new Uint8Array(buffer))
-            .map((b) => b.toString(16).padStart(2, "0"))
-            .join("");
-    }
-
-    /**
-     * Parse CRL reason code.
-     */
-    private parseReasonCode(buffer: ArrayBuffer): string {
-        const reasons = [
-            "unspecified",
-            "keyCompromise",
-            "cACompromise",
-            "affiliationChanged",
-            "superseded",
-            "cessationOfOperation",
-            "certificateHold",
-            "unused",
-            "removeFromCRL",
-            "privilegeWithdrawn",
-            "aACompromise",
-        ];
-
-        try {
-            const bytes = new Uint8Array(buffer);
-            // Reason code is an ENUMERATED value, typically 3 bytes: 0x0a 0x01 <value>
-            if (bytes.length >= 3 && bytes[0] === 0x0a && bytes[1] === 0x01) {
-                const code = bytes[2];
-                return reasons[code] || `unknown(${code})`;
-            }
-        } catch {
-            // Ignore parsing errors
-        }
-        return "unknown";
     }
 
     /**

@@ -209,11 +209,18 @@ export class CertService {
                 };
             }
 
-            // Check CRL revocation if service is available
+            // Check CRL revocation if service is available. The CRL must be
+            // signed by the leaf's issuer, which is in the rest of the chain
+            // or is the key chain's root CA.
             if (this.crlValidationService) {
+                const issuerCandidates = [
+                    ...cert.crt.slice(1),
+                    cert.keyChain?.rootCertificate,
+                ].filter((pem): pem is string => !!pem);
                 const crlResult =
                     await this.crlValidationService.checkCertificateRevocation(
                         leafPem,
+                        issuerCandidates,
                     );
                 if (!crlResult.isValid && crlResult.revokedAt) {
                     return {
