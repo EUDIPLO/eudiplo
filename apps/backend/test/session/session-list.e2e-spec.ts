@@ -37,6 +37,11 @@ describe("Session list filters and search", () => {
                 })
                 .expect(201)
         ).body;
+        // SQLite stores timestamps with second precision. Start the next
+        // session in a later second so sorting by updatedAt is not a tie.
+        await new Promise((resolve) =>
+            setTimeout(resolve, 1010 - (Date.now() % 1000)),
+        );
         presentation = (
             await request(app.getHttpServer())
                 .post("/verifier/offer")
@@ -104,10 +109,16 @@ describe("Session list filters and search", () => {
                 `createdFrom=${new Date(Date.now() + 60_000).toISOString()}`,
             ),
         ).toEqual([]);
-        const all = await ids(
-            "sortBy=updatedAt&sortOrder=asc&updatedFrom=2020-01-01T00:00:00Z",
-        );
-        expect(all).toEqual([issuance.session, presentation.session]);
+        const updatedSince =
+            "updatedFrom=2020-01-01T00:00:00Z&sortBy=updatedAt";
+        expect(await ids(`${updatedSince}&sortOrder=asc`)).toEqual([
+            issuance.session,
+            presentation.session,
+        ]);
+        expect(await ids(`${updatedSince}&sortOrder=desc`)).toEqual([
+            presentation.session,
+            issuance.session,
+        ]);
     });
 
     test.each([
