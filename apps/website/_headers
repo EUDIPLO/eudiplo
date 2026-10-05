@@ -7,3 +7,6 @@
 /schemas/index.json
   ! Content-Type
   Content-Type: application/json; charset=utf-8
+
+/fonts/*
+  Cache-Control: public, max-age=2592000

@@ -48,12 +48,17 @@ for (const file of [
   "install.sh",
   "logo.svg",
   "eudiplo.png",
+  "mark.png",
+  "favicon-32.png",
+  "icon-192.png",
+  "apple-touch-icon.png",
+  "fonts",
   "_headers",
   "404.html",
 ]) {
   if (!existsSync(resolve(website, file)))
     throw new Error(`Missing website asset: ${file}`);
-  cpSync(resolve(website, file), resolve(output, file));
+  cpSync(resolve(website, file), resolve(output, file), { recursive: true });
 }
 for (const { path } of schemas.values()) {
   const target = resolve(output, "schemas", path);
