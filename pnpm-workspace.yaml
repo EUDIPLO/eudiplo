@@ -90,4 +90,4 @@ overrides:
   uuid@<11.1.1: ^11.1.1
 
 patchedDependencies:
-  '@openid4vc/oauth2@0.5.6': patches/@openid4vc__oauth2@0.5.6.patch
+  '@openid4vc/oauth2@0.6.0': patches/@openid4vc__oauth2@0.6.0.patch

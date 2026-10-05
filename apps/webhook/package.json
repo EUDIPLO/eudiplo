@@ -13,11 +13,11 @@
 		"format:check": "biome format ."
 	},
 	"dependencies": {
-		"zod": "^4.5.4"
+		"zod": "^4.6.5"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.5.14",
+		"@biomejs/biome": "2.5.15",
 		"typescript": "^7.0.2",
-		"wrangler": "^4.127.1"
+		"wrangler": "^4.147.0"
 	}
 }
