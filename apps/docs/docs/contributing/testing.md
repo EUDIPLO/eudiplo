@@ -14,7 +14,7 @@ All TypeScript packages test with [Vitest](https://vitest.dev). Run the unit tes
 | CLI | `apps/cli/test/**/*.test.ts`, `apps/cli/src/**/*.spec.ts` | `pnpm --filter @eudiplo/cli test` | Build CLI |
 | Config format, SDK | `packages/*/src/**/*.spec.ts`, `packages/eudiplo-sdk-core/test/` | `pnpm --filter @eudiplo/config-format test`, `pnpm --filter @eudiplo/sdk-core test` | — |
 | Client unit | `apps/client/src/**/*.spec.ts` | `pnpm --filter @eudiplo/client test` | Build Client |
-| Client browser (Playwright) | `apps/client/e2e/` | `pnpm --filter @eudiplo/client e2e` | not run |
+| Client browser (Playwright) | `apps/client/e2e/` | `E2E_USE_BUILD=true pnpm --filter @eudiplo/client e2e` | E2E Tests (Client) |
 | Documentation tooling | `apps/docs/scripts/` | `pnpm --filter @eudiplo/docs test` | Build Documentation |
 
 CI is defined in `.github/workflows/ci-and-release.yml` and runs on pull requests, the merge queue and pushes to `main`.
@@ -108,7 +108,7 @@ Logs land in `tmp/oidf-logs/<planId>/` and, for failed modules, `tmp/oidf-logs/f
 
 ## Client tests
 
-Unit tests run with Vitest through the Angular builder; the Playwright browser tests are not part of CI. Setup and conventions: [Client development](./client.md#tests).
+Unit tests run with Vitest through the Angular builder. The Playwright browser tests run in the **E2E Tests (Client)** job against the production client build and the built backend. Setup and conventions: [Client development](./client.md#tests).
 
 ## Coverage
 

@@ -42,7 +42,13 @@ function loadBackendEnv(): DotenvMap {
   return {};
 }
 
-const backendEnv = loadBackendEnv();
+// E2E_USE_BUILD=true runs the built backend with the demo tenant from
+// assets/config/demo and without apps/backend/.env, so the demo tenant's
+// test client signs in unless E2E_TENANT_CLIENT_ID/SECRET say otherwise.
+const useBuild = process.env['E2E_USE_BUILD'] === 'true';
+const backendEnv: DotenvMap = useBuild
+  ? { E2E_TENANT_CLIENT_ID: 'test-client', E2E_TENANT_CLIENT_SECRET: 'test-client-secret' }
+  : loadBackendEnv();
 const allowRootFallback = process.env['E2E_ALLOW_ROOT_FALLBACK'] === 'true';
 
 const resolvedClientId =
@@ -59,14 +65,17 @@ const resolvedClientSecret =
   backendEnv['E2E_CLIENT_SECRET'] ??
   (allowRootFallback ? backendEnv['AUTH_CLIENT_SECRET'] : undefined);
 
+const apiBaseUrl = process.env['PLAYWRIGHT_API_URL'] ?? 'http://127.0.0.1:3000';
+
 export const resolvedE2EConfig = {
-  apiBaseUrl: process.env['PLAYWRIGHT_API_URL'] ?? 'http://127.0.0.1:3000',
+  useBuild,
+  apiBaseUrl,
   clientId: resolvedClientId,
   clientSecret: resolvedClientSecret,
   baseURL: process.env['PLAYWRIGHT_TEST_BASE_URL'] ?? 'http://127.0.0.1:4200',
-  backendURL: process.env['PLAYWRIGHT_BACKEND_URL'] ?? 'http://127.0.0.1:3000/api/docs-json',
+  backendURL: process.env['PLAYWRIGHT_BACKEND_URL'] ?? `${apiBaseUrl}/health`,
 };
 
 export const hasAuthCredentials = Boolean(
-  resolvedE2EConfig.clientId && resolvedE2EConfig.clientSecret,
+  resolvedE2EConfig.clientId && resolvedE2EConfig.clientSecret
 );

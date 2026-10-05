@@ -61,7 +61,7 @@
       "entry": [
         "src/**/*.spec.ts",
         "src/test-setup.ts",
-        "e2e/**/*.ts"
+        "e2e/**/*.{ts,mjs}"
       ],
       "ignoreDependencies": [
         "@fontsource/roboto",

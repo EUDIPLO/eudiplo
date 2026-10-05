@@ -70,7 +70,18 @@ pnpm --filter @eudiplo/client test --watch=false
 
 `src/test-setup.ts` provides in-memory `localStorage`/`sessionStorage`, a `matchMedia` stub and a never-settling `fetch` for the SDK client. To assert API calls, stub `fetch` and inspect the requests; the Angular builder cannot intercept `vi.mock('@eudiplo/sdk-core')`.
 
-**Browser tests** use Playwright and live in `apps/client/e2e/`. They are **not** run in CI. `pnpm --filter @eudiplo/client e2e` starts the backend (`pnpm run dev` in `apps/backend`) and `ng serve`, or reuses running servers. Sign-in uses a tenant client from `E2E_TENANT_CLIENT_ID` / `E2E_TENANT_CLIENT_SECRET`, read from the environment or `apps/backend/.env`; `E2E_ALLOW_ROOT_FALLBACK=true` falls back to `AUTH_CLIENT_ID` / `AUTH_CLIENT_SECRET`.
+**Browser tests** use Playwright and live in `apps/client/e2e/`. They run in two modes:
+
+- **Build mode** (`E2E_USE_BUILD=true`, used by the **E2E Tests (Client)** CI job) tests what ships. Build the backend and the client first; Playwright then runs `apps/backend/dist` against a fresh SQLite database in `apps/client/tmp/e2e-backend` (`e2e/support/start-backend.mjs`) and serves the production build with a generated `env.js`, like the client Docker image (`e2e/support/serve-dist.mjs`). The backend imports the demo tenant from `assets/config/demo` plus an external authorization server for the authorization code tests, and the tests sign in with the demo tenant's `test-client`. Imported resources are file-managed and read-only in the client, so tests that change data create their own resources.
+- **Dev mode** (default) starts the backend (`pnpm run dev` in `apps/backend`) and `ng serve`, or reuses running servers. Sign-in uses a tenant client from `E2E_TENANT_CLIENT_ID` / `E2E_TENANT_CLIENT_SECRET`, read from the environment or `apps/backend/.env`; `E2E_ALLOW_ROOT_FALLBACK=true` falls back to `AUTH_CLIENT_ID` / `AUTH_CLIENT_SECRET`. The tests expect data like the demo tenant's.
+
+```bash
+pnpm --filter @eudiplo/config-format build && pnpm --filter @eudiplo/sdk-core build
+pnpm --filter @eudiplo/backend build && pnpm --filter @eudiplo/client build
+E2E_USE_BUILD=true pnpm --filter @eudiplo/client e2e
+```
+
+`PLAYWRIGHT_API_URL` and `PLAYWRIGHT_TEST_BASE_URL` move the backend and client off ports 3000 and 4200. CI uploads the HTML report as the `client-e2e-report` artifact.
 
 ## Version check
 
