@@ -264,8 +264,8 @@ const config: Config = {
               href: 'https://discord.gg/58ys8XfXDu',
             },
             {
-              label: 'GitHub Discussions',
-              href: 'https://github.com/openwallet-foundation/eudiplo/discussions',
+              label: 'GitHub Issues',
+              href: 'https://github.com/openwallet-foundation/eudiplo/issues',
             },
           ],
         },

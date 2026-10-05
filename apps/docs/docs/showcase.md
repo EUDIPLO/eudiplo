@@ -20,4 +20,3 @@ Projects and platforms that run EUDIPLO.
 
 - [Discord](https://discord.gg/58ys8XfXDu)
 - [GitHub issues](https://github.com/openwallet-foundation/eudiplo/issues) for bugs and feature requests
-- [GitHub discussions](https://github.com/openwallet-foundation/eudiplo/discussions)
