@@ -100,4 +100,4 @@ Some wallets do not handle `trusted_authorities` yet. `VP_REMOVE_TA=true` remove
 
 ### Caching
 
-Loaded trust lists are cached for five minutes. After changing a list, clear the cache with `DELETE /api/cache/trust-list` (it also clears the OpenID Federation cache) to use it immediately; `GET /api/cache/stats` shows what is cached. Fetching a list times out after four seconds. Outside `NODE_ENV=production`, the TLS certificate of the list's host is not checked; the list signature always is.
+Loaded trust lists are cached for five minutes. After changing a list, clear the cache with `DELETE /api/cache/trust-list` (it also clears the OpenID Federation cache) to use it immediately; `GET /api/cache/stats` shows what is cached. Fetching a list times out after four seconds. Outside `NODE_ENV=production`, the TLS certificate of the list's host is not checked; the list signature always is. Trust list fetches do not use the [outbound URL policy](../concepts/security-model.md#https-and-tls).

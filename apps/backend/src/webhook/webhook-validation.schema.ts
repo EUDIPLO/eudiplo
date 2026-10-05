@@ -20,7 +20,7 @@ export const WEBHOOK_VALIDATION_SCHEMA = Joi.object({
         .allow("")
         .optional()
         .description(
-            "Comma-separated hostname allowlist for outbound calls (webhooks, attribute providers, metadata imports; supports exact host and subdomains)",
+            "Comma-separated hostname allowlist for outbound calls (webhooks, attribute providers, metadata imports; supports exact host and subdomains). When set, other hosts are rejected. Listed hosts still need HTTPS and public addresses unless OUTBOUND_URL_ALLOW_HTTP or OUTBOUND_URL_ALLOW_PRIVATE_NETWORK is set.",
         )
         .meta({ group: "webhook", order: 30 }),
 });
