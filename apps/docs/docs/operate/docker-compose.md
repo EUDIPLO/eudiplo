@@ -32,7 +32,8 @@ openssl rand -base64 24   # AUTH_CLIENT_SECRET, DB_PASSWORD, RUSTFS_SECRET_KEY
 
 `MASTER_SECRET`, `AUTH_CLIENT_ID` and `AUTH_CLIENT_SECRET` have no defaults; the
 backend does not start without them. In `standard` and `full`, set
-`S3_SECRET_ACCESS_KEY` to the same value as `RUSTFS_SECRET_KEY`. Set `PUBLIC_URL`
+`S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` to the same values as
+`RUSTFS_ACCESS_KEY` and `RUSTFS_SECRET_KEY`. Set `PUBLIC_URL`
 to the URL wallets use to reach the backend.
 
 ## 2. Start a profile
