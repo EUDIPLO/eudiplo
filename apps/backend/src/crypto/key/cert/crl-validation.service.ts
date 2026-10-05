@@ -396,7 +396,7 @@ export class CrlValidationService {
         }
 
         const keyUsage = issuer.getExtension(x509.KeyUsagesExtension);
-        if (keyUsage && !(keyUsage.usages & x509.KeyUsageFlags.cRLSign)) {
+        if (keyUsage && (keyUsage.usages & x509.KeyUsageFlags.cRLSign) === 0) {
             throw new Error(
                 `Issuer certificate ${issuer.subject} lacks the cRLSign key usage`,
             );
