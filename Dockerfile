@@ -78,6 +78,7 @@ COPY --from=build-frontend /usr/src/app/apps/client/dist/apps/client/browser /us
 
 # Copy nginx configuration
 COPY apps/client/nginx.conf /etc/nginx/nginx.conf
+COPY apps/client/nginx-security-headers.conf /etc/nginx/snippets/security-headers.conf
 
 # Copy entrypoint script
 COPY apps/client/docker-entrypoint.sh /docker-entrypoint.sh
