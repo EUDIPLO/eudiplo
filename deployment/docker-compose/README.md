@@ -169,7 +169,7 @@ After deployment, access the services at:
 3. To keep signing keys in Vault as well, add a `kms.json` with a provider of
    type `vault` (`"vaultUrl": "${VAULT_ADDR}"`, `"vaultToken": "${VAULT_TOKEN}"`)
    to `CONFIG_FOLDER`. The KMS provider is not selected via environment
-   variables; see the [KMS documentation](https://docs.eudiplo.dev/administration/kms).
+   variables; see the [KMS documentation](https://docs.eudiplo.dev/operate/kms).
 4. Start with `docker compose --profile full up -d`
 
 ## Production Considerations

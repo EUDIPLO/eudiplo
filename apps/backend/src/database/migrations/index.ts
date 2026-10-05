@@ -55,3 +55,4 @@ export { ChangeSessionExpiresAtToTimestamp1784000000000 } from "./1784000000000-
 export { AddOfferLifetimeToIssuanceConfig1784100000000 } from "./1784100000000-AddOfferLifetimeToIssuanceConfig.js";
 export { RemoveRegistrationCertProvidedAttestations1784200000000 } from "./1784200000000-RemoveRegistrationCertProvidedAttestations.js";
 export { AddSessionListFilters1784300000000 } from "./1784300000000-AddSessionListFilters.js";
+export { ChangeSessionOauthBindingsToTimestamp1784400000000 } from "./1784400000000-ChangeSessionOauthBindingsToTimestamp.js";

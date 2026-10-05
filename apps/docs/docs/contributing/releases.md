@@ -52,5 +52,5 @@ Images are never rebuilt from source for a release: the tested CI image is promo
 
 - Every `!` commit and `BREAKING CHANGE` footer since the last tag is covered in the upgrade guide (`git log --format='%h %s%n%b' vX.Y.Z..main`).
 - The guide is listed in the Upgrade sidebar and on [the upgrade overview](../upgrade/index.md).
-- `eudiplo upgrade` prints `https://docs.eudiplo.dev/migration/<from>.x-to-<to>.0` for every major it crosses; add a redirect from that path to the new guide in `apps/docs/docusaurus.config.ts`.
+- `eudiplo upgrade` prints `https://docs.eudiplo.dev/upgrade/<from>.x-to-<to>.0` for every major it crosses, so name the guide `<from>.x-to-<to>.0.md`. CLIs of 8.x and older print `/migration/<from>.x-to-<to>.0`; add a redirect from that path to the new guide in `apps/docs/docusaurus.config.ts`.
 - Configuration format changes are published: new `schemas/v*/` snapshots go live with the website deployment of the release ([Configuration schemas](./configuration-schemas.md)).
