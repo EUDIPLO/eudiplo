@@ -6,6 +6,8 @@ import {
     DeviceRequest,
     DocRequest,
     Holder,
+    IdentifierList,
+    IdentifierListCwt,
     Issuer,
     IssuerSigned,
     ItemsRequest,
@@ -35,6 +37,10 @@ import { MdocverifierService } from "./mdocverifier.service.js";
 const docType = "eu.europa.ec.eudi.pid.1";
 const namespace = "eu.europa.ec.eudi.pid.1";
 
+/** Words that read as "unavailable" when matched in an error message. */
+const identifierListPath = "/revocation/network/timeout";
+const revokedId = new Uint8Array([0xde, 0xad]);
+
 /**
  * The status list URI of a presented mDOC comes from its MSO. Without a trust
  * list the presented x5chain is the trust anchor, so a wallet can present a
@@ -48,17 +54,25 @@ describe("MdocverifierService status list fetch", () => {
     let issuerJwk: Record<string, unknown>;
     let issuerCertificate: Uint8Array;
     let deviceJwk: Record<string, unknown>;
-    let statusListCwt: Uint8Array;
+    /** Revocation lists the server publishes, by path. */
+    const published = new Map<
+        string,
+        { contentType: string; token: Uint8Array }
+    >();
 
     beforeAll(async () => {
         x509.cryptoProvider.set(crypto);
 
         server = createServer((request, response) => {
             requests.push(request.url ?? "");
-            response.writeHead(200, {
-                "content-type": "application/statuslist+cwt",
-            });
-            response.end(statusListCwt);
+            const list = published.get(request.url ?? "");
+            if (!list) {
+                response.writeHead(404);
+                response.end();
+                return;
+            }
+            response.writeHead(200, { "content-type": list.contentType });
+            response.end(list.token);
         });
         await new Promise<void>((resolve) =>
             server.listen(0, "127.0.0.1", resolve),
@@ -95,7 +109,16 @@ describe("MdocverifierService status list fetch", () => {
             unknown
         >;
 
-        statusListCwt = await signStatusListCwt(`${loopbackIp}/status/1`);
+        published.set("/status/1", {
+            contentType: "application/statuslist+cwt",
+            token: await signStatusListCwt(`${loopbackIp}/status/1`),
+        });
+        published.set(identifierListPath, {
+            contentType: "application/identifierlist+cwt",
+            token: await signIdentifierListCwt(
+                `${loopbackIp}${identifierListPath}`,
+            ),
+        });
     });
 
     afterAll(async () => {
@@ -116,6 +139,32 @@ describe("MdocverifierService status list fetch", () => {
                 expirationTime: new Date((now + 3600) * 1000),
                 timeToLive: 300,
                 statusList: new StatusList([0, 0, 0, 0, 0, 0, 0, 0], 1),
+            },
+            protectedHeaders: new Map<number, unknown>([
+                [1, SignatureAlgorithm.ES256],
+                [33, [issuerCertificate]],
+            ]),
+        });
+        return cwt.signAndEncode(
+            {
+                signingKey: CoseKey.fromJwk(issuerJwk),
+                algorithm: SignatureAlgorithm.ES256,
+            },
+            { sign: mdocContext.cose.sign1.sign },
+        );
+    }
+
+    /** Identifier list for `uri` that revokes {@link revokedId}. */
+    async function signIdentifierListCwt(uri: string): Promise<Uint8Array> {
+        const now = Math.floor(Date.now() / 1000);
+        const cwt = new IdentifierListCwt({
+            payload: {
+                uri,
+                issuedAt: new Date((now - 60) * 1000),
+                expirationTime: new Date((now + 3600) * 1000),
+                identifierList: IdentifierList.create({
+                    identifiers: [revokedId],
+                }),
             },
             protectedHeaders: new Map<number, unknown>([
                 [1, SignatureAlgorithm.ES256],
@@ -197,6 +246,13 @@ describe("MdocverifierService status list fetch", () => {
 
     const statusListAt = (uri: string): StatusOptions => ({
         statusList: { idx: 1, uri },
+    });
+
+    const identifierListAt = (
+        uri: string,
+        id = new Uint8Array([0x01]),
+    ): StatusOptions => ({
+        identifierList: { id, uri },
     });
 
     /** Policy with the 9.0 defaults: HTTPS only, no private addresses. */
@@ -300,20 +356,31 @@ describe("MdocverifierService status list fetch", () => {
         expect(requests).toEqual(["/status/1"]);
     });
 
-    it("does not fetch an identifier list on a private address", async () => {
-        const result = await verify(
-            verifier(policy({ OUTBOUND_URL_ALLOW_HTTP: true })),
-            {
-                identifierList: {
-                    id: new Uint8Array([1, 2, 3]),
-                    uri: `${loopbackIp}/identifiers/1`,
-                },
-            },
-        );
+    describe("identifier lists", () => {
+        const uri = () => `${loopbackIp}${identifierListPath}`;
 
-        expect(result.verified).toBe(false);
-        expect(result.failureReason).toContain("private or loopback IP");
-        expect(requests).toEqual([]);
+        it("does not fetch an identifier list on a private address", async () => {
+            const result = await verify(
+                verifier(policy({ OUTBOUND_URL_ALLOW_HTTP: true })),
+                identifierListAt(uri()),
+            );
+
+            expect(result.verified).toBe(false);
+            expect(result.failureReason).toContain("private or loopback IP");
+            expect(requests).toEqual([]);
+        });
+
+        it("checks an identifier list on EUDIPLO's own PUBLIC_URL", async () => {
+            const service = verifier(policy(), loopbackIp);
+
+            await expect(
+                verify(service, identifierListAt(uri())),
+            ).resolves.toMatchObject({ verified: true });
+            await expect(
+                verify(service, identifierListAt(uri(), revokedId)),
+            ).resolves.toMatchObject({ verified: false });
+            expect(requests).toEqual([identifierListPath, identifierListPath]);
+        });
     });
 
     describe("best-effort revocation", () => {
@@ -330,6 +397,39 @@ describe("MdocverifierService status list fetch", () => {
                 verify(blocked, statusListAt(uri), false),
             ).resolves.toMatchObject({ verified: true });
             expect(requests).toEqual([]);
+        });
+
+        it("treats a blocked identifier list as unavailable", async () => {
+            await expect(
+                verify(
+                    verifier(policy({ OUTBOUND_URL_ALLOW_HTTP: true })),
+                    identifierListAt(`${loopbackIp}/identifiers/1`),
+                    false,
+                ),
+            ).resolves.toMatchObject({ verified: true });
+            expect(requests).toEqual([]);
+        });
+
+        it("rejects a credential its identifier list revokes", async () => {
+            // The error names the list's URI, which here reads like an
+            // availability problem; the list was fetched, so it must not be
+            // treated as unavailable.
+            const result = await verify(
+                verifier(policy(), loopbackIp),
+                identifierListAt(
+                    `${loopbackIp}${identifierListPath}`,
+                    revokedId,
+                ),
+                false,
+            );
+
+            expect(result.verified).toBe(false);
+            expect(result.failureReason).toContain(
+                "found in the revoked identifier list",
+            );
+            expect(isStatusListUnavailableError(result.failureReason)).toBe(
+                true,
+            );
         });
     });
 });

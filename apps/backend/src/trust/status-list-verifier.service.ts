@@ -9,6 +9,7 @@ import {
 } from "@owf/token-status-list";
 import { decodeJwt } from "jose";
 import { toBuffer } from "../shared/utils/buffer.util.js";
+import { RevocationListUnavailableError } from "./revocation-policy.util.js";
 import { TrustFetchService } from "./trust-fetch.service.js";
 
 /** Upper bound for a status list token. */
@@ -238,9 +239,10 @@ export class StatusListVerifierService {
 
             return response.body.trim();
         } catch (error: any) {
-            // "Failed to fetch status list" marks the list as unavailable for
-            // the best-effort revocation policy (isStatusListUnavailableError).
-            throw new Error(
+            // Marks the list as unavailable for the best-effort revocation
+            // policy: the message on the SD-JWT path
+            // (isStatusListUnavailableError), the class on the mDOC path.
+            throw new RevocationListUnavailableError(
                 `Failed to fetch status list from ${uri}: ${error?.message || error}`,
             );
         }
@@ -422,10 +424,9 @@ export class StatusListVerifierService {
      * size limit and timeout of SD-JWT status lists, and status lists come
      * from the cache.
      *
-     * Failures are thrown rather than returned as a non-2xx response, so a
-     * status list that cannot be fetched fails with "Failed to fetch status
-     * list" as on the SD-JWT path, which the best-effort revocation policy
-     * treats as unavailable.
+     * A list that cannot be fetched, including a non-2xx response, is thrown
+     * as {@link RevocationListUnavailableError} rather than returned, so the
+     * best-effort revocation mode can tell it from an invalid or revoking list.
      */
     readonly mdocFetch: typeof fetch = async (input, init) => {
         const uri = input instanceof Request ? input.url : input.toString();
@@ -446,7 +447,7 @@ export class StatusListVerifierService {
                 accept: accept || undefined,
             })
             .catch((error: any) => {
-                throw new Error(
+                throw new RevocationListUnavailableError(
                     `Failed to fetch identifier list from ${uri}: ${error?.message || error}`,
                 );
             });

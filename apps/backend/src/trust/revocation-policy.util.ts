@@ -41,6 +41,14 @@ export function resolveRevocationPolicy(
     };
 }
 
+/**
+ * A status list or identifier list could not be fetched: the request failed,
+ * timed out, returned a non-2xx status or was blocked by the outbound URL
+ * policy. The best-effort revocation mode then verifies without the status
+ * check.
+ */
+export class RevocationListUnavailableError extends Error {}
+
 export function isStatusListUnavailableError(error: unknown): boolean {
     const message = String(
         (error as Error | undefined)?.message ?? error ?? "",

@@ -1,5 +1,6 @@
 import { DeviceResponse, Verifier } from "@owf/mdoc";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { RevocationListUnavailableError } from "../../../../trust/revocation-policy.util.js";
 import {
     shortVerificationMessage,
     type VerificationFailureType,
@@ -141,9 +142,19 @@ describe("MdocverifierService revocation mode", () => {
             trace: vi.fn(),
         };
 
+        const statusListVerifier = {
+            mdocFetch: vi
+                .fn()
+                .mockRejectedValue(
+                    new RevocationListUnavailableError(
+                        "Failed to fetch status list from https://status.example/1: Outbound request timed out after 10000 ms",
+                    ),
+                ),
+        };
+
         service = new MdocverifierService(
             chainValidation as any,
-            { mdocFetch: vi.fn() } as any,
+            statusListVerifier as any,
             logger as any,
         );
 
@@ -173,15 +184,16 @@ describe("MdocverifierService revocation mode", () => {
         });
     });
 
-    it("retries without status anchors in best-effort mode when status list is unavailable", async () => {
-        const verifyDeviceResponse = vi
-            .spyOn(Verifier, "verifyDeviceResponse")
-            .mockRejectedValueOnce(
-                new Error("Status list fetch timed out after 10000ms"),
-            )
-            .mockResolvedValueOnce(undefined as any);
+    /** The status check of @owf/mdoc, which fetches through the context. */
+    const fetchStatusList = async (_options: unknown, ctx: any) => {
+        await ctx.fetch("https://status.example/1", {
+            headers: { Accept: "application/statuslist+cwt" },
+        });
+        return undefined as any;
+    };
 
-        const result = await service.verify(
+    const verifyBestEffort = () =>
+        service.verify(
             "AA",
             {
                 protocol: "iso-18013-7",
@@ -198,6 +210,14 @@ describe("MdocverifierService revocation mode", () => {
                 },
             } as any,
         );
+
+    it("retries without status anchors in best-effort mode when status list is unavailable", async () => {
+        const verifyDeviceResponse = vi
+            .spyOn(Verifier, "verifyDeviceResponse")
+            .mockImplementationOnce(fetchStatusList)
+            .mockResolvedValueOnce(undefined as any);
+
+        const result = await verifyBestEffort();
 
         expect(result.verified).toBe(true);
         expect(verifyDeviceResponse).toHaveBeenCalledTimes(2);
@@ -220,9 +240,7 @@ describe("MdocverifierService revocation mode", () => {
     it("does not retry in strict mode when status list is unavailable", async () => {
         const verifyDeviceResponse = vi
             .spyOn(Verifier, "verifyDeviceResponse")
-            .mockRejectedValueOnce(
-                new Error("Status list fetch timed out after 10000ms"),
-            );
+            .mockImplementationOnce(fetchStatusList);
 
         const result = await service.verify(
             "AA",
@@ -241,6 +259,23 @@ describe("MdocverifierService revocation mode", () => {
                 },
             } as any,
         );
+
+        expect(result.verified).toBe(false);
+        expect(verifyDeviceResponse).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not retry in best-effort mode when the status check fails for another reason", async () => {
+        // The message names an availability problem and the list's URI, but
+        // the list was fetched: a revoked credential must not be accepted.
+        const verifyDeviceResponse = vi
+            .spyOn(Verifier, "verifyDeviceResponse")
+            .mockRejectedValueOnce(
+                new Error(
+                    "Identifier 01 found in the revoked identifier list at 'https://revocation.network.example/unavailable'",
+                ),
+            );
+
+        const result = await verifyBestEffort();
 
         expect(result.verified).toBe(false);
         expect(verifyDeviceResponse).toHaveBeenCalledTimes(1);
