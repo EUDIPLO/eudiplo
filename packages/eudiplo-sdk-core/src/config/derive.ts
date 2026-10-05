@@ -23,15 +23,19 @@ function resolveChildPath(
   // For array parents, support relative child paths without an explicit
   // array marker (null/number) by inserting the item step automatically.
   // Breaking change: relative child paths using a leading null marker are rejected.
+  // A child path of just [null] describes the items themselves.
   if (
     parentType === "array" &&
     childPath.length > 0
   ) {
     if (childPath[0] === null) {
-      throw new Error(
-        "Relative child paths under array parents must not start with null. " +
-          "Use ['field'] instead of [null, 'field']."
-      );
+      if (childPath.length > 1) {
+        throw new Error(
+          "Relative child paths under array parents must not start with null. " +
+            "Use ['field'] instead of [null, 'field']."
+        );
+      }
+      return [...parentPath, null];
     }
 
     if (typeof childPath[0] !== "number") {

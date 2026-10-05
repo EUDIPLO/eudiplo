@@ -235,4 +235,26 @@ describe("config derive helpers", () => {
       "Relative child paths under array parents must not start with null"
     );
   });
+
+  it("treats a [null] child path under an array parent as the items", () => {
+    const relative: ClaimFieldDefinition[] = [
+      {
+        path: ["nationalities"],
+        type: "array",
+        children: [{ path: [null], type: "string", defaultValue: "DE" }],
+      },
+    ];
+    const absolute: ClaimFieldDefinition[] = [
+      {
+        path: ["nationalities"],
+        type: "array",
+        children: [
+          { path: ["nationalities", null], type: "string", defaultValue: "DE" },
+        ],
+      },
+    ];
+
+    expect(buildJsonSchema(relative)).toEqual(buildJsonSchema(absolute));
+    expect(buildClaims(relative)).toEqual(buildClaims(absolute));
+  });
 });
