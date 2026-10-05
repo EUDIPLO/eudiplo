@@ -5,6 +5,7 @@ import {
     DeviceResponse,
     DocRequest,
     ItemsRequest,
+    type MdocContext,
     SessionTranscript,
     Verifier,
 } from "@owf/mdoc";
@@ -16,8 +17,9 @@ import {
     isStatusListUnavailableError,
     resolveRevocationPolicy,
 } from "../../../../trust/revocation-policy.util.js";
+import { StatusListVerifierService } from "../../../../trust/status-list-verifier.service.js";
 import { VerifierOptions } from "../../../../trust/types.js";
-import { mdocContext } from "../../mdoc-context.js";
+import { mdocContext, withFetch } from "../../mdoc-context.js";
 import {
     ChainValidationResult,
     CredentialChainValidationService,
@@ -93,11 +95,20 @@ interface MdocErrorDetails {
 
 @Injectable()
 export class MdocverifierService {
+    /**
+     * Context for verifying device responses: status lists and identifier
+     * lists named in the presented MSO are fetched under the outbound URL
+     * policy, not with the global `fetch`.
+     */
+    private readonly verificationContext: MdocContext;
+
     constructor(
         private readonly chainValidation: CredentialChainValidationService,
+        statusListVerifier: StatusListVerifierService,
         private readonly logger: PinoLogger,
     ) {
         this.logger.setContext(MdocverifierService.name);
+        this.verificationContext = withFetch(statusListVerifier.mdocFetch);
     }
 
     /**
@@ -275,7 +286,7 @@ export class MdocverifierService {
                         trustedCertificates,
                         disableStatusValidation: !includeStatusCheck,
                     },
-                    mdocContext,
+                    this.verificationContext,
                 );
             } catch (error) {
                 if (
@@ -305,7 +316,7 @@ export class MdocverifierService {
                         trustedCertificates,
                         disableStatusValidation: true,
                     },
-                    mdocContext,
+                    this.verificationContext,
                 );
             }
 

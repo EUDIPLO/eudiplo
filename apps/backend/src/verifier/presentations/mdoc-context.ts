@@ -188,8 +188,15 @@ const verifyChainSignatures = async (
     }
 };
 
-export const mdocContext: MdocContext = {
-    fetch,
+/**
+ * Everything @owf/mdoc needs except `fetch`, for signing, session transcripts
+ * and issuance. Verifying a presented mDOC fetches the status list or
+ * identifier list named in its MSO, and has to use {@link withFetch} with a
+ * fetch under the outbound URL policy. Without `fetch` here, passing this
+ * context to a verification is a type error; at runtime @owf/mdoc would
+ * fall back to the global `fetch`.
+ */
+export const mdocContext: Omit<MdocContext, "fetch"> = {
     crypto: {
         digest: async ({ digestAlgorithm, bytes }) => {
             const digest = await webCrypto.subtle.digest(
@@ -375,3 +382,9 @@ export const mdocContext: MdocContext = {
         },
     },
 };
+
+/** {@link mdocContext} with the `fetch` that verifying an mDOC needs. */
+export const withFetch = (fetch: MdocContext["fetch"]): MdocContext => ({
+    ...mdocContext,
+    fetch,
+});

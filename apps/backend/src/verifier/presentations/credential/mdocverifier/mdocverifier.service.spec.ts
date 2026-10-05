@@ -22,6 +22,7 @@ describe("MdocverifierService failure classification", () => {
 
         service = new MdocverifierService(
             chainValidation as any,
+            { mdocFetch: vi.fn() } as any,
             logger as any,
         );
     });
@@ -142,6 +143,7 @@ describe("MdocverifierService revocation mode", () => {
 
         service = new MdocverifierService(
             chainValidation as any,
+            { mdocFetch: vi.fn() } as any,
             logger as any,
         );
 

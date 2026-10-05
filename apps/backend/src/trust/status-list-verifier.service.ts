@@ -8,10 +8,15 @@ import {
     StatusType,
 } from "@owf/token-status-list";
 import { decodeJwt } from "jose";
+import { toBuffer } from "../shared/utils/buffer.util.js";
 import { TrustFetchService } from "./trust-fetch.service.js";
 
 /** Upper bound for a status list token. */
 const STATUS_LIST_MAX_BYTES = 10 * 1024 * 1024;
+
+const STATUS_LIST_TIMEOUT_MS = 10_000;
+
+const STATUS_LIST_CWT = "application/statuslist+cwt";
 
 /**
  * Cached status list with metadata.
@@ -38,6 +43,20 @@ interface CachedJwt {
     /** TTL from the JWT payload (in seconds) */
     ttl?: number;
     /** Expiration time from the JWT (exp claim) */
+    exp?: number;
+}
+
+/**
+ * Cached raw CWT with metadata.
+ */
+interface CachedCwt {
+    /** The raw CWT bytes */
+    cwt: Uint8Array;
+    /** When the cache entry was fetched */
+    fetchedAt: number;
+    /** TTL from the CWT payload (in seconds) */
+    ttl?: number;
+    /** Expiration time from the CWT (exp claim) */
     exp?: number;
 }
 
@@ -74,6 +93,12 @@ export class StatusListVerifierService {
      * Used by statusListFetcher interface for SD-JWT SDK.
      */
     private readonly cachedJwts = new Map<string, CachedJwt>();
+
+    /**
+     * Cache of raw status list CWTs keyed by URI.
+     * Used by the mDOC verifier, see {@link mdocFetch}.
+     */
+    private readonly cachedCwts = new Map<string, CachedCwt>();
 
     /** Default cache TTL in milliseconds (5 minutes) */
     private readonly defaultCacheTtlMs = 5 * 60 * 1000;
@@ -192,7 +217,7 @@ export class StatusListVerifierService {
      */
     private async fetchStatusListToken(
         uri: string,
-        timeoutMs = 10000,
+        timeoutMs = STATUS_LIST_TIMEOUT_MS,
         type: "jwt" | "cwt" = "jwt",
     ): Promise<string | Uint8Array> {
         try {
@@ -201,13 +226,13 @@ export class StatusListVerifierService {
                 maxBytes: STATUS_LIST_MAX_BYTES,
                 accept:
                     type === "cwt"
-                        ? "application/statuslist+cwt"
+                        ? STATUS_LIST_CWT
                         : "application/statuslist+jwt",
             });
 
             const contentType = (response.contentType ?? "").toLowerCase();
 
-            if (contentType.includes("application/statuslist+cwt")) {
+            if (contentType.includes(STATUS_LIST_CWT)) {
                 return new Uint8Array(response.bytes);
             }
 
@@ -278,9 +303,11 @@ export class StatusListVerifierService {
         if (uri) {
             this.cache.delete(uri);
             this.cachedJwts.delete(uri);
+            this.cachedCwts.delete(uri);
         } else {
             this.cache.clear();
             this.cachedJwts.clear();
+            this.cachedCwts.clear();
         }
     }
 
@@ -292,7 +319,11 @@ export class StatusListVerifierService {
             size: this.cache.size,
             jwtCacheSize: this.cachedJwts.size,
             uris: Array.from(
-                new Set([...this.cache.keys(), ...this.cachedJwts.keys()]),
+                new Set([
+                    ...this.cache.keys(),
+                    ...this.cachedJwts.keys(),
+                    ...this.cachedCwts.keys(),
+                ]),
             ),
         };
     }
@@ -344,4 +375,85 @@ export class StatusListVerifierService {
     private isJwtCacheExpired(cached: CachedJwt): boolean {
         return this.isTimedCacheExpired(cached);
     }
+
+    /**
+     * Get a status list CWT from cache or fetch it.
+     * The CWT is cached based on its ttl/exp claims.
+     *
+     * @param uri The URI of the status list CWT
+     * @returns The raw CWT bytes
+     */
+    async getStatusListCwt(uri: string): Promise<Uint8Array> {
+        const cached = this.cachedCwts.get(uri);
+        if (cached && !this.isTimedCacheExpired(cached)) {
+            this.logger.debug(`Using cached status list CWT for ${uri}`);
+            return cached.cwt;
+        }
+
+        this.logger.debug(`Fetching status list CWT from ${uri}`);
+        const token = await this.fetchStatusListToken(
+            uri,
+            STATUS_LIST_TIMEOUT_MS,
+            "cwt",
+        );
+        if (typeof token === "string") {
+            throw new TypeError(
+                `Status list at ${uri} was not served as ${STATUS_LIST_CWT}`,
+            );
+        }
+
+        const { payload } = StatusListCwt.fromToken(token);
+        this.cachedCwts.set(uri, {
+            cwt: token,
+            fetchedAt: Date.now(),
+            ttl: payload.timeToLive,
+            exp: payload.expirationTime
+                ? Math.floor(payload.expirationTime.getTime() / 1000)
+                : undefined,
+        });
+
+        return token;
+    }
+
+    /**
+     * `fetch` for the mDOC verifier's `MdocContext`. @owf/mdoc downloads the
+     * status list or ISO/IEC 18013-5 identifier list named in a presented
+     * mDOC's MSO through it, so these requests get the outbound URL policy,
+     * size limit and timeout of SD-JWT status lists, and status lists come
+     * from the cache.
+     *
+     * Failures are thrown rather than returned as a non-2xx response, so a
+     * status list that cannot be fetched fails with "Failed to fetch status
+     * list" as on the SD-JWT path, which the best-effort revocation policy
+     * treats as unavailable.
+     */
+    readonly mdocFetch: typeof fetch = async (input, init) => {
+        const uri = input instanceof Request ? input.url : input.toString();
+        const accept = new Headers(init?.headers).get("accept") ?? "";
+
+        if (accept.includes(STATUS_LIST_CWT)) {
+            const cwt = await this.getStatusListCwt(uri);
+            return new Response(toBuffer(cwt), {
+                headers: { "content-type": STATUS_LIST_CWT },
+            });
+        }
+
+        // Identifier lists are not cached.
+        const response = await this.trustFetch
+            .get(uri, {
+                timeoutMs: STATUS_LIST_TIMEOUT_MS,
+                maxBytes: STATUS_LIST_MAX_BYTES,
+                accept: accept || undefined,
+            })
+            .catch((error: any) => {
+                throw new Error(
+                    `Failed to fetch identifier list from ${uri}: ${error?.message || error}`,
+                );
+            });
+        return new Response(toBuffer(response.bytes), {
+            headers: response.contentType
+                ? { "content-type": response.contentType }
+                : undefined,
+        });
+    };
 }
