@@ -6,13 +6,13 @@ EUDIPLO can use [OpenID Federation](https://openid.net/specs/openid-federation-1
 
 ## Limitations
 
-Federation support is not yet a full OpenID Federation trust-chain resolution ([#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046)). Treat federation trust as unauthenticated and prefer LoTE [trust lists](trust-lists.md) in production:
+Federation support is not yet a full OpenID Federation trust-chain resolution ([#1046](https://github.com/EUDIPLO/eudiplo/issues/1046)). Treat federation trust as unauthenticated and prefer LoTE [trust lists](trust-lists.md) in production:
 
 - Entity configurations and subordinate statements are not verified against the trust anchor. EUDIPLO only checks that the entity's `sub` matches and that its `authority_hints` lead to a configured trust anchor. A JWT entity configuration is only verified against the certificate in its own `x5c` header, if present, and its `exp` is not checked. Membership is therefore self-asserted: any entity whose entity configuration names your trust anchor in `authority_hints` is trusted.
 - For credentials, the entity ID is taken from the credential's leaf certificate (SAN or CN); the signing key is not bound to the entity's federation metadata.
 - In presentation verification, the credential's certificate chain is not checked when federation decides; only the entity ID in its leaf certificate is.
 - TLS certificates of federation entities are not checked outside `NODE_ENV=production`.
-- EUDIPLO does not publish its own entity configuration yet ([#1047](https://github.com/openwallet-foundation/eudiplo/issues/1047)).
+- EUDIPLO does not publish its own entity configuration yet ([#1047](https://github.com/EUDIPLO/eudiplo/issues/1047)).
 
 ## Where federation is checked
 

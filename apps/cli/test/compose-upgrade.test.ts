@@ -8,8 +8,8 @@ import {
 const envFile = [
     "# managed by eudiplo init, edit freely",
     "EUDIPLO_ENV_FILE=.eudiplo.env",
-    "EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo:8.0.2",
-    "EUDIPLO_CLIENT_IMAGE=ghcr.io/openwallet-foundation/eudiplo-client:8.0.2",
+    "EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo:8.0.2",
+    "EUDIPLO_CLIENT_IMAGE=ghcr.io/eudiplo/eudiplo-client:8.0.2",
     "PUBLIC_URL=https://eudiplo.example.com",
     "",
     "# my own settings",
@@ -25,13 +25,13 @@ describe("image upgrade planning", () => {
         expect(plan.changes).toEqual([
             {
                 key: "EUDIPLO_IMAGE",
-                repository: "ghcr.io/openwallet-foundation/eudiplo",
+                repository: "ghcr.io/eudiplo/eudiplo",
                 from: "8.0.2",
                 to: "8.1.0",
             },
             {
                 key: "EUDIPLO_CLIENT_IMAGE",
-                repository: "ghcr.io/openwallet-foundation/eudiplo-client",
+                repository: "ghcr.io/eudiplo/eudiplo-client",
                 from: "8.0.2",
                 to: "8.1.0",
             },
@@ -82,15 +82,60 @@ describe("image upgrade planning", () => {
             "a custom registry",
             "EUDIPLO_IMAGE=registry.example.com/eudiplo:8.0.2",
         ],
-        [
-            "a digest",
-            "EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo@sha256:abc123",
-        ],
-        ["no tag", "EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo"],
+        ["a digest", "EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo@sha256:abc123"],
+        ["no tag", "EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo"],
     ])("refuses a user-managed image line with %s", (_label, line) => {
         const custom = envFile.replace(
-            "EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo:8.0.2",
+            "EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo:8.0.2",
             line,
+        );
+
+        expect(() => planImageUpgrade(custom, "8.1.0")).toThrow(
+            /not a CLI-managed image/,
+        );
+    });
+
+    it("moves legacy OpenWallet Foundation images to the current repository", () => {
+        const legacy = envFile.replaceAll(
+            "ghcr.io/eudiplo/",
+            "ghcr.io/openwallet-foundation/",
+        );
+        const plan = planImageUpgrade(legacy, "9.0.0");
+
+        expect(plan.changes).toEqual([
+            {
+                key: "EUDIPLO_IMAGE",
+                repository: "ghcr.io/eudiplo/eudiplo",
+                movedFrom: "ghcr.io/openwallet-foundation/eudiplo",
+                from: "8.0.2",
+                to: "9.0.0",
+            },
+            {
+                key: "EUDIPLO_CLIENT_IMAGE",
+                repository: "ghcr.io/eudiplo/eudiplo-client",
+                movedFrom: "ghcr.io/openwallet-foundation/eudiplo-client",
+                from: "8.0.2",
+                to: "9.0.0",
+            },
+        ]);
+        expect(plan.content).toBe(envFile.replaceAll(":8.0.2", ":9.0.0"));
+    });
+
+    it("moves legacy images even when the tag stays the same", () => {
+        const legacy = envFile.replaceAll(
+            "ghcr.io/eudiplo/",
+            "ghcr.io/openwallet-foundation/",
+        );
+        const plan = planImageUpgrade(legacy, "8.0.2");
+
+        expect(plan.changes).toHaveLength(2);
+        expect(plan.content).toBe(envFile);
+    });
+
+    it("refuses a legacy image pinned by digest", () => {
+        const custom = envFile.replace(
+            "EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo:8.0.2",
+            "EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo@sha256:abc123",
         );
 
         expect(() => planImageUpgrade(custom, "8.1.0")).toThrow(
@@ -105,7 +150,7 @@ describe("image upgrade planning", () => {
     });
 
     it("refuses duplicate managed keys instead of picking one", () => {
-        const duplicated = `${envFile}EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo:7.0.0\n`;
+        const duplicated = `${envFile}EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo:7.0.0\n`;
 
         expect(() => planImageUpgrade(duplicated, "8.1.0")).toThrow(
             /defined more than once/,

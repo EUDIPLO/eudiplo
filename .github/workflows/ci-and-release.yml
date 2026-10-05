@@ -559,7 +559,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/openwallet-foundation/eudiplo
+          images: ghcr.io/eudiplo/eudiplo
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -576,7 +576,7 @@ jobs:
           context: .
           target: eudiplo
           load: true
-          tags: ghcr.io/openwallet-foundation/eudiplo:test
+          tags: ghcr.io/eudiplo/eudiplo:test
           build-args: |
             VERSION=${{ needs.build-info.outputs.version }}
             REVISION=${{ needs.build-info.outputs.revision }}
@@ -591,7 +591,7 @@ jobs:
             -e AUTH_CLIENT_ID=ci-docker-client \
             -e AUTH_CLIENT_SECRET=ci-docker-secret \
             -e ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
-            ghcr.io/openwallet-foundation/eudiplo:test
+            ghcr.io/eudiplo/eudiplo:test
 
       - name: Wait for healthy
         if: matrix.arch == 'amd64'
@@ -667,7 +667,7 @@ jobs:
             VERSION=${{ needs.build-info.outputs.version }}
             REVISION=${{ needs.build-info.outputs.revision }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=ghcr.io/openwallet-foundation/eudiplo,push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=ghcr.io/eudiplo/eudiplo,push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -715,7 +715,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/openwallet-foundation/eudiplo
+          images: ghcr.io/eudiplo/eudiplo
           tags: |
             type=raw,value=main
             type=raw,value=sha-${{ github.sha }}
@@ -724,14 +724,14 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'ghcr.io/openwallet-foundation/eudiplo@sha256:%s ' *)
+            $(printf 'ghcr.io/eudiplo/eudiplo@sha256:%s ' *)
 
       - name: Inspect image
-        run: docker buildx imagetools inspect ghcr.io/openwallet-foundation/eudiplo:main
+        run: docker buildx imagetools inspect ghcr.io/eudiplo/eudiplo:main
 
   # =============================================================================
   # Docker Backend Demo: Build & Push (multi-platform with native runners)
-  # Publishes ghcr.io/openwallet-foundation/eudiplo-demo:main on main branch.
+  # Publishes ghcr.io/eudiplo/eudiplo-demo:main on main branch.
   # =============================================================================
   docker-backend-demo:
     name: Build & Push Backend Demo Docker (${{ matrix.arch }})
@@ -757,7 +757,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/openwallet-foundation/eudiplo-demo
+          images: ghcr.io/eudiplo/eudiplo-demo
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -791,7 +791,7 @@ jobs:
             VERSION=${{ needs.build-info.outputs.version }}
             REVISION=${{ needs.build-info.outputs.revision }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=ghcr.io/openwallet-foundation/eudiplo-demo,push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=ghcr.io/eudiplo/eudiplo-demo,push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -839,7 +839,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/openwallet-foundation/eudiplo-demo
+          images: ghcr.io/eudiplo/eudiplo-demo
           tags: |
             type=raw,value=main
             type=raw,value=sha-${{ github.sha }}
@@ -848,10 +848,10 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'ghcr.io/openwallet-foundation/eudiplo-demo@sha256:%s ' *)
+            $(printf 'ghcr.io/eudiplo/eudiplo-demo@sha256:%s ' *)
 
       - name: Inspect image
-        run: docker buildx imagetools inspect ghcr.io/openwallet-foundation/eudiplo-demo:main
+        run: docker buildx imagetools inspect ghcr.io/eudiplo/eudiplo-demo:main
 
   # =============================================================================
   # Docker Client: Build & Push (multi-platform with native runners)
@@ -882,7 +882,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/openwallet-foundation/eudiplo-client
+          images: ghcr.io/eudiplo/eudiplo-client
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -904,7 +904,7 @@ jobs:
             VERSION=${{ needs.build-info.outputs.version }}
             REVISION=${{ needs.build-info.outputs.revision }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=ghcr.io/openwallet-foundation/eudiplo-client,push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=ghcr.io/eudiplo/eudiplo-client,push-by-digest=true,name-canonical=true,push=true
 
       # --- Build to validate (PRs/workflow_dispatch only) ---
       - name: Build to validate
@@ -964,7 +964,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/openwallet-foundation/eudiplo-client
+          images: ghcr.io/eudiplo/eudiplo-client
           tags: |
             type=raw,value=main
             type=raw,value=sha-${{ github.sha }}
@@ -973,7 +973,7 @@ jobs:
         working-directory: ${{ runner.temp }}/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'ghcr.io/openwallet-foundation/eudiplo-client@sha256:%s ' *)
+            $(printf 'ghcr.io/eudiplo/eudiplo-client@sha256:%s ' *)
 
       - name: Inspect image
-        run: docker buildx imagetools inspect ghcr.io/openwallet-foundation/eudiplo-client:main
+        run: docker buildx imagetools inspect ghcr.io/eudiplo/eudiplo-client:main

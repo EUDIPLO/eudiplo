@@ -49,16 +49,16 @@
       "name": "EUDIPLO",
       "description": "Self-hosted, open-source middleware for the EU Digital Identity Wallet. It issues and verifies credentials with OpenID4VCI and OpenID4VP, SD-JWT VC and mdoc.",
       "url": "https://eudiplo.dev/",
-      "codeRepository": "https://github.com/openwallet-foundation/eudiplo",
+      "codeRepository": "https://github.com/EUDIPLO/eudiplo",
       "programmingLanguage": "TypeScript",
       "license": "https://www.apache.org/licenses/LICENSE-2.0",
       "isAccessibleForFree": true,
       "publisher": {
         "@type": "Organization",
-        "name": "OpenWallet Foundation",
-        "url": "https://openwallet.foundation/"
+        "name": "LF Decentralized Trust",
+        "url": "https://www.lfdecentralizedtrust.org/"
       },
-      "sameAs": ["https://github.com/openwallet-foundation/eudiplo"]
+      "sameAs": ["https://github.com/EUDIPLO/eudiplo"]
     }
   ]
 }
@@ -796,7 +796,7 @@ h1 em { font-style: normal; color: var(--brand); }
       <a href="#use-cases">Use cases</a>
       <a href="#why-now">Why now</a>
       <a href="https://docs.eudiplo.dev/">Docs</a>
-      <a href="https://github.com/openwallet-foundation/eudiplo">GitHub</a>
+      <a href="https://github.com/EUDIPLO/eudiplo">GitHub</a>
     </nav>
     <a class="btn" href="#start">Get started</a>
   </div>
@@ -814,7 +814,7 @@ h1 em { font-style: normal; color: var(--brand); }
           <a class="door primary" href="#start"><strong>I'm building <span aria-hidden="true">→</span></strong><span>Run it locally and follow a cookbook</span></a>
           <a class="door" href="#self-hosted"><strong>I'm evaluating <span aria-hidden="true">→</span></strong><span>Data protection, use cases and deadlines</span></a>
         </div>
-        <p class="hero-meta"><span>Runs on your servers</span><span>Apache-2.0</span><span>OpenWallet Foundation</span><span>OpenID4VCI 1.0</span><span>OpenID4VP 1.0</span></p>
+        <p class="hero-meta"><span>Runs on your servers</span><span>Apache-2.0</span><span>LF Decentralized Trust</span><span>OpenID4VCI 1.0</span><span>OpenID4VP 1.0</span></p>
       </div>
 
       <div class="stage" id="stage" aria-label="Example wallet flow">
@@ -1141,8 +1141,8 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
       </div>
       <div class="oss">
         <strong>Open source, Apache-2.0</strong>
-        <p>Hosted by the OpenWallet Foundation and developed in the open. No license fees, no per-transaction pricing, no lock-in.</p>
-        <a class="btn ghost" href="https://github.com/openwallet-foundation/eudiplo">View on GitHub ↗</a>
+        <p>Hosted by LF Decentralized Trust and developed in the open. No license fees, no per-transaction pricing, no lock-in.</p>
+        <a class="btn ghost" href="https://github.com/EUDIPLO/eudiplo">View on GitHub ↗</a>
       </div>
     </div>
   </section>
@@ -1260,7 +1260,7 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
           <div class="links">
             <a href="https://docs.eudiplo.dev/reference/api">API reference</a>
             <a href="https://docs.eudiplo.dev/cookbooks/integrate-backend">TypeScript SDK</a>
-            <a href="https://github.com/openwallet-foundation/eudiplo">GitHub ↗</a>
+            <a href="https://github.com/EUDIPLO/eudiplo">GitHub ↗</a>
           </div>
         </div>
         <div class="panel decide" id="decide">
@@ -1289,7 +1289,7 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
     <div class="foot-grid">
       <div>
         <a class="brand" href="#top"><span class="mark" aria-hidden="true"></span>EUDIPLO</a>
-        <p>Open-source middleware for the EU Digital Identity Wallet. An OpenWallet Foundation project.</p>
+        <p>Open-source middleware for the EU Digital Identity Wallet. An LF Decentralized Trust project.</p>
       </div>
       <div>
         <h4>Docs</h4>
@@ -1303,9 +1303,9 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
       <div>
         <h4>Community</h4>
         <ul>
-          <li><a href="https://github.com/openwallet-foundation/eudiplo">GitHub</a></li>
+          <li><a href="https://github.com/EUDIPLO/eudiplo">GitHub</a></li>
           <li><a href="https://discord.gg/58ys8XfXDu">Discord</a></li>
-          <li><a href="https://github.com/openwallet-foundation/eudiplo/blob/main/CONTRIBUTING.MD">Contributing</a></li>
+          <li><a href="https://github.com/EUDIPLO/eudiplo/blob/main/CONTRIBUTING.MD">Contributing</a></li>
         </ul>
       </div>
       <div>
@@ -1313,7 +1313,7 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
         <ul>
           <li><a href="https://docs.eudiplo.dev/showcase">Who uses EUDIPLO</a></li>
           <li><a href="https://eudiplo.dev/schemas/index.json">Configuration schemas</a></li>
-          <li><a href="https://github.com/openwallet-foundation/eudiplo/blob/main/LICENSE">License (Apache-2.0)</a></li>
+          <li><a href="https://github.com/EUDIPLO/eudiplo/blob/main/LICENSE">License (Apache-2.0)</a></li>
         </ul>
       </div>
     </div>
@@ -1378,7 +1378,7 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
   });
 
   /* ---------- MRZ strip (decorative, styled like an ID card's machine-readable zone) ---------- */
-  const mrz = ['EUDIPLO<<ISSUE<VERIFY<TRUST', 'APACHE<2<0<<OPENWALLET<FOUNDATION'];
+  const mrz = ['EUDIPLO<<ISSUE<VERIFY<TRUST', 'APACHE<2<0<<LF<DECENTRALIZED<TRUST'];
   $('mrz').textContent = mrz.map((l) => l.padEnd(44, '<').slice(0, 44)).join('\n');
 
   /* ---------- Timeline: today marker ---------- */

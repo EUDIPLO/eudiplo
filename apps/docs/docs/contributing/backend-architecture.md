@@ -4,7 +4,7 @@ title: Backend Architecture
 
 # Backend architecture
 
-This page says where backend code goes, which boundaries the tests enforce, and how to add an endpoint, a migration, an environment variable or an adapter. The rules for each role (what controllers, use cases, ports and adapters may and may not do, forbidden dependencies) are in [`.github/instructions/backend-architecture.instructions.md`](https://github.com/openwallet-foundation/eudiplo/blob/main/.github/instructions/backend-architecture.instructions.md). Migration status, known debt and the next slices are in the [refactoring plan](https://github.com/openwallet-foundation/eudiplo/blob/main/apps/backend/docs/refactoring-plan.md); it is not an instruction to execute tasks automatically.
+This page says where backend code goes, which boundaries the tests enforce, and how to add an endpoint, a migration, an environment variable or an adapter. The rules for each role (what controllers, use cases, ports and adapters may and may not do, forbidden dependencies) are in [`.github/instructions/backend-architecture.instructions.md`](https://github.com/EUDIPLO/eudiplo/blob/main/.github/instructions/backend-architecture.instructions.md). Migration status, known debt and the next slices are in the [refactoring plan](https://github.com/EUDIPLO/eudiplo/blob/main/apps/backend/docs/refactoring-plan.md); it is not an instruction to execute tasks automatically.
 
 EUDIPLO's backend is a NestJS modular monolith that is migrating incrementally toward ports and adapters. Apply the boundaries to new or explicitly migrated code. Preserve public HTTP and protocol contracts, configuration formats, persisted data and security behavior unless the change explicitly targets them.
 

@@ -7,7 +7,7 @@ set -euo pipefail
 DOCKER_SOURCE_SHA="${DOCKER_SOURCE_SHA:-${GITHUB_SHA:-}}"
 : "${DOCKER_SOURCE_SHA:?DOCKER_SOURCE_SHA (or GITHUB_SHA) is required}"
 
-REGISTRY="ghcr.io/openwallet-foundation"
+REGISTRY="ghcr.io/eudiplo"
 DOCKERFILE="Dockerfile.release"
 SOURCE_TAG="sha-${DOCKER_SOURCE_SHA}"
 

@@ -32,7 +32,7 @@ installer falls back to `npm install -g @eudiplo/cli`, which needs Node.js 22.12
 or newer and npm.
 
 **Windows, or with Node.js:** use the npm package, or the Windows x64 archive
-from the [GitHub releases](https://github.com/openwallet-foundation/eudiplo/releases).
+from the [GitHub releases](https://github.com/EUDIPLO/eudiplo/releases).
 
 ```bash
 npm install -g @eudiplo/cli   # installs the `eudiplo` command

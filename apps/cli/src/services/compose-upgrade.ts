@@ -9,15 +9,25 @@
  */
 
 const managedImages = {
-    EUDIPLO_IMAGE: "ghcr.io/openwallet-foundation/eudiplo",
-    EUDIPLO_CLIENT_IMAGE: "ghcr.io/openwallet-foundation/eudiplo-client",
+    EUDIPLO_IMAGE: "ghcr.io/eudiplo/eudiplo",
+    EUDIPLO_CLIENT_IMAGE: "ghcr.io/eudiplo/eudiplo-client",
 } as const;
 
 type ManagedKey = keyof typeof managedImages;
 
+// Releases up to v8.1.0 were published while the project was hosted by the
+// OpenWallet Foundation. Instances still on those images are moved to the
+// current repository by their next upgrade.
+const legacyImages: Record<ManagedKey, string> = {
+    EUDIPLO_IMAGE: "ghcr.io/openwallet-foundation/eudiplo",
+    EUDIPLO_CLIENT_IMAGE: "ghcr.io/openwallet-foundation/eudiplo-client",
+};
+
 interface ImageChange {
     key: ManagedKey;
     repository: string;
+    /** The legacy repository the line pointed at, when it is being moved. */
+    movedFrom?: string;
     from: string;
     to: string;
 }
@@ -39,10 +49,21 @@ export function assertImageTag(tag: string): void {
     }
 }
 
+/** Returns the tag of `value` if it is `repository:<tag>`. */
+function tagOf(value: string, repository: string): string | undefined {
+    const prefix = `${repository}:`;
+    if (!value.startsWith(prefix)) {
+        return undefined;
+    }
+    const tag = value.slice(prefix.length);
+    return TAG.test(tag) ? tag : undefined;
+}
+
 /**
- * Plans a tag change for the managed image lines. Refuses rather than
- * guesses when a line has been customised (another registry, a digest, or
- * no tag), because that line is then user-managed.
+ * Plans a tag change for the managed image lines. Lines on a legacy
+ * repository are moved to the current one. Refuses rather than guesses when
+ * a line has been customised (another registry, a digest, or no tag),
+ * because that line is then user-managed.
  */
 export function planImageUpgrade(content: string, tag: string): UpgradePlan {
     assertImageTag(tag);
@@ -70,20 +91,27 @@ export function planImageUpgrade(content: string, tag: string): UpgradePlan {
         }
         found.add(key);
 
-        const prefix = `${repository}:`;
-        const current = value.startsWith(prefix)
-            ? value.slice(prefix.length)
-            : undefined;
-        if (current === undefined || !TAG.test(current)) {
+        const currentTag = tagOf(value, repository);
+        const legacyTag = tagOf(value, legacyImages[key]);
+        const current = currentTag ?? legacyTag;
+        if (current === undefined) {
             throw new Error(
-                `${key} is set to ${value}, which is not a CLI-managed image. Update it yourself, or restore ${prefix}<tag> to let the CLI manage it.`,
+                `${key} is set to ${value}, which is not a CLI-managed image. Update it yourself, or restore ${repository}:<tag> to let the CLI manage it.`,
             );
         }
 
-        if (current !== tag) {
+        if (currentTag === undefined) {
+            changes.push({
+                key,
+                repository,
+                movedFrom: legacyImages[key],
+                from: current,
+                to: tag,
+            });
+        } else if (current !== tag) {
             changes.push({ key, repository, from: current, to: tag });
         }
-        return `${key}=${prefix}${tag}${lineEnding}`;
+        return `${key}=${repository}:${tag}${lineEnding}`;
     });
 
     if (!found.has("EUDIPLO_IMAGE")) {

@@ -67,7 +67,7 @@ spec:
               done
       containers:
         - name: eudiplo
-          image: ghcr.io/openwallet-foundation/eudiplo:v7.4.0
+          image: ghcr.io/eudiplo/eudiplo:v7.4.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000

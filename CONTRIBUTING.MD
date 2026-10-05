@@ -6,7 +6,7 @@ Thanks for your interest in contributing to **EUDIPLO**! This file describes the
 
 ## Reporting issues
 
-1. **Search** the existing [issues](https://github.com/openwallet-foundation/eudiplo/issues) to avoid duplicates.
+1. **Search** the existing [issues](https://github.com/EUDIPLO/eudiplo/issues) to avoid duplicates.
 2. If there is none, **open a new issue** with:
    - a short description,
    - steps to reproduce,
@@ -21,7 +21,7 @@ Open an issue with the `feature request` label and describe the problem you want
 
 ## Finding something to work on
 
-- Issues labeled [`good first issue`](https://github.com/openwallet-foundation/eudiplo/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+- Issues labeled [`good first issue`](https://github.com/EUDIPLO/eudiplo/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
 - Findings on the [SonarCloud dashboard](https://sonarcloud.io/project/overview?id=openwallet-foundation_eudiplo) (code smells, bugs, security hotspots). They are self-contained and a good way to learn the codebase.
 - For backend refactoring, the [refactoring plan](apps/backend/docs/refactoring-plan.md). Pick one bounded slice before you start.
 
@@ -133,6 +133,6 @@ We follow a [Code of Conduct](CODE_OF_CONDUCT.md). Please be kind and constructi
 
 ## Need help?
 
-Open a discussion or issue on [GitHub](https://github.com/openwallet-foundation/eudiplo/issues), join the [Discord](https://discord.gg/58ys8XfXDu), or contact the [maintainers](MAINTAINERS.md).
+Open a discussion or issue on [GitHub](https://github.com/EUDIPLO/eudiplo/issues), join the [Discord](https://discord.gg/58ys8XfXDu), or contact the [maintainers](MAINTAINERS.md).
 
 Thanks for helping improve EUDIPLO!

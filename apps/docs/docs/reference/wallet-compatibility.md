@@ -7,7 +7,7 @@ description: Wallets tested with EUDIPLO, their supported features and how to te
 
 This page records which wallets have been tested with EUDIPLO and which features worked. EUDIPLO itself is tested against the [OpenID Foundation conformance suite](https://openid.net/certification/about-conformance-suite/) for OID4VCI and OID4VP with every change, so a wallet that passes the same suite should work without wallet-specific configuration.
 
-If a conformant wallet does not work with EUDIPLO, [open an issue](https://github.com/openwallet-foundation/eudiplo/issues/new).
+If a conformant wallet does not work with EUDIPLO, [open an issue](https://github.com/EUDIPLO/eudiplo/issues/new).
 
 ## Tested wallets
 
@@ -81,7 +81,7 @@ Protocol conformance is tested automatically; wallet-specific behavior still nee
      -e MASTER_SECRET="$(openssl rand -base64 32)" \
      -e AUTH_CLIENT_ID=root \
      -e AUTH_CLIENT_SECRET="$(openssl rand -base64 24)" \
-     ghcr.io/openwallet-foundation/eudiplo:latest
+     ghcr.io/eudiplo/eudiplo:latest
    ```
 
 2. **Start with a known-good configuration.** Create a credential configuration from a template (for example PID as SD-JWT VC), make sure the tenant has signing keys and certificates, and leave DPoP off for the first run.
@@ -91,6 +91,6 @@ Protocol conformance is tested automatically; wallet-specific behavior still nee
 
 ## Report results
 
-- **Wallet works:** open an issue with the [wallet compatibility template](https://github.com/openwallet-foundation/eudiplo/issues/new?template=wallet-compatibility.md) and include the results from step 5, so the wallet can be added to this page.
-- **Wallet fails:** check the notes above, then open an [issue](https://github.com/openwallet-foundation/eudiplo/issues/new) with reproduction steps, EUDIPLO and wallet versions, and the [session logs](../operate/logging.md).
+- **Wallet works:** open an issue with the [wallet compatibility template](https://github.com/EUDIPLO/eudiplo/issues/new?template=wallet-compatibility.md) and include the results from step 5, so the wallet can be added to this page.
+- **Wallet fails:** check the notes above, then open an [issue](https://github.com/EUDIPLO/eudiplo/issues/new) with reproduction steps, EUDIPLO and wallet versions, and the [session logs](../operate/logging.md).
 - **Questions:** ask in the [Discord community](https://discord.gg/58ys8XfXDu).

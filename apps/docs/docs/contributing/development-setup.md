@@ -18,7 +18,7 @@ No local Node.js? Use the [dev container](#dev-container).
 ## 1. Install
 
 ```bash
-git clone https://github.com/openwallet-foundation/eudiplo.git
+git clone https://github.com/EUDIPLO/eudiplo.git
 cd eudiplo
 corepack enable
 pnpm install
@@ -121,7 +121,7 @@ The CLI project keeps its runtime environment in `.eudiplo.env`, the Compose fil
 
 ## Dev container
 
-The repository ships a VS Code dev container (`.devcontainer/`) with Node.js, pnpm, Git and the recommended extensions. Open the folder in VS Code and run **Dev Containers: Reopen in Container**; `pnpm install` runs automatically. GitHub Codespaces uses the same configuration. The container sets `PUBLIC_URL`, `MASTER_SECRET`, `AUTH_CLIENT_SECRET` and both `OUTBOUND_URL_ALLOW_*` flags and forwards ports 3000 and 4200. Details: [`.devcontainer/README.md`](https://github.com/openwallet-foundation/eudiplo/blob/main/.devcontainer/README.md).
+The repository ships a VS Code dev container (`.devcontainer/`) with Node.js, pnpm, Git and the recommended extensions. Open the folder in VS Code and run **Dev Containers: Reopen in Container**; `pnpm install` runs automatically. GitHub Codespaces uses the same configuration. The container sets `PUBLIC_URL`, `MASTER_SECRET`, `AUTH_CLIENT_SECRET` and both `OUTBOUND_URL_ALLOW_*` flags and forwards ports 3000 and 4200. Details: [`.devcontainer/README.md`](https://github.com/EUDIPLO/eudiplo/blob/main/.devcontainer/README.md).
 
 ## Repository layout
 

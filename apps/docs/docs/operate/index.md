@@ -17,8 +17,8 @@ an instance to real wallets and users, work through the
 | Compose without the CLI       | You keep your own Compose files, for example in an existing infrastructure repository          | `docker compose` with the files in `deployment/docker-compose` | [Compose without the CLI](docker-compose.md)             |
 | Kubernetes                    | You deploy to a cluster with Kustomize and bring your own database, object storage and secrets | `kubectl apply -k`, optionally the CLI for checks     | [Kubernetes](kubernetes.md)                              |
 
-All three run the same images, `ghcr.io/openwallet-foundation/eudiplo` (backend)
-and `ghcr.io/openwallet-foundation/eudiplo-client` (web client). The bundled
+All three run the same images, `ghcr.io/eudiplo/eudiplo` (backend)
+and `ghcr.io/eudiplo/eudiplo-client` (web client). The bundled
 manifests and Compose files run one backend replica. Several replicas can share
 one PostgreSQL database and one S3 bucket, but configuration changes of a tenant
 are serialized by a database lock (see
@@ -79,7 +79,7 @@ docker run -d --name eudiplo -p 3000:3000 \
   -e AUTH_CLIENT_ID=root \
   -e AUTH_CLIENT_SECRET="$AUTH_CLIENT_SECRET" \
   -v eudiplo-data:/app/config \
-  ghcr.io/openwallet-foundation/eudiplo:latest
+  ghcr.io/eudiplo/eudiplo:latest
 
 curl http://localhost:3000/health
 ```

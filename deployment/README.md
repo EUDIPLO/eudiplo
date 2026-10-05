@@ -85,5 +85,5 @@ After deployment, access the services at:
 ## Support
 
 - **Documentation:** [https://docs.eudiplo.dev/](https://docs.eudiplo.dev/)
-- **Issues:** [GitHub Issues](https://github.com/openwallet-foundation/eudiplo/issues)
+- **Issues:** [GitHub Issues](https://github.com/EUDIPLO/eudiplo/issues)
 - **Community:** [Discord](https://discord.gg/58ys8XfXDu)

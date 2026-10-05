@@ -34,11 +34,11 @@ function normalizeLocalSchemaUri(uri: string): string {
 }
 
 const transactionDataArraySchema = {
-  uri: 'https://raw.githubusercontent.com/openwallet-foundation/eudiplo/refs/heads/main/schemas/TransactionDataArray.schema.json',
+  uri: 'https://raw.githubusercontent.com/EUDIPLO/eudiplo/refs/heads/main/schemas/TransactionDataArray.schema.json',
   fileMatch: ['a://b/TransactionDataArray*.schema.json'],
   schema: {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
-    $id: 'https://raw.githubusercontent.com/openwallet-foundation/eudiplo/refs/heads/main/schemas/TransactionDataArray.schema.json',
+    $id: 'https://raw.githubusercontent.com/EUDIPLO/eudiplo/refs/heads/main/schemas/TransactionDataArray.schema.json',
     title: 'TransactionDataArray',
     type: 'array',
     items: transactionDataSchemaObj,

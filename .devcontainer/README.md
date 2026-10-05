@@ -14,7 +14,7 @@ This project supports development inside a Docker container using **VS Code Dev 
 1. **Open in VS Code**
 
    ```bash
-   git clone https://github.com/openwallet-foundation/eudiplo.git
+   git clone https://github.com/EUDIPLO/eudiplo.git
    cd eudiplo
    code .
    ```
@@ -40,7 +40,7 @@ This project supports development inside a Docker container using **VS Code Dev 
 
 You can also develop using GitHub Codespaces:
 
-1. Go to the [repository on GitHub](https://github.com/openwallet-foundation/eudiplo)
+1. Go to the [repository on GitHub](https://github.com/EUDIPLO/eudiplo)
 2. Click the green **"Code"** button
 3. Select **"Codespaces"** tab
 4. Click **"Create codespace on main"**

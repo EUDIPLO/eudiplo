@@ -22,10 +22,10 @@ discussions, or pull requests.
 
 1. **GitHub Private Vulnerability Reporting**: Submit a confidential advisory
    directly via
-   [GitHub Security Advisories](https://github.com/openwallet-foundation/eudiplo/security/advisories/new).
-2. **Email**: Send an encrypted or confidential email to the OpenWallet
-   Foundation security team:
-   - Recipient: [security@openwallet.foundation](mailto:security@openwallet.foundation)
+   [GitHub Security Advisories](https://github.com/EUDIPLO/eudiplo/security/advisories/new).
+2. **Email**: Send a confidential email to the LF Decentralized Trust security
+   team:
+   - Recipient: [security@lists.lfdecentralizedtrust.org](mailto:security@lists.lfdecentralizedtrust.org)
    - Subject: `[SECURITY] eudiplo: <brief description>`
 
 ### Information to Include
@@ -105,9 +105,9 @@ of our project. With your permission, we will:
 For security-related questions or concerns, please contact:
 
 - **Preferred Contact**:
-  [GitHub Security Advisories](https://github.com/openwallet-foundation/eudiplo/security/advisories/new)
+  [GitHub Security Advisories](https://github.com/EUDIPLO/eudiplo/security/advisories/new)
 - **Security Email**:
-  [security@openwallet.foundation](mailto:security@openwallet.foundation)
+  [security@lists.lfdecentralizedtrust.org](mailto:security@lists.lfdecentralizedtrust.org)
 - **Response Time**: Within 3 business days
 
 Thank you for helping keep our project and community safe!

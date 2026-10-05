@@ -14,9 +14,9 @@ Projects and platforms that run EUDIPLO.
 
 ## Add your project
 
-[Edit this page](https://github.com/openwallet-foundation/eudiplo/edit/main/apps/docs/docs/showcase.md) and open a pull request, or [open an issue](https://github.com/openwallet-foundation/eudiplo/issues/new) with the project or organization name, a URL if public, and one sentence on how you use EUDIPLO. Private deployments can be listed with a description only.
+[Edit this page](https://github.com/EUDIPLO/eudiplo/edit/main/apps/docs/docs/showcase.md) and open a pull request, or [open an issue](https://github.com/EUDIPLO/eudiplo/issues/new) with the project or organization name, a URL if public, and one sentence on how you use EUDIPLO. Private deployments can be listed with a description only.
 
 ## Community
 
 - [Discord](https://discord.gg/58ys8XfXDu)
-- [GitHub issues](https://github.com/openwallet-foundation/eudiplo/issues) for bugs and feature requests
+- [GitHub issues](https://github.com/EUDIPLO/eudiplo/issues) for bugs and feature requests

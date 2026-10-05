@@ -9,11 +9,9 @@ describe("compose template helpers", () => {
     it("uses latest image tags by default", () => {
         const env = createComposeEnv({ mode: "demo" });
 
+        expect(env).toContain("EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo:latest");
         expect(env).toContain(
-            "EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo:latest",
-        );
-        expect(env).toContain(
-            "EUDIPLO_CLIENT_IMAGE=ghcr.io/openwallet-foundation/eudiplo-client:latest",
+            "EUDIPLO_CLIENT_IMAGE=ghcr.io/eudiplo/eudiplo-client:latest",
         );
     });
 
@@ -74,11 +72,9 @@ describe("compose template helpers", () => {
         expect(env).toContain("PUBLIC_URL=https://eudiplo.example.com");
         expect(env).toContain("AUTH_CLIENT_ID=example-client");
         expect(env).toContain("AUTH_CLIENT_SECRET=example-secret");
+        expect(env).toContain("EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo:latest");
         expect(env).toContain(
-            "EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo:latest",
-        );
-        expect(env).toContain(
-            "EUDIPLO_CLIENT_IMAGE=ghcr.io/openwallet-foundation/eudiplo-client:latest",
+            "EUDIPLO_CLIENT_IMAGE=ghcr.io/eudiplo/eudiplo-client:latest",
         );
         expect(env).toContain("DB_TYPE=postgres");
         expect(env).toContain("DB_HOST=postgres");
@@ -120,11 +116,9 @@ describe("compose template helpers", () => {
             mode: "standard",
             imageTagOverride: "main",
         });
+        expect(env).toContain("EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo:main");
         expect(env).toContain(
-            "EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo:main",
-        );
-        expect(env).toContain(
-            "EUDIPLO_CLIENT_IMAGE=ghcr.io/openwallet-foundation/eudiplo-client:main",
+            "EUDIPLO_CLIENT_IMAGE=ghcr.io/eudiplo/eudiplo-client:main",
         );
     });
 });

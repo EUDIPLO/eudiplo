@@ -566,11 +566,9 @@ describe("EUDIPLO CLI", () => {
             "EUDIPLO Docker Compose - Multi-Profile Deployment",
         );
         const env = await readFile(join(cwd, ".eudiplo.env"), "utf8");
+        expect(env).toContain("EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo:latest");
         expect(env).toContain(
-            "EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo:latest",
-        );
-        expect(env).toContain(
-            "EUDIPLO_CLIENT_IMAGE=ghcr.io/openwallet-foundation/eudiplo-client:latest",
+            "EUDIPLO_CLIENT_IMAGE=ghcr.io/eudiplo/eudiplo-client:latest",
         );
         expect(env).toContain("AUTH_CLIENT_ID=root");
         expect(env).toContain("DB_TYPE=sqlite");
@@ -803,9 +801,7 @@ describe("EUDIPLO CLI", () => {
         expect(questions[0]).toBe("Project directory [./]: ");
         await expect(
             readFile(join(cwd, "generated-project", ".eudiplo.env"), "utf8"),
-        ).resolves.toContain(
-            "EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo:latest",
-        );
+        ).resolves.toContain("EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo:latest");
         const config = JSON.parse(await readFile(configPath, "utf8"));
         expect(config.instances.local.projectDirectory).toBe(
             join(cwd, "generated-project"),
@@ -850,13 +846,11 @@ describe("EUDIPLO CLI", () => {
         expect(output.stdout).toContain("Initialized compose instance local.");
         await expect(
             readFile(join(cwd, ".eudiplo.demo.env"), "utf8"),
-        ).resolves.toContain(
-            "EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo:latest",
-        );
+        ).resolves.toContain("EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo:latest");
         await expect(
             readFile(join(cwd, ".eudiplo.demo.env"), "utf8"),
         ).resolves.toContain(
-            "EUDIPLO_CLIENT_IMAGE=ghcr.io/openwallet-foundation/eudiplo-client:latest",
+            "EUDIPLO_CLIENT_IMAGE=ghcr.io/eudiplo/eudiplo-client:latest",
         );
         await expect(
             readFile(join(cwd, ".eudiplo.demo.env"), "utf8"),
@@ -877,13 +871,11 @@ describe("EUDIPLO CLI", () => {
         expect(code).toBe(0);
         await expect(
             readFile(join(cwd, ".eudiplo.demo.env"), "utf8"),
-        ).resolves.toContain(
-            "EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo:main",
-        );
+        ).resolves.toContain("EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo:main");
         await expect(
             readFile(join(cwd, ".eudiplo.demo.env"), "utf8"),
         ).resolves.toContain(
-            "EUDIPLO_CLIENT_IMAGE=ghcr.io/openwallet-foundation/eudiplo-client:main",
+            "EUDIPLO_CLIENT_IMAGE=ghcr.io/eudiplo/eudiplo-client:main",
         );
     });
 
@@ -1019,7 +1011,7 @@ describe("EUDIPLO CLI", () => {
             await expect(
                 readFile(join(cwd, ".eudiplo.demo.env"), "utf8"),
             ).resolves.toContain(
-                "EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo:latest",
+                "EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo:latest",
             );
             const env = await readFile(join(cwd, ".eudiplo.demo.env"), "utf8");
             expect(env).toContain("DB_TYPE=sqlite");

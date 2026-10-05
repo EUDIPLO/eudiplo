@@ -36,14 +36,14 @@
     ],
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/openwallet-foundation/eudiplo.git",
+        "url": "git+https://github.com/EUDIPLO/eudiplo.git",
         "directory": "apps/cli"
     },
-    "homepage": "https://github.com/openwallet-foundation/eudiplo/tree/main/apps/cli#readme",
+    "homepage": "https://github.com/EUDIPLO/eudiplo/tree/main/apps/cli#readme",
     "bugs": {
-        "url": "https://github.com/openwallet-foundation/eudiplo/issues"
+        "url": "https://github.com/EUDIPLO/eudiplo/issues"
     },
-    "author": "OpenWallet Foundation",
+    "author": "LF Decentralized Trust",
     "license": "Apache-2.0",
     "engines": {
         "node": ">=22.12.0"

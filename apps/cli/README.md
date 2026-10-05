@@ -28,8 +28,8 @@ copies canonical demo configuration into `config/demo`, and starts the
 minimal `compose` stack. It always uses SQLite, local file storage,
 database-backed key management, the backend, and the web client.
 
-- Backend image: `ghcr.io/openwallet-foundation/eudiplo:<tag>`
-- Client image: `ghcr.io/openwallet-foundation/eudiplo-client:<tag>`
+- Backend image: `ghcr.io/eudiplo/eudiplo:<tag>`
+- Client image: `ghcr.io/eudiplo/eudiplo-client:<tag>`
 
 Tag selection defaults to `latest` for both images. Use `--image-tag` (or
 `EUDIPLO_IMAGE_TAG`) to select `main`, a release tag, or an immutable SHA tag.
@@ -210,13 +210,13 @@ Extract the archive for the matching platform and run the executable directly:
 
 ```bash
 # Linux / macOS
-curl -LO https://github.com/openwallet-foundation/eudiplo/releases/download/vVERSION/eudiplo-vVERSION-linux-x64.tar.gz
+curl -LO https://github.com/EUDIPLO/eudiplo/releases/download/vVERSION/eudiplo-vVERSION-linux-x64.tar.gz
 mkdir -p ~/.local/bin
  tar -xzf eudiplo-vVERSION-linux-x64.tar.gz -C ~/.local/bin
  ~/.local/bin/eudiplo --help
 
 # Windows PowerShell
-Invoke-WebRequest -Uri "https://github.com/openwallet-foundation/eudiplo/releases/download/vVERSION/eudiplo-vVERSION-windows-x64.zip" -OutFile "eudiplo-vVERSION-windows-x64.zip"
+Invoke-WebRequest -Uri "https://github.com/EUDIPLO/eudiplo/releases/download/vVERSION/eudiplo-vVERSION-windows-x64.zip" -OutFile "eudiplo-vVERSION-windows-x64.zip"
 Expand-Archive -Path .\eudiplo-vVERSION-windows-x64.zip -DestinationPath .
 .\eudiplo.exe --help
 ```

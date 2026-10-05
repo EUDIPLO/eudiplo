@@ -58,14 +58,14 @@
     ],
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/openwallet-foundation/eudiplo.git",
+        "url": "git+https://github.com/EUDIPLO/eudiplo.git",
         "directory": "packages/eudiplo-sdk-core"
     },
-    "homepage": "https://github.com/openwallet-foundation/eudiplo/tree/main/packages/eudiplo-sdk-core#readme",
+    "homepage": "https://github.com/EUDIPLO/eudiplo/tree/main/packages/eudiplo-sdk-core#readme",
     "bugs": {
-        "url": "https://github.com/openwallet-foundation/eudiplo/issues"
+        "url": "https://github.com/EUDIPLO/eudiplo/issues"
     },
-    "author": "OpenWallet Foundation",
+    "author": "LF Decentralized Trust",
     "engines": {
         "node": ">=20.0.0"
     },

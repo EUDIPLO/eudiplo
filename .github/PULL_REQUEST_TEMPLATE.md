@@ -31,7 +31,7 @@ If this is a breaking change, list what is affected:
 > [migration guide](apps/docs/docs/migration/index.md) is updated.
 > Mark the commit with `!` (for example `fix(api)!: …`) and a `BREAKING CHANGE:`
 > footer, add the change to the
-> [upgrade guide](https://github.com/openwallet-foundation/eudiplo/tree/main/apps/docs/docs/upgrade)
+> [upgrade guide](https://github.com/EUDIPLO/eudiplo/tree/main/apps/docs/docs/upgrade)
 > of the next major version, and add the `breaking-change` label.
 
 ## 🧪 Testing

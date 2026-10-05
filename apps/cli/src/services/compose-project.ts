@@ -47,8 +47,8 @@ export function createComposeEnv(options: ComposeEnvOptions): string {
     const authClientSecret = options.authClientSecret ?? "root";
     const lines = [
         `EUDIPLO_ENV_FILE=${envFileName}`,
-        `EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo:${imageTag}`,
-        `EUDIPLO_CLIENT_IMAGE=ghcr.io/openwallet-foundation/eudiplo-client:${imageTag}`,
+        `EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo:${imageTag}`,
+        `EUDIPLO_CLIENT_IMAGE=ghcr.io/eudiplo/eudiplo-client:${imageTag}`,
         ...(options.mode === "demo" ? ["EUDIPLO_BIND_ADDRESS=127.0.0.1"] : []),
         `EUDIPLO_CONFIG_MOUNT=./${configDirectoryName}:/app/config`,
         "CONFIG_FOLDER=/app/config",

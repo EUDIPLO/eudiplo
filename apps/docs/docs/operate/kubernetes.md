@@ -46,9 +46,9 @@ same version:
 
 ```yaml title="overlays/standard/kustomization.yaml"
 images:
-  - name: ghcr.io/openwallet-foundation/eudiplo
+  - name: ghcr.io/eudiplo/eudiplo
     newTag: "9.0.0"
-  - name: ghcr.io/openwallet-foundation/eudiplo-client
+  - name: ghcr.io/eudiplo/eudiplo-client
     newTag: "9.0.0"
 ```
 
@@ -122,9 +122,9 @@ namespace: eudiplo
 resources:
   - ../../base
 images:
-  - name: ghcr.io/openwallet-foundation/eudiplo
+  - name: ghcr.io/eudiplo/eudiplo
     newTag: "9.0.0"
-  - name: ghcr.io/openwallet-foundation/eudiplo-client
+  - name: ghcr.io/eudiplo/eudiplo-client
     newTag: "9.0.0"
 ```
 

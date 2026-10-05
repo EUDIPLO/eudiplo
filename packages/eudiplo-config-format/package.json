@@ -37,10 +37,10 @@
     ],
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/openwallet-foundation/eudiplo.git",
+        "url": "git+https://github.com/EUDIPLO/eudiplo.git",
         "directory": "packages/eudiplo-config-format"
     },
-    "author": "OpenWallet Foundation",
+    "author": "LF Decentralized Trust",
     "license": "Apache-2.0",
     "engines": {
         "node": ">=22.12.0"

@@ -67,7 +67,9 @@ export async function runUpgradeCommand(
     context.stdout.write(`Upgrade ${instanceName}:\n`);
     for (const change of plan.changes) {
         context.stdout.write(
-            `  ${change.repository}: ${change.from} -> ${change.to}\n`,
+            change.movedFrom
+                ? `  ${change.movedFrom}:${change.from} -> ${change.repository}:${change.to}\n`
+                : `  ${change.repository}: ${change.from} -> ${change.to}\n`,
         );
     }
     const notes = new Set(

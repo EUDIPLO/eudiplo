@@ -19,7 +19,7 @@ The version bump is derived from the commits since the last tag (`.releaserc.js`
 
 For a breaking change write both: a `!` in the header (`fix(trust)!: …`) for readers, and a `BREAKING CHANGE:` footer that says what changed and what users must do. Only the footer triggers the major release: the Angular preset does not parse `!`, so a `!` header without the footer releases nothing. The footer text ends up in the release notes. A breaking change also needs an entry in `apps/docs/docs/upgrade/<previous>.x-to-<next>.0.md`, and the PR gets the `breaking-change` label.
 
-Every commit must carry a DCO sign-off (`git commit -s`) and be cryptographically signed. The full process rules are in [`CONTRIBUTING.MD`](https://github.com/openwallet-foundation/eudiplo/blob/main/CONTRIBUTING.MD#commits).
+Every commit must carry a DCO sign-off (`git commit -s`) and be cryptographically signed. The full process rules are in [`CONTRIBUTING.MD`](https://github.com/EUDIPLO/eudiplo/blob/main/CONTRIBUTING.MD#commits).
 
 ## Builds from `main`
 
@@ -27,7 +27,7 @@ Every push to `main` that passes CI publishes development artifacts. Their versi
 
 | Artifact | Published as |
 | --- | --- |
-| `ghcr.io/openwallet-foundation/eudiplo`, `eudiplo-client`, `eudiplo-demo` | `:main` and `:sha-<full commit sha>` |
+| `ghcr.io/eudiplo/eudiplo`, `eudiplo-client`, `eudiplo-demo` | `:main` and `:sha-<full commit sha>` |
 | `@eudiplo/sdk-core`, `@eudiplo/cli` on npm | `<last release>-main.<short sha>` with the dist-tag `main` |
 
 There is no alpha or beta channel. The `:main` images carry unreleased database migrations, which can still change before a release; use them only with throwaway databases.

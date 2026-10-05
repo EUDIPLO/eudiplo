@@ -132,7 +132,7 @@ The web client can run under a path, for example
    ```yaml
    services:
        eudiplo-client:
-           image: ghcr.io/openwallet-foundation/eudiplo-client:latest
+           image: ghcr.io/eudiplo/eudiplo-client:latest
            environment:
                API_BASE_URL: https://eudiplo.example.com
                CLIENT_BASE_HREF: /eudiplo-client/

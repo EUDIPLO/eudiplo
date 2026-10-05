@@ -11,7 +11,7 @@ import kmsConfigSchemaObj from '../../../../../schemas/KmsConfigDto.schema.json'
 // Create an array schema for TransactionData (URI-based matching allows arrays as root)
 const transactionDataArraySchemaObj = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
-  $id: 'https://raw.githubusercontent.com/openwallet-foundation/eudiplo/refs/heads/main/schemas/TransactionDataArray.schema.json',
+  $id: 'https://raw.githubusercontent.com/EUDIPLO/eudiplo/refs/heads/main/schemas/TransactionDataArray.schema.json',
   title: 'TransactionDataArray',
   type: 'array',
   items: transactionDataSchemaObj,

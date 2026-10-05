@@ -4,7 +4,7 @@
 
 The backend is migrating incrementally toward the [target architecture](../../docs/docs/contributing/backend-architecture.md). Work happens in bounded vertical slices; per-slice details live in commit messages and pull requests, not in this document.
 
-- **Last reviewed:** 2026-09-28, full review of the migration in [#1081](https://github.com/openwallet-foundation/eudiplo/pull/1081).
+- **Last reviewed:** 2026-09-28, full review of the migration in [#1081](https://github.com/EUDIPLO/eudiplo/pull/1081).
 - **Enforced by:** `apps/backend/test/architecture/dependency-rules.spec.ts` and `apps/backend/src/platform/module-boundaries.spec.ts`. Both run with `pnpm --filter @eudiplo/backend test`. See [boundary enforcement](../../docs/docs/contributing/backend-architecture.md#current-boundary-enforcement).
 
 This plan is not an instruction to execute tasks automatically. Pick one slice, agree on its scope, and complete it end to end.
@@ -29,7 +29,7 @@ The task prompt `.github/prompts/architecture-task.prompt.md` contains the same 
 | 5–6 | OID4VCI use cases, no Express | Partial | Issuer metadata, authorization-server selection and deferred issuance use ports. The built-in authorization server's token, PAR and authorization endpoints are use cases in `oid4vci/authorization/application/` with transport-neutral `OAuthError`s mapped by `AuthorizeController`. `Oid4vciService` still parses requests and maps protocol errors with Nest exceptions; the interactive, chained and OID4VP-backed authorization servers still orchestrate in legacy services. |
 | 7–9 | Issuer credential formats | Done | Registry dispatches to SD-JWT VC and mdoc issuers typed on the plain `CredentialConfiguration` model. |
 | 10–11 | Claims provider and publisher ports | Done | Unify claim-source selection between `IssueCredential` and `ConfiguredCredentialClaimsProvider`. |
-| 12–13 | Trust retrieval and federation resolver | Partial | `FederationResolver` port and bounded chain traversal exist. Full trust-chain resolution and verification (T1) and outbound request hardening (T2) are tracked in [#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046). |
+| 12–13 | Trust retrieval and federation resolver | Partial | `FederationResolver` port and bounded chain traversal exist. Full trust-chain resolution and verification (T1) and outbound request hardening (T2) are tracked in [#1046](https://github.com/EUDIPLO/eudiplo/issues/1046). |
 | 14 | OID4VP use cases | Partial | Request retrieval, response parsing, `vp_token` verification (`VerifyPresentationResponse`) and completion are use cases; `PresentationsService` is gone. `Oid4vpService` (~920 lines) still creates requests, decrypts responses and maps application errors to HTTP exceptions. |
 | 15–16 | Verifier credential formats | Done | One `CredentialVerifierFormat.verify(credential, context)` contract (`presentations/domain/`) with adapters in `presentations/adapters/`: mdoc builds its session transcript, SD-JWT VC its key-binding nonce and audience. OID4VP and ISO 18013 both resolve formats from the registry. Format-specific DCQL claim semantics (mdoc verifies each `claim_sets` option, SD-JWT VC matches once) live in the adapters. |
 | 17–18 | Configuration repositories, plain models | Done for tenant, credential, issuance, attribute-provider, webhook-endpoint | Status-list, registrar, key-chain and config-portability still use TypeORM in services. Presentation configuration is administrative CRUD: `verifier/presentations/configuration/` keeps TypeORM in plain services and is excluded from the protocol-core ratchet. Credential configurations use one `CredentialConfigurationRepository` port owned by `CredentialConfigModule`. |
@@ -60,8 +60,8 @@ Findings from the 2026-09-28 review that are not fixed yet. Items marked *pre-ex
 
 ### Security and behavior
 
-- **T1 — Federation trust is not anchored** (*pre-existing*). Tracked in [#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046): full trust-chain resolution, signature and anchor validation, and resolving credential keys through federation instead of the credential's own certificate.
-- **T2 — Federation fetches bypass the outbound URL policy** (*pre-existing*). Traversal is now bounded (10 hints per entity, 32 resolutions per evaluation, 5 s timeout). To be handled with the resolver work in [#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046): apply `OutboundUrlPolicyService` to federation fetches and stop disabling TLS verification outside `NODE_ENV=production` in `TrustModule`.
+- **T1 — Federation trust is not anchored** (*pre-existing*). Tracked in [#1046](https://github.com/EUDIPLO/eudiplo/issues/1046): full trust-chain resolution, signature and anchor validation, and resolving credential keys through federation instead of the credential's own certificate.
+- **T2 — Federation fetches bypass the outbound URL policy** (*pre-existing*). Traversal is now bounded (10 hints per entity, 32 resolutions per evaluation, 5 s timeout). To be handled with the resolver work in [#1046](https://github.com/EUDIPLO/eudiplo/issues/1046): apply `OutboundUrlPolicyService` to federation fetches and stop disabling TLS verification outside `NODE_ENV=production` in `TrustModule`.
 - **I2 — Explicit authorization-server selection stores a URL** (*pre-existing*). When an offer names `authorization_server`, the session's `authorizationServerId` receives the resolved issuer URL instead of the configured id (`SelectAuthorizationServer`). Decide which value consumers expect.
 
 ### Cleanup
@@ -87,7 +87,7 @@ Take them in this order unless a finding above is more urgent.
    1. One set of chained-AS use cases (PAR, authorize, token) shared by `ChainedAsService`, `ChainedAsVpService` and `AuthorizationServersService`, throwing `OAuthError` instead of Nest exceptions; they differ only in how the user is authenticated.
    2. `InteractiveAuthorizationService` as a use case that returns IAE responses; it currently maps `BadRequestException`s of its dependencies to `invalid_request`.
 5. **Contract tests (Task 23)** for storage, KMS and client providers.
-6. **Federation (T1, T2)** as part of [#1046](https://github.com/openwallet-foundation/eudiplo/issues/1046) (trust-chain resolution) and [#1047](https://github.com/openwallet-foundation/eudiplo/issues/1047) (own Entity Configuration).
+6. **Federation (T1, T2)** as part of [#1046](https://github.com/EUDIPLO/eudiplo/issues/1046) (trust-chain resolution) and [#1047](https://github.com/EUDIPLO/eudiplo/issues/1047) (own Entity Configuration).
 7. **Session status transitions (O5):** dedicated repository transitions so `SessionUpdate` no longer accepts `status`.
 
 ## Requirements for every slice

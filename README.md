@@ -1,18 +1,21 @@
 ![Logo](./apps/docs/static/img/eudiplo.png)
 
-[![Build Status](https://github.com/openwallet-foundation/eudiplo/actions/workflows/ci-and-release.yml/badge.svg)](https://github.com/openwallet-foundation/eudiplo/actions)
-![License](https://img.shields.io/github/license/openwallet-foundation/eudiplo)
+[![Build Status](https://github.com/EUDIPLO/eudiplo/actions/workflows/ci-and-release.yml/badge.svg)](https://github.com/EUDIPLO/eudiplo/actions)
+![License](https://img.shields.io/github/license/EUDIPLO/eudiplo)
 [![Website](https://img.shields.io/badge/website-eudiplo-blue)](https://eudiplo.dev)
 [![Docs](https://img.shields.io/badge/docs-eudiplo-blue)](https://docs.eudiplo.dev)
-[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=openwallet-foundation_eudiplo&metric=security_rating)](https://sonarcloud.io/project/overview?id=openwallet-foundation_eudiplo)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=openwallet-foundation_eudiplo&metric=alert_status)](https://sonarcloud.io/project/overview?id=openwallet-foundation_eudiplo)
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=EUDIPLO_eudiplo&metric=security_rating)](https://sonarcloud.io/project/overview?id=EUDIPLO_eudiplo)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=EUDIPLO_eudiplo&metric=alert_status)](https://sonarcloud.io/project/overview?id=EUDIPLO_eudiplo)
 [![Join our Discord](https://img.shields.io/discord/1022962884864643214?label=Join%20our%20Discord&logo=discord&color=7289DA&labelColor=2C2F33)](https://discord.gg/58ys8XfXDu)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/openwallet-foundation/eudiplo/badge)](https://scorecard.dev/viewer/?uri=github.com/openwallet-foundation/eudiplo)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/EUDIPLO/eudiplo/badge)](https://scorecard.dev/viewer/?uri=github.com/EUDIPLO/eudiplo)
 
 # Your Diplomatic Layer for EUDI Wallet Integration
 
 EUDIPLO is an open-source middleware that bridges your backend and EUDI Wallets
 using a unified API and standardized protocols.
+
+EUDIPLO is an [LF Decentralized Trust](https://www.lfdecentralizedtrust.org/)
+project. It was previously hosted by the OpenWallet Foundation.
 
 ---
 
@@ -156,10 +159,10 @@ For production authentication setup, see [Authentication](https://docs.eudiplo.d
 Use the current documentation:
 
 - 🚀 **Documentation**: [https://docs.eudiplo.dev/](https://docs.eudiplo.dev/)
-- **Legacy documentation**: [https://openwallet-foundation.github.io/eudiplo/docs/latest/](https://openwallet-foundation.github.io/eudiplo/docs/latest/)
+- **Legacy documentation**: [https://eudiplo.github.io/eudiplo/docs/latest/](https://eudiplo.github.io/eudiplo/docs/latest/)
 
 The current documentation reflects the active release. For older releases,
-use the [legacy documentation archive](https://openwallet-foundation.github.io/eudiplo/docs/latest/).
+use the [legacy documentation archive](https://eudiplo.github.io/eudiplo/docs/latest/).
 
 **Key sections:**
 
@@ -187,5 +190,9 @@ and connect with other developers.
 Licensed under the [Apache 2.0 License](LICENSE)
 
 ## Governance
+
+EUDIPLO is a project of [LF Decentralized Trust](https://www.lfdecentralizedtrust.org/)
+and follows the
+[LF Decentralized Trust Code of Conduct](https://lf-decentralized-trust.github.io/governance/governing-documents/code-of-conduct/).
 
 The Project Charter for EUDIPLO can be found [here](<https://github.com/openwallet-foundation/technical-project-charters/blob/main/EUDIPLO%20Technical%20Charter%20(FINAL%2008.11.25).pdf>).

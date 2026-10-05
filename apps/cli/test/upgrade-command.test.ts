@@ -38,8 +38,8 @@ vi.mock("node:child_process", () => ({
 const { runUpgradeCommand } = await import("../src/commands/upgrade/action.js");
 
 const envContent = [
-    "EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo:8.0.2",
-    "EUDIPLO_CLIENT_IMAGE=ghcr.io/openwallet-foundation/eudiplo-client:8.0.2",
+    "EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo:8.0.2",
+    "EUDIPLO_CLIENT_IMAGE=ghcr.io/eudiplo/eudiplo-client:8.0.2",
     "# keep me",
     "MY_SETTING=1",
     "",
@@ -124,13 +124,40 @@ describe("eudiplo upgrade", () => {
         ).toBe(0);
 
         expect(output.stdout).toContain(
-            "ghcr.io/openwallet-foundation/eudiplo: 8.0.2 -> 8.1.0",
+            "ghcr.io/eudiplo/eudiplo: 8.0.2 -> 8.1.0",
         );
         expect(await readFile(envPath, "utf8")).toBe(
             envContent.replaceAll(":8.0.2", ":8.1.0"),
         );
         expect(verbs()).toEqual(["pull", "up -d"]);
         expect(output.stdout).toContain("Upgraded local to 8.1.0.");
+    });
+
+    it("moves an instance off the legacy OpenWallet Foundation images", async () => {
+        const { config, context, output, envPath } = await setup();
+        await writeFile(
+            envPath,
+            envContent.replaceAll(
+                "ghcr.io/eudiplo/",
+                "ghcr.io/openwallet-foundation/",
+            ),
+            "utf8",
+        );
+
+        expect(
+            await runUpgradeCommand(
+                config,
+                parsed({ "image-tag": "8.1.0", yes: true }),
+                context,
+            ),
+        ).toBe(0);
+
+        expect(output.stdout).toContain(
+            "ghcr.io/openwallet-foundation/eudiplo:8.0.2 -> ghcr.io/eudiplo/eudiplo:8.1.0",
+        );
+        expect(await readFile(envPath, "utf8")).toBe(
+            envContent.replaceAll(":8.0.2", ":8.1.0"),
+        );
     });
 
     it("keeps the env file owner-only", async () => {

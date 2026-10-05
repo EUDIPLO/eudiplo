@@ -1,6 +1,6 @@
 services:
   eudiplo:
-    image: ghcr.io/openwallet-foundation/eudiplo:latest
+    image: ghcr.io/eudiplo/eudiplo:latest
     restart: always
     build:
       target: eudiplo
@@ -18,7 +18,7 @@ services:
       start_period: 40s
 
   eudiplo-client:
-    image: ghcr.io/openwallet-foundation/eudiplo-client:latest
+    image: ghcr.io/eudiplo/eudiplo-client:latest
     restart: always
     build:
       target: client

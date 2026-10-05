@@ -66,8 +66,8 @@ The Compose file also reads these variables from `.env`:
 
 | Variable                | Default                                              | Use                                                         |
 | ----------------------- | ---------------------------------------------------- | ----------------------------------------------------------- |
-| `EUDIPLO_IMAGE`         | `ghcr.io/openwallet-foundation/eudiplo:latest`        | Backend image; pin a release tag in production              |
-| `EUDIPLO_CLIENT_IMAGE`  | `ghcr.io/openwallet-foundation/eudiplo-client:latest` | Web client image; keep it on the same tag as the backend    |
+| `EUDIPLO_IMAGE`         | `ghcr.io/eudiplo/eudiplo:latest`        | Backend image; pin a release tag in production              |
+| `EUDIPLO_CLIENT_IMAGE`  | `ghcr.io/eudiplo/eudiplo-client:latest` | Web client image; keep it on the same tag as the backend    |
 | `EUDIPLO_BIND_ADDRESS`  | `0.0.0.0`                                            | Host address for ports 3000 and 4200; `127.0.0.1` behind a local reverse proxy |
 | `EUDIPLO_CONFIG_MOUNT`  | named volume `eudiplo-config:/app/config`            | What is mounted at `/app/config`                            |
 | `EUDIPLO_ENV_FILE`      | `.env`                                               | Environment file passed to the backend                     |

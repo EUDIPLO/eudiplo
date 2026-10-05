@@ -30,7 +30,7 @@ info:
     url: https://www.apache.org/licenses/LICENSE-2.0
   contact:
     name: EUDIPLO Project
-    url: https://github.com/openwallet-foundation/eudiplo
+    url: https://github.com/EUDIPLO/eudiplo
 
 servers:
   - url: https://your-webhook-server.example.com

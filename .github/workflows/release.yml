@@ -398,9 +398,9 @@ jobs:
 
       - name: Verify immutable Docker source images
         run: |
-          docker buildx imagetools inspect "ghcr.io/openwallet-foundation/eudiplo:sha-${GITHUB_SHA}"
-          docker buildx imagetools inspect "ghcr.io/openwallet-foundation/eudiplo-client:sha-${GITHUB_SHA}"
-          docker buildx imagetools inspect "ghcr.io/openwallet-foundation/eudiplo-demo:sha-${GITHUB_SHA}"
+          docker buildx imagetools inspect "ghcr.io/eudiplo/eudiplo:sha-${GITHUB_SHA}"
+          docker buildx imagetools inspect "ghcr.io/eudiplo/eudiplo-client:sha-${GITHUB_SHA}"
+          docker buildx imagetools inspect "ghcr.io/eudiplo/eudiplo-demo:sha-${GITHUB_SHA}"
 
       - name: Verify release assets
         shell: bash

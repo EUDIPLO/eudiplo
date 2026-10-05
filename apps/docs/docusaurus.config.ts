@@ -19,7 +19,7 @@ const config: Config = {
   url: 'https://docs.eudiplo.dev',
   baseUrl: '/',
 
-  organizationName: 'openwallet-foundation',
+  organizationName: 'EUDIPLO',
   projectName: 'eudiplo',
 
   onBrokenLinks: 'throw',
@@ -39,7 +39,7 @@ const config: Config = {
           routeBasePath: '/',
           sidebarPath: './sidebars.ts',
           editUrl:
-            'https://github.com/openwallet-foundation/eudiplo/edit/main/apps/docs/docs/',
+            'https://github.com/EUDIPLO/eudiplo/edit/main/apps/docs/docs/',
           lastVersion: 'current',
           versions: {
             current: {
@@ -228,7 +228,7 @@ const config: Config = {
           label: 'Docs',
         },
         {
-          href: 'https://github.com/openwallet-foundation/eudiplo',
+          href: 'https://github.com/EUDIPLO/eudiplo',
           label: 'GitHub',
           position: 'right',
         },
@@ -239,7 +239,7 @@ const config: Config = {
         },
         {
           // MkDocs site for releases before the Docusaurus migration.
-          href: 'https://openwallet-foundation.github.io/eudiplo/docs/latest/',
+          href: 'https://eudiplo.github.io/eudiplo/docs/latest/',
           label: 'Legacy Docs',
           position: 'right',
         },
@@ -265,7 +265,7 @@ const config: Config = {
             },
             {
               label: 'GitHub Issues',
-              href: 'https://github.com/openwallet-foundation/eudiplo/issues',
+              href: 'https://github.com/EUDIPLO/eudiplo/issues',
             },
           ],
         },
@@ -274,16 +274,16 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/openwallet-foundation/eudiplo',
+              href: 'https://github.com/EUDIPLO/eudiplo',
             },
             {
               label: 'Contributing Guide',
-              href: 'https://github.com/openwallet-foundation/eudiplo/blob/main/CONTRIBUTING.MD',
+              href: 'https://github.com/EUDIPLO/eudiplo/blob/main/CONTRIBUTING.MD',
             },
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} OpenWallet Foundation | License: CC BY 4.0`,
+      copyright: `Copyright © ${new Date().getFullYear()} LF Decentralized Trust | License: CC BY 4.0`,
     },
     prism: {
       theme: prismThemes.github,

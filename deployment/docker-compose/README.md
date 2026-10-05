@@ -14,7 +14,7 @@ Pull from GHCR (recommended):
 
 ```bash
 cp .env.minimal.example .env
-echo 'EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo-demo:latest' >> .env
+echo 'EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo-demo:latest' >> .env
 docker compose up -d
 ```
 
@@ -72,7 +72,7 @@ the SQLite database). If you mount a folder that directly contains the tenant
 folders (for example `../../assets/config:/app/config`), also set
 `CONFIG_FOLDER=/app/config`.
 
-When using the demo image (`EUDIPLO_IMAGE=ghcr.io/openwallet-foundation/eudiplo-demo:latest` or `EUDIPLO_IMAGE=eudiplo-demo:local`), you typically do not need a bind mount for config import.
+When using the demo image (`EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo-demo:latest` or `EUDIPLO_IMAGE=eudiplo-demo:local`), you typically do not need a bind mount for config import.
 
 Example:
 

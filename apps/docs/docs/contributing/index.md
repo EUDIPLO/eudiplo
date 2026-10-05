@@ -4,7 +4,7 @@ title: Contributing
 
 # Contributing
 
-This section is for people who change EUDIPLO itself. Pick the task below; the process rules (issues, pull requests, DCO sign-off, commit messages) live in [`CONTRIBUTING.MD`](https://github.com/openwallet-foundation/eudiplo/blob/main/CONTRIBUTING.MD).
+This section is for people who change EUDIPLO itself. Pick the task below; the process rules (issues, pull requests, DCO sign-off, commit messages) live in [`CONTRIBUTING.MD`](https://github.com/EUDIPLO/eudiplo/blob/main/CONTRIBUTING.MD).
 
 | I want to… | Read |
 | --- | --- |

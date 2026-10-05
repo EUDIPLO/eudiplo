@@ -15,7 +15,7 @@ services:
   # =============================================================================
 
   eudiplo:
-    image: ${EUDIPLO_IMAGE:-ghcr.io/openwallet-foundation/eudiplo:latest}
+    image: ${EUDIPLO_IMAGE:-ghcr.io/eudiplo/eudiplo:latest}
     restart: always
     env_file:
       - ${EUDIPLO_ENV_FILE:-.env}
@@ -41,7 +41,7 @@ services:
       - eudiplo-network
 
   eudiplo-client:
-    image: ${EUDIPLO_CLIENT_IMAGE:-ghcr.io/openwallet-foundation/eudiplo-client:latest}
+    image: ${EUDIPLO_CLIENT_IMAGE:-ghcr.io/eudiplo/eudiplo-client:latest}
     restart: always
     ports:
       - '${EUDIPLO_BIND_ADDRESS:-0.0.0.0}:4200:8080'

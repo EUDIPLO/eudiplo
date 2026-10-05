@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="openwallet-foundation/eudiplo"
+REPO="EUDIPLO/eudiplo"
 GITHUB_API="https://api.github.com/repos/${REPO}/releases/latest"
 INSTALL_DIR="${EUDIPLO_INSTALL_DIR:-$HOME/.local/bin}"
 
