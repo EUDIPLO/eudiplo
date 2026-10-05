@@ -1,5 +1,4 @@
 import { X509Certificate } from "node:crypto";
-import { HttpService } from "@nestjs/axios";
 import { Inject, Injectable } from "@nestjs/common";
 import {
     compactVerify,
@@ -7,53 +6,54 @@ import {
     decodeProtectedHeader,
     importX509,
 } from "jose";
-import { firstValueFrom } from "rxjs";
 import {
     type FederationEntityConfiguration,
     type FederationResolver,
 } from "../ports/federation-resolver.js";
+import { TrustFetchService } from "../trust-fetch.service.js";
 
 /** A slow or unresponsive federation entity must not stall trust evaluation. */
 const FEDERATION_FETCH_TIMEOUT_MS = 5000;
 
+/** Upper bound for an entity configuration. */
+const FEDERATION_MAX_BYTES = 1024 * 1024;
+
 @Injectable()
 export class OpenIdFederationResolver implements FederationResolver {
-    constructor(@Inject(HttpService) private readonly http: HttpService) {}
+    constructor(
+        @Inject(TrustFetchService)
+        private readonly trustFetch: Pick<TrustFetchService, "get">,
+    ) {}
 
     async resolveEntityConfiguration(
         entityId: string,
     ): Promise<FederationEntityConfiguration> {
         const url = `${entityId.replace(/\/$/, "")}/.well-known/openid-federation`;
-        const response = await firstValueFrom(
-            this.http.get<string | Record<string, unknown>>(url, {
-                responseType: "text" as never,
-                timeout: FEDERATION_FETCH_TIMEOUT_MS,
-            }),
-        );
-        return this.parse(response.data, entityId);
+        const response = await this.trustFetch.get(url, {
+            timeoutMs: FEDERATION_FETCH_TIMEOUT_MS,
+            maxBytes: FEDERATION_MAX_BYTES,
+        });
+        return this.parse(response.body, entityId);
     }
 
     private async parse(
-        response: string | Record<string, unknown>,
+        response: string,
         entityId: string,
     ): Promise<FederationEntityConfiguration> {
-        if (typeof response === "string") {
-            const trimmed = response.trim();
-            if (trimmed.startsWith("{")) {
-                return JSON.parse(trimmed) as FederationEntityConfiguration;
-            }
-            if (trimmed.split(".").length >= 2) {
-                return this.parseSignedJwt(trimmed, entityId);
-            }
-        } else if (response && typeof response === "object") {
-            const entityConfiguration = response.entity_configuration;
+        const trimmed = response.trim();
+        if (trimmed.startsWith("{")) {
+            const json = JSON.parse(trimmed) as Record<string, unknown>;
+            const entityConfiguration = json.entity_configuration;
             if (
                 typeof entityConfiguration === "string" &&
                 entityConfiguration.split(".").length >= 2
             ) {
                 return this.parseSignedJwt(entityConfiguration, entityId);
             }
-            return response as FederationEntityConfiguration;
+            return json as FederationEntityConfiguration;
+        }
+        if (trimmed.split(".").length >= 2) {
+            return this.parseSignedJwt(trimmed, entityId);
         }
 
         throw new Error(

@@ -1,6 +1,12 @@
-import { of } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import { OpenIdFederationResolver } from "./openid-federation-resolver.js";
+
+/** A {@link TrustFetchService} stub that answers with the given bodies. */
+const fetching = (...bodies: string[]) => {
+    const get = vi.fn();
+    for (const body of bodies) get.mockResolvedValueOnce({ body });
+    return get;
+};
 
 const jwt = (payload: Record<string, unknown>) =>
     [
@@ -11,34 +17,28 @@ const jwt = (payload: Record<string, unknown>) =>
 
 describe("OpenIdFederationResolver", () => {
     it("fetches the well-known endpoint and parses JSON entity configuration", async () => {
-        const get = vi
-            .fn()
-            .mockReturnValue(
-                of({ data: JSON.stringify({ sub: "https://entity.example" }) }),
-            );
-        const resolver = new OpenIdFederationResolver({ get } as never);
+        const get = fetching(JSON.stringify({ sub: "https://entity.example" }));
+        const resolver = new OpenIdFederationResolver({ get });
 
         await expect(
             resolver.resolveEntityConfiguration("https://entity.example/"),
         ).resolves.toEqual({ sub: "https://entity.example" });
         expect(get).toHaveBeenCalledWith(
             "https://entity.example/.well-known/openid-federation",
-            { responseType: "text", timeout: 5000 },
+            { timeoutMs: 5000, maxBytes: 1024 * 1024 },
         );
     });
 
-    it("normalizes compact entity configuration JWTs from strings and objects", async () => {
+    it("normalizes compact entity configuration JWTs, bare and wrapped in JSON", async () => {
         const compact = jwt({
             sub: "https://entity.example",
             authority_hints: ["https://anchor.example"],
         });
-        const get = vi
-            .fn()
-            .mockReturnValueOnce(of({ data: compact }))
-            .mockReturnValueOnce(
-                of({ data: { entity_configuration: compact } }),
-            );
-        const resolver = new OpenIdFederationResolver({ get } as never);
+        const get = fetching(
+            compact,
+            JSON.stringify({ entity_configuration: compact }),
+        );
+        const resolver = new OpenIdFederationResolver({ get });
         const expected = {
             sub: "https://entity.example",
             authority_hints: ["https://anchor.example"],
@@ -53,9 +53,7 @@ describe("OpenIdFederationResolver", () => {
     });
 
     it("rejects unsupported response shapes", async () => {
-        const resolver = new OpenIdFederationResolver({
-            get: vi.fn().mockReturnValue(of({ data: 42 })),
-        } as never);
+        const resolver = new OpenIdFederationResolver({ get: fetching("42") });
 
         await expect(
             resolver.resolveEntityConfiguration("https://entity.example"),
@@ -78,8 +76,8 @@ describe("OpenIdFederationResolver", () => {
             "invalid-signature",
         ].join(".");
         const resolver = new OpenIdFederationResolver({
-            get: vi.fn().mockReturnValue(of({ data: compact })),
-        } as never);
+            get: fetching(compact),
+        });
 
         await expect(
             resolver.resolveEntityConfiguration("https://entity.example"),

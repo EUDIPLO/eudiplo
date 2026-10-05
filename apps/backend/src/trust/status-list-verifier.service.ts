@@ -1,4 +1,3 @@
-import { HttpService } from "@nestjs/axios";
 import { Injectable, Logger } from "@nestjs/common";
 import {
     getListFromStatusListJWT,
@@ -9,7 +8,10 @@ import {
     StatusType,
 } from "@owf/token-status-list";
 import { decodeJwt } from "jose";
-import { firstValueFrom } from "rxjs";
+import { TrustFetchService } from "./trust-fetch.service.js";
+
+/** Upper bound for a status list token. */
+const STATUS_LIST_MAX_BYTES = 10 * 1024 * 1024;
 
 /**
  * Cached status list with metadata.
@@ -76,7 +78,7 @@ export class StatusListVerifierService {
     /** Default cache TTL in milliseconds (5 minutes) */
     private readonly defaultCacheTtlMs = 5 * 60 * 1000;
 
-    constructor(private readonly httpService: HttpService) {}
+    constructor(private readonly trustFetch: TrustFetchService) {}
 
     /**
      * Get the status entry from a JWT that contains a status claim.
@@ -193,46 +195,29 @@ export class StatusListVerifierService {
         timeoutMs = 10000,
         type: "jwt" | "cwt" = "jwt",
     ): Promise<string | Uint8Array> {
-        const ctrl = new AbortController();
-        const timeout = setTimeout(() => ctrl.abort(), timeoutMs);
-
         try {
-            const response = await firstValueFrom(
-                this.httpService.get(uri, {
-                    signal: ctrl.signal,
-                    responseType: "arraybuffer",
-                    headers: {
-                        Accept:
-                            type === "cwt"
-                                ? "application/statuslist+cwt"
-                                : "application/statuslist+jwt",
-                    },
-                }),
-            );
+            const response = await this.trustFetch.get(uri, {
+                timeoutMs,
+                maxBytes: STATUS_LIST_MAX_BYTES,
+                accept:
+                    type === "cwt"
+                        ? "application/statuslist+cwt"
+                        : "application/statuslist+jwt",
+            });
 
-            const contentType = String(
-                response.headers?.["content-type"] || "",
-            ).toLowerCase();
+            const contentType = (response.contentType ?? "").toLowerCase();
 
             if (contentType.includes("application/statuslist+cwt")) {
-                return new Uint8Array(response.data);
+                return new Uint8Array(response.bytes);
             }
 
-            return Buffer.from(response.data).toString("utf8").trim();
+            return response.body.trim();
         } catch (error: any) {
-            if (
-                error?.name === "CanceledError" ||
-                error?.code === "ERR_CANCELED"
-            ) {
-                throw new Error(
-                    `Status list fetch timed out after ${timeoutMs}ms for URI: ${uri}`,
-                );
-            }
+            // "Failed to fetch status list" marks the list as unavailable for
+            // the best-effort revocation policy (isStatusListUnavailableError).
             throw new Error(
                 `Failed to fetch status list from ${uri}: ${error?.message || error}`,
             );
-        } finally {
-            clearTimeout(timeout);
         }
     }
 

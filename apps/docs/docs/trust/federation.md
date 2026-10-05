@@ -11,7 +11,7 @@ Federation support is not yet a full OpenID Federation trust-chain resolution ([
 - Entity configurations and subordinate statements are not verified against the trust anchor. EUDIPLO only checks that the entity's `sub` matches and that its `authority_hints` lead to a configured trust anchor. A JWT entity configuration is only verified against the certificate in its own `x5c` header, if present, and its `exp` is not checked. Membership is therefore self-asserted: any entity whose entity configuration names your trust anchor in `authority_hints` is trusted.
 - For credentials, the entity ID is taken from the credential's leaf certificate (SAN or CN); the signing key is not bound to the entity's federation metadata.
 - In presentation verification, the credential's certificate chain is not checked when federation decides; only the entity ID in its leaf certificate is.
-- Federation fetches do not use the outbound URL policy, and TLS certificates are not checked outside `NODE_ENV=production`.
+- TLS certificates of federation entities are not checked outside `NODE_ENV=production`.
 - EUDIPLO does not publish its own entity configuration yet ([#1047](https://github.com/openwallet-foundation/eudiplo/issues/1047)).
 
 ## Where federation is checked
@@ -82,7 +82,7 @@ Add an `openid_federation` entry with trust anchor entity IDs to `trusted_author
 
 Common reasons:
 
-- `could not fetch federation entity configuration`: network error, timeout (5 seconds), unparsable response or invalid `x5c` signature, and no cached result from the last hour.
+- `could not fetch federation entity configuration`: network error, timeout (5 seconds), a URL the [outbound URL policy](../concepts/security-model.md#https-and-tls) blocks (HTTP or a private address), unparsable response or invalid `x5c` signature, and no cached result from the last hour.
 - `entity did not chain to configured trust anchor`: the `authority_hints` do not lead to a configured trust anchor.
 - `federation entity subject does not match entity id`: the entity configuration's `sub` differs from the requested entity ID.
 - `federation authority_hints chain exceeded maximum depth`, `... contains a cycle` or `... traversal exceeded resolution limit`: the chain is longer than 8 levels, loops, or needs more than 32 fetches (at most 10 hints per entity).
@@ -93,7 +93,7 @@ Common reasons:
 
 | Symptom                                                  | Fix                                                                                                                      |
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `could not fetch federation entity configuration`        | Check that `{entityId}/.well-known/openid-federation` is publicly reachable and returns a JSON or JWT entity configuration. |
+| `could not fetch federation entity configuration`        | Check that `{entityId}/.well-known/openid-federation` is reachable over HTTPS on a public address and returns a JSON or JWT entity configuration. |
 | `entity did not chain to configured trust anchor`        | Check the trust anchor entity IDs and the entity's `authority_hints`.                                                     |
 | A changed federation still gives the old decision        | Decisions are cached for `cacheTtlSeconds` (failed fetches for 10 seconds). Clear the cache with `DELETE /api/cache/trust-list` or `DELETE /api/cache`. |
 

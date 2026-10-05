@@ -3,6 +3,7 @@ import { DynamicModule, Global } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
+import { OutboundUrlPolicyModule } from "../../webhook/outbound-url-policy.module.js";
 import { CertService } from "./cert/cert.service.js";
 import { CertificateBuilderService } from "./cert/certificate-builder.service.js";
 import { CrlValidationService } from "./cert/crl-validation.service.js";
@@ -26,6 +27,7 @@ export class KeyModule {
                 HttpModule,
                 ConfigModule,
                 CryptoImplementationModule,
+                OutboundUrlPolicyModule,
                 TypeOrmModule.forFeature([KeyChainEntity, TenantEntity]),
             ],
             controllers: [KeyChainController],

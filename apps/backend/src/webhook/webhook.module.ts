@@ -1,7 +1,7 @@
 import { HttpModule } from "@nestjs/axios";
 import { Module } from "@nestjs/common";
 import { SessionModule } from "../session/session.module.js";
-import { OutboundUrlPolicyService } from "./outbound-url-policy.service.js";
+import { OutboundUrlPolicyModule } from "./outbound-url-policy.module.js";
 import { PRESENTATION_RESULT_PUBLISHER } from "./ports/presentation-result-publisher.js";
 import { WebhookService } from "./webhook.service.js";
 import { WebhookPresentationResultPublisher } from "./webhook-presentation-result-publisher.js";
@@ -13,10 +13,9 @@ import { WebhookPresentationResultPublisher } from "./webhook-presentation-resul
  * providers, ensuring the application uses one shared provider instance.
  */
 @Module({
-    imports: [HttpModule, SessionModule],
+    imports: [HttpModule, SessionModule, OutboundUrlPolicyModule],
     providers: [
         WebhookService,
-        OutboundUrlPolicyService,
         WebhookPresentationResultPublisher,
         {
             provide: PRESENTATION_RESULT_PUBLISHER,
@@ -25,7 +24,7 @@ import { WebhookPresentationResultPublisher } from "./webhook-presentation-resul
     ],
     exports: [
         WebhookService,
-        OutboundUrlPolicyService,
+        OutboundUrlPolicyModule,
         PRESENTATION_RESULT_PUBLISHER,
     ],
 })

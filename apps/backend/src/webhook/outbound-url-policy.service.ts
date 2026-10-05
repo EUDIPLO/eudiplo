@@ -26,6 +26,16 @@ interface OutboundGetOptions {
     timeoutMs: number;
     maxBytes: number;
     headers?: Record<string, string>;
+    /** Allow `http:` targets even when `OUTBOUND_URL_ALLOW_HTTP` is off. */
+    allowHttp?: boolean;
+    /**
+     * Origins that skip the policy, such as EUDIPLO's own `PUBLIC_URL`. Every
+     * redirect hop is matched again, so a trusted origin cannot redirect to a
+     * blocked target.
+     */
+    trustedOrigins?: string[];
+    /** `false` skips TLS certificate verification; it is on by default. */
+    rejectUnauthorized?: boolean;
 }
 
 @Injectable()
@@ -72,12 +82,16 @@ export class OutboundUrlPolicyService {
     /**
      * GET a URL that passed {@link assertSafeUrl}, validating the connected
      * address, bounding time and response size, and not following redirects.
+     * URLs of {@link OutboundGetOptions.trustedOrigins} skip both checks.
      */
     async get(
         url: string,
         options: OutboundGetOptions,
     ): Promise<OutboundResponse> {
-        await this.assertSafeUrl(url);
+        const trusted = this.isTrustedOrigin(url, options.trustedOrigins);
+        if (!trusted) {
+            await this.assertSafeUrl(url, { allowHttp: options.allowHttp });
+        }
         const target = new URL(url);
         const send = target.protocol === "https:" ? httpsRequest : httpRequest;
         return new Promise<OutboundResponse>((resolve, reject) => {
@@ -95,7 +109,8 @@ export class OutboundUrlPolicyService {
                 {
                     method: "GET",
                     headers: options.headers,
-                    lookup: this.safeLookup,
+                    lookup: trusted ? undefined : this.safeLookup,
+                    rejectUnauthorized: options.rejectUnauthorized ?? true,
                     // No connection pooling: every request opens a fresh
                     // connection, so the address check in safeLookup always
                     // runs instead of reusing a socket from another request.
@@ -170,7 +185,14 @@ export class OutboundUrlPolicyService {
         );
     }
 
-    async assertSafeUrl(url: string): Promise<void> {
+    /**
+     * @param overrides.allowHttp allow `http:` even when
+     * `OUTBOUND_URL_ALLOW_HTTP` is off
+     */
+    async assertSafeUrl(
+        url: string,
+        overrides: { allowHttp?: boolean } = {},
+    ): Promise<void> {
         let parsed: URL;
         try {
             parsed = new URL(url);
@@ -181,7 +203,7 @@ export class OutboundUrlPolicyService {
         const protocol = parsed.protocol.toLowerCase();
         if (
             protocol !== "https:" &&
-            !(protocol === "http:" && this.allowHttp())
+            !(protocol === "http:" && (overrides.allowHttp || this.allowHttp()))
         ) {
             throw new BadRequestException(
                 "Outbound URL must use HTTPS in this environment",
@@ -240,6 +262,24 @@ export class OutboundUrlPolicyService {
             throw new BadRequestException(
                 "Outbound URL target resolves to a private or loopback IP",
             );
+        }
+    }
+
+    private isTrustedOrigin(url: string, trustedOrigins: string[] = []) {
+        const origin = this.originOf(url);
+        return (
+            origin !== undefined &&
+            trustedOrigins.some((trusted) => this.originOf(trusted) === origin)
+        );
+    }
+
+    private originOf(url: string): string | undefined {
+        try {
+            const { origin } = new URL(url);
+            // Opaque origins ("null"), e.g. of data: URLs, never match.
+            return origin === "null" ? undefined : origin;
+        } catch {
+            return undefined;
         }
     }
 

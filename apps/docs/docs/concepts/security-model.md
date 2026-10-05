@@ -13,8 +13,8 @@ This page describes who EUDIPLO trusts, how each boundary is protected and which
 flowchart LR
     BE[Your backend] -->|"bearer token<br/>(client, roles)"| API["Management API /api"]
     W[Wallet] -->|"codes, PKCE, DPoP,<br/>attestation, encryption"| P[Protocol endpoints]
-    E[EUDIPLO] -->|"outbound URL policy,<br/>auth header"| X["Webhooks, attribute providers,<br/>metadata and schema downloads"]
-    E -->|"no URL policy"| T["Trust and status lists, federation,<br/>CRLs, external authorization servers"]
+    E[EUDIPLO] -->|"outbound URL policy,<br/>auth header"| X["Webhooks, attribute providers, metadata,<br/>trust and status lists, federation, CRLs"]
+    E -->|"no URL policy"| T["External and chained<br/>authorization servers"]
     E -->|"encryption at rest,<br/>KMS"| S[(Database, KMS)]
     API --- E
     P --- E
@@ -24,7 +24,7 @@ flowchart LR
 | ------------------------ | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Management API (`/api`)  | Your backend, the web client              | OAuth 2.0 bearer token of a client. The token names one tenant and the client's roles; allow lists can further restrict which configurations a client may use. Configuration changes are written to an audit log. |
 | Protocol endpoints       | Wallets, and your page for the DC API     | Public by design. Each step is protected by the protocol: single-use codes and nonces, PKCE, DPoP, wallet and key attestation, signed requests and encrypted responses. |
-| Outbound calls           | EUDIPLO to URLs that tenants configure or that credentials and certificates name | Webhooks, attribute providers and metadata downloads: outbound URL policy (below), optional API key header. Webhook requests are not signed. Trust lists, status lists, federation, CRLs and external authorization servers are fetched without the policy. |
+| Outbound calls           | EUDIPLO to URLs that tenants configure or that credentials and certificates name | Outbound URL policy (below), optional API key header for webhooks and attribute providers. Webhook requests are not signed. External and chained authorization servers are called without the policy. |
 | Storage and key material | EUDIPLO to database, object storage, KMS  | Sensitive columns encrypted at rest; with an external KMS the private keys never leave it. Configuration bundle exports never contain private keys. `GET /api/key-chain/{id}/export` returns the private key of a `db` key chain and, like the tenant KMS provider configuration with its provider credentials, needs `tenant:admin` or `tenants:manage`. |
 
 Tenants are isolated in the data layer: every entity carries a `tenantId`, and a client token only reaches its own tenant. A client with the `tenants:manage` role can manage all tenants, so give it only to platform operators ([Tenants and access](../operate/tenants-and-access.md)).
@@ -33,9 +33,11 @@ Tenants are isolated in the data layer: every entity carries a `tenantId`, and a
 
 Wallets expect HTTPS for every issuer and verifier URL, so `PUBLIC_URL` must be an HTTPS URL. TLS is terminated by a reverse proxy or by EUDIPLO itself ([TLS](../operate/tls.md)).
 
-For outgoing requests to URLs that tenants configure (webhooks, attribute providers, issuer metadata, rulebooks and schemas), EUDIPLO applies an outbound URL policy against server-side request forgery: only HTTPS targets that resolve to public addresses are allowed, checked after DNS resolution, and every redirect of a metadata, rulebook or schema download is checked again. `OUTBOUND_URL_ALLOW_HTTP` and `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` relax this for development or in-cluster services. `OUTBOUND_URL_ALLOWED_HOSTS` narrows it: when set, only the listed hosts and their subdomains are reachable, and they still need HTTPS and public addresses unless the two flags allow otherwise ([environment variables](../reference/environment-variables.md#webhook)).
+For outgoing requests to URLs that tenants configure or that credentials and certificates name (webhooks, attribute providers, issuer metadata, rulebooks and schemas, trust lists, status lists, OpenID Federation entity configurations and certificate revocation lists), EUDIPLO applies an outbound URL policy against server-side request forgery: only HTTPS targets that resolve to public addresses are allowed, checked after DNS resolution, and every redirect of a download is checked again. `OUTBOUND_URL_ALLOW_HTTP` and `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` relax this for development or in-cluster services. `OUTBOUND_URL_ALLOWED_HOSTS` narrows it: when set, only the listed hosts and their subdomains are reachable, and they still need HTTPS and public addresses unless the two flags allow otherwise ([environment variables](../reference/environment-variables.md#webhook)).
 
-The policy does not cover trust lists, status lists, OpenID Federation entity configurations, certificate revocation lists (CRLs), or the metadata, discovery and token endpoints of external and chained authorization servers. These requests are allowed over HTTP and to private addresses, and some of their URLs come from outside your configuration: a status list URI from a presented credential, a federation entity ID from a certificate, a CRL distribution point from a key chain certificate. Restrict EUDIPLO's egress at the network level if it must not reach internal services.
+Two exceptions keep standard deployments working. Trust lists, status lists and federation entity configurations on EUDIPLO's own `PUBLIC_URL` or `INTERNAL_URL` origin skip the policy, because managed trust lists and the status lists of credentials EUDIPLO issued are fetched from there; a redirect to another origin is checked again. CRL distribution points may use plain HTTP regardless of `OUTBOUND_URL_ALLOW_HTTP`, as is usual for CRLs (RFC 5280); their address is still checked.
+
+The policy does not cover the metadata, discovery and token endpoints of external and chained authorization servers, which are allowed over HTTP and to private addresses. Restrict EUDIPLO's egress at the network level if they must not reach internal services.
 
 ### Trust decisions
 

@@ -1,9 +1,8 @@
-import * as https from "node:https";
-import { HttpModule } from "@nestjs/axios";
 import { Module, type Provider } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CryptoModule } from "../crypto/crypto.module.js";
 import { TrustListModule } from "../issuer/trust-list/trustlist.module.js";
+import { OutboundUrlPolicyModule } from "../webhook/outbound-url-policy.module.js";
 import { OpenIdFederationResolver } from "./adapters/openid-federation-resolver.js";
 import { VerifiedLoteProvider } from "./adapters/verified-lote-provider.js";
 import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
@@ -20,6 +19,7 @@ import {
     type TrustListProvider,
 } from "./ports/trust-list-provider.js";
 import { StatusListVerifierService } from "./status-list-verifier.service.js";
+import { TrustFetchService } from "./trust-fetch.service.js";
 import { TrustStoreService } from "./trust-store.service.js";
 import { TRUST_STORE_SETTINGS } from "./trust-store-settings.js";
 import { TrustListJwtService } from "./trustlist-jwt.service.js";
@@ -40,17 +40,10 @@ export const evaluateFederationTrustChainProvider: Provider = {
 };
 
 @Module({
-    imports: [
-        HttpModule.register({
-            httpsAgent: new https.Agent({
-                rejectUnauthorized: process.env.NODE_ENV === "production",
-            }),
-        }),
-        CryptoModule,
-        TrustListModule,
-    ],
+    imports: [CryptoModule, TrustListModule, OutboundUrlPolicyModule],
     controllers: [CacheController],
     providers: [
+        TrustFetchService,
         TrustListJwtService,
         LoteParserService,
         TrustStoreService,

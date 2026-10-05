@@ -1,40 +1,28 @@
-import { HttpService } from "@nestjs/axios";
 import { Injectable, Logger } from "@nestjs/common";
 import { importJWK, importX509, jwtVerify } from "jose";
-import { firstValueFrom } from "rxjs";
 import { TrustListRef } from "../verifier/presentations/entities/presentation-config.entity.js";
+import { TrustFetchService } from "./trust-fetch.service.js";
+
+/** Upper bound for a trust list JWT. */
+const TRUST_LIST_MAX_BYTES = 10 * 1024 * 1024;
 
 @Injectable()
 export class TrustListJwtService {
     private readonly logger = new Logger(TrustListJwtService.name);
 
-    constructor(private readonly httpService: HttpService) {}
+    constructor(private readonly trustFetch: TrustFetchService) {}
 
     async fetchJwt(url: string, timeoutMs = 4000): Promise<string> {
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), timeoutMs);
         try {
-            const res = await firstValueFrom(
-                this.httpService.get(url, {
-                    signal: ctrl.signal,
-                    responseType: "text",
-                }),
-            );
-            return res.data;
+            const response = await this.trustFetch.get(url, {
+                timeoutMs,
+                maxBytes: TRUST_LIST_MAX_BYTES,
+            });
+            return response.body;
         } catch (error: any) {
-            if (
-                error?.name === "CanceledError" ||
-                error?.code === "ERR_CANCELED"
-            ) {
-                throw new Error(
-                    `Trust list fetch timed out after ${timeoutMs}ms for URL: ${url}`,
-                );
-            }
             throw new Error(
                 `Failed to fetch trust list from ${url}: ${error?.message || error}`,
             );
-        } finally {
-            clearTimeout(t);
         }
     }
 

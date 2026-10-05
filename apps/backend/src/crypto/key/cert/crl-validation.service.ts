@@ -1,9 +1,14 @@
-import { HttpService } from "@nestjs/axios";
 import { Injectable, Logger } from "@nestjs/common";
 import { AsnParser } from "@peculiar/asn1-schema";
 import { CertificateList } from "@peculiar/asn1-x509";
 import * as x509 from "@peculiar/x509";
-import { firstValueFrom } from "rxjs";
+import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
+
+/** Upper bound for a CRL download. */
+const CRL_MAX_BYTES = 20 * 1024 * 1024;
+
+/** The axios client used for CRL downloads before followed five redirects. */
+const CRL_MAX_REDIRECTS = 5;
 
 /**
  * Cached CRL with metadata.
@@ -65,7 +70,7 @@ export class CrlValidationService {
     /** Timeout for CRL fetch in milliseconds */
     private readonly fetchTimeoutMs = 10000;
 
-    constructor(private readonly httpService: HttpService) {}
+    constructor(private readonly outboundUrlPolicy: OutboundUrlPolicyService) {}
 
     /**
      * Check if a certificate is revoked according to its CRL.
@@ -308,22 +313,30 @@ export class CrlValidationService {
 
         this.logger.debug(`Fetching CRL from ${url}`);
 
-        const ctrl = new AbortController();
-        const timeout = setTimeout(() => ctrl.abort(), this.fetchTimeoutMs);
-
         try {
-            const response = await firstValueFrom(
-                this.httpService.get(url, {
-                    signal: ctrl.signal,
-                    responseType: "arraybuffer",
+            const response = await this.outboundUrlPolicy.getFollowingRedirects(
+                url,
+                {
+                    timeoutMs: this.fetchTimeoutMs,
+                    maxBytes: CRL_MAX_BYTES,
+                    maxRedirects: CRL_MAX_REDIRECTS,
                     headers: {
-                        Accept: "application/pkix-crl, application/x-pkcs7-crl",
+                        accept: "application/pkix-crl, application/x-pkcs7-crl",
                     },
-                }),
+                    // CRL distribution points are plain HTTP by convention
+                    // (RFC 5280, section 4.2.1.13), so HTTP is allowed
+                    // regardless of OUTBOUND_URL_ALLOW_HTTP. Private addresses
+                    // stay blocked unless OUTBOUND_URL_ALLOW_PRIVATE_NETWORK.
+                    allowHttp: true,
+                },
             );
+            if (response.status < 200 || response.status >= 300) {
+                throw new Error(
+                    `Request failed with status code ${response.status}`,
+                );
+            }
 
-            const crlData = response.data as ArrayBuffer;
-            const crl = AsnParser.parse(crlData, CertificateList);
+            const crl = AsnParser.parse(response.bytes, CertificateList);
 
             // Extract nextUpdate for cache TTL
             let nextUpdate: Date | undefined;
@@ -340,19 +353,9 @@ export class CrlValidationService {
 
             return crl;
         } catch (error: any) {
-            if (
-                error?.name === "CanceledError" ||
-                error?.code === "ERR_CANCELED"
-            ) {
-                throw new Error(
-                    `CRL fetch timed out after ${this.fetchTimeoutMs}ms for URL: ${url}`,
-                );
-            }
             throw new Error(
                 `Failed to fetch CRL from ${url}: ${error?.message || error}`,
             );
-        } finally {
-            clearTimeout(timeout);
         }
     }
 
