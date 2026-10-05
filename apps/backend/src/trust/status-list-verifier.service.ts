@@ -8,6 +8,7 @@ import {
     StatusType,
 } from "@owf/token-status-list";
 import { decodeJwt } from "jose";
+import { BoundedTtlCache } from "../shared/utils/bounded-ttl-cache.js";
 import { toBuffer } from "../shared/utils/buffer.util.js";
 import { RevocationListUnavailableError } from "./revocation-policy.util.js";
 import { TrustFetchService } from "./trust-fetch.service.js";
@@ -19,46 +20,43 @@ const STATUS_LIST_TIMEOUT_MS = 10_000;
 
 const STATUS_LIST_CWT = "application/statuslist+cwt";
 
-/**
- * Cached status list with metadata.
- */
-interface CachedStatusList {
-    /** The parsed status list */
-    statusList: StatusList;
-    /** When the cache entry was fetched */
-    fetchedAt: number;
-    /** TTL from the status list JWT payload (in seconds) */
-    ttl?: number;
-    /** Expiration time from the JWT (exp claim) */
-    exp?: number;
-}
+/** Cache time of a status list token without a ttl. */
+const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
- * Cached raw JWT with metadata.
+ * Longest cache time of a status list token, whatever its ttl says. The ttl
+ * and exp are read before the token's signature is verified, so the server
+ * at a URI from a presented credential chooses them. One hour is the default
+ * STATUS_TTL of EUDIPLO's own status lists.
  */
-interface CachedJwt {
-    /** The raw JWT string */
-    jwt: string;
-    /** When the cache entry was fetched */
-    fetchedAt: number;
-    /** TTL from the JWT payload (in seconds) */
-    ttl?: number;
-    /** Expiration time from the JWT (exp claim) */
-    exp?: number;
-}
+const MAX_CACHE_TTL_MS = 60 * 60 * 1000;
 
 /**
- * Cached raw CWT with metadata.
+ * The URIs of these caches come from presented credentials, so each cache is
+ * bounded. When one is full, the least recently used status list is evicted.
  */
-interface CachedCwt {
-    /** The raw CWT bytes */
-    cwt: Uint8Array;
-    /** When the cache entry was fetched */
-    fetchedAt: number;
-    /** TTL from the CWT payload (in seconds) */
-    ttl?: number;
-    /** Expiration time from the CWT (exp claim) */
-    exp?: number;
+const CACHE_MAX_ENTRIES = 1000;
+
+/** Byte budget of each raw token cache, counted by {@link tokenBytes}. */
+const TOKEN_CACHE_MAX_BYTES = 32 * 1024 * 1024;
+
+/** Byte budget of the parsed status lists. */
+const PARSED_CACHE_MAX_BYTES = 64 * 1024 * 1024;
+
+/**
+ * A parsed `StatusList` holds a JavaScript array with one number per status,
+ * about 8 bytes each whatever the bits per status. The compressed token does
+ * not bound this: a token of a few hundred bytes can hold millions of
+ * statuses.
+ */
+const PARSED_BYTES_PER_STATUS = 8;
+
+/**
+ * Memory a status list token takes, or more. A string is counted at two
+ * bytes per character, the most V8 stores one with.
+ */
+function tokenBytes(token: string | Uint8Array): number {
+    return typeof token === "string" ? token.length * 2 : token.byteLength;
 }
 
 /**
@@ -85,24 +83,29 @@ export class StatusListVerifierService {
 
     /**
      * Cache of parsed status lists keyed by URI.
-     * Uses a simple in-memory cache with TTL support.
      */
-    private readonly cache = new Map<string, CachedStatusList>();
+    private readonly cache = new BoundedTtlCache<StatusList>({
+        maxEntries: CACHE_MAX_ENTRIES,
+        maxBytes: PARSED_CACHE_MAX_BYTES,
+    });
 
     /**
      * Cache of raw status list JWTs keyed by URI.
      * Used by statusListFetcher interface for SD-JWT SDK.
      */
-    private readonly cachedJwts = new Map<string, CachedJwt>();
+    private readonly cachedJwts = new BoundedTtlCache<string>({
+        maxEntries: CACHE_MAX_ENTRIES,
+        maxBytes: TOKEN_CACHE_MAX_BYTES,
+    });
 
     /**
      * Cache of raw status list CWTs keyed by URI.
      * Used by the mDOC verifier, see {@link mdocFetch}.
      */
-    private readonly cachedCwts = new Map<string, CachedCwt>();
-
-    /** Default cache TTL in milliseconds (5 minutes) */
-    private readonly defaultCacheTtlMs = 5 * 60 * 1000;
+    private readonly cachedCwts = new BoundedTtlCache<Uint8Array>({
+        maxEntries: CACHE_MAX_ENTRIES,
+        maxBytes: TOKEN_CACHE_MAX_BYTES,
+    });
 
     constructor(private readonly trustFetch: TrustFetchService) {}
 
@@ -170,9 +173,9 @@ export class StatusListVerifierService {
     async getStatusList(uri: string): Promise<StatusList> {
         // Check cache first
         const cached = this.cache.get(uri);
-        if (cached && !this.isCacheExpired(cached)) {
+        if (cached) {
             this.logger.debug(`Using cached status list for ${uri}`);
-            return cached.statusList;
+            return cached;
         }
 
         // Fetch and cache
@@ -199,12 +202,15 @@ export class StatusListVerifierService {
                 : undefined;
         }
 
-        this.cache.set(uri, {
+        this.cache.set(
+            uri,
             statusList,
-            fetchedAt: Date.now(),
-            ttl,
-            exp,
-        });
+            // The token's size covers what the list keeps besides its
+            // statuses, such as its aggregation_uri.
+            tokenBytes(statusListToken) +
+                statusList.totalStatuses * PARSED_BYTES_PER_STATUS,
+            this.cacheExpiresAt(ttl, exp),
+        );
 
         return statusList;
     }
@@ -249,35 +255,16 @@ export class StatusListVerifierService {
     }
 
     /**
-     * Check if a cache entry is expired.
+     * When a status list token fetched now leaves the cache: after its ttl
+     * (in seconds, capped at {@link MAX_CACHE_TTL_MS}) or the default cache
+     * time, and at its exp (epoch seconds) at the latest.
      */
-    private isCacheExpired(cached: CachedStatusList): boolean {
-        return this.isTimedCacheExpired(cached);
-    }
-
-    /**
-     * Shared expiration logic for parsed-list and raw-token caches.
-     */
-    private isTimedCacheExpired(cached: {
-        fetchedAt: number;
-        ttl?: number;
-        exp?: number;
-    }): boolean {
-        const now = Date.now();
-
-        // Check if JWT has expired (exp claim)
-        if (cached.exp && now >= cached.exp * 1000) {
-            return true;
-        }
-
-        // Check TTL from JWT payload
-        if (cached.ttl) {
-            const expiresAt = cached.fetchedAt + cached.ttl * 1000;
-            return now >= expiresAt;
-        }
-
-        // Fall back to default cache TTL
-        return now >= cached.fetchedAt + this.defaultCacheTtlMs;
+    private cacheExpiresAt(ttl?: number, exp?: number): number {
+        const ttlMs = ttl
+            ? Math.min(ttl * 1000, MAX_CACHE_TTL_MS)
+            : DEFAULT_CACHE_TTL_MS;
+        const expiresAt = Date.now() + ttlMs;
+        return exp ? Math.min(expiresAt, exp * 1000) : expiresAt;
     }
 
     /**
@@ -314,9 +301,12 @@ export class StatusListVerifierService {
     }
 
     /**
-     * Get cache statistics for monitoring.
+     * Get cache statistics for monitoring. Expired entries are not counted.
      */
     getCacheStats(): { size: number; jwtCacheSize: number; uris: string[] } {
+        this.cache.deleteExpired();
+        this.cachedJwts.deleteExpired();
+        this.cachedCwts.deleteExpired();
         return {
             size: this.cache.size,
             jwtCacheSize: this.cachedJwts.size,
@@ -341,9 +331,9 @@ export class StatusListVerifierService {
     async getStatusListJwt(uri: string): Promise<string> {
         // Check if we have a valid cached entry
         const cached = this.cachedJwts.get(uri);
-        if (cached && !this.isJwtCacheExpired(cached)) {
+        if (cached) {
             this.logger.debug(`Using cached status list JWT for ${uri}`);
-            return cached.jwt;
+            return cached;
         }
 
         // Fetch and cache
@@ -354,28 +344,23 @@ export class StatusListVerifierService {
                 `Status list at ${uri} returned CWT while JWT was requested`,
             );
         }
-        const jwt = token;
+        // A copy: the token is trimmed from the response body, and V8 can keep
+        // the whole body in memory for a trimmed string.
+        const jwt = Buffer.from(token).toString();
 
         // Extract TTL and exp from the JWT payload
         const payload = decodeJwt(jwt);
         const ttl = typeof payload.ttl === "number" ? payload.ttl : undefined;
         const exp = typeof payload.exp === "number" ? payload.exp : undefined;
 
-        this.cachedJwts.set(uri, {
+        this.cachedJwts.set(
+            uri,
             jwt,
-            fetchedAt: Date.now(),
-            ttl,
-            exp,
-        });
+            tokenBytes(jwt),
+            this.cacheExpiresAt(ttl, exp),
+        );
 
         return jwt;
-    }
-
-    /**
-     * Check if a JWT cache entry is expired.
-     */
-    private isJwtCacheExpired(cached: CachedJwt): boolean {
-        return this.isTimedCacheExpired(cached);
     }
 
     /**
@@ -387,9 +372,9 @@ export class StatusListVerifierService {
      */
     async getStatusListCwt(uri: string): Promise<Uint8Array> {
         const cached = this.cachedCwts.get(uri);
-        if (cached && !this.isTimedCacheExpired(cached)) {
+        if (cached) {
             this.logger.debug(`Using cached status list CWT for ${uri}`);
-            return cached.cwt;
+            return cached;
         }
 
         this.logger.debug(`Fetching status list CWT from ${uri}`);
@@ -405,14 +390,17 @@ export class StatusListVerifierService {
         }
 
         const { payload } = StatusListCwt.fromToken(token);
-        this.cachedCwts.set(uri, {
-            cwt: token,
-            fetchedAt: Date.now(),
-            ttl: payload.timeToLive,
-            exp: payload.expirationTime
-                ? Math.floor(payload.expirationTime.getTime() / 1000)
-                : undefined,
-        });
+        this.cachedCwts.set(
+            uri,
+            token,
+            tokenBytes(token),
+            this.cacheExpiresAt(
+                payload.timeToLive,
+                payload.expirationTime
+                    ? Math.floor(payload.expirationTime.getTime() / 1000)
+                    : undefined,
+            ),
+        );
 
         return token;
     }
