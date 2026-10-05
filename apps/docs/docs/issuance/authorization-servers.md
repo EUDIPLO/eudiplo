@@ -71,6 +71,7 @@ Requirements for your server:
 1. It publishes OAuth authorization server or OpenID Connect discovery metadata for `issuer`, including `jwks_uri`.
 2. It issues JWT access tokens (`typ: at+jwt`) with `iss`, `sub`, `aud`, `exp`, `iat` and `jti`. `aud` must contain `{PUBLIC_URL}/issuers/{tenant}`.
 3. It copies the offer's `issuer_state` (the EUDIPLO session ID) unchanged into the access token claim named in `sessionBinding.claim`.
+4. Its metadata, `jwks_uri` and any `introspection_endpoint` are HTTPS URLs on public addresses, as the [outbound URL policy](../concepts/security-model.md#https-and-tls) requires. For a server on HTTP or a private address, set `OUTBOUND_URL_ALLOW_HTTP` or `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK`.
 
 Every token must point to an active offer session that was created for this authorization server; EUDIPLO never creates a session from an external token. With the first credential request, EUDIPLO binds the token's `iss` and `sub` to the session, and later tokens must carry the same identity. The claims must come from the offer or an attribute provider, see [Claims](claims.md#external-authorization-servers-need-a-dynamic-source). External entries do not accept `token`, `requireDPoP` or wallet attestation settings; your server handles those.
 
@@ -98,6 +99,7 @@ EUDIPLO acts as the authorization server towards the wallet and delegates the lo
 
 - Register `{PUBLIC_URL}/issuers/{tenant}/chained-as/callback` as redirect URI of the upstream client.
 - EUDIPLO uses OpenID Connect discovery, the authorization code flow with PKCE (`S256`), and sends `client_id` and `client_secret` in the token request body. Omit `clientSecret` for a public client. `scopes` defaults to `["openid"]`.
+- EUDIPLO fetches the discovery document and calls the token endpoint under the [outbound URL policy](../concepts/security-model.md#https-and-tls): both need HTTPS on a public address unless `OUTBOUND_URL_ALLOW_HTTP` or `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` is set, and the token endpoint must answer without a redirect.
 - Attribute providers receive the upstream user as `identity`: `iss` and `sub` of the upstream ID token and the ID token claims merged over the upstream access token claims.
 - EUDIPLO's access token contains `issuer_state`, `client_id`, `upstream_iss` and `upstream_sub`; its `sub` is the wallet's `client_id`.
 - Endpoints: `/issuers/{tenant}/chained-as/{par,authorize,callback,token}`, metadata at `/.well-known/oauth-authorization-server/issuers/{tenant}/chained-as`, keys at `/.well-known/jwks.json/issuers/{tenant}/chained-as`.

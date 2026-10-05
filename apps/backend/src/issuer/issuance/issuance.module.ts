@@ -1,4 +1,4 @@
-import { HttpModule, HttpService } from "@nestjs/axios";
+import { HttpModule } from "@nestjs/axios";
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
@@ -19,6 +19,7 @@ import { TrustStoreService } from "../../trust/trust-store.service.js";
 import { X509ValidationService } from "../../trust/x509-validation.service.js";
 import { Oid4vpModule } from "../../verifier/oid4vp/oid4vp.module.js";
 import { PresentationsModule } from "../../verifier/presentations/presentations.module.js";
+import { OutboundUrlPolicyService } from "../../webhook/outbound-url-policy.service.js";
 import { WebhookModule } from "../../webhook/webhook.module.js";
 import { ConfigurationModule } from "../configuration/configuration.module.js";
 import { CredentialsService } from "../configuration/credentials/credentials.service.js";
@@ -172,17 +173,17 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
         {
             provide: EXTERNAL_AUTHORIZATION_SERVER_METADATA_RESOLVER,
             inject: [
-                HttpService,
+                OutboundUrlPolicyService,
                 FederationTrustService,
                 { token: MetricService, optional: true },
             ],
             useFactory: (
-                http: HttpService,
+                outboundUrlPolicy: OutboundUrlPolicyService,
                 federation: FederationTrustService,
                 metrics?: MetricService,
             ) =>
                 new HttpExternalAuthorizationServerMetadataResolver(
-                    http,
+                    outboundUrlPolicy,
                     federation,
                     metrics,
                 ),

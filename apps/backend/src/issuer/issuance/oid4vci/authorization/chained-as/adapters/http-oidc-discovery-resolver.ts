@@ -1,18 +1,19 @@
-import { HttpService } from "@nestjs/axios";
-import { firstValueFrom } from "rxjs";
+import type { OutboundUrlPolicyService } from "../../../../../../webhook/outbound-url-policy.service.js";
+import { getAuthorizationServerJson } from "../../../adapters/authorization-server-http.js";
 import type {
     OidcDiscoveryDocument,
     OidcDiscoveryResolver,
 } from "../ports/oidc-discovery-resolver.js";
 
+/** Fetches upstream OIDC discovery documents under the outbound URL policy. */
 export class HttpOidcDiscoveryResolver implements OidcDiscoveryResolver {
-    constructor(private readonly http: HttpService) {}
+    constructor(private readonly outboundUrlPolicy: OutboundUrlPolicyService) {}
 
-    async resolve(issuer: string): Promise<OidcDiscoveryDocument> {
+    resolve(issuer: string): Promise<OidcDiscoveryDocument> {
         const wellKnownUrl = `${issuer.replace(/\/$/, "")}/.well-known/openid-configuration`;
-        const response = await firstValueFrom(
-            this.http.get<OidcDiscoveryDocument>(wellKnownUrl),
+        return getAuthorizationServerJson<OidcDiscoveryDocument>(
+            this.outboundUrlPolicy,
+            wellKnownUrl,
         );
-        return response.data;
     }
 }

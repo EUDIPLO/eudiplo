@@ -15,6 +15,8 @@ import { TrustModule } from "../../../../trust/trust.module.js";
 import { WalletAttestationService } from "../../../../trust/wallet-attestation.service.js";
 import { Oid4vpModule } from "../../../../verifier/oid4vp/oid4vp.module.js";
 import { PresentationsModule } from "../../../../verifier/presentations/presentations.module.js";
+import { OutboundUrlPolicyModule } from "../../../../webhook/outbound-url-policy.module.js";
+import { OutboundUrlPolicyService } from "../../../../webhook/outbound-url-policy.service.js";
 import { ConfigurationModule } from "../../../configuration/configuration.module.js";
 import { IssuanceService } from "../../../configuration/issuance/issuance.service.js";
 import { StatusListConfigService } from "../../../status-list/status-list-config.service.js";
@@ -235,6 +237,7 @@ export const builtInAuthorizationServerProviders = [
         DpopProofModule,
         HttpModule,
         TrustModule,
+        OutboundUrlPolicyModule,
         TypeOrmModule.forFeature([
             InteractiveAuthSessionEntity,
             ChainedAsSessionEntity,
@@ -277,14 +280,17 @@ export const builtInAuthorizationServerProviders = [
         ChainedAsService,
         {
             provide: OIDC_DISCOVERY_RESOLVER,
-            inject: [HttpService],
-            useFactory: (http: HttpService) =>
-                new HttpOidcDiscoveryResolver(http),
+            inject: [OutboundUrlPolicyService],
+            useFactory: (outboundUrlPolicy: OutboundUrlPolicyService) =>
+                new HttpOidcDiscoveryResolver(outboundUrlPolicy),
         },
         {
             provide: OIDC_TOKEN_EXCHANGER,
-            inject: [HttpService],
-            useFactory: (http: HttpService) => new HttpOidcTokenExchanger(http),
+            inject: [HttpService, OutboundUrlPolicyService],
+            useFactory: (
+                http: HttpService,
+                outboundUrlPolicy: OutboundUrlPolicyService,
+            ) => new HttpOidcTokenExchanger(http, outboundUrlPolicy),
         },
         AuthorizationServersService,
     ],
