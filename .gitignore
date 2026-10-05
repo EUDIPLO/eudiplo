@@ -3,6 +3,7 @@
 apps/cli/dist
 apps/cli/dist-sea
 node_modules
+.angular/
 /build
 /site
 swagger.json
