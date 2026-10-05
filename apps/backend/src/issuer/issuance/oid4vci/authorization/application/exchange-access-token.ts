@@ -2,6 +2,7 @@ import {
     type AuthorizationCodeGrantIdentifier,
     authorizationCodeGrantIdentifier,
     type Oauth2AuthorizationServer,
+    PkceCodeChallengeMethod,
     type PreAuthorizedCodeGrantIdentifier,
     preAuthorizedCodeGrantIdentifier,
     type RefreshTokenGrantIdentifier,
@@ -301,6 +302,13 @@ export class ExchangeAccessToken {
                         jwt: parsed.dpop?.jwt,
                         expectedJwkThumbprint: session.dpop_jkt,
                         ...dpopProofChecks,
+                    },
+                    // Checked above already; without it the library rejects
+                    // every code_verifier as a PKCE downgrade (RFC 9700 4.8.2).
+                    pkce: {
+                        codeChallenge: session.auth_queries!.code_challenge!,
+                        codeChallengeMethod: PkceCodeChallengeMethod.S256,
+                        codeVerifier: parsed.pkceCodeVerifier,
                     },
                     authorizationServerMetadata,
                 })
