@@ -52,7 +52,7 @@ Settings you often need locally:
 | Variable | Purpose |
 | --- | --- |
 | `PUBLIC_URL` | URL wallets use to reach the backend (`.env.example`: `http://localhost:3000`). A wallet on a phone needs a public HTTPS URL; the [Foundation cookbook](../cookbooks/foundation.md) shows how to get one with a tunnel. |
-| `OUTBOUND_URL_ALLOW_HTTP=true`, `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK=true` | Webhooks, attribute providers, metadata imports, schema metadata downloads, trust lists, status lists and federation entities reject HTTP and private or loopback targets by default. Enable both to call services on your machine. The dev container sets both. |
+| `OUTBOUND_URL_ALLOW_HTTP=true`, `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK=true` | Webhooks, attribute providers, metadata imports, schema metadata downloads, trust lists, status lists, federation entities and external or upstream authorization servers reject HTTP and private or loopback targets by default. Enable both to call services on your machine. The dev container sets both. |
 | `CONFIG_IMPORT_MODE=upsert` | Imports the tenant configuration in `CONFIG_FOLDER` (default: `assets/config`, the demo tenant) on every start. The default is `disabled`. |
 | `SKIP_*` | Turn off a check of the normal flow for interoperability testing. Active flags are logged as warnings on startup. See [skip flags](../reference/environment-variables.md#skip-flags). |
 

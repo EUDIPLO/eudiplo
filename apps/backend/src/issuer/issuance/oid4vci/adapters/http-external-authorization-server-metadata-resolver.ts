@@ -1,15 +1,15 @@
-import type { HttpService } from "@nestjs/axios";
 import { Logger } from "@nestjs/common";
 import type { AuthorizationServerMetadata } from "@openid4vc/oauth2";
 import type { MetricService } from "nestjs-otel";
-import { firstValueFrom } from "rxjs";
 import type { FederationTrustService } from "../../../../trust/federation-trust.service.js";
 import type { FederationTrustSource } from "../../../../trust/types.js";
+import type { OutboundUrlPolicyService } from "../../../../webhook/outbound-url-policy.service.js";
 import {
     AuthorizationServerMetadataUnavailable,
     AuthorizationServerNotTrusted,
 } from "../domain/authorization-server-errors.js";
 import type { ExternalAuthorizationServerMetadataResolver } from "../ports/authorization-server-metadata.js";
+import { getAuthorizationServerJson } from "./authorization-server-http.js";
 
 type CachedMetadata = {
     metadata: AuthorizationServerMetadata;
@@ -23,9 +23,10 @@ const STALE_TTL_MS = 60 * 60 * 1000;
 
 /**
  * Fetches external authorization server metadata over HTTP
- * (`oauth-authorization-server`, falling back to `openid-configuration`).
- * Results are cached per issuer, concurrent fetches are deduplicated, and a
- * stale entry is served for up to one hour when a refresh fails.
+ * (`oauth-authorization-server`, falling back to `openid-configuration`)
+ * under the outbound URL policy. Results are cached per issuer, concurrent
+ * fetches are deduplicated, and a stale entry is served for up to one hour
+ * when a refresh fails.
  */
 export class HttpExternalAuthorizationServerMetadataResolver
     implements ExternalAuthorizationServerMetadataResolver
@@ -41,7 +42,7 @@ export class HttpExternalAuthorizationServerMetadataResolver
     private readonly counters;
 
     constructor(
-        private readonly http: HttpService,
+        private readonly outboundUrlPolicy: OutboundUrlPolicyService,
         private readonly federationTrust: FederationTrustService,
         metrics?: MetricService,
     ) {
@@ -146,15 +147,20 @@ export class HttpExternalAuthorizationServerMetadataResolver
 
     private async fetch(issuer: string): Promise<AuthorizationServerMetadata> {
         const get = (path: string) =>
-            firstValueFrom(this.http.get(`${issuer}${path}`)).then(
-                (response) => response.data as AuthorizationServerMetadata,
+            getAuthorizationServerJson<AuthorizationServerMetadata>(
+                this.outboundUrlPolicy,
+                `${issuer}${path}`,
             );
         try {
             return await get("/.well-known/oauth-authorization-server");
         } catch {
             try {
                 return await get("/.well-known/openid-configuration");
-            } catch {
+            } catch (error) {
+                // Shows outbound URL policy rejections to the operator.
+                this.logger.warn(
+                    `Failed to fetch authorization server metadata for ${issuer}: ${error instanceof Error ? error.message : String(error)}`,
+                );
                 throw new AuthorizationServerMetadataUnavailable();
             }
         }

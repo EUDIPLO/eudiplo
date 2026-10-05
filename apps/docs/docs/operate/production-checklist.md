@@ -40,14 +40,15 @@ again after major upgrades. Each item links to the guide that explains it.
       limiting. Where possible, restrict `/api/*` to known networks.
 - [ ] `OUTBOUND_URL_ALLOW_HTTP` and `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` stay
       `false` (the default since 9.0). Webhooks, attribute providers, metadata,
-      trust lists, status lists and federation entities then need public HTTPS
-      targets; CRLs may use HTTP.
+      trust lists, status lists, federation entities, external authorization
+      servers and the upstream provider of a chained authorization server then
+      need public HTTPS targets; CRLs may use HTTP.
       `OUTBOUND_URL_ALLOWED_HOSTS` additionally limits them to the listed
       hosts; it does not exempt a host from either check, so a webhook on a
       private address still needs `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK=true`.
 - [ ] Egress is restricted at the network level if EUDIPLO must not reach
-      internal services: external and chained authorization servers are
-      called without the outbound URL policy
+      internal services: KMS providers, including those in a tenant's KMS
+      configuration, are called without the outbound URL policy
       ([security model](../concepts/security-model.md#https-and-tls)).
 - [ ] Services with private CAs (Vault, KMS, webhooks, PostgreSQL) are trusted
       through `NODE_EXTRA_CA_CERTS` or `DB_SSL_CA_PATH`, never by disabling
