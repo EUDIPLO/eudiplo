@@ -25,7 +25,7 @@ declare let monaco: any;
 const runtimeEnv = globalThis as { env?: { baseHref?: string } };
 const baseHref = runtimeEnv.env?.baseHref ?? '/';
 const monacoBaseUrl = new URL(
-  'assets/monaco/min/vs',
+  'assets/monaco/vs',
   new URL(baseHref, document.location.origin)
 ).toString();
 
