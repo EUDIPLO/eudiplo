@@ -193,8 +193,9 @@
               <div>
                 <p>Allowed values (text)</p>
                 <p class="field-hint">
-                  Leave unrestricted to accept any value. The wallet uses these hints when selecting
-                  claims; your application must still check the returned values.
+                  Leave unrestricted to accept any value. EUDIPLO rejects a presentation whose
+                  disclosed value is not one of these. For boolean or number values, use the JSON
+                  editor.
                 </p>
                 @for (value of claim.values; track $index; let k = $index) {
                   <div class="row-fields">

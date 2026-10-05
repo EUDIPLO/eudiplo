@@ -87,21 +87,21 @@ flowchart TB
     S --> T[Issuer trusted?]
     T --> H[Holder binding: nonce, audience,<br/>transaction data hashes]
     H --> X[Status list check]
-    X --> Q[Requested claims disclosed?]
+    X --> Q[Requested claims disclosed<br/>with accepted values?]
     Q --> OK[Session completed]
     C -->|no| F[Session failed]
     S -->|invalid| F
     T -->|untrusted| F
     H -->|mismatch| F
     X -->|revoked, suspended<br/>or unavailable| F
-    Q -->|missing| F
+    Q -->|missing or<br/>other value| F
 ```
 
 1. **Completeness.** Every required `credential_sets` option must be satisfied; without credential sets, every credential query must be answered. Credential IDs that are not in the query are rejected, and a query that does not set `multiple: true` accepts only one presentation.
 2. **Signature and trust.** The format verifier (SD-JWT VC or mdoc) checks the issuer signature, builds the issuer certificate chain and checks every certificate's validity period. Trust is opt-in per credential query: with `trusted_authorities`, the chain must match a PID or EAA issuer listed in one of the trust lists, and a trust list that cannot be loaded, has a bad signature or is past its next update fails the check. Without `trusted_authorities`, any validly signed issuer is accepted. Certificate revocation (CRL, OCSP) is not checked. `openid_federation` authorities are evaluated as described in [OpenID Federation](../trust/federation.md).
 3. **Holder binding.** The key binding JWT (SD-JWT VC) or device authentication (mdoc) must match the request's `nonce` and audience and, with transaction data, contain the matching hashes.
 4. **Status.** The credential's status list is fetched and checked according to `statusCheckMode`: `strict` fails if the list is unavailable, `best_effort` continues, `disabled` skips the check.
-5. **Claims.** The requested claims, or one of the `claim_sets`, must be disclosed. `values` constraints are passed to the wallet but not checked again by EUDIPLO.
+5. **Claims.** The requested claims, or one of the `claim_sets`, must be disclosed, each with one of its `values` if the claim query lists them (`claim_value_mismatch` otherwise).
 
 A failed check records the failure as a structured `outcome` on the session, with a machine-readable code such as `trust_chain_not_trusted` ([Session outcome](../reference/session-outcome.md)).
 

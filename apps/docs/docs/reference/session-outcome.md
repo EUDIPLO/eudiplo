@@ -79,6 +79,14 @@ The same codes are used for SD-JWT VC and mDOC, in OpenID4VP and ISO 18013-7 flo
 | `x5c_missing`             | The credential is missing its issuer certificate chain.                         | The credential carries no `x5c` certificate chain.                                                                     |
 | `verification_error`      | The credential could not be verified.                                            | Any other verification error, including a malformed `x5c` and federation trust failures.                              |
 
+### DCQL claim values
+
+| Code                   | Message                                                                                     | Cause                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `claim_value_mismatch` | `Disclosed claim values do not match the requested values for credential '<id>': <paths>` | A disclosed claim is not one of the [`values`](../presentation/dcql.md#accept-specific-values) of its claim query. With `claim_sets`, no set matched and at least one disclosed claim had another value. |
+
+The message names the credential query and the claim paths, never the disclosed values. The outcome has no `credentials` entry for this code. A mismatch is reported before missing claims of the same credential.
+
 ### Wallet error responses
 
 When the wallet answers with an OAuth error instead of a presentation, for example because the user declined, EUDIPLO records the wallet's code as `failureCode` (`access_denied`, `invalid_request`, `vp_formats_not_supported`, `wallet_unavailable`, ...). `errorReason` and `outcome.message` read `Wallet error: <error>: <error_description>`. The wallet gets HTTP `200`, as OpenID4VP 1.0 §8.2 requires, with a `redirect_uri` carrying `error` and `error_description` if a redirect is configured. EUDIPLO accepts the error both as form parameters and inside an encrypted `direct_post.jwt` response.

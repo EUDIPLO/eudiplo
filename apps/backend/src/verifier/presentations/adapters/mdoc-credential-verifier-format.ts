@@ -18,9 +18,9 @@ import type {
 } from "../domain/credential-verifier-format.js";
 import {
     type DcqlClaimQuery,
-    matchesMdocClaimSelection,
+    evaluateMdocClaimSelection,
+    isClaimSelectionSatisfied,
     mdocClaimName,
-    missingMdocClaims,
 } from "../domain/dcql-claim-policy.js";
 
 const REASON_BY_FAILURE_TYPE: Record<VerificationFailureType, string> = {
@@ -37,7 +37,8 @@ const REASON_BY_FAILURE_TYPE: Record<VerificationFailureType, string> = {
 /**
  * mdoc (ISO 18013-5) verifier format. Requested claims are part of the
  * DeviceRequest the response is verified against, so each `claim_sets`
- * option is verified separately.
+ * option is verified separately. Claim `values` are checked against the
+ * disclosed elements.
  */
 @Injectable()
 export class MdocCredentialVerifierFormat implements CredentialVerifierFormat {
@@ -71,18 +72,24 @@ export class MdocCredentialVerifierFormat implements CredentialVerifierFormat {
         }
 
         this.logClaimChecks(context.credentialId, context.claims, result);
+        const claimCheck = evaluateMdocClaimSelection(
+            result.claims,
+            context.claims ?? [],
+        );
         return {
             verified: true,
             claims: result.claims,
             docType: result.docType,
             provenance: result.provenance,
-            missingClaims: missingMdocClaims(context.claims, result.claims),
+            missingClaims: claimCheck.missing,
+            mismatchedClaims: claimCheck.mismatched,
         };
     }
 
     /**
-     * The first option that verifies and discloses all its elements wins. When
-     * none does, the last verification failure is reported.
+     * The first option that verifies and discloses all its elements with
+     * requested values wins. When none does, the last verification failure
+     * is reported, else the value mismatches of all verified options.
      */
     private async verifyClaimSets(
         credential: string,
@@ -93,6 +100,7 @@ export class MdocCredentialVerifierFormat implements CredentialVerifierFormat {
             | Pick<MdocVerificationResult, "failureType" | "failureReason">
             | undefined;
         let lastVerified: MdocVerificationResult | undefined;
+        const mismatchedClaims = new Set<string>();
 
         for (const selectedClaims of context.claimSets ?? []) {
             let result: MdocVerificationResult;
@@ -118,15 +126,23 @@ export class MdocCredentialVerifierFormat implements CredentialVerifierFormat {
             }
 
             lastVerified = result;
-            if (matchesMdocClaimSelection(result.claims, selectedClaims)) {
+            const claimCheck = evaluateMdocClaimSelection(
+                result.claims,
+                selectedClaims,
+            );
+            if (isClaimSelectionSatisfied(claimCheck)) {
                 return {
                     verified: true,
                     claims: result.claims,
                     docType: result.docType,
                     provenance: result.provenance,
                     missingClaims: [],
+                    mismatchedClaims: [],
                     claimSetSatisfied: true,
                 };
+            }
+            for (const claim of claimCheck.mismatched) {
+                mismatchedClaims.add(claim);
             }
         }
 
@@ -140,6 +156,7 @@ export class MdocCredentialVerifierFormat implements CredentialVerifierFormat {
             docType: lastVerified?.docType,
             provenance: lastVerified?.provenance,
             missingClaims: [],
+            mismatchedClaims: [...mismatchedClaims],
             claimSetSatisfied: false,
         };
     }

@@ -12,7 +12,9 @@ import type {
     Oid4vpPresentationBinding,
 } from "../domain/credential-verifier-format.js";
 import {
-    matchesClaimSelection,
+    type ClaimSelectionResult,
+    evaluateClaimSelection,
+    isClaimSelectionSatisfied,
     sdJwtRequiredClaimKeys,
 } from "../domain/dcql-claim-policy.js";
 
@@ -73,15 +75,14 @@ export class SdJwtCredentialVerifierFormat implements CredentialVerifierFormat {
         }
         const payload = (result.payload ?? {}) as Record<string, unknown>;
 
-        const claimSetSatisfied = context.claimSets
-            ? context.claimSets.some((selectedClaims) =>
-                  matchesClaimSelection(
-                      payload,
-                      context.claims,
-                      selectedClaims,
-                  ),
-              )
-            : undefined;
+        // The SD-JWT VC verifier only checks that claim keys are disclosed;
+        // claim sets and `values` are checked on the disclosed payload.
+        const selections = context.claimSets ?? [context.claims ?? []];
+        const results = selections.map((selectedClaims) =>
+            evaluateClaimSelection(payload, selectedClaims),
+        );
+        const satisfied = results.some(isClaimSelectionSatisfied);
+        const claimSetSatisfied = context.claimSets ? satisfied : undefined;
 
         if (claimSetSatisfied !== false) {
             this.logger.debug(
@@ -106,7 +107,8 @@ export class SdJwtCredentialVerifierFormat implements CredentialVerifierFormat {
             verified: true,
             // Holder key and status reference are not claims about the subject.
             claims: { ...result.payload, cnf: undefined, status: undefined },
-            missingClaims: [],
+            missingClaims: context.claimSets ? [] : results[0].missing,
+            mismatchedClaims: satisfied ? [] : mismatchedClaims(results),
             claimSetSatisfied,
         };
     }
@@ -141,6 +143,11 @@ export class SdJwtCredentialVerifierFormat implements CredentialVerifierFormat {
         );
         return defaultAudience;
     }
+}
+
+/** The mismatched claims of all selections, without duplicates. */
+function mismatchedClaims(results: ClaimSelectionResult[]): string[] {
+    return [...new Set(results.flatMap((result) => result.mismatched))];
 }
 
 function normalizeDcApiOrigin(origin: string | undefined): string | undefined {

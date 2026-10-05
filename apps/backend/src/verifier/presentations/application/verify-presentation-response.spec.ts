@@ -31,6 +31,7 @@ function setup(
             verified: true,
             claims: { given_name: "Erika" },
             missingClaims: [],
+            mismatchedClaims: [],
             ...result,
         }),
     };
@@ -223,6 +224,39 @@ describe("VerifyPresentationResponse", () => {
         await expect(claimSet.run({ pid: ["vp"] })).rejects.toThrow(
             'Credential "pid" does not satisfy any claim_set',
         );
+    });
+
+    it("rejects claim value mismatches with a stable code before other claim violations", async () => {
+        const { run } = setup(
+            [
+                {
+                    id: "pid",
+                    claims: [{ id: "a", path: ["a"], values: [true] }],
+                    claim_sets: [["a"]],
+                },
+            ],
+            {
+                mismatchedClaims: ["a"],
+                missingClaims: ["b"],
+                claimSetSatisfied: false,
+            },
+        );
+
+        const error = await run({ pid: ["vp"] }).catch((e) => e);
+        expect(error).toBeInstanceOf(IncompletePresentationError);
+        expect(error.code).toBe("claim_value_mismatch");
+        expect(error.message).toBe(
+            "Disclosed claim values do not match the requested values for credential 'pid': a",
+        );
+        expect(error.details).toEqual({ mismatchedClaims: { pid: ["a"] } });
+    });
+
+    it("reports incomplete presentations without a failure code", async () => {
+        const { run } = setup([{ id: "pid" }], { missingClaims: ["ns.age"] });
+
+        const error = await run({ pid: ["vp"] }).catch((e) => e);
+        expect(error).toBeInstanceOf(IncompletePresentationError);
+        expect(error.code).toBeUndefined();
     });
 
     it("passes only the transaction data that references the credential", async () => {

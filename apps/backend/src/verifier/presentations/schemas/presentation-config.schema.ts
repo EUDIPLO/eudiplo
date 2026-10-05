@@ -71,9 +71,12 @@ const ClaimsQuerySchema = z
             .array(z.union([z.string(), z.number()]))
             .describe("Path to the claim value in presented credentials."),
         values: z
-            .array(z.string())
+            .array(z.union([z.string(), z.number().int(), z.boolean()]))
+            .min(1)
             .optional()
-            .describe("Optional allowed values for the claim."),
+            .describe(
+                "Optional allowed values for the claim. A disclosed value must equal one of them in type and value.",
+            ),
     })
     .describe("Claim query constraint.")
     .strict();

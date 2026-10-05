@@ -31,7 +31,11 @@ function requestObject(payload: Record<string, unknown>): string {
 type DcqlCredential = {
     id: string;
     format: "dc+sd-jwt" | "mso_mdoc";
-    claims?: Array<{ id?: string; path: string[] }>;
+    claims?: Array<{
+        id?: string;
+        path: string[];
+        values?: Array<string | number | boolean>;
+    }>;
     claim_sets?: string[][];
     trusted_authorities?: unknown[];
 };
@@ -158,13 +162,22 @@ describe("OID4VP presentation verification", () => {
     });
 
     it("verifies SD-JWT VCs with key binding and strips cnf and status", async () => {
-        const { service, config, session, sdJwt } = setup([
+        const { service, config, session, sdJwt } = setup(
+            [
+                {
+                    id: "pid",
+                    format: "dc+sd-jwt",
+                    claims: [{ path: ["address", "locality"] }],
+                },
+            ],
             {
-                id: "pid",
-                format: "dc+sd-jwt",
-                claims: [{ path: ["address", "locality"] }],
+                sdJwtPayload: {
+                    address: { locality: "Berlin" },
+                    cnf: { jwk: {} },
+                    status: {},
+                },
             },
-        ]);
+        );
 
         await expect(
             service.parseResponse(
@@ -176,7 +189,11 @@ describe("OID4VP presentation verification", () => {
             {
                 id: "pid",
                 values: [
-                    { given_name: "Erika", cnf: undefined, status: undefined },
+                    {
+                        address: { locality: "Berlin" },
+                        cnf: undefined,
+                        status: undefined,
+                    },
                 ],
             },
         ]);
@@ -526,5 +543,271 @@ describe("OID4VP presentation verification", () => {
         expect(error.message).toBe(
             'Credential "mdl" does not satisfy any claim_set',
         );
+    });
+});
+
+describe("DCQL claim values", () => {
+    const parse = (
+        credentials: DcqlCredential[],
+        options: Parameters<typeof setup>[1],
+        vpToken: Record<string, string[]>,
+    ) => {
+        const { service, config, session } = setup(credentials, options);
+        return service.parseResponse({ vp_token: vpToken }, config, session);
+    };
+    const rejection = (promise: Promise<unknown>) =>
+        promise.then(
+            () => {
+                throw new Error("expected the presentation to be rejected");
+            },
+            (error) => error,
+        );
+
+    describe("SD-JWT VC", () => {
+        const over18 = (
+            values: Array<string | number | boolean>,
+        ): DcqlCredential[] => [
+            {
+                id: "pid",
+                format: "dc+sd-jwt",
+                claims: [{ path: ["age_equal_or_over", "18"], values }],
+            },
+        ];
+        const presented = (value: unknown) => ({
+            sdJwtPayload: { age_equal_or_over: { "18": value } },
+        });
+
+        it("accepts a disclosed value that is one of the requested values", async () => {
+            await expect(
+                parse(over18([true]), presented(true), { pid: ["vp"] }),
+            ).resolves.toEqual([
+                {
+                    id: "pid",
+                    values: [
+                        {
+                            age_equal_or_over: { "18": true },
+                            cnf: undefined,
+                            status: undefined,
+                        },
+                    ],
+                },
+            ]);
+        });
+
+        it("rejects a wrong value with claim_value_mismatch and no value in the message", async () => {
+            const error = await rejection(
+                parse(over18([true]), presented(false), { pid: ["vp"] }),
+            );
+            expect(error).toBeInstanceOf(IncompletePresentationException);
+            expect(error.code).toBe("claim_value_mismatch");
+            expect(error.message).toBe(
+                "Disclosed claim values do not match the requested values for credential 'pid': age_equal_or_over.18",
+            );
+            expect(error.details).toEqual({
+                mismatchedClaims: { pid: ["age_equal_or_over.18"] },
+            });
+            expect(error.message).not.toContain("false");
+        });
+
+        it("rejects a value of the wrong type", async () => {
+            const error = await rejection(
+                parse(over18([true]), presented("true"), { pid: ["vp"] }),
+            );
+            expect(error.code).toBe("claim_value_mismatch");
+        });
+
+        it("accepts a claim set whose claims match and rejects value mismatches in all of them", async () => {
+            const credentials: DcqlCredential[] = [
+                {
+                    id: "pid",
+                    format: "dc+sd-jwt",
+                    claims: [
+                        {
+                            id: "over21",
+                            path: ["age_equal_or_over", "21"],
+                            values: [true],
+                        },
+                        {
+                            id: "over18",
+                            path: ["age_equal_or_over", "18"],
+                            values: [true],
+                        },
+                    ],
+                    claim_sets: [["over21"], ["over18"]],
+                },
+            ];
+
+            await expect(
+                parse(
+                    credentials,
+                    {
+                        sdJwtPayload: {
+                            age_equal_or_over: { "18": true, "21": false },
+                        },
+                    },
+                    { pid: ["vp"] },
+                ),
+            ).resolves.toHaveLength(1);
+
+            const error = await rejection(
+                parse(
+                    credentials,
+                    { sdJwtPayload: { age_equal_or_over: { "18": false } } },
+                    { pid: ["vp"] },
+                ),
+            );
+            expect(error.code).toBe("claim_value_mismatch");
+            expect(error.details).toEqual({
+                mismatchedClaims: { pid: ["age_equal_or_over.18"] },
+            });
+        });
+
+        it("keeps undisclosed claim sets an incomplete presentation", async () => {
+            const error = await rejection(
+                parse(
+                    [
+                        {
+                            id: "pid",
+                            format: "dc+sd-jwt",
+                            claims: [
+                                {
+                                    id: "over18",
+                                    path: ["age_equal_or_over", "18"],
+                                    values: [true],
+                                },
+                            ],
+                            claim_sets: [["over18"]],
+                        },
+                    ],
+                    { sdJwtPayload: { given_name: "Erika" } },
+                    { pid: ["vp"] },
+                ),
+            );
+            expect(error).toBeInstanceOf(IncompletePresentationException);
+            expect(error.code).toBeUndefined();
+            expect(error.message).toBe(
+                'Credential "pid" does not satisfy any claim_set',
+            );
+        });
+    });
+
+    describe("mDOC", () => {
+        const namespace = "eu.europa.ec.eudi.pid.1";
+        const over18 = (
+            values: Array<string | number | boolean>,
+        ): DcqlCredential[] => [
+            {
+                id: "pid",
+                format: "mso_mdoc",
+                claims: [{ path: [namespace, "age_over_18"], values }],
+            },
+        ];
+        const presented = (claims: Record<string, unknown>) => ({
+            mdocResult: { verified: true, claims },
+        });
+
+        it("accepts a disclosed value that is one of the requested values", async () => {
+            await expect(
+                parse(over18([true]), presented({ age_over_18: true }), {
+                    pid: ["dr"],
+                }),
+            ).resolves.toEqual([
+                { id: "pid", values: [{ age_over_18: true }] },
+            ]);
+        });
+
+        it("rejects a wrong value with claim_value_mismatch", async () => {
+            const error = await rejection(
+                parse(over18([true]), presented({ age_over_18: false }), {
+                    pid: ["dr"],
+                }),
+            );
+            expect(error).toBeInstanceOf(IncompletePresentationException);
+            expect(error.code).toBe("claim_value_mismatch");
+            expect(error.message).toBe(
+                `Disclosed claim values do not match the requested values for credential 'pid': ${namespace}.age_over_18`,
+            );
+        });
+
+        it("rejects a value of the wrong type", async () => {
+            const error = await rejection(
+                parse(over18([true]), presented({ age_over_18: "true" }), {
+                    pid: ["dr"],
+                }),
+            );
+            expect(error.code).toBe("claim_value_mismatch");
+
+            const integer = await rejection(
+                parse(over18([18]), presented({ age_over_18: "18" }), {
+                    pid: ["dr"],
+                }),
+            );
+            expect(integer.code).toBe("claim_value_mismatch");
+        });
+
+        it("tries the next claim set when values do not match and reports mismatches of all sets", async () => {
+            const credentials: DcqlCredential[] = [
+                {
+                    id: "pid",
+                    format: "mso_mdoc",
+                    claims: [
+                        {
+                            id: "over21",
+                            path: [namespace, "age_over_21"],
+                            values: [true],
+                        },
+                        {
+                            id: "over18",
+                            path: [namespace, "age_over_18"],
+                            values: [true],
+                        },
+                    ],
+                    claim_sets: [["over21"], ["over18"]],
+                },
+            ];
+
+            await expect(
+                parse(
+                    credentials,
+                    presented({ age_over_18: true, age_over_21: false }),
+                    { pid: ["dr"] },
+                ),
+            ).resolves.toEqual([
+                {
+                    id: "pid",
+                    values: [{ age_over_18: true, age_over_21: false }],
+                },
+            ]);
+
+            const error = await rejection(
+                parse(
+                    credentials,
+                    presented({ age_over_18: false, age_over_21: false }),
+                    { pid: ["dr"] },
+                ),
+            );
+            expect(error.code).toBe("claim_value_mismatch");
+            expect(error.details).toEqual({
+                mismatchedClaims: {
+                    pid: [
+                        `${namespace}.age_over_21`,
+                        `${namespace}.age_over_18`,
+                    ],
+                },
+            });
+        });
+
+        it("keeps a missing element an incomplete presentation", async () => {
+            const error = await rejection(
+                parse(over18([true]), presented({ given_name: "Erika" }), {
+                    pid: ["dr"],
+                }),
+            );
+            expect(error).toBeInstanceOf(IncompletePresentationException);
+            expect(error.code).toBeUndefined();
+            expect(error.message).toBe(
+                `Missing required claims for credential 'pid': ${namespace}.age_over_18`,
+            );
+        });
     });
 });

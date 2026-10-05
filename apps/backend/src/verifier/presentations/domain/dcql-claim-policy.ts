@@ -1,6 +1,7 @@
 /**
- * DCQL presentation policy: which credentials and claims a presentation
- * response must contain to satisfy the DCQL query of a presentation config.
+ * DCQL presentation policy: which credentials and claims (with which
+ * values) a presentation response must contain to satisfy the DCQL query of
+ * a presentation config.
  *
  * Pure functions without framework or format-library dependencies. The
  * caller verifies credentials and decides how a violation is reported.
@@ -8,10 +9,15 @@
 
 export type VerifierCredentialFormat = "dc+sd-jwt" | "mso_mdoc";
 
+/** A value a DCQL claims query can require (OID4VP 1.0 §6.3). */
+type DcqlClaimValue = string | number | boolean;
+
 /** The subset of a DCQL claims query the policy needs. */
 export interface DcqlClaimQuery {
     id?: string;
     path: string[];
+    /** The disclosed value must equal one of these (same type and value). */
+    values?: DcqlClaimValue[];
 }
 
 /** The subset of a DCQL credential query the policy needs. */
@@ -28,14 +34,30 @@ export interface DcqlCredentialSetQuery {
     required?: boolean;
 }
 
+/** Failure code of a disclosed claim whose value is not one of its `values`. */
+export const CLAIM_VALUE_MISMATCH = "claim_value_mismatch";
+
 /** Why a presentation does not satisfy the DCQL query. */
 export interface IncompletePresentation {
+    /** Stable failure code for the session outcome, when there is one. */
+    code?: typeof CLAIM_VALUE_MISMATCH;
     message: string;
     details: {
         missingCredentials?: string[];
         missingClaims?: Record<string, string[]>;
+        mismatchedClaims?: Record<string, string[]>;
         unsatisfiedCredentialSets?: number[];
     };
+}
+
+/**
+ * How disclosed claims fail a claim selection, as dotted claim paths: claims
+ * that are not disclosed, and disclosed claims whose value is not one of the
+ * requested `values`.
+ */
+export interface ClaimSelectionResult {
+    missing: string[];
+    mismatched: string[];
 }
 
 /** A `claim_sets` entry references a claim id that is not defined. */
@@ -114,19 +136,6 @@ export function mdocClaimName(path: string[]): string {
     return path.length > 1 ? path[1] : path[0];
 }
 
-/**
- * Returns the requested mdoc claims (as dotted full paths) that are absent
- * from the verified claims.
- */
-export function missingMdocClaims(
-    requestedClaims: DcqlClaimQuery[] | undefined,
-    receivedClaims: Record<string, unknown>,
-): string[] {
-    return (requestedClaims ?? [])
-        .filter((claim) => !(mdocClaimName(claim.path) in receivedClaims))
-        .map((claim) => claim.path.join("."));
-}
-
 /** The violation reported when requested claims (dotted paths) are not disclosed. */
 export function missingClaimsViolation(
     credentialId: string,
@@ -135,6 +144,21 @@ export function missingClaimsViolation(
     return {
         message: `Missing required claims for credential '${credentialId}': ${missingClaims.join(", ")}`,
         details: { missingClaims: { [credentialId]: missingClaims } },
+    };
+}
+
+/**
+ * The violation reported when disclosed claims (dotted paths) do not have
+ * one of the requested values. The values themselves are never included.
+ */
+export function claimValueMismatchViolation(
+    credentialId: string,
+    mismatchedClaims: string[],
+): IncompletePresentation {
+    return {
+        code: CLAIM_VALUE_MISMATCH,
+        message: `Disclosed claim values do not match the requested values for credential '${credentialId}': ${mismatchedClaims.join(", ")}`,
+        details: { mismatchedClaims: { [credentialId]: mismatchedClaims } },
     };
 }
 
@@ -191,59 +215,125 @@ export function claimSelections<Claim extends DcqlClaimQuery>(credential: {
     );
 }
 
-/** Whether a disclosed SD-JWT VC payload contains every selected claim path. */
-export function matchesClaimSelection(
+/**
+ * Checks the selected claims against a disclosed SD-JWT VC payload: each
+ * path must select at least one value, and with `values` one of the selected
+ * values must be requested.
+ */
+export function evaluateClaimSelection(
     payload: Record<string, unknown>,
-    allClaims: DcqlClaimQuery[] | undefined,
     selectedClaims: DcqlClaimQuery[],
-): boolean {
-    if (!allClaims || allClaims.length === 0) {
-        return selectedClaims.length === 0;
-    }
-
-    return selectedClaims.every((claim) => hasClaimPath(payload, claim.path));
-}
-
-/** Whether verified mdoc claims contain every selected element. */
-export function matchesMdocClaimSelection(
-    claims: Record<string, unknown>,
-    selectedClaims: DcqlClaimQuery[],
-): boolean {
-    return selectedClaims.every((claim) => mdocClaimName(claim.path) in claims);
+): ClaimSelectionResult {
+    return evaluate(selectedClaims, (claim) =>
+        selectClaimValues(payload, claim.path),
+    );
 }
 
 /**
- * Whether `value` has a defined value at `path`. Numeric segments index into
- * arrays.
+ * Checks the selected claims against verified mdoc claims, matched by
+ * element name (see {@link mdocClaimName}).
  */
-export function hasClaimPath(value: unknown, path: string[]): boolean {
-    let current: unknown = value;
+export function evaluateMdocClaimSelection(
+    claims: Record<string, unknown>,
+    selectedClaims: DcqlClaimQuery[],
+): ClaimSelectionResult {
+    return evaluate(selectedClaims, (claim) => {
+        const name = mdocClaimName(claim.path);
+        return Object.hasOwn(claims, name) ? [claims[name]] : [];
+    });
+}
 
+/** Whether a claim selection is disclosed with requested values only. */
+export function isClaimSelectionSatisfied(
+    result: ClaimSelectionResult,
+): boolean {
+    return result.missing.length === 0 && result.mismatched.length === 0;
+}
+
+function evaluate(
+    selectedClaims: DcqlClaimQuery[],
+    disclosedValues: (claim: DcqlClaimQuery) => unknown[],
+): ClaimSelectionResult {
+    const result: ClaimSelectionResult = { missing: [], mismatched: [] };
+    for (const claim of selectedClaims) {
+        const disclosed = disclosedValues(claim);
+        const requested = claim.values;
+        if (disclosed.length === 0) {
+            result.missing.push(claim.path.join("."));
+        } else if (
+            requested &&
+            !disclosed.some((value) => isRequestedValue(value, requested))
+        ) {
+            result.mismatched.push(claim.path.join("."));
+        }
+    }
+    return result;
+}
+
+/**
+ * Whether a disclosed value equals one of the requested values in type and
+ * value: `"true"` does not match `true`, nor `"18"` match `18`.
+ */
+function isRequestedValue(
+    disclosed: unknown,
+    values: readonly DcqlClaimValue[],
+): boolean {
+    return values.some((value) => value === disclosed);
+}
+
+/**
+ * A DCQL claims path pointer. Config paths are strings; numbers and `null`
+ * come from the OID4VP JSON form.
+ */
+type ClaimPath = ReadonlyArray<string | number | null>;
+
+/**
+ * The values a claims path pointer selects in `value` (OID4VP 1.0 §7.1): a
+ * string selects an object key, a non-negative integer (or numeric string)
+ * an array element, and `null` every array element. Undefined values count
+ * as not selected; an empty result means the claim is not disclosed.
+ */
+export function selectClaimValues(value: unknown, path: ClaimPath): unknown[] {
+    let selected: unknown[] = [value];
     for (const segment of path) {
-        if (current === null || current === undefined) {
-            return false;
+        selected = selected.flatMap((current) =>
+            selectPathSegment(current, segment),
+        );
+    }
+    return selected.filter((current) => current !== undefined);
+}
+
+function selectPathSegment(
+    current: unknown,
+    segment: string | number | null,
+): unknown[] {
+    if (Array.isArray(current)) {
+        if (segment === null) {
+            return current;
         }
-
-        if (Array.isArray(current)) {
-            const index = Number(segment);
-            if (!Number.isInteger(index) || index < 0) {
-                return false;
-            }
-
-            current = current[index];
-            continue;
-        }
-
-        if (typeof current !== "object") {
-            return false;
-        }
-
-        if (!(segment in current)) {
-            return false;
-        }
-
-        current = (current as Record<string, unknown>)[segment];
+        const index = arrayIndex(segment);
+        return index !== undefined && index < current.length
+            ? [current[index]]
+            : [];
     }
 
-    return current !== undefined;
+    if (
+        segment === null ||
+        current === null ||
+        typeof current !== "object" ||
+        !Object.hasOwn(current, segment)
+    ) {
+        return [];
+    }
+    return [(current as Record<string | number, unknown>)[segment]];
+}
+
+function arrayIndex(segment: string | number): number | undefined {
+    const index =
+        typeof segment === "number"
+            ? segment
+            : /^\d+$/.test(segment)
+              ? Number(segment)
+              : Number.NaN;
+    return Number.isSafeInteger(index) && index >= 0 ? index : undefined;
 }

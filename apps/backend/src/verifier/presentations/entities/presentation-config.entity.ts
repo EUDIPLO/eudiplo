@@ -73,7 +73,19 @@ export class ClaimsQuery {
 
     path!: string[];
 
-    values?: string[];
+    @ApiPropertyOptional({
+        type: "array",
+        description:
+            "Allowed values of the claim. A disclosed value must equal one of them in type and value.",
+        items: {
+            oneOf: [
+                { type: "string" },
+                { type: "integer" },
+                { type: "boolean" },
+            ],
+        },
+    })
+    values?: Array<string | number | boolean>;
 }
 
 export class MsoMdocClaimsQuery extends ClaimsQuery {

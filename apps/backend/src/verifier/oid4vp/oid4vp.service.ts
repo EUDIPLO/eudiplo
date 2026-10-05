@@ -890,6 +890,13 @@ export class Oid4vpService {
             // machine-readable code and a short, safe message; keep the verbose
             // reason to logs/audit only.
             const structured = classifyVerificationFailure(error);
+            // DCQL violations with a code (claim value mismatches) never
+            // carry the disclosed values, so their message is safe as is.
+            const code =
+                structured?.code ??
+                (error instanceof IncompletePresentationException
+                    ? error.code
+                    : undefined);
 
             this.auditLogger.logFlowError(
                 logContext,
@@ -898,7 +905,7 @@ export class Oid4vpService {
                     : (error as Error),
                 {
                     action: "process_presentation_response",
-                    ...(structured?.code ? { errorCode: structured.code } : {}),
+                    ...(code ? { errorCode: code } : {}),
                 },
             );
 
@@ -917,7 +924,7 @@ export class Oid4vpService {
                 sessionId: session.id,
                 requestId: session.requestId,
                 message: errorMessage,
-                code: structured?.code,
+                code,
                 credentials: structured ? [structured.credential] : undefined,
                 publish: webhook ? { webhook, session } : undefined,
             });
@@ -1001,6 +1008,7 @@ function presentationVerificationException(error: unknown): unknown {
         return new IncompletePresentationException(
             error.message,
             error.details,
+            error.code,
         );
     }
     if (error instanceof UnknownPresentedCredentialError) {

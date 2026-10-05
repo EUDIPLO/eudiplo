@@ -23,7 +23,7 @@ export const CONFIG_FORMATS = {
     PresentationConfig: {
         slug: "presentation-config",
         file: "PresentationConfigFile",
-        version: 2,
+        version: 3,
     },
     AttributeProvider: {
         slug: "attribute-provider",
@@ -156,6 +156,17 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         migrate: (spec) => ({ spec }),
     },
     presentationConfigV1ToV2,
+    {
+        id: "presentation-config-v3-typed-claim-values",
+        kind: "PresentationConfig",
+        from: 2,
+        to: 3,
+        // v3 accepts integer and boolean DCQL claim `values` besides strings
+        // and requires them to be non-empty. A v2 spec with non-empty string
+        // values is a valid v3 spec; an empty `values` array fails v3
+        // validation, since it could never match a disclosed claim.
+        migrate: (spec) => ({ spec }),
+    },
 ];
 export function schemaUrl(
     kind: ConfigResourceKind,
