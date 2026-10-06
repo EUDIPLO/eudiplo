@@ -57,20 +57,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Run compiled NestJS app
 CMD [ "node", "dist/main.js" ]
 
-FROM eudiplo AS eudiplo-demo
-# Opt-in demo bootstrap from embedded sample config.
-ENV BOOTSTRAP_DEMO=true
-
-# Bundle demo configuration so users can run without downloading repo config files.
-COPY assets/config/demo /app/demo-config/demo
-
-# Seed demo config only when the target config folder is empty.
-COPY apps/backend/docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
-
-ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD [ "node", "dist/main.js" ]
-
 FROM nginx:alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2 AS client
 # Copy the Angular build output into the nginx html directory.
 # The Angular output path is configured as apps/client/dist/apps/client in angular.json.

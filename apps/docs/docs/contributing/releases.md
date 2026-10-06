@@ -27,7 +27,7 @@ Every push to `main` that passes CI publishes development artifacts. Their versi
 
 | Artifact | Published as |
 | --- | --- |
-| `ghcr.io/eudiplo/eudiplo`, `eudiplo-client`, `eudiplo-demo` | `:main` and `:sha-<full commit sha>` |
+| `ghcr.io/eudiplo/eudiplo`, `eudiplo-client` | `:main` and `:sha-<full commit sha>` |
 | `@eudiplo/sdk-core`, `@eudiplo/cli` on npm | `<last release>-main.<short sha>` with the dist-tag `main` |
 
 There is no alpha or beta channel. The `:main` images carry unreleased database migrations, which can still change before a release; use them only with throwaway databases.
@@ -43,7 +43,7 @@ The workflow then:
 - determines the next version with a semantic-release dry run,
 - builds the standalone CLI for `linux-x64`, `linux-arm64`, `macos-arm64` and `windows-x64`, writes `SHA256SUMS.txt` and a build provenance attestation (`provenance.sigstore.json`),
 - runs semantic-release: sets the SDK and CLI versions, creates the tag `vX.Y.Z` and the GitHub release with the CLI archives, checksums and attestation, and publishes `@eudiplo/sdk-core` and `@eudiplo/cli` to npm with the dist-tag `latest`,
-- promotes the CI images of the released commit (`:sha-<commit>`, by digest) for `eudiplo`, `eudiplo-client` and `eudiplo-demo` to `:X.Y.Z`, `:X.Y`, `:X` and `:latest` (`scripts/release-docker.sh`, `Dockerfile.release`, `linux/amd64` and `linux/arm64`),
+- promotes the CI images of the released commit (`:sha-<commit>`, by digest) for `eudiplo` and `eudiplo-client` to `:X.Y.Z`, `:X.Y`, `:X` and `:latest` (`scripts/release-docker.sh`, `Dockerfile.release`, `linux/amd64` and `linux/arm64`),
 - builds and deploys the documentation and the website to production (see [Documentation](./documentation.md#deployment-and-versions)).
 
 Images are never rebuilt from source for a release: the tested CI image is promoted.

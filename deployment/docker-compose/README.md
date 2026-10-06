@@ -2,36 +2,34 @@
 
 This directory contains Docker Compose configurations for EUDIPLO with profile-based deployment options.
 
-## Demo Image (Embedded Config)
+## Demo
 
-This is the Docker-only path. The recommended onboarding path is
-`npx @eudiplo/cli demo`.
+The recommended demo path is the EUDIPLO CLI. It starts EUDIPLO with the demo
+tenant and keeps the tenant files editable in `config/demo/`:
 
-The demo backend image contains embedded demo config and bootstraps it
-automatically when `/app/config` is empty.
+```bash
+npx @eudiplo/cli demo
+```
 
-Pull from GHCR (recommended):
+To run the demo tenant with the Compose files in this directory instead, mount
+the repository's `assets/` folder, which contains the demo tenant in
+`config/demo/`, and enable the startup import. The demo tenant's attribute
+provider and webhook point to `http://localhost:8787`, so the import also needs
+the relaxed outbound URL policy; do not use these settings in production:
 
 ```bash
 cp .env.minimal.example .env
-echo 'EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo-demo:latest' >> .env
+cat >> .env <<'EOF'
+EUDIPLO_CONFIG_MOUNT=../../assets:/app/config
+CONFIG_IMPORT_MODE=create
+OUTBOUND_URL_ALLOW_HTTP=true
+OUTBOUND_URL_ALLOW_PRIVATE_NETWORK=true
+EOF
 docker compose up -d
 ```
 
-Or build locally:
-
-```bash
-docker build --target eudiplo-demo -t eudiplo-demo:local ../..
-cp .env.minimal.example .env
-echo 'EUDIPLO_IMAGE=eudiplo-demo:local' >> .env
-docker compose up -d
-```
-
-Notes:
-
-- Keep `EUDIPLO_CONFIG_MOUNT` unset to use the default named volume.
-- On first startup, the demo image seeds config once (when config folder is empty).
-- If you already have data/config in the volume, bootstrap is skipped.
+The `ghcr.io/eudiplo/eudiplo-demo` image with embedded demo config is published
+only up to 9.0.
 
 ## Quick Start
 
@@ -71,8 +69,6 @@ defaults to `/app/config/config` (the `config/` folder inside the mount, next to
 the SQLite database). If you mount a folder that directly contains the tenant
 folders (for example `../../assets/config:/app/config`), also set
 `CONFIG_FOLDER=/app/config`.
-
-When using the demo image (`EUDIPLO_IMAGE=ghcr.io/eudiplo/eudiplo-demo:latest` or `EUDIPLO_IMAGE=eudiplo-demo:local`), you typically do not need a bind mount for config import.
 
 Example:
 
