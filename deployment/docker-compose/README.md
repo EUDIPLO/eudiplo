@@ -13,17 +13,13 @@ npx @eudiplo/cli demo
 
 To run the demo tenant with the Compose files in this directory instead, mount
 the repository's `assets/` folder, which contains the demo tenant in
-`config/demo/`, and enable the startup import. The demo tenant's attribute
-provider and webhook point to `http://localhost:8787`, so the import also needs
-the relaxed outbound URL policy; do not use these settings in production:
+`config/demo/`, and enable the startup import:
 
 ```bash
 cp .env.minimal.example .env
 cat >> .env <<'EOF'
 EUDIPLO_CONFIG_MOUNT=../../assets:/app/config
 CONFIG_IMPORT_MODE=create
-OUTBOUND_URL_ALLOW_HTTP=true
-OUTBOUND_URL_ALLOW_PRIVATE_NETWORK=true
 EOF
 docker compose up -d
 ```

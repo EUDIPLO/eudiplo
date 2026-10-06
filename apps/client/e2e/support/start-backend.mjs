@@ -39,6 +39,28 @@ issuance.spec.authorizationServers.push({
 });
 writeFileSync(issuanceFile, JSON.stringify(issuance, null, 2));
 
+// The offer form selects an attribute provider; the demo tenant has none.
+// Offer creation does not call it, so nothing needs to listen on its URL.
+const attributeProviderDir = resolve(workDir, 'config/demo/attribute-providers');
+mkdirSync(attributeProviderDir, { recursive: true });
+writeFileSync(
+  resolve(attributeProviderDir, 'claims-provider.json'),
+  JSON.stringify(
+    {
+      $schema: 'https://eudiplo.dev/schemas/v1/AttributeProviderConfigFile.schema.json',
+      metadata: { generation: 1 },
+      spec: {
+        id: 'claims-provider',
+        name: 'Claims Provider',
+        url: 'http://localhost:8787/claims',
+        auth: { type: 'none' },
+      },
+    },
+    null,
+    2
+  )
+);
+
 process.chdir(workDir);
 
 Object.assign(process.env, {
@@ -50,7 +72,8 @@ Object.assign(process.env, {
   MASTER_SECRET: process.env['MASTER_SECRET'] ?? 'e2e-master-secret-with-at-least-32-chars',
   AUTH_CLIENT_ID: process.env['AUTH_CLIENT_ID'] ?? 'root',
   AUTH_CLIENT_SECRET: process.env['AUTH_CLIENT_SECRET'] ?? 'root',
-  // The demo tenant points its attribute provider and webhook at http://localhost.
+  // The attribute provider above and the external authorization server's
+  // metadata are served over HTTP on localhost.
   OUTBOUND_URL_ALLOW_HTTP: 'true',
   OUTBOUND_URL_ALLOW_PRIVATE_NETWORK: 'true',
 });

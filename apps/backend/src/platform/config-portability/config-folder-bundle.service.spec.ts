@@ -43,7 +43,7 @@ describe("ConfigFolderBundleService", () => {
             ),
         );
 
-        expect(bundle.documents).toHaveLength(17);
+        expect(bundle.documents).toHaveLength(15);
         expect(bundle.assets).toHaveLength(4);
         expect(bundle.documents).toEqual(
             expect.arrayContaining([
