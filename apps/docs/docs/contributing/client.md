@@ -83,6 +83,8 @@ E2E_USE_BUILD=true pnpm --filter @eudiplo/client e2e
 
 `PLAYWRIGHT_API_URL` and `PLAYWRIGHT_TEST_BASE_URL` move the backend and client off ports 3000 and 4200. CI uploads the HTML report as the `client-e2e-report` artifact.
 
+Specs import `test` and `expect` from `e2e/support/test.ts` instead of `@playwright/test`. With `E2E_COVERAGE=true`, that fixture records Chromium's JavaScript coverage of every page, and after the run `monocart-coverage-reports` maps it back to `src/**/*.ts` through the build's source maps (`e2e/support/coverage.ts`). Files no test loaded count as uncovered; templates are not included. The HTML, LCOV and Cobertura reports land in `apps/client/coverage/e2e/`.
+
 ## Version check
 
 After sign-in the client compares its build (`env.js`) with the backend's `GET /api/version`. Different revisions, or releases that differ in more than the patch version, show a warning banner. Local builds without version information are not checked.

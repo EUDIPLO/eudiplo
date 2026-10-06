@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect } from './support/test';
 import { hasAuthCredentials } from './support/e2e-config';
 
 // Walks the first two steps of the offer wizard for one credential config.

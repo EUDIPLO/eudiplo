@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/test';
 import { hasAuthCredentials, resolvedE2EConfig } from './support/e2e-config';
 
 const authStatePath = 'playwright/.auth/user.json';
@@ -8,7 +8,7 @@ const authStatePath = 'playwright/.auth/user.json';
 test('authenticate and persist storage state', async ({ page }) => {
   test.skip(
     !hasAuthCredentials,
-    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET to enable authenticated tenant e2e state.',
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET to enable authenticated tenant e2e state.'
   );
 
   await page.goto('/login');

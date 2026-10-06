@@ -63,6 +63,7 @@
     "istanbul-lib-instrument": "^6.0.3",
     "jsdom": "^30.1.2",
     "karma": "~6.4.4",
+    "monocart-coverage-reports": "^2.13.0",
     "playwright-ng-schematics": "22.1.2",
     "prettier": "^3.9.9",
     "typescript": "~6.0.3",

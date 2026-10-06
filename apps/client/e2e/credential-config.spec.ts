@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/test';
 import { hasAuthCredentials } from './support/e2e-config';
 
 test('create credential config', async ({ page }) => {

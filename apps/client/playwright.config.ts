@@ -45,6 +45,8 @@ export default defineConfig({
   retries: process.env['CI'] ? 2 : 0,
   workers: process.env['CI'] ? 1 : undefined,
   reporter: process.env['CI'] ? [['github'], ['html', { open: 'never' }]] : 'html',
+  // E2E_COVERAGE=true writes the client's coverage to coverage/e2e.
+  globalSetup: './e2e/support/coverage-global-setup.ts',
   use: {
     baseURL,
     trace: 'on-first-retry',

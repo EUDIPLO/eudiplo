@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './support/test';
 import { hasAuthCredentials, resolvedE2EConfig } from './support/e2e-config';
 
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -11,7 +11,7 @@ test('login page is accessible', async ({ page }) => {
 test('login with client credentials redirects to dashboard', async ({ page }) => {
   test.skip(
     !hasAuthCredentials,
-    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET to run tenant login flow test.',
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET to run tenant login flow test.'
   );
 
   await page.goto('/login');
