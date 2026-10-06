@@ -8,6 +8,7 @@ import type {
     SessionData as Session,
 } from "../session/domain/session-data.js";
 import type { SessionOutcome } from "../session/domain/session-outcome.js";
+import { SessionStatus } from "../session/domain/session-state.js";
 import { OutboundUrlPolicyService } from "./outbound-url-policy.service.js";
 import { WebhookConfig } from "./webhook.dto.js";
 import { extractRawTokenFromSubmission } from "./webhook.utils.js";
@@ -230,6 +231,54 @@ export class WebhookService {
                 throw new Error(`Error sending webhook: ${err.message || err}`);
             },
         );
+    }
+
+    /**
+     * Tells the session webhook that an operator cancelled the offer, with
+     * `status: "cancelled"` like the status of a presentation result.
+     * @param webhook The webhook configuration
+     * @param session The cancelled session
+     * @param reason Why the offer was cancelled, when given
+     */
+    async sendSessionCancelledWebhook(
+        webhook: WebhookConfig,
+        session: Session,
+        reason?: string,
+    ) {
+        await this.outboundUrlPolicyService.assertSafeUrl(webhook.url);
+
+        const headers: Record<string, string> = {};
+
+        if (webhook.auth && webhook.auth.type === "apiKey") {
+            headers[webhook.auth.config.headerName] = webhook.auth.config.value;
+        }
+
+        this.logger.debug(
+            { webhookUrl: webhook.url, sessionId: session.id },
+            "Sending session cancelled webhook",
+        );
+
+        await firstValueFrom(
+            this.httpService.post(
+                webhook.url,
+                {
+                    status: SessionStatus.Cancelled,
+                    session: session.id,
+                    ...referenceOf(session),
+                    ...(reason ? { reason } : {}),
+                },
+                {
+                    headers,
+                    lookup: this.outboundUrlPolicyService.safeLookup as never,
+                },
+            ),
+        ).catch((err) => {
+            this.logger.error(
+                { webhookUrl: webhook.url, error: err.message },
+                "Error sending session cancelled webhook",
+            );
+            throw new Error(`Error sending webhook: ${err.message || err}`);
+        });
     }
 
     /**

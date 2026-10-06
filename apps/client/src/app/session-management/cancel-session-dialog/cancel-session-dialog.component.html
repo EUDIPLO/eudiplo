@@ -1,0 +1,24 @@
+<h2 mat-dialog-title>Cancel {{ data.count === 1 ? 'offer' : data.count + ' offers' }}?</h2>
+<mat-dialog-content>
+  <p>
+    A wallet can no longer use
+    {{ data.count === 1 ? 'this offer or request' : 'these offers or requests' }} to start a flow.
+    Flows a wallet already started are not interrupted, and credentials that were already issued
+    stay valid. Only active and fetched sessions can be cancelled.
+  </p>
+  <mat-form-field appearance="outline" style="width: 100%">
+    <mat-label>Reason (optional)</mat-label>
+    <textarea
+      matInput
+      [formControl]="reason"
+      maxlength="500"
+      placeholder="e.g. sent to wrong recipient"
+    ></textarea>
+    <mat-hint>Stored in the session log and sent to the session webhook.</mat-hint>
+    <mat-hint align="end">{{ reason.value.length }}/500</mat-hint>
+  </mat-form-field>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" mat-dialog-close>Back</button>
+  <button mat-raised-button color="warn" type="button" (click)="confirm()">Cancel offer</button>
+</mat-dialog-actions>

@@ -54,6 +54,7 @@ const STATUS_RANK: Record<SessionStatus, number> = {
     [SessionStatus.Completed]: 2,
     [SessionStatus.Failed]: 2,
     [SessionStatus.Expired]: 2,
+    [SessionStatus.Cancelled]: 2,
 };
 
 function isTerminal(status: SessionStatus): boolean {

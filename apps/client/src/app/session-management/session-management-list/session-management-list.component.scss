@@ -72,6 +72,11 @@
       background-color: var(--mat-sys-error-container);
       color: var(--eudiplo-danger);
     }
+
+    &.status-cancelled {
+      background-color: var(--mat-sys-surface-container-high);
+      color: var(--mat-sys-on-surface-variant);
+    }
   }
 
   .date-text {

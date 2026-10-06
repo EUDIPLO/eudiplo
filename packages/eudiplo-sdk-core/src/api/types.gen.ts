@@ -1675,7 +1675,7 @@ export type Session = {
     /**
      * Status of the session.
      */
-    status: 'active' | 'fetched' | 'completed' | 'expired' | 'failed';
+    status: 'active' | 'fetched' | 'completed' | 'expired' | 'failed' | 'cancelled';
     /**
      * Unique identifier for the session.
      */
@@ -1907,6 +1907,13 @@ export type PaginatedSessionResponseDto = {
      * Total number of pages
      */
     totalPages: number;
+};
+
+export type CancelSessionDto = {
+    /**
+     * Why the offer was cancelled. Stored in the session log and sent to the session webhook.
+     */
+    reason?: string;
 };
 
 export type SessionLogEntryResponseDto = {
@@ -6400,7 +6407,7 @@ export type SessionControllerGetAllSessionsData = {
         /**
          * Filter by session status. Repeat the parameter to match any of several statuses.
          */
-        status?: 'active' | 'fetched' | 'completed' | 'expired' | 'failed' | Array<'active' | 'fetched' | 'completed' | 'expired' | 'failed'>;
+        status?: 'active' | 'fetched' | 'completed' | 'expired' | 'failed' | 'cancelled' | Array<'active' | 'fetched' | 'completed' | 'expired' | 'failed' | 'cancelled'>;
         /**
          * Filter by session type
          */
@@ -6494,6 +6501,38 @@ export type SessionControllerGetSessionResponses = {
 };
 
 export type SessionControllerGetSessionResponse = SessionControllerGetSessionResponses[keyof SessionControllerGetSessionResponses];
+
+export type SessionControllerCancelData = {
+    body: CancelSessionDto;
+    path: {
+        /**
+         * The session ID
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/session/{id}/cancel';
+};
+
+export type SessionControllerCancelErrors = {
+    /**
+     * Session not found
+     */
+    404: unknown;
+    /**
+     * The session is already completed, failed, expired or cancelled
+     */
+    409: unknown;
+};
+
+export type SessionControllerCancelResponses = {
+    /**
+     * Session cancelled
+     */
+    204: void;
+};
+
+export type SessionControllerCancelResponse = SessionControllerCancelResponses[keyof SessionControllerCancelResponses];
 
 export type SessionControllerGetSessionLogsData = {
     body?: never;

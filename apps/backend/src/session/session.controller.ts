@@ -1,5 +1,6 @@
 import {
     Body,
+    ConflictException,
     Controller,
     Delete,
     Get,
@@ -14,8 +15,13 @@ import { Secured } from "../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../auth/token.decorator.js";
 import { StatusUpdateDto } from "../issuer/status-list/dto/status-update.dto.js";
 import { StatusListService } from "../issuer/status-list/status-list.service.js";
+import {
+    CancelSession,
+    SessionNotCancellable,
+} from "./application/cancel-session.js";
 import { SessionStore } from "./application/session-store.js";
 import type { SessionData } from "./domain/session-data.js";
+import { CancelSessionDto } from "./dto/cancel-session.dto.js";
 import { PaginatedSessionResponseDto } from "./dto/paginated-session-response.dto.js";
 import { SessionLogEntryResponseDto } from "./dto/session-log-entry-response.dto.js";
 import { SessionQueryDto } from "./dto/session-query.dto.js";
@@ -31,6 +37,7 @@ export class SessionController {
         private readonly sessions: SessionStore,
         private readonly statusListService: StatusListService,
         private readonly logStoreService: SessionLogStoreService,
+        private readonly cancelSession: CancelSession,
     ) {}
 
     /**
@@ -86,6 +93,49 @@ export class SessionController {
             id,
             sessionScope(user),
         );
+    }
+
+    /**
+     * Cancels a pending issuance offer or presentation request.
+     * @param id - The session ID.
+     */
+    @Post(":id/cancel")
+    @ApiParam({ name: "id", description: "The session ID", type: String })
+    @ApiOperation({
+        summary: "Cancel a pending offer",
+        description:
+            "Cancels an issuance offer or presentation request that is still active or fetched, so a wallet can no longer use it to start a flow. A flow the wallet already started is not interrupted. The session is kept with the status `cancelled`. To revoke credentials that were already issued, use `POST /session/revoke`.",
+    })
+    @ApiResponse({ status: 204, description: "Session cancelled" })
+    @ApiResponse({ status: 404, description: "Session not found" })
+    @ApiResponse({
+        status: 409,
+        description:
+            "The session is already completed, failed, expired or cancelled",
+    })
+    @HttpCode(204)
+    async cancel(
+        @Param("id") id: string,
+        @Body() body: CancelSessionDto,
+        @Token() token: TokenPayload,
+    ): Promise<void> {
+        try {
+            await this.cancelSession.execute({
+                tenantId: token.entity!.id,
+                sessionId: id,
+                scope: sessionScope(token),
+                reason: body.reason,
+                actor:
+                    token.client?.clientId ??
+                    token.authorizedParty ??
+                    token.subject,
+            });
+        } catch (error) {
+            if (error instanceof SessionNotCancellable) {
+                throw new ConflictException(error.message);
+            }
+            throw error;
+        }
     }
 
     /**

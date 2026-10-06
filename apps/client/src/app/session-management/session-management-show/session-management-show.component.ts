@@ -3,6 +3,7 @@ import { UpperCasePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -12,6 +13,11 @@ import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import * as QRCode from 'qrcode';
 import { Session, isDcApiAvailable, type DigitalCredentialResponse } from '@eudiplo/sdk-core';
+import {
+  CancelSessionDialogComponent,
+  CancelSessionDialogData,
+  CancelSessionDialogResult,
+} from '../cancel-session-dialog/cancel-session-dialog.component';
 import { SessionManagementService, type SessionLogEntry } from '../session-management.service';
 import { GrafanaLinkService } from '../../services/grafana-link.service';
 import { HttpClient } from '@angular/common/http';
@@ -83,8 +89,52 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
     private snackBar: MatSnackBar,
     private router: Router,
     private httpClient: HttpClient,
-    public grafanaLinkService: GrafanaLinkService
+    public grafanaLinkService: GrafanaLinkService,
+    private dialog: MatDialog
   ) {}
+
+  cancelling = false;
+
+  /** Only offers and requests a wallet has not finished yet can be cancelled. */
+  canCancel(): boolean {
+    return this.session?.status === 'active' || this.session?.status === 'fetched';
+  }
+
+  cancelSession(): void {
+    const session = this.session;
+    if (!session || !this.canCancel()) return;
+
+    this.dialog
+      .open<CancelSessionDialogComponent, CancelSessionDialogData, CancelSessionDialogResult>(
+        CancelSessionDialogComponent,
+        { data: { count: 1 }, width: '480px' }
+      )
+      .afterClosed()
+      .subscribe(async (result) => {
+        if (!result) return;
+        this.cancelling = true;
+        try {
+          await this.sessionManagementService.cancelSession(session.id, result.reason);
+          this.stopPolling();
+          await this.loadSession(session.id);
+          this.loadSessionLogs(session.id);
+          this.snackBar.open('Offer cancelled', 'Close', { duration: 3000 });
+        } catch (error) {
+          console.error('Error cancelling session:', error);
+          this.snackBar.open(
+            'The session could not be cancelled, it is no longer pending',
+            'Close',
+            {
+              duration: 4000,
+              panelClass: ['error-snackbar'],
+            }
+          );
+          await this.loadSession(session.id);
+        } finally {
+          this.cancelling = false;
+        }
+      });
+  }
 
   async ngOnInit(): Promise<void> {
     const sessionId = this.route.snapshot.params['id'];
@@ -326,7 +376,7 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
         });
 
         // Stop polling if session is in a final state
-        if (['completed', 'expired', 'failed'].includes(currentStatus)) {
+        if (['completed', 'expired', 'failed', 'cancelled'].includes(currentStatus)) {
           this.stopPolling();
         }
       }
@@ -342,19 +392,19 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
       const statusObj = session.status as any;
       if (
         statusObj.status &&
-        ['active', 'completed', 'expired', 'failed'].includes(statusObj.status)
+        ['active', 'completed', 'expired', 'failed', 'cancelled'].includes(statusObj.status)
       ) {
         return statusObj.status;
       }
       if (
         statusObj.state &&
-        ['active', 'completed', 'expired', 'failed'].includes(statusObj.state)
+        ['active', 'completed', 'expired', 'failed', 'cancelled'].includes(statusObj.state)
       ) {
         return statusObj.state;
       }
     } else if (
       typeof session.status === 'string' &&
-      ['active', 'completed', 'expired', 'failed'].includes(session.status)
+      ['active', 'completed', 'expired', 'failed', 'cancelled'].includes(session.status)
     ) {
       return session.status;
     }
@@ -367,6 +417,7 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
         return ['success-snackbar'];
       case 'failed':
       case 'expired':
+      case 'cancelled':
         return ['error-snackbar'];
       default:
         return [];

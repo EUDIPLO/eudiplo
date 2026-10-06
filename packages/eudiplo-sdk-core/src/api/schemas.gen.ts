@@ -3799,7 +3799,8 @@ export const SessionSchema = {
                 'fetched',
                 'completed',
                 'expired',
-                'failed'
+                'failed',
+                'cancelled'
             ],
             type: 'string'
         },
@@ -4076,6 +4077,20 @@ export const PaginatedSessionResponseDtoSchema = {
         'pageSize',
         'totalPages'
     ]
+} as const;
+
+export const CancelSessionDtoSchema = {
+    type: 'object',
+    properties: {
+        reason: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 500,
+            description: 'Why the offer was cancelled. Stored in the session log and sent to the session webhook.',
+            example: 'sent to wrong recipient'
+        }
+    },
+    additionalProperties: false
 } as const;
 
 export const SessionLogEntryResponseDtoSchema = {

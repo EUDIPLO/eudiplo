@@ -1,10 +1,16 @@
+import { ConflictException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { rolesAllow } from "../../test/roles-guard.js";
 import { Role } from "../auth/roles/role.enum.js";
 import type { TokenPayload } from "../auth/token.decorator.js";
 import type { StatusListService } from "../issuer/status-list/status-list.service.js";
+import {
+    type CancelSession,
+    SessionNotCancellable,
+} from "./application/cancel-session.js";
 import { SessionNotFound } from "./application/session-errors.js";
 import type { SessionStore } from "./application/session-store.js";
+import { SessionStatus } from "./domain/session-state.js";
 import type { SessionLogStoreService } from "./logging/session-log-store.service.js";
 import { SessionController } from "./session.controller.js";
 
@@ -15,12 +21,14 @@ function createController() {
         deleteForTenant: vi.fn().mockResolvedValue(undefined),
     };
     const logs = { findBySessionId: vi.fn().mockResolvedValue([]) };
+    const cancel = { execute: vi.fn().mockResolvedValue(undefined) };
     const controller = new SessionController(
         sessions as unknown as SessionStore,
         {} as StatusListService,
         logs as unknown as SessionLogStoreService,
+        cancel as unknown as CancelSession,
     );
-    return { controller, sessions, logs };
+    return { controller, sessions, logs, cancel };
 }
 
 const token = (roles: Role[]) =>
@@ -49,6 +57,7 @@ describe("SessionController", () => {
             "getSession",
             "deleteSession",
             "getSessionLogs",
+            "cancel",
         ] as const)(
             "%s needs issuance:offer or presentation:request",
             (handler) => {
@@ -104,6 +113,50 @@ describe("SessionController", () => {
                 ),
             ).rejects.toBeInstanceOf(SessionNotFound);
             expect(logs.findBySessionId).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("cancel", () => {
+        it("cancels within the caller's scope and records the client as actor", async () => {
+            const { controller, cancel } = createController();
+            const caller = {
+                ...token([Role.IssuanceOffer]),
+                client: { clientId: "client-1" },
+            } as unknown as TokenPayload;
+
+            await controller.cancel(
+                "session-1",
+                { reason: "sent to wrong recipient" },
+                caller,
+            );
+
+            expect(cancel.execute).toHaveBeenCalledExactlyOnceWith({
+                tenantId: "tenant-1",
+                sessionId: "session-1",
+                scope: "issuance",
+                reason: "sent to wrong recipient",
+                actor: "client-1",
+            });
+        });
+
+        it("answers a session that is no longer open with 409", async () => {
+            const { controller, cancel } = createController();
+            cancel.execute.mockRejectedValue(
+                new SessionNotCancellable(SessionStatus.Completed),
+            );
+
+            await expect(
+                controller.cancel("session-1", {}, token([Role.IssuanceOffer])),
+            ).rejects.toBeInstanceOf(ConflictException);
+        });
+
+        it("passes a missing session on as SessionNotFound (404)", async () => {
+            const { controller, cancel } = createController();
+            cancel.execute.mockRejectedValue(new SessionNotFound());
+
+            await expect(
+                controller.cancel("session-1", {}, token([Role.IssuanceOffer])),
+            ).rejects.toBeInstanceOf(SessionNotFound);
         });
     });
 });

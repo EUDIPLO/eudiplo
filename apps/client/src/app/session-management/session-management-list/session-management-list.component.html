@@ -181,6 +181,21 @@
         <div fxLayout="row" fxLayoutGap="8px" fxLayoutAlign="start center" class="bulk-actions">
           <span class="selection-info">{{ selection.selected.length }} selected</span>
           <button
+            mat-stroked-button
+            color="warn"
+            type="button"
+            (click)="cancelSelectedSessions()"
+            [disabled]="cancellingSelected || cancellableSelected.length === 0"
+            matTooltip="Cancel the selected active or fetched offers, so a wallet can no longer use them"
+          >
+            <mat-icon>cancel</mat-icon>
+            @if (cancellingSelected) {
+              Cancelling...
+            } @else {
+              Cancel Selected
+            }
+          </button>
+          <button
             mat-raised-button
             color="warn"
             type="button"

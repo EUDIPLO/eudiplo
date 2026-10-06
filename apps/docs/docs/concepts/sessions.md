@@ -16,10 +16,11 @@ A session is EUDIPLO's record of one issuance or presentation flow. It ties the 
 | `completed` | Wallet reported `credential_accepted`                     | Response verified                              |
 | `failed`    | Wallet reported `credential_failure` or `credential_deleted` | Verification failed, or the wallet sent an error |
 | `expired`   | Offer not redeemed before `expiresAt`                     | No response before `expiresAt`                 |
+| `cancelled` | Offer [cancelled](#cancelling-an-offer) by an operator    | Request cancelled by an operator               |
 
 The flow diagrams are on [Issuance under the hood](issuance.md#session-states) and [Presentation under the hood](presentation.md#session-states).
 
-- **Terminal states are final.** `completed`, `failed` and `expired` never change again. Redeeming the offer of a finished session, or answering its presentation request, is rejected and does not overwrite the result.
+- **Terminal states are final.** `completed`, `failed`, `expired` and `cancelled` never change again. Redeeming the offer of a finished session, or answering its presentation request, is rejected and does not overwrite the result.
 - **Expiry is checked when the wallet arrives.** A presentation request expires after the configuration's `lifeTime` (default 300 seconds). An offer expires after `offerLifetimeSeconds` of the offer or the issuance configuration, and never if neither is set. The wallet-facing endpoints that redeem an offer (offer retrieval, PAR, authorization, token) or serve and answer a presentation request compare `expiresAt` with the current time, so an overdue session is rejected immediately (`invalid_grant` at the token endpoint, HTTP 400 or 404 elsewhere). The maintenance job only records the `expired` status afterwards.
 - **Redeemed offers do not expire.** Once the token exchange succeeded, the wallet can keep requesting credentials with its tokens; `expiresAt` only limits redemption.
 - **Results are structured.** A failed presentation stores a machine-readable failure code and an `outcome` with per-credential details ([Session outcome](../reference/session-outcome.md)).
@@ -56,6 +57,25 @@ Two more values bind the response to the request:
 Without the `response_code`, an attacker could start a request at your site, send its link to a victim, and pick up the victim's verified result in the attacker's own browser session. With it, only the browser that the victim's wallet redirected can claim the result, and a session completes once, so it has exactly one code.
 
 ISO 18013-7 responses are posted by your own page with the session ID, so these values do not apply there. How to implement the check is described in [Receive results](../presentation/receive-results.md); the specification text is in [OID4VP §13.3](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-session-identifier-separati).
+
+## Cancelling an offer
+
+An offer or presentation request that should not be used anymore, for example because it was sent to the wrong person, its link leaked or the user aborted the flow in your application, can be cancelled while it is `active` or `fetched`:
+
+```http
+POST /api/session/{id}/cancel
+Content-Type: application/json
+
+{ "reason": "sent to wrong recipient" }
+```
+
+- The session moves to `cancelled` and is kept for auditing. To remove it, use `DELETE /api/session/{id}`.
+- A wallet can no longer use the offer or request to start a flow: offer retrieval, PAR, authorization and the token endpoint, as well as fetching or answering the presentation request, are rejected like for a finished session.
+- A flow the wallet already started is not interrupted: tokens it already received keep working, so it can still request its credentials. Credentials that were already issued stay valid; revoke them with `POST /api/session/revoke` ([Revocation](../issuance/revocation.md)).
+- A session that is already `completed`, `failed`, `expired` or `cancelled` answers `409` and does not change. Cancellation and redemption are one conditional update, so when both race exactly one wins.
+- The optional `reason` (up to 500 characters) and the client that cancelled the session are written to the session log. The status change is published on the event stream, and the session's webhook receives a [cancellation webhook](../reference/webhooks.md#cancellation-webhook).
+
+The web client offers the same action on the session page and as a bulk action in the session list.
 
 ## Finding sessions
 

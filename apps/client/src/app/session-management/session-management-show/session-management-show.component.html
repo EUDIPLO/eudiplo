@@ -22,6 +22,18 @@
             Traces
           </button>
         }
+        @if (canCancel()) {
+          <button
+            mat-button
+            color="warn"
+            (click)="cancelSession()"
+            [disabled]="cancelling"
+            matTooltip="Cancel this offer, so a wallet can no longer use it"
+          >
+            <mat-icon>cancel</mat-icon>
+            Cancel Offer
+          </button>
+        }
         @if (canRecreateOffer()) {
           <button
             mat-button

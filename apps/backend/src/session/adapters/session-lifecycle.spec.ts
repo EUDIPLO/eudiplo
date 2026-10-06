@@ -57,6 +57,7 @@ describe("session state-change characterization", () => {
                     SessionStatus.Completed,
                     SessionStatus.Failed,
                     SessionStatus.Expired,
+                    SessionStatus.Cancelled,
                 ].includes(status)
                     ? { status, responseEncryptionPrivateJwk: null }
                     : { status },

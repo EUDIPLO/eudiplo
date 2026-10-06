@@ -17,12 +17,14 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { provideNativeDateAdapter } from '@angular/material/core';
 import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatPaginator, MatPaginatorModule } from '@angular/material/paginator';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatSort, MatSortModule, SortDirection } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -33,17 +35,29 @@ import { from, merge, of as observableOf, Subject } from 'rxjs';
 import { catchError, debounceTime, map, startWith, switchMap } from 'rxjs/operators';
 import { CredentialConfigService } from '../../issuance/credential-config/credential-config.service';
 import { PresentationManagementService } from '../../presentation/presentation-config/presentation-management.service';
+import {
+  CancelSessionDialogComponent,
+  CancelSessionDialogData,
+  CancelSessionDialogResult,
+} from '../cancel-session-dialog/cancel-session-dialog.component';
 import { SessionManagementService, SessionQueryParams } from '../session-management.service';
 
 // Define the SessionStatus type
-export type SessionStatus = 'active' | 'fetched' | 'completed' | 'expired' | 'failed';
+export type SessionStatus = 'active' | 'fetched' | 'completed' | 'expired' | 'failed' | 'cancelled';
 
 type SessionType = 'all' | 'issuance' | 'presentation';
 type SortField = NonNullable<SessionQueryParams['sortBy']>;
 
 /** Statuses of offers and requests a wallet has not finished yet. */
 const PENDING_STATUSES: SessionStatus[] = ['active', 'fetched'];
-const STATUSES = new Set<string>(['active', 'fetched', 'completed', 'expired', 'failed']);
+const STATUSES = new Set<string>([
+  'active',
+  'fetched',
+  'completed',
+  'expired',
+  'failed',
+  'cancelled',
+]);
 const DEFAULT_PAGE_SIZE = 25;
 const SORT_FIELDS = new Set<string>(['id', 'status', 'createdAt', 'updatedAt', 'requestId']);
 
@@ -172,6 +186,7 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
     { value: 'completed', label: 'Completed' },
     { value: 'expired', label: 'Expired' },
     { value: 'failed', label: 'Failed' },
+    { value: 'cancelled', label: 'Cancelled' },
   ];
 
   updatedOptions = Object.entries(UPDATED_WITHIN).map(([value, { label }]) => ({ value, label }));
@@ -182,6 +197,7 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
   presentationConfigOptions: ConfigOption[] = [];
 
   deletingSelected = false;
+  cancellingSelected = false;
 
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
@@ -189,6 +205,8 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
   private readonly credentialConfigService = inject(CredentialConfigService);
   private readonly presentationManagementService = inject(PresentationManagementService);
   private readonly sessionManagementService = inject(SessionManagementService);
+  private readonly dialog = inject(MatDialog);
+  private readonly snackBar = inject(MatSnackBar);
   private readonly refresh$ = new Subject<void>();
 
   ngOnInit(): void {
@@ -465,6 +483,55 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
       // You can add error notification here
     } finally {
       this.deletingSelected = false;
+    }
+  }
+
+  /** Selected sessions a wallet has not finished yet, the only ones that can be cancelled. */
+  get cancellableSelected(): Session[] {
+    return this.selection.selected.filter((session) =>
+      PENDING_STATUSES.includes(session.status as SessionStatus)
+    );
+  }
+
+  async cancelSelectedSessions() {
+    const sessions = this.cancellableSelected;
+    if (sessions.length === 0) {
+      return;
+    }
+
+    const result = await new Promise<CancelSessionDialogResult | undefined>((resolve) =>
+      this.dialog
+        .open<CancelSessionDialogComponent, CancelSessionDialogData, CancelSessionDialogResult>(
+          CancelSessionDialogComponent,
+          { data: { count: sessions.length }, width: '480px' }
+        )
+        .afterClosed()
+        .subscribe(resolve)
+    );
+    if (!result) {
+      return;
+    }
+
+    this.cancellingSelected = true;
+    try {
+      // A session a wallet finished in the meantime is rejected (409) and counted as failed.
+      const outcomes = await Promise.allSettled(
+        sessions.map((session) =>
+          this.sessionManagementService.cancelSession(session.id, result.reason)
+        )
+      );
+      const failed = outcomes.filter((outcome) => outcome.status === 'rejected').length;
+      this.snackBar.open(
+        failed
+          ? `Cancelled ${sessions.length - failed} of ${sessions.length} sessions; the others were no longer pending`
+          : `Cancelled ${sessions.length} ${sessions.length === 1 ? 'session' : 'sessions'}`,
+        'Close',
+        { duration: 4000 }
+      );
+      this.selection.clear();
+      await this.refreshSessions();
+    } finally {
+      this.cancellingSelected = false;
     }
   }
 

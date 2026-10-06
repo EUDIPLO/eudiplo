@@ -48,6 +48,7 @@ describe("assertSessionUsable", () => {
         [SessionStatus.Completed, "The session is already completed"],
         [SessionStatus.Failed, "The session is already failed"],
         [SessionStatus.Expired, "The session has expired"],
+        [SessionStatus.Cancelled, "The session is already cancelled"],
     ])("rejects a %s session even before its expiry", (status, message) => {
         const error = rejection({
             status,
@@ -68,7 +69,7 @@ describe("assertSessionUsable", () => {
 });
 
 describe("session status classification", () => {
-    it("treats completed, failed and expired as terminal", () => {
+    it("treats completed, failed, expired and cancelled as terminal", () => {
         expect(
             Object.values(SessionStatus).filter((status) =>
                 isTerminalStatus(status),
@@ -77,6 +78,7 @@ describe("session status classification", () => {
             SessionStatus.Completed,
             SessionStatus.Expired,
             SessionStatus.Failed,
+            SessionStatus.Cancelled,
         ]);
         expect(OPEN_SESSION_STATUSES).toEqual([
             SessionStatus.Active,

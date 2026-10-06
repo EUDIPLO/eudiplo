@@ -4,6 +4,8 @@ export enum SessionStatus {
     Completed = "completed",
     Expired = "expired",
     Failed = "failed",
+    /** An operator cancelled the offer before a wallet started to use it. */
+    Cancelled = "cancelled",
 }
 
 /**
@@ -15,6 +17,7 @@ const TERMINAL_STATUSES: ReadonlySet<SessionStatus> = new Set([
     SessionStatus.Completed,
     SessionStatus.Failed,
     SessionStatus.Expired,
+    SessionStatus.Cancelled,
 ]);
 
 export function isTerminalStatus(status: SessionStatus): boolean {

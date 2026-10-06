@@ -492,6 +492,241 @@ describe("Session expiry (Issue #1120) - OID4VP", () => {
     });
 });
 
+describe("Session cancellation (Issue #1119) - OID4VCI", () => {
+    let app: INestApplication<App>;
+    let authToken: string;
+
+    beforeAll(async () => {
+        const ctx = await setupIssuanceTestApp();
+        app = ctx.app;
+        authToken = ctx.authToken;
+    });
+
+    afterAll(async () => {
+        await app?.close();
+    });
+
+    async function createOffer() {
+        const res = await request(app.getHttpServer())
+            .post("/issuer/offer")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                response_type: "uri",
+                credentialConfigurationIds: ["pid-no-key"],
+                flow: "pre_authorized_code",
+            })
+            .expect(201);
+        return {
+            sessionId: res.body.session as string,
+            offerPath: new URL(
+                new URL(res.body.uri).searchParams.get(
+                    "credential_offer_uri",
+                ) as string,
+            ).pathname,
+        };
+    }
+
+    async function session(sessionId: string) {
+        return (
+            await request(app.getHttpServer())
+                .get(`/session/${sessionId}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200)
+        ).body;
+    }
+
+    const cancel = (sessionId: string, body: Record<string, unknown> = {}) =>
+        request(app.getHttpServer())
+            .post(`/session/${sessionId}/cancel`)
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send(body);
+
+    test("a cancelled offer can no longer be fetched or redeemed", async () => {
+        const { sessionId, offerPath } = await createOffer();
+        const client = new Openid4vciClient({
+            callbacks: {
+                ...callbacks,
+                clientAuthentication: clientAuthenticationAnonymous(),
+            },
+        });
+        const credentialOffer = await client.resolveCredentialOffer(
+            (await session(sessionId)).offerUrl,
+        );
+        const issuerMetadata = await client.resolveIssuerMetadata(
+            credentialOffer.credential_issuer,
+        );
+
+        await cancel(sessionId, { reason: "sent to wrong recipient" }).expect(
+            204,
+        );
+        expect((await session(sessionId)).status).toBe("cancelled");
+
+        const fetched = await request(app.getHttpServer())
+            .get(offerPath)
+            .trustLocalhost()
+            .expect(404);
+        expect(fetched.body.message).toBe("The session is already cancelled");
+
+        const tokenPath = new URL(
+            issuerMetadata.authorizationServers?.[0]?.token_endpoint as string,
+        ).pathname;
+        const res = await request(app.getHttpServer())
+            .post(tokenPath)
+            .trustLocalhost()
+            .send({
+                grant_type:
+                    "urn:ietf:params:oauth:grant-type:pre-authorized_code",
+                "pre-authorized_code":
+                    credentialOffer.grants?.[
+                        "urn:ietf:params:oauth:grant-type:pre-authorized_code"
+                    ]?.["pre-authorized_code"],
+            })
+            .expect(400);
+        expect(res.body).toEqual({
+            error: "invalid_grant",
+            error_description: "The credential offer is no longer valid",
+        });
+    });
+
+    test("cancelled sessions can be filtered by status", async () => {
+        const { sessionId } = await createOffer();
+        await cancel(sessionId).expect(204);
+
+        const res = await request(app.getHttpServer())
+            .get("/session")
+            .query({ status: "cancelled", pageSize: 100 })
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        const ids = res.body.items.map((item: { id: string }) => item.id);
+        expect(ids).toContain(sessionId);
+        expect(
+            res.body.items.every(
+                (item: { status: string }) => item.status === "cancelled",
+            ),
+        ).toBe(true);
+    });
+
+    test("cancelling a session that is no longer open answers 409 and changes nothing", async () => {
+        const cancelled = await createOffer();
+        await cancel(cancelled.sessionId).expect(204);
+        const again = await cancel(cancelled.sessionId).expect(409);
+        expect(again.body.message).toBe(
+            "The session is already cancelled and can no longer be cancelled",
+        );
+
+        const expired = await createOffer();
+        await app
+            .get(DataSource)
+            .getRepository(Session)
+            .update(expired.sessionId, {
+                expiresAt: new Date(Date.now() - 1000),
+            });
+        await cancel(expired.sessionId).expect(409);
+        expect((await session(expired.sessionId)).status).toBe("active");
+    });
+
+    test("exactly one of concurrent cancellations wins", async () => {
+        const { sessionId } = await createOffer();
+
+        const results = await Promise.all(
+            Array.from({ length: 5 }, () => cancel(sessionId)),
+        );
+
+        expect(results.map((res) => res.status).sort((a, b) => a - b)).toEqual([
+            204, 409, 409, 409, 409,
+        ]);
+    });
+});
+
+describe("Session cancellation (Issue #1119) - OID4VP", () => {
+    let app: INestApplication<App>;
+    let authToken: string;
+    let host: string;
+    let client: Openid4vpClient;
+
+    beforeAll(async () => {
+        const ctx = await setupPresentationTestApp();
+        app = ctx.app;
+        authToken = ctx.authToken;
+        host = ctx.host;
+        client = new Openid4vpClient({
+            callbacks: {
+                ...callbacks,
+                fetch: createTestFetch(app, () => host),
+            },
+        });
+    });
+
+    afterAll(async () => {
+        await app?.close();
+    });
+
+    async function session(sessionId: string) {
+        return (
+            await request(app.getHttpServer())
+                .get(`/session/${sessionId}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200)
+        ).body;
+    }
+
+    test("a cancelled request can no longer be fetched or answered", async () => {
+        const res = await createPresentationRequest(app, authToken, {
+            response_type: ResponseType.URI,
+            requestId: "pid-no-hook",
+        });
+        const sessionId: string = res.body.session;
+        const authRequest = client.parseOpenid4vpAuthorizationRequest({
+            authorizationRequest: res.body.uri,
+        });
+        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+            authorizationRequestPayload: authRequest.params,
+            responseMode: { type: "direct_post" },
+        });
+        expect((await session(sessionId)).status).toBe("fetched");
+
+        await request(app.getHttpServer())
+            .post(`/session/${sessionId}/cancel`)
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({ reason: "checkout cancelled" })
+            .expect(204);
+
+        const requestUri = new URL(
+            new URLSearchParams(res.body.uri.split("?")[1]).get(
+                "request_uri",
+            ) as string,
+        );
+        const fetchAgain = await request(app.getHttpServer())
+            .get(requestUri.pathname)
+            .trustLocalhost()
+            .expect(400);
+        expect(fetchAgain.body.message).toBe(
+            "The session is already cancelled",
+        );
+
+        const response = await request(app.getHttpServer())
+            .post(
+                new URL(
+                    resolved.authorizationRequestPayload.response_uri as string,
+                ).pathname,
+            )
+            .trustLocalhost()
+            .send({ response: "unused.jwe.value" })
+            .expect(400);
+        expect(response.body.message).toBe("The session is already cancelled");
+        expect(await session(sessionId)).toMatchObject({
+            status: "cancelled",
+            consumed: false,
+        });
+    });
+});
+
 describe("Single-Use Validation - Edge Cases", () => {
     test("should handle refresh token separately from single-use validation", async () => {
         // Covered in issuance-refresh-token.e2e-spec.ts.

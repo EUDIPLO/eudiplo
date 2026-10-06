@@ -13,6 +13,7 @@ import {
 } from "./adapters/session-maintenance.job.js";
 import { TypeOrmSessionRepository } from "./adapters/typeorm-session.repository.js";
 import { TypeOrmSessionRetentionPolicies } from "./adapters/typeorm-session-retention-policies.js";
+import { CancelSession } from "./application/cancel-session.js";
 import { ChangeSessionState } from "./application/change-session-state.js";
 import { CleanupSessions } from "./application/cleanup-sessions.js";
 import { CreateSession } from "./application/create-session.js";
@@ -22,6 +23,7 @@ import { SessionStore } from "./application/session-store.js";
 import { SessionCleanupMode } from "./domain/session-retention.js";
 import { Session } from "./entities/session.entity.js";
 import { SessionLogEntry } from "./entities/session-log-entry.entity.js";
+import { SessionLoggerService } from "./logging/session-logger.service.js";
 import { SessionLoggingModule } from "./logging/session-logging.module.js";
 import {
     SESSION_REPOSITORY,
@@ -133,6 +135,28 @@ import { SESSION_SETTINGS, type SessionSettings } from "./session-settings.js";
                 repository: SessionRepository,
                 events: SessionEventPublisher,
             ) => new ChangeSessionState(repository, events),
+        },
+        {
+            provide: CancelSession,
+            inject: [
+                SessionStore,
+                ChangeSessionState,
+                SESSION_EVENT_PUBLISHER,
+                SessionLoggerService,
+            ],
+            useFactory: (
+                store: SessionStore,
+                changeState: ChangeSessionState,
+                events: NestSessionEventPublisher,
+                logs: SessionLoggerService,
+            ) =>
+                new CancelSession(
+                    store,
+                    changeState,
+                    events,
+                    (session, detail) =>
+                        logs.logSessionCancelled(session, detail),
+                ),
         },
         SessionConfigService,
         {

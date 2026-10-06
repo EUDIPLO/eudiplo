@@ -1252,6 +1252,7 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
                     SessionStatus.Completed,
                     SessionStatus.Failed,
                     SessionStatus.Expired,
+                    SessionStatus.Cancelled,
                 ].includes(status);
                 expect(stored.status).toBe(status);
                 expect(stored.responseEncryptionPrivateJwk).toEqual(

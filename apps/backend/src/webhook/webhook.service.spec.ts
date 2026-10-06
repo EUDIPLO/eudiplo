@@ -146,4 +146,32 @@ describe("WebhookService presentation payloads", () => {
         for (const [, payload] of post.mock.calls)
             expect(payload).not.toHaveProperty("reference");
     });
+
+    it("reports a cancelled session with its reference and reason", async () => {
+        const { service, post } = setup();
+
+        await service.sendSessionCancelledWebhook(
+            webhook,
+            { ...session, reference: "order-4711" } as SessionData,
+            "sent to wrong recipient",
+        );
+
+        expect(post.mock.calls[0][1]).toEqual({
+            status: "cancelled",
+            session: "session-1",
+            reference: "order-4711",
+            reason: "sent to wrong recipient",
+        });
+    });
+
+    it("omits the reason of a cancelled session when none was given", async () => {
+        const { service, post } = setup();
+
+        await service.sendSessionCancelledWebhook(webhook, session);
+
+        expect(post.mock.calls[0][1]).toEqual({
+            status: "cancelled",
+            session: "session-1",
+        });
+    });
 });

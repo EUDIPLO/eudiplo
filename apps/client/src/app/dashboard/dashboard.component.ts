@@ -291,6 +291,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         return 'error';
       case 'expired':
         return 'schedule';
+      case 'cancelled':
+        return 'cancel';
       case 'fetched':
         return 'download';
       default:

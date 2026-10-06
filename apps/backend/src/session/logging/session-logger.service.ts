@@ -223,4 +223,23 @@ export class SessionLoggerService {
             ...additionalData,
         });
     }
+    /**
+     * Log that an operator cancelled a pending session (audit event - persisted to DB)
+     */
+    logSessionCancelled(
+        context: { sessionId: string; tenantId: string },
+        detail: { reason?: string; actor?: string },
+    ) {
+        if (!this.shouldLog()) return;
+
+        const message = `Session ${context.sessionId} cancelled`;
+
+        this.logger.info(
+            { ...context, event: "session_cancelled", ...detail },
+            message,
+        );
+        this.logStore
+            .append(context.sessionId, "info", message, "cancellation", detail)
+            .catch(() => {});
+    }
 }

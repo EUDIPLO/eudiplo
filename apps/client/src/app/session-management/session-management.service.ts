@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import {
   client,
+  sessionControllerCancel,
   sessionControllerDeleteSession,
   sessionControllerGetAllSessions,
   sessionControllerGetSession,
@@ -89,6 +90,16 @@ export class SessionManagementService {
       console.error('Error deleting session:', error);
       throw new Error(`Failed to delete session ${sessionId}`, { cause: error });
     }
+  }
+
+  /**
+   * Cancel a pending offer or presentation request, so a wallet can no longer use it
+   */
+  async cancelSession(sessionId: string, reason?: string): Promise<void> {
+    await sessionControllerCancel({
+      path: { id: sessionId },
+      body: reason ? { reason } : {},
+    });
   }
 
   /**

@@ -1,5 +1,8 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatDialog } from '@angular/material/dialog';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
+import type { Session } from '@eudiplo/sdk-core';
+import { of } from 'rxjs';
 import { vi } from 'vitest';
 
 import { CredentialConfigService } from '../../issuance/credential-config/credential-config.service';
@@ -11,6 +14,7 @@ describe('SessionManagementListComponent', () => {
   let component: SessionManagementListComponent;
   let fixture: ComponentFixture<SessionManagementListComponent>;
   let getAllSessions: ReturnType<typeof vi.fn>;
+  let cancelSession: ReturnType<typeof vi.fn>;
 
   async function setup(queryParams: Record<string, string | string[]> = {}) {
     vi.useFakeTimers();
@@ -21,6 +25,7 @@ describe('SessionManagementListComponent', () => {
       pageSize: 25,
       totalPages: 0,
     });
+    cancelSession = vi.fn().mockResolvedValue(undefined);
     await TestBed.configureTestingModule({
       imports: [SessionManagementListComponent],
       providers: [
@@ -33,7 +38,7 @@ describe('SessionManagementListComponent', () => {
         },
         {
           provide: SessionManagementService,
-          useValue: { getAllSessions, getStatusDisplay: (status: string) => status },
+          useValue: { getAllSessions, cancelSession, getStatusDisplay: (status: string) => status },
         },
         {
           provide: CredentialConfigService,
@@ -189,5 +194,40 @@ describe('SessionManagementListComponent', () => {
     expect(component.hasActiveFilters()).toBe(true);
     component.clearFilters();
     expect(component.hasActiveFilters()).toBe(false);
+  });
+
+  it('cancels only the selected sessions that are still pending, with the given reason', async () => {
+    await setup();
+    const open = vi
+      .spyOn(TestBed.inject(MatDialog), 'open')
+      .mockReturnValue({ afterClosed: () => of({ reason: 'sent to wrong recipient' }) } as never);
+    const active = { id: 's-1', status: 'active' } as Session;
+    const fetched = { id: 's-2', status: 'fetched' } as Session;
+    const completed = { id: 's-3', status: 'completed' } as Session;
+    component.selection.select(active, fetched, completed);
+
+    expect(component.cancellableSelected).toEqual([active, fetched]);
+    await component.cancelSelectedSessions();
+
+    expect(open).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ data: { count: 2 } })
+    );
+    expect(cancelSession).toHaveBeenCalledTimes(2);
+    expect(cancelSession).toHaveBeenCalledWith('s-1', 'sent to wrong recipient');
+    expect(cancelSession).toHaveBeenCalledWith('s-2', 'sent to wrong recipient');
+    expect(component.selection.selected).toEqual([]);
+  });
+
+  it('does not cancel anything when the dialog is dismissed', async () => {
+    await setup();
+    vi.spyOn(TestBed.inject(MatDialog), 'open').mockReturnValue({
+      afterClosed: () => of(undefined),
+    } as never);
+    component.selection.select({ id: 's-1', status: 'active' } as Session);
+
+    await component.cancelSelectedSessions();
+
+    expect(cancelSession).not.toHaveBeenCalled();
   });
 });
