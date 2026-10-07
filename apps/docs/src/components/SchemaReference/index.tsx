@@ -3,6 +3,7 @@ import CodeBlock from "@theme/CodeBlock";
 import models from "@site/docs/_generated/schemas";
 import type { SchemaField } from "../../../scripts/schema-docs/model";
 import { renderSchemaBody, schemaTableRows } from "../../../scripts/schema-docs/render";
+import InlineCode from "../InlineCode";
 
 export interface SchemaReferenceProps {
     /** Registry name from apps/docs/scripts/schema-docs/registry.ts. */
@@ -60,8 +61,12 @@ export default function SchemaReference({ name, mode = "table", maxDepth }: Sche
                             {row.minimum !== undefined && <> (minimum {row.minimum})</>}
                         </td>
                         <td>
-                            {row.variant && <em>Only in {row.variant}. </em>}
-                            {row.description}
+                            {row.variant && (
+                                <em>
+                                    Only <InlineCode text={row.variant} />.{" "}
+                                </em>
+                            )}
+                            {row.description && <InlineCode text={row.description} />}
                         </td>
                     </tr>
                 ))}

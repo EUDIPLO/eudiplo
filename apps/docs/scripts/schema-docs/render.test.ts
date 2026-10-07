@@ -67,15 +67,51 @@ test("table mode flattens nested objects and array items into dotted paths", () 
     });
 });
 
-test("table mode labels the fields of each union shape", () => {
+test("table mode labels the fields of each union shape by its discriminator", () => {
     const rows = schemaTableRows(buildSchemaModel(PresentationRequestSchema));
     assert.equal(rows.find((row) => row.path === "webhook.auth")?.type, "one of 2 shapes");
     const authTypes = rows.filter((row) => row.path === "webhook.auth.type");
     assert.deepEqual(
         authTypes.map((row) => [row.variant, row.allowed]),
-        [["shape 1 of 2", ["apiKey"]], ["shape 2 of 2", ["none"]]],
+        [["when `type` is `apiKey`", ["apiKey"]], ["when `type` is `none`", ["none"]]],
     );
-    assert.equal(rows.find((row) => row.path === "webhook.auth.config.headerName")?.variant, "shape 1 of 2");
+    assert.equal(
+        rows.find((row) => row.path === "webhook.auth.config.headerName")?.variant,
+        "when `type` is `apiKey`",
+    );
+});
+
+test("table mode lists the fields that every union shape shares once", () => {
+    const schema = z.object({
+        query: z.discriminatedUnion("format", [
+            z.object({ format: z.literal("mso_mdoc"), id: z.string(), doctype: z.string() }),
+            z.object({ format: z.literal("dc+sd-jwt"), id: z.string(), vct: z.string() }),
+        ]),
+    });
+    const rows = schemaTableRows(buildSchemaModel(schema)).filter((row) => row.path.startsWith("query."));
+    assert.deepEqual(
+        rows.map((row) => [row.path, row.variant]),
+        [
+            ["query.id", undefined],
+            ["query.format", "when `format` is `mso_mdoc`"],
+            ["query.doctype", "when `format` is `mso_mdoc`"],
+            ["query.format", "when `format` is `dc+sd-jwt`"],
+            ["query.vct", "when `format` is `dc+sd-jwt`"],
+        ],
+    );
+});
+
+test("table mode numbers the shapes of a union without a discriminator", () => {
+    const schema = z.object({ value: z.union([z.object({ a: z.string() }), z.object({ b: z.number(), c: z.boolean() })]) });
+    const rows = schemaTableRows(buildSchemaModel(schema)).filter((row) => row.path.startsWith("value."));
+    assert.deepEqual(
+        rows.map((row) => [row.path, row.variant]),
+        [
+            ["value.b", "in shape 1 of 2"],
+            ["value.c", "in shape 1 of 2"],
+            ["value.a", "in shape 2 of 2"],
+        ],
+    );
 });
 
 test("table mode lists the allowed values of enum arrays", () => {

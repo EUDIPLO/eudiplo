@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildSchemaModel } from "./schema-docs/model.js";
+import { buildSchemaModel, overrideDescriptions } from "./schema-docs/model.js";
 import { schemaDocs } from "./schema-docs/registry.js";
 
 const outputDir = resolve(dirname(fileURLToPath(import.meta.url)), "../docs/_generated/schemas");
@@ -11,12 +11,12 @@ async function main() {
     await fs.rm(outputDir, { recursive: true, force: true });
     await fs.mkdir(outputDir, { recursive: true });
     const names = new Set<string>();
-    for (const { name, schema } of schemaDocs) {
+    for (const { name, schema, descriptions } of schemaDocs) {
         if (!/^[a-z0-9-]+$/.test(name) || names.has(name)) {
             throw new Error(`Invalid or duplicate schema docs name: ${name}`);
         }
         names.add(name);
-        const model = buildSchemaModel(schema);
+        const model = overrideDescriptions(buildSchemaModel(schema), descriptions ?? {});
         await fs.writeFile(resolve(outputDir, `${name}.json`), `${JSON.stringify(model, null, 2)}\n`, "utf8");
     }
     const imports = [...names].map((name, index) => `import model${index} from "./${name}.json";`);
