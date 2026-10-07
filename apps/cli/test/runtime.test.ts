@@ -40,6 +40,10 @@ describe("EUDIPLO CLI", () => {
 
         const logs = await createContext();
         expect(await runCli(["logs", "--help"], logs.context)).toBe(0);
+        // logs prints and exits; only --follow keeps streaming.
+        expect(logs.output.stdout).toContain(
+            "Print the logs of the selected deployment, or stream them with --follow",
+        );
         expect(logs.output.stdout).toContain("--service <name>");
         expect(logs.output.stdout).toContain("--follow");
         expect(logs.output.stdout).toContain("--tail <lines>");
@@ -123,6 +127,15 @@ describe("EUDIPLO CLI", () => {
         expect(output.stdout).toContain("create|new [options] <tenant-id>");
         expect(output.stdout).toContain("validate [options] [tenant-id]");
         expect(output.stdout).toContain("remove|rm [options] <tenant-id>");
+
+        output.stdout = "";
+        expect(await runCli(["config", "validate", "--help"], context)).toBe(0);
+        expect(output.stdout).toContain(
+            'scope                 "tenant" for one tenant folder or "tenants"',
+        );
+        expect(output.stdout).toContain(
+            "the folder to validate (required with a scope)",
+        );
 
         output.stdout = "";
         expect(

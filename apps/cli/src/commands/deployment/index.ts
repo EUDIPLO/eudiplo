@@ -8,7 +8,7 @@ type DriverCommand = "up" | "down" | "logs" | "ps" | "restart" | "pull";
 const descriptions: Record<DriverCommand, string> = {
     up: "Start the selected Compose deployment",
     down: "Stop the selected Compose deployment",
-    logs: "Stream logs for the selected deployment",
+    logs: "Print the logs of the selected deployment, or stream them with --follow",
     ps: "List the running containers or pods for the selected deployment",
     restart: "Restart the workloads of the selected deployment",
     pull: "Download the configured images without changing configuration",
