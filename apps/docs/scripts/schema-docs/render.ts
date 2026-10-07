@@ -65,7 +65,7 @@ export interface SchemaTableRow {
     allowed?: string[];
     minimum?: number;
     description?: string;
-    /** Set for fields that only exist in one shape of a union, e.g. `shape 1 of 2`. */
+    /** Set for fields that only exist in one shape of a union, e.g. "when `format` is `mso_mdoc`". */
     variant?: string;
 }
 
@@ -80,11 +80,58 @@ function baseTypeLabel(field: SchemaField): string {
     return field.type;
 }
 
+/**
+ * The property that tells the shapes of a union apart (a single allowed value
+ * per shape, different in every shape), for example `format` or `type`.
+ */
+function discriminator(shapes: SchemaField[]): { name: string; values: string[] } | undefined {
+    for (const name of Object.keys(shapes[0]?.properties ?? {})) {
+        const values = shapes.map((shape) => {
+            const allowed = shape.properties?.[name]?.enum;
+            return allowed?.length === 1 ? String(allowed[0]) : undefined;
+        });
+        if (values.every((value) => value !== undefined) && new Set(values).size === values.length) {
+            return { name, values: values as string[] };
+        }
+    }
+    return undefined;
+}
+
+function pickProperties(field: SchemaField, keep: (name: string) => boolean): SchemaField {
+    return {
+        ...field,
+        properties: Object.fromEntries(Object.entries(field.properties ?? {}).filter(([name]) => keep(name))),
+    };
+}
+
+function unionRows(field: SchemaField, path: string, depth: number, variant?: string): SchemaTableRow[] {
+    const shapes = orderedVariants(field);
+    const key = discriminator(shapes);
+    // Fields that every shape has in the same form are listed once.
+    const common = new Set(
+        Object.keys(shapes[0].properties ?? {}).filter(
+            (name) =>
+                name !== key?.name &&
+                shapes.every(
+                    (shape) =>
+                        shape.properties?.[name] !== undefined &&
+                        JSON.stringify(shape.properties[name]) === JSON.stringify(shapes[0].properties?.[name]),
+                ),
+        ),
+    );
+    const label = (index: number) =>
+        key ? `when \`${key.name}\` is \`${key.values[index]}\`` : `in shape ${index + 1} of ${shapes.length}`;
+    return [
+        ...(common.size > 0 ? childRows(pickProperties(shapes[0], (name) => common.has(name)), path, depth, variant) : []),
+        ...shapes.flatMap((shape, index) =>
+            childRows(pickProperties(shape, (name) => !common.has(name)), path, depth, label(index)),
+        ),
+    ];
+}
+
 function childRows(field: SchemaField, path: string, depth: number, variant?: string): SchemaTableRow[] {
     if (field.variants) {
-        return orderedVariants(field).flatMap((shape, index, shapes) =>
-            childRows(shape, path, depth, `shape ${index + 1} of ${shapes.length}`),
-        );
+        return unionRows(field, path, depth, variant);
     }
     if (field.type === "array" && field.items) {
         return childRows(field.items, `${path}[]`, depth, variant);

@@ -48,6 +48,29 @@ describe("BuildCredentialOfferGrants", () => {
         });
     });
 
+    it.each([
+        ["0000", "numeric"],
+        ["007", "numeric"],
+        ["1e3", "text"],
+        [" 12", "text"],
+        ["12 ", "text"],
+        ["0x1A", "text"],
+        ["-12", "text"],
+        ["4.2", "text"],
+    ])("advertises tx-code %j as %s", (txCode, inputMode) => {
+        expect(
+            useCase.execute({
+                flow: FlowType.PRE_AUTH_CODE,
+                issuerState: "state-1",
+                authorizationCode: "code-1",
+                txCode,
+                authorizationServer,
+            })[preAuthorizedCodeGrantIdentifier],
+        ).toMatchObject({
+            tx_code: { input_mode: inputMode, length: txCode.length },
+        });
+    });
+
     it("preserves text tx-code classification and omitted tx-code", () => {
         expect(
             useCase.execute({

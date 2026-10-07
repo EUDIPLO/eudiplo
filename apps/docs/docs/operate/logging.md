@@ -87,8 +87,10 @@ To go from a log line or a pasted offer link to the session, search the session 
 Changes to a tenant and to its credential, issuance, presentation and
 status-list configurations, webhook endpoints and attribute providers are
 recorded with actor, time and changed fields, as are bundle imports, exports,
-detach actions and generated client secrets. Key chain and trust list changes
-are not audited. Read them with
+detach actions and generated client secrets. Not audited: key chains, trust
+lists, API clients and users (including role changes and secret rotation), KMS
+provider and registrar configuration, and session retention settings. Read the
+audit log with
 `GET /api/admin/audit-logs` (role `clients:manage`) or in the web client. The
 audit log is kept forever unless you limit it; a daily job at 03:00 applies:
 

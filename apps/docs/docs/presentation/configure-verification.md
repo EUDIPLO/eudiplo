@@ -74,7 +74,7 @@ To manage configurations as files, place them in `config/<tenant>/presentation/<
 
 ## Send results to your backend
 
-A presentation configuration references a webhook endpoint by ID (`webhookEndpointId`); it has no inline webhook. Create the endpoint once per tenant, in the Web Client under **Credential Verification → Webhook Endpoints** or via the API:
+A presentation configuration references a webhook endpoint by ID (`webhookEndpointId`); it has no inline webhook. Create the endpoint once per tenant, in the Web Client under **Integrations → Webhook Endpoints** or via the API:
 
 ```bash
 curl -X POST "$EUDIPLO_URL/api/issuer/webhook-endpoints" \

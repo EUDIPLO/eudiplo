@@ -404,7 +404,7 @@ export class CredentialsService {
      * @param credentialConfigurationId
      * @param holderCnf
      * @param session
-     * @param preloadedClaims Optional claims fetched from webhook (to avoid redundant calls in batch)
+     * @param preloadedClaims Claims resolved from the session's claim source; without them, the static defaults are issued
      * @param issuanceSetId Opaque identifier grouping credentials issued with one access token
      * @returns
      */

@@ -67,8 +67,10 @@ pnpm --filter @eudiplo/backend dev
 
 ### Running in Docker Compose
 
-When running the full stack via Docker Compose, set the OTLP endpoint to the
-collector's container name:
+When the backend runs in a container, set the OTLP endpoint to the collector's
+container name and put the backend and the collector on a shared network; the
+[Monitoring Guide](../apps/docs/docs/operate/monitoring.md) shows how for
+Compose and for CLI-managed instances:
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
@@ -133,9 +135,10 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 
 Pre-configured alerts in `prometheus/rules/eudiplo.yml`:
 
-- **HighErrorRate** — HTTP 5xx rate exceeds 5% of total requests
+- **HighErrorRate** — more than 0.1 HTTP 5xx responses per second
 - **ServiceDown** — OTel Collector target is down
 - **HighResponseTime** — P95 response time exceeds 2 seconds
+- **HighMemoryUsage** — memory of the backend's host above 80 %
 
 ## Configuration
 

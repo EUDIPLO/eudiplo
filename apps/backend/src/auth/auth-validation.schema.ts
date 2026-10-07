@@ -2,7 +2,9 @@ import Joi from "joi";
 
 export const AUTH_VALIDATION_SCHEMA: Joi.ObjectSchema = Joi.object({
     OIDC: Joi.string()
-        .description("Enable OIDC mode")
+        .description(
+            "Issuer URL of the Keycloak realm, for example `https://keycloak.example.com/realms/eudiplo`. Setting it switches the management API to OIDC mode (Keycloak only)",
+        )
         .meta({ group: "auth", order: 10 }),
 
     OIDC_INTERNAL_ISSUER_URL: Joi.string()
@@ -13,7 +15,7 @@ export const AUTH_VALIDATION_SCHEMA: Joi.ObjectSchema = Joi.object({
             otherwise: Joi.optional(),
         })
         .description("Internal issuer URL in OIDC mode")
-        .meta({ group: "auth", order: 20 }),
+        .meta({ group: "auth", order: 20, defaultText: "the value of `OIDC`" }),
 
     OIDC_CLIENT_ID: Joi.when("OIDC", {
         is: Joi.exist(),

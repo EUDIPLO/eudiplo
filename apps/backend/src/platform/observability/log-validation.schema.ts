@@ -8,7 +8,12 @@ export const LOG_VALIDATION_SCHEMA = Joi.object({
         .valid("trace", "debug", "info", "warn", "error", "fatal")
         .default(process.env.NODE_ENV === "production" ? "warn" : "debug")
         .description("Application log level")
-        .meta({ group: "log", order: 10 }),
+        .meta({
+            group: "log",
+            order: 10,
+            defaultText:
+                "`warn` when `NODE_ENV` is `production` (as in the container image), otherwise `debug`",
+        }),
     LOG_ENABLE_HTTP_LOGGER: Joi.boolean()
         .default(false)
         .description("Enable HTTP request logging")

@@ -10,7 +10,7 @@ This page describes who EUDIPLO trusts, how each boundary is protected and which
 ## Trust boundaries
 
 ```mermaid
-flowchart LR
+flowchart TB
     BE[Your backend] -->|"bearer token<br/>(client, roles)"| API["Management API /api"]
     W[Wallet] -->|"codes, PKCE, DPoP,<br/>attestation, encryption"| P[Protocol endpoints]
     E[EUDIPLO] -->|"outbound URL policy,<br/>auth header"| X["Webhooks, attribute providers, metadata,<br/>trust and status lists, federation, CRLs,<br/>external and upstream authorization servers"]
@@ -21,7 +21,7 @@ flowchart LR
 
 | Boundary                 | Callers                                   | Protection                                                                                                                                                       |
 | ------------------------ | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Management API (`/api`)  | Your backend, the web client              | OAuth 2.0 bearer token of a client. The token names one tenant and the client's roles; allow lists can further restrict which configurations a client may use. Configuration changes are written to an audit log. |
+| Management API (`/api`)  | Your backend, the web client              | OAuth 2.0 bearer token of a client. The token names one tenant and the client's roles; allow lists can further restrict which configurations a client may use. Changes to tenants and to issuance and presentation configuration are written to an [audit log](../operate/logging.md#audit-log). |
 | Protocol endpoints       | Wallets, and your page for the DC API     | Public by design. Each step is protected by the protocol: single-use codes and nonces, PKCE, DPoP, wallet and key attestation, signed requests and encrypted responses. |
 | Outbound calls           | EUDIPLO to URLs that tenants configure or that credentials and certificates name | Outbound URL policy (below), optional API key header for webhooks and attribute providers. Webhook requests are not signed. |
 | Storage and key material | EUDIPLO to database, object storage, KMS  | Sensitive columns encrypted at rest; with an external KMS the private keys never leave it. Configuration bundle exports never contain private keys. `GET /api/key-chain/{id}/export` returns the private key of a `db` key chain and, like the tenant KMS provider configuration with its provider credentials, needs `tenant:admin` or `tenants:manage`. |

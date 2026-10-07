@@ -60,7 +60,9 @@ the default). A fresh, empty database is created by the same migrations, so
 leave `DB_SYNCHRONIZE=false` from the first start on; `DB_SYNCHRONIZE=true`
 lets TypeORM change the schema from the entity definitions and is meant for
 development only. With `DB_MIGRATIONS_RUN=false`, the backend logs a warning
-when migrations are pending.
+when migrations are pending; to apply them, start a single backend instance
+once with `DB_MIGRATIONS_RUN=true`, wait until `GET /health` is `ok`, and
+start the other instances afterwards.
 
 Plan upgrades with migrations in mind:
 

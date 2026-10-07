@@ -212,4 +212,91 @@ describe("ConfiguredCredentialClaimsProvider", () => {
         ).resolves.toBeUndefined();
         expect(remote.fetchClaims).not.toHaveBeenCalled();
     });
+
+    describe("a dynamic source that answers without claims", () => {
+        const webhook = {
+            url: "https://claims.example",
+            auth: { type: "none" },
+        };
+        const sources: Array<[string, Record<string, unknown> | undefined]> = [
+            ["an offer webhook", { pid: { type: "webhook", webhook } }],
+            [
+                "an offer attribute provider",
+                {
+                    pid: {
+                        type: "attributeProvider",
+                        attributeProviderId: "offer-provider",
+                    },
+                },
+            ],
+            ["the configuration's attribute provider", undefined],
+        ];
+
+        function setup(answer: unknown) {
+            const fetchClaims = vi.fn().mockResolvedValue(answer);
+            const provider = new ConfiguredCredentialClaimsProvider(
+                {
+                    findForTenant: vi
+                        .fn()
+                        .mockResolvedValue({ attributeProviderId: "claims-1" }),
+                },
+                { findForTenant: vi.fn().mockResolvedValue(webhook) },
+                { fetchClaims },
+            );
+            return { provider, fetchClaims };
+        }
+
+        it.each(sources)(
+            "fails the request for %s instead of using the static defaults",
+            async (_source, credentialClaims) => {
+                const test = setup({ deferred: false, claims: undefined });
+                await expect(
+                    test.provider.resolveClaims({
+                        credentialConfigurationId: "pid",
+                        session: session(credentialClaims),
+                    }),
+                ).rejects.toMatchObject({
+                    name: "CredentialClaimsResolutionError",
+                    code: "claims_missing",
+                    message:
+                        "The claim source returned no claims for credential configuration 'pid'",
+                });
+                expect(test.fetchClaims).toHaveBeenCalledOnce();
+            },
+        );
+
+        it.each([null, "Max", ["Max"]])(
+            "treats %j under the configuration ID as no claims",
+            async (claims) => {
+                const test = setup({ deferred: false, claims });
+                await expect(
+                    test.provider.resolveClaims({
+                        credentialConfigurationId: "pid",
+                        session: session(),
+                    }),
+                ).rejects.toMatchObject({ code: "claims_missing" });
+            },
+        );
+
+        it("fails for tokens of an external authorization server too", async () => {
+            const test = setup({ deferred: false, claims: undefined });
+            await expect(
+                test.provider.resolveClaims({
+                    credentialConfigurationId: "pid",
+                    session: session(),
+                    requireProvider: true,
+                }),
+            ).rejects.toMatchObject({ code: "claims_missing" });
+        });
+
+        it("keeps a deferred answer deferred", async () => {
+            const test = setup({ deferred: true, interval: 5 });
+            await expect(
+                test.provider.resolveClaims({
+                    credentialConfigurationId: "pid",
+                    session: session(),
+                }),
+            ).resolves.toEqual({ deferred: true, interval: 5 });
+        });
+    });
 });

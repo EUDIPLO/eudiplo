@@ -31,7 +31,8 @@ curl -X POST "$EUDIPLO_URL/api/config-bundles/resources/PresentationConfig/age-c
 ```
 
 The web client lists ownership and offers the detach action under
-**Settings > Configuration Portability**.
+**Settings > Config Portability** (shown with `tenant:admin` or
+`tenants:manage`).
 
 ## Provision tenants from a folder
 
@@ -122,8 +123,8 @@ eudiplo config upgrade ./config --output ./config-upgraded --diff
 
 The command writes to a separate output, never invents missing security-relevant
 values, and leaves the output untouched when validation fails. A 9.0 bundle
-cannot be imported into 8.x: IssuanceConfig and PresentationConfig are file
-format version 2 since 9.0.
+cannot be imported into 8.x: since 9.0, IssuanceConfig files are format
+version 2 and PresentationConfig files version 3.
 
 ## Plan and import
 

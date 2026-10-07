@@ -346,7 +346,7 @@ export class IssuanceConfigCreateComponent implements OnInit {
     this.form = new FormGroup({
       display: this.fb.array([]),
       authorizationServers: this.fb.array([]),
-      batchSize: new FormControl(1, [Validators.min(1)]),
+      batchSize: new FormControl(1, [Validators.required, Validators.min(1)]),
       dPopRequired: new FormControl(false),
       txCodeMaxAttempts: new FormControl<number | null>(null, [Validators.min(1)]),
       credentialResponseEncryption: new FormControl(false),
@@ -838,7 +838,11 @@ export class IssuanceConfigCreateComponent implements OnInit {
 
     return {
       batchSize: formValue.batchSize,
-      display: formValue.display,
+      // The API requires `uri` when a logo is set.
+      display: (formValue.display ?? []).map(({ logo, ...display }: any) => ({
+        ...display,
+        ...(logo?.uri ? { logo } : {}),
+      })),
       dPopRequired: formValue.dPopRequired,
       credentialResponseEncryption: formValue.credentialResponseEncryption ?? false,
       credentialRequestEncryption: formValue.credentialRequestEncryption ?? false,

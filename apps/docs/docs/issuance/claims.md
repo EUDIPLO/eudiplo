@@ -15,7 +15,7 @@ For each credential configuration in an offer, EUDIPLO uses the first source tha
 | 2 | **Configuration attribute provider** | `attributeProviderId` of the [credential configuration](credential-configuration.md) |
 | 3 | **Static defaults** | `defaultValue` of each entry in `fields[]` |
 
-Sources are not merged. If an offer passes inline claims, the configuration's attribute provider is not called and the static defaults are ignored; if an attribute provider answers, its claims replace all defaults. Return every claim from the source you use, including fixed values such as the issuing country.
+Sources are not merged. If an offer passes inline claims, the configuration's attribute provider is not called and the static defaults are ignored; if an attribute provider answers, its claims replace all defaults. An attribute provider or webhook that answers without claims for the configuration fails the credential request ([errors](../reference/attribute-provider-api.md#errors)); EUDIPLO does not fall back to the static defaults. Return every claim from the source you use, including fixed values such as the issuing country.
 
 An attribute provider or webhook may also answer that the credential is not ready yet; see [Deferred issuance](deferred-issuance.md).
 
@@ -27,7 +27,7 @@ An attribute provider or webhook may also answer that the credential is not read
 
 ## External authorization servers need a dynamic source
 
-When the wallet's access token comes from an [external authorization server](authorization-servers.md#external), static defaults are not accepted: the claims must come from the offer (`credentialClaims`) or from the configuration's attribute provider. Otherwise the credential request fails. All other flows fall back to the static defaults.
+When the wallet's access token comes from an [external authorization server](authorization-servers.md#external), static defaults are not accepted: the claims must come from the offer (`credentialClaims`) or from the configuration's attribute provider. Otherwise the credential request fails. In all other flows, credentials without a dynamic source get the static defaults.
 
 ## Identity passed to attribute providers
 

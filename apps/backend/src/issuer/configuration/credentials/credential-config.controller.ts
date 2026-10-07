@@ -14,10 +14,21 @@ import { AuditMeta } from "../../../audit-log/audit-log-context.util.js";
 import { Role } from "../../../auth/roles/role.enum.js";
 import { Secured } from "../../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../../auth/token.decorator.js";
+import { createConfigBodyPipe } from "../../../shared/common/zod/zod-schema.util.js";
 import { CredentialConfigService } from "./credential-config/credential-config.service.js";
 import { CredentialConfigCreate } from "./dto/credential-config-create.dto.js";
 import { CredentialConfigUpdate } from "./dto/credential-config-update.dto.js";
 import { CredentialConfig } from "./entities/credential.entity.js";
+import { CredentialConfigCreateSchema } from "./schemas/credential-config.schema.js";
+
+/** Fields a GET response adds to the configuration (tenant and relations). */
+const readOnly = [
+    "tenantId",
+    "tenant",
+    "attributeProvider",
+    "webhookEndpoint",
+    "keyChain",
+];
 
 /**
  * Controller for managing credential configurations.
@@ -47,7 +58,8 @@ export class CredentialConfigController {
     @ApiBody({ type: CredentialConfigCreate })
     @ApiResponse({ status: 201, type: CredentialConfig })
     storeCredentialConfiguration(
-        @Body() config: CredentialConfigCreate,
+        @Body(createConfigBodyPipe(CredentialConfigCreateSchema, { readOnly }))
+        config: CredentialConfigCreate,
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
@@ -66,7 +78,13 @@ export class CredentialConfigController {
     @ApiResponse({ status: 200, type: CredentialConfig })
     updateCredentialConfiguration(
         @Param("id") id: string,
-        @Body() config: CredentialConfigUpdate,
+        @Body(
+            createConfigBodyPipe(CredentialConfigCreateSchema, {
+                readOnly,
+                partial: true,
+            }),
+        )
+        config: CredentialConfigUpdate,
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {

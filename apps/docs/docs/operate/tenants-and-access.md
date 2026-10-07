@@ -60,8 +60,9 @@ endpoint); the wallet-facing protocol API is documented at `/docs`.
 
 On the first start, EUDIPLO creates the root client from `AUTH_CLIENT_ID` and
 `AUTH_CLIENT_SECRET`. It has `tenants:manage` and belongs to no tenant, so it
-can manage tenants and clients but cannot call tenant-scoped endpoints such as
-issuance or presentation configs. Changing the two variables later does not
+can create and manage tenants (each new tenant gets a `<tenant>-admin` client)
+and rotate client secrets, but cannot call tenant-scoped endpoints such as
+clients, issuance or presentation configs. Changing the two variables later does not
 change the stored client; rotate its secret with
 `POST /api/client/<client-id>/rotate-secret` instead.
 

@@ -23,6 +23,7 @@ export class RecordCredentialNotification {
         session: SessionData,
         notificationId: string,
         event: Notification["event"],
+        eventDescription?: string,
     ): Promise<Notification> {
         const notification = session.notifications.find(
             (item) => item.id === notificationId,
@@ -32,6 +33,8 @@ export class RecordCredentialNotification {
         }
 
         notification.event = event;
+        // Wallets may notify several times; a description belongs to its event.
+        notification.eventDescription = eventDescription;
         await this.sessions.updateForTenant(session.tenantId, session.id, {
             notifications: session.notifications,
         });

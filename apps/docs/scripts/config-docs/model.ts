@@ -1,12 +1,20 @@
 import Joi from "joi";
-import { extractConditionsFromKeyDesc, flattenMetas } from "./helpers";
+import {
+  branchType,
+  extractConditionsFromKeyDesc,
+  flattenMetas,
+  formatDefault,
+} from "./helpers";
 
-type Presence = "required" | "optional" | "";
+// "conditional": required only under a condition listed in `conditions`.
+type Presence = "required" | "optional" | "conditional";
 
 interface ConfigItem {
   key: string;
   type: string;
   defaultValue?: unknown;
+  /** The default as display text, with inline code in backticks. */
+  defaultText?: string;
   allowedValues?: unknown[];
   description: string;
   presence: Presence;
@@ -50,17 +58,28 @@ export function buildModelFromSchema(schema: Joi.ObjectSchema): ConfigModel {
       (Array.isArray(keyDesc.notes) ? keyDesc.notes.join(" ") : "") ||
       "";
 
+    // A computed default (a function, or a value that depends on where the
+    // docs are built) is described by the key's `defaultText` meta.
+    const defaultText: string | undefined =
+      typeof meta.defaultText === "string" ? meta.defaultText : undefined;
+    const { conditions, required } = extractConditionsFromKeyDesc(
+      keyDesc,
+      defaultText,
+    );
+
     const presence: Presence =
       flags.presence === "required"
         ? "required"
-        : flags.presence === "optional"
-        ? "optional"
-        : "";
+        : required
+        ? "conditional"
+        : "optional";
 
-    const type =
-      Array.isArray(keyDesc.type) ? keyDesc.type.join(" | ") : keyDesc.type ?? "unknown";
+    const baseType = Array.isArray(keyDesc.type)
+      ? keyDesc.type.join(" | ")
+      : keyDesc.type ?? "unknown";
+    const type = baseType === "any" ? branchType(keyDesc) ?? baseType : baseType;
 
-    const conditions = extractConditionsFromKeyDesc(keyDesc);
+    const hasDefault = Object.prototype.hasOwnProperty.call(flags, "default");
     const allowedValues =
       keyDesc.flags?.only === true && Array.isArray(keyDesc.allow)
         ? keyDesc.allow
@@ -69,8 +88,14 @@ export function buildModelFromSchema(schema: Joi.ObjectSchema): ConfigModel {
     items.push({
       key,
       type,
-      defaultValue: Object.prototype.hasOwnProperty.call(flags, "default")
-        ? flags.default
+      defaultValue:
+        hasDefault && typeof flags.default !== "function"
+          ? flags.default
+          : undefined,
+      // A key without its own default uses `defaultText` only in the
+      // condition that sets one (e.g. LOCAL_STORAGE_DIR).
+      defaultText: hasDefault
+        ? defaultText ?? formatDefault(flags.default)
         : undefined,
       allowedValues,
       description,
@@ -81,11 +106,6 @@ export function buildModelFromSchema(schema: Joi.ObjectSchema): ConfigModel {
       conditions,
       meta,
     });
-
-    //check if some must be replaced
-    if(key === "CONFIG_FOLDER") {
-      items[items.length - 1].defaultValue = "/path/to/config/folder";
-    }
   }
 
   // Group & sort

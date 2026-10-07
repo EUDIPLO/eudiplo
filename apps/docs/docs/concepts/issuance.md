@@ -10,6 +10,13 @@ This page explains what EUDIPLO does during an OID4VCI issuance: the message flo
 ## Flow
 
 ```mermaid
+---
+config:
+  sequence:
+    wrap: true
+    width: 110
+    actorMargin: 20
+---
 sequenceDiagram
     participant BE as Your backend
     participant E as EUDIPLO
@@ -86,6 +93,13 @@ All credentials issued with the same access token form one issuance set. When a 
 Deferred issuance separates the credential request from the decision to issue, for example for a manual approval.
 
 ```mermaid
+---
+config:
+  sequence:
+    wrap: true
+    width: 150
+    actorMargin: 50
+---
 sequenceDiagram
     participant W as Wallet
     participant E as EUDIPLO

@@ -50,9 +50,16 @@ Vault serves a different purpose depending on where `full` comes from:
   the database unless you add a `kms.json`.
 
 The CLI also accepts `--database`, `--storage` and `--kms` to mix components,
-and Compose accepts the single profiles `postgres`, `s3` and `vault`. The bundled
-Vault runs in development mode with the root token `root`; use your own Vault in
-production.
+and Compose accepts the single profiles `postgres`, `s3` and `vault`.
+
+The bundled Vault runs in development mode with the root token `root` and keeps
+everything in memory, so `full` is for evaluation only. When its container or
+pod restarts, its data is gone: the encryption key has to be written again from
+your copy ([Compose](docker-compose.md#create-the-encryption-key-for-full),
+[Kubernetes](kubernetes.md#encryption-key-in-the-bundled-vault-full)), and
+signing keys that EUDIPLO created in Vault with `--preset full` are lost,
+because they are not exportable. In production, use a Vault with persistent
+storage.
 
 ## Configure the instance
 
@@ -92,6 +99,7 @@ it derives the key that decrypts private keys and session data.
 | Topic                                         | Guide                                                         |
 | --------------------------------------------- | ------------------------------------------------------------- |
 | HTTPS, reverse proxy, web client on a subpath | [TLS and reverse proxy](tls.md)                               |
+| WAF rules for wallet and management routes    | [Web application firewall](waf.md)                            |
 | CLI install, instances and drivers            | [CLI](cli.md)                                                 |
 | Export, validate and import configuration     | [Configuration as code](configuration-as-code.md)             |
 | Tenants, API clients, users and SSO           | [Tenants and access](tenants-and-access.md), [Keycloak](keycloak.md) |

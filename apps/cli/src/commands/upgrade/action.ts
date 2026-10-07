@@ -6,6 +6,7 @@ import {
     buildComposeUpArgs,
 } from "../../services/compose-args.js";
 import {
+    managedServices,
     migrationNotes,
     planImageUpgrade,
 } from "../../services/compose-upgrade.js";
@@ -89,7 +90,15 @@ export async function runUpgradeCommand(
     // Writing to the existing path keeps its owner-only permissions.
     await writeFile(envPath, plan.content, "utf8");
 
-    const pulled = await runCompose(buildComposePullArgs(undefined), options);
+    // Pull only the images this upgrade changes. The other services keep
+    // their images, and a registry that stopped serving one of them (MinIO's
+    // images now need a login) must not block the upgrade.
+    const pulled = await runCompose(
+        buildComposePullArgs(
+            plan.changes.map((change) => managedServices[change.key]),
+        ),
+        options,
+    );
     if (pulled !== 0) {
         await writeFile(envPath, original, "utf8");
         context.stderr.write(

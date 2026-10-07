@@ -93,8 +93,15 @@ export class JwtService {
   }
 
   hasTenantContext(): boolean {
+    return this.getTenantId() !== null;
+  }
+
+  /**
+   * Tenant of the signed-in client from the token's `tenant_id` claim, or null without one.
+   */
+  getTenantId(): string | null {
     const jwt = this.decodeToken(this.apiService.accessToken);
-    return typeof jwt?.tenant_id === 'string' && jwt.tenant_id.length > 0;
+    return typeof jwt?.tenant_id === 'string' && jwt.tenant_id.length > 0 ? jwt.tenant_id : null;
   }
 
   /**

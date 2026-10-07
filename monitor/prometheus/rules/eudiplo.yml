@@ -34,16 +34,18 @@ groups:
           summary: "High response time detected"
           description: "95th percentile response time is {{ $value }}s"
 
-      # High Memory Usage (if host metrics are available)
+      # High memory usage of the host the backend runs on (in a container: the
+      # Docker host or Kubernetes node), from the backend's host metrics
+      # (system.memory.utilization of @opentelemetry/host-metrics).
       - alert: HighMemoryUsage
-        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 80
+        expr: system_memory_utilization{system_memory_state="used"} > 0.8
         for: 5m
         labels:
           severity: warning
           service: eudiplo
         annotations:
           summary: "High memory usage"
-          description: "Memory usage is {{ $value }}%"
+          description: "Host memory usage is {{ $value | humanizePercentage }}"
 
   - name: tenant.rules
     rules:

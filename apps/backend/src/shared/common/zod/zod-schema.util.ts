@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, type PipeTransform } from "@nestjs/common";
 import {
     createZodValidationPipe,
     type ZodValidationException,
@@ -148,6 +148,89 @@ function zodErrorToValidationIssues(error: unknown): ValidationIssue[] {
         message: issue.message,
         code: issue.code,
     }));
+}
+
+interface ConfigBodyOptions {
+    /** Fields that a GET response adds to the configuration; dropped. */
+    readOnly: readonly string[];
+    /** Partial update: every field optional, `null` clears an optional one. */
+    partial?: boolean;
+}
+
+function accepts(schema: z.ZodType, value: unknown): boolean {
+    try {
+        return schema.safeParse(value).success;
+    } catch {
+        // Async refinements cannot run here; such a field counts as required.
+        return false;
+    }
+}
+
+/**
+ * Validates the body of a configuration endpoint with the schema that
+ * configuration import uses, so unknown or misspelled fields are rejected.
+ * A GET response can still be sent back: the read-only fields it adds are
+ * dropped, and `null` is accepted for optional fields (unset on create and
+ * replace, cleared by a partial update). Use it where the body type is a
+ * class DTO, which the app-wide pipe does not check. The body is passed on
+ * as sent, not as parsed: parsing would fill in schema defaults, which a
+ * partial update must not store.
+ */
+export function createConfigBodyPipe<Shape extends z.ZodRawShape>(
+    schema: z.ZodObject<Shape>,
+    { readOnly, partial = false }: ConfigBodyOptions,
+): PipeTransform {
+    const shape = schema.shape as unknown as Record<string, z.ZodType>;
+    const optional = new Set(
+        Object.entries(shape)
+            .filter(([, field]) => accepts(field, undefined))
+            .map(([key]) => key),
+    );
+    // Built from the shape because `.partial()` refuses objects with
+    // refinements; refinements across fields are checked by the services
+    // against the merged configuration.
+    const partialSchema = z
+        .object(
+            Object.fromEntries(
+                Object.entries(shape).map(([key, field]) => [
+                    key,
+                    optional.has(key)
+                        ? field.nullable().optional()
+                        : field.optional(),
+                ]),
+            ),
+        )
+        .strict();
+    return {
+        async transform(value: unknown) {
+            let body = value;
+            if (body && typeof body === "object" && !Array.isArray(body)) {
+                body = Object.fromEntries(
+                    Object.entries(body).filter(
+                        ([key, fieldValue]) =>
+                            !readOnly.includes(key) &&
+                            // Without a merge, null and a missing field mean the same.
+                            !(
+                                !partial &&
+                                fieldValue === null &&
+                                optional.has(key) &&
+                                !accepts(shape[key], null)
+                            ),
+                    ),
+                );
+            }
+            const result = await (partial
+                ? partialSchema
+                : schema
+            ).safeParseAsync(body);
+            if (!result.success) {
+                throw createValidationException(
+                    zodErrorToValidationIssues(result.error),
+                );
+            }
+            return body;
+        },
+    };
 }
 
 export function createAppValidationPipe() {

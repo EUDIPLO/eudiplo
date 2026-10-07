@@ -30,4 +30,11 @@ export class FrontendConfigResponseDto {
         example: "upsert",
     })
     configImportMode!: "disabled" | "create" | "upsert" | "replace";
+
+    @ApiProperty({
+        description:
+            "Public URL of the instance (PUBLIC_URL). Wallets and other verifiers reach the wallet-facing endpoints, such as trust lists, under this URL, which can differ from the URL the client signed in with.",
+        example: "https://eudiplo.example.com",
+    })
+    publicUrl!: string;
 }

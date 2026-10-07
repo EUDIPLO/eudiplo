@@ -37,7 +37,7 @@ spec:
               echo "eudiplo is up."
       containers:
         - name: eudiplo-client
-          image: ghcr.io/eudiplo/eudiplo-client:v7.4.0
+          image: ghcr.io/eudiplo/eudiplo-client:9.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

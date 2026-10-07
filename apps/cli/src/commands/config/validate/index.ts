@@ -9,8 +9,11 @@ export function createValidateCommand(
 ): Command {
     return new Command("validate")
         .description("Validate CLI or tenant config-import files")
-        .argument("[scope]")
-        .argument("[path]")
+        .argument(
+            "[scope]",
+            '"tenant" for one tenant folder or "tenants" for a folder of tenant folders; omit it to validate the CLI config file',
+        )
+        .argument("[path]", "the folder to validate (required with a scope)")
         .addOption(
             new Option("--format <text|json>", "tenant report format")
                 .choices(["text", "json"])

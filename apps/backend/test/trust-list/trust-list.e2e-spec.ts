@@ -493,12 +493,34 @@ describe("Trust List e2e Tests", () => {
     });
 
     describe("Error Handling", () => {
+        test("should reject unknown fields", async () => {
+            const res = await request(ctx.app.getHttpServer())
+                .post("/trust-list")
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .send({
+                    id: "unknown-field-test",
+                    keyChainId: "570852d7-7e7f-40af-a0e3-a6ebffd75ed0",
+                    entites: [],
+                })
+                .expect(400);
+            expect(JSON.stringify(res.body.errors)).toContain("entites");
+        });
+
         test("should reject trust list with invalid key chain id", async () => {
             const createDto: TrustListCreateDto = {
                 id: "invalid-keychain-test",
                 description: "Invalid Key Chain Test",
                 keyChainId: "non-existent-key-chain",
-                entities: [],
+                entities: [
+                    {
+                        type: "internal",
+                        issuerKeyChainId:
+                            "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                        revocationKeyChainId:
+                            "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
+                        info: { name: "Test Provider", lang: "en" },
+                    },
+                ],
             };
 
             await request(ctx.app.getHttpServer())
@@ -514,7 +536,16 @@ describe("Trust List e2e Tests", () => {
                 id: "wrong-usage-test",
                 description: "Wrong Usage Test",
                 keyChainId: "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad", // attestation key
-                entities: [],
+                entities: [
+                    {
+                        type: "internal",
+                        issuerKeyChainId:
+                            "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                        revocationKeyChainId:
+                            "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
+                        info: { name: "Test Provider", lang: "en" },
+                    },
+                ],
             };
 
             await request(ctx.app.getHttpServer())

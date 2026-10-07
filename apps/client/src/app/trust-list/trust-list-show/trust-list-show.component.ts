@@ -26,6 +26,8 @@ import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { CredentialConfigService } from '../../issuance/credential-config/credential-config.service';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-ownership-notice.component';
+import { FrontendConfigService } from '../../services/frontend-config.service';
+import { trustListUrl } from '../../utils/public-url';
 
 interface EntityInfo {
   name: string;
@@ -84,11 +86,17 @@ export class TrustListShowComponent implements OnInit {
   private readonly snackBar = inject(MatSnackBar);
   private readonly apiService = inject(ApiService);
   private readonly credentialConfigService = inject(CredentialConfigService);
+  private readonly frontendConfigService = inject(FrontendConfigService);
 
   trustList?: TrustList;
   entities: TrustListEntity[] = [];
   versions: TrustListVersion[] = [];
   publicUrl = '';
+  /**
+   * True when the backend did not report its public URL and publicUrl uses the instance URL
+   * the admin signed in with instead, which wallets may not reach.
+   */
+  publicUrlIsInstanceUrl = false;
   relatedCredentialConfigs: CredentialConfig[] = [];
   private readonly id: string;
 
@@ -102,7 +110,7 @@ export class TrustListShowComponent implements OnInit {
         this.trustList = res.data;
         this.parseEntities();
         this.loadVersions(this.id);
-        this.buildPublicUrl();
+        void this.buildPublicUrl();
         await this.loadRelatedCredentialConfigs();
       },
       () => {
@@ -143,12 +151,20 @@ export class TrustListShowComponent implements OnInit {
     return data?.LoTE?.TrustedEntitiesList?.length ?? 0;
   }
 
-  private buildPublicUrl(): void {
-    if (this.trustList) {
-      const baseUrl = this.apiService.getBaseUrl() || '';
-      const tenantId = this.trustList.tenantId;
-      this.publicUrl = `${baseUrl}/issuers/${tenantId}/trust-list/${this.trustList.id}`;
-    }
+  /**
+   * Wallets fetch the list under the backend's PUBLIC_URL, not under the instance URL used to
+   * sign in. Backends that do not report it get the instance URL with a warning.
+   */
+  private async buildPublicUrl(): Promise<void> {
+    const trustList = this.trustList;
+    if (!trustList) return;
+    const publicUrl = (await this.frontendConfigService.getConfig())?.publicUrl;
+    this.publicUrlIsInstanceUrl = !publicUrl;
+    this.publicUrl = trustListUrl(
+      publicUrl ?? this.apiService.getBaseUrl() ?? '',
+      trustList.tenantId,
+      trustList.id
+    );
   }
 
   private async loadRelatedCredentialConfigs(): Promise<void> {

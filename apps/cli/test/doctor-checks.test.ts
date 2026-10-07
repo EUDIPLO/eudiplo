@@ -121,6 +121,62 @@ describe("container state parsing", () => {
         expect(parseContainerStates("  \n")).toEqual([]);
     });
 
+    it("reads the exit code from Docker's status and Podman's ExitCode", () => {
+        const [docker, killed, running] = parseContainerStates(
+            [
+                '{"Names":"a","State":"exited","Status":"Exited (0) 3 minutes ago"}',
+                '{"Names":"b","State":"exited","Status":"Exited (137) 1 minute ago"}',
+                '{"Names":"c","State":"running","Status":"Up 1 minute"}',
+            ].join("\n"),
+        );
+        const [podman] = parseContainerStates(
+            JSON.stringify([
+                { Names: ["d"], State: "exited", Status: "", ExitCode: 0 },
+            ]),
+        );
+
+        expect(docker.exitCode).toBe(0);
+        expect(killed.exitCode).toBe(137);
+        expect(running.exitCode).toBeUndefined();
+        expect(podman.exitCode).toBe(0);
+    });
+
+    it("counts a container that exited with 0 as completed, not as stopped", () => {
+        // The standard preset creates the RustFS bucket in a one-shot
+        // container that stays behind as "Exited (0)".
+        const check = summarizeContainerStates(
+            parseContainerStates(
+                [
+                    '{"Names":"eudiplo-eudiplo-1","State":"running","Status":"Up 2 minutes (healthy)"}',
+                    '{"Names":"eudiplo-rustfs-1","State":"running","Status":"Up 2 minutes (healthy)"}',
+                    '{"Names":"eudiplo-rustfs-init-1","State":"exited","Status":"Exited (0) 2 minutes ago"}',
+                ].join("\n"),
+            ),
+            "eudiplo",
+        );
+
+        expect(check).toEqual({
+            name: "service containers",
+            status: "pass",
+            message: "2 container(s) running, 1 completed.",
+        });
+    });
+
+    it("warns when nothing but completed containers is left", () => {
+        const check = summarizeContainerStates(
+            [
+                {
+                    name: "eudiplo-rustfs-init-1",
+                    state: "exited",
+                    status: "Exited (0) 1 hour ago",
+                    exitCode: 0,
+                },
+            ],
+            "eudiplo",
+        );
+        expect(check.status).toBe("warn");
+    });
+
     it("warns when the project has no containers", () => {
         expect(summarizeContainerStates([], "eudiplo")).toMatchObject({
             status: "warn",

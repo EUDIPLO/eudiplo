@@ -45,7 +45,7 @@ The **Check Config Schemas and Website** job checks that the generated schemas m
 
 ## Editor setup
 
-The repository's `.vscode/settings.json` enables format on save and runs the Biome quick fixes and import organization on save. Install the extensions the dev container uses: Biome (`biomejs.biome`), ESLint, Prettier and the Angular Language Service. For other editors, see [Biome editor integration](https://biomejs.dev/guides/integrate-in-editor/).
+The repository's `.vscode/settings.json` enables format on save and runs the Biome quick fixes and import organization on save. Install the extensions the dev container uses: Biome (`biomejs.biome`), ESLint, Prettier and the Angular Language Service. For other editors, see [Biome editor integration](https://biomejs.dev/configuration/editors/).
 
 ## Style
 

@@ -7,8 +7,22 @@ import Joi from "joi";
 export const BASE_VALIDATION_SCHEMA = Joi.object({
     FOLDER: Joi.string()
         .default("../../tmp")
-        .description("Root working folder for temp files")
-        .meta({ group: "general", order: 10 }),
+        .description(
+            "Working folder: holds the SQLite database (`service.db`) and, with local storage, the uploaded files",
+        )
+        .meta({
+            group: "general",
+            order: 10,
+            defaultText:
+                "`../../tmp`, relative to the working directory; the container image sets `/app/config`",
+        }),
+    // Not validated: read directly from process.env where it matters.
+    NODE_ENV: Joi.string()
+        .optional()
+        .description(
+            "`production` turns on TLS certificate checks for status list, trust list and federation fetches, hides internal error messages from API responses and makes `warn` the default `LOG_LEVEL`. The container image sets it; set it yourself when you run the backend from source in production.",
+        )
+        .meta({ group: "general", order: 11 }),
     // Read from process.env in bootstrap.ts. No Joi default: @nestjs/config
     // writes defaults back into process.env.
     PORT: Joi.string()

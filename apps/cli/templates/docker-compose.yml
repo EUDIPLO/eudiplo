@@ -49,9 +49,10 @@ services:
       eudiplo:
         condition: service_healthy
     environment:
-      - API_BASE_URL=http://eudiplo:3000
-      # Uncomment to serve the client from a subpath behind a reverse proxy:
-      # - CLIENT_BASE_HREF=/eudiplo-client/
+      # Used by the browser only, to prefill the backend URL on the login page.
+      - API_BASE_URL=${API_BASE_URL:-http://localhost:3000}
+      # Subpath behind a reverse proxy, for example /eudiplo-client/
+      - CLIENT_BASE_HREF=${CLIENT_BASE_HREF:-/}
     healthcheck:
       test: ['CMD', 'wget', '-qO', '/dev/null', 'http://localhost:8080']
       interval: 30s
@@ -92,8 +93,8 @@ services:
     restart: always
     profiles: ['s3', 'standard', 'full']
     ports:
-      - '9000:9000'
-      - '9001:9001'
+      - '${EUDIPLO_BIND_ADDRESS:-0.0.0.0}:9000:9000'
+      - '${EUDIPLO_BIND_ADDRESS:-0.0.0.0}:9001:9001'
     environment:
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
@@ -141,12 +142,16 @@ services:
   # FULL PROFILE: + HashiCorp Vault
   # =============================================================================
 
+  # Development mode: Vault keeps all data in memory, so the encryption key and
+  # any signing keys in it are lost when the container restarts. Nothing creates
+  # the encryption key, see
+  # https://docs.eudiplo.dev/operate/docker-compose#create-the-encryption-key-for-full
   vault:
     image: hashicorp/vault:latest
     restart: always
     profiles: ['vault', 'full']
     ports:
-      - '8200:8200'
+      - '${EUDIPLO_BIND_ADDRESS:-0.0.0.0}:8200:8200'
     environment:
       VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_TOKEN:-root}
       VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
