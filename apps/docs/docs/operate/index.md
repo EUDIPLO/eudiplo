@@ -50,9 +50,16 @@ Vault serves a different purpose depending on where `full` comes from:
   the database unless you add a `kms.json`.
 
 The CLI also accepts `--database`, `--storage` and `--kms` to mix components,
-and Compose accepts the single profiles `postgres`, `s3` and `vault`. The bundled
-Vault runs in development mode with the root token `root`; use your own Vault in
-production.
+and Compose accepts the single profiles `postgres`, `s3` and `vault`.
+
+The bundled Vault runs in development mode with the root token `root` and keeps
+everything in memory, so `full` is for evaluation only. When its container or
+pod restarts, its data is gone: the encryption key has to be written again from
+your copy ([Compose](docker-compose.md#create-the-encryption-key-for-full),
+[Kubernetes](kubernetes.md#encryption-key-in-the-bundled-vault-full)), and
+signing keys that EUDIPLO created in Vault with `--preset full` are lost,
+because they are not exportable. In production, use a Vault with persistent
+storage.
 
 ## Configure the instance
 
