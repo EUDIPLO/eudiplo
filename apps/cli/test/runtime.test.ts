@@ -1,13 +1,13 @@
 import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCli } from "../src/runtime.js";
 import {
     drivers,
     resolveComposeRuntime,
 } from "../src/services/deployment-drivers.js";
-import type { CommandContext } from "../src/types.js";
+import type { CommandContext, DriverCommandOptions } from "../src/types.js";
 
 describe("EUDIPLO CLI", () => {
     it("prints command descriptions in help", async () => {
@@ -40,6 +40,10 @@ describe("EUDIPLO CLI", () => {
 
         const logs = await createContext();
         expect(await runCli(["logs", "--help"], logs.context)).toBe(0);
+        // logs prints and exits; only --follow keeps streaming.
+        expect(logs.output.stdout).toContain(
+            "Print the logs of the selected deployment, or stream them with --follow",
+        );
         expect(logs.output.stdout).toContain("--service <name>");
         expect(logs.output.stdout).toContain("--follow");
         expect(logs.output.stdout).toContain("--tail <lines>");
@@ -123,6 +127,15 @@ describe("EUDIPLO CLI", () => {
         expect(output.stdout).toContain("create|new [options] <tenant-id>");
         expect(output.stdout).toContain("validate [options] [tenant-id]");
         expect(output.stdout).toContain("remove|rm [options] <tenant-id>");
+
+        output.stdout = "";
+        expect(await runCli(["config", "validate", "--help"], context)).toBe(0);
+        expect(output.stdout).toContain(
+            'scope                 "tenant" for one tenant folder or "tenants"',
+        );
+        expect(output.stdout).toContain(
+            "the folder to validate (required with a scope)",
+        );
 
         output.stdout = "";
         expect(
@@ -225,6 +238,11 @@ describe("EUDIPLO CLI", () => {
 
         expect(await runCli(["init", "--databse", "sqlite"], context)).toBe(1);
         expect(output.stderr).toContain("unknown option '--databse'");
+
+        // Only the driver commands pass unknown options to the runtime.
+        output.stderr = "";
+        expect(await runCli(["doctor", "--volumes"], context)).toBe(1);
+        expect(output.stderr).toContain("unknown option '--volumes'");
 
         output.stderr = "";
         expect(await runCli(["config", "tenant", "create"], context)).toBe(1);
@@ -968,6 +986,128 @@ describe("EUDIPLO CLI", () => {
         } finally {
             drivers.compose.logs = originalLogs;
         }
+    });
+
+    describe("runtime arguments of the driver commands", () => {
+        const original = {
+            down: drivers.compose.down,
+            logs: drivers.compose.logs,
+        };
+        let calls: Array<Pick<DriverCommandOptions, "args" | "flags">>;
+
+        beforeEach(() => {
+            calls = [];
+            const record = async ({ args, flags }: DriverCommandOptions) => {
+                calls.push({ args, flags });
+                return 0;
+            };
+            drivers.compose.down = record;
+            drivers.compose.logs = record;
+        });
+
+        afterEach(() => {
+            drivers.compose.down = original.down;
+            drivers.compose.logs = original.logs;
+        });
+
+        async function composeInstance() {
+            const created = await createContext();
+            expect(
+                await runCli(["init", "--target", "compose"], created.context),
+            ).toBe(0);
+            return created;
+        }
+
+        it("passes options the command does not define to the runtime", async () => {
+            const { context } = await composeInstance();
+
+            expect(
+                await runCli(
+                    ["down", "--volumes", "--remove-orphans"],
+                    context,
+                ),
+            ).toBe(0);
+            expect(
+                await runCli(
+                    [
+                        "logs",
+                        "--tail",
+                        "10",
+                        "--until",
+                        "5m",
+                        "--service",
+                        "eudiplo",
+                    ],
+                    context,
+                ),
+            ).toBe(0);
+            // The CLI's own options still work after runtime options.
+            expect(
+                await runCli(
+                    ["down", "--volumes", "--instance", "local"],
+                    context,
+                ),
+            ).toBe(0);
+
+            expect(calls).toEqual([
+                { args: ["--volumes", "--remove-orphans"], flags: {} },
+                {
+                    args: ["--until", "5m"],
+                    flags: { tail: "10", service: "eudiplo" },
+                },
+                { args: ["--volumes"], flags: { instance: "local" } },
+            ]);
+        });
+
+        it("passes everything after -- to the runtime, without the --", async () => {
+            const { context } = await composeInstance();
+
+            expect(await runCli(["down", "--", "--volumes"], context)).toBe(0);
+            // Commander keeps a -- that follows an unknown option.
+            expect(
+                await runCli(
+                    ["down", "--remove-orphans", "--", "--rmi", "all"],
+                    context,
+                ),
+            ).toBe(0);
+            // After --, an option named like a CLI option is for the runtime.
+            expect(
+                await runCli(
+                    ["logs", "--timestamps", "--", "--since", "1h"],
+                    context,
+                ),
+            ).toBe(0);
+
+            expect(calls).toEqual([
+                { args: ["--volumes"], flags: {} },
+                { args: ["--remove-orphans", "--rmi", "all"], flags: {} },
+                { args: ["--timestamps", "--since", "1h"], flags: {} },
+            ]);
+        });
+
+        it("rejects misspelled options of the command before running anything", async () => {
+            const { context, output } = await composeInstance();
+
+            expect(
+                await runCli(
+                    ["down", "--volumes", "--instnace", "local"],
+                    context,
+                ),
+            ).toBe(1);
+            expect(output.stderr).toContain(
+                "error: unknown option '--instnace'\n(Did you mean --instance?)",
+            );
+
+            output.stderr = "";
+            expect(
+                await runCli(["logs", "--servce=eudiplo", "--folow"], context),
+            ).toBe(1);
+            expect(output.stderr).toContain(
+                "error: unknown option '--servce=eudiplo'\n(Did you mean --service?)",
+            );
+
+            expect(calls).toEqual([]);
+        });
     });
 
     it("selects Podman when requested with EUDIPLO_CONTAINER_RUNTIME", async () => {

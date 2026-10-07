@@ -2,7 +2,10 @@ apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 
 # HashiCorp Vault Component
-# Adds Vault for secure key management
+# Adds a Vault in development mode that holds the encryption key. It keeps all
+# data in memory: when the vault pod restarts, the key is gone and must be
+# restored from a backup. For evaluation only; use a persistent Vault in
+# production. See https://docs.eudiplo.dev/operate/kubernetes
 
 resources:
   - vault-deployment.yaml

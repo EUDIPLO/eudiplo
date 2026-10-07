@@ -129,8 +129,32 @@ describe("eudiplo upgrade", () => {
         expect(await readFile(envPath, "utf8")).toBe(
             envContent.replaceAll(":8.0.2", ":8.1.0"),
         );
-        expect(verbs()).toEqual(["pull", "up -d"]);
+        expect(verbs()).toEqual(["pull eudiplo eudiplo-client", "up -d"]);
         expect(output.stdout).toContain("Upgraded local to 8.1.0.");
+    });
+
+    it("pulls only the services whose image it changes", async () => {
+        // A plain `compose pull` also pulls PostgreSQL, Vault and, in 8.x
+        // projects, MinIO, whose images now need a login.
+        const { config, context, envPath } = await setup();
+        await writeFile(
+            envPath,
+            envContent.replace(
+                "ghcr.io/eudiplo/eudiplo-client:8.0.2",
+                "ghcr.io/eudiplo/eudiplo-client:8.1.0",
+            ),
+            "utf8",
+        );
+
+        expect(
+            await runUpgradeCommand(
+                config,
+                parsed({ "image-tag": "8.1.0", yes: true }),
+                context,
+            ),
+        ).toBe(0);
+
+        expect(verbs()).toEqual(["pull eudiplo", "up -d"]);
     });
 
     it("moves an instance off the legacy OpenWallet Foundation images", async () => {
@@ -201,7 +225,7 @@ describe("eudiplo upgrade", () => {
         ).toBe(1);
 
         expect(await readFile(envPath, "utf8")).toBe(envContent);
-        expect(verbs()).toEqual(["pull"]);
+        expect(verbs()).toEqual(["pull eudiplo eudiplo-client"]);
         expect(output.stderr).toContain("Restored the previous image tags");
     });
 
@@ -255,7 +279,7 @@ describe("eudiplo upgrade", () => {
             context,
         );
 
-        expect(verbs()).toEqual(["pull", "up -d"]);
+        expect(verbs()).toEqual(["pull eudiplo eudiplo-client", "up -d"]);
     });
 
     it("does nothing when already on the requested tag", async () => {

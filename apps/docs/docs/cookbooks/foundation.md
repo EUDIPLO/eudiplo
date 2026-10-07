@@ -46,7 +46,7 @@ A phone cannot use your computer's `localhost`: it would connect to the phone it
 ngrok http 3000
 ```
 
-Keep this terminal open. Below, `https://YOUR-HTTPS-HOST` stands for the forwarding URL, without a trailing slash. Use this exact address from now on: issued credentials and offers contain URLs that point back to it. If the address changes later, update the deployment and issue a fresh credential.
+Keep this terminal open. Below, `https://YOUR-HTTPS-HOST` stands for the forwarding URL, without a trailing slash. Use this exact address from now on: issued credentials and offers contain URLs that point back to it. If the address changes later, update the deployment as described under [Troubleshooting](#troubleshooting) and issue a fresh credential.
 
 **Checkpoint:** the tunnel shows an HTTPS forwarding URL. Requests to it return a gateway error until EUDIPLO runs.
 
@@ -84,7 +84,7 @@ Then open `https://YOUR-HTTPS-HOST/health` in the **browser on your phone**. It 
 ## Step 5: Sign in to the Web Client
 
 1. Open [http://localhost:4200](http://localhost:4200), or run `eudiplo open --instance cookbook`.
-2. In **EUDIPLO Instance**, enter `http://localhost:3000`. The field can be prefilled with `http://eudiplo:3000`, the backend's address inside the Compose network, which your browser cannot reach.
+2. Check that **EUDIPLO Instance** is `http://localhost:3000`. Projects created with an older CLI prefill `http://eudiplo:3000`, the backend's address inside the Compose network, which your browser cannot reach.
 3. Read the root credentials from the project directory: `grep AUTH_CLIENT .eudiplo.env`.
 4. On the **Client ID and Secret** tab, enter `AUTH_CLIENT_ID` (by default `root`) as **Client ID** and `AUTH_CLIENT_SECRET` as **Client Secret**.
 5. Choose **Login with Client Credentials**.
@@ -106,7 +106,7 @@ Check your wallet's row in [Wallet and registrar requirements](../trust/wallet-r
 | ----------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `init` fails with "port is already allocated"   | The demo or another stack uses port `3000` or `4200`        | Stop the other stack (`eudiplo down --instance local` for the demo), then run `eudiplo up --instance cookbook`.                                             |
 | Local health works, phone health fails          | Tunnel stopped, wrong target port or an interstitial page   | Restart the tunnel to port `3000`; make sure the phone gets the JSON directly.                                                                              |
-| Offers or metadata contain `localhost` or an old tunnel URL | `PUBLIC_URL` in `.eudiplo.env` is wrong              | Edit `PUBLIC_URL`, run `eudiplo up --instance cookbook` (Compose recreates the backend with the new environment), then create a new offer.                   |
+| Offers or metadata contain `localhost` or an old tunnel URL | `PUBLIC_URL` in `.eudiplo.env` is wrong              | Edit `PUBLIC_URL`, run `eudiplo up --instance cookbook` (Compose recreates the backend with the new environment), change the `url` of the `cookbook` instance in `~/.eudiplo/config.json` (the CLI commands use it), then create a new offer. |
 
 For login errors, `eudiplo: command not found` and other common problems, see [Troubleshooting](../troubleshooting.md).
 

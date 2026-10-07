@@ -36,7 +36,7 @@ k8s/
 | ------------ | ------------------------------------ | -------------------------- | ------------------- |
 | **Minimal**  | `kubectl apply -k overlays/minimal`  | EUDIPLO only               | Local dev, testing  |
 | **Standard** | `kubectl apply -k overlays/standard` | + PostgreSQL, RustFS        | Staging, small prod |
-| **Full**     | `kubectl apply -k overlays/full`     | + PostgreSQL, RustFS, Vault | Enterprise prod     |
+| **Full**     | `kubectl apply -k overlays/full`     | + PostgreSQL, RustFS, Vault | Evaluation (dev-mode Vault) |
 
 ### 2. Configure and Deploy
 
@@ -66,13 +66,16 @@ kubectl -n eudiplo get pods -w
 - **Client UI:** http://eudiplo-client.localtest.me
 - **RustFS Console:** http://rustfs-console.localtest.me/rustfs/console/ (standard/full)
 
+The bundled `Ingress` uses the class `nginx`; set `spec.ingressClassName` to the
+class of your ingress controller (`kubectl get ingressclass`).
+
 ## Configuration Matrix
 
 | Component          | Minimal   | Standard   | Full       |
 | ------------------ | --------- | ---------- | ---------- |
 | **Database**       | SQLite    | PostgreSQL | PostgreSQL |
 | **File Storage**   | Local     | RustFS (S3) | RustFS (S3) |
-| **Key Management** | DB-backed | DB-backed  | Vault      |
+| **Encryption key** | From `MASTER_SECRET` | From `MASTER_SECRET` | Vault (dev mode, in memory) |
 
 ## Customizing Deployments
 
@@ -149,29 +152,21 @@ kubectl -n eudiplo port-forward svc/eudiplo 3000:3000
 5. **Set up monitoring** (Prometheus, Grafana)
 6. **Pin application images** to a tested release or digest before upgrading
 
-The full overlay deploys Vault in development mode and creates its encryption key
-automatically. Use an externally managed, initialized Vault instance with a
-restricted token for production.
+The full overlay deploys Vault in development mode, which keeps everything in
+memory. Its bootstrap job creates the encryption key if none exists; when the
+Vault pod restarts, the key is gone and must be restored from a backup, never
+recreated. Use an externally managed, initialized Vault instance with a
+restricted token for production. See
+[Kubernetes](https://docs.eudiplo.dev/operate/kubernetes#encryption-key-in-the-bundled-vault-full).
 
 👉 **[Read the full documentation](https://docs.eudiplo.dev/operate/kubernetes/)**
 
 ## Migrating existing MinIO storage
 
-These templates now deploy RustFS 1.0.0 with a separate `rustfs-data` volume
-(or PVC). Existing MinIO data is not migrated automatically. Keep the old
-volumes and backups; do not mount a MinIO data directory directly into RustFS.
-
-1. Start RustFS with an empty volume alongside the existing storage service.
-2. Copy buckets and objects through the S3 API using a migration tool that
-   preserves the metadata, versions, and policies your deployment requires.
-3. Verify object counts, contents, and application reads before switching
-   `S3_ENDPOINT` to `http://rustfs:9000`.
-4. Replace `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` with `RUSTFS_ACCESS_KEY` /
-   `RUSTFS_SECRET_KEY`, and use the same values for `S3_ACCESS_KEY_ID` /
-   `S3_SECRET_ACCESS_KEY`. Bucket initialization now uses `S3_BUCKET`.
-5. Keep the old service and data available for rollback until the migration
-   is verified. Existing CLI projects need their Compose file and `.env`
-   updated as well; updating the CLI alone does not rewrite them.
+These manifests deploy RustFS 1.0.0 with a separate `rustfs-data` PVC. Existing
+MinIO data is not migrated automatically; do not mount a MinIO data directory
+into RustFS. The steps are in the
+[upgrade guide](https://docs.eudiplo.dev/upgrade/8.x-to-9.0#bundled-object-storage-minio-replaced-by-rustfs).
 
 The bucket initialization job uses AWS CLI 2.34.0 and retains the previous
 public-download policy (`s3:GetObject`). Review that policy for private buckets.

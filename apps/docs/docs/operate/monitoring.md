@@ -55,8 +55,13 @@ docker compose up -d
 | `grafana`        | `grafana/grafana`                       | 3001 (user `admin`, password `admin`)    |
 
 The services share the Compose network `monitoring`, which Docker names
-`monitor_monitoring` when started from the `monitor` folder. Attach the backend
-to it:
+`monitor_monitoring` when started from the `monitor` folder. Inside a container,
+`localhost` is the container itself, so a containerized backend must share a
+network with the collector.
+
+**Compose without the CLI:** attach the backend to the monitoring network with an
+override file. Compose reads `docker-compose.override.yml` automatically when you
+run `docker compose` without `-f`:
 
 ```yaml title="docker-compose.override.yml (next to your EUDIPLO Compose file)"
 services:
@@ -72,6 +77,37 @@ networks:
         name: monitor_monitoring
         external: true
 ```
+
+**CLI-managed instances:** the CLI passes its Compose files with `-f`, so
+Compose ignores an override file in the project directory, and
+`eudiplo init --force` rewrites `eudiplo.compose.yaml`. Attach the collector to
+the instance's network instead, with an override file in the `monitor` folder:
+
+```yaml title="monitor/docker-compose.override.yml"
+services:
+    otel-collector:
+        networks:
+            - monitoring
+            - eudiplo
+
+networks:
+    eudiplo:
+        name: eudiplo_eudiplo-network # <project>_eudiplo-network, see docker network ls
+        external: true
+```
+
+Then, in the instance's project directory, set the endpoint and apply it:
+
+```bash
+echo 'OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318' >> .eudiplo.env
+eudiplo up   # recreates the backend with the new variable
+```
+
+Start the instance before the monitoring stack, because the network must
+exist. While the collector is attached, `eudiplo down` keeps the network and
+reports it as still in use. A collector elsewhere works the same way: set
+`OTEL_EXPORTER_OTLP_ENDPOINT` in `.eudiplo.env` to an address the container can
+reach.
 
 A backend running directly on the host reaches the collector at the default
 `http://localhost:4318`. Running the backend from source with `pnpm dev` is
@@ -119,7 +155,7 @@ sum by (tenant_id) (max by (tenant_id, session_type, status) (sessions{status="a
 | `HighErrorRate`    | More than 0.1 responses per second with status 5xx, for 2 minutes  | warning  |
 | `ServiceDown`      | The collector's scrape target is down for 1 minute                 | critical |
 | `HighResponseTime` | 95th percentile of request duration above 2 s, for 5 minutes       | warning  |
-| `HighMemoryUsage`  | Host memory above 80 %; uses `node_memory_*` metrics from a node exporter, which the stack does not run, so it never fires as shipped | warning |
+| `HighMemoryUsage`  | Memory use of the host the backend runs on (a container's Docker host or Kubernetes node) above 80 % for 5 minutes, from the backend's host metric `system_memory_utilization` | warning |
 
 The file also defines the recording rule `tenant:active_sessions`. Prometheus
 has no Alertmanager configured (the `alerting` block in

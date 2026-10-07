@@ -83,11 +83,17 @@ export const FrontendConfigResponseDtoSchema = {
             type: 'string',
             description: 'Active startup configuration import mode',
             example: 'upsert'
+        },
+        publicUrl: {
+            type: 'string',
+            description: 'Public URL of the instance (PUBLIC_URL). Wallets and other verifiers reach the wallet-facing endpoints, such as trust lists, under this URL, which can differ from the URL the client signed in with.',
+            example: 'https://eudiplo.example.com'
         }
     },
     required: [
         'grafana',
-        'configImportMode'
+        'configImportMode',
+        'publicUrl'
     ]
 } as const;
 

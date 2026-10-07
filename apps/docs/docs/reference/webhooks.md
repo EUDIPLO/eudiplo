@@ -57,7 +57,7 @@ The presentation target is resolved when the request is created; later changes t
 
 ## Presentation webhook
 
-EUDIPLO sends one `POST` per presentation after the session reached its final status. The payload always contains `status`, `outcome` and `session`; `credentials` is only present when the presentation succeeded.
+EUDIPLO sends one `POST` per presentation after the session reached its final status. The payload always contains `status`, `outcome` and `session`; `credentials` is only present when the presentation succeeded, `reference` only when the request set one.
 
 **Completed:**
 
@@ -81,7 +81,8 @@ EUDIPLO sends one `POST` per presentation after the session reached its final st
             ]
         }
     ],
-    "session": "0b6f3a8e-6d0c-4b8e-9a63-2f1c5d7e9a10"
+    "session": "0b6f3a8e-6d0c-4b8e-9a63-2f1c5d7e9a10",
+    "reference": "order-4711"
 }
 ```
 
@@ -114,6 +115,7 @@ EUDIPLO sends one `POST` per presentation after the session reached its final st
 | `outcome`          | Structured result with machine-readable `error` codes; see [Session outcome](session-outcome.md)                                                  |
 | `credentials`      | Only on success. OID4VP: one entry per DCQL credential `id` with the disclosed claims of each presentation in `values` (`cnf` and `status` removed). ISO 18013-7: `id`, `format`, `docType` and `claims` |
 | `session`          | Session ID, as returned by `POST /api/verifier/offer`                                                                                             |
+| `reference`        | Your [reference](../concepts/sessions.md#your-own-reference) of the request; only present when set                                                |
 | `transaction_data` | The transaction data of the request, if it had any                                                                                               |
 
 A wallet that declines sends an OAuth error; the webhook then reports `failed` with the wallet's error code (for example `access_denied`) as `outcome.error`. Expired requests do not trigger a webhook.
@@ -134,7 +136,7 @@ Other response fields are ignored.
 
 ## Notification webhook
 
-When the wallet calls the [notification endpoint](../issuance/notifications.md), EUDIPLO records the event on the session and forwards it to the webhook endpoint named in the offer:
+When the wallet calls the [notification endpoint](../issuance/notifications.md), EUDIPLO records the event on the session, sets the session status and then forwards the event to the webhook endpoint named in the offer:
 
 ```json
 {
@@ -143,7 +145,8 @@ When the wallet calls the [notification endpoint](../issuance/notifications.md),
         "event": "credential_accepted",
         "credentialConfigurationId": "membership"
     },
-    "session": "a6318799-dff4-4b60-9d1d-58703611bd23"
+    "session": "a6318799-dff4-4b60-9d1d-58703611bd23",
+    "reference": "order-4711"
 }
 ```
 
@@ -151,8 +154,10 @@ When the wallet calls the [notification endpoint](../issuance/notifications.md),
 | ---------------------------------------- | --------------------------------------------------------------------------- |
 | `notification.id`                        | `notification_id` that EUDIPLO returned in the credential response          |
 | `notification.event`                     | Sent by the wallet: `credential_accepted`, `credential_failure` or `credential_deleted` |
+| `notification.eventDescription`          | The wallet's `event_description`; only present when the wallet sent one     |
 | `notification.credentialConfigurationId` | Credential configuration of the notified credential                         |
 | `session`                                | Issuance session ID, as returned by `POST /api/issuer/offer`                |
+| `reference`                              | Your [reference](../concepts/sessions.md#your-own-reference) of the offer; only present when set |
 
 The response body is ignored.
 
@@ -184,5 +189,5 @@ The response body is ignored.
 - **Synchronous.** The wallet's request waits for your webhook, because a presentation webhook can change the redirect. Answer quickly and do slow work afterwards.
 - **Presentation failures are best effort.** The session status is final before the webhook is sent. A failed delivery (connection error, non-2xx status, blocked URL) is logged and changes neither the session nor the wallet's result. Use [polling or the event stream](../presentation/receive-results.md) as a fallback.
 - **Cancellation webhooks are best effort.** The session is cancelled before the webhook is sent; a failed delivery is only logged.
-- **Notification failures are reported to the wallet.** EUDIPLO records the event on the session first, then sends the webhook, then updates the session status. If the delivery fails, the wallet's notification request fails with HTTP 500 and the session keeps its previous status.
+- **Notification failures are best effort.** EUDIPLO records the event and sets the session status before it sends the webhook. A failed delivery is logged and changes neither the session nor the answer to the wallet. The recorded events stay in `notifications` of the session.
 - **Outbound URL policy.** Webhook URLs must use HTTPS and resolve to public addresses unless `OUTBOUND_URL_ALLOW_HTTP` or `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` allow otherwise. With `OUTBOUND_URL_ALLOWED_HOSTS` set, the host must also be on that list; see [environment variables](environment-variables.md#webhook). A blocked URL counts as a failed delivery.

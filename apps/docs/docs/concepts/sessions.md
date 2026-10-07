@@ -95,8 +95,9 @@ The web client offers the same action on the session page and as a bulk action i
 | `id`                        | Sessions whose ID starts with the value.                                                                                        |
 | `q`                         | Search, see below.                                                                                                              |
 | `sortBy`, `sortOrder`       | `id`, `status`, `createdAt`, `updatedAt` (default) or `requestId`; `asc` or `desc` (default).                                   |
+| `page`, `pageSize`          | Page number from 1 (default 1) and page size from 1 to 100 (default 25).                                                        |
 
-A range that starts after it ends, an unknown status or an ID longer than 255 characters answers `400`.
+The response is paged: `items` holds the sessions of the page, and `total` and `totalPages` count all matches. An unknown parameter or status, a range that starts after it ends, an `id` that is not the beginning of a session ID, or a `requestId`, `credentialConfigurationId` or `failureCode` longer than 255 characters answers `400`.
 
 ```http
 GET /api/session?type=presentation&status=failed&createdFrom=2026-10-02T08:00:00Z&requestId=age-check&sortBy=updatedAt&sortOrder=desc

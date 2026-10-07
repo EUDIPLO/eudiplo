@@ -1,12 +1,8 @@
 import type { Jwk } from "@openid4vc/oauth2";
 import type { SessionData } from "../../../../session/domain/session-data.js";
-import type { AttributeProviderRepository } from "../../attribute-provider/ports/attribute-provider.repository.js";
 import { assertClaimsMatchConfiguration } from "../domain/credential-claims-validation.js";
 import type { CredentialConfigurationRepository } from "../ports/credential-configuration.repository.js";
-import type {
-    IssuerFederationContext,
-    SessionCredentialClaims,
-} from "../ports/credential-generation-context.js";
+import type { IssuerFederationContext } from "../ports/credential-generation-context.js";
 import { buildClaims } from "../utils/derive.js";
 import type { ClaimFieldDefinition } from "../utils/types.js";
 import type { CredentialIssuerFormatRegistry } from "./credential-issuer-format-registry.js";
@@ -17,15 +13,15 @@ export class IssueCredential {
             CredentialConfigurationRepository,
             "getForTenant"
         >,
-        private readonly attributeProviders: Pick<
-            AttributeProviderRepository,
-            "findForTenant"
-        >,
-        private readonly claims: SessionCredentialClaims,
         private readonly federation: IssuerFederationContext,
         private readonly formats: CredentialIssuerFormatRegistry,
     ) {}
 
+    /**
+     * Signs one credential with the claims the caller resolved from the
+     * session's claim source (see `CredentialClaimsProvider`). Without claims,
+     * no dynamic source applies and the static defaults are issued.
+     */
     async execute(command: {
         credentialConfigurationId: string;
         holderKey: Jwk;
@@ -38,40 +34,11 @@ export class IssueCredential {
             session.tenantId,
             credentialConfigurationId,
         );
-        let claims = buildClaims(
-            configuration.fields as ClaimFieldDefinition[],
-        ) as Record<string, unknown>;
-        if (command.preloadedClaims) {
-            claims = command.preloadedClaims;
-        } else {
-            const source =
-                session.credentialPayload?.credentialClaims?.[
-                    credentialConfigurationId
-                ];
-            if (source?.type === "inline") {
-                claims = source.claims;
-            } else {
-                let webhook =
-                    source?.type === "webhook" ? source.webhook : undefined;
-                if (!webhook && configuration.attributeProviderId) {
-                    const provider =
-                        await this.attributeProviders.findForTenant(
-                            session.tenantId,
-                            configuration.attributeProviderId,
-                        );
-                    if (provider)
-                        webhook = { url: provider.url, auth: provider.auth };
-                }
-                if (webhook) {
-                    claims =
-                        (await this.claims.resolve(
-                            webhook,
-                            session,
-                            credentialConfigurationId,
-                        )) ?? claims;
-                }
-            }
-        }
+        const claims =
+            command.preloadedClaims ??
+            (buildClaims(
+                configuration.fields as ClaimFieldDefinition[],
+            ) as Record<string, unknown>);
         // Final claims from every source must match the configuration before signing.
         assertClaimsMatchConfiguration(configuration, claims);
         // Existing direct-generation behavior tolerates unavailable issuance settings.

@@ -1,24 +1,25 @@
 /**
- * Enumeration of all roles available in the system.
+ * Enumeration of all roles available in the system. The member comments are
+ * the role descriptions of the generated docs (apps/docs/scripts/generate-roles-docs.ts).
  */
 export enum Role {
-    //to manage presentation resources
+    // to manage verifier resources: presentation configurations, trust lists, key chains and webhook endpoints
     Presentations = "presentation:manage",
-    // to create offers
+    // to create presentation requests, read presentation configurations and read or delete presentation sessions
     PresentationRequest = "presentation:request",
-    // to manage issuance resources
+    // to manage issuer resources: credential and issuance configurations, attribute providers, status lists, key chains and webhook endpoints
     Issuances = "issuance:manage",
-    // to create offers
+    // to create credential offers, complete or fail deferred issuance, revoke or suspend credentials, and read or delete issuance sessions
     IssuanceOffer = "issuance:offer",
-    // to manage client resources
+    // to manage the tenant's API clients and read its audit log
     Clients = "clients:manage",
-    // to manage human users
+    // to manage the tenant's human users
     Users = "users:manage",
-    // to manage tenant resources
+    // platform operator role, needs no tenant: to create, change and delete any tenant, rotate client secrets, and use a tenant's configuration bundles, key export and KMS provider settings
     Tenants = "tenants:manage",
-    // to manage the current tenant's full configuration
+    // to manage the current tenant's full configuration: configuration bundles, key export and KMS provider settings
     TenantAdmin = "tenant:admin",
-    // to manage registrar configuration and operations
+    // to manage the registrar configuration and request registration certificates
     Registrar = "registrar:manage",
 }
 

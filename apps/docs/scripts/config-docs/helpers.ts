@@ -1,66 +1,124 @@
 /**
- * Summarizes the flags for a given configuration key.
- * @param flags The flags object to summarize.
- * @returns A string representation of the flags.
+ * Joi compiles `is: "sqlite"` to `valid(Joi.override, "sqlite")`; describe()
+ * lists the override marker as `{ override: true }`. It is not a value.
  */
-function summarizeFlags(flags?: any): string {
-    if (!flags) return "";
-    const bits: string[] = [];
-    if (flags.presence === "required") bits.push("required");
-    if ("default" in flags)
-        bits.push(`default=${JSON.stringify(flags.default)}`);
-    return bits.join(", ");
+function isOverrideMarker(value: unknown): boolean {
+    return (
+        typeof value === "object" &&
+        value !== null &&
+        (value as { override?: unknown }).override === true
+    );
 }
 
 /**
- * Summarizes the shape of a given schema.
- * @param s The schema object to summarize.
- * @returns A string representation of the schema shape.
+ * Formats a default value as inline code. Computed defaults (functions) have
+ * no printable value; the key's `defaultText` meta describes them instead.
  */
-function summarizeSchemaShape(s?: any): string {
-    if (!s) return "";
-    if (s.type === "boolean" && Array.isArray(s.allow) && s.allow.length)
-        return String(s.allow[0]);
-    if (Array.isArray(s.allow) && s.allow.length)
-        return s.allow.map((v: any) => JSON.stringify(v)).join(" | ");
-    if (s.type === "any") return "set"; // Joi.exist()
-    return s.type ?? "condition";
+export function formatDefault(value: unknown, defaultText?: string): string {
+    if (typeof value === "function" || value === undefined) {
+        return defaultText ?? "computed at startup";
+    }
+    return `\`${typeof value === "string" ? value : JSON.stringify(value)}\``;
 }
 
 /**
- * Summarizes the conditions for a given "when" entry.
- * @param w The "when" entry object to summarize.
- * @returns A string representation of the "when" entry.
+ * Describes the `is` schema of a condition, e.g. "is set" or "is `s3`".
  */
-function summarizeWhenEntry(w: any): string {
+function summarizeIs(s?: any): string {
+    const values = Array.isArray(s?.allow)
+        ? s.allow.filter((value: unknown) => !isOverrideMarker(value))
+        : [];
+    if (values.length > 0) {
+        return `is ${values
+            .map((value: unknown) =>
+                typeof value === "string" ? `\`${value}\`` : `\`${JSON.stringify(value)}\``,
+            )
+            .join(" or ")}`;
+    }
+    if (s?.type === "any") return "is set"; // Joi.exist()
+    return "matches";
+}
+
+interface BranchSummary {
+    conditions: string[];
+    required: boolean;
+}
+
+/**
+ * Describes what one branch of a condition changes: "required when …",
+ * "required unless …" or "default … when …".
+ */
+function summarizeBranch(
+    flags: any,
+    sense: "when" | "unless",
+    condition: string,
+    defaultText?: string,
+): BranchSummary {
+    const conditions: string[] = [];
+    if (flags?.presence === "required") {
+        conditions.push(`required ${sense} ${condition}`);
+    }
+    if (flags && "default" in flags) {
+        conditions.push(
+            `default ${formatDefault(flags.default, defaultText)} ${sense} ${condition}`,
+        );
+    }
+    return { conditions, required: flags?.presence === "required" };
+}
+
+function summarizeWhenEntry(w: any, defaultText?: string): BranchSummary {
     const ref =
         (typeof w.ref === "string" && w.ref) ||
         (Array.isArray(w.ref?.path) ? w.ref.path.join(".") : "ref");
-    const isTxt = summarizeSchemaShape(w.is);
-    const thenTxt = summarizeFlags(w.then?.flags);
-    const othTxt = summarizeFlags(w.otherwise?.flags);
-    const parts: string[] = [`when ${ref} is ${isTxt}`];
-    if (thenTxt) parts.push(`then ${thenTxt}`);
-    if (othTxt) parts.push(`otherwise ${othTxt}`);
-    return parts.join(" → ");
+    const condition = `\`${ref}\` ${summarizeIs(w.is)}`;
+    const then = summarizeBranch(w.then?.flags, "when", condition, defaultText);
+    const otherwise = summarizeBranch(
+        w.otherwise?.flags,
+        "unless",
+        condition,
+        defaultText,
+    );
+    return {
+        conditions: [...then.conditions, ...otherwise.conditions],
+        required: then.required || otherwise.required,
+    };
 }
+
 /**
- * Extracts the conditions from a given key description.
- * @param keyDesc The key description object to extract conditions from.
- * @returns An array of strings representing the extracted conditions.
+ * Extracts the conditions of a key ("required unless `OIDC` is set") and
+ * whether one of them makes the key required.
  */
-export function extractConditionsFromKeyDesc(keyDesc: any): string[] {
-    const out: string[] = [];
-    if (Array.isArray(keyDesc?.whens))
-        for (const w of keyDesc.whens) out.push(summarizeWhenEntry(w));
-    if (Array.isArray(keyDesc?.matches)) {
-        for (const m of keyDesc.matches) {
-            if (m.ref || m.is || m.then || m.otherwise)
-                out.push(summarizeWhenEntry(m));
-        }
-    }
-    return out;
+export function extractConditionsFromKeyDesc(
+    keyDesc: any,
+    defaultText?: string,
+): BranchSummary {
+    const entries = [
+        ...(Array.isArray(keyDesc?.whens) ? keyDesc.whens : []),
+        ...(Array.isArray(keyDesc?.matches)
+            ? keyDesc.matches.filter(
+                  (m: any) => m.ref || m.is || m.then || m.otherwise,
+              )
+            : []),
+    ];
+    const summaries = entries.map((entry) => summarizeWhenEntry(entry, defaultText));
+    return {
+        conditions: summaries.flatMap((summary) => summary.conditions),
+        required: summaries.some((summary) => summary.required),
+    };
 }
+
+/**
+ * The type of a key whose base schema is `any` (`Joi.when(...)` without a
+ * type) is the type of its branches.
+ */
+export function branchType(keyDesc: any): string | undefined {
+    for (const w of keyDesc?.whens ?? []) {
+        const type = w.then?.type ?? w.otherwise?.type;
+        if (type && type !== "any") return type;
+    }
+    return undefined;
+}
+
 /**
  * Flattens the meta information from a given description object.
  * @param desc The description object to extract meta information from.

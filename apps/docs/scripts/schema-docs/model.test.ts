@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
 import { PresentationRequestSchema } from "../../../backend/src/verifier/oid4vp/dto/presentation-request.schema.js";
-import { buildSchemaModel } from "./model.js";
+import { buildSchemaModel, overrideDescriptions } from "./model.js";
 
 test("presentation request docs follow DTO metadata and preserve nested body shape", () => {
     const model = buildSchemaModel(PresentationRequestSchema);
@@ -78,4 +78,11 @@ test("nullable fields keep their type and are marked nullable", () => {
     assert.equal(model.properties?.nested.properties?.value.required, true);
     assert.equal(model.properties?.list.type, "array");
     assert.equal(model.properties?.list.variants, undefined);
+});
+
+test("description overrides replace the description and reject unknown paths", () => {
+    const schema = z.object({ items: z.array(z.object({ url: z.string().describe("Base URL.") })) });
+    const model = overrideDescriptions(buildSchemaModel(schema), { "items.url": "Posted to as is." });
+    assert.equal(model.properties?.items.items?.properties?.url.description, "Posted to as is.");
+    assert.throws(() => overrideDescriptions(buildSchemaModel(schema), { "items.uri": "x" }), /unknown field "items.uri"/);
 });

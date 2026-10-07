@@ -13,7 +13,10 @@ again after major upgrades. Each item links to the guide that explains it.
       (`openssl rand -base64 32`), kept in a secret manager and never changed
       while the data exists ([Encryption keys](encryption-keys.md#keep-the-key-stable)).
 - [ ] The encryption key comes from `vault`, `aws` or `azure` instead of being
-      derived from `MASTER_SECRET` ([Encryption keys](encryption-keys.md#choose-a-key-source)).
+      derived from `MASTER_SECRET` ([Encryption keys](encryption-keys.md#choose-a-key-source)),
+      and is backed up. The bundled Vault of the `full` preset runs in
+      development mode and loses the key on every restart
+      ([presets](index.md#presets-and-profiles)).
 - [ ] `AUTH_CLIENT_SECRET` is random. Changing it in the environment later has
       no effect; rotate it with `POST /api/client/<id>/rotate-secret`
       ([Tenants and access](tenants-and-access.md#built-in-oauth2-server)).
@@ -32,12 +35,20 @@ again after major upgrades. Each item links to the guide that explains it.
       ([TLS and reverse proxy](tls.md)).
 - [ ] The backend port is reachable only through the reverse proxy
       (`EUDIPLO_BIND_ADDRESS=127.0.0.1` in Compose).
+- [ ] RustFS (ports 9000 and 9001) and Vault (8200) are not reachable from other
+      hosts. The current Compose file binds them to `EUDIPLO_BIND_ADDRESS` like
+      the backend. Older Compose files, including the `eudiplo.compose.yaml` of
+      existing CLI projects, publish them on all interfaces: remove those
+      `ports:` entries or block the ports in a firewall in front of the host
+      ([Compose](docker-compose.md#services)).
 - [ ] `CORS_ORIGINS` lists exactly the origins of the web client and of your own
       frontends that call `/api/*` from the browser, for example
       `CORS_ORIGINS=https://console.example.com`. Protocol endpoints stay open.
 - [ ] The reverse proxy, API gateway or WAF rate-limits the token, PAR and
       credential endpoints and the management API; EUDIPLO has no built-in rate
-      limiting. Where possible, restrict `/api/*` to known networks.
+      limiting. Where possible, restrict `/api/*` to known networks, and
+      exclude the WAF rules that block wallet requests
+      ([Web application firewall](waf.md)).
 - [ ] `OUTBOUND_URL_ALLOW_HTTP` and `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` stay
       `false` (the default since 9.0). Webhooks, attribute providers, metadata,
       trust lists, status lists, federation entities, external authorization
@@ -74,6 +85,12 @@ again after major upgrades. Each item links to the guide that explains it.
       [Registration certificates](../trust/registration-certificates.md)).
 - [ ] No `SKIP_*` flag is set; the startup log lists active ones
       ([Skip flags](../reference/environment-variables.md#skip-flags)).
+- [ ] Outside the container image, for example with `node dist/main.js` from a
+      source build, `NODE_ENV=production` is set. Otherwise EUDIPLO skips TLS
+      certificate checks when it fetches status lists, trust lists and
+      federation entity configurations, returns internal error messages to API
+      callers, and `LOG_LEVEL` defaults to `debug` instead of `warn`
+      ([Environment variables](../reference/environment-variables.md#general)).
 - [ ] Issuance configurations require DPoP and wallet attestation where your use
       case demands it ([Authorization servers](../issuance/authorization-servers.md)).
 
@@ -115,7 +132,9 @@ Back up all of these together; a restore needs every part:
 - [ ] Metrics, traces and logs reach your monitoring, and someone receives the
       alerts ([Monitoring](monitoring.md)).
 - [ ] `eudiplo doctor --strict` passes, also as a scheduled check with
-      `EUDIPLO_CLIENT_ID` and `EUDIPLO_CLIENT_SECRET` set ([CLI](cli.md#check-an-instance-with-doctor)):
+      `EUDIPLO_CLIENT_ID` and `EUDIPLO_CLIENT_SECRET` set ([CLI](cli.md#check-an-instance-with-doctor)).
+      With the root client the KMS check is skipped; a tenant client with
+      `issuance:manage` checks the KMS providers as well:
 
 ```bash
 eudiplo doctor --instance production --strict

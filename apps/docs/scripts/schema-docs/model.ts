@@ -117,3 +117,23 @@ export function buildSchemaModel(schema: z.ZodType): SchemaField {
         true,
     );
 }
+
+/**
+ * Replaces the description of fields by path (`a.b`; arrays and nullable
+ * wrappers are crossed implicitly). Throws for a path that does not exist, so
+ * a renamed field cannot leave a stale override behind.
+ */
+export function overrideDescriptions(model: SchemaField, descriptions: Record<string, string>): SchemaField {
+    for (const [path, description] of Object.entries(descriptions)) {
+        let field: SchemaField | undefined = model;
+        for (const name of path.split(".")) {
+            while (field?.items) field = field.items;
+            field = field?.properties?.[name];
+        }
+        if (!field) {
+            throw new Error(`Description override for unknown field "${path}"`);
+        }
+        field.description = description;
+    }
+    return model;
+}

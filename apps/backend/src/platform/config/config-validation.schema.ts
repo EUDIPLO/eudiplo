@@ -17,7 +17,12 @@ export const CONFIG_VALIDATION_SCHEMA = Joi.object({
     CONFIG_FOLDER: Joi.string()
         .default(resolve(currentDir, "../../../../../assets/config"))
         .description("Path to config import folder")
-        .meta({ group: "config", order: 40 }),
+        .meta({
+            group: "config",
+            order: 40,
+            defaultText:
+                "`assets/config` of the repository; the container image sets `/app/config/config`",
+        }),
     CONFIG_VARIABLE_STRICT: Joi.alternatives()
         .try(Joi.string().valid("abort", "skip", "ignore"), Joi.boolean())
         .default("skip")

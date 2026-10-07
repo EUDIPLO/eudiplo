@@ -36,5 +36,5 @@ The backend package also has `start` (no watch) and `start:debug` (watch with th
 
 - Run the checks of the packages you touched: `pnpm run lint`, `pnpm run format:check` and the relevant tests.
 - Sign off every commit (`git commit -s`) and use [Conventional Commits](https://www.conventionalcommits.org/).
-- A breaking change needs a `!` or a `BREAKING CHANGE:` footer and an entry in the [upgrade guide](../upgrade/index.md) of the next major.
+- A breaking change needs a `!` in the header **and** a `BREAKING CHANGE:` footer (only the footer triggers the major release, see [Releases](releases.md)) and an entry in the [upgrade guide](../upgrade/index.md) of the next major.
 - Update the documentation page that owns the behavior you changed.

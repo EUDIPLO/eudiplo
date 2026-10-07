@@ -78,7 +78,7 @@ export class ConfiguredCredentialClaimsProvider
             return undefined;
         }
 
-        return this.remoteClaims.fetchClaims({
+        const result = await this.remoteClaims.fetchClaims({
             webhook,
             session: session.id,
             ...(session.reference ? { reference: session.reference } : {}),
@@ -86,6 +86,15 @@ export class ConfiguredCredentialClaimsProvider
             identity,
             credentials,
         });
+        // Sources are not merged: an answer without claims for this
+        // configuration fails instead of falling back to the static defaults.
+        if (!result.deferred && !isClaimsObject(result.claims)) {
+            throw new CredentialClaimsResolutionError(
+                "claims_missing",
+                `The claim source returned no claims for credential configuration '${credentialConfigurationId}'`,
+            );
+        }
+        return result;
     }
 
     private async resolveAttributeProvider(
@@ -104,4 +113,8 @@ export class ConfiguredCredentialClaimsProvider
         }
         return { url: provider.url, auth: provider.auth };
     }
+}
+
+function isClaimsObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
 }

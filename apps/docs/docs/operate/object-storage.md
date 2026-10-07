@@ -45,10 +45,12 @@ region, network) stops the startup with a message. The check needs object-level
 read permission only, not `s3:ListBucket`.
 
 The bucket does not have to be public: wallets and browsers download files
-through the backend. Uploads through the API set the `public-read` ACL. If your
-bucket has ACLs disabled (on AWS the default object ownership
-*Bucket owner enforced*), such uploads fail with `AccessControlListNotSupported`;
-allow ACLs on the bucket or use a provider that ignores them. The bundled
+through the backend. Every write sets the `public-read` ACL: uploads through the
+API and the images imported from tenant config folders and configuration
+bundles. If your bucket has ACLs disabled (on AWS the default object ownership
+*Bucket owner enforced*), these writes fail with `AccessControlListNotSupported`,
+so uploads and imports that contain images fail; allow ACLs on the bucket or use
+a provider that ignores them. The bundled
 `rustfs-init` job creates `S3_BUCKET` and grants anonymous `s3:GetObject`;
 remove that policy if the bucket must stay private.
 
@@ -70,4 +72,4 @@ the database; deleting a tenant deletes its files.
 To move to another storage driver, copy the objects with their keys (for local
 storage the files and their `.meta` files) and switch the variables. Moving
 existing MinIO data to RustFS is described in the
-[upgrade guide](../upgrade/index.md).
+[upgrade guide](../upgrade/8.x-to-9.0.md#bundled-object-storage-minio-replaced-by-rustfs).

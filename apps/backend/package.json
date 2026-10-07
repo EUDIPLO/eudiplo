@@ -35,8 +35,7 @@
         "test:oidf": "vitest run --config ./test/vitest.oidf.config.ts",
         "registrar": "openapi-ts",
         "typeorm": "tsx ./node_modules/typeorm/cli.js -d ./src/database/data-source.ts",
-        "migration:generate": "pnpm typeorm migration:generate ./src/database/migrations/$npm_config_name",
-        "migration:create": "pnpm typeorm migration:create ./src/database/migrations/$npm_config_name",
+        "migration:create": "tsx ./node_modules/typeorm/cli.js migration:create",
         "migration:run": "pnpm typeorm migration:run",
         "migration:revert": "pnpm typeorm migration:revert",
         "migration:show": "pnpm typeorm migration:show"
