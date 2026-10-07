@@ -58,6 +58,18 @@ describe('CredentialConfigCreateComponent', () => {
     expect(save).toHaveBeenCalledOnce();
   });
 
+  it('omits display images without a URI and keeps set ones', () => {
+    basics();
+    component.displayConfigs.at(0).patchValue({
+      name: 'Membership',
+      description: 'Member card',
+      logo: { uri: 'https://example.com/logo.png' },
+    });
+    const [display] = (component as any).buildConfigurationPayload().config.display;
+    expect(display.logo).toEqual({ uri: 'https://example.com/logo.png' });
+    expect(display).not.toHaveProperty('background_image');
+  });
+
   it('keeps status management on while Single Active Credential is enabled', () => {
     basics();
     component.displayConfigs.at(0).patchValue({ name: 'Membership', description: 'Member card' });

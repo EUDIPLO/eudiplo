@@ -1072,7 +1072,7 @@ export class CredentialConfigCreateComponent implements OnInit {
 
     formValue.config = {
       format: formValue.format,
-      display: formValue.displayConfigs,
+      display: this.buildDisplayPayload(formValue.displayConfigs),
       scope: formValue.scope || undefined,
       proofTypesSupported:
         formValue.proofTypesSupported?.length > 0
@@ -1216,6 +1216,15 @@ export class CredentialConfigCreateComponent implements OnInit {
 
     const parsed = JSON.parse(value);
     return mode === 'extract' ? extractSchema(value) : parsed;
+  }
+
+  /** Drops display images without a URI: the API requires `uri` when an image is set. */
+  private buildDisplayPayload(displays: any[] | undefined): any[] {
+    return (displays ?? []).map(({ background_image, logo, ...display }: any) => ({
+      ...display,
+      ...(background_image?.uri ? { background_image } : {}),
+      ...(logo?.uri ? { logo } : {}),
+    }));
   }
 
   private buildFieldsPayload(rawFields: any[]): ClaimFieldDefinitionDto[] {

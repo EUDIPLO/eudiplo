@@ -838,7 +838,11 @@ export class IssuanceConfigCreateComponent implements OnInit {
 
     return {
       batchSize: formValue.batchSize,
-      display: formValue.display,
+      // The API requires `uri` when a logo is set.
+      display: (formValue.display ?? []).map(({ logo, ...display }: any) => ({
+        ...display,
+        ...(logo?.uri ? { logo } : {}),
+      })),
       dPopRequired: formValue.dPopRequired,
       credentialResponseEncryption: formValue.credentialResponseEncryption ?? false,
       credentialRequestEncryption: formValue.credentialRequestEncryption ?? false,

@@ -93,6 +93,13 @@ describe('issuer settings guided setup', () => {
     expect(service.saveConfiguration).not.toHaveBeenCalled();
   });
 
+  it('omits a display logo without a URI', async () => {
+    await component.loadConfigForEdit();
+    component.onSubmit();
+    const [payload] = service.saveConfiguration.mock.calls[0];
+    expect(payload.display).toEqual([{ name: 'Example Issuer', locale: 'en-US' }]);
+  });
+
   it('explicitly clears disabled trust settings and resets the PIN limit', async () => {
     service.getConfig.mockResolvedValue({
       ...config,
