@@ -8,6 +8,10 @@ import type { WebhookEndpointRepository } from "../../../configuration/webhook-e
 import type { CredentialNotificationPublisher } from "../ports/credential-notification-publisher.js";
 import type { RecordCredentialNotification } from "./record-credential-notification.js";
 
+/**
+ * Records the wallet's event and changes the session status before publishing
+ * the event, so that delivery is best effort like for presentation results.
+ */
 export class HandleCredentialNotification {
     constructor(
         private readonly record: Pick<RecordCredentialNotification, "execute">,
@@ -22,29 +26,36 @@ export class HandleCredentialNotification {
         session: SessionData,
         notificationId: string,
         event: Notification["event"],
-    ): Promise<void> {
+        eventDescription?: string,
+    ): Promise<{ publicationFailed: boolean; publicationError?: unknown }> {
         const notification = await this.record.execute(
             session,
             notificationId,
             event,
+            eventDescription,
         );
-        if (session.webhookEndpointId) {
-            const endpoint = await this.endpoints.findForTenant(
-                session.tenantId,
-                session.webhookEndpointId,
-            );
-            if (endpoint)
-                await this.publisher.publish(
-                    { url: endpoint.url, auth: endpoint.auth },
-                    session,
-                    notification,
-                );
-        }
+        const endpoint = session.webhookEndpointId
+            ? await this.endpoints.findForTenant(
+                  session.tenantId,
+                  session.webhookEndpointId,
+              )
+            : null;
         await this.state.execute(
             session,
             event === "credential_accepted"
                 ? SessionStatus.Completed
                 : SessionStatus.Failed,
         );
+        if (!endpoint) return { publicationFailed: false };
+        try {
+            await this.publisher.publish(
+                { url: endpoint.url, auth: endpoint.auth },
+                session,
+                notification,
+            );
+            return { publicationFailed: false };
+        } catch (publicationError) {
+            return { publicationFailed: true, publicationError };
+        }
     }
 }

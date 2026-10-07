@@ -601,7 +601,9 @@ export class Oid4vciService {
     /**
      * Store the notification in the session based on the notification id.
      * The session is resolved from the access token like at the credential
-     * endpoint, and the notification id must have been issued in it.
+     * endpoint, and the notification id must have been issued in it. The
+     * session's webhook endpoint gets the event best effort: a failed
+     * delivery is logged and does not fail the request.
      * @throws CredentialNotificationNotFound when the token has no session or
      * the notification id was not issued in it.
      * @param req
@@ -670,22 +672,39 @@ export class Oid4vciService {
             stage: "notification",
         };
 
-        try {
-            await this.handleCredentialNotification.execute(
+        const outcome = await this.handleCredentialNotification
+            .execute(
                 session,
                 body.notification_id,
                 body.event,
+                body.event_description,
+            )
+            .catch((error: unknown) => {
+                this.auditLogger.logError(
+                    logContext,
+                    error as Error,
+                    "Failed to handle notification",
+                    {
+                        notificationId: body.notification_id,
+                    },
+                );
+                throw error;
+            });
+        // The event is recorded and the status changed; like presentation
+        // results, a failed webhook delivery does not fail the request.
+        if (outcome.publicationFailed) {
+            const error = outcome.publicationError as Error;
+            this.logger.warn(
+                `[${tenantId}] OID4VCI notification webhook delivery failed: sessionId=${session.id}, notificationId=${body.notification_id}, error=${error?.message ?? "unknown"}`,
             );
-        } catch (error) {
             this.auditLogger.logError(
                 logContext,
-                error as Error,
-                "Failed to handle notification",
+                error,
+                "Failed to deliver the notification webhook",
                 {
                     notificationId: body.notification_id,
                 },
             );
-            throw error;
         }
     }
 

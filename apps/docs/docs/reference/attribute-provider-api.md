@@ -31,6 +31,7 @@ EUDIPLO sends `POST <url>` with `Content-Type: application/json` and, for `apiKe
 ```json
 {
     "session": "a6318799-dff4-4b60-9d1d-58703611bd23",
+    "reference": "order-4711",
     "credential_configuration_id": "membership",
     "identity": {
         "iss": "https://keycloak.example.com/realms/eudiplo",
@@ -54,6 +55,7 @@ EUDIPLO sends `POST <url>` with `Content-Type: application/json` and, for `apiKe
 | Field | Present | Description |
 | --- | --- | --- |
 | `session` | always | Issuance session ID. It equals the `session` returned when the offer was created. |
+| `reference` | when set | Your [reference](../issuance/credential-offers.md#your-own-reference) of the offer. |
 | `credential_configuration_id` | always | Credential configuration the wallet requested. |
 | `identity` | always | `iss`, `sub` and `token_claims` of the authorization behind the wallet's access token. What they contain per flow is listed in [Claims](../issuance/claims.md#identity-passed-to-attribute-providers). |
 | `credentials` | after a presentation | Verified claims the wallet presented to an [OID4VP authorization server](../issuance/authorization-servers.md#oid4vp) or in an [interactive authorization](../issuance/interactive-authorization.md) presentation step. One entry per credential query ID of the presentation's DCQL query; `values` holds the disclosed claims of each matching credential (several with `multiple: true`). |

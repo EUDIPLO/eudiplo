@@ -46,14 +46,14 @@ Each credential response contains a `notification_id`. The wallet sends it back 
 | `credential_failure` | The wallet could not process it. | `failed` |
 | `credential_deleted` | The user deleted it. | `failed` |
 
-EUDIPLO then posts the event to the webhook endpoint. The payload and the authentication options are described in [Webhooks](../reference/webhooks.md). Delivery is not retried; a failed delivery fails the wallet's notification request and is logged. Use the notification ID to detect duplicates.
+EUDIPLO records the event and sets the session status first, then posts the event to the webhook endpoint. The payload and the authentication options are described in [Webhooks](../reference/webhooks.md). Delivery is best effort and not retried: a failed delivery is logged and changes neither the session status nor the answer to the wallet. Use the notification ID to detect duplicates.
 
-You can also read the recorded events from `notifications` of `GET /api/session/{id}`.
+You can also read the recorded events from `notifications` of `GET /api/session/{id}`, for example to catch up after a failed delivery.
 
 ## Endpoint behavior
 
 - The request must carry the access token of the issuance, with DPoP when the issuance configuration sets `dPopRequired`. The endpoint works with tokens of every authorization server type: built-in, external, chained and OID4VP.
-- The body is strict: only `notification_id` and `event` are accepted.
+- The body must contain `notification_id` and `event`. The wallet may add `event_description`, a text of printable ASCII characters without `"` and `\` (OID4VCI `%x20-21 / %x23-5B / %x5D-7E`); EUDIPLO stores it with the event as `eventDescription` and forwards it in the webhook. Other parameters are ignored. A body that breaks these rules answers `400`.
 - A successful request answers `201` with an empty body.
 - Since 9.0, a `notification_id` that was not issued for the token's session answers `400` with `{"error": "invalid_notification_id"}`. A missing or invalid access token answers `401` with `invalid_token`.
 

@@ -30,6 +30,41 @@ describe("RecordCredentialNotification", () => {
         );
     });
 
+    it("stores the event description with its event only", async () => {
+        const session = {
+            id: "session-1",
+            tenantId: "tenant-1",
+            notifications: [
+                { id: "notification-1", credentialConfigurationId: "pid" },
+            ],
+        } as SessionData;
+        const useCase = new RecordCredentialNotification({
+            updateForTenant: vi.fn().mockResolvedValue(1),
+        });
+
+        await expect(
+            useCase.execute(
+                session,
+                "notification-1",
+                "credential_failure",
+                "Storage full",
+            ),
+        ).resolves.toEqual({
+            id: "notification-1",
+            credentialConfigurationId: "pid",
+            event: "credential_failure",
+            eventDescription: "Storage full",
+        });
+
+        const accepted = await useCase.execute(
+            session,
+            "notification-1",
+            "credential_accepted",
+        );
+        expect(accepted.event).toBe("credential_accepted");
+        expect(accepted.eventDescription).toBeUndefined();
+    });
+
     it("fails without persisting when the notification is unknown", async () => {
         const updateForTenant = vi.fn();
         const useCase = new RecordCredentialNotification({ updateForTenant });

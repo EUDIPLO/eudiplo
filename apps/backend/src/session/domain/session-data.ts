@@ -51,6 +51,8 @@ interface SessionTransactionData {
 export interface Notification {
     id: string;
     event?: NotificationEvent;
+    /** OID4VCI `event_description` the wallet sent with the latest event. */
+    eventDescription?: string;
     credentialConfigurationId: string;
 }
 /** Read-only tenant projection retained for the existing session detail response. */
