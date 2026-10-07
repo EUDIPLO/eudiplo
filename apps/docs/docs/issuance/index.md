@@ -15,7 +15,7 @@ EUDIPLO issues SD-JWT VC (`dc+sd-jwt`) and mDOC (`mso_mdoc`) credentials over Op
 | The user completes steps in the wallet (presentation, web form) before issuance; experimental | `authorization_code` | `built-in` with interactive authorization | Attribute provider, which receives the presented claims | [Interactive authorization](interactive-authorization.md) |
 | The wallet starts without an offer | none (wallet-initiated) | `built-in` | Attribute provider or static defaults | [Built-in](authorization-servers.md#built-in) |
 
-An attribute provider is only mandatory for tokens of an external authorization server; in all other flows it is the recommended source for user-specific claims. To issue after a manual review, let the attribute provider [defer the credential](deferred-issuance.md).
+Only tokens of an external authorization server need a dynamic claim source (offer claims or an attribute provider); in all other flows, static defaults are accepted, and an attribute provider is the recommended source for user-specific claims. To issue after a manual review, let the attribute provider [defer the credential](deferred-issuance.md).
 
 ## Build an issuer
 

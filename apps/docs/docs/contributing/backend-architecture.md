@@ -132,7 +132,7 @@ Protocol endpoints (OID4VCI, OID4VP, ISO 18013-7, `.well-known`, public status a
 
 ### A database migration
 
-1. Change the entity, then create the migration from `apps/backend`: `pnpm migration:generate --name=…` or `pnpm migration:create --name=…` (commands: [Development setup](./development-setup.md#database-migrations)).
+1. Change the entity, then create the migration from `apps/backend` with `pnpm migration:create src/database/migrations/<Name>` (commands: [Development setup](./development-setup.md#database-migrations)).
 2. Make it work on SQLite and PostgreSQL and idempotent: check with `queryRunner.getTable()` / `findColumnByName()` before changing a table, as the existing migrations do. Implement `down()` where possible.
 3. Export the class from `src/database/migrations/index.ts`; migrations are loaded from that index, not by file glob.
 4. Cover data changes with a spec (see `src/database/*-migration.spec.ts`) and run `test/migrations.e2e-spec.ts`.

@@ -202,7 +202,7 @@ curl -s "$EUDIPLO/api/session/<id>" -H "Authorization: Bearer $TOKEN" | jq '{sta
 ## Step 6: Handle failed and expired sessions
 
 1. Create another presentation request and **decline** it in the wallet.
-2. The receiver prints `failed <session> access_denied`. The session has `status: failed` and `failureCode: access_denied`, and a same-device redirect carries `error=access_denied` instead of `response_code`.
+2. The receiver prints `failed <session> access_denied Wallet error: access_denied` (some wallets add a description after the code). The session has `status: failed` and `failureCode: access_denied`, and a same-device redirect carries `error=access_denied` instead of `response_code`.
 3. Create one more request and let it sit for more than 300 seconds. When the wallet tries it, it gets "The session has expired".
 
 Failure webhooks never contain credentials. A periodic cleanup job writes the `expired` status later and sends no webhook, so treat a session whose `expiresAt` has passed as expired. Failure codes are listed in [Session outcome](../reference/session-outcome.md#failure-codes).

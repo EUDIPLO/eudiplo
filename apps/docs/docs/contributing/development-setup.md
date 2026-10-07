@@ -85,14 +85,13 @@ Commit the regenerated files with the change that caused them. Format snapshots 
 The backend applies pending migrations on startup (`DB_MIGRATIONS_RUN=true`, the default). To work with migrations manually, run from `apps/backend`:
 
 ```bash
-pnpm migration:generate --name=AddMyColumn   # from entity changes
-pnpm migration:create --name=AddMyColumn     # empty migration
+pnpm migration:create src/database/migrations/AddMyColumn   # new, empty migration
+pnpm migration:show                                         # applied and pending migrations
 pnpm migration:run
-pnpm migration:revert                        # reverts the last migration
-pnpm migration:show
+pnpm migration:revert                                       # reverts the last migration
 ```
 
-The TypeORM CLI reads `apps/backend/.env` and the root `.env` (`src/database/data-source.ts`). How to write a migration that works on SQLite and PostgreSQL: [Backend architecture](./backend-architecture.md#a-database-migration).
+The TypeORM CLI reads `apps/backend/.env` and the root `.env` and uses the same database defaults as the backend (`src/database/data-source.ts`); with SQLite, that is `tmp/service.db` in the repository. Migrations are written by hand, because each one must work on SQLite and PostgreSQL; there is no generator. How to write one: [Backend architecture](./backend-architecture.md#a-database-migration).
 
 ## Iterate on tenant configuration
 

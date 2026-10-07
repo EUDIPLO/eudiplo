@@ -10,6 +10,13 @@ This page explains what EUDIPLO does during a presentation: the message flow, wh
 ## Flow
 
 ```mermaid
+---
+config:
+  sequence:
+    wrap: true
+    width: 150
+    actorMargin: 50
+---
 sequenceDiagram
     participant BE as Your backend
     participant E as EUDIPLO

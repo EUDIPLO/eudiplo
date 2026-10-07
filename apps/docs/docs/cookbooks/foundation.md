@@ -46,7 +46,7 @@ A phone cannot use your computer's `localhost`: it would connect to the phone it
 ngrok http 3000
 ```
 
-Keep this terminal open. Below, `https://YOUR-HTTPS-HOST` stands for the forwarding URL, without a trailing slash. Use this exact address from now on: issued credentials and offers contain URLs that point back to it. If the address changes later, update the deployment and issue a fresh credential.
+Keep this terminal open. Below, `https://YOUR-HTTPS-HOST` stands for the forwarding URL, without a trailing slash. Use this exact address from now on: issued credentials and offers contain URLs that point back to it. If the address changes later, update the deployment as described under [Troubleshooting](#troubleshooting) and issue a fresh credential.
 
 **Checkpoint:** the tunnel shows an HTTPS forwarding URL. Requests to it return a gateway error until EUDIPLO runs.
 
@@ -106,7 +106,7 @@ Check your wallet's row in [Wallet and registrar requirements](../trust/wallet-r
 | ----------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `init` fails with "port is already allocated"   | The demo or another stack uses port `3000` or `4200`        | Stop the other stack (`eudiplo down --instance local` for the demo), then run `eudiplo up --instance cookbook`.                                             |
 | Local health works, phone health fails          | Tunnel stopped, wrong target port or an interstitial page   | Restart the tunnel to port `3000`; make sure the phone gets the JSON directly.                                                                              |
-| Offers or metadata contain `localhost` or an old tunnel URL | `PUBLIC_URL` in `.eudiplo.env` is wrong              | Edit `PUBLIC_URL`, run `eudiplo up --instance cookbook` (Compose recreates the backend with the new environment), then create a new offer.                   |
+| Offers or metadata contain `localhost` or an old tunnel URL | `PUBLIC_URL` in `.eudiplo.env` is wrong              | Edit `PUBLIC_URL`, run `eudiplo up --instance cookbook` (Compose recreates the backend with the new environment), change the `url` of the `cookbook` instance in `~/.eudiplo/config.json` (the CLI commands use it), then create a new offer. |
 
 For login errors, `eudiplo: command not found` and other common problems, see [Troubleshooting](../troubleshooting.md).
 

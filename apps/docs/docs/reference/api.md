@@ -75,10 +75,11 @@ const eudiplo = new EudiploClient({
   clientSecret: process.env.EUDIPLO_CLIENT_SECRET!,
 });
 
-const { uri, sessionId } = await eudiplo.createPresentationRequest({
+const { crossDeviceUri, sessionId } = await eudiplo.createPresentationRequest({
   configId: "membership-check",
 });
-// Show `uri` as a QR code, then wait for a terminal status.
+// Show `crossDeviceUri` as a QR code (on the phone itself, open `uri`),
+// then wait for a terminal status.
 const session = await eudiplo.waitForSession(sessionId);
 ```
 

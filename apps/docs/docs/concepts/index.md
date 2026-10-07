@@ -21,26 +21,19 @@ EUDIPLO is a self-hosted issuer and verifier service. Your backend talks to its 
 ## Architecture
 
 ```mermaid
-flowchart LR
-    subgraph yours["Your systems"]
-        BE[Your backend]
-        RX[Webhook receiver<br/>attribute provider]
-    end
+flowchart TB
+    BE[Your backend]
     W[EUDI Wallet]
     subgraph eudiplo[EUDIPLO]
         API["Management API<br/>/api/..."]
         PROTO["Protocol endpoints<br/>/issuers/..., /presentations/..."]
     end
-    subgraph backends[Backends]
-        DB[("Database<br/>SQLite, PostgreSQL")]
-        KMS["Key management<br/>db, Vault, AWS KMS,<br/>PKCS#11, CSC, HTTP"]
-        ST["Object storage<br/>local, S3"]
-        IAM["API authentication<br/>built-in OAuth 2.0, Keycloak"]
-    end
+    RX["Your webhook receiver<br/>and attribute provider"]
+    B["Pluggable backends: database, key management,<br/>object storage, API authentication"]
     BE -->|"configure, create offers<br/>and requests, read sessions"| API
     W <-->|"OID4VCI, OID4VP"| PROTO
     eudiplo -->|"results, notifications,<br/>claim requests"| RX
-    eudiplo --- backends
+    eudiplo --- B
 ```
 
 - **Two API surfaces.** Management endpoints live under `/api` and require an OAuth 2.0 client token. Protocol endpoints are public and secured by the protocols themselves (see [API reference](../reference/api.md)).
@@ -68,30 +61,38 @@ flowchart LR
 
 ## How entities relate
 
-All entities are scoped to the tenant, so the tenant is left out of the diagram. `o|` marks an optional reference, `o{` zero or more.
+All entities are scoped to the tenant, so the tenant is left out of the diagrams. `o|` marks an optional reference, `o{` zero or more.
+
+Issuance:
 
 ```mermaid
 erDiagram
     Client }o--o{ CredentialConfig : "may offer"
-    Client }o--o{ PresentationConfig : "may request"
-    IssuanceConfig ||--o{ AuthorizationServer : contains
+    Session }o--o{ CredentialConfig : offers
     CredentialConfig }o--o| KeyChain : "signs with"
     CredentialConfig }o--o| AttributeProvider : "gets claims from"
     StatusList }o--o| CredentialConfig : "bound to"
     StatusList }o--o| KeyChain : "signed with"
+    Session }o--o{ StatusList : "has entries in"
+    Session }o--o| WebhookEndpoint : notifies
+```
+
+Presentation:
+
+```mermaid
+erDiagram
+    Client }o--o{ PresentationConfig : "may request"
     PresentationConfig }o--o| KeyChain : "signs requests with"
     PresentationConfig }o--o| WebhookEndpoint : "reports to"
     PresentationConfig }o--o{ TrustList : "trusts issuers of"
     TrustList }o--|| KeyChain : "signed with"
     RegistrarConfig ||--o{ PresentationConfig : "certifies"
-    Session }o--o{ CredentialConfig : offers
     Session }o--o| PresentationConfig : "created from"
     Session }o--o| WebhookEndpoint : notifies
-    Session }o--o{ StatusList : "has entries in"
 ```
 
 - **Key chains by usage.** A configuration that names no key chain uses a key chain of the required usage type from the tenant, for example an `attestation` key chain to sign credentials.
-- **Offers name the credentials.** The issuance configuration does not list credential configurations. Each offer names the credential configurations it offers, and the wallet requests them by `credential_configuration_id`.
+- **Offers name the credentials.** The issuance configuration holds the tenant's issuer settings and authorization servers; it does not list credential configurations. Each offer names the credential configurations it offers, and the wallet requests them by `credential_configuration_id`.
 - **Shared definitions.** Webhook endpoints and attribute providers are defined once per tenant and referenced by ID from any number of configurations and offers.
 - **Sessions refer to configurations.** A session stores what it offers or requests and is evaluated against the current configuration when the wallet arrives. Internal bookkeeping (nonces, DPoP proof IDs, deferred transactions, session logs, audit logs) is not shown.
 

@@ -7,11 +7,8 @@ This directory contains TypeORM database migrations for the EUDIPLO backend.
 Run these commands from the `apps/backend` directory:
 
 ```bash
-# Generate a new migration based on entity changes
-pnpm migration:generate --name=MigrationName
-
-# Create an empty migration
-pnpm migration:create --name=MigrationName
+# Create an empty migration (write it by hand: it must work on SQLite and PostgreSQL)
+pnpm migration:create src/database/migrations/MigrationName
 
 # Run pending migrations
 pnpm migration:run

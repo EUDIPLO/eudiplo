@@ -17,7 +17,11 @@ under one 256-bit key, which the backend loads at startup from
 | Sessions                           | `credentials` (verified presentations), `credentialPayload` (offer claims), `offer`, `auth_queries`, `responseEncryptionPrivateJwk` (per-request key that decrypts the wallet response) |
 | Interactive authorization sessions | `authorizationDetails`, `presentationData`, `completedStepsData`                         |
 
-Public keys, certificates and configuration are stored in plain text. Keys in an
+Public keys, certificates and configuration are stored in plain text. This
+includes the secrets inside the configuration: authentication headers of webhook
+endpoints and attribute providers, the upstream client secret of a chained
+authorization server, and the registrar password and client secret. Protect
+database backups and dumps like these secrets. Keys in an
 external [KMS](kms.md) never reach the database. Values written before
 encryption was introduced are still read and are encrypted on their next write.
 
@@ -94,7 +98,8 @@ az keyvault secret set --vault-name myvault --name eudiplo-encryption-key \
 Credentials come from `DefaultAzureCredential` (managed identity, or
 `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_CLIENT_SECRET`).
 
-**Checkpoint:** the startup log shows `Initializing encryption with key provider: <source>`,
+**Checkpoint:** with `LOG_LEVEL=info` (the image logs only warnings by default),
+the startup log shows `Initializing encryption with key provider: <source>`,
 and for `vault`, `aws` and `azure` a short key fingerprint. All replicas must
 log the same fingerprint.
 
