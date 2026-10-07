@@ -109,8 +109,10 @@ eudiplo down                                # add --volumes to delete the data
 ```
 
 `logs` prints and exits unless you pass `--follow`. `--service` must name a
-service of the project. Arguments after the options are passed to
-`docker compose`, for example `eudiplo down --volumes --remove-orphans`.
+service of the project. Options that `up`, `down`, `ps`, `logs`, `restart` and
+`pull` do not define, and everything after `--`, are passed to
+`docker compose`, for example `eudiplo down --volumes --remove-orphans`. Write
+`--volumes` in full: `-v` prints the CLI version.
 
 ### Upgrade the application
 
@@ -162,6 +164,8 @@ eudiplo restart --instance production --service backend
   `kubectl rollout restart` and waits for the rollout (`--no-wait` returns
   immediately).
 - `--read-only` registers an instance on which `restart` is refused.
+- Options that `ps`, `logs` and `restart` do not define are passed to
+  `kubectl`, for example `--timestamps` for `logs`.
 - Set `EUDIPLO_KUBECTL` to use a `kubectl` binary that is not on the `PATH`.
 
 `eudiplo doctor` checks the permissions with `kubectl auth can-i`. A Role for

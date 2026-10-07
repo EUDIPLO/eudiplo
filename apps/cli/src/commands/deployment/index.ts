@@ -2,6 +2,7 @@ import { Command } from "commander";
 import type { CommandContext } from "../../types.js";
 import { loadCliState, parsedArgs, type SetExitCode } from "../shared.js";
 import { runDriverCommand } from "./action.js";
+import { runtimeArguments } from "./pass-through.js";
 
 type DriverCommand = "up" | "down" | "logs" | "ps" | "restart" | "pull";
 
@@ -31,8 +32,11 @@ export function createDeploymentCommands(
                 .description(descriptions[name])
                 .argument(
                     "[args...]",
-                    "additional arguments passed to the deployment runtime",
+                    "additional arguments and options passed to the deployment runtime",
                 )
+                // Options this command does not define belong to Compose or
+                // kubectl; runtimeArguments still rejects misspelled ones.
+                .allowUnknownOption()
                 .option("--instance <name>", "select a configured instance");
             if (serviceScoped.has(name)) {
                 command.option(
@@ -56,12 +60,13 @@ export function createDeploymentCommands(
                 );
             }
             return command.action(async (args, options) => {
+                const runtimeArgs = runtimeArguments(command, args);
                 const { config } = await loadCliState(context);
                 setExitCode(
                     await runDriverCommand(
                         config,
                         name,
-                        parsedArgs(name, undefined, args, options),
+                        parsedArgs(name, undefined, runtimeArgs, options),
                         context,
                     ),
                 );
