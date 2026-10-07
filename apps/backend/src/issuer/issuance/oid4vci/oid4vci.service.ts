@@ -149,6 +149,15 @@ export class Oid4vciService {
                 tokenPayload,
             );
         } catch (error) {
+            // Denied like claims that do not match the configuration.
+            if (
+                error instanceof CredentialClaimsResolutionError &&
+                error.code === "claims_missing"
+            )
+                throw new CredentialRequestException(
+                    "credential_request_denied",
+                    error.message,
+                );
             if (error instanceof CredentialClaimsResolutionError)
                 throw new ConflictException(error.message);
             if (error instanceof CredentialSessionAuthorizationDenied)

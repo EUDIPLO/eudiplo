@@ -57,6 +57,11 @@ async function resolveCredentialOffer(offerUri: string): Promise<any> {
     return client.resolveCredentialOffer(offerUri);
 }
 
+/** Request body that nock passed to a reply function, as JSON. */
+function asJson(body: unknown): unknown {
+    return typeof body === "string" ? JSON.parse(body) : body;
+}
+
 describe("Issuance - Pre-authorized Code Flow", () => {
     let app: INestApplication<App>;
     let authToken: string;
@@ -1339,6 +1344,44 @@ describe("Issuance - Pre-authorized Code Flow", () => {
             .expect((res) => {
                 expect(res.body.message).toContain("/town: must be string");
             });
+    });
+
+    test("rejects a webhook answer without claims for the credential configuration", async () => {
+        const claimRequests: unknown[] = [];
+        nock("http://localhost:8787")
+            .post("/request")
+            .times(2)
+            .reply((_uri, body) => {
+                claimRequests.push(asJson(body));
+                return [200, { other: { town: "Köln" } }];
+            });
+
+        const offerResponse = await createWebhookOffer("citizen");
+
+        expect(await getCredentialErrorResponse(offerResponse)).toEqual({
+            error: "credential_request_denied",
+            error_description:
+                "The claim source returned no claims for credential configuration 'citizen'",
+        });
+        // One claims request; no second call and no static default.
+        expect(claimRequests).toEqual([
+            expect.objectContaining({ credential_configuration_id: "citizen" }),
+        ]);
+    });
+
+    test("issues the static defaults without a claim source", async () => {
+        const offerResponse = await request(app.getHttpServer())
+            .post("/issuer/offer")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                flow: "pre_authorized_code",
+                response_type: "uri",
+                credentialConfigurationIds: ["citizen"],
+            })
+            .expect(201);
+
+        expect((await getClaims(offerResponse)).town).toBe("BERLIN");
     });
 
     test("pre-authorized flow defaults to built-in authorization server", async () => {

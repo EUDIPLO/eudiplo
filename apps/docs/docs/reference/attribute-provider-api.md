@@ -93,5 +93,6 @@ EUDIPLO answers the wallet with a `transaction_id`. Completing or failing the tr
 ## Errors
 
 - Any non-`2xx` status or network error fails the credential request. The wallet receives HTTP `400` with `invalid_credential_request`; claims that do not match the configuration lead to `credential_request_denied`.
+- A `200` answer without a claims object under the requested credential configuration ID, and without `deferred: true`, fails the credential request with `credential_request_denied`. EUDIPLO does not fall back to the static defaults.
 - EUDIPLO does not retry and sets no timeout of its own. The wallet's credential request waits for your answer, so answer quickly or defer.
 - The provider URL must pass the outbound URL policy: HTTPS and public addresses only, unless `OUTBOUND_URL_ALLOW_HTTP` or `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` is set (both `false` by default since 9.0). See [Webhooks](webhooks.md).

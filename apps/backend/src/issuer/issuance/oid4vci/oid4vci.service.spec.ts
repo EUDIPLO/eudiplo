@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { SessionNotFound } from "../../../session/application/session-errors.js";
+import { CredentialClaimsResolutionError } from "../../configuration/credentials/domain/credential-claims.js";
 import {
     CorrelateCredentialTokenSession,
     CredentialSessionAuthorizationDenied,
@@ -261,6 +262,40 @@ describe("Oid4vciService credential request error mapping", () => {
             error_description:
                 "The access token is not associated with a valid session",
         });
+    });
+
+    it("maps a claim source without claims to credential_request_denied", async () => {
+        const message =
+            "The claim source returned no claims for credential configuration 'pid'";
+        const error = await rejection(
+            setup({
+                resolveSession: () =>
+                    Promise.reject(
+                        new CredentialClaimsResolutionError(
+                            "claims_missing",
+                            message,
+                        ),
+                    ),
+            }).getCredential(request, "tenant"),
+        );
+        expect(protocolError(error)).toEqual({
+            error: "credential_request_denied",
+            error_description: message,
+        });
+
+        // Other resolution errors keep their mapping.
+        const providerRequired = await rejection(
+            setup({
+                resolveSession: () =>
+                    Promise.reject(
+                        new CredentialClaimsResolutionError(
+                            "provider_required",
+                            "provider required",
+                        ),
+                    ),
+            }).getCredential(request, "tenant"),
+        );
+        expect(providerRequired).toBeInstanceOf(ConflictException);
     });
 
     it("propagates SessionNotFound unchanged for the controller to wrap", async () => {
