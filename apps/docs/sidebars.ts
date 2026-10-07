@@ -85,6 +85,7 @@ const sidebars: SidebarsConfig = {
         'operate/docker-compose',
         'operate/kubernetes',
         'operate/tls',
+        'operate/waf',
         'operate/cli',
         'operate/configuration-as-code',
         'operate/tenants-and-access',

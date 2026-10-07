@@ -35,7 +35,7 @@ Management endpoints carry the `/api` prefix, for example `POST /api/issuer/offe
 | `/storage/{key}`                                    | Public files such as credential logos                                |
 | `/health`                                           | Health check                                                         |
 
-When you restrict network access to the management API, keep the wallet-facing paths reachable from the internet.
+When you restrict network access to the management API, keep the wallet-facing paths reachable from the internet; see [Web application firewall](../operate/waf.md).
 
 ## Authentication
 

@@ -92,6 +92,7 @@ it derives the key that decrypts private keys and session data.
 | Topic                                         | Guide                                                         |
 | --------------------------------------------- | ------------------------------------------------------------- |
 | HTTPS, reverse proxy, web client on a subpath | [TLS and reverse proxy](tls.md)                               |
+| WAF rules for wallet and management routes    | [Web application firewall](waf.md)                            |
 | CLI install, instances and drivers            | [CLI](cli.md)                                                 |
 | Export, validate and import configuration     | [Configuration as code](configuration-as-code.md)             |
 | Tenants, API clients, users and SSO           | [Tenants and access](tenants-and-access.md), [Keycloak](keycloak.md) |

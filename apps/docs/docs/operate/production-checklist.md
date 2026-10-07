@@ -37,7 +37,9 @@ again after major upgrades. Each item links to the guide that explains it.
       `CORS_ORIGINS=https://console.example.com`. Protocol endpoints stay open.
 - [ ] The reverse proxy, API gateway or WAF rate-limits the token, PAR and
       credential endpoints and the management API; EUDIPLO has no built-in rate
-      limiting. Where possible, restrict `/api/*` to known networks.
+      limiting. Where possible, restrict `/api/*` to known networks, and
+      exclude the WAF rules that block wallet requests
+      ([Web application firewall](waf.md)).
 - [ ] `OUTBOUND_URL_ALLOW_HTTP` and `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` stay
       `false` (the default since 9.0). Webhooks, attribute providers, metadata,
       trust lists, status lists, federation entities, external authorization
