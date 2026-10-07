@@ -128,8 +128,11 @@ env file. Before asking for confirmation it shows the old and new tags, links
 the upgrade guide for every major version you cross, and warns about downgrades
 and tags it cannot compare, such as `latest`. It then pulls the images and
 recreates the services; if the pull fails, the old tags are restored.
-Non-interactive runs need `--yes`. A customized image line (another registry, a
-digest) is not touched.
+Non-interactive runs need `--yes`. Lines that still point at
+`ghcr.io/openwallet-foundation/` (releases up to 8.1.0) are moved to
+`ghcr.io/eudiplo/`. If a line points at another image (another registry, a
+digest or no tag), `upgrade` stops without changing anything; update that line
+yourself.
 
 Migrations run when the new backend starts and cannot be undone by going back
 to the old tag, so [back up](production-checklist.md#backups) first.
@@ -168,8 +171,9 @@ eudiplo restart --instance production --service backend
   `kubectl`, for example `--timestamps` for `logs`.
 - Set `EUDIPLO_KUBECTL` to use a `kubectl` binary that is not on the `PATH`.
 
-`eudiplo doctor` checks the permissions with `kubectl auth can-i`. A Role for
-the CLI:
+`eudiplo doctor` reads the namespace and checks the permissions with
+`kubectl auth can-i`. `restart` waits with `kubectl rollout status`, which
+watches the deployment (not with `--no-wait`). A Role for the CLI:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -179,6 +183,9 @@ metadata:
   namespace: eudiplo
 rules:
   - apiGroups: [""]
+    resources: ["namespaces"]   # in a Role: only the Role's own namespace
+    verbs: ["get"]
+  - apiGroups: [""]
     resources: ["pods", "pods/log"]
     verbs: ["get", "list"]
   - apiGroups: ["discovery.k8s.io"]
@@ -186,7 +193,7 @@ rules:
     verbs: ["get", "list"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "list", "patch"]   # drop patch for --read-only instances
+    verbs: ["get", "list", "watch", "patch"]   # drop watch and patch for --read-only instances
 ```
 
 ## Check an instance with doctor
