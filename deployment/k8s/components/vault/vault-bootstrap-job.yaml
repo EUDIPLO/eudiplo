@@ -37,7 +37,14 @@ spec:
               until vault status >/dev/null 2>&1; do
                 echo "waiting for Vault..."; sleep 3;
               done
-              vault kv put secret/eudiplo/encryption-key key="$(head -c 32 /dev/urandom | base64)"
+              # Never replace an existing key: the data encrypted with it
+              # would become unreadable. With -cas=0 Vault also refuses the
+              # write if the key exists but could not be read above.
+              if vault kv get -field=key secret/eudiplo/encryption-key >/dev/null 2>&1; then
+                echo "Encryption key exists, leaving it unchanged."
+              else
+                vault kv put -cas=0 secret/eudiplo/encryption-key key="$(head -c 32 /dev/urandom | base64)"
+              fi
           resources:
             requests:
               cpu: "50m"
