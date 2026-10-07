@@ -22,7 +22,9 @@
 #   START_STACK         Auto-start compose stack  (default: true)
 #   COMPOSE_PROFILE     Compose profile to start   (default: standard)
 #   K6_ENV_FILE         Compose env file path      (default:
-#                         deployment/docker-compose/.env)
+#                         deployment/docker-compose/k6.env, which imports the
+#                         demo tenant; relative paths are resolved against the
+#                         current directory)
 #   K6_PROFILE          Load profile              (default: smoke)
 #                         once | smoke | load | stress | spike
 #   PROMETHEUS_RW_URL   If set, metrics are pushed to this Prometheus remote-
@@ -72,11 +74,17 @@ CLIENT_ID="${CLIENT_ID:-test-client}"
 CLIENT_SECRET="${CLIENT_SECRET:-test-client-secret}"
 START_STACK="${START_STACK:-true}"
 COMPOSE_PROFILE="${COMPOSE_PROFILE:-standard}"
-K6_ENV_FILE="${K6_ENV_FILE:-${COMPOSE_DIR}/.env}"
+K6_ENV_FILE="${K6_ENV_FILE:-${COMPOSE_DIR}/k6.env}"
 K6_PROFILE="${K6_PROFILE:-smoke}"
 SUMMARY_DIR="${SUMMARY_DIR:-${SCRIPT_DIR}/results}"
 CLEAN_RESULTS="${CLEAN_RESULTS:-true}"
 PAUSE_BETWEEN="${PAUSE_BETWEEN:-5}"
+
+# The stack is started from COMPOSE_DIR, so resolve a relative env file against
+# the caller's directory first.
+if [[ "${K6_ENV_FILE}" != /* ]]; then
+    K6_ENV_FILE="${PWD}/${K6_ENV_FILE}"
+fi
 
 ALL_SCENARIOS=(api-auth pre-auth-issuance oid4vp-presentation status-list)
 
