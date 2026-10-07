@@ -102,20 +102,30 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: '📖 Reference',
+      link: {
+        type: 'generated-index',
+        title: 'Reference',
+        slug: '/reference',
+        description:
+          'Exact facts to look up: supported standards and wallets, the API and its payloads, configuration formats, environment variables, roles and CLI commands.',
+      },
       items: [
+        // Standards and wallets.
         'reference/protocols',
+        'reference/wallet-compatibility',
+        // The management API and the payloads EUDIPLO sends or expects.
         'reference/api',
-        'reference/cli',
+        'reference/webhooks',
+        'reference/attribute-provider-api',
+        'reference/session-outcome',
+        // Configuration and operation.
+        'reference/credential-configuration',
+        'reference/presentation-configuration',
+        'reference/config-bundle-format',
+        'reference/kms-config',
         'reference/environment-variables',
         'reference/roles',
-        'reference/kms-config',
-        'reference/config-bundle-format',
-        'reference/webhooks',
-        'reference/presentation-configuration',
-        'reference/session-outcome',
-        'reference/attribute-provider-api',
-        'reference/credential-configuration',
-        'reference/wallet-compatibility',
+        'reference/cli',
       ],
     },
     {

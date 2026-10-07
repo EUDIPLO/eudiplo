@@ -18,6 +18,10 @@ const config: Config = {
 
   url: 'https://docs.eudiplo.dev',
   baseUrl: '/',
+  // Emit `page.html` instead of `page/index.html`: Cloudflare Pages serves
+  // `/page` from `page.html` directly, while `page/index.html` makes every
+  // sitemap and canonical URL redirect to `/page/` first.
+  trailingSlash: false,
 
   organizationName: 'EUDIPLO',
   projectName: 'eudiplo',
@@ -38,8 +42,8 @@ const config: Config = {
           path: 'docs',
           routeBasePath: '/',
           sidebarPath: './sidebars.ts',
-          editUrl:
-            'https://github.com/EUDIPLO/eudiplo/edit/main/apps/docs/docs/',
+          // Docusaurus appends the docs folder (`docs/`) and the file path.
+          editUrl: 'https://github.com/EUDIPLO/eudiplo/edit/main/apps/docs/',
           lastVersion: 'current',
           versions: {
             current: {
