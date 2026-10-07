@@ -5,7 +5,7 @@ sidebar_label: Notifications
 
 Find out whether the wallet stored, rejected or deleted a credential. Wallets report this to the OID4VCI notification endpoint; EUDIPLO records the event on the issuance session, updates the session status and forwards the event to a webhook endpoint of your choice.
 
-**Prerequisites:** a [webhook endpoint](../reference/webhooks.md) created under `/api/issuer/webhook-endpoints` (web client: **Webhook Endpoints**).
+**Prerequisites:** a [webhook endpoint](../reference/webhooks.md) created under `/api/issuer/webhook-endpoints` (web client: **Integrations → Webhook Endpoints**).
 
 ## 1. Keep the endpoint enabled
 
