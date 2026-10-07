@@ -12,6 +12,8 @@ describe('CredentialConfigCreateComponent', () => {
       { snapshot: { params: {} } } as any,
       { open: vi.fn() } as any,
       {} as any,
+      {} as any,
+      {} as any,
       {} as any
     );
   });
@@ -159,10 +161,42 @@ describe('CredentialConfigCreateComponent', () => {
       { snapshot: { params: { id: 'existing' } } } as any,
       {} as any,
       {} as any,
+      {} as any,
+      {} as any,
       {} as any
     );
     expect(edit.create).toBe(false);
     expect(edit.guidedMode).toBe(false);
+  });
+
+  it('shows the hosted VCT URI under the public URL of the backend', async () => {
+    const hosted = new CredentialConfigCreateComponent(
+      {} as any,
+      {} as any,
+      { snapshot: { params: {} } } as any,
+      { open: vi.fn() } as any,
+      {} as any,
+      { loadConfigurations: vi.fn().mockResolvedValue([]) } as any,
+      {
+        getConfig: vi.fn().mockResolvedValue({
+          configImportMode: 'disabled',
+          publicUrl: 'https://eudiplo.example.com',
+        }),
+      } as any,
+      { getTenantId: () => 'membership-demo' } as any
+    );
+    hosted.form.patchValue({ id: 'membership' });
+    expect(hosted.getVctUri()).toBe(
+      '<PUBLIC_URL>/issuers/<tenantId>/credentials-metadata/vct/membership'
+    );
+
+    hosted.ngOnInit();
+
+    await vi.waitFor(() =>
+      expect(hosted.getVctUri()).toBe(
+        'https://eudiplo.example.com/issuers/membership-demo/credentials-metadata/vct/membership'
+      )
+    );
   });
 
   it.each([

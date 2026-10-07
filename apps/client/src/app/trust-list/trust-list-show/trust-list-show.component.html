@@ -70,7 +70,8 @@
           <div class="public-url-section">
             <h4>Public URL</h4>
             <p class="url-description">
-              Use this URL to reference the trust list in external configurations:
+              Wallets and other verifiers fetch the signed trust list from this URL. It starts with
+              the backend's public URL (PUBLIC_URL):
             </p>
             <mat-form-field appearance="outline" class="url-field">
               <mat-label>Trust List URL</mat-label>
@@ -84,6 +85,15 @@
                 <mat-icon>content_copy</mat-icon>
               </button>
             </mat-form-field>
+            @if (publicUrlIsInstanceUrl) {
+              <p class="url-hint" role="status">
+                <mat-icon class="hint-icon">warning</mat-icon>
+                <span
+                  >The backend did not report its public URL, so this URL uses the instance address
+                  you signed in with. Wallets and other verifiers may not reach it.</span
+                >
+              </p>
+            }
             <p class="url-hint">
               <mat-icon class="hint-icon">lightbulb</mat-icon>
               <span

@@ -75,7 +75,7 @@ For an internal entity, EUDIPLO lists the root CA certificate of the issuer key 
 
 </details>
 
-**Checkpoint:** the trust list page shows the **Trust List URL** `https://YOUR-HTTPS-HOST/issuers/membership-demo/trust-list/membership-issuers`, and it serves a signed list:
+**Checkpoint:** the trust list page shows the **Trust List URL** `https://YOUR-HTTPS-HOST/issuers/membership-demo/trust-list/membership-issuers`. Wallets and verifiers fetch the list there, so the URL starts with the backend's `PUBLIC_URL`, not with the address you signed in with. It serves a signed list:
 
 ```bash
 curl -s https://YOUR-HTTPS-HOST/issuers/membership-demo/trust-list/membership-issuers | cut -c1-40
@@ -148,7 +148,7 @@ To accept the issuers of an external List of Trusted Entities (LoTE), choose **A
 { "type": "etsi_tl", "values": [{ "url": "https://trust.example.org/lists/members", "verifierX509Der": "MIIB..." }] }
 ```
 
-Without verification material, EUDIPLO cannot check the list's signature, and verification fails with `trust_list_unavailable`. EUDIPLO caches fetched lists for 5 minutes; `DELETE /api/cache/trust-list` clears the cache after the publisher changes a list. To try the variant without a second organization, use the URL of `membership-issuers` and the certificate of `Membership trust list signing`.
+Without verification material, EUDIPLO cannot check the list's signature, and verification fails with `trust_list_unavailable`. EUDIPLO caches fetched lists for 5 minutes; `DELETE /api/cache/trust-list` clears the cache after the publisher changes a list. To try the variant without a second organization, enter the **Trust List URL** of `membership-issuers` from step 2. For the certificate, open `Membership trust list signing` under **Keys**, choose **Copy PEM** under **Active Certificate**, and paste it without the `-----BEGIN CERTIFICATE-----` and `-----END CERTIFICATE-----` lines.
 
 **Checkpoint:** the same two tests as in steps 3 and 5 give the same results.
 
@@ -159,7 +159,7 @@ Without verification material, EUDIPLO cannot check the list's signature, and ve
 | Creating the list fails with `409` about the key      | No key chain with usage **Trust List Signing**, or a different one selected | Create the key in step 1 and select it as **Signing Key Chain**.                                    |
 | The trusted credential is rejected too                | The entity lists a different issuer key chain                            | Edit the list and select `Membership credential signing` as **Issuer Key Chain**.                      |
 | The wallet offers no credential at all                | The wallet cannot match the `aki` values                                 | Test with `VP_REMOVE_TA=true`; report the wallet's behavior to its vendor.                             |
-| `trust_list_unavailable`                              | The list URL is unreachable, expired or lacks verification material      | Open the URL; for external lists, add `verifierX509Der` or `verifierKey`.                              |
+| `trust_list_unavailable`                              | The list URL is unreachable or expired, or the verification material is missing or wrong | Open the URL; for external lists, check `verifierX509Der` (the signer's certificate without the PEM header and footer lines) or `verifierKey`. |
 
 General problems are covered in [Troubleshooting](../troubleshooting.md).
 

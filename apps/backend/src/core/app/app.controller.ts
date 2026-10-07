@@ -86,6 +86,7 @@ export class AppController {
                 ),
             },
             configImportMode: this.configImportModeService.resolve(),
+            publicUrl: this.configService.getOrThrow<string>("PUBLIC_URL"),
         };
     }
 }

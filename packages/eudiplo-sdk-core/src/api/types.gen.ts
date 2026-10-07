@@ -50,6 +50,10 @@ export type FrontendConfigResponseDto = {
      * Active startup configuration import mode
      */
     configImportMode: 'disabled' | 'create' | 'upsert' | 'replace';
+    /**
+     * Public URL of the instance (PUBLIC_URL). Wallets and other verifiers reach the wallet-facing endpoints, such as trust lists, under this URL, which can differ from the URL the client signed in with.
+     */
+    publicUrl: string;
 };
 
 export type RoleDto = {
