@@ -23,7 +23,7 @@ flowchart LR
 
 - **Starts from:** nothing. If EUDIPLO is new to you, run the [Issue and verify](foundation.md) cookbook on your computer first.
 - A Linux VM with a public IP address, and DNS records for `eudiplo.example.com` and `console.example.com` that point to it. Replace both names with your own throughout.
-- A firewall in front of the VM (for example your cloud provider's security group) that allows inbound traffic only on ports 22, 80 and 443. Docker publishes container ports past host firewalls such as `ufw`, and the `standard` preset publishes RustFS on ports 9000 and 9001 on all interfaces.
+- A firewall in front of the VM (for example your cloud provider's security group) that allows inbound traffic only on ports 22, 80 and 443. Docker publishes container ports past host firewalls such as `ufw`, and projects created with an older CLI publish RustFS on ports 9000 and 9001 on all interfaces.
 - Docker Engine with the Compose v2 plugin. For Podman with Podman Compose, run `export EUDIPLO_CONTAINER_RUNTIME=podman` before the CLI commands.
 - [Caddy](https://caddyserver.com/docs/install) installed as a system service.
 
@@ -70,7 +70,7 @@ EUDIPLO_BIND_ADDRESS=127.0.0.1
 CORS_ORIGINS=https://console.example.com
 ```
 
-- `EUDIPLO_BIND_ADDRESS` publishes the backend (`3000`) and the Web Client (`4200`) on the loopback interface only.
+- `EUDIPLO_BIND_ADDRESS` publishes the backend (`3000`), the Web Client (`4200`) and RustFS (`9000`, `9001`) on the loopback interface only.
 - `CORS_ORIGINS` lets browsers call the management API (`/api/*`) only from the console origin. Wallet-facing and public endpoints stay open to all origins. Use `scheme://host` without a path or trailing slash; the backend refuses to start with an invalid value.
 
 **Checkpoint:** `grep -E 'PUBLIC_URL|EUDIPLO_BIND_ADDRESS|CORS_ORIGINS' ~/eudiplo/.eudiplo.env` prints all three settings.

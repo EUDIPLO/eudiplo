@@ -84,7 +84,7 @@ Then open `https://YOUR-HTTPS-HOST/health` in the **browser on your phone**. It 
 ## Step 5: Sign in to the Web Client
 
 1. Open [http://localhost:4200](http://localhost:4200), or run `eudiplo open --instance cookbook`.
-2. In **EUDIPLO Instance**, enter `http://localhost:3000`. The field can be prefilled with `http://eudiplo:3000`, the backend's address inside the Compose network, which your browser cannot reach.
+2. Check that **EUDIPLO Instance** is `http://localhost:3000`. Projects created with an older CLI prefill `http://eudiplo:3000`, the backend's address inside the Compose network, which your browser cannot reach.
 3. Read the root credentials from the project directory: `grep AUTH_CLIENT .eudiplo.env`.
 4. On the **Client ID and Secret** tab, enter `AUTH_CLIENT_ID` (by default `root`) as **Client ID** and `AUTH_CLIENT_SECRET` as **Client Secret**.
 5. Choose **Login with Client Credentials**.

@@ -23,7 +23,7 @@ flowchart LR
 
 **[Start the cookbook →](cookbooks/foundation.md)** It installs EUDIPLO, issues a membership credential to a wallet on your phone, and verifies it.
 
-For a quick look at the Web Client with sample data, run `eudiplo demo`. Open `http://localhost:4200`, set **EUDIPLO Instance** to `http://localhost:3000` (replace the prefilled `http://eudiplo:3000`), and sign in with client ID and secret `root`. The demo uses the same ports as the cookbook, so stop it with `eudiplo down --instance local` before you begin.
+For a quick look at the Web Client with sample data, run `eudiplo demo`. Open `http://localhost:4200`, check that **EUDIPLO Instance** is `http://localhost:3000`, and sign in with client ID and secret `root`. The demo uses the same ports as the cookbook, so stop it with `eudiplo down --instance local` before you begin.
 
 ## Find your way
 
