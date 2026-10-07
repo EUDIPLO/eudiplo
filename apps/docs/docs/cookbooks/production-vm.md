@@ -115,7 +115,7 @@ read -rs EUDIPLO_CLIENT_SECRET && export EUDIPLO_CLIENT_SECRET
 eudiplo doctor --strict
 ```
 
-`read -rs` waits for you to paste the secret without showing it. `--strict` treats every warning as a failure, for example a public URL without HTTPS, a TLS certificate close to expiry or missing client credentials. Skipped checks do not fail.
+`read -rs` waits for you to paste the secret without showing it. `--strict` treats every warning as a failure, for example a public URL without HTTPS, a TLS certificate close to expiry or missing client credentials. Skipped checks do not fail. With the root client the KMS provider check is skipped, because provider health is read per tenant; once you have a tenant, a [tenant client](../operate/tenants-and-access.md#api-clients-with-least-privilege) with `issuance:manage` covers it too.
 
 **Checkpoint:** `eudiplo doctor --strict` exits with status `0`. Run it after every change and from your monitoring.
 

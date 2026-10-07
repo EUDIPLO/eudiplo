@@ -209,6 +209,11 @@ The CLI gets its token from the built-in `POST /api/oauth2/token`. Without
 external OIDC provider that endpoint is disabled, so the authenticated checks
 fail when the variables are set.
 
+KMS provider health is read per tenant, so with the root client the KMS check
+is skipped; a
+[tenant client](tenants-and-access.md#api-clients-with-least-privilege) with
+`issuance:manage` or `presentation:manage` covers it too.
+
 ## Environment variables
 
 | Variable                                     | Effect                                                                        |

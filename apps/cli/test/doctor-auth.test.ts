@@ -6,7 +6,7 @@ import {
     readProviderHealth,
     summarizeProviderHealth,
 } from "../src/services/backend-checks.js";
-import { runDoctor } from "../src/services/diagnostics.js";
+import { hasFailedChecks, runDoctor } from "../src/services/diagnostics.js";
 import type { CommandContext, DoctorCheck } from "../src/types.js";
 import packageJson from "../package.json" with { type: "json" };
 
@@ -303,21 +303,50 @@ describe("authenticated doctor checks", () => {
         expect(find(checks, "KMS providers").status).toBe("skip");
     });
 
+    it.each([401, 403])(
+        "skips the KMS check for a client without a tenant role (HTTP %i)",
+        async (status) => {
+            // The bootstrap root client has tenants:manage and no tenant, so
+            // the backend refuses the per-tenant provider health.
+            const { context } = createContext(
+                {
+                    "/api/oauth2/token": {
+                        body: { access_token: "token-123" },
+                    },
+                    "/api/version": { body: { version: packageJson.version } },
+                    "/api/key-chain/providers/health": { status },
+                    "/api/docs": {},
+                    "/health": {},
+                },
+                credentials,
+            );
+
+            const checks = await runDoctor(instance, context, []);
+
+            expect(find(checks, "KMS providers")).toEqual({
+                name: "KMS providers",
+                status: "skip",
+                message: `Needs a tenant client with issuance:manage or presentation:manage (/api/key-chain/providers/health returned HTTP ${status}).`,
+            });
+            // Every other check passes, so --strict passes as well.
+            expect(hasFailedChecks(checks, true)).toBe(false);
+        },
+    );
+
     it("fails when the endpoints error for another reason", async () => {
         const { context } = createContext(
             {
                 "/api/oauth2/token": { body: { access_token: "token-123" } },
                 "/api/version": { status: 500 },
+                "/api/key-chain/providers/health": { status: 500 },
             },
             credentials,
         );
 
-        expect(
-            find(
-                await runDoctor(instance, context, []),
-                "version compatibility",
-            ).status,
-        ).toBe("fail");
+        const checks = await runDoctor(instance, context, []);
+
+        expect(find(checks, "version compatibility").status).toBe("fail");
+        expect(find(checks, "KMS providers").status).toBe("fail");
     });
 
     it("fails, rather than skipping, when the credentials are rejected", async () => {
