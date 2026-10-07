@@ -188,7 +188,7 @@ describe("startup configuration reconciliation", () => {
         expect(plan.applicable, JSON.stringify(plan, null, 2)).toBe(true);
         const metadata = await app.get(ConfigOwnershipService).list("demo");
 
-        expect(metadata).toHaveLength(18);
+        expect(metadata).toHaveLength(16);
         expect(metadata).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({
@@ -207,7 +207,12 @@ describe("startup configuration reconciliation", () => {
             metadata.every((entry) => entry.source?.startsWith("folder:")),
         ).toBe(true);
 
-        rmSync(join(configRoot, "demo/webhook-endpoints/notification.json"));
+        rmSync(
+            join(
+                configRoot,
+                "demo/trust-lists/trustlist-580831bc-ef11-43f4-a3be-a2b6bf1b29a3-config.json",
+            ),
+        );
         const replaceBundle = app
             .get(ConfigFolderBundleService)
             .buildBundle("demo", join(configRoot, "demo"));

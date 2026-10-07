@@ -1,13 +1,15 @@
 import React from "react";
 import configModel from "@site/docs/_generated/config-model.json";
+import InlineCode from "../InlineCode";
 
 export interface ConfigItem {
     key: string;
     type: string;
     defaultValue?: unknown;
+    defaultText?: string;
     allowedValues?: unknown[];
     description: string;
-    presence: "required" | "optional" | "";
+    presence: "required" | "optional" | "conditional";
     group: string;
     order: number;
     secret: boolean;
@@ -90,27 +92,30 @@ export default function ConfigTable({
 function ConfigNotes({ item }: { item: ConfigItem }): React.ReactElement {
     return (
         <>
-            {item.description}
+            <InlineCode text={item.description} />
             {item.presence === "required" && (
                 <>
                     {" "}
                     <strong>[required]</strong>
                 </>
             )}
-            {item.presence !== "required" && (
+            {item.presence === "optional" && (
                 <>
                     {" "}
                     <strong>[optional]</strong>
                 </>
             )}
-            {item.defaultValue !== undefined && (
+            {item.defaultText !== undefined && (
                 <>
                     {" "}
-                    (default: <code>{String(item.defaultValue)}</code>)
+                    (default: <InlineCode text={item.defaultText} />)
                 </>
             )}
             {item.conditions.map((c, idx) => (
-                <React.Fragment key={idx}> [{c}]</React.Fragment>
+                <React.Fragment key={idx}>
+                    {" "}
+                    [<InlineCode text={c} />]
+                </React.Fragment>
             ))}
             {item.secret && <> 🔒</>}
         </>

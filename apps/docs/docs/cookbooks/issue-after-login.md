@@ -10,6 +10,13 @@ The person receiving the credential signs in at Keycloak first. EUDIPLO then ask
 EUDIPLO acts as a **chained authorization server**: the wallet talks OAuth to EUDIPLO, and EUDIPLO sends the user's browser to Keycloak to sign in. When the wallet requests the credential, EUDIPLO calls your attribute provider with the Keycloak identity, and the provider returns `name` and `member_id`.
 
 ```mermaid
+---
+config:
+  sequence:
+    wrap: true
+    width: 120
+    actorMargin: 30
+---
 sequenceDiagram
     participant W as Wallet
     participant E as EUDIPLO (chained AS)

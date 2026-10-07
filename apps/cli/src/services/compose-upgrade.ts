@@ -15,6 +15,12 @@ const managedImages = {
 
 type ManagedKey = keyof typeof managedImages;
 
+/** The Compose service that runs the image of each managed line. */
+export const managedServices: Record<ManagedKey, string> = {
+    EUDIPLO_IMAGE: "eudiplo",
+    EUDIPLO_CLIENT_IMAGE: "eudiplo-client",
+};
+
 // Releases up to v8.1.0 were published while the project was hosted by the
 // OpenWallet Foundation. Instances still on those images are moved to the
 // current repository by their next upgrade.

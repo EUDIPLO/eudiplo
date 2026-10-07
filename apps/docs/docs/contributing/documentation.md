@@ -65,10 +65,11 @@ Prefer a reference generated from code over a hand-written table. `prebuild` wri
 | Environment variables | Joi schemas combined in `apps/backend/src/platform/config/combined.schema.ts` | `scripts/generate-config-docs.ts` → `_generated/config-model.json` | `<ConfigTable group="…" />` (`src/components/ConfigTable`) |
 | CLI command reference | The commander program of `apps/cli` | `scripts/generate-cli-reference.ts` → `_generated/cli-reference.md` | Imported as an MDX partial in `reference/cli.md` |
 | Request bodies and configuration fields | Zod schemas registered in `scripts/schema-docs/registry.ts` | `scripts/generate-schema-docs.ts` → `_generated/schemas/` | `<SchemaReference name="…" mode="table" />` (field table) or `mode="body"` (annotated JSON sample) |
+| Roles and the endpoints that accept them | `apps/backend/src/auth/roles/role.enum.ts` (member comments are the descriptions) and the `@Secured` decorators of the controllers | `scripts/generate-roles-docs.ts` → `_generated/roles.json` | `<RoleReference table="roles" />` or `table="endpoints"` (`src/components/RoleReference`) |
 
-To document a new Zod schema, add `{ name, schema }` to `registry.ts`, run `prebuild`, import `SchemaReference` from `@site/src/components/SchemaReference` and place the component. Field descriptions come from the schema's `.describe(…)` texts, so improve the description in the backend schema instead of the page. An unknown `name` fails the build.
+To document a new Zod schema, add `{ name, schema }` to `registry.ts`, run `prebuild`, import `SchemaReference` from `@site/src/components/SchemaReference` and place the component. Field descriptions come from the schema's `.describe(…)` texts, so improve the description in the backend schema instead of the page. An unknown `name` fails the build. Descriptions that are part of a published configuration file format can't change without a new format version (`pnpm schemas:check-contract` fails); correct those with the entry's `descriptions` overrides in `registry.ts` until the next format version. Text in backticks renders as inline code in the generated tables.
 
-The same applies to other references that can be derived from code (for example roles from `apps/backend/src/auth/roles/role.enum.ts`): generate them instead of writing a table by hand. The published JSON schemas for configuration files are a separate pipeline: [Configuration schemas](./configuration-schemas.md).
+Generate other references that can be derived from code too, instead of writing a table by hand. The published JSON schemas for configuration files are a separate pipeline: [Configuration schemas](./configuration-schemas.md).
 
 ## Checks
 

@@ -356,7 +356,7 @@ describe("Issuance - Chained AS Flow", () => {
             })
             .expect(400);
 
-        expect(response.body.message).toContain("'oid4vp'");
+        expect(JSON.stringify(response.body.errors)).toContain("'oid4vp'");
     });
 
     test("OID4VP authorization server binds the token to the PAR DPoP key", async () => {

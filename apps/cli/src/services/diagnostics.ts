@@ -208,6 +208,16 @@ const kmsHealthCheck: DoctorCheckDefinition = {
                             "This backend does not expose the KMS provider health endpoint.",
                     };
                 }
+                // Provider health is read per tenant, so the bootstrap root
+                // client (tenants:manage, no tenant) is refused. That says
+                // nothing about the providers.
+                if (response.status === 401 || response.status === 403) {
+                    return {
+                        name: "KMS providers",
+                        status: "skip",
+                        message: `Needs a tenant client with issuance:manage or presentation:manage (${response.reason}).`,
+                    };
+                }
                 return {
                     name: "KMS providers",
                     status: "fail",

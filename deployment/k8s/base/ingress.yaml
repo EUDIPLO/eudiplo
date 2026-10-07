@@ -3,8 +3,7 @@ kind: Ingress
 metadata:
   name: eudiplo-ingress
   annotations:
-    # Add your ingress controller annotations here
-    # nginx.ingress.kubernetes.io/rewrite-target: /
+    # Add the annotations your ingress controller needs here.
 spec:
   ingressClassName: nginx
   rules:

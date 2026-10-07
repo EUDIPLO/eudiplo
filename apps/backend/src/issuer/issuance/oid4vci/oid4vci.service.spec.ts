@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { SessionNotFound } from "../../../session/application/session-errors.js";
+import { CredentialClaimsResolutionError } from "../../configuration/credentials/domain/credential-claims.js";
 import {
     CorrelateCredentialTokenSession,
     CredentialSessionAuthorizationDenied,
@@ -263,6 +264,40 @@ describe("Oid4vciService credential request error mapping", () => {
         });
     });
 
+    it("maps a claim source without claims to credential_request_denied", async () => {
+        const message =
+            "The claim source returned no claims for credential configuration 'pid'";
+        const error = await rejection(
+            setup({
+                resolveSession: () =>
+                    Promise.reject(
+                        new CredentialClaimsResolutionError(
+                            "claims_missing",
+                            message,
+                        ),
+                    ),
+            }).getCredential(request, "tenant"),
+        );
+        expect(protocolError(error)).toEqual({
+            error: "credential_request_denied",
+            error_description: message,
+        });
+
+        // Other resolution errors keep their mapping.
+        const providerRequired = await rejection(
+            setup({
+                resolveSession: () =>
+                    Promise.reject(
+                        new CredentialClaimsResolutionError(
+                            "provider_required",
+                            "provider required",
+                        ),
+                    ),
+            }).getCredential(request, "tenant"),
+        );
+        expect(providerRequired).toBeInstanceOf(ConflictException);
+    });
+
     it("propagates SessionNotFound unchanged for the controller to wrap", async () => {
         const notFound = new SessionNotFound();
         const error = await rejection(
@@ -332,7 +367,7 @@ describe("Oid4vciService authorization server errors", () => {
 });
 
 describe("OID4VCI notification endpoint lookup", () => {
-    function setup(lookupError?: Error | null) {
+    function setup(lookupError?: Error | null, publishError?: Error) {
         const session = {
             id: "session",
             tenantId: "tenant",
@@ -350,17 +385,20 @@ describe("OID4VCI notification endpoint lookup", () => {
         const order: string[] = [];
         const publish = vi.fn(async () => {
             order.push("publish");
+            if (publishError) throw publishError;
         });
         const changeState = vi.fn(async () => {
             order.push("state");
         });
         const logError = vi.fn();
+        const warn = vi.fn();
         const lookup = vi.fn(async () => {
             order.push("lookup");
             if (lookupError) throw lookupError;
             return lookupError === null ? null : endpoint;
         });
         const oid4vci = service({
+            logger: { debug: vi.fn(), warn },
             issuanceService: {
                 getIssuanceConfiguration: vi.fn().mockResolvedValue({}),
             },
@@ -403,6 +441,7 @@ describe("OID4VCI notification endpoint lookup", () => {
             publish,
             changeState,
             logError,
+            warn,
             lookup,
             order,
             session,
@@ -435,7 +474,7 @@ describe("OID4VCI notification endpoint lookup", () => {
         expect(test.order).toEqual(["record", "lookup", "state"]);
     });
 
-    it("persists, publishes, and changes state in that order", async () => {
+    it("persists and changes state before publishing", async () => {
         const test = setup();
         await test.execute();
         expect(test.publish).toHaveBeenCalledWith(
@@ -443,7 +482,32 @@ describe("OID4VCI notification endpoint lookup", () => {
             test.session,
             test.notification,
         );
-        expect(test.order).toEqual(["record", "lookup", "publish", "state"]);
+        expect(test.order).toEqual(["record", "lookup", "state", "publish"]);
+    });
+
+    it("completes the session and logs a failed delivery without failing the request", async () => {
+        const failure = new Error(
+            "Error sending webhook: connect ECONNREFUSED",
+        );
+        const test = setup(undefined, failure);
+
+        await expect(test.execute()).resolves.toBeUndefined();
+        expect(test.changeState).toHaveBeenCalledWith(
+            test.session,
+            "completed",
+        );
+        expect(test.logError).toHaveBeenCalledExactlyOnceWith(
+            expect.objectContaining({
+                sessionId: "session",
+                stage: "notification",
+            }),
+            failure,
+            "Failed to deliver the notification webhook",
+            { notificationId: "notification" },
+        );
+        expect(test.warn).toHaveBeenCalledWith(
+            expect.stringContaining(failure.message),
+        );
     });
 });
 
@@ -500,7 +564,10 @@ describe("OID4VCI notification endpoint session resolution", () => {
             ),
             auditLogger: { logError: vi.fn() },
         });
-        const notify = (notificationId = "notification") =>
+        const notify = (
+            notificationId = "notification",
+            eventDescription?: string,
+        ) =>
             oid4vci.handleNotification(
                 {
                     method: "POST",
@@ -512,11 +579,23 @@ describe("OID4VCI notification endpoint session resolution", () => {
                 {
                     notification_id: notificationId,
                     event: "credential_accepted",
+                    event_description: eventDescription,
                 },
                 "tenant",
             );
         return { notify, changeState, session };
     }
+
+    it("records the wallet's event_description with the event", async () => {
+        const test = setup({ iss: "local", sub: "session" });
+        await test.notify("notification", "Stored after user consent");
+        expect(test.session.notifications[0]).toEqual({
+            id: "notification",
+            credentialConfigurationId: "pid",
+            event: "credential_accepted",
+            eventDescription: "Stored after user consent",
+        });
+    });
 
     function invalidNotificationId(error: unknown, notificationId: string) {
         expect(error).toBeInstanceOf(CredentialNotificationNotFound);

@@ -6,7 +6,7 @@ description: Every field of a credential configuration, generated from the schem
 
 import SchemaReference from "@site/src/components/SchemaReference";
 
-Fields of a credential configuration, as accepted by `POST /api/issuer/credentials` and by configuration import. The tables are generated from the Zod schema the backend validates with; unknown fields are rejected. For how to use the fields, see [Configure a credential](../issuance/credential-configuration.md).
+Fields of a credential configuration, as accepted by `POST /api/issuer/credentials`, `PATCH /api/issuer/credentials/{id}` (any subset of the fields; `null` clears an optional one) and configuration import. The tables are generated from the Zod schema the backend validates with; unknown fields are rejected with `400`. The fields that a `GET` response adds (`tenantId` and the resolved references) are ignored, so a configuration read with `GET` can be sent back. For how to use the fields, see [Configure a credential](../issuance/credential-configuration.md).
 
 ## Configuration
 

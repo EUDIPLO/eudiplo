@@ -11,9 +11,11 @@ schema. How to choose and set up a provider is described in
 [Key management (KMS)](../operate/kms.md).
 
 Every object is strict: unknown fields are rejected. String values accept
-`${VAR}` and `${VAR:default}` placeholders, resolved from the backend's
-environment. `defaultProvider` must match a provider `id`, and provider IDs
-must be unique.
+`${VAR}` placeholders (upper-case letters, digits and `_`), resolved from the
+backend's environment; a file that references an unset or empty variable is
+rejected. Unlike configuration import files, `kms.json` has no
+`${VAR:default}` syntax. `defaultProvider` must match a provider `id`, and
+provider IDs must be unique.
 
 import SchemaReference from "@site/src/components/SchemaReference";
 

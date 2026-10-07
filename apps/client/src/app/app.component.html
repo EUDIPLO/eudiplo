@@ -166,6 +166,24 @@
           </mat-list-item>
         }
 
+        <!-- Integrations Section: webhook endpoints serve issuance and verification -->
+        @if (hasRole(['issuance:manage', 'presentation:manage'])) {
+          <mat-divider></mat-divider>
+          <div mat-subheader>
+            <mat-icon class="subheader-icon">hub</mat-icon>
+            Integrations
+          </div>
+
+          <mat-list-item
+            [routerLink]="['/webhook-endpoints']"
+            routerLinkActive="active-link"
+            (click)="closeSidenavOnMobile()"
+          >
+            <mat-icon matListItemIcon>webhook</mat-icon>
+            <span matListItemTitle>Webhook Endpoints</span>
+          </mat-list-item>
+        }
+
         <!-- Credential Issuance Section -->
         @if (hasRole(['issuance:manage', 'issuance:offer'])) {
           <mat-divider></mat-divider>
@@ -287,15 +305,6 @@
             >
               <mat-icon matListItemIcon>tune</mat-icon>
               <span matListItemTitle>Verification Configs</span>
-            </mat-list-item>
-
-            <mat-list-item
-              [routerLink]="['/webhook-endpoints']"
-              routerLinkActive="active-link"
-              (click)="closeSidenavOnMobile()"
-            >
-              <mat-icon matListItemIcon>webhook</mat-icon>
-              <span matListItemTitle>Webhook Endpoints</span>
             </mat-list-item>
           }
         }

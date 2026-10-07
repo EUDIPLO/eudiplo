@@ -245,4 +245,121 @@ describe("Issuance - Configuration", () => {
                 });
             });
     });
+    describe("request bodies are validated like configuration import", () => {
+        test("a GET response can be sent back as it is", async () => {
+            await ensureBaselineConfig();
+            const current = await request(app.getHttpServer())
+                .get("/issuer/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            // tenantId, createdAt, updatedAt and nulls of unset fields included.
+            expect(current.body.tenantId).toBeDefined();
+
+            await request(app.getHttpServer())
+                .post("/issuer/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({ ...current.body, batchSize: 3 })
+                .expect(201);
+
+            const updated = await request(app.getHttpServer())
+                .get("/issuer/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            expect(updated.body.batchSize).toBe(3);
+            expect(updated.body.authorizationServers).toEqual(
+                current.body.authorizationServers,
+            );
+        });
+
+        test("unknown or misspelled fields are rejected and nothing is stored", async () => {
+            await ensureBaselineConfig();
+            const res = await request(app.getHttpServer())
+                .post("/issuer/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({ batchSize: 4, dpopRequired: true })
+                .expect(400);
+            expect(res.body.errors).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ code: "unrecognized_keys" }),
+                ]),
+            );
+
+            const stored = await request(app.getHttpServer())
+                .get("/issuer/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            expect(stored.body.batchSize).toBe(1);
+        });
+
+        test("null clears an optional setting", async () => {
+            await ensureBaselineConfig();
+            for (const txCodeMaxAttempts of [5, null]) {
+                await request(app.getHttpServer())
+                    .post("/issuer/config")
+                    .trustLocalhost()
+                    .set("Authorization", `Bearer ${authToken}`)
+                    .send({ txCodeMaxAttempts })
+                    .expect(201);
+            }
+            const stored = await request(app.getHttpServer())
+                .get("/issuer/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            expect(stored.body.txCodeMaxAttempts).toBeNull();
+        });
+
+        test("credential configurations reject misspelled fields and accept a GET response", async () => {
+            const configs = await request(app.getHttpServer())
+                .get("/issuer/credentials")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            const existing = await request(app.getHttpServer())
+                .get(`/issuer/credentials/${configs.body[0].id}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+
+            // A copy of a GET response is accepted: the tenant fields are dropped.
+            await request(app.getHttpServer())
+                .post("/issuer/credentials")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({ ...existing.body, id: "validated-copy" })
+                .expect(201);
+
+            const typo = await request(app.getHttpServer())
+                .post("/issuer/credentials")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    ...existing.body,
+                    id: "validated-typo",
+                    statusManagment: true,
+                })
+                .expect(400);
+            expect(JSON.stringify(typo.body.errors)).toContain(
+                "statusManagment",
+            );
+
+            await request(app.getHttpServer())
+                .patch("/issuer/credentials/validated-copy")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({ descripton: "typo" })
+                .expect(400);
+            await request(app.getHttpServer())
+                .patch("/issuer/credentials/validated-copy")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({ description: "patched" })
+                .expect(200);
+        });
+    });
 });

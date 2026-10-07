@@ -31,6 +31,7 @@ EUDIPLO sends `POST <url>` with `Content-Type: application/json` and, for `apiKe
 ```json
 {
     "session": "a6318799-dff4-4b60-9d1d-58703611bd23",
+    "reference": "order-4711",
     "credential_configuration_id": "membership",
     "identity": {
         "iss": "https://keycloak.example.com/realms/eudiplo",
@@ -54,6 +55,7 @@ EUDIPLO sends `POST <url>` with `Content-Type: application/json` and, for `apiKe
 | Field | Present | Description |
 | --- | --- | --- |
 | `session` | always | Issuance session ID. It equals the `session` returned when the offer was created. |
+| `reference` | when set | Your [reference](../issuance/credential-offers.md#your-own-reference) of the offer. |
 | `credential_configuration_id` | always | Credential configuration the wallet requested. |
 | `identity` | always | `iss`, `sub` and `token_claims` of the authorization behind the wallet's access token. What they contain per flow is listed in [Claims](../issuance/claims.md#identity-passed-to-attribute-providers). |
 | `credentials` | after a presentation | Verified claims the wallet presented to an [OID4VP authorization server](../issuance/authorization-servers.md#oid4vp) or in an [interactive authorization](../issuance/interactive-authorization.md) presentation step. One entry per credential query ID of the presentation's DCQL query; `values` holds the disclosed claims of each matching credential (several with `multiple: true`). |
@@ -93,5 +95,6 @@ EUDIPLO answers the wallet with a `transaction_id`. Completing or failing the tr
 ## Errors
 
 - Any non-`2xx` status or network error fails the credential request. The wallet receives HTTP `400` with `invalid_credential_request`; claims that do not match the configuration lead to `credential_request_denied`.
+- A `200` answer without a claims object under the requested credential configuration ID, and without `deferred: true`, fails the credential request with `credential_request_denied`. EUDIPLO does not fall back to the static defaults.
 - EUDIPLO does not retry and sets no timeout of its own. The wallet's credential request waits for your answer, so answer quickly or defer.
 - The provider URL must pass the outbound URL policy: HTTPS and public addresses only, unless `OUTBOUND_URL_ALLOW_HTTP` or `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` is set (both `false` by default since 9.0). See [Webhooks](webhooks.md).

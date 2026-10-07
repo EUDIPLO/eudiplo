@@ -13,8 +13,8 @@ target a deployment that is already running.
 
 - [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) 2.0 or newer
 - Docker, only if the runner should start the local stack
-- An OAuth client and a tenant with issuance and presentation configurations in
-  the target deployment
+- For a running deployment: an OAuth client and a tenant with issuance and
+  presentation configurations (the local stack imports the demo tenant)
 
 ## Run against the local stack
 
@@ -23,10 +23,15 @@ target a deployment that is already running.
 ```
 
 The runner starts `deployment/docker-compose` with the `standard` profile
-(`COMPOSE_PROFILE`, env file `K6_ENV_FILE`, default
-`deployment/docker-compose/.env`), waits for `/health` and runs every scenario
-once. Each scenario writes a JSON summary and a log with k6's end-of-run metrics
-to `scripts/load-test/results/`.
+(`COMPOSE_PROFILE`) and the env file `deployment/docker-compose/k6.env`
+(`K6_ENV_FILE`; a relative path is resolved against the current directory),
+waits for `/health` and runs every scenario once. `k6.env` mounts
+`assets/config` and imports the demo tenant on startup, with the client
+`test-client` that the scenarios use by default. Another env file must set
+`EUDIPLO_ENV_FILE` to its own path, as `k6.env` does, so that the backend reads
+it too. If a backend already answers at `HEALTH_URL`, the runner uses it instead
+of starting the stack. Each scenario writes a JSON summary and a log with k6's
+end-of-run metrics to `scripts/load-test/results/`.
 
 ## Run against a deployment
 

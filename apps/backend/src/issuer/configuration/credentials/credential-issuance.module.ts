@@ -15,7 +15,6 @@ import { IssuanceConfigModule } from "../issuance/issuance-config.module.js";
 import { ConfiguredIssuerFederationContext } from "./adapters/issuer-federation-context.js";
 import { MdocCredentialIssuerFormat } from "./adapters/mdoc-credential-issuer-format.js";
 import { SdjwtvcCredentialIssuerFormat } from "./adapters/sdjwtvc-credential-issuer-format.js";
-import { WebhookSessionCredentialClaims } from "./adapters/session-credential-claims.js";
 import { WebhookRemoteCredentialClaims } from "./adapters/webhook-remote-credential-claims.js";
 import { ConfiguredCredentialClaimsProvider } from "./application/configured-credential-claims.provider.js";
 import { CredentialIssuerFormatRegistry } from "./application/credential-issuer-format-registry.js";
@@ -33,8 +32,6 @@ import {
 import {
     ISSUER_FEDERATION_CONTEXT,
     type IssuerFederationContext,
-    SESSION_CREDENTIAL_CLAIMS,
-    type SessionCredentialClaims,
 } from "./ports/credential-generation-context.js";
 import {
     REMOTE_CREDENTIAL_CLAIMS,
@@ -61,34 +58,17 @@ import {
             ) => new ConfiguredIssuerFederationContext(issuance, federation),
         },
         {
-            provide: SESSION_CREDENTIAL_CLAIMS,
-            inject: [WebhookService],
-            useFactory: (webhooks: WebhookService) =>
-                new WebhookSessionCredentialClaims(webhooks),
-        },
-        {
             provide: IssueCredential,
             inject: [
                 CREDENTIAL_CONFIGURATION_REPOSITORY,
-                ATTRIBUTE_PROVIDER_REPOSITORY,
-                SESSION_CREDENTIAL_CLAIMS,
                 ISSUER_FEDERATION_CONTEXT,
                 CredentialIssuerFormatRegistry,
             ],
             useFactory: (
                 configs: CredentialConfigurationRepository,
-                providers: AttributeProviderRepository,
-                claims: SessionCredentialClaims,
                 federation: IssuerFederationContext,
                 formats: CredentialIssuerFormatRegistry,
-            ) =>
-                new IssueCredential(
-                    configs,
-                    providers,
-                    claims,
-                    federation,
-                    formats,
-                ),
+            ) => new IssueCredential(configs, federation, formats),
         },
         {
             provide: CREDENTIAL_SETTINGS,

@@ -13,7 +13,7 @@ This directory contains deployment configurations for EUDIPLO with multiple prof
 | ------------ | -------------------------------------- | ---------------------------- |
 | **Minimal**  | `docker compose up`                    | EUDIPLO only                 |
 | **Standard** | `docker compose --profile standard up` | + PostgreSQL + RustFS         |
-| **Full**     | `docker compose --profile full up`     | + PostgreSQL + RustFS + Vault |
+| **Full**     | `docker compose --profile full up`     | + PostgreSQL + RustFS + Vault (dev mode, evaluation only) |
 
 ```bash
 cd deployment/docker-compose
@@ -27,7 +27,7 @@ docker compose --profile standard up -d
 | ------------ | ------------------------------------ | ---------------------------- |
 | **Minimal**  | `kubectl apply -k overlays/minimal`  | EUDIPLO only                 |
 | **Standard** | `kubectl apply -k overlays/standard` | + PostgreSQL + RustFS         |
-| **Full**     | `kubectl apply -k overlays/full`     | + PostgreSQL + RustFS + Vault |
+| **Full**     | `kubectl apply -k overlays/full`     | + PostgreSQL + RustFS + Vault (dev mode, evaluation only) |
 
 ```bash
 cd deployment/k8s
@@ -43,8 +43,8 @@ kubectl apply -k overlays/standard
 | ------------------ | ---------------- | ------------------ | --------------- |
 | **Database**       | SQLite           | PostgreSQL         | PostgreSQL      |
 | **File Storage**   | Local filesystem | RustFS (S3)         | RustFS (S3)      |
-| **Key Management** | DB-backed        | DB-backed          | HashiCorp Vault |
-| **Use Case**       | Dev/Testing      | Staging/Small Prod | Enterprise Prod |
+| **Encryption key** | From `MASTER_SECRET` | From `MASTER_SECRET` | HashiCorp Vault (dev mode, in memory) |
+| **Use Case**       | Dev/Testing      | Staging/Small Prod | Evaluation      |
 
 ## Directory Structure
 

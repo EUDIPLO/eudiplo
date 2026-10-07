@@ -33,7 +33,7 @@ export class BuildCredentialOfferGrants {
                     "pre-authorized_code": input.authorizationCode,
                     tx_code: input.txCode
                         ? {
-                              input_mode: Number(input.txCode)
+                              input_mode: /^\d+$/.test(input.txCode)
                                   ? "numeric"
                                   : "text",
                               length: input.txCode.length,

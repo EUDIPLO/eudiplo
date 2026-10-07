@@ -240,7 +240,7 @@ section { scroll-margin-top: 72px; }
 }
 .primary-nav { display: flex; gap: 2px; margin-left: auto; }
 .primary-nav a {
-  padding: 8px 12px; border-radius: 8px; text-decoration: none;
+  padding: 8px 12px; border-radius: 8px; text-decoration: none; white-space: nowrap;
   color: var(--ink-soft); font-size: 15px;
 }
 .primary-nav a:hover { color: var(--ink); background: var(--surface-2); }
@@ -255,7 +255,7 @@ section { scroll-margin-top: 72px; }
 }
 .menu-toggle i::before { position: absolute; top: -5px; }
 .menu-toggle i::after { position: absolute; top: 5px; }
-@media (max-width: 900px) {
+@media (max-width: 960px) {
   .menu-toggle { display: inline-flex; }
   .primary-nav {
     display: none; position: absolute; top: 64px; left: 0; right: 0;
@@ -485,7 +485,9 @@ h1 em { font-style: normal; color: var(--brand); }
 
 /* How it works: above and below the waterline */
 .how .above { padding-block: clamp(64px, 9vw, 104px) 36px; }
+.flow-switch { width: fit-content; margin-top: 28px; }
 .code-pair { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 16px; margin-top: 40px; align-items: start; }
+.flow-switch + .code-pair { margin-top: 20px; }
 .code {
   background: var(--code-bg); color: var(--code-ink); border-radius: 14px; overflow: hidden;
   border: 1px solid var(--code-line); box-shadow: var(--shadow); min-width: 0; margin: 0;
@@ -536,6 +538,10 @@ h1 em { font-style: normal; color: var(--brand); }
 .below-head .count { font: 800 clamp(64px, 9vw, 112px)/0.8 var(--display); letter-spacing: -0.04em; color: var(--signal); }
 .below-head h3 { font: 700 clamp(22px, 2.4vw, 30px)/1.15 var(--display); margin: 0; max-width: 20em; }
 .below-head p { color: var(--deep-soft); margin-top: 8px; }
+.below-head .tabs { margin-left: auto; align-self: center; background: var(--deep-chip); border-color: var(--deep-line); }
+.below-head .tabs button { color: var(--deep-soft); }
+.below-head .tabs button[aria-pressed="true"] { background: var(--deep-ink); color: var(--deep); box-shadow: none; }
+@media (max-width: 600px) { .below-head .tabs { margin-left: 0; } }
 .hood-list { list-style: none; margin: 40px 0 0; padding: 0; columns: 2; column-gap: 56px; }
 .hood-list li {
   break-inside: avoid; display: grid; grid-template-columns: 2.6em 1fr; gap: 2px 12px;
@@ -549,6 +555,11 @@ h1 em { font-style: normal; color: var(--brand); }
   color: var(--deep-soft); max-width: 52em;
 }
 .issuance-note b { color: var(--deep-ink); }
+.flow-link {
+  appearance: none; border: 0; padding: 0; background: none; cursor: pointer;
+  font: inherit; font-weight: 700; color: var(--signal); white-space: nowrap;
+}
+.flow-link:hover { text-decoration: underline; }
 .issuance-note code { font: 500 0.85em var(--mono); color: var(--deep-ink); background: var(--deep-chip); padding: 2px 6px; border-radius: 5px; }
 @media (max-width: 860px) {
   .code-pair { grid-template-columns: minmax(0, 1fr); }
@@ -612,6 +623,26 @@ h1 em { font-style: normal; color: var(--brand); }
 .tenant b { font: 700 15px/1.3 var(--body); }
 .tenant span { font: 400 11.5px/1.5 var(--mono); color: var(--ink-soft); }
 @media (max-width: 860px) { .provider { grid-template-columns: minmax(0, 1fr); } }
+
+/* Web client */
+.webclient { background: var(--surface); border-block: 1px solid var(--line); padding-block: clamp(64px, 9vw, 104px); }
+.wc-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: clamp(28px, 4vw, 52px); margin-top: 44px; align-items: center; }
+.wc-shot {
+  margin: 0; border: 1px solid var(--line-strong); border-radius: 12px; overflow: hidden;
+  background: var(--surface-2); box-shadow: var(--shadow-lg); font-size: 14px;
+}
+.wc-shot img { display: block; width: 100%; height: auto; }
+.wc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 18px; }
+.wc-list li { display: grid; align-content: start; gap: 2px; padding-left: 14px; border-left: 2px solid var(--brand); }
+.wc-list b { font: 720 18px/1.25 var(--display); letter-spacing: -0.005em; }
+.wc-list span { font-size: 15px; line-height: 1.45; color: var(--ink-soft); }
+.wc-note { margin-top: 36px; max-width: 60em; color: var(--ink-soft); font-size: 16px; }
+.wc-note b { color: var(--ink); }
+.wc-note code { font: 500 0.85em var(--mono); color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); padding: 1px 6px; border-radius: 5px; }
+.wc-note a { color: var(--brand); font-weight: 700; text-decoration: none; white-space: nowrap; }
+.wc-note a:hover { text-decoration: underline; }
+@media (max-width: 960px) { .wc-grid { grid-template-columns: minmax(0, 1fr); } .wc-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 28px; } }
+@media (max-width: 640px) { .wc-list { grid-template-columns: minmax(0, 1fr); } }
 
 /* Use cases */
 .usecases { padding-block: clamp(64px, 9vw, 104px); }
@@ -800,6 +831,7 @@ h1 em { font-style: normal; color: var(--brand); }
     <nav class="primary-nav" id="primary-nav" aria-label="Main">
       <a href="#how">How it works</a>
       <a href="#self-hosted">Self-hosted</a>
+      <a href="#web-client">Web client</a>
       <a href="#use-cases">Use cases</a>
       <a href="#why-now">Why now</a>
       <a href="https://docs.eudiplo.dev/">Docs</a>
@@ -821,7 +853,7 @@ h1 em { font-style: normal; color: var(--brand); }
           <a class="door primary" href="#start"><strong>I'm building <span aria-hidden="true">→</span></strong><span>Run it locally and follow a cookbook</span></a>
           <a class="door" href="#self-hosted"><strong>I'm evaluating <span aria-hidden="true">→</span></strong><span>Data protection, use cases and deadlines</span></a>
         </div>
-        <p class="hero-meta"><span>Runs on your servers</span><span>Apache-2.0</span><span>LF Decentralized Trust</span><span>OpenID4VCI 1.0</span><span>OpenID4VP 1.0</span></p>
+        <p class="hero-meta"><span>Runs on your servers</span><span>Web client included</span><span>Apache-2.0</span><span>LF Decentralized Trust</span><span>OpenID4VCI 1.0</span><span>OpenID4VP 1.0</span></p>
       </div>
 
       <div class="stage" id="stage" aria-label="Example wallet flow">
@@ -866,10 +898,15 @@ h1 em { font-style: normal; color: var(--brand); }
       <div class="sec-head">
         <p class="kicker">How it works</p>
         <h2 id="how-title">You make one API call. EUDIPLO does the protocol work.</h2>
-        <p>This is the complete backend side of the age check above, with the TypeScript SDK or plain HTTP from any language. Everything below the waterline is what EUDIPLO did to answer it.</p>
+        <p data-only="verify">This is the complete backend side of the age check above, with the TypeScript SDK or plain HTTP from any language. Everything below the waterline is what EUDIPLO did to answer it.</p>
+        <p data-only="issue" hidden>This is the complete backend side of the employee ID above, with the TypeScript SDK or plain HTTP from any language. Everything below the waterline is what EUDIPLO did to deliver it.</p>
+      </div>
+      <div class="tabs flow-switch" role="group" aria-label="Choose a flow">
+        <button type="button" data-flow="verify" aria-pressed="true">Verify a credential</button>
+        <button type="button" data-flow="issue" aria-pressed="false">Issue a credential</button>
       </div>
       <div class="code-pair">
-        <figure class="code" aria-label="Backend code for the age check">
+        <figure class="code" id="code-main" aria-label="Backend code for the age check">
           <div class="code-head">
             <div class="code-tabs" role="tablist" aria-label="Choose how to call EUDIPLO">
               <button type="button" role="tab" id="tab-sdk" aria-selected="true" aria-controls="code-sdk" data-file="checkout.js">TypeScript SDK</button>
@@ -878,7 +915,7 @@ h1 em { font-style: normal; color: var(--brand); }
             <span id="code-file">checkout.js</span>
           </div>
           <div id="code-sdk" role="tabpanel" aria-labelledby="tab-sdk">
-<pre><code><span class="tk">import</span> { EudiploClient } <span class="tk">from</span> <span class="ts">'@eudiplo/sdk-core'</span>;
+<pre data-only="verify"><code><span class="tk">import</span> { EudiploClient } <span class="tk">from</span> <span class="ts">'@eudiplo/sdk-core'</span>;
 
 <span class="tk">const</span> eudiplo = <span class="tk">new</span> <span class="tf">EudiploClient</span>({ baseUrl, clientId, clientSecret });
 
@@ -889,9 +926,23 @@ h1 em { font-style: normal; color: var(--brand); }
 <span class="tc">// Resolves once EUDIPLO has verified the answer</span>
 <span class="tk">const</span> session = <span class="tk">await</span> eudiplo.<span class="tf">waitForSession</span>(request.sessionId);
 <span class="tf">grantAccess</span>(session.credentials);</code></pre>
+<pre data-only="issue" hidden><code><span class="tk">import</span> { EudiploClient } <span class="tk">from</span> <span class="ts">'@eudiplo/sdk-core'</span>;
+
+<span class="tk">const</span> eudiplo = <span class="tk">new</span> <span class="tf">EudiploClient</span>({ baseUrl, clientId, clientSecret });
+
+<span class="tc">// Offer the employee ID with claims from your HR system</span>
+<span class="tk">const</span> offer = <span class="tk">await</span> eudiplo.<span class="tf">createIssuanceOffer</span>({
+  credentialConfigurationIds: [<span class="ts">'employee-id'</span>],
+  claims: { <span class="ts">'employee-id'</span>: { given_name: <span class="ts">'Lena'</span>, employee_no: <span class="ts">'E-4711'</span> } },
+});
+<span class="tf">showQrCode</span>(offer.uri);
+
+<span class="tc">// Resolves once the wallet reports that it stored the credential</span>
+<span class="tk">await</span> eudiplo.<span class="tf">waitForSession</span>(offer.sessionId);
+<span class="tf">markIssued</span>(employee);</code></pre>
           </div>
           <div id="code-http" role="tabpanel" aria-labelledby="tab-http" hidden>
-<pre><code><span class="tc"># Get a token for your API client</span>
+<pre data-only="verify"><code><span class="tc"># Get a token for your API client</span>
 TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/oauth2/token \
   -d grant_type=client_credentials -d client_id=shop-backend \
   -d client_secret=<span class="ts">"$CLIENT_SECRET"</span> | <span class="tf">jq</span> -r .access_token)
@@ -905,11 +956,27 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
 <span class="tc"># The verified result arrives at your webhook, or read the session</span>
 <span class="tf">curl</span> -s https://eudiplo.example.com/api/session/$SESSION \
   -H <span class="ts">"Authorization: Bearer $TOKEN"</span></code></pre>
+<pre data-only="issue" hidden><code><span class="tc"># Get a token for your API client</span>
+TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/oauth2/token \
+  -d grant_type=client_credentials -d client_id=hr-backend \
+  -d client_secret=<span class="ts">"$CLIENT_SECRET"</span> | <span class="tf">jq</span> -r .access_token)
+
+<span class="tc"># Offer the employee ID with claims from your HR system</span>
+<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/issuer/offer \
+  -H <span class="ts">"Authorization: Bearer $TOKEN"</span> -H <span class="ts">"Content-Type: application/json"</span> \
+  -d <span class="ts">'{ "response_type": "uri", "flow": "pre_authorized_code",
+        "credentialConfigurationIds": ["employee-id"],
+        "credentialClaims": { "employee-id": { "type": "inline",
+          "claims": { "given_name": "Lena", "employee_no": "E-4711" } } },
+        "webhookEndpointId": "hr-backend" }'</span>
+<span class="tc"># → { "uri": "openid-credential-offer://…", "session": "5c1e9a72-…" }</span>
+
+<span class="tc"># The wallet's confirmation arrives at your webhook</span></code></pre>
           </div>
         </figure>
         <figure class="code">
           <figcaption class="code-head"><b>What your backend receives</b><span>webhook</span></figcaption>
-<pre><code>{
+<pre data-only="verify"><code>{
   <span class="tp">"status"</span>: <span class="ts">"completed"</span>,
   <span class="tp">"session"</span>: <span class="ts">"0b6f3a8e-6d0c-4b8e…"</span>,
   <span class="tp">"credentials"</span>: [{
@@ -919,6 +986,14 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
       <span class="tp">"age_equal_or_over"</span>: { <span class="tp">"18"</span>: <span class="tn">true</span> }
     }]
   }]
+}</code></pre>
+<pre data-only="issue" hidden><code>{
+  <span class="tp">"notification"</span>: {
+    <span class="tp">"id"</span>: <span class="ts">"550e8400-e29b-41d4…"</span>,
+    <span class="tp">"event"</span>: <span class="ts">"credential_accepted"</span>,
+    <span class="tp">"credentialConfigurationId"</span>: <span class="ts">"employee-id"</span>
+  },
+  <span class="tp">"session"</span>: <span class="ts">"5c1e9a72-3f0d-4c8e…"</span>
 }</code></pre>
         </figure>
       </div>
@@ -935,14 +1010,19 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
 
     <div class="below">
       <div class="wrap">
-        <div class="below-head">
-          <span class="count">14</span>
+        <div class="below-head" id="hood-head">
+          <span class="count" data-only="verify">14</span>
+          <span class="count" data-only="issue" hidden>18</span>
           <div>
             <h3>steps EUDIPLO ran for that one call</h3>
             <p>You don't build them, test them against the conformance suite, or rewrite them when the specs move.</p>
           </div>
+          <div class="tabs" role="group" aria-label="Choose a flow">
+            <button type="button" data-flow="verify" aria-pressed="true">Verify</button>
+            <button type="button" data-flow="issue" aria-pressed="false">Issue</button>
+          </div>
         </div>
-        <ol class="hood-list">
+        <ol class="hood-list" data-only="verify">
           <li><span class="n">01</span><span class="t">Build the DCQL query from your configuration</span><span class="spec">OpenID4VP 1.0 · DCQL</span></li>
           <li><span class="n">02</span><span class="t">Sign the request with your access certificate and a fresh nonce</span><span class="spec">Signed request object · x509_hash client ID</span></li>
           <li><span class="n">03</span><span class="t">Attach your registration certificate, so the wallet can show who is asking and why</span><span class="spec">verifier_info</span></li>
@@ -955,10 +1035,31 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
           <li><span class="n">10</span><span class="t">Check the issuer against your trust list</span><span class="spec">ETSI TS 119 602 lists of trusted entities</span></li>
           <li><span class="n">11</span><span class="t">Check that the credential is not revoked or suspended</span><span class="spec">Token Status List</span></li>
           <li><span class="n">12</span><span class="t">Match the answer to your query, claim by claim</span><span class="spec">DCQL claims and values</span></li>
-          <li><span class="n">13</span><span class="t">Record the session for audit and troubleshooting</span><span class="spec">Session log · OpenTelemetry</span></li>
+          <li><span class="n">13</span><span class="t">Record the session for audit and troubleshooting</span><span class="spec">Session record · OpenTelemetry</span></li>
           <li><span class="n">14</span><span class="t">Deliver one clean result to your backend</span><span class="spec">Webhook · REST · server-sent events</span></li>
         </ol>
-        <p class="issuance-note"><b>Issuing works the same way.</b> One call to <code>POST /api/issuer/offer</code>, and EUDIPLO runs OpenID4VCI with pushed authorization requests, PKCE, DPoP, wallet and key attestation, batch issuance, status lists and wallet notifications.</p>
+        <ol class="hood-list" data-only="issue" hidden>
+          <li><span class="n">01</span><span class="t">Check your claims against the credential type and store them encrypted with the session</span><span class="spec">Credential configuration · encrypted at rest</span></li>
+          <li><span class="n">02</span><span class="t">Create the offer with a one-time pre-authorized code and an optional PIN</span><span class="spec">OpenID4VCI 1.0 · pre-authorized code · tx_code</span></li>
+          <li><span class="n">03</span><span class="t">Publish your name, logo and credential types as issuer metadata, signed on request</span><span class="spec">Credential issuer metadata · signed metadata</span></li>
+          <li><span class="n">04</span><span class="t">Act as the wallet's authorization server</span><span class="spec">OAuth 2.0 authorization server metadata (RFC 8414)</span></li>
+          <li><span class="n">05</span><span class="t">Check the wallet attestation against your list of trusted wallet providers</span><span class="spec">OAuth 2.0 Attestation-Based Client Authentication · ETSI TS 119 602</span></li>
+          <li><span class="n">06</span><span class="t">Redeem the code once and before it expires, and lock it after repeated wrong PINs</span><span class="spec">Single-use pre-authorized code · tx_code</span></li>
+          <li><span class="n">07</span><span class="t">Bind the access token to a key in the wallet</span><span class="spec">DPoP (RFC 9449)</span></li>
+          <li><span class="n">08</span><span class="t">Hand out a fresh nonce for the key proof</span><span class="spec">OpenID4VCI 1.0 · nonce endpoint</span></li>
+          <li><span class="n">09</span><span class="t">Verify that the wallet holds the key the credential will be bound to</span><span class="spec">Key proof · c_nonce</span></li>
+          <li><span class="n">10</span><span class="t">Check the key attestation that shows the key is kept in secure hardware</span><span class="spec">Key attestation · key_storage</span></li>
+          <li><span class="n">11</span><span class="t">Issue one credential per wallet key, so separate presentations can't be linked</span><span class="spec">OpenID4VCI 1.0 · batch issuance</span></li>
+          <li><span class="n">12</span><span class="t">Reserve a random entry in a status list, so you can revoke or suspend the credential later</span><span class="spec">Token Status List</span></li>
+          <li><span class="n">13</span><span class="t">Build the SD-JWT VC with a salted digest for every claim the holder may withhold</span><span class="spec">SD-JWT VC · selective disclosure</span></li>
+          <li><span class="n">14</span><span class="t">Check that your issuer certificate is valid and not revoked, then sign in your HSM or KMS</span><span class="spec">x5c · CRL · PKCS#11 · AWS KMS · Vault</span></li>
+          <li><span class="n">15</span><span class="t">Encrypt the credential response when the wallet asks for it</span><span class="spec">Credential response encryption · JWE</span></li>
+          <li><span class="n">16</span><span class="t">Accept the wallet's confirmation that it stored the credential</span><span class="spec">OpenID4VCI 1.0 · notification endpoint</span></li>
+          <li><span class="n">17</span><span class="t">Record the session for audit and troubleshooting</span><span class="spec">Session record · OpenTelemetry</span></li>
+          <li><span class="n">18</span><span class="t">Pass the confirmation to your backend</span><span class="spec">Webhook · REST · server-sent events</span></li>
+        </ol>
+        <p class="issuance-note" data-only="verify"><b>Issuing takes more.</b> One call to <code>POST /api/issuer/offer</code> starts a full OpenID4VCI flow. <button type="button" class="flow-link" data-flow-go="issue">See the steps for issuing →</button></p>
+        <p class="issuance-note" data-only="issue" hidden><b>With your login in front.</b> In the authorization code flow, EUDIPLO also runs pushed authorization requests, PKCE and the sign-in through Keycloak or any OpenID Connect provider. Claims can also come from your own API at the moment of issuance. <button type="button" class="flow-link" data-flow-go="verify">See the steps for verifying →</button></p>
       </div>
     </div>
   </section>
@@ -1036,6 +1137,37 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
           <div class="tenant"><b>city.example</b><span>own keys · own trust list · anonymized after 7 days</span></div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="webclient" id="web-client" aria-labelledby="wc-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <p class="kicker">Web client included</p>
+        <h2 id="wc-title">Not just an API. Your team works in the browser.</h2>
+        <p>EUDIPLO comes with a web client that runs on your servers next to it. Your team sets up credentials and verification requests, tests them with a real wallet and follows every session, without writing code.</p>
+      </div>
+      <div class="wc-grid">
+        <figure class="wc-shot">
+          <div class="b-bar" aria-hidden="true">
+            <span class="b-dots"><i></i><i></i><i></i></span>
+            <span class="b-url"><svg viewBox="0 0 9 11"><path d="M2 4V3a2.5 2.5 0 0 1 5 0v1h1a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h1Zm1 0h3V3a1.5 1.5 0 0 0-3 0v1Z"/></svg>eudiplo-client.example.com/dashboard</span>
+          </div>
+          <picture>
+            <source srcset="img/web-client-dark.webp" media="(prefers-color-scheme: dark)">
+            <img src="img/web-client-light.webp" width="1600" height="1000" loading="lazy" decoding="async" alt="The EUDIPLO web client dashboard. The menu lists API clients, activity logs, keys, KMS providers, credential types, issuer settings, trust lists, status lists and verification. The page shows counts of configurations, key chains and sessions, the health of the access certificate and trust lists, and recent sessions.">
+          </picture>
+        </figure>
+        <ul class="wc-list">
+          <li><b>Credentials and requests</b><span>Set up credential types, issuer settings and verification requests in forms, or in a JSON editor that checks every field against the schema.</span></li>
+          <li><b>Test with a real wallet</b><span>Create an issuance offer or a verification request, then scan the QR code with your phone or use the browser's Digital Credentials API.</span></li>
+          <li><b>Every session in view</b><span>Filter sessions by type, status, configuration and failure code, and open one to read its logs.</span></li>
+          <li><b>Keys and trust</b><span>Keys and certificates, KMS providers, trust lists, status lists and the connection to a registrar.</span></li>
+          <li><b>Access and audit</b><span>API clients with roles, single sign-on through Keycloak, and an audit log of who changed which configuration.</span></li>
+          <li><b>Tenants and configuration</b><span>Manage tenants and export or import configuration. Configurations kept as code are marked, so nobody edits them by accident.</span></li>
+        </ul>
+      </div>
+      <p class="wc-note"><b>Prefer code?</b> Everything the web client does is also available through the API and the CLI. To look around with sample data, run <code>eudiplo demo</code> and open <code>localhost:4200</code>. <a href="https://docs.eudiplo.dev/#get-started">Demo sign-in →</a></p>
     </div>
   </section>
 
@@ -1126,7 +1258,7 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
           <ul class="proof-list">
             <li><a href="https://playground.eudi-wallet.org/">EUDI Wallet Playground</a><p>The German EUDI ecosystem's playground for testing wallets and their interoperability.</p></li>
             <li><a href="https://www.espuni.com/">espuni</a><p>Multi-tenant age verification as a service for platforms under DSA Article 28.</p></li>
-            <li><a href="https://eudi-web-client.h.aioblak.com/">EUDI Web Client Demo</a><p>A public instance of the EUDIPLO admin interface.</p></li>
+            <li><a href="https://eudi-web-client.h.aioblak.com/">EUDI Web Client Demo</a><p>A public instance of the EUDIPLO web client.</p></li>
           </ul>
         </div>
         <div class="proof-col">
@@ -1164,7 +1296,7 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
       <div class="arch">
         <div class="node">
           <h4>Your application</h4>
-          <p>Creates requests and offers through the REST API or the TypeScript SDK. Your team manages everything in the admin interface or the CLI.</p>
+          <p>Creates requests and offers through the REST API or the TypeScript SDK. Your team manages everything in the <a href="#web-client">web client</a> or the CLI.</p>
         </div>
         <div class="conn" aria-hidden="true"><div class="wire"></div><span>REST · webhooks</span></div>
         <div class="node core">
@@ -1257,7 +1389,7 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
             <li>
               <h4>Start the demo</h4>
               <div class="cmd"><code id="cmd-demo">eudiplo demo</code><button type="button" class="copy" data-copy="cmd-demo">Copy</button></div>
-              <small>Starts EUDIPLO and its admin interface. Needs Docker or Podman.</small>
+              <small>Starts EUDIPLO and its web client with sample data. Needs Docker or Podman.</small>
             </li>
             <li>
               <h4>Follow a cookbook</h4>
@@ -1277,6 +1409,7 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
             <li><b>Self-hosted.</b> It runs on your servers, in the country you choose. Signing keys stay in your HSM, AWS KMS or Vault.</li>
             <li><b>Free to use.</b> Apache-2.0, with no license or per-transaction fees.</li>
             <li><b>Multi-tenant.</b> One installation serves several issuers and verifiers, or many customers if you offer it as a service, each with its own keys, roles and configuration.</li>
+            <li><b>Operated in the browser.</b> Your team manages configuration, keys, access and sessions in the web client. The API is for your application and your automation.</li>
             <li><b>Ready for audits.</b> Session logs, OpenTelemetry, and configuration changes that are planned before they are applied.</li>
           </ul>
           <div class="links">
@@ -1383,6 +1516,23 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
       next.focus();
     });
   });
+
+  /* ---------- Flow switch: the same section for verifying and issuing ---------- */
+  const flowButtons = [...document.querySelectorAll('[data-flow]')];
+  const codeLabels = { verify: 'Backend code for the age check', issue: 'Backend code for the employee ID' };
+  const sdkFiles = { verify: 'checkout.js', issue: 'employee-id.js' };
+  const setFlow = (flow) => {
+    flowButtons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.flow === flow)));
+    document.querySelectorAll('[data-only]').forEach((el) => { el.hidden = el.dataset.only !== flow; });
+    $('code-main').setAttribute('aria-label', codeLabels[flow]);
+    $('tab-sdk').dataset.file = sdkFiles[flow];
+    $('code-file').textContent = codeTabs.find((t) => t.getAttribute('aria-selected') === 'true').dataset.file;
+  };
+  flowButtons.forEach((b) => b.addEventListener('click', () => setFlow(b.dataset.flow)));
+  document.querySelectorAll('[data-flow-go]').forEach((b) => b.addEventListener('click', () => {
+    setFlow(b.dataset.flowGo);
+    $('hood-head').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+  }));
 
   /* ---------- MRZ strip (decorative, styled like an ID card's machine-readable zone) ---------- */
   const mrz = ['EUDIPLO<<ISSUE<VERIFY<TRUST', 'APACHE<2<0<<LF<DECENTRALIZED<TRUST'];
@@ -1504,7 +1654,7 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
         'Your backend calls POST /api/issuer/offer with the employee’s claims. EUDIPLO returns a credential offer.',
         'The wallet reads the issuer metadata and redeems the pre-authorized code for a token.',
         'The wallet proves it holds a key on this phone, so the credential is bound to the device.',
-        'EUDIPLO signs the SD-JWT VC, adds a status list entry for revocation and notifies your webhook.',
+        'EUDIPLO adds a status list entry for revocation, signs the SD-JWT VC and notifies your webhook once the wallet confirms.',
       ],
     },
   };

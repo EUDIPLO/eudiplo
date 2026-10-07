@@ -53,6 +53,7 @@ for (const file of [
   "icon-192.png",
   "apple-touch-icon.png",
   "fonts",
+  "img",
   "_headers",
   "404.html",
 ]) {

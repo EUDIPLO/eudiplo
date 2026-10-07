@@ -109,8 +109,10 @@ eudiplo down                                # add --volumes to delete the data
 ```
 
 `logs` prints and exits unless you pass `--follow`. `--service` must name a
-service of the project. Arguments after the options are passed to
-`docker compose`, for example `eudiplo down --volumes --remove-orphans`.
+service of the project. Options that `up`, `down`, `ps`, `logs`, `restart` and
+`pull` do not define, and everything after `--`, are passed to
+`docker compose`, for example `eudiplo down --volumes --remove-orphans`. Write
+`--volumes` in full: `-v` prints the CLI version.
 
 ### Upgrade the application
 
@@ -126,8 +128,11 @@ env file. Before asking for confirmation it shows the old and new tags, links
 the upgrade guide for every major version you cross, and warns about downgrades
 and tags it cannot compare, such as `latest`. It then pulls the images and
 recreates the services; if the pull fails, the old tags are restored.
-Non-interactive runs need `--yes`. A customized image line (another registry, a
-digest) is not touched.
+Non-interactive runs need `--yes`. Lines that still point at
+`ghcr.io/openwallet-foundation/` (releases up to 8.1.0) are moved to
+`ghcr.io/eudiplo/`. If a line points at another image (another registry, a
+digest or no tag), `upgrade` stops without changing anything; update that line
+yourself.
 
 Migrations run when the new backend starts and cannot be undone by going back
 to the old tag, so [back up](production-checklist.md#backups) first.
@@ -162,10 +167,13 @@ eudiplo restart --instance production --service backend
   `kubectl rollout restart` and waits for the rollout (`--no-wait` returns
   immediately).
 - `--read-only` registers an instance on which `restart` is refused.
+- Options that `ps`, `logs` and `restart` do not define are passed to
+  `kubectl`, for example `--timestamps` for `logs`.
 - Set `EUDIPLO_KUBECTL` to use a `kubectl` binary that is not on the `PATH`.
 
-`eudiplo doctor` checks the permissions with `kubectl auth can-i`. A Role for
-the CLI:
+`eudiplo doctor` reads the namespace and checks the permissions with
+`kubectl auth can-i`. `restart` waits with `kubectl rollout status`, which
+watches the deployment (not with `--no-wait`). A Role for the CLI:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -175,6 +183,9 @@ metadata:
   namespace: eudiplo
 rules:
   - apiGroups: [""]
+    resources: ["namespaces"]   # in a Role: only the Role's own namespace
+    verbs: ["get"]
+  - apiGroups: [""]
     resources: ["pods", "pods/log"]
     verbs: ["get", "list"]
   - apiGroups: ["discovery.k8s.io"]
@@ -182,7 +193,7 @@ rules:
     verbs: ["get", "list"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "list", "patch"]   # drop patch for --read-only instances
+    verbs: ["get", "list", "watch", "patch"]   # drop watch and patch for --read-only instances
 ```
 
 ## Check an instance with doctor
@@ -208,6 +219,11 @@ The CLI gets its token from the built-in `POST /api/oauth2/token`. Without
 (which fails `--strict`) and the version and KMS checks are skipped. With an
 external OIDC provider that endpoint is disabled, so the authenticated checks
 fail when the variables are set.
+
+KMS provider health is read per tenant, so with the root client the KMS check
+is skipped; a
+[tenant client](tenants-and-access.md#api-clients-with-least-privilege) with
+`issuance:manage` or `presentation:manage` covers it too.
 
 ## Environment variables
 

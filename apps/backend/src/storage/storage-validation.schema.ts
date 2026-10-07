@@ -15,7 +15,11 @@ export const STORAGE_VALIDATION_SCHEMA = Joi.object({
             ),
         })
         .description("The directory to store files in when using local storage")
-        .meta({ group: "storage", order: 20 }),
+        .meta({
+            group: "storage",
+            order: 20,
+            defaultText: "`<FOLDER>/uploads`",
+        }),
     S3_REGION: Joi.string()
         .when(Joi.ref("STORAGE_DRIVER"), {
             is: "s3",

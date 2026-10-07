@@ -13,17 +13,13 @@ npx @eudiplo/cli demo
 
 To run the demo tenant with the Compose files in this directory instead, mount
 the repository's `assets/` folder, which contains the demo tenant in
-`config/demo/`, and enable the startup import. The demo tenant's attribute
-provider and webhook point to `http://localhost:8787`, so the import also needs
-the relaxed outbound URL policy; do not use these settings in production:
+`config/demo/`, and enable the startup import:
 
 ```bash
 cp .env.minimal.example .env
 cat >> .env <<'EOF'
 EUDIPLO_CONFIG_MOUNT=../../assets:/app/config
 CONFIG_IMPORT_MODE=create
-OUTBOUND_URL_ALLOW_HTTP=true
-OUTBOUND_URL_ALLOW_PRIVATE_NETWORK=true
 EOF
 docker compose up -d
 ```
@@ -48,7 +44,7 @@ nano .env
 # Start services
 docker compose up -d                      # Minimal (default)
 docker compose --profile standard up -d   # Standard
-docker compose --profile full up -d       # Full
+docker compose --profile full up -d       # Full: create the Vault key first, see below
 
 # Components can also be enabled independently
 docker compose --profile postgres --profile s3 up -d
@@ -109,7 +105,7 @@ You can override this behavior with:
 | ------------ | -------------------------------------- | -------------------------- | ------------------------- |
 | **Minimal**  | `docker compose up`                    | EUDIPLO only               | Local dev, quick testing  |
 | **Standard** | `docker compose --profile standard up` | + PostgreSQL, RustFS        | Staging, small production |
-| **Full**     | `docker compose --profile full up`     | + PostgreSQL, RustFS, Vault | Enterprise production     |
+| **Full**     | `docker compose --profile full up`     | + PostgreSQL, RustFS, Vault | Evaluation (dev-mode Vault) |
 
 The component profiles `postgres`, `s3`, and `vault` can be combined directly.
 The EUDIPLO CLI uses these component profiles for custom `eudiplo init`
@@ -121,7 +117,7 @@ selections.
 | ------------------ | ---------------- | ---------- | --------------- |
 | **Database**       | SQLite           | PostgreSQL | PostgreSQL      |
 | **File Storage**   | Local filesystem | RustFS (S3) | RustFS (S3)      |
-| **Key Management** | DB-backed        | DB-backed  | HashiCorp Vault |
+| **Encryption key** | From `MASTER_SECRET` | From `MASTER_SECRET` | HashiCorp Vault (dev mode, in memory) |
 
 ## Environment Files
 
@@ -141,6 +137,10 @@ After deployment, access the services at:
 | **RustFS Console**     | <http://localhost:9001/rustfs/console/> (standard/full) |
 | **Vault UI**          | <http://localhost:8200> (full)          |
 
+All published ports bind to `EUDIPLO_BIND_ADDRESS` (default `0.0.0.0`). Set
+`EUDIPLO_BIND_ADDRESS=127.0.0.1` when a reverse proxy on the same host serves
+the backend and client; RustFS and Vault are then reachable only from the host.
+
 ## Upgrading Between Profiles
 
 ### Minimal → Standard
@@ -153,20 +153,22 @@ After deployment, access the services at:
 
 ### Standard → Full
 
-1. Stop services: `docker compose --profile standard down`
-2. Update `.env` with Vault configuration:
+The `full` profile adds a Vault in development mode, which keeps everything in
+memory and loses the encryption key on every restart. Use it for evaluation
+only. `.env.full.example` sets `ENCRYPTION_KEY_SOURCE=vault`, and nothing
+creates the key; the backend does not start until it exists. Creating the key
+and the restart behavior are described in
+[Compose without the CLI](https://docs.eudiplo.dev/operate/docker-compose#create-the-encryption-key-for-full).
 
-   ```
-   VAULT_ADDR=http://vault:8200
-   VAULT_TOKEN=your-token
-   ENCRYPTION_KEY_SOURCE=vault
-   ```
+Data that the standard profile encrypted with the key derived from
+`MASTER_SECRET` stays readable only if Vault holds that same key; a new random
+key makes it unreadable. See
+[Switch to an external key source](https://docs.eudiplo.dev/operate/encryption-keys#switch-to-an-external-key-source).
 
-3. To keep signing keys in Vault as well, add a `kms.json` with a provider of
-   type `vault` (`"vaultUrl": "${VAULT_ADDR}"`, `"vaultToken": "${VAULT_TOKEN}"`)
-   to `CONFIG_FOLDER`. The KMS provider is not selected via environment
-   variables; see the [KMS documentation](https://docs.eudiplo.dev/operate/kms).
-4. Start with `docker compose --profile full up -d`
+To keep signing keys in Vault as well, add a `kms.json` with a provider of type
+`vault` (`"vaultUrl": "${VAULT_ADDR}"`, `"vaultToken": "${VAULT_TOKEN}"`) to
+`CONFIG_FOLDER`. The KMS provider is not selected via environment variables;
+see the [KMS documentation](https://docs.eudiplo.dev/operate/kms).
 
 ## Production Considerations
 
@@ -174,7 +176,8 @@ After deployment, access the services at:
 
 1. **Change all default credentials** in `.env`
 2. **Use strong secrets**: `openssl rand -base64 32`
-3. **Configure proper Vault setup** (not dev mode)
+3. **Configure proper Vault setup** (not the bundled dev-mode Vault, which loses
+   its data on restart)
 4. **Set up TLS/HTTPS** via reverse proxy
 5. **Configure backup strategies** for PostgreSQL and RustFS
 
@@ -182,21 +185,12 @@ For more details, see the [full documentation](https://docs.eudiplo.dev/operate/
 
 ## Migrating existing MinIO storage
 
-These templates now deploy RustFS 1.0.0 with a separate `rustfs-data` volume
-(or PVC). Existing MinIO data is not migrated automatically. Keep the old
-volumes and backups; do not mount a MinIO data directory directly into RustFS.
+This Compose file deploys RustFS 1.0.0 with a separate `rustfs-data` volume.
+Existing MinIO data is not migrated automatically; do not mount a MinIO data
+directory into RustFS. The steps are in the
+[upgrade guide](https://docs.eudiplo.dev/upgrade/8.x-to-9.0#bundled-object-storage-minio-replaced-by-rustfs).
+Existing CLI projects keep their Compose file and env file; updating the CLI
+does not rewrite them.
 
-1. Start RustFS with an empty volume alongside the existing storage service.
-2. Copy buckets and objects through the S3 API using a migration tool that
-   preserves the metadata, versions, and policies your deployment requires.
-3. Verify object counts, contents, and application reads before switching
-   `S3_ENDPOINT` to `http://rustfs:9000`.
-4. Replace `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` with `RUSTFS_ACCESS_KEY` /
-   `RUSTFS_SECRET_KEY`, and use the same values for `S3_ACCESS_KEY_ID` /
-   `S3_SECRET_ACCESS_KEY`. Bucket initialization now uses `S3_BUCKET`.
-5. Keep the old service and data available for rollback until the migration
-   is verified. Existing CLI projects need their Compose file and `.env`
-   updated as well; updating the CLI alone does not rewrite them.
-
-The bucket initialization job uses AWS CLI 2.34.0 and retains the previous
+The bucket initialization job uses AWS CLI 2.37.4 and retains the previous
 public-download policy (`s3:GetObject`). Review that policy for private buckets.

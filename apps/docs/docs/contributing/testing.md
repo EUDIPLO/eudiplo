@@ -67,7 +67,7 @@ The CI job also adds the `host.testcontainers.internal` hosts entry and starts `
 
 ## OIDF conformance testing
 
-The conformance tests run the [OpenID Foundation conformance suite](https://openid.net/certification/conformance/) locally and execute its OID4VCI issuer and OID4VP verifier test plans against EUDIPLO. Testcontainers starts the suite (MongoDB, the suite server and its nginx front end on port 8443); the tests start the backend at `https://host.testcontainers.internal:3000`. No public deployment and no hosted suite are needed.
+The conformance tests run the [OpenID Foundation conformance suite](https://openid.net/certification/about-conformance-suite/) locally and execute its OID4VCI issuer and OID4VP verifier test plans against EUDIPLO. Testcontainers starts the suite (MongoDB, the suite server and its nginx front end on port 8443); the tests start the backend at `https://host.testcontainers.internal:3000`. No public deployment and no hosted suite are needed.
 
 Prerequisites:
 

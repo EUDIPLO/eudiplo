@@ -9,6 +9,7 @@ import {
 } from "@openid4vc/oauth2";
 import {
     createKeyAttestationJwt,
+    type NotificationEvent,
     Openid4vciClient,
     type Openid4vciRetrieveCredentialsError,
 } from "@openid4vc/openid4vci";
@@ -55,6 +56,11 @@ async function resolveCredentialOffer(offerUri: string): Promise<any> {
     });
 
     return client.resolveCredentialOffer(offerUri);
+}
+
+/** Request body that nock passed to a reply function, as JSON. */
+function asJson(body: unknown): unknown {
+    return typeof body === "string" ? JSON.parse(body) : body;
 }
 
 describe("Issuance - Pre-authorized Code Flow", () => {
@@ -1341,6 +1347,44 @@ describe("Issuance - Pre-authorized Code Flow", () => {
             });
     });
 
+    test("rejects a webhook answer without claims for the credential configuration", async () => {
+        const claimRequests: unknown[] = [];
+        nock("http://localhost:8787")
+            .post("/request")
+            .times(2)
+            .reply((_uri, body) => {
+                claimRequests.push(asJson(body));
+                return [200, { other: { town: "Köln" } }];
+            });
+
+        const offerResponse = await createWebhookOffer("citizen");
+
+        expect(await getCredentialErrorResponse(offerResponse)).toEqual({
+            error: "credential_request_denied",
+            error_description:
+                "The claim source returned no claims for credential configuration 'citizen'",
+        });
+        // One claims request; no second call and no static default.
+        expect(claimRequests).toEqual([
+            expect.objectContaining({ credential_configuration_id: "citizen" }),
+        ]);
+    });
+
+    test("issues the static defaults without a claim source", async () => {
+        const offerResponse = await request(app.getHttpServer())
+            .post("/issuer/offer")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                flow: "pre_authorized_code",
+                response_type: "uri",
+                credentialConfigurationIds: ["citizen"],
+            })
+            .expect(201);
+
+        expect((await getClaims(offerResponse)).town).toBe("BERLIN");
+    });
+
     test("pre-authorized flow defaults to built-in authorization server", async () => {
         const offerResponse = await request(app.getHttpServer())
             .post("/issuer/offer")
@@ -1392,6 +1436,95 @@ describe("Issuance - Pre-authorized Code Flow", () => {
         );
     });
 
+    describe("notification webhook", () => {
+        const receiver = "http://localhost:8787";
+
+        beforeAll(async () => {
+            await request(app.getHttpServer())
+                .post("/issuer/webhook-endpoints")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    id: "issuance-events",
+                    name: "Issuance events",
+                    url: `${receiver}/notify`,
+                    auth: { type: "none" },
+                })
+                .expect(201);
+        });
+
+        function createNotifyingOffer() {
+            return request(app.getHttpServer())
+                .post("/issuer/offer")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    response_type: "uri",
+                    credentialConfigurationIds: ["pid-no-key"],
+                    flow: "pre_authorized_code",
+                    webhookEndpointId: "issuance-events",
+                    reference: "order-4711",
+                })
+                .expect(201);
+        }
+
+        function getSession(id: string) {
+            return request(app.getHttpServer())
+                .get(`/session/${id}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+        }
+
+        test("completes the session although the delivery fails", async () => {
+            const delivery = nock(receiver).post("/notify").reply(500);
+            const offerResponse = await createNotifyingOffer();
+            const { notify } = await retrieveCredentials(offerResponse);
+
+            // Answers the wallet with success instead of 500.
+            await notify("credential_accepted");
+
+            expect(delivery.isDone()).toBe(true);
+            const session = await getSession(offerResponse.body.session);
+            expect(session.body.status).toBe("completed");
+            expect(session.body.notifications).toEqual([
+                expect.objectContaining({ event: "credential_accepted" }),
+            ]);
+        });
+
+        test("forwards the event description and the reference", async () => {
+            const payloads: unknown[] = [];
+            nock(receiver)
+                .post("/notify")
+                .reply((_uri, body) => {
+                    payloads.push(asJson(body));
+                    return [204, ""];
+                });
+            const offerResponse = await createNotifyingOffer();
+            const { credentialResponse, notify } =
+                await retrieveCredentials(offerResponse);
+
+            await notify("credential_failure", "Could not store: [E42]");
+
+            const notification = {
+                id: credentialResponse.notification_id,
+                credentialConfigurationId: "pid-no-key",
+                event: "credential_failure",
+                eventDescription: "Could not store: [E42]",
+            };
+            expect(payloads).toEqual([
+                {
+                    notification,
+                    session: offerResponse.body.session,
+                    reference: "order-4711",
+                },
+            ]);
+            const session = await getSession(offerResponse.body.session);
+            expect(session.body.status).toBe("failed");
+            expect(session.body.notifications).toEqual([notification]);
+        });
+    });
+
     async function retrieveCredentials(offerResponse: any) {
         const holderKeyPair = await generateKeyPair("ES256", {
             extractable: true,
@@ -1437,7 +1570,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
             nonce: nonceResponse.c_nonce,
         });
 
-        return client.retrieveCredentials({
+        const response = await client.retrieveCredentials({
             accessToken: accessTokenResponse.access_token,
             credentialConfigurationId:
                 credentialOffer.credential_configuration_ids[0],
@@ -1446,6 +1579,19 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                 jwt: [proofJwt],
             },
         });
+        // Sends the wallet's notification for the issued credential.
+        const notify = (event: NotificationEvent, eventDescription?: string) =>
+            client.sendNotification({
+                issuerMetadata,
+                notification: {
+                    notificationId:
+                        response.credentialResponse.notification_id!,
+                    event,
+                    eventDescription,
+                },
+                accessToken: accessTokenResponse.access_token,
+            });
+        return { ...response, notify };
     }
 
     async function getClaims(offerResponse: any): Promise<Record<string, any>> {

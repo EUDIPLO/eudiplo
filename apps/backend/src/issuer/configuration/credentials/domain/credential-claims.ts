@@ -18,7 +18,9 @@ export interface CredentialClaimsResult {
 export type CredentialClaimsResolutionErrorCode =
     | "credential_configuration_not_found"
     | "attribute_provider_not_found"
-    | "provider_required";
+    | "provider_required"
+    /** A dynamic source answered without claims for the configuration. */
+    | "claims_missing";
 
 export class CredentialClaimsResolutionError extends Error {
     constructor(
@@ -31,6 +33,11 @@ export class CredentialClaimsResolutionError extends Error {
 }
 
 export interface CredentialClaimsProvider {
+    /**
+     * Resolves the claims of the one source that applies. Resolves undefined
+     * only when no dynamic source applies; the static defaults are issued then.
+     * @throws CredentialClaimsResolutionError
+     */
     resolveClaims(
         request: CredentialClaimsRequest,
     ): Promise<CredentialClaimsResult | undefined>;

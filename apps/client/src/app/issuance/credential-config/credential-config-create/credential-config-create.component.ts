@@ -56,6 +56,9 @@ import { EditorComponent, extractSchema } from '../../../utils/editor/editor.com
 import { ImageFieldComponent } from '../../../utils/image-field/image-field.component';
 import { schemaFormValidator } from '../../../utils/schema-form-validator';
 import { getApiErrorMessage } from '../../../utils/error-message';
+import { hostedVctUrl } from '../../../utils/public-url';
+import { FrontendConfigService } from '../../../services/frontend-config.service';
+import { JwtService } from '../../../services/jwt.service';
 
 @Component({
   selector: 'app-credential-config-create',
@@ -243,6 +246,10 @@ export class CredentialConfigCreateComponent implements OnInit {
   // VCT mode: 'string' for simple URI, 'object' for metadata object
   vctMode: 'string' | 'object' = 'string';
 
+  /** The backend's PUBLIC_URL and the tenant, for the hosted VCT URI; null until known. */
+  private publicUrl: string | null = null;
+  private tenantId: string | null = null;
+
   get isMdocFormat(): boolean {
     return this.form.get('format')?.value === 'mso_mdoc';
   }
@@ -253,7 +260,9 @@ export class CredentialConfigCreateComponent implements OnInit {
     private readonly route: ActivatedRoute,
     private readonly snackBar: MatSnackBar,
     private readonly dialog: MatDialog,
-    private readonly presentationManagementService: PresentationManagementService
+    private readonly presentationManagementService: PresentationManagementService,
+    private readonly frontendConfigService: FrontendConfigService,
+    private readonly jwtService: JwtService
   ) {
     this.form = new FormGroup({
       id: new FormControl('', [Validators.required]),
@@ -365,6 +374,12 @@ export class CredentialConfigCreateComponent implements OnInit {
         console.error('Failed to load webhook endpoints:', error);
       }
     );
+
+    // The hosted VCT URI starts with the backend's PUBLIC_URL, not the instance URL.
+    this.tenantId = this.jwtService.getTenantId();
+    this.frontendConfigService
+      .getConfig()
+      .then((config) => (this.publicUrl = config?.publicUrl ?? null));
 
     const id = this.route.snapshot.params['id'];
     if (!id) {
@@ -726,12 +741,13 @@ export class CredentialConfigCreateComponent implements OnInit {
   }
 
   /**
-   * Get the auto-generated VCT URI based on the credential config ID
+   * Get the auto-generated VCT URI based on the credential config ID. Placeholders stand for
+   * the public URL until the frontend configuration is loaded, and for a tenant the token
+   * does not name.
    */
   getVctUri(): string {
     const configId = this.form.get('id')?.value || '<credential-id>';
-    // The actual tenant ID will be determined server-side, show placeholder
-    return `<PUBLIC_URL>/<tenantId>/credentials-metadata/vct/${configId}`;
+    return hostedVctUrl(this.publicUrl ?? '<PUBLIC_URL>', this.tenantId ?? '<tenantId>', configId);
   }
 
   /**
@@ -1072,7 +1088,7 @@ export class CredentialConfigCreateComponent implements OnInit {
 
     formValue.config = {
       format: formValue.format,
-      display: formValue.displayConfigs,
+      display: this.buildDisplayPayload(formValue.displayConfigs),
       scope: formValue.scope || undefined,
       proofTypesSupported:
         formValue.proofTypesSupported?.length > 0
@@ -1216,6 +1232,15 @@ export class CredentialConfigCreateComponent implements OnInit {
 
     const parsed = JSON.parse(value);
     return mode === 'extract' ? extractSchema(value) : parsed;
+  }
+
+  /** Drops display images without a URI: the API requires `uri` when an image is set. */
+  private buildDisplayPayload(displays: any[] | undefined): any[] {
+    return (displays ?? []).map(({ background_image, logo, ...display }: any) => ({
+      ...display,
+      ...(background_image?.uri ? { background_image } : {}),
+      ...(logo?.uri ? { logo } : {}),
+    }));
   }
 
   private buildFieldsPayload(rawFields: any[]): ClaimFieldDefinitionDto[] {
