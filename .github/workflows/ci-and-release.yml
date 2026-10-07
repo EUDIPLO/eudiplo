@@ -554,14 +554,14 @@ jobs:
           name: backend-cobertura-coverage
           path: apps/backend/coverage
 
-      - uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
+      - uses: actions/upload-code-coverage@bfa741d815a28cb064a8e3a0837e577457a017d5 # v1.4.3
         with:
           file: apps/backend/coverage/unit/cobertura-coverage.xml
           language: TypeScript
           label: backend-unit
           fail-on-error: false
 
-      - uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
+      - uses: actions/upload-code-coverage@bfa741d815a28cb064a8e3a0837e577457a017d5 # v1.4.3
         with:
           file: apps/backend/coverage/e2e/cobertura-coverage.xml
           language: TypeScript
@@ -593,7 +593,7 @@ jobs:
           name: client-e2e-coverage
           path: apps/client/coverage/e2e
 
-      - uses: actions/upload-code-coverage@d8e329117199404bba6fc81efe8093dc7c015e34 # v1.4.2
+      - uses: actions/upload-code-coverage@bfa741d815a28cb064a8e3a0837e577457a017d5 # v1.4.3
         with:
           file: apps/client/coverage/e2e/cobertura-coverage.xml
           language: TypeScript
