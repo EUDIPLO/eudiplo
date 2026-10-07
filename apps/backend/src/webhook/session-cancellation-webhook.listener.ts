@@ -1,9 +1,10 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
-import { InjectRepository } from "@nestjs/typeorm";
 import { PinoLogger } from "nestjs-pino";
-import { Repository } from "typeorm";
-import { WebhookEndpointEntity } from "../issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
+import {
+    WEBHOOK_ENDPOINT_REPOSITORY,
+    type WebhookEndpointRepository,
+} from "../issuer/configuration/webhook-endpoint/ports/webhook-endpoint.repository.js";
 import { SessionStore } from "../session/application/session-store.js";
 import {
     SESSION_CANCELLED,
@@ -23,8 +24,11 @@ export class SessionCancellationWebhookListener {
     constructor(
         private readonly sessionStore: SessionStore,
         private readonly webhooks: WebhookService,
-        @InjectRepository(WebhookEndpointEntity)
-        private readonly endpoints: Repository<WebhookEndpointEntity>,
+        @Inject(WEBHOOK_ENDPOINT_REPOSITORY)
+        private readonly endpoints: Pick<
+            WebhookEndpointRepository,
+            "findForTenant"
+        >,
         private readonly logger: PinoLogger,
     ) {
         this.logger.setContext("SessionCancellationWebhookListener");
@@ -33,7 +37,8 @@ export class SessionCancellationWebhookListener {
     @OnEvent(SESSION_CANCELLED, { async: true })
     async handleSessionCancelled(event: SessionCancelledEvent): Promise<void> {
         try {
-            const session = await this.sessionStore.getForInternalFlow(
+            const session = await this.sessionStore.getForTenant(
+                event.tenantId,
                 event.sessionId,
             );
             const webhook =
@@ -64,10 +69,10 @@ export class SessionCancellationWebhookListener {
         webhookEndpointId: string | undefined,
     ): Promise<WebhookConfig | undefined> {
         if (!webhookEndpointId) return undefined;
-        const endpoint = await this.endpoints.findOneBy({
-            id: webhookEndpointId,
+        const endpoint = await this.endpoints.findForTenant(
             tenantId,
-        });
+            webhookEndpointId,
+        );
         return endpoint
             ? { url: endpoint.url, auth: endpoint.auth }
             : undefined;

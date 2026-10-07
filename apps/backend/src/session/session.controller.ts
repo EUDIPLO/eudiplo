@@ -9,7 +9,18 @@ import {
     Post,
     Query,
 } from "@nestjs/common";
-import { ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
+import {
+    ApiBody,
+    ApiOperation,
+    ApiParam,
+    ApiResponse,
+    ApiTags,
+} from "@nestjs/swagger";
+import type { AuditLogRequestMeta } from "../audit-log/audit-log.service.js";
+import {
+    AuditMeta,
+    resolveAuditActor,
+} from "../audit-log/audit-log-context.util.js";
 import { Role } from "../auth/roles/role.enum.js";
 import { Secured } from "../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../auth/token.decorator.js";
@@ -104,20 +115,22 @@ export class SessionController {
     @ApiOperation({
         summary: "Cancel a pending offer",
         description:
-            "Cancels an issuance offer or presentation request that is still active or fetched, so a wallet can no longer use it to start a flow. A flow the wallet already started is not interrupted. The session is kept with the status `cancelled`. To revoke credentials that were already issued, use `POST /session/revoke`.",
+            "Cancels an issuance offer or presentation request that a wallet has not redeemed yet, so it can no longer be used to start a flow. The session is kept with the status `cancelled`. Once a wallet exchanged the offer for tokens or answered the request, the session can no longer be cancelled; to revoke credentials that were already issued, use `POST /session/revoke`.",
     })
+    @ApiBody({ type: CancelSessionDto, required: false })
     @ApiResponse({ status: 204, description: "Session cancelled" })
     @ApiResponse({ status: 404, description: "Session not found" })
     @ApiResponse({
         status: 409,
         description:
-            "The session is already completed, failed, expired or cancelled",
+            "A wallet already redeemed the offer, or the session is completed, failed, expired or cancelled",
     })
     @HttpCode(204)
     async cancel(
         @Param("id") id: string,
         @Body() body: CancelSessionDto,
         @Token() token: TokenPayload,
+        @AuditMeta() requestMeta: AuditLogRequestMeta,
     ): Promise<void> {
         try {
             await this.cancelSession.execute({
@@ -125,10 +138,8 @@ export class SessionController {
                 sessionId: id,
                 scope: sessionScope(token),
                 reason: body.reason,
-                actor:
-                    token.client?.clientId ??
-                    token.authorizedParty ??
-                    token.subject,
+                actor: resolveAuditActor(token),
+                requestMeta,
             });
         } catch (error) {
             if (error instanceof SessionNotCancellable) {

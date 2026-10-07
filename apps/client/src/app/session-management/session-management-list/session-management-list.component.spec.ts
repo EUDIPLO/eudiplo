@@ -1,5 +1,6 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import type { Session } from '@eudiplo/sdk-core';
 import { of } from 'rxjs';
@@ -204,7 +205,8 @@ describe('SessionManagementListComponent', () => {
     const active = { id: 's-1', status: 'active' } as Session;
     const fetched = { id: 's-2', status: 'fetched' } as Session;
     const completed = { id: 's-3', status: 'completed' } as Session;
-    component.selection.select(active, fetched, completed);
+    const redeemed = { id: 's-4', status: 'active', consumed: true } as Session;
+    component.selection.select(active, fetched, completed, redeemed);
 
     expect(component.cancellableSelected).toEqual([active, fetched]);
     await component.cancelSelectedSessions();
@@ -217,6 +219,31 @@ describe('SessionManagementListComponent', () => {
     expect(cancelSession).toHaveBeenCalledWith('s-1', 'sent to wrong recipient');
     expect(cancelSession).toHaveBeenCalledWith('s-2', 'sent to wrong recipient');
     expect(component.selection.selected).toEqual([]);
+  });
+
+  it('reports sessions that were no longer pending apart from other errors', async () => {
+    await setup();
+    vi.spyOn(TestBed.inject(MatDialog), 'open').mockReturnValue({
+      afterClosed: () => of({}),
+    } as never);
+    const snackBar = vi.spyOn(TestBed.inject(MatSnackBar), 'open');
+    cancelSession
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce({ statusCode: 409, message: 'already redeemed' })
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    component.selection.select(
+      { id: 's-1', status: 'active' } as Session,
+      { id: 's-2', status: 'active' } as Session,
+      { id: 's-3', status: 'fetched' } as Session
+    );
+
+    await component.cancelSelectedSessions();
+
+    expect(snackBar).toHaveBeenCalledWith(
+      'Cancelled 1 of 3 sessions; 1 no longer pending; 1 failed',
+      'Close',
+      expect.anything()
+    );
   });
 
   it('does not cancel anything when the dialog is dismissed', async () => {

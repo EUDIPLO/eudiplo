@@ -633,6 +633,12 @@
               ><strong>{{ dashboardService.sessionFailed }}</strong> Failed</span
             >
           </div>
+          <div class="session-stat" fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+            <mat-icon class="status-cancelled">cancel</mat-icon>
+            <span
+              ><strong>{{ dashboardService.sessionCancelled }}</strong> Cancelled</span
+            >
+          </div>
         </div>
       </mat-card-content>
       <mat-card-actions>

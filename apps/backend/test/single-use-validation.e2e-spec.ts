@@ -11,6 +11,7 @@ import request from "supertest";
 import { App } from "supertest/types";
 import { DataSource } from "typeorm";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { AuditLogEntity } from "../src/audit-log/entities/audit-log.entity.js";
 import { StatusListService } from "../src/issuer/status-list/status-list.service.js";
 import { Session } from "../src/session/entities/session.entity.js";
 import { ResponseType } from "../src/verifier/oid4vp/dto/presentation-request.dto.js";
@@ -639,6 +640,92 @@ describe("Session cancellation (Issue #1119) - OID4VCI", () => {
         expect(results.map((res) => res.status).sort((a, b) => a - b)).toEqual([
             204, 409, 409, 409, 409,
         ]);
+    });
+
+    test("cancelling works without a request body", async () => {
+        const { sessionId } = await createOffer();
+
+        await request(app.getHttpServer())
+            .post(`/session/${sessionId}/cancel`)
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(204);
+        expect((await session(sessionId)).status).toBe("cancelled");
+    });
+
+    test("the cancellation is recorded in the tenant audit log", async () => {
+        const { sessionId } = await createOffer();
+        await cancel(sessionId, { reason: "data changed" }).expect(204);
+
+        const entries = await app
+            .get(DataSource)
+            .getRepository(AuditLogEntity)
+            .findBy({ actionType: "session_cancelled" });
+        const entry = entries.find(
+            (candidate) => candidate.after?.sessionId === sessionId,
+        );
+        expect(entry).toMatchObject({
+            actorType: "client",
+            after: { sessionId, reason: "data changed" },
+        });
+        expect(entry?.actorId).toBeDefined();
+    });
+
+    /** Resolves the offer of a session, so a wallet can redeem it. */
+    async function walletFor(sessionId: string) {
+        const client = new Openid4vciClient({
+            callbacks: {
+                ...callbacks,
+                clientAuthentication: clientAuthenticationAnonymous(),
+            },
+        });
+        const credentialOffer = await client.resolveCredentialOffer(
+            (await session(sessionId)).offerUrl,
+        );
+        const issuerMetadata = await client.resolveIssuerMetadata(
+            credentialOffer.credential_issuer,
+        );
+        return () =>
+            client.retrievePreAuthorizedCodeAccessTokenFromOffer({
+                credentialOffer,
+                issuerMetadata,
+            });
+    }
+
+    test("an offer a wallet already redeemed answers 409 and stays usable", async () => {
+        const { sessionId } = await createOffer();
+        const redeem = await walletFor(sessionId);
+        await redeem();
+
+        const res = await cancel(sessionId).expect(409);
+        expect(res.body.message).toBe(
+            "A wallet already redeemed the offer, so it can no longer be cancelled",
+        );
+        expect(await session(sessionId)).toMatchObject({
+            status: "active",
+            consumed: true,
+        });
+    });
+
+    test("exactly one of a cancellation and a concurrent redemption wins", async () => {
+        for (let round = 0; round < 3; round++) {
+            const { sessionId } = await createOffer();
+            const redeem = await walletFor(sessionId);
+
+            const [token, cancellation] = await Promise.allSettled([
+                redeem(),
+                cancel(sessionId),
+            ]);
+            const redeemed = token.status === "fulfilled";
+            const cancelled =
+                cancellation.status === "fulfilled" &&
+                cancellation.value.status === 204;
+
+            expect(redeemed !== cancelled).toBe(true);
+            expect((await session(sessionId)).status).toBe(
+                cancelled ? "cancelled" : "active",
+            );
+        }
     });
 });
 

@@ -413,7 +413,7 @@ export type UpdateTenantDto = {
 export type AuditLogResponseDto = {
     id: string;
     tenantId: string;
-    actionType: 'tenant_created' | 'tenant_updated' | 'tenant_deleted' | 'presentation_config_created' | 'presentation_config_updated' | 'presentation_config_deleted' | 'issuance_config_updated' | 'credential_config_created' | 'credential_config_updated' | 'credential_config_deleted' | 'status_list_config_updated' | 'status_list_config_reset' | 'webhook_endpoint_created' | 'webhook_endpoint_updated' | 'webhook_endpoint_deleted' | 'attribute_provider_created' | 'attribute_provider_updated' | 'attribute_provider_deleted' | 'config_bundle_exported' | 'config_bundle_imported' | 'config_client_secret_generated' | 'config_resource_detached';
+    actionType: 'tenant_created' | 'tenant_updated' | 'tenant_deleted' | 'presentation_config_created' | 'presentation_config_updated' | 'presentation_config_deleted' | 'issuance_config_updated' | 'credential_config_created' | 'credential_config_updated' | 'credential_config_deleted' | 'status_list_config_updated' | 'status_list_config_reset' | 'webhook_endpoint_created' | 'webhook_endpoint_updated' | 'webhook_endpoint_deleted' | 'attribute_provider_created' | 'attribute_provider_updated' | 'attribute_provider_deleted' | 'config_bundle_exported' | 'config_bundle_imported' | 'config_client_secret_generated' | 'config_resource_detached' | 'session_cancelled';
     actorType: 'user' | 'client' | 'system';
     actorId?: string;
     actorDisplay?: string;
@@ -1911,7 +1911,7 @@ export type PaginatedSessionResponseDto = {
 
 export type CancelSessionDto = {
     /**
-     * Why the offer was cancelled. Stored in the session log and sent to the session webhook.
+     * Why the offer was cancelled. Stored in the audit logs and sent to the session webhook.
      */
     reason?: string;
 };
@@ -6503,7 +6503,7 @@ export type SessionControllerGetSessionResponses = {
 export type SessionControllerGetSessionResponse = SessionControllerGetSessionResponses[keyof SessionControllerGetSessionResponses];
 
 export type SessionControllerCancelData = {
-    body: CancelSessionDto;
+    body?: CancelSessionDto;
     path: {
         /**
          * The session ID
@@ -6520,7 +6520,7 @@ export type SessionControllerCancelErrors = {
      */
     404: unknown;
     /**
-     * The session is already completed, failed, expired or cancelled
+     * A wallet already redeemed the offer, or the session is completed, failed, expired or cancelled
      */
     409: unknown;
 };

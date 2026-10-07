@@ -10,12 +10,12 @@ const event = {
 
 function setup(session: Partial<SessionData>) {
     const stored = { id: "session-1", tenantId: "tenant-1", ...session };
-    const sessions = { getForInternalFlow: vi.fn().mockResolvedValue(stored) };
+    const sessions = { getForTenant: vi.fn().mockResolvedValue(stored) };
     const webhooks = {
         sendSessionCancelledWebhook: vi.fn().mockResolvedValue(undefined),
     };
     const endpoints = {
-        findOneBy: vi.fn().mockResolvedValue({
+        findForTenant: vi.fn().mockResolvedValue({
             url: "https://endpoint.example/hook",
             auth: { type: "none" },
         }),
@@ -27,7 +27,7 @@ function setup(session: Partial<SessionData>) {
         endpoints as never,
         logger as never,
     );
-    return { listener, stored, webhooks, endpoints, logger };
+    return { listener, stored, sessions, webhooks, endpoints, logger };
 }
 
 describe("SessionCancellationWebhookListener", () => {
@@ -43,7 +43,7 @@ describe("SessionCancellationWebhookListener", () => {
 
         await listener.handleSessionCancelled(event);
 
-        expect(endpoints.findOneBy).not.toHaveBeenCalled();
+        expect(endpoints.findForTenant).not.toHaveBeenCalled();
         expect(webhooks.sendSessionCancelledWebhook).toHaveBeenCalledWith(
             parsedWebhook,
             stored,
@@ -58,14 +58,25 @@ describe("SessionCancellationWebhookListener", () => {
 
         await listener.handleSessionCancelled(event);
 
-        expect(endpoints.findOneBy).toHaveBeenCalledWith({
-            id: "endpoint-1",
-            tenantId: "tenant-1",
-        });
+        expect(endpoints.findForTenant).toHaveBeenCalledWith(
+            "tenant-1",
+            "endpoint-1",
+        );
         expect(webhooks.sendSessionCancelledWebhook).toHaveBeenCalledWith(
             { url: "https://endpoint.example/hook", auth: { type: "none" } },
             expect.objectContaining({ id: "session-1" }),
             "sent to wrong recipient",
+        );
+    });
+
+    it("reads the session within the tenant of the event", async () => {
+        const { listener, sessions } = setup({});
+
+        await listener.handleSessionCancelled(event);
+
+        expect(sessions.getForTenant).toHaveBeenCalledWith(
+            "tenant-1",
+            "session-1",
         );
     });
 

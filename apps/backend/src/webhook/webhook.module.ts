@@ -1,7 +1,10 @@
 import { HttpModule } from "@nestjs/axios";
 import { Module } from "@nestjs/common";
-import { TypeOrmModule } from "@nestjs/typeorm";
+import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
+import type { Repository } from "typeorm";
+import { TypeOrmWebhookEndpointRepository } from "../issuer/configuration/webhook-endpoint/adapters/typeorm-webhook-endpoint.repository.js";
 import { WebhookEndpointEntity } from "../issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
+import { WEBHOOK_ENDPOINT_REPOSITORY } from "../issuer/configuration/webhook-endpoint/ports/webhook-endpoint.repository.js";
 import { SessionModule } from "../session/session.module.js";
 import { OutboundUrlPolicyModule } from "./outbound-url-policy.module.js";
 import { PRESENTATION_RESULT_PUBLISHER } from "./ports/presentation-result-publisher.js";
@@ -25,6 +28,14 @@ import { WebhookPresentationResultPublisher } from "./webhook-presentation-resul
     providers: [
         WebhookService,
         SessionCancellationWebhookListener,
+        // WebhookEndpointModule imports this module, so the port is provided
+        // here instead of importing it back.
+        {
+            provide: WEBHOOK_ENDPOINT_REPOSITORY,
+            inject: [getRepositoryToken(WebhookEndpointEntity)],
+            useFactory: (repository: Repository<WebhookEndpointEntity>) =>
+                new TypeOrmWebhookEndpointRepository(repository),
+        },
         WebhookPresentationResultPublisher,
         {
             provide: PRESENTATION_RESULT_PUBLISHER,

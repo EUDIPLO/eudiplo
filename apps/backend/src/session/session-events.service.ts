@@ -79,7 +79,7 @@ export class SessionEventsService {
      * The stream starts with the current status, merges in-process events
      * with a periodic database read (so changes made by other replicas
      * arrive too), emits each status once, and completes after a terminal
-     * status (completed, failed, expired) or when the session is gone.
+     * status (completed, failed, expired, cancelled) or when the session is gone.
      * Unsubscribing stops the database reads.
      *
      * @param tenantId - Tenant that owns the session; scopes every read

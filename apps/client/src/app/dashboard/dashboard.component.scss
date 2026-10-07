@@ -479,6 +479,10 @@ mat-icon[mat-card-avatar] {
       .status-failed {
         color: var(--eudiplo-danger);
       }
+
+      .status-cancelled {
+        color: var(--mat-sys-on-surface-variant);
+      }
     }
   }
 }
@@ -567,6 +571,10 @@ mat-icon[mat-card-avatar] {
 
     &.status-failed {
       color: var(--eudiplo-danger);
+    }
+
+    &.status-cancelled {
+      color: var(--mat-sys-on-surface-variant);
     }
   }
 

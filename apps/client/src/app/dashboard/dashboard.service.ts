@@ -27,6 +27,7 @@ export class DashboardService {
   sessionFetched = 0;
   sessionFailed = 0;
   sessionExpired = 0;
+  sessionCancelled = 0;
   totalKeyChains = 0;
   accessKeyChains = 0;
   hasActiveAccessCertificate = false;
@@ -53,6 +54,7 @@ export class DashboardService {
     this.sessionFetched = 0;
     this.sessionFailed = 0;
     this.sessionExpired = 0;
+    this.sessionCancelled = 0;
     this.totalKeyChains = 0;
     this.accessKeyChains = 0;
     this.hasActiveAccessCertificate = false;
@@ -152,6 +154,9 @@ export class DashboardService {
                     break;
                   case 'expired':
                     this.sessionExpired++;
+                    break;
+                  case 'cancelled':
+                    this.sessionCancelled++;
                     break;
                 }
 

@@ -128,6 +128,7 @@ describe("SessionController", () => {
                 "session-1",
                 { reason: "sent to wrong recipient" },
                 caller,
+                { requestId: "request-1" },
             );
 
             expect(cancel.execute).toHaveBeenCalledExactlyOnceWith({
@@ -135,7 +136,8 @@ describe("SessionController", () => {
                 sessionId: "session-1",
                 scope: "issuance",
                 reason: "sent to wrong recipient",
-                actor: "client-1",
+                actor: { type: "client", id: "client-1", display: "client-1" },
+                requestMeta: { requestId: "request-1" },
             });
         });
 
@@ -146,7 +148,12 @@ describe("SessionController", () => {
             );
 
             await expect(
-                controller.cancel("session-1", {}, token([Role.IssuanceOffer])),
+                controller.cancel(
+                    "session-1",
+                    {},
+                    token([Role.IssuanceOffer]),
+                    {},
+                ),
             ).rejects.toBeInstanceOf(ConflictException);
         });
 
@@ -155,7 +162,12 @@ describe("SessionController", () => {
             cancel.execute.mockRejectedValue(new SessionNotFound());
 
             await expect(
-                controller.cancel("session-1", {}, token([Role.IssuanceOffer])),
+                controller.cancel(
+                    "session-1",
+                    {},
+                    token([Role.IssuanceOffer]),
+                    {},
+                ),
             ).rejects.toBeInstanceOf(SessionNotFound);
         });
     });

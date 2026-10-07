@@ -40,7 +40,12 @@ import {
   CancelSessionDialogData,
   CancelSessionDialogResult,
 } from '../cancel-session-dialog/cancel-session-dialog.component';
-import { SessionManagementService, SessionQueryParams } from '../session-management.service';
+import {
+  isCancelConflict,
+  isCancellable,
+  SessionManagementService,
+  SessionQueryParams,
+} from '../session-management.service';
 
 // Define the SessionStatus type
 export type SessionStatus = 'active' | 'fetched' | 'completed' | 'expired' | 'failed' | 'cancelled';
@@ -486,11 +491,9 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
     }
   }
 
-  /** Selected sessions a wallet has not finished yet, the only ones that can be cancelled. */
+  /** Selected sessions a wallet has neither redeemed nor finished, the only ones that can be cancelled. */
   get cancellableSelected(): Session[] {
-    return this.selection.selected.filter((session) =>
-      PENDING_STATUSES.includes(session.status as SessionStatus)
-    );
+    return this.selection.selected.filter(isCancellable);
   }
 
   async cancelSelectedSessions() {
@@ -514,16 +517,24 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
 
     this.cancellingSelected = true;
     try {
-      // A session a wallet finished in the meantime is rejected (409) and counted as failed.
+      // A session a wallet redeemed or finished in the meantime is rejected (409).
       const outcomes = await Promise.allSettled(
         sessions.map((session) =>
           this.sessionManagementService.cancelSession(session.id, result.reason)
         )
       );
-      const failed = outcomes.filter((outcome) => outcome.status === 'rejected').length;
+      const rejected = outcomes.filter(
+        (outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected'
+      );
+      const conflicts = rejected.filter((outcome) => isCancelConflict(outcome.reason)).length;
+      const errors = rejected.length - conflicts;
       this.snackBar.open(
-        failed
-          ? `Cancelled ${sessions.length - failed} of ${sessions.length} sessions; the others were no longer pending`
+        rejected.length
+          ? [
+              `Cancelled ${sessions.length - rejected.length} of ${sessions.length} sessions`,
+              ...(conflicts ? [`${conflicts} no longer pending`] : []),
+              ...(errors ? [`${errors} failed`] : []),
+            ].join('; ')
           : `Cancelled ${sessions.length} ${sessions.length === 1 ? 'session' : 'sessions'}`,
         'Close',
         { duration: 4000 }

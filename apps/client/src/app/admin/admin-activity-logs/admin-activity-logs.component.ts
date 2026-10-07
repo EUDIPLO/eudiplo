@@ -102,7 +102,9 @@ export class AdminActivityLogsComponent implements OnInit {
 
     for (const log of this.activityLogs) {
       if (log.actionType) {
-        const match = log.actionType.match(/^(.+?)(?:_created|_updated|_deleted|_reset)$/);
+        const match = log.actionType.match(
+          /^(.+?)(?:_created|_updated|_deleted|_reset|_cancelled)$/
+        );
         if (match) {
           objectTypes.add(match[1]);
         }
@@ -117,6 +119,7 @@ export class AdminActivityLogsComponent implements OnInit {
       attribute_provider: 'Attribute Provider',
       status_list_config: 'Status List Config',
       webhook_endpoint: 'Webhook Endpoint',
+      session: 'Session',
     };
 
     return Array.from(objectTypes)
@@ -152,6 +155,7 @@ export class AdminActivityLogsComponent implements OnInit {
       webhook_endpoint_created: 'Webhook Endpoint Created',
       webhook_endpoint_updated: 'Webhook Endpoint Updated',
       webhook_endpoint_deleted: 'Webhook Endpoint Deleted',
+      session_cancelled: 'Session Cancelled',
     };
     return labels[actionType] || actionType;
   }

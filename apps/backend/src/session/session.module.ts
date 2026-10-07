@@ -1,6 +1,8 @@
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
+import { AuditLogModule } from "../audit-log/audit-log.module.js";
+import { AuditLogService } from "../audit-log/audit-log.service.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { TenantEntity } from "../auth/tenant/entities/tenant.entity.js";
 import { StatusListModule } from "../issuer/status-list/status-list.module.js";
@@ -34,7 +36,9 @@ import {
     type SessionContext,
 } from "./ports/session-context.js";
 import {
+    SESSION_CANCELLATION_PUBLISHER,
     SESSION_EVENT_PUBLISHER,
+    type SessionCancellationPublisher,
     type SessionEventPublisher,
 } from "./ports/session-event-publisher.js";
 import {
@@ -57,6 +61,7 @@ import { SESSION_SETTINGS, type SessionSettings } from "./session-settings.js";
         StatusListModule,
         SessionLoggingModule,
         AuthModule,
+        AuditLogModule,
     ],
     providers: [
         { provide: SESSION_CONTEXT, useClass: RequestSessionContext },
@@ -123,9 +128,14 @@ import { SESSION_SETTINGS, type SessionSettings } from "./session-settings.js";
                     1000,
             }),
         },
+        NestSessionEventPublisher,
         {
             provide: SESSION_EVENT_PUBLISHER,
-            useClass: NestSessionEventPublisher,
+            useExisting: NestSessionEventPublisher,
+        },
+        {
+            provide: SESSION_CANCELLATION_PUBLISHER,
+            useExisting: NestSessionEventPublisher,
         },
         OtelSessionMetrics,
         {
@@ -141,21 +151,37 @@ import { SESSION_SETTINGS, type SessionSettings } from "./session-settings.js";
             inject: [
                 SessionStore,
                 ChangeSessionState,
-                SESSION_EVENT_PUBLISHER,
+                SESSION_CANCELLATION_PUBLISHER,
                 SessionLoggerService,
+                AuditLogService,
             ],
             useFactory: (
                 store: SessionStore,
                 changeState: ChangeSessionState,
-                events: NestSessionEventPublisher,
-                logs: SessionLoggerService,
+                events: SessionCancellationPublisher,
+                sessionLog: SessionLoggerService,
+                auditLog: AuditLogService,
             ) =>
                 new CancelSession(
                     store,
                     changeState,
                     events,
-                    (session, detail) =>
-                        logs.logSessionCancelled(session, detail),
+                    async (session, { reason, actor, requestMeta }) => {
+                        sessionLog.logSessionCancelled(session, {
+                            reason,
+                            actor,
+                        });
+                        await auditLog.record({
+                            tenantId: session.tenantId,
+                            actionType: "session_cancelled",
+                            actor,
+                            after: {
+                                sessionId: session.sessionId,
+                                ...(reason ? { reason } : {}),
+                            },
+                            requestMeta,
+                        });
+                    },
                 ),
         },
         SessionConfigService,

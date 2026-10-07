@@ -22,7 +22,8 @@ export type AuditActionTypeLiteral =
     | "config_bundle_exported"
     | "config_bundle_imported"
     | "config_client_secret_generated"
-    | "config_resource_detached";
+    | "config_resource_detached"
+    | "session_cancelled";
 
 const ACTION_TYPE_VALUES: AuditActionTypeLiteral[] = [
     "tenant_created",
@@ -47,6 +48,7 @@ const ACTION_TYPE_VALUES: AuditActionTypeLiteral[] = [
     "config_bundle_imported",
     "config_client_secret_generated",
     "config_resource_detached",
+    "session_cancelled",
 ];
 
 export class AuditLogResponseDto {

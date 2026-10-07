@@ -18,7 +18,12 @@ import {
   CancelSessionDialogData,
   CancelSessionDialogResult,
 } from '../cancel-session-dialog/cancel-session-dialog.component';
-import { SessionManagementService, type SessionLogEntry } from '../session-management.service';
+import {
+  isCancelConflict,
+  isCancellable,
+  SessionManagementService,
+  type SessionLogEntry,
+} from '../session-management.service';
 import { GrafanaLinkService } from '../../services/grafana-link.service';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
@@ -95,9 +100,9 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
 
   cancelling = false;
 
-  /** Only offers and requests a wallet has not finished yet can be cancelled. */
+  /** Only offers and requests a wallet has neither redeemed nor finished can be cancelled. */
   canCancel(): boolean {
-    return this.session?.status === 'active' || this.session?.status === 'fetched';
+    return !!this.session && isCancellable(this.session);
   }
 
   cancelSession(): void {
@@ -122,7 +127,9 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
         } catch (error) {
           console.error('Error cancelling session:', error);
           this.snackBar.open(
-            'The session could not be cancelled, it is no longer pending',
+            isCancelConflict(error)
+              ? 'The session could not be cancelled, it is no longer pending'
+              : 'The session could not be cancelled, please try again',
             'Close',
             {
               duration: 4000,

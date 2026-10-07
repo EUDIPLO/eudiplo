@@ -186,7 +186,7 @@
             type="button"
             (click)="cancelSelectedSessions()"
             [disabled]="cancellingSelected || cancellableSelected.length === 0"
-            matTooltip="Cancel the selected active or fetched offers, so a wallet can no longer use them"
+            matTooltip="Cancel the selected offers a wallet has not redeemed yet, so it can no longer use them"
           >
             <mat-icon>cancel</mat-icon>
             @if (cancellingSelected) {

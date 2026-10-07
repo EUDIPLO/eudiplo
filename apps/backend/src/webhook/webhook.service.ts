@@ -58,6 +58,13 @@ function referenceOf(session: { reference?: string | null }) {
     return session.reference ? { reference: session.reference } : {};
 }
 
+/** The API key header of the webhook, when it uses one. */
+function authHeaders(webhook: WebhookConfig): Record<string, string> {
+    return webhook.auth?.type === "apiKey"
+        ? { [webhook.auth.config.headerName]: webhook.auth.config.value }
+        : {};
+}
+
 /**
  * Service for handling webhooks in the application.
  * HTTP calls are auto-instrumented by OpenTelemetry for distributed tracing.
@@ -99,12 +106,7 @@ export class WebhookService {
         rawPresentationPayload?: any;
         result?: PresentationWebhookResult;
     }): Promise<WebhookResponse> {
-        const headers: Record<string, string> = {};
-
-        if (values.webhook.auth && values.webhook.auth.type === "apiKey") {
-            headers[values.webhook.auth.config.headerName] =
-                values.webhook.auth.config.value;
-        }
+        const headers = authHeaders(values.webhook);
 
         let payloadCredentials = values.credentials;
 
@@ -188,48 +190,16 @@ export class WebhookService {
      * @param session The session
      * @param notification The notification payload
      */
-    async sendWebhookNotification(
+    sendWebhookNotification(
         webhook: WebhookConfig,
         session: Session,
         notification: Notification,
     ) {
-        await this.outboundUrlPolicyService.assertSafeUrl(webhook.url);
-
-        const headers: Record<string, string> = {};
-
-        if (webhook.auth && webhook.auth.type === "apiKey") {
-            headers[webhook.auth.config.headerName] = webhook.auth.config.value;
-        }
-
-        this.logger.debug(
-            { webhookUrl: webhook.url, sessionId: session.id },
-            "Sending webhook notification",
-        );
-
-        await firstValueFrom(
-            this.httpService.post(
-                webhook.url,
-                {
-                    notification,
-                    session: session.id,
-                    ...referenceOf(session),
-                },
-                {
-                    headers,
-                    lookup: this.outboundUrlPolicyService.safeLookup as never,
-                },
-            ),
-        ).then(
-            () => {
-                // Success - OTel traces capture the HTTP call details
-            },
-            (err) => {
-                this.logger.error(
-                    { webhookUrl: webhook.url, error: err.message },
-                    "Error sending webhook notification",
-                );
-                throw new Error(`Error sending webhook: ${err.message || err}`);
-            },
+        return this.postSessionEvent(
+            webhook,
+            session,
+            { notification, session: session.id, ...referenceOf(session) },
+            "webhook notification",
         );
     }
 
@@ -240,42 +210,50 @@ export class WebhookService {
      * @param session The cancelled session
      * @param reason Why the offer was cancelled, when given
      */
-    async sendSessionCancelledWebhook(
+    sendSessionCancelledWebhook(
         webhook: WebhookConfig,
         session: Session,
         reason?: string,
     ) {
+        return this.postSessionEvent(
+            webhook,
+            session,
+            {
+                status: SessionStatus.Cancelled,
+                session: session.id,
+                ...referenceOf(session),
+                ...(reason ? { reason } : {}),
+            },
+            "session cancelled webhook",
+        );
+    }
+
+    /**
+     * Posts a session event whose response body is ignored.
+     * @throws Error when the URL is blocked or the delivery failed
+     */
+    private async postSessionEvent(
+        webhook: WebhookConfig,
+        session: Session,
+        payload: Record<string, unknown>,
+        description: string,
+    ): Promise<void> {
         await this.outboundUrlPolicyService.assertSafeUrl(webhook.url);
-
-        const headers: Record<string, string> = {};
-
-        if (webhook.auth && webhook.auth.type === "apiKey") {
-            headers[webhook.auth.config.headerName] = webhook.auth.config.value;
-        }
 
         this.logger.debug(
             { webhookUrl: webhook.url, sessionId: session.id },
-            "Sending session cancelled webhook",
+            `Sending ${description}`,
         );
 
         await firstValueFrom(
-            this.httpService.post(
-                webhook.url,
-                {
-                    status: SessionStatus.Cancelled,
-                    session: session.id,
-                    ...referenceOf(session),
-                    ...(reason ? { reason } : {}),
-                },
-                {
-                    headers,
-                    lookup: this.outboundUrlPolicyService.safeLookup as never,
-                },
-            ),
+            this.httpService.post(webhook.url, payload, {
+                headers: authHeaders(webhook),
+                lookup: this.outboundUrlPolicyService.safeLookup as never,
+            }),
         ).catch((err) => {
             this.logger.error(
                 { webhookUrl: webhook.url, error: err.message },
-                "Error sending session cancelled webhook",
+                `Error sending ${description}`,
             );
             throw new Error(`Error sending webhook: ${err.message || err}`);
         });
@@ -306,12 +284,7 @@ export class WebhookService {
     }): Promise<WebhookResponse> {
         await this.outboundUrlPolicyService.assertSafeUrl(values.webhook.url);
 
-        const headers: Record<string, string> = {};
-
-        if (values.webhook.auth?.type === "apiKey") {
-            headers[values.webhook.auth.config.headerName] =
-                values.webhook.auth.config.value;
-        }
+        const headers = authHeaders(values.webhook);
 
         this.logger.debug(
             {

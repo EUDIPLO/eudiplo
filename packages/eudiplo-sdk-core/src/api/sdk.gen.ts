@@ -512,7 +512,7 @@ export const sessionControllerGetSession = <ThrowOnError extends boolean = true>
 /**
  * Cancel a pending offer
  *
- * Cancels an issuance offer or presentation request that is still active or fetched, so a wallet can no longer use it to start a flow. A flow the wallet already started is not interrupted. The session is kept with the status `cancelled`. To revoke credentials that were already issued, use `POST /session/revoke`.
+ * Cancels an issuance offer or presentation request that a wallet has not redeemed yet, so it can no longer be used to start a flow. The session is kept with the status `cancelled`. Once a wallet exchanged the offer for tokens or answered the request, the session can no longer be cancelled; to revoke credentials that were already issued, use `POST /session/revoke`.
  */
 export const sessionControllerCancel = <ThrowOnError extends boolean = true>(options: Options<SessionControllerCancelData, ThrowOnError>): RequestResult<SessionControllerCancelResponses, SessionControllerCancelErrors, ThrowOnError> => (options.client ?? client).post<SessionControllerCancelResponses, SessionControllerCancelErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
