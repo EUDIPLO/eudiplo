@@ -37,7 +37,8 @@ describe("Issuance - Refresh Token Flow", () => {
         authToken = ctx.authToken;
         clientId = ctx.clientId;
 
-        // Enable refresh tokens for the root tenant's issuance config (POST upserts)
+        // Refresh tokens are on by default (token.refreshTokenEnabled of each
+        // authorization server); the issuance config has no top-level switch.
         await request(app.getHttpServer())
             .post("/issuer/config")
             .trustLocalhost()
@@ -45,7 +46,6 @@ describe("Issuance - Refresh Token Flow", () => {
             .send({
                 walletAttestationRequired: false,
                 dPopRequired: false,
-                refreshTokenEnabled: true,
             })
             .expect(201);
     });

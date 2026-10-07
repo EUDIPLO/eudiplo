@@ -346,7 +346,7 @@ export class IssuanceConfigCreateComponent implements OnInit {
     this.form = new FormGroup({
       display: this.fb.array([]),
       authorizationServers: this.fb.array([]),
-      batchSize: new FormControl(1, [Validators.min(1)]),
+      batchSize: new FormControl(1, [Validators.required, Validators.min(1)]),
       dPopRequired: new FormControl(false),
       txCodeMaxAttempts: new FormControl<number | null>(null, [Validators.min(1)]),
       credentialResponseEncryption: new FormControl(false),

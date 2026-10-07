@@ -13,8 +13,23 @@ import { ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Role } from "../../auth/roles/role.enum.js";
 import { Secured } from "../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../auth/token.decorator.js";
+import { createConfigBodyPipe } from "../../shared/common/zod/zod-schema.util.js";
 import { TrustListCreateDto } from "./dto/trust-list-create.dto.js";
+import { TrustListCreateSchema } from "./schemas/trust-list.schema.js";
 import { TrustListService } from "./trustlist.service.js";
+
+/** Fields a GET response adds to the trust list (tenant, generated list). */
+const readOnly = [
+    "tenantId",
+    "tenant",
+    "keyChain",
+    "data",
+    "entityConfig",
+    "sequenceNumber",
+    "jwt",
+    "createdAt",
+    "updatedAt",
+];
 
 /**
  * Controller for managing trust lists.
@@ -32,7 +47,8 @@ export class TrustListController {
      */
     @Post()
     createTrustList(
-        @Body() body: TrustListCreateDto,
+        @Body(createConfigBodyPipe(TrustListCreateSchema, { readOnly }))
+        body: TrustListCreateDto,
         @Token() token: TokenPayload,
     ) {
         return this.trustListService
@@ -129,7 +145,8 @@ export class TrustListController {
     @Put(":id")
     updateTrustList(
         @Param("id") id: string,
-        @Body() body: TrustListCreateDto,
+        @Body(createConfigBodyPipe(TrustListCreateSchema, { readOnly }))
+        body: TrustListCreateDto,
         @Token() token: TokenPayload,
     ) {
         return this.trustListService
