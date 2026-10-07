@@ -110,9 +110,13 @@ export function buildComposeLogsArgs(
     return args;
 }
 
-export function buildComposePullArgs(service: string | undefined): string[] {
+export function buildComposePullArgs(
+    services: string | readonly string[] | undefined,
+): string[] {
     const args = ["pull"];
-    if (service !== undefined) {
+    for (const service of typeof services === "string"
+        ? [services]
+        : (services ?? [])) {
         assertServiceName(service);
         args.push(service);
     }
