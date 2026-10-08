@@ -2,6 +2,7 @@ export interface TrustListRef {
     trustListId?: string;
     url: string;
     verifierKey?: Record<string, unknown>;
+    verifierKeyPem?: string;
     verifierX509Der?: string;
 }
 
@@ -30,13 +31,16 @@ export function normalizeTrustListRefs(
 
         const hasVerifierKey =
             !!ref.verifierKey && typeof ref.verifierKey === "object";
+        const hasVerifierKeyPem =
+            typeof ref.verifierKeyPem === "string" &&
+            ref.verifierKeyPem.trim().length > 0;
         const hasVerifierX509Der =
             typeof ref.verifierX509Der === "string" &&
             ref.verifierX509Der.trim().length > 0;
 
-        if (!hasVerifierKey && !hasVerifierX509Der) {
+        if (!hasVerifierKey && !hasVerifierKeyPem && !hasVerifierX509Der) {
             throw new Error(
-                `Trust list reference '${url}' must define verifierKey or verifierX509Der`,
+                `Trust list reference '${url}' must define verifierKey, verifierKeyPem or verifierX509Der`,
             );
         }
 
@@ -44,6 +48,7 @@ export function normalizeTrustListRefs(
             {
                 url,
                 verifierKey: ref.verifierKey,
+                verifierKeyPem: ref.verifierKeyPem?.trim(),
                 verifierX509Der: ref.verifierX509Der?.trim(),
             },
         ];

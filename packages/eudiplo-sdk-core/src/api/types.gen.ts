@@ -4263,6 +4263,10 @@ export type WalletProviderTrustListRefDto = {
         [key: string]: unknown;
     };
     /**
+     * PEM-encoded public key (SPKI, -----BEGIN PUBLIC KEY-----) used to verify the trust-list JWT signature.
+     */
+    verifierKeyPem?: string;
+    /**
      * Base64 DER-encoded X.509 certificate used to verify the trust-list JWT signature.
      */
     verifierX509Der?: string;
@@ -4311,6 +4315,7 @@ export type Oid4VpAuthorizationServerConfig = {
         verifierKey?: {
             [key: string]: unknown;
         };
+        verifierKeyPem?: string;
         verifierX509Der?: string;
     }>;
     label?: string;
@@ -4380,6 +4385,7 @@ export type ChainedAuthorizationServerConfig = {
         verifierKey?: {
             [key: string]: unknown;
         };
+        verifierKeyPem?: string;
         verifierX509Der?: string;
     }>;
     label?: string;
@@ -4421,6 +4427,7 @@ export type BuiltInAuthorizationServerConfig = {
         verifierKey?: {
             [key: string]: unknown;
         };
+        verifierKeyPem?: string;
         verifierX509Der?: string;
     }>;
     label?: string;
@@ -4529,7 +4536,7 @@ export type IssuanceConfig = {
     /**
      * Shared wallet provider trust lists for key attestations at the credential endpoint
      * and default wallet-attestation trust at managed authorization servers.
-     * Each entry MUST include either `verifierKey` or `verifierX509Der`.
+     * Each entry MUST include `verifierKey`, `verifierKeyPem` or `verifierX509Der`.
      */
     walletProviderTrustLists?: Array<WalletProviderTrustListRefDto>;
     /**
@@ -4608,7 +4615,7 @@ export type UpdateIssuanceDto = {
     /**
      * Shared wallet provider trust lists for key attestations at the credential endpoint
      * and default wallet-attestation trust at managed authorization servers.
-     * Each entry MUST include either `verifierKey` or `verifierX509Der`.
+     * Each entry MUST include `verifierKey`, `verifierKeyPem` or `verifierX509Der`.
      */
     walletProviderTrustLists?: Array<WalletProviderTrustListRefDto>;
     /**
@@ -5473,7 +5480,7 @@ export type IssuanceConfigWritable = {
     /**
      * Shared wallet provider trust lists for key attestations at the credential endpoint
      * and default wallet-attestation trust at managed authorization servers.
-     * Each entry MUST include either `verifierKey` or `verifierX509Der`.
+     * Each entry MUST include `verifierKey`, `verifierKeyPem` or `verifierX509Der`.
      */
     walletProviderTrustLists?: Array<WalletProviderTrustListRefDto>;
     /**
@@ -5548,7 +5555,7 @@ export type UpdateIssuanceDtoWritable = {
     /**
      * Shared wallet provider trust lists for key attestations at the credential endpoint
      * and default wallet-attestation trust at managed authorization servers.
-     * Each entry MUST include either `verifierKey` or `verifierX509Der`.
+     * Each entry MUST include `verifierKey`, `verifierKeyPem` or `verifierX509Der`.
      */
     walletProviderTrustLists?: Array<WalletProviderTrustListRefDto>;
     /**

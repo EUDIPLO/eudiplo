@@ -71,6 +71,9 @@ import { ConfigOwnershipNoticeComponent } from '../../../config-portability/conf
   styleUrl: './issuance-config-create.component.scss',
 })
 export class IssuanceConfigCreateComponent implements OnInit {
+  private static readonly SPKI_PEM_PATTERN =
+    /^\s*-----BEGIN PUBLIC KEY-----[A-Za-z0-9+/=\s]+-----END PUBLIC KEY-----\s*$/;
+
   private static jsonValidator(control: AbstractControl): ValidationErrors | null {
     const value = control.value as string;
     if (!value?.trim()) return null;
@@ -87,6 +90,7 @@ export class IssuanceConfigCreateComponent implements OnInit {
       trustListId?: string;
       url?: string;
       verifierKey?: unknown;
+      verifierKeyPem?: unknown;
       verifierX509Der?: unknown;
     };
 
@@ -94,18 +98,23 @@ export class IssuanceConfigCreateComponent implements OnInit {
     if (!value?.url?.trim()) return { missingUrl: true };
     const keyStr = value?.verifierKey;
     const hasVerifierKey = !!keyStr && typeof keyStr === 'string' && keyStr.trim().length > 0;
+    const hasVerifierKeyPem =
+      typeof value?.verifierKeyPem === 'string' && value.verifierKeyPem.trim().length > 0;
     const hasVerifierX509Der =
       !!value?.verifierX509Der &&
       typeof value.verifierX509Der === 'string' &&
       (value.verifierX509Der as string).trim().length > 0;
 
-    return hasVerifierKey || hasVerifierX509Der ? null : { missingVerifier: true };
+    return hasVerifierKey || hasVerifierKeyPem || hasVerifierX509Der
+      ? null
+      : { missingVerifier: true };
   }
 
   private createWalletProviderTrustListGroup(value?: {
     trustListId?: string;
     url?: string;
     verifierKey?: string;
+    verifierKeyPem?: string;
     verifierX509Der?: string;
   }): FormGroup {
     return this.fb.group(
@@ -113,6 +122,10 @@ export class IssuanceConfigCreateComponent implements OnInit {
         trustListId: [value?.trustListId ?? ''],
         url: [value?.url ?? ''],
         verifierKey: [value?.verifierKey ?? '', [IssuanceConfigCreateComponent.jsonValidator]],
+        verifierKeyPem: [
+          value?.verifierKeyPem ?? '',
+          [Validators.pattern(IssuanceConfigCreateComponent.SPKI_PEM_PATTERN)],
+        ],
         verifierX509Der: [value?.verifierX509Der ?? ''],
       },
       {
@@ -140,6 +153,7 @@ export class IssuanceConfigCreateComponent implements OnInit {
                 : entry?.verifierKey
                   ? JSON.stringify(entry.verifierKey, null, 2)
                   : '',
+            verifierKeyPem: entry?.verifierKeyPem ?? '',
             verifierX509Der: entry?.verifierX509Der ?? '',
           })
         );
@@ -182,6 +196,7 @@ export class IssuanceConfigCreateComponent implements OnInit {
             return {
               url: entry?.url?.trim() || undefined,
               verifierKey,
+              verifierKeyPem: entry?.verifierKeyPem?.trim() || undefined,
               verifierX509Der: entry?.verifierX509Der?.trim() || undefined,
             };
           })
@@ -605,6 +620,7 @@ export class IssuanceConfigCreateComponent implements OnInit {
               entry?.verifierKey && typeof entry.verifierKey === 'object'
                 ? JSON.stringify(entry.verifierKey, null, 2)
                 : '',
+            verifierKeyPem: typeof entry?.verifierKeyPem === 'string' ? entry.verifierKeyPem : '',
             verifierX509Der:
               typeof entry?.verifierX509Der === 'string' ? entry.verifierX509Der : '',
           })

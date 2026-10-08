@@ -18,6 +18,7 @@ export type IssuanceConfiguration = Omit<
         trustListId?: string;
         url: string;
         verifierKey?: Record<string, unknown>;
+        verifierKeyPem?: string;
         verifierX509Der?: string;
     }>;
     display: NonNullable<ConfigInput["display"]>;

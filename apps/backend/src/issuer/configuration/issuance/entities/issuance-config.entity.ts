@@ -53,6 +53,13 @@ class WalletProviderTrustListRefDto {
     @ApiPropertyOptional({
         type: "string",
         description:
+            "PEM-encoded public key (SPKI, -----BEGIN PUBLIC KEY-----) used to verify the trust-list JWT signature.",
+    })
+    verifierKeyPem?: string;
+
+    @ApiPropertyOptional({
+        type: "string",
+        description:
             "Base64 DER-encoded X.509 certificate used to verify the trust-list JWT signature.",
     })
     verifierX509Der?: string;
@@ -110,7 +117,7 @@ export class IssuanceConfig {
     /**
      * Shared wallet provider trust lists for key attestations at the credential endpoint
      * and default wallet-attestation trust at managed authorization servers.
-     * Each entry MUST include either `verifierKey` or `verifierX509Der`.
+     * Each entry MUST include `verifierKey`, `verifierKeyPem` or `verifierX509Der`.
      */
     @ApiPropertyOptional({
         type: [WalletProviderTrustListRefDto],

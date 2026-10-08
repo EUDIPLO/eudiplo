@@ -39,6 +39,11 @@
             },
             "additionalProperties": {}
           },
+          "verifierKeyPem": {
+            "description": "Optional verifier public key in SPKI PEM form (-----BEGIN PUBLIC KEY-----).",
+            "type": "string",
+            "pattern": "^\\s*-----BEGIN PUBLIC KEY-----[A-Za-z0-9+/=\\s]+-----END PUBLIC KEY-----\\s*$"
+          },
           "verifierX509Der": {
             "description": "Optional verifier certificate in DER/base64 form.",
             "type": "string"
@@ -191,6 +196,11 @@
                       },
                       "additionalProperties": {}
                     },
+                    "verifierKeyPem": {
+                      "description": "Optional verifier public key in SPKI PEM form (-----BEGIN PUBLIC KEY-----).",
+                      "type": "string",
+                      "pattern": "^\\s*-----BEGIN PUBLIC KEY-----[A-Za-z0-9+/=\\s]+-----END PUBLIC KEY-----\\s*$"
+                    },
                     "verifierX509Der": {
                       "description": "Optional verifier certificate in DER/base64 form.",
                       "type": "string"
@@ -319,6 +329,11 @@
                       },
                       "additionalProperties": {}
                     },
+                    "verifierKeyPem": {
+                      "description": "Optional verifier public key in SPKI PEM form (-----BEGIN PUBLIC KEY-----).",
+                      "type": "string",
+                      "pattern": "^\\s*-----BEGIN PUBLIC KEY-----[A-Za-z0-9+/=\\s]+-----END PUBLIC KEY-----\\s*$"
+                    },
                     "verifierX509Der": {
                       "description": "Optional verifier certificate in DER/base64 form.",
                       "type": "string"
@@ -412,6 +427,11 @@
                         "type": "string"
                       },
                       "additionalProperties": {}
+                    },
+                    "verifierKeyPem": {
+                      "description": "Optional verifier public key in SPKI PEM form (-----BEGIN PUBLIC KEY-----).",
+                      "type": "string",
+                      "pattern": "^\\s*-----BEGIN PUBLIC KEY-----[A-Za-z0-9+/=\\s]+-----END PUBLIC KEY-----\\s*$"
                     },
                     "verifierX509Der": {
                       "description": "Optional verifier certificate in DER/base64 form.",

@@ -45,7 +45,7 @@ rejects versions newer than its own.
 | `KmsConfig`          | `KmsConfigFile`               | 1               | yes       |
 | `KeyChain`           | `KeyChainConfigFile`          | 1               |           |
 | `RegistrarConfig`    | `RegistrarConfigFile`         | 1               | yes       |
-| `IssuanceConfig`     | `IssuanceConfigFile`          | 2               | yes       |
+| `IssuanceConfig`     | `IssuanceConfigFile`          | 3               | yes       |
 | `CredentialConfig`   | `CredentialConfigFile`        | 1               |           |
 | `PresentationConfig` | `PresentationConfigFile`      | 3               |           |
 | `AttributeProvider`  | `AttributeProviderConfigFile` | 1               |           |
@@ -65,6 +65,11 @@ Versions 2 and 3 were introduced with EUDIPLO 9.0; 8.x cannot read them:
   besides strings and requires them to be non-empty. A v2 document is migrated
   unchanged; an empty `values` array stops the migration with a validation
   error.
+
+**IssuanceConfig v3** came after 9.0. It adds the optional `verifierKeyPem`
+(PEM public key of the list signer) to `walletProviderTrustLists` entries. A v2
+document is migrated unchanged; releases that only know v2, such as 9.0, cannot
+read v3 files.
 
 ## Tenant folder layout
 

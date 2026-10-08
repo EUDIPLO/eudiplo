@@ -19,13 +19,17 @@ const WalletProviderTrustListRefSchema = z
         trustListId: z.string().trim().min(1).optional(),
         url: z.url().optional(),
         verifierKey: z.record(z.string(), z.unknown()).optional(),
+        verifierKeyPem: z.string().optional(),
         verifierX509Der: z.string().optional(),
     })
     .strict()
     .refine(
         (ref) =>
             !!ref.trustListId ||
-            (!!ref.url && (!!ref.verifierKey || !!ref.verifierX509Der)),
+            (!!ref.url &&
+                (!!ref.verifierKey ||
+                    !!ref.verifierKeyPem ||
+                    !!ref.verifierX509Der)),
         {
             message:
                 "Provide a managed trustListId or a URL with verifier material",
@@ -55,6 +59,13 @@ class WalletProviderTrustListRefDto {
         description: "JWK used to verify the trust-list JWT signature.",
     })
     verifierKey?: Record<string, unknown>;
+
+    @ApiPropertyOptional({
+        type: "string",
+        description:
+            "PEM-encoded public key (SPKI, -----BEGIN PUBLIC KEY-----) used to verify the trust-list JWT signature.",
+    })
+    verifierKeyPem?: string;
 
     @ApiPropertyOptional({
         type: "string",

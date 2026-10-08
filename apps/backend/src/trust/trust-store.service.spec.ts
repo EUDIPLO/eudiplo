@@ -43,6 +43,17 @@ describe("TrustStoreService cache isolation", () => {
             replacement.lotes[0],
             jwt,
         );
+
+        const pinnedKey = {
+            lotes: [{ url: source.lotes[0].url, verifierKeyPem: "key-a" }],
+        };
+        await service.getTrustStore(pinnedKey);
+        await service.getTrustStore(pinnedKey);
+        expect(fetchJwt).toHaveBeenCalledTimes(3);
+        await service.getTrustStore({
+            lotes: [{ ...pinnedKey.lotes[0], verifierKeyPem: "key-b" }],
+        });
+        expect(fetchJwt).toHaveBeenCalledTimes(4);
     });
 
     it("uses the internal URL for managed trust-list references with public fallback", async () => {

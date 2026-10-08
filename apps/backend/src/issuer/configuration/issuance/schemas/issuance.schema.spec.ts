@@ -93,4 +93,50 @@ describe("IssuanceConfigSchema", () => {
 
         expect(result.error?.issues).toBeUndefined();
     });
+
+    describe("trust-list verifierKeyPem", () => {
+        const pem =
+            "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE\n-----END PUBLIC KEY-----";
+        const parse = (verifierKeyPem: string) =>
+            IssuanceConfigSchema.safeParse({
+                authorizationServers: [
+                    {
+                        type: "built-in",
+                        id: "built-in",
+                        walletProviderTrustLists: [
+                            { url: "https://trust.example/as", verifierKeyPem },
+                        ],
+                    },
+                ],
+                walletProviderTrustLists: [
+                    { url: "https://trust.example/shared", verifierKeyPem },
+                ],
+            });
+
+        it("accepts a PEM public key as the only verifier and trims it", () => {
+            const result = parse(`\n${pem}\n`);
+
+            expect(result.error?.issues).toBeUndefined();
+            expect(result.data?.walletProviderTrustLists?.[0]).toEqual({
+                url: "https://trust.example/shared",
+                verifierKeyPem: pem,
+            });
+        });
+
+        it("rejects a PEM block that is not a public key", () => {
+            const result = parse(
+                "-----BEGIN PRIVATE KEY-----\nMIGHAgEA\n-----END PRIVATE KEY-----",
+            );
+
+            expect(result.success).toBe(false);
+            expect(
+                result.error?.issues.map((issue) => issue.path.join(".")),
+            ).toEqual(
+                expect.arrayContaining([
+                    "walletProviderTrustLists.0.verifierKeyPem",
+                    "authorizationServers.0.walletProviderTrustLists.0.verifierKeyPem",
+                ]),
+            );
+        });
+    });
 });

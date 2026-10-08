@@ -426,6 +426,7 @@ export class IssuanceService {
             return walletProviderTrustListsRaw.map((ref) => ({
                 url: ref.url,
                 hasVerifierKey: !!ref.verifierKey,
+                hasVerifierKeyPem: !!ref.verifierKeyPem,
                 hasVerifierX509Der: !!ref.verifierX509Der,
             }));
         };
@@ -457,6 +458,7 @@ export class IssuanceService {
             (ref) => ({
                 url: ref.url,
                 hasVerifierKey: !!ref.verifierKey,
+                hasVerifierKeyPem: !!ref.verifierKeyPem,
                 hasVerifierX509Der: !!ref.verifierX509Der,
             }),
         );

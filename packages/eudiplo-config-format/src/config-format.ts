@@ -13,7 +13,7 @@ export const CONFIG_FORMATS = {
     IssuanceConfig: {
         slug: "issuance-config",
         file: "IssuanceConfigFile",
-        version: 2,
+        version: 3,
     },
     CredentialConfig: {
         slug: "credential-config",
@@ -153,6 +153,15 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         to: 2,
         // v2 only adds the optional offerLifetimeSeconds: a v1 spec is a
         // valid v2 spec whose offers keep having no lifetime.
+        migrate: (spec) => ({ spec }),
+    },
+    {
+        id: "issuance-config-v3-trust-list-verifier-pem",
+        kind: "IssuanceConfig",
+        from: 2,
+        to: 3,
+        // v3 only adds the optional verifierKeyPem to wallet provider trust
+        // list references: a v2 spec is a valid v3 spec.
         migrate: (spec) => ({ spec }),
     },
     presentationConfigV1ToV2,

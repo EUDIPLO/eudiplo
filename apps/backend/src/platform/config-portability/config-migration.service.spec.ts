@@ -21,13 +21,14 @@ describe("ConfigMigrationService", () => {
         const result = service.upgrade(input);
 
         expect(result.document.$schema).toBe(
-            "https://eudiplo.dev/schemas/v2/IssuanceConfigFile.schema.json",
+            "https://eudiplo.dev/schemas/v3/IssuanceConfigFile.schema.json",
         );
         expect(result.document.spec.walletProviderTrustLists).toEqual([
             { url: "https://example.com/trust-list" },
         ]);
         expect(result.migrations).toEqual([
             "issuance-config-v2-offer-lifetime",
+            "issuance-config-v3-trust-list-verifier-pem",
         ]);
         expect(result.issues).toEqual([]);
     });

@@ -96,7 +96,7 @@ describe("portable schema identity and migrations", () => {
         expect(result.migrations).toEqual(["rename-name"]);
     });
 
-    it("upgrades a v1 issuance configuration to v2 unchanged", () => {
+    it("upgrades a v1 issuance configuration to v3 unchanged", () => {
         const v1 = {
             $schema: schemaUrl("IssuanceConfig", 1),
             metadata: { generation: 2 },
@@ -109,8 +109,9 @@ describe("portable schema identity and migrations", () => {
         expect(result.issues).toEqual([]);
         expect(result.migrations).toEqual([
             "issuance-config-v2-offer-lifetime",
+            "issuance-config-v3-trust-list-verifier-pem",
         ]);
-        expect(result.document.$schema).toBe(schemaUrl("IssuanceConfig", 2));
+        expect(result.document.$schema).toBe(schemaUrl("IssuanceConfig", 3));
         expect(result.document.spec).toEqual(v1.spec);
         expect(result.document.metadata).toEqual({ generation: 2 });
         // Repeating the upgrade on the result is a no-op.
@@ -140,6 +141,35 @@ describe("portable schema identity and migrations", () => {
                 }),
             ).map((issue) => issue.message),
         ).toContain("Unknown property: offerLifetimeSeconds");
+    });
+
+    it("accepts a PEM trust-list verifier only from v3 on", () => {
+        const spec = {
+            authorizationServers: [{ id: "issuer", type: "built-in" }],
+            walletProviderTrustLists: [
+                {
+                    url: "https://trust.example/wallet-providers",
+                    verifierKeyPem:
+                        "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE\n-----END PUBLIC KEY-----",
+                },
+            ],
+        };
+        expect(
+            validateConfigDocument(
+                normalizeDocument({
+                    $schema: schemaUrl("IssuanceConfig", 3),
+                    spec,
+                }),
+            ),
+        ).toEqual([]);
+        expect(
+            validateConfigDocument(
+                normalizeDocument({
+                    $schema: schemaUrl("IssuanceConfig", 2),
+                    spec,
+                }),
+            ).map((issue) => issue.message),
+        ).toContain("Unknown property: verifierKeyPem");
     });
 
     it("refuses missing migration steps", () =>

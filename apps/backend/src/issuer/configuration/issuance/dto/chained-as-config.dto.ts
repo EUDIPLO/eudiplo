@@ -24,6 +24,7 @@ const WalletProviderTrustListRefSchema = z
     .object({
         url: z.string(),
         verifierKey: z.record(z.string(), z.unknown()).optional(),
+        verifierKeyPem: z.string().optional(),
         verifierX509Der: z.string().optional(),
     })
     .strict();
@@ -209,6 +210,7 @@ export class ChainedAsConfig extends createZodDto(ChainedAsConfigSchema) {
     walletProviderTrustLists?: Array<{
         url: string;
         verifierKey?: Record<string, unknown>;
+        verifierKeyPem?: string;
         verifierX509Der?: string;
     }>;
 }

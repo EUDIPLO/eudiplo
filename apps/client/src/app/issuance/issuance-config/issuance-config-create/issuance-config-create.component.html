@@ -448,6 +448,26 @@
                                       </mat-form-field>
 
                                       <mat-form-field>
+                                        <mat-label>Verifier Public Key (PEM)</mat-label>
+                                        <textarea
+                                          matInput
+                                          [id]="'auth-server-' + i + '-wallet-trust-pem-' + j"
+                                          formControlName="verifierKeyPem"
+                                          rows="4"
+                                          placeholder="-----BEGIN PUBLIC KEY-----&#10;MFkw...&#10;-----END PUBLIC KEY-----"
+                                        ></textarea>
+                                        <mat-icon matSuffix>key</mat-icon>
+                                        @if (
+                                          trustList.get('verifierKeyPem')?.invalid &&
+                                          trustList.get('verifierKeyPem')?.touched
+                                        ) {
+                                          <mat-error
+                                            >Please enter a PEM-encoded public key.</mat-error
+                                          >
+                                        }
+                                      </mat-form-field>
+
+                                      <mat-form-field>
                                         <mat-label>Verifier Certificate (Base64 DER)</mat-label>
                                         <input
                                           (keydown.enter)="onInputEnter($event)"
@@ -464,8 +484,8 @@
                                         trustList.hasError('missingVerifier') && trustList.touched
                                       ) {
                                         <p class="trust-list-error">
-                                          Provide at least one verifier method: JWK or DER
-                                          certificate.
+                                          Provide at least one verifier method: JWK, PEM public key
+                                          or DER certificate.
                                         </p>
                                       }
                                     </div>
@@ -917,6 +937,24 @@
                               </mat-form-field>
 
                               <mat-form-field>
+                                <mat-label>Verifier Public Key (PEM)</mat-label>
+                                <textarea
+                                  matInput
+                                  [id]="'wallet-trust-pem-' + i"
+                                  formControlName="verifierKeyPem"
+                                  rows="4"
+                                  placeholder="-----BEGIN PUBLIC KEY-----&#10;MFkw...&#10;-----END PUBLIC KEY-----"
+                                ></textarea>
+                                <mat-icon matSuffix>key</mat-icon>
+                                @if (
+                                  trustList.get('verifierKeyPem')?.invalid &&
+                                  trustList.get('verifierKeyPem')?.touched
+                                ) {
+                                  <mat-error>Please enter a PEM-encoded public key.</mat-error>
+                                }
+                              </mat-form-field>
+
+                              <mat-form-field>
                                 <mat-label>Verifier Certificate (Base64 DER)</mat-label>
                                 <input
                                   (keydown.enter)="onInputEnter($event)"
@@ -931,7 +969,8 @@
 
                               @if (trustList.hasError('missingVerifier') && trustList.touched) {
                                 <p class="trust-list-error">
-                                  Provide at least one verifier method: JWK or DER certificate.
+                                  Provide at least one verifier method: JWK, PEM public key or DER
+                                  certificate.
                                 </p>
                               }
                             </div>

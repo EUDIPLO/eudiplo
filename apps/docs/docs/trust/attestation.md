@@ -15,7 +15,7 @@ During issuance, EUDIPLO can check two statements signed by the wallet provider:
 
 Wallet-provider trust lists are LoTE JWTs whose entities offer the service types `http://uri.etsi.org/19602/SvcType/WalletSolution`, `.../WalletSolution/Issuance` or `.../WalletSolution/Revocation`. Reference them like any [trust list](trust-lists.md):
 
-- **External list**, for example the wallet provider list published for your ecosystem: `{ "url": "https://...", "verifierX509Der": "MIIB..." }` (or `verifierKey`). Obtain the verification certificate through a trusted channel; it authenticates the list, not the providers in it.
+- **External list**, for example the wallet provider list published for your ecosystem: `{ "url": "https://...", "verifierX509Der": "MIIB..." }`. Instead of the certificate, you can pin the signer's public key: as a JWK in `verifierKey`, or as a PEM public key (`-----BEGIN PUBLIC KEY-----`) in `verifierKeyPem`. Obtain this material through a trusted channel; it authenticates the list, not the providers in it.
 - **Managed list** of this tenant: `{ "trustListId": "wallet-providers" }`. Create it under **Trust Lists** and set **Provider type → Wallet provider** on each entity (`"providerType": "wallet-provider"`). EUDIPLO then publishes `WalletSolution/Issuance` and `WalletSolution/Revocation` services; a list with only wallet-provider entities uses the wallet-provider scheme of ETSI TS 119 602 Annex E. If wallet and key attestations are signed by different provider CAs, list both.
 
 Put the lists into the issuance configuration so that both checks can use them:
@@ -90,4 +90,4 @@ Every presented key attestation must be signed by a wallet provider in the issua
 | `The credential configuration requires a key attestation ...`  | The wallet sent a `jwt` proof without `key_attestation`. Use a wallet that sends key attestations, or remove `keyAttestationsRequired`. |
 | `The key attestation does not state an accepted key_storage value ...` (or `user_authentication`) | The attested level is not in the configured list. Add the level your wallets attest, if it meets your requirements. |
 | `The proof contains a key that is not listed in attested_keys ...` | The `jwt` proof is signed with a key the attestation does not cover.                                          |
-| `Wallet attestation verification failed: ...` or `Attestation proof x5c chain could not be validated` | Often a trust list problem: the list cannot be fetched or its signature does not match `verifierX509Der`/`verifierKey`. Check the server log for the reason. |
+| `Wallet attestation verification failed: ...` or `Attestation proof x5c chain could not be validated` | Often a trust list problem: the list cannot be fetched or its signature does not match `verifierX509Der`, `verifierKey` or `verifierKeyPem`. Check the server log for the reason. |

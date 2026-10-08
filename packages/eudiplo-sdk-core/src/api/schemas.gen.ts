@@ -9355,6 +9355,10 @@ export const WalletProviderTrustListRefDtoSchema = {
             additionalProperties: true,
             description: 'JWK used to verify the trust-list JWT signature.'
         },
+        verifierKeyPem: {
+            type: 'string',
+            description: 'PEM-encoded public key (SPKI, -----BEGIN PUBLIC KEY-----) used to verify the trust-list JWT signature.'
+        },
         verifierX509Der: {
             type: 'string',
             description: 'Base64 DER-encoded X.509 certificate used to verify the trust-list JWT signature.'
@@ -9441,6 +9445,9 @@ export const Oid4VpAuthorizationServerConfigSchema = {
                             type: 'string'
                         },
                         additionalProperties: {}
+                    },
+                    verifierKeyPem: {
+                        type: 'string'
                     },
                     verifierX509Der: {
                         type: 'string'
@@ -9598,6 +9605,9 @@ export const ChainedAuthorizationServerConfigSchema = {
                         },
                         additionalProperties: {}
                     },
+                    verifierKeyPem: {
+                        type: 'string'
+                    },
                     verifierX509Der: {
                         type: 'string'
                     }
@@ -9691,6 +9701,9 @@ export const BuiltInAuthorizationServerConfigSchema = {
                             type: 'string'
                         },
                         additionalProperties: {}
+                    },
+                    verifierKeyPem: {
+                        type: 'string'
                     },
                     verifierX509Der: {
                         type: 'string'
@@ -9909,7 +9922,7 @@ export const IssuanceConfigSchema = {
     type: 'object',
     properties: {
         walletProviderTrustLists: {
-            description: 'Shared wallet provider trust lists for key attestations at the credential endpoint\nand default wallet-attestation trust at managed authorization servers.\nEach entry MUST include either `verifierKey` or `verifierX509Der`.',
+            description: 'Shared wallet provider trust lists for key attestations at the credential endpoint\nand default wallet-attestation trust at managed authorization servers.\nEach entry MUST include `verifierKey`, `verifierKeyPem` or `verifierX509Der`.',
             type: 'array',
             items: {
                 $ref: '#/components/schemas/WalletProviderTrustListRefDto'
@@ -10063,7 +10076,7 @@ export const UpdateIssuanceDtoSchema = {
     type: 'object',
     properties: {
         walletProviderTrustLists: {
-            description: 'Shared wallet provider trust lists for key attestations at the credential endpoint\nand default wallet-attestation trust at managed authorization servers.\nEach entry MUST include either `verifierKey` or `verifierX509Der`.',
+            description: 'Shared wallet provider trust lists for key attestations at the credential endpoint\nand default wallet-attestation trust at managed authorization servers.\nEach entry MUST include `verifierKey`, `verifierKeyPem` or `verifierX509Der`.',
             type: 'array',
             items: {
                 $ref: '#/components/schemas/WalletProviderTrustListRefDto'
@@ -11802,7 +11815,7 @@ export const IssuanceConfigWritableSchema = {
     type: 'object',
     properties: {
         walletProviderTrustLists: {
-            description: 'Shared wallet provider trust lists for key attestations at the credential endpoint\nand default wallet-attestation trust at managed authorization servers.\nEach entry MUST include either `verifierKey` or `verifierX509Der`.',
+            description: 'Shared wallet provider trust lists for key attestations at the credential endpoint\nand default wallet-attestation trust at managed authorization servers.\nEach entry MUST include `verifierKey`, `verifierKeyPem` or `verifierX509Der`.',
             type: 'array',
             items: {
                 $ref: '#/components/schemas/WalletProviderTrustListRefDto'
@@ -11944,7 +11957,7 @@ export const UpdateIssuanceDtoWritableSchema = {
     type: 'object',
     properties: {
         walletProviderTrustLists: {
-            description: 'Shared wallet provider trust lists for key attestations at the credential endpoint\nand default wallet-attestation trust at managed authorization servers.\nEach entry MUST include either `verifierKey` or `verifierX509Der`.',
+            description: 'Shared wallet provider trust lists for key attestations at the credential endpoint\nand default wallet-attestation trust at managed authorization servers.\nEach entry MUST include `verifierKey`, `verifierKeyPem` or `verifierX509Der`.',
             type: 'array',
             items: {
                 $ref: '#/components/schemas/WalletProviderTrustListRefDto'

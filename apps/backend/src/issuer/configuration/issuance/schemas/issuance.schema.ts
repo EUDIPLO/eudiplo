@@ -48,6 +48,14 @@ const UpstreamOidcConfigSchema = z
     .describe("OIDC upstream settings for chained authorization server mode.")
     .strict();
 
+const SpkiPemSchema = z
+    .string()
+    .trim()
+    .regex(
+        /^\s*-----BEGIN PUBLIC KEY-----[A-Za-z0-9+/=\s]+-----END PUBLIC KEY-----\s*$/,
+        "Expected a PEM public key (-----BEGIN PUBLIC KEY-----)",
+    );
+
 const WalletProviderTrustListRefSchema = z
     .object({
         trustListId: z.string().trim().min(1).optional(),
@@ -61,6 +69,9 @@ const WalletProviderTrustListRefSchema = z
             .describe(
                 "Optional verifier key material used for trust list verification.",
             ),
+        verifierKeyPem: SpkiPemSchema.optional().describe(
+            "Optional verifier public key in SPKI PEM form (-----BEGIN PUBLIC KEY-----).",
+        ),
         verifierX509Der: z
             .string()
             .optional()
@@ -71,7 +82,10 @@ const WalletProviderTrustListRefSchema = z
     .refine(
         (ref) =>
             !!ref.trustListId ||
-            (!!ref.url && (!!ref.verifierKey || !!ref.verifierX509Der)),
+            (!!ref.url &&
+                (!!ref.verifierKey ||
+                    !!ref.verifierKeyPem ||
+                    !!ref.verifierX509Der)),
         {
             message:
                 "Provide a managed trustListId or a URL with verifier material",

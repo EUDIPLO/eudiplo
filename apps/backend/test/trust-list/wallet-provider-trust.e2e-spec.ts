@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { X509Certificate } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -149,6 +150,53 @@ describe("Hosted wallet provider trust", () => {
                 lotes: [{ ...refs[0], verifierX509Der: untrusted.x5c[0] }],
             }),
         ).rejects.toThrow("verification failed");
+    });
+
+    test("verifies the list with the signer's public key in PEM form", async () => {
+        const toPem = (der: string) =>
+            new X509Certificate(Buffer.from(der, "base64")).publicKey
+                .export({ type: "spki", format: "pem" })
+                .toString();
+        const issuanceService = app.get(IssuanceService);
+        const previous =
+            await issuanceService.getIssuanceConfiguration(tenantId);
+        const store = async (verifierKeyPem: string) => {
+            await issuanceService.storeIssuanceConfiguration(tenantId, {
+                walletProviderTrustLists: [
+                    { url: refs[0].url, verifierKeyPem },
+                ],
+            });
+            const config =
+                await issuanceService.getIssuanceConfiguration(tenantId);
+            return config.walletProviderTrustLists!;
+        };
+        const jwt = await new SignJWT({})
+            .setProtectedHeader({ alg: "ES256", x5c: wallet.x5c })
+            .sign(await importJWK(wallet, "ES256"));
+        const deps = {
+            trustStoreService: app.get(TrustStoreService),
+            x509ValidationService: app.get(X509ValidationService),
+        };
+        try {
+            const pemRefs = await store(toPem(refs[0].verifierX509Der!));
+            await expect(
+                validateAttestationProofTrust(jwt, pemRefs, deps),
+            ).resolves.toBeUndefined();
+
+            const untrusted = await generateCaSignedJwk({
+                use: "sig",
+                alg: "ES256",
+                cn: "Untrusted list signer",
+            });
+            const wrongRefs = await store(toPem(untrusted.x5c[0]));
+            await expect(
+                app.get(TrustStoreService).getTrustStore({ lotes: wrongRefs }),
+            ).rejects.toThrow("verification failed");
+        } finally {
+            await issuanceService.storeIssuanceConfiguration(tenantId, {
+                walletProviderTrustLists: previous.walletProviderTrustLists,
+            });
+        }
     });
 
     test("refreshes the hosted list on another run and stops trusting old roots", async () => {
