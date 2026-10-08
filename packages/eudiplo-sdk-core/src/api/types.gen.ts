@@ -81,7 +81,7 @@ export type TokenResponse = {
     /**
      * Token type
      */
-    token_type: string;
+    token_type: 'Bearer';
     /**
      * Access token lifetime in seconds
      */
@@ -210,11 +210,11 @@ export type ClientEntity = {
     /**
      * Tenant identifier the client belongs to
      */
-    tenantId?: string;
+    tenantId?: string | null;
     /**
      * Client description
      */
-    description?: string;
+    description?: string | null;
     /**
      * Roles assigned to the client
      */
@@ -245,7 +245,7 @@ export type TenantResponseDto = {
     /**
      * Tenant status
      */
-    status: string;
+    status: 'active' | null;
     /**
      * Session storage configuration for this tenant. Controls TTL and cleanup behavior.
      */
@@ -347,7 +347,7 @@ export type TenantCreateResponseDto = {
     /**
      * Tenant status
      */
-    status: string;
+    status: 'active' | null;
     /**
      * Session storage configuration for this tenant. Controls TTL and cleanup behavior.
      */
@@ -964,11 +964,11 @@ export type KmsConfigDto = {
 
 export type KmsTenantConfigResponseDto = {
     /**
-     * Tenant-specific KMS configuration from <CONFIG_FOLDER>/<tenantId>/kms.json. Null when no tenant file exists.
+     * Tenant-specific KMS configuration from <CONFIG_FOLDER>/<tenantId>/kms.json. Null when no tenant file exists. Credentials are `<redacted>`; `${ENV_VAR}` placeholders are returned as stored.
      */
     tenantConfig?: KmsConfigDto | null;
     /**
-     * Effective configuration used at runtime for the tenant (global + tenant merge).
+     * Effective configuration used at runtime for the tenant (global + tenant merge). Credentials are `<redacted>`; providers from the global configuration are shown with their non-secret settings only.
      */
     effectiveConfig: KmsConfigDto;
 };
@@ -1115,9 +1115,9 @@ export type ExportEcJwk = {
      */
     y: string;
     /**
-     * Private key (base64url)
+     * Private key (base64url). Only present for keys held in the database (`db` provider); external KMS keys are exported without private material.
      */
-    d: string;
+    d?: string;
     /**
      * Algorithm
      */
@@ -1157,7 +1157,7 @@ export type KeyChainExportDto = {
      */
     usageType: 'access' | 'attestation' | 'trustList' | 'statusList' | 'encrypt';
     /**
-     * The private key in JWK format (EC).
+     * The key in JWK format (EC). Contains the private key for database-held keys and only the public key for external KMS providers.
      */
     key: ExportEcJwk;
     /**
@@ -1414,7 +1414,7 @@ export type TenantEntity = {
     /**
      * Tenant status
      */
-    status: string;
+    status: 'active' | null;
     /**
      * Session storage configuration for this tenant. Controls TTL and cleanup behavior.
      */
@@ -1568,7 +1568,7 @@ export type OfferRequestDto = {
     /**
      * The type of response expected for the offer request.
      */
-    response_type: 'uri' | 'iso-18013-7' | 'dc-api';
+    response_type: 'uri' | 'dc-api' | 'iso-18013-7';
     /**
      * Authorization server id from issuer configuration. If omitted, the first enabled server is used.
      */
@@ -1596,6 +1596,14 @@ export type OfferRequestDto = {
         };
     };
     /**
+     * Lifetime of this offer in seconds. Overrides offerLifetimeSeconds of the issuance configuration. Without both, the offer does not expire.
+     */
+    offerLifetimeSeconds?: number;
+    /**
+     * Your own reference for this offer, e.g. an order or case id. Stored in plaintext, searchable in the session list, included in webhooks and kept when the session is anonymized. Must not contain personal data.
+     */
+    reference?: string;
+    /**
      * The flow type for the offer request.
      */
     flow: 'authorization_code' | 'pre_authorized_code';
@@ -1615,17 +1623,13 @@ export type OfferRequestDto = {
      * ID of the webhook endpoint to notify about the status of the issuance process.
      */
     webhookEndpointId?: string;
-    /**
-     * Your own reference for this offer, e.g. an order or case id. Stored in plaintext, searchable in the session list, included in webhooks and kept when the session is anonymized. Must not contain personal data.
-     */
-    reference?: string;
 };
 
 export type WebHookAuthConfigNone = {
     /**
      * The type of authentication used for the webhook.
      */
-    type: never;
+    type: 'none';
 };
 
 export type ApiKeyConfig = {
@@ -1643,7 +1647,7 @@ export type WebHookAuthConfigHeader = {
     /**
      * The type of authentication used for the webhook.
      */
-    type: never;
+    type: 'apiKey';
     /**
      * Configuration for API key authentication.
      * This is required if the type is 'apiKey'.
@@ -1693,7 +1697,8 @@ export type Session = {
      */
     updatedAt: string;
     /**
-     * The timestamp when the request is set to expire.
+     * The timestamp after which a wallet can no longer redeem the offer or
+     * presentation request. Not set for offers without a lifetime.
      */
     expiresAt?: string;
     /**
@@ -1726,6 +1731,21 @@ export type Session = {
     reference?: string | null;
     authorization_code?: string;
     /**
+     * Expiration timestamp of the authorization code issued by the authorization endpoint.
+     * Not set for pre-authorized codes.
+     */
+    authorization_code_expires_at?: string;
+    /**
+     * JWK thumbprint of the DPoP key the session's tokens are bound to.
+     * Set from the PAR request (DPoP header or `dpop_jkt`) or at token issuance.
+     */
+    dpop_jkt?: string;
+    /**
+     * JWK thumbprint of the client instance key (client attestation `cnf`)
+     * the refresh token is bound to.
+     */
+    client_key_jkt?: string;
+    /**
      * Refresh token for the session - used to obtain a new access token.
      */
     refresh_token?: string;
@@ -1738,6 +1758,11 @@ export type Session = {
      * Request URI from the authorization request.
      */
     request_uri?: string;
+    /**
+     * Expiration timestamp of the PAR request_uri. Set to the time of use once
+     * the request_uri was redeemed, making it single-use.
+     */
+    request_uri_expires_at?: string;
     /**
      * Authorization queries associated with the session.
      * Encrypted at rest.
@@ -2110,9 +2135,12 @@ export type UpdateStatusListDto = {
 };
 
 export type ClaimsQuery = {
+    /**
+     * Allowed values of the claim. A disclosed value must equal one of them in type and value.
+     */
+    values?: Array<string | number | boolean>;
     id?: string;
     path: Array<string>;
-    values?: Array<string>;
 };
 
 export type CredentialSetQuery = {
@@ -2136,16 +2164,16 @@ export type AttestationBasedPolicy = {
 };
 
 export type NoneTrustPolicy = {
-    policy: string;
+    policy: 'none';
 };
 
 export type AllowListPolicy = {
-    policy: string;
+    policy: 'allowList';
     values: Array<string>;
 };
 
 export type RootOfTrustPolicy = {
-    policy: string;
+    policy: 'rootOfTrust';
     values: string;
 };
 
@@ -2358,7 +2386,7 @@ export type IssuerMetadataCredentialConfig = {
      */
     proofTypesSupported?: Array<'jwt' | 'attestation'>;
     credentialReusePolicy?: CredentialReusePolicy;
-    format: 'mso_mdoc' | 'dc+sd-jwt';
+    format: 'dc+sd-jwt' | 'mso_mdoc';
     display: Array<Display>;
     scope?: string;
     /**
@@ -2776,12 +2804,15 @@ export type MsoMdocCredentialQueryMeta = {
 
 export type MsoMdocClaimsQuery = {
     /**
+     * Allowed values of the claim. A disclosed value must equal one of them in type and value.
+     */
+    values?: Array<string | number | boolean>;
+    /**
      * Whether the holder should be allowed to retain the claim in an mso_mdoc response.
      */
     intent_to_retain?: boolean;
     id?: string;
     path: Array<string>;
-    values?: Array<string>;
 };
 
 export type CredentialQueryDcSdJwt = {
@@ -2852,9 +2883,11 @@ export type RegistrationCertificateBody = {
     credentials?: Array<{
         [key: string]: unknown;
     }>;
-    provided_attestations?: Array<{
-        [key: string]: unknown;
-    }>;
+    /**
+     * Credential type identifiers (SD-JWT VC `vct` or mdoc doctype) provided
+     * by an issuer.
+     */
+    provides_attestations?: Array<string>;
 };
 
 export type RegistrationCertificateRequest = {
@@ -2878,9 +2911,7 @@ export type RegistrationCertificateRequest = {
         credentials?: Array<{
             [key: string]: unknown;
         }>;
-        provided_attestations?: Array<{
-            [key: string]: unknown;
-        }>;
+        provides_attestations?: Array<string>;
     };
     /**
      * Optional pre-existing registration certificate JWT.
@@ -3443,9 +3474,9 @@ export type PresentationConfigCreateDto = {
                  */
                 path: Array<string | number>;
                 /**
-                 * Optional allowed values for the claim.
+                 * Optional allowed values for the claim. A disclosed value must equal one of them in type and value.
                  */
-                values?: Array<string>;
+                values?: Array<string | number | boolean>;
             }>;
         } | {
             /**
@@ -3524,9 +3555,9 @@ export type PresentationConfigCreateDto = {
                  */
                 path: Array<string | number>;
                 /**
-                 * Optional allowed values for the claim.
+                 * Optional allowed values for the claim. A disclosed value must equal one of them in type and value.
                  */
-                values?: Array<string>;
+                values?: Array<string | number | boolean>;
                 /**
                  * Whether relying party intends to retain the claim.
                  */
@@ -3581,9 +3612,7 @@ export type PresentationConfigCreateDto = {
             credentials?: Array<{
                 [key: string]: unknown;
             }>;
-            provided_attestations?: Array<{
-                [key: string]: unknown;
-            }>;
+            provides_attestations?: Array<string>;
         };
         jwt?: string;
     } | null;
@@ -3754,9 +3783,9 @@ export type PresentationConfigUpdateDto = {
                  */
                 path: Array<string | number>;
                 /**
-                 * Optional allowed values for the claim.
+                 * Optional allowed values for the claim. A disclosed value must equal one of them in type and value.
                  */
-                values?: Array<string>;
+                values?: Array<string | number | boolean>;
             }>;
         } | {
             /**
@@ -3835,9 +3864,9 @@ export type PresentationConfigUpdateDto = {
                  */
                 path: Array<string | number>;
                 /**
-                 * Optional allowed values for the claim.
+                 * Optional allowed values for the claim. A disclosed value must equal one of them in type and value.
                  */
-                values?: Array<string>;
+                values?: Array<string | number | boolean>;
                 /**
                  * Whether relying party intends to retain the claim.
                  */
@@ -3892,9 +3921,7 @@ export type PresentationConfigUpdateDto = {
             credentials?: Array<{
                 [key: string]: unknown;
             }>;
-            provided_attestations?: Array<{
-                [key: string]: unknown;
-            }>;
+            provides_attestations?: Array<string>;
         };
         jwt?: string;
     } | null;
@@ -4197,7 +4224,7 @@ export type ExternalAuthorizationServerConfig = {
      */
     issuer: string;
     sessionBinding?: {
-        method: string;
+        method: 'access_token_claim';
         claim: string;
     };
     label?: string;
@@ -4544,6 +4571,10 @@ export type IssuanceConfig = {
      */
     txCodeMaxAttempts?: number | null;
     /**
+     * Default lifetime of credential offers in seconds. Can be overridden per offer request. Unset: offers do not expire.
+     */
+    offerLifetimeSeconds?: number | null;
+    /**
      * The tenant that owns this object.
      */
     tenant: TenantEntity;
@@ -4618,6 +4649,10 @@ export type UpdateIssuanceDto = {
      * Maximum failed tx_code attempts before the pre-authorized code is invalidated. Defaults to 5.
      */
     txCodeMaxAttempts?: number | null;
+    /**
+     * Default lifetime of credential offers in seconds. Can be overridden per offer request. Unset: offers do not expire.
+     */
+    offerLifetimeSeconds?: number | null;
     /**
      * Value to determine the amount of credentials that are issued in a batch.
      * Default is 1.
@@ -4895,7 +4930,8 @@ export type DeferredCredentialRequestDto = {
 
 export type NotificationRequestDto = {
     notification_id: string;
-    event: 'credential_accepted' | 'credential_failure' | 'credential_deleted';
+    event: 'credential_accepted' | 'credential_deleted' | 'credential_failure';
+    event_description?: string;
 };
 
 export type OfferResponse = {
@@ -4942,7 +4978,7 @@ export type EcPublic = {
     /**
      * The key type, which is always 'EC' for Elliptic Curve keys.
      */
-    kty: string;
+    kty: 'EC';
     /**
      * The algorithm intended for use with the key, such as 'ES256'.
      */
@@ -5076,7 +5112,7 @@ export type InteractiveAuthorizationCodeResponseDto = {
     /**
      * Response status
      */
-    status: string;
+    status: 'ok';
     /**
      * Authorization code
      */
@@ -5259,9 +5295,13 @@ export type PresentationRequest = {
         [key: string]: unknown;
     }>;
     /**
+     * Client identifier scheme for the OID4VP request. Defaults to x509_hash.
+     */
+    clientIdScheme?: 'x509_hash' | 'x509_san_dns';
+    /**
      * The type of response expected from the presentation request.
      */
-    response_type: 'uri' | 'iso-18013-7' | 'dc-api';
+    response_type: 'uri' | 'dc-api' | 'iso-18013-7';
     /**
      * Identifier of the presentation configuration
      */
@@ -5471,6 +5511,10 @@ export type IssuanceConfigWritable = {
      */
     txCodeMaxAttempts?: number | null;
     /**
+     * Default lifetime of credential offers in seconds. Can be overridden per offer request. Unset: offers do not expire.
+     */
+    offerLifetimeSeconds?: number | null;
+    /**
      * The tenant that owns this object.
      */
     tenant: TenantEntity;
@@ -5541,6 +5585,10 @@ export type UpdateIssuanceDtoWritable = {
      * Maximum failed tx_code attempts before the pre-authorized code is invalidated. Defaults to 5.
      */
     txCodeMaxAttempts?: number | null;
+    /**
+     * Default lifetime of credential offers in seconds. Can be overridden per offer request. Unset: offers do not expire.
+     */
+    offerLifetimeSeconds?: number | null;
     /**
      * Value to determine the amount of credentials that are issued in a batch.
      * Default is 1.
@@ -6070,6 +6118,13 @@ export type KeyChainControllerDeleteTenantKmsConfigData = {
     url: '/api/key-chain/providers/config';
 };
 
+export type KeyChainControllerDeleteTenantKmsConfigErrors = {
+    /**
+     * The caller lacks the `tenant:admin` or `tenants:manage` role or a tenant context.
+     */
+    403: unknown;
+};
+
 export type KeyChainControllerDeleteTenantKmsConfigResponses = {
     /**
      * Tenant-specific KMS config removed.
@@ -6086,6 +6141,13 @@ export type KeyChainControllerGetTenantKmsConfigData = {
     url: '/api/key-chain/providers/config';
 };
 
+export type KeyChainControllerGetTenantKmsConfigErrors = {
+    /**
+     * The caller lacks the `tenant:admin` or `tenants:manage` role or a tenant context.
+     */
+    403: unknown;
+};
+
 export type KeyChainControllerGetTenantKmsConfigResponses = {
     /**
      * Tenant and effective KMS configuration.
@@ -6100,6 +6162,13 @@ export type KeyChainControllerUpdateTenantKmsConfigData = {
     path?: never;
     query?: never;
     url: '/api/key-chain/providers/config';
+};
+
+export type KeyChainControllerUpdateTenantKmsConfigErrors = {
+    /**
+     * The caller lacks the `tenant:admin` or `tenants:manage` role or a tenant context.
+     */
+    403: unknown;
 };
 
 export type KeyChainControllerUpdateTenantKmsConfigResponses = {
@@ -6233,6 +6302,10 @@ export type KeyChainControllerExportData = {
 };
 
 export type KeyChainControllerExportErrors = {
+    /**
+     * The caller lacks the `tenant:admin` or `tenants:manage` role or a tenant context.
+     */
+    403: unknown;
     /**
      * Key chain not found
      */
@@ -6563,9 +6636,20 @@ export type SessionControllerRevokeAllData = {
     url: '/api/session/revoke';
 };
 
+export type SessionControllerRevokeAllErrors = {
+    /**
+     * The status does not fit the status list's bits per entry
+     */
+    400: unknown;
+    /**
+     * No status entry for the session, or a revoked credential would be reinstated or suspended
+     */
+    409: unknown;
+};
+
 export type SessionControllerRevokeAllResponses = {
     /**
-     * All sessions revoked
+     * Status updated
      */
     204: void;
 };
@@ -7685,136 +7769,6 @@ export type DeferredControllerFailDeferredResponses = {
 };
 
 export type DeferredControllerFailDeferredResponse = DeferredControllerFailDeferredResponses[keyof DeferredControllerFailDeferredResponses];
-
-export type ChainedAsVpControllerParData = {
-    body: ChainedAsParRequestDto;
-    headers?: {
-        /**
-         * DPoP proof JWT
-         */
-        DPoP?: string;
-        /**
-         * Wallet attestation JWT
-         */
-        'OAuth-Client-Attestation'?: string;
-        /**
-         * Wallet attestation proof-of-possession JWT
-         */
-        'OAuth-Client-Attestation-PoP'?: string;
-    };
-    path: {
-        /**
-         * Tenant identifier
-         */
-        tenantId: string;
-    };
-    query?: never;
-    url: '/api/issuers/{tenantId}/chained-as-vp/par';
-};
-
-export type ChainedAsVpControllerParErrors = {
-    400: ChainedAsErrorResponseDto;
-};
-
-export type ChainedAsVpControllerParError = ChainedAsVpControllerParErrors[keyof ChainedAsVpControllerParErrors];
-
-export type ChainedAsVpControllerParResponses = {
-    201: ChainedAsParResponseDto;
-};
-
-export type ChainedAsVpControllerParResponse = ChainedAsVpControllerParResponses[keyof ChainedAsVpControllerParResponses];
-
-export type ChainedAsVpControllerAuthorizeData = {
-    body?: never;
-    path: {
-        /**
-         * Tenant identifier
-         */
-        tenantId: string;
-    };
-    query: {
-        /**
-         * Client identifier
-         */
-        client_id: string;
-        /**
-         * Request URI from PAR response
-         */
-        request_uri: string;
-        /**
-         * State parameter (returned in redirect)
-         */
-        state?: string;
-    };
-    url: '/api/issuers/{tenantId}/chained-as-vp/authorize';
-};
-
-export type ChainedAsVpControllerAuthorizeErrors = {
-    400: ChainedAsErrorResponseDto;
-};
-
-export type ChainedAsVpControllerAuthorizeError = ChainedAsVpControllerAuthorizeErrors[keyof ChainedAsVpControllerAuthorizeErrors];
-
-export type ChainedAsVpControllerVpCallbackData = {
-    body?: never;
-    path: {
-        /**
-         * Tenant identifier
-         */
-        tenantId: string;
-    };
-    query: {
-        cas: string;
-        response_code?: string;
-        error?: string;
-        error_description?: string;
-    };
-    url: '/api/issuers/{tenantId}/chained-as-vp/vp-callback';
-};
-
-export type ChainedAsVpControllerVpCallbackErrors = {
-    400: ChainedAsErrorResponseDto;
-};
-
-export type ChainedAsVpControllerVpCallbackError = ChainedAsVpControllerVpCallbackErrors[keyof ChainedAsVpControllerVpCallbackErrors];
-
-export type ChainedAsVpControllerTokenData = {
-    body: ChainedAsTokenRequestDto;
-    headers?: {
-        /**
-         * DPoP proof JWT
-         */
-        DPoP?: string;
-        /**
-         * Wallet attestation JWT
-         */
-        'OAuth-Client-Attestation'?: string;
-        /**
-         * Wallet attestation proof-of-possession JWT
-         */
-        'OAuth-Client-Attestation-PoP'?: string;
-    };
-    path: {
-        /**
-         * Tenant identifier
-         */
-        tenantId: string;
-    };
-    query?: never;
-    url: '/api/issuers/{tenantId}/chained-as-vp/token';
-};
-
-export type ChainedAsVpControllerTokenErrors = {
-    400: ChainedAsErrorResponseDto;
-};
-
-export type ChainedAsVpControllerTokenError = ChainedAsVpControllerTokenErrors[keyof ChainedAsVpControllerTokenErrors];
-
-export type ChainedAsVpControllerTokenResponses = {
-    200: ChainedAsTokenResponseDto;
-};
-
-export type ChainedAsVpControllerTokenResponse = ChainedAsVpControllerTokenResponses[keyof ChainedAsVpControllerTokenResponses];
 
 export type VerifierOfferControllerGetOfferData = {
     body: PresentationRequest;

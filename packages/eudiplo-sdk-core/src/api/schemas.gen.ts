@@ -153,6 +153,9 @@ export const TokenResponseSchema = {
             description: 'Optional refresh token'
         },
         token_type: {
+            enum: [
+                'Bearer'
+            ],
             type: 'string',
             description: 'Token type'
         },
@@ -366,15 +369,21 @@ export const ClientEntitySchema = {
             description: 'Unique client identifier'
         },
         tenantId: {
-            type: 'string',
+            type: [
+                'string',
+                'null'
+            ],
             description: 'Tenant identifier the client belongs to'
         },
         description: {
-            type: 'string',
+            type: [
+                'string',
+                'null'
+            ],
             description: 'Client description'
         },
         roles: {
-            description: 'Roles assigned to the client',
+            type: 'array',
             items: {
                 type: 'string',
                 enum: [
@@ -389,14 +398,10 @@ export const ClientEntitySchema = {
                     'registrar:manage'
                 ]
             },
-            type: 'array'
+            description: 'Roles assigned to the client'
         },
         allowedPresentationConfigs: {
             description: 'List of presentation config IDs this client can use. If empty/null, all configs are allowed.',
-            example: [
-                'age-verification',
-                'kyc-basic'
-            ],
             type: [
                 'array',
                 'null'
@@ -407,10 +412,6 @@ export const ClientEntitySchema = {
         },
         allowedIssuanceConfigs: {
             description: 'List of issuance config IDs this client can use. If empty/null, all configs are allowed.',
-            example: [
-                'pid',
-                'mdl'
-            ],
             type: [
                 'array',
                 'null'
@@ -445,8 +446,15 @@ export const TenantResponseDtoSchema = {
             description: 'Tenant description'
         },
         status: {
-            type: 'string',
             description: 'Tenant status',
+            enum: [
+                'active',
+                null
+            ],
+            type: [
+                'string',
+                'null'
+            ],
             example: 'active'
         },
         sessionConfig: {
@@ -637,8 +645,15 @@ export const TenantCreateResponseDtoSchema = {
             description: 'Tenant description'
         },
         status: {
-            type: 'string',
             description: 'Tenant status',
+            enum: [
+                'active',
+                null
+            ],
+            type: [
+                'string',
+                'null'
+            ],
             example: 'active'
         },
         sessionConfig: {
@@ -1265,7 +1280,7 @@ export const CreateUserDtoSchema = {
         email: {
             type: 'string',
             format: 'email',
-            pattern: '^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_\'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$'
+            pattern: '^(?:[A-Za-z0-9_\'+\\-]+\\.)*[A-Za-z0-9_\'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$'
         },
         roles: {
             type: 'array',
@@ -1305,7 +1320,7 @@ export const UpdateUserDtoSchema = {
         email: {
             type: 'string',
             format: 'email',
-            pattern: '^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_\'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$'
+            pattern: '^(?:[A-Za-z0-9_\'+\\-]+\\.)*[A-Za-z0-9_\'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$'
         },
         roles: {
             type: 'array',
@@ -2453,7 +2468,7 @@ export const KmsTenantConfigResponseDtoSchema = {
     type: 'object',
     properties: {
         tenantConfig: {
-            description: 'Tenant-specific KMS configuration from <CONFIG_FOLDER>/<tenantId>/kms.json. Null when no tenant file exists.',
+            description: 'Tenant-specific KMS configuration from <CONFIG_FOLDER>/<tenantId>/kms.json. Null when no tenant file exists. Credentials are `<redacted>`; `${ENV_VAR}` placeholders are returned as stored.',
             anyOf: [
                 {
                     $ref: '#/components/schemas/KmsConfigDto'
@@ -2464,7 +2479,7 @@ export const KmsTenantConfigResponseDtoSchema = {
             ]
         },
         effectiveConfig: {
-            description: 'Effective configuration used at runtime for the tenant (global + tenant merge).',
+            description: 'Effective configuration used at runtime for the tenant (global + tenant merge). Credentials are `<redacted>`; providers from the global configuration are shown with their non-secret settings only.',
             allOf: [
                 {
                     $ref: '#/components/schemas/KmsConfigDto'
@@ -2699,7 +2714,7 @@ export const ExportEcJwkSchema = {
         },
         d: {
             type: 'string',
-            description: 'Private key (base64url)'
+            description: 'Private key (base64url). Only present for keys held in the database (`db` provider); external KMS keys are exported without private material.'
         },
         alg: {
             type: 'string',
@@ -2715,8 +2730,7 @@ export const ExportEcJwkSchema = {
         'kty',
         'crv',
         'x',
-        'y',
-        'd'
+        'y'
     ]
 } as const;
 
@@ -2764,7 +2778,7 @@ export const KeyChainExportDtoSchema = {
             description: 'Usage type for this key chain.'
         },
         key: {
-            description: 'The private key in JWK format (EC).',
+            description: 'The key in JWK format (EC). Contains the private key for database-held keys and only the public key for external KMS providers.',
             allOf: [
                 {
                     $ref: '#/components/schemas/ExportEcJwk'
@@ -3175,8 +3189,15 @@ export const TenantEntitySchema = {
             description: 'Tenant description'
         },
         status: {
-            type: 'string',
             description: 'Tenant status',
+            enum: [
+                'active',
+                null
+            ],
+            type: [
+                'string',
+                'null'
+            ],
             example: 'active'
         },
         sessionConfig: {
@@ -3520,24 +3541,25 @@ export const OfferRequestDtoSchema = {
                     const: 'iso-18013-7'
                 }
             ],
+            description: 'The type of response expected for the offer request.',
             enum: [
                 'uri',
-                'iso-18013-7',
-                'dc-api'
+                'dc-api',
+                'iso-18013-7'
             ],
             examples: [
                 {
                     value: 'qrcode'
                 }
-            ],
-            description: 'The type of response expected for the offer request.'
+            ]
         },
         authorization_server: {
-            type: 'string',
             description: 'Authorization server id from issuer configuration. If omitted, the first enabled server is used.',
+            type: 'string',
             example: 'issuer-built-in'
         },
         credentialClaims: {
+            description: 'Credential claims configuration per credential. Keys must match credentialConfigurationIds.',
             type: 'object',
             propertyNames: {
                 type: 'string'
@@ -3612,7 +3634,6 @@ export const OfferRequestDtoSchema = {
                     }
                 ]
             },
-            description: 'Credential claims configuration per credential. Keys must match credentialConfigurationIds.',
             example: {
                 citizen: {
                     type: 'inline',
@@ -3622,6 +3643,20 @@ export const OfferRequestDtoSchema = {
                     }
                 }
             }
+        },
+        offerLifetimeSeconds: {
+            description: 'Lifetime of this offer in seconds. Overrides offerLifetimeSeconds of the issuance configuration. Without both, the offer does not expire.',
+            type: 'number',
+            minimum: 1,
+            maximum: 9007199254740991,
+            example: 600
+        },
+        reference: {
+            description: 'Your own reference for this offer, e.g. an order or case id. Stored in plaintext, searchable in the session list, included in webhooks and kept when the session is anonymized. Must not contain personal data.',
+            type: 'string',
+            minLength: 1,
+            maxLength: 255,
+            example: 'order-4711'
         },
         flow: {
             anyOf: [
@@ -3641,12 +3676,12 @@ export const OfferRequestDtoSchema = {
             ]
         },
         tx_code: {
-            type: 'string',
-            description: 'Transaction code for pre-authorized code flow.'
+            description: 'Transaction code for pre-authorized code flow.',
+            type: 'string'
         },
         tx_code_description: {
-            type: 'string',
-            description: 'Description for the transaction code (e.g., "Please enter the PIN sent to your email").'
+            description: 'Description for the transaction code (e.g., "Please enter the PIN sent to your email").',
+            type: 'string'
         },
         credentialConfigurationIds: {
             items: {
@@ -3656,15 +3691,8 @@ export const OfferRequestDtoSchema = {
             type: 'array'
         },
         webhookEndpointId: {
-            type: 'string',
-            description: 'ID of the webhook endpoint to notify about the status of the issuance process.'
-        },
-        reference: {
-            description: 'Your own reference for this offer, e.g. an order or case id. Stored in plaintext, searchable in the session list, included in webhooks and kept when the session is anonymized. Must not contain personal data.',
-            type: 'string',
-            minLength: 1,
-            maxLength: 255,
-            example: 'order-4711'
+            description: 'ID of the webhook endpoint to notify about the status of the issuance process.',
+            type: 'string'
         }
     },
     required: [
@@ -3682,7 +3710,9 @@ export const WebHookAuthConfigNoneSchema = {
             type: 'string',
             const: 'none',
             description: 'The type of authentication used for the webhook.',
-            enum: []
+            enum: [
+                'none'
+            ]
         }
     },
     required: [
@@ -3717,7 +3747,9 @@ export const WebHookAuthConfigHeaderSchema = {
             type: 'string',
             const: 'apiKey',
             description: 'The type of authentication used for the webhook.',
-            enum: []
+            enum: [
+                'apiKey'
+            ]
         },
         config: {
             properties: {
@@ -3828,7 +3860,7 @@ export const SessionSchema = {
         expiresAt: {
             format: 'date-time',
             type: 'string',
-            description: 'The timestamp when the request is set to expire.'
+            description: 'The timestamp after which a wallet can no longer redeem the offer or\npresentation request. Not set for offers without a lifetime.'
         },
         useDcApi: {
             type: 'boolean',
@@ -3864,6 +3896,19 @@ export const SessionSchema = {
         authorization_code: {
             type: 'string'
         },
+        authorization_code_expires_at: {
+            format: 'date-time',
+            type: 'string',
+            description: 'Expiration timestamp of the authorization code issued by the authorization endpoint.\nNot set for pre-authorized codes.'
+        },
+        dpop_jkt: {
+            type: 'string',
+            description: 'JWK thumbprint of the DPoP key the session\'s tokens are bound to.\nSet from the PAR request (DPoP header or `dpop_jkt`) or at token issuance.'
+        },
+        client_key_jkt: {
+            type: 'string',
+            description: 'JWK thumbprint of the client instance key (client attestation `cnf`)\nthe refresh token is bound to.'
+        },
         refresh_token: {
             type: 'string',
             description: 'Refresh token for the session - used to obtain a new access token.'
@@ -3876,6 +3921,11 @@ export const SessionSchema = {
         request_uri: {
             type: 'string',
             description: 'Request URI from the authorization request.'
+        },
+        request_uri_expires_at: {
+            format: 'date-time',
+            type: 'string',
+            description: 'Expiration timestamp of the PAR request_uri. Set to the time of use once\nthe request_uri was redeemed, making it single-use.'
         },
         auth_queries: {
             description: 'Authorization queries associated with the session.\nEncrypted at rest.',
@@ -4575,16 +4625,27 @@ export const UpdateStatusListDtoSchema = {
 export const ClaimsQuerySchema = {
     type: 'object',
     properties: {
+        values: {
+            type: 'array',
+            description: 'Allowed values of the claim. A disclosed value must equal one of them in type and value.',
+            items: {
+                oneOf: [
+                    {
+                        type: 'string'
+                    },
+                    {
+                        type: 'integer'
+                    },
+                    {
+                        type: 'boolean'
+                    }
+                ]
+            }
+        },
         id: {
             type: 'string'
         },
         path: {
-            type: 'array',
-            items: {
-                type: 'string'
-            }
-        },
-        values: {
             type: 'array',
             items: {
                 type: 'string'
@@ -4644,7 +4705,10 @@ export const AttestationBasedPolicySchema = {
     properties: {
         policy: {
             type: 'string',
-            const: 'attestationBased'
+            const: 'attestationBased',
+            enum: [
+                'attestationBased'
+            ]
         },
         values: {
             items: {
@@ -4682,7 +4746,10 @@ export const NoneTrustPolicySchema = {
     type: 'object',
     properties: {
         policy: {
-            type: 'string'
+            type: 'string',
+            enum: [
+                'none'
+            ]
         }
     },
     required: [
@@ -4695,7 +4762,10 @@ export const AllowListPolicySchema = {
     type: 'object',
     properties: {
         policy: {
-            type: 'string'
+            type: 'string',
+            enum: [
+                'allowList'
+            ]
         },
         values: {
             type: 'array',
@@ -4715,7 +4785,10 @@ export const RootOfTrustPolicySchema = {
     type: 'object',
     properties: {
         policy: {
-            type: 'string'
+            type: 'string',
+            enum: [
+                'rootOfTrust'
+            ]
         },
         values: {
             type: 'string'
@@ -5218,8 +5291,8 @@ export const IssuerMetadataCredentialConfigSchema = {
             ]
         },
         proofTypesSupported: {
-            description: 'Supported proof types for this credential configuration. Defaults to [\'attestation\', \'jwt\'].',
             type: 'array',
+            description: 'Supported proof types for this credential configuration. Defaults to [\'attestation\', \'jwt\'].',
             items: {
                 type: 'string',
                 enum: [
@@ -5238,8 +5311,8 @@ export const IssuerMetadataCredentialConfigSchema = {
         format: {
             type: 'string',
             enum: [
-                'mso_mdoc',
-                'dc+sd-jwt'
+                'dc+sd-jwt',
+                'mso_mdoc'
             ]
         },
         display: {
@@ -6106,6 +6179,23 @@ export const MsoMdocCredentialQueryMetaSchema = {
 export const MsoMdocClaimsQuerySchema = {
     type: 'object',
     properties: {
+        values: {
+            type: 'array',
+            description: 'Allowed values of the claim. A disclosed value must equal one of them in type and value.',
+            items: {
+                oneOf: [
+                    {
+                        type: 'string'
+                    },
+                    {
+                        type: 'integer'
+                    },
+                    {
+                        type: 'boolean'
+                    }
+                ]
+            }
+        },
         intent_to_retain: {
             type: 'boolean',
             description: 'Whether the holder should be allowed to retain the claim in an mso_mdoc response.'
@@ -6114,12 +6204,6 @@ export const MsoMdocClaimsQuerySchema = {
             type: 'string'
         },
         path: {
-            type: 'array',
-            items: {
-                type: 'string'
-            }
-        },
-        values: {
             type: 'array',
             items: {
                 type: 'string'
@@ -6362,14 +6446,12 @@ export const RegistrationCertificateBodySchema = {
             },
             type: 'array'
         },
-        provided_attestations: {
+        provides_attestations: {
             items: {
-                type: 'object',
-                propertyNames: {
-                    type: 'string'
-                },
-                additionalProperties: {}
+                type: 'string',
+                minLength: 1
             },
+            description: 'Credential type identifiers (SD-JWT VC `vct` or mdoc doctype) provided\nby an issuer.',
             type: 'array'
         }
     },
@@ -6423,14 +6505,11 @@ export const RegistrationCertificateRequestSchema = {
                         additionalProperties: {}
                     }
                 },
-                provided_attestations: {
+                provides_attestations: {
                     type: 'array',
                     items: {
-                        type: 'object',
-                        propertyNames: {
-                            type: 'string'
-                        },
-                        additionalProperties: {}
+                        type: 'string',
+                        minLength: 1
                     }
                 }
             },
@@ -7403,10 +7482,23 @@ export const PresentationConfigCreateDtoSchema = {
                                                     description: 'Path to the claim value in presented credentials.'
                                                 },
                                                 values: {
-                                                    description: 'Optional allowed values for the claim.',
+                                                    description: 'Optional allowed values for the claim. A disclosed value must equal one of them in type and value.',
+                                                    minItems: 1,
                                                     type: 'array',
                                                     items: {
-                                                        type: 'string'
+                                                        anyOf: [
+                                                            {
+                                                                type: 'string'
+                                                            },
+                                                            {
+                                                                type: 'integer',
+                                                                minimum: -9007199254740991,
+                                                                maximum: 9007199254740991
+                                                            },
+                                                            {
+                                                                type: 'boolean'
+                                                            }
+                                                        ]
                                                     }
                                                 }
                                             },
@@ -7571,10 +7663,23 @@ export const PresentationConfigCreateDtoSchema = {
                                                     description: 'Path to the claim value in presented credentials.'
                                                 },
                                                 values: {
-                                                    description: 'Optional allowed values for the claim.',
+                                                    description: 'Optional allowed values for the claim. A disclosed value must equal one of them in type and value.',
+                                                    minItems: 1,
                                                     type: 'array',
                                                     items: {
-                                                        type: 'string'
+                                                        anyOf: [
+                                                            {
+                                                                type: 'string'
+                                                            },
+                                                            {
+                                                                type: 'integer',
+                                                                minimum: -9007199254740991,
+                                                                maximum: 9007199254740991
+                                                            },
+                                                            {
+                                                                type: 'boolean'
+                                                            }
+                                                        ]
                                                     }
                                                 },
                                                 intent_to_retain: {
@@ -7721,14 +7826,11 @@ export const PresentationConfigCreateDtoSchema = {
                                         additionalProperties: {}
                                     }
                                 },
-                                provided_attestations: {
+                                provides_attestations: {
                                     type: 'array',
                                     items: {
-                                        type: 'object',
-                                        propertyNames: {
-                                            type: 'string'
-                                        },
-                                        additionalProperties: {}
+                                        type: 'string',
+                                        minLength: 1
                                     }
                                 }
                             },
@@ -8068,10 +8170,23 @@ export const PresentationConfigUpdateDtoSchema = {
                                                     description: 'Path to the claim value in presented credentials.'
                                                 },
                                                 values: {
-                                                    description: 'Optional allowed values for the claim.',
+                                                    description: 'Optional allowed values for the claim. A disclosed value must equal one of them in type and value.',
+                                                    minItems: 1,
                                                     type: 'array',
                                                     items: {
-                                                        type: 'string'
+                                                        anyOf: [
+                                                            {
+                                                                type: 'string'
+                                                            },
+                                                            {
+                                                                type: 'integer',
+                                                                minimum: -9007199254740991,
+                                                                maximum: 9007199254740991
+                                                            },
+                                                            {
+                                                                type: 'boolean'
+                                                            }
+                                                        ]
                                                     }
                                                 }
                                             },
@@ -8236,10 +8351,23 @@ export const PresentationConfigUpdateDtoSchema = {
                                                     description: 'Path to the claim value in presented credentials.'
                                                 },
                                                 values: {
-                                                    description: 'Optional allowed values for the claim.',
+                                                    description: 'Optional allowed values for the claim. A disclosed value must equal one of them in type and value.',
+                                                    minItems: 1,
                                                     type: 'array',
                                                     items: {
-                                                        type: 'string'
+                                                        anyOf: [
+                                                            {
+                                                                type: 'string'
+                                                            },
+                                                            {
+                                                                type: 'integer',
+                                                                minimum: -9007199254740991,
+                                                                maximum: 9007199254740991
+                                                            },
+                                                            {
+                                                                type: 'boolean'
+                                                            }
+                                                        ]
                                                     }
                                                 },
                                                 intent_to_retain: {
@@ -8386,14 +8514,11 @@ export const PresentationConfigUpdateDtoSchema = {
                                         additionalProperties: {}
                                     }
                                 },
-                                provided_attestations: {
+                                provides_attestations: {
                                     type: 'array',
                                     items: {
-                                        type: 'object',
-                                        propertyNames: {
-                                            type: 'string'
-                                        },
-                                        additionalProperties: {}
+                                        type: 'string',
+                                        minLength: 1
                                     }
                                 }
                             },
@@ -8572,10 +8697,10 @@ export const InternalTrustListEntitySchema = {
     type: 'object',
     properties: {
         type: {
-            type: 'string',
             enum: [
                 'internal'
-            ]
+            ],
+            type: 'string'
         },
         providerType: {
             enum: [
@@ -8608,10 +8733,10 @@ export const ExternalTrustListEntitySchema = {
     type: 'object',
     properties: {
         type: {
-            type: 'string',
             enum: [
                 'external'
-            ]
+            ],
+            type: 'string'
         },
         providerType: {
             enum: [
@@ -8859,7 +8984,10 @@ export const AuthenticationMethodNoneSchema = {
     properties: {
         method: {
             type: 'string',
-            const: 'none'
+            const: 'none',
+            enum: [
+                'none'
+            ]
         }
     },
     required: [
@@ -8954,7 +9082,10 @@ export const AuthenticationMethodAuthSchema = {
     properties: {
         method: {
             type: 'string',
-            const: 'auth'
+            const: 'auth',
+            enum: [
+                'auth'
+            ]
         },
         config: {
             properties: {
@@ -9062,7 +9193,10 @@ export const AuthenticationMethodPresentationSchema = {
     properties: {
         method: {
             type: 'string',
-            const: 'presentationDuringIssuance'
+            const: 'presentationDuringIssuance',
+            enum: [
+                'presentationDuringIssuance'
+            ]
         },
         config: {
             properties: {
@@ -9128,10 +9262,10 @@ export const ExternalAuthorizationServerConfigSchema = {
         type: {
             type: 'string',
             const: 'external',
-            description: 'Authorization server implementation type',
             enum: [
                 'external'
             ],
+            description: 'Authorization server implementation type',
             example: 'external'
         },
         id: {
@@ -9148,6 +9282,9 @@ export const ExternalAuthorizationServerConfigSchema = {
             type: 'object',
             properties: {
                 method: {
+                    enum: [
+                        'access_token_claim'
+                    ],
                     type: 'string'
                 },
                 claim: {
@@ -9231,10 +9368,10 @@ export const Oid4VpAuthorizationServerConfigSchema = {
         type: {
             type: 'string',
             const: 'oid4vp',
-            description: 'Authorization server implementation type',
             enum: [
                 'oid4vp'
             ],
+            description: 'Authorization server implementation type',
             example: 'oid4vp'
         },
         id: {
@@ -9371,10 +9508,10 @@ export const ChainedAuthorizationServerConfigSchema = {
         type: {
             type: 'string',
             const: 'chained',
-            description: 'Authorization server implementation type',
             enum: [
                 'chained'
             ],
+            description: 'Authorization server implementation type',
             example: 'chained'
         },
         id: {
@@ -9491,10 +9628,10 @@ export const BuiltInAuthorizationServerConfigSchema = {
         type: {
             type: 'string',
             const: 'built-in',
-            description: 'Authorization server implementation type',
             enum: [
                 'built-in'
             ],
+            description: 'Authorization server implementation type',
             example: 'built-in'
         },
         id: {
@@ -9868,6 +10005,14 @@ export const IssuanceConfigSchema = {
             description: 'Maximum failed tx_code attempts before the pre-authorized code is invalidated. Defaults to 5.',
             default: 5
         },
+        offerLifetimeSeconds: {
+            type: [
+                'number',
+                'null'
+            ],
+            description: 'Default lifetime of credential offers in seconds. Can be overridden per offer request. Unset: offers do not expire.',
+            minimum: 1
+        },
         tenant: {
             description: 'The tenant that owns this object.',
             allOf: [
@@ -10013,6 +10158,14 @@ export const UpdateIssuanceDtoSchema = {
             ],
             description: 'Maximum failed tx_code attempts before the pre-authorized code is invalidated. Defaults to 5.',
             default: 5
+        },
+        offerLifetimeSeconds: {
+            type: [
+                'number',
+                'null'
+            ],
+            description: 'Default lifetime of credential offers in seconds. Can be overridden per offer request. Unset: offers do not expire.',
+            minimum: 1
         },
         batchSize: {
             type: 'number',
@@ -10654,16 +10807,19 @@ export const NotificationRequestDtoSchema = {
             type: 'string',
             enum: [
                 'credential_accepted',
-                'credential_failure',
-                'credential_deleted'
+                'credential_deleted',
+                'credential_failure'
             ]
+        },
+        event_description: {
+            type: 'string',
+            pattern: '^[\\x20\\x21\\x23-\\x5B\\x5D-\\x7E]*$'
         }
     },
     required: [
         'notification_id',
         'event'
-    ],
-    additionalProperties: false
+    ]
 } as const;
 
 export const OfferResponseSchema = {
@@ -10755,7 +10911,10 @@ export const EC_PublicSchema = {
     properties: {
         kty: {
             type: 'string',
-            description: 'The key type, which is always \'EC\' for Elliptic Curve keys.'
+            description: 'The key type, which is always \'EC\' for Elliptic Curve keys.',
+            enum: [
+                'EC'
+            ]
         },
         crv: {
             type: 'string',
@@ -10945,6 +11104,9 @@ export const InteractiveAuthorizationCodeResponseDtoSchema = {
     type: 'object',
     properties: {
         status: {
+            enum: [
+                'ok'
+            ],
             type: 'string',
             description: 'Response status',
             example: 'ok'
@@ -11173,6 +11335,7 @@ export const PresentationRequestSchema = {
     type: 'object',
     properties: {
         webhook: {
+            description: 'Webhook configuration to receive the response.\nIf not provided, the configured webhook from the configuration will be used.',
             properties: {
                 url: {
                     type: 'string'
@@ -11232,7 +11395,6 @@ export const PresentationRequestSchema = {
                 }
             },
             additionalProperties: false,
-            description: 'Webhook configuration to receive the response.\nIf not provided, the configured webhook from the configuration will be used.',
             allOf: [
                 {
                     $ref: '#/components/schemas/WebhookConfig'
@@ -11240,6 +11402,7 @@ export const PresentationRequestSchema = {
             ]
         },
         transaction_data: {
+            description: 'Optional transaction data to include in the OID4VP request.\nIf provided, this will override the transaction_data from the presentation configuration.',
             items: {
                 type: 'object',
                 properties: {
@@ -11264,8 +11427,16 @@ export const PresentationRequestSchema = {
                 ],
                 additionalProperties: {}
             },
-            description: 'Optional transaction data to include in the OID4VP request.\nIf provided, this will override the transaction_data from the presentation configuration.',
             type: 'array'
+        },
+        clientIdScheme: {
+            description: 'Client identifier scheme for the OID4VP request. Defaults to x509_hash.',
+            type: 'string',
+            enum: [
+                'x509_hash',
+                'x509_san_dns'
+            ],
+            default: 'x509_hash'
         },
         response_type: {
             anyOf: [
@@ -11285,8 +11456,8 @@ export const PresentationRequestSchema = {
             description: 'The type of response expected from the presentation request.',
             enum: [
                 'uri',
-                'iso-18013-7',
-                'dc-api'
+                'dc-api',
+                'iso-18013-7'
             ]
         },
         requestId: {
@@ -11294,18 +11465,18 @@ export const PresentationRequestSchema = {
             description: 'Identifier of the presentation configuration'
         },
         redirectUri: {
-            type: 'string',
             description: 'Optional redirect URI to which the user-agent should be redirected after the presentation is completed.\nYou can use the `{sessionId}` placeholder in the URI, which will be replaced with the actual session ID.',
+            type: 'string',
             example: 'https://example.com/callback?session={sessionId}'
         },
         expected_origin: {
-            type: 'string',
-            description: 'Optional expected browser origin for DC API key-binding audience.\nExample: "http://localhost:8080"'
+            description: 'Optional expected browser origin for DC API key-binding audience.\nExample: "http://localhost:8080"',
+            type: 'string'
         },
         skewSeconds: {
+            description: 'Optional clock skew tolerance for this presentation offer, in seconds.\nIf provided, this overrides the presentation configuration for the created session.',
             type: 'number',
-            minimum: 0,
-            description: 'Optional clock skew tolerance for this presentation offer, in seconds.\nIf provided, this overrides the presentation configuration for the created session.'
+            minimum: 0
         },
         reference: {
             description: 'Caller reference stored with the session, e.g. an order or case id.\nStored in plaintext and kept on anonymization: never put personal data here.',
@@ -11715,6 +11886,14 @@ export const IssuanceConfigWritableSchema = {
             description: 'Maximum failed tx_code attempts before the pre-authorized code is invalidated. Defaults to 5.',
             default: 5
         },
+        offerLifetimeSeconds: {
+            type: [
+                'number',
+                'null'
+            ],
+            description: 'Default lifetime of credential offers in seconds. Can be overridden per offer request. Unset: offers do not expire.',
+            minimum: 1
+        },
         tenant: {
             description: 'The tenant that owns this object.',
             allOf: [
@@ -11848,6 +12027,14 @@ export const UpdateIssuanceDtoWritableSchema = {
             ],
             description: 'Maximum failed tx_code attempts before the pre-authorized code is invalidated. Defaults to 5.',
             default: 5
+        },
+        offerLifetimeSeconds: {
+            type: [
+                'number',
+                'null'
+            ],
+            description: 'Default lifetime of credential offers in seconds. Can be overridden per offer request. Unset: offers do not expire.',
+            minimum: 1
         },
         batchSize: {
             type: 'number',
