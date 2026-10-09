@@ -1,0 +1,33 @@
+name: Log in to Docker Hub
+description: >-
+  Log in to Docker Hub with retries so pulls are not subject to the anonymous
+  rate limit. If every attempt fails, warn and continue with anonymous pulls
+  instead of failing the job.
+
+inputs:
+  username:
+    description: Docker Hub username
+    required: true
+  token:
+    description: Docker Hub access token
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Log in to Docker Hub
+      shell: bash
+      env:
+        DOCKERHUB_USERNAME: ${{ inputs.username }}
+        DOCKERHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        for attempt in 1 2 3; do
+          if docker login --username "$DOCKERHUB_USERNAME" --password-stdin <<< "$DOCKERHUB_TOKEN"; then
+            exit 0
+          fi
+          if [[ "$attempt" -lt 3 ]]; then
+            echo "Docker Hub login attempt ${attempt} failed, retrying in $((attempt * 10))s"
+            sleep $((attempt * 10))
+          fi
+        done
+        echo "::warning::Docker Hub login failed after 3 attempts; pulling anonymously"
