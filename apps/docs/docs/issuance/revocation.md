@@ -53,7 +53,30 @@ curl -X POST "$EUDIPLO_URL/api/session/revoke" \
 - Allowed roles: `issuance:offer` or `issuance:manage`.
 - Revocation is final: setting `0` or `2` on a revoked credential is rejected with `409`, and nothing is changed. A suspension can be lifted (`0`) or turned into a revocation (`1`).
 
+In the web client, open the session under **All Sessions**. The **Credential Status** card lists the credentials of the session per credential type and offers **Revoke**, **Suspend** and **Reinstate** where the change is allowed; Suspend only appears when every list of that type has at least 2 bits per entry.
+
 ## 3. Check the result
+
+Read the current status of a session's credentials:
+
+```bash
+curl "$EUDIPLO_URL/api/session/a6318799-dff4-4b60-9d1d-58703611bd23/credential-status" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+[
+  {
+    "credentialConfigurationId": "membership",
+    "statusListId": "8f1c…",
+    "index": 42,
+    "status": 1,
+    "bits": 2
+  }
+]
+```
+
+There is one entry per issued credential that carries a status, so a batch issuance returns several entries for the same type. The list is empty when no credential of the session carries a status. Allowed roles: `issuance:offer` or `issuance:manage`.
 
 Verifiers resolve `status_list.uri` and read the bit at `idx`. Status list tokens are cached:
 

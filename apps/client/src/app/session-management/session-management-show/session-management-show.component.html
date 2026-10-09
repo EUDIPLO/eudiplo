@@ -136,6 +136,13 @@
       </mat-card-content>
     </mat-card>
 
+    @if (canManageCredentialStatus()) {
+      <app-credential-status-card
+        [sessionId]="session.id"
+        [sessionStatus]="getSessionStatusValue(session)"
+      />
+    }
+
     <!-- QR Code Section -->
     <mat-card class="qr-card">
       <mat-card-header>

@@ -25,6 +25,8 @@ import {
   type SessionLogEntry,
 } from '../session-management.service';
 import { GrafanaLinkService } from '../../services/grafana-link.service';
+import { JwtService } from '../../services/jwt.service';
+import { CredentialStatusCardComponent } from '../credential-status/credential-status-card.component';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { decodeJwt } from 'jose';
@@ -41,6 +43,7 @@ import { decodeJwt } from 'jose';
     MatProgressSpinnerModule,
     MatTooltipModule,
     UpperCasePipe,
+    CredentialStatusCardComponent,
   ],
   templateUrl: './session-management-show.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -95,8 +98,16 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
     private router: Router,
     private httpClient: HttpClient,
     public grafanaLinkService: GrafanaLinkService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private jwtService: JwtService
   ) {}
+
+  /** Changing credential status is an issuer action, like on the backend. */
+  canManageCredentialStatus(): boolean {
+    return (
+      this.isIssuanceSession() && this.jwtService.hasRole(['issuance:offer', 'issuance:manage'])
+    );
+  }
 
   cancelling = false;
 

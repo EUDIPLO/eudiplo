@@ -1978,6 +1978,29 @@ export type SessionLogEntryResponseDto = {
     };
 };
 
+export type CredentialStatusDto = {
+    /**
+     * Credential configuration the credential was issued for.
+     */
+    credentialConfigurationId: string;
+    /**
+     * ID of the status list holding the entry.
+     */
+    statusListId: string;
+    /**
+     * Index of the entry in the status list.
+     */
+    index: number;
+    /**
+     * Current status: 0 = valid, 1 = revoked, 2 = suspended. Lists with more bits per entry can hold higher values.
+     */
+    status: number;
+    /**
+     * Bits per entry of the status list. Suspension (2) needs at least 2.
+     */
+    bits: 1 | 2 | 4 | 8;
+};
+
 export type StatusUpdateDto = {
     /**
      * Session identifier used to locate credentials for status updates.
@@ -6635,6 +6658,31 @@ export type SessionControllerGetSessionLogsResponses = {
 };
 
 export type SessionControllerGetSessionLogsResponse = SessionControllerGetSessionLogsResponses[keyof SessionControllerGetSessionLogsResponses];
+
+export type SessionControllerGetCredentialStatusData = {
+    body?: never;
+    path: {
+        /**
+         * The session ID
+         */
+        id: string;
+    };
+    query?: never;
+    url: '/api/session/{id}/credential-status';
+};
+
+export type SessionControllerGetCredentialStatusErrors = {
+    /**
+     * Session not found
+     */
+    404: unknown;
+};
+
+export type SessionControllerGetCredentialStatusResponses = {
+    200: Array<CredentialStatusDto>;
+};
+
+export type SessionControllerGetCredentialStatusResponse = SessionControllerGetCredentialStatusResponses[keyof SessionControllerGetCredentialStatusResponses];
 
 export type SessionControllerRevokeAllData = {
     body: StatusUpdateDto;

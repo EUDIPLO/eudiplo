@@ -73,7 +73,7 @@ The body is optional.
 
 - The session moves to `cancelled` and is kept for auditing. To remove it, use `DELETE /api/session/{id}`.
 - A wallet can no longer use the offer or request to start a flow: offer retrieval, PAR, authorization and the token endpoint, as well as fetching or answering the presentation request, are rejected like for a finished session.
-- Once a wallet exchanged the offer for tokens, the offer is redeemed and can no longer be cancelled (`409`); the wallet finishes its flow. Credentials that were already issued stay valid; revoke them with `POST /api/session/revoke` ([Revocation](../issuance/revocation.md)).
+- Once a wallet exchanged the offer for tokens, the offer is redeemed and can no longer be cancelled (`409`); the wallet finishes its flow. Credentials that were already issued stay valid; revoke them with `POST /api/session/revoke` or on the session page of the web client ([Revocation](../issuance/revocation.md)).
 - A session that is already `completed`, `failed`, `expired` or `cancelled` answers `409` and does not change. Cancellation, the token exchange and the presentation response use the same conditional update, so when they race exactly one wins.
 - The optional `reason` (up to 500 characters) and the client that cancelled the session are recorded in the tenant [audit log](../operate/logging.md#audit-log), and in the session log when session logging is enabled. The status change is published on the event stream, and the session's webhook receives a [cancellation webhook](../reference/webhooks.md#cancellation-webhook).
 

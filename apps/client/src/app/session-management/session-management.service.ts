@@ -1,10 +1,14 @@
 import { Injectable } from '@angular/core';
+import type { CredentialStatusValue } from './credential-status/credential-status';
 import {
   client,
+  CredentialStatusDto,
   sessionControllerCancel,
   sessionControllerDeleteSession,
   sessionControllerGetAllSessions,
+  sessionControllerGetCredentialStatus,
   sessionControllerGetSession,
+  sessionControllerRevokeAll,
   PaginatedSessionResponseDto,
   Session,
   SessionControllerGetAllSessionsData,
@@ -89,7 +93,8 @@ export class SessionManagementService {
   }
 
   /**
-   * Revoke/delete a session by ID
+   * Delete a session by ID. Credentials issued in the session keep their
+   * status; use {@link updateCredentialStatus} to revoke them.
    */
   async deleteSession(sessionId: string): Promise<void> {
     try {
@@ -109,6 +114,32 @@ export class SessionManagementService {
     await sessionControllerCancel({
       path: { id: sessionId },
       body: reason ? { reason } : {},
+    });
+  }
+
+  /**
+   * Get the status of every credential issued in a session that carries one
+   */
+  async getCredentialStatus(sessionId: string): Promise<CredentialStatusDto[]> {
+    const response = await sessionControllerGetCredentialStatus({ path: { id: sessionId } });
+    return response.data ?? [];
+  }
+
+  /**
+   * Set the status of the credentials issued in a session, optionally only
+   * those of one credential configuration. Revocation is final.
+   */
+  async updateCredentialStatus(
+    sessionId: string,
+    status: CredentialStatusValue,
+    credentialConfigurationId?: string
+  ): Promise<void> {
+    await sessionControllerRevokeAll({
+      body: {
+        sessionId,
+        status,
+        ...(credentialConfigurationId !== undefined && { credentialConfigurationId }),
+      },
     });
   }
 
