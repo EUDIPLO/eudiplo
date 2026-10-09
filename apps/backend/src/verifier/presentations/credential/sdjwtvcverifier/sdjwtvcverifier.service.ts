@@ -175,6 +175,10 @@ export class SdjwtvcverifierService {
             throw e;
         }
 
+        if (revocationPolicy.enabled) {
+            this.checkStatusMechanism(result, revocationPolicy.failClosed);
+        }
+
         // Validate transaction data hashes if transaction data was provided
         if (options.transactionData && options.transactionData.length > 0) {
             this.validateTransactionDataHashes(result, options.transactionData);
@@ -185,6 +189,37 @@ export class SdjwtvcverifierService {
         }
 
         return result;
+    }
+
+    /**
+     * The library only checks `status.status_list` and passes any other
+     * `status` claim unchecked. A credential without a `status` claim cannot
+     * be revoked and is accepted, but a `status` claim without a status list
+     * names a status the verifier could not check: strict mode rejects it,
+     * best-effort mode logs it and accepts the credential.
+     */
+    private checkStatusMechanism(
+        result: VerificationResult,
+        failClosed: boolean,
+    ): void {
+        const status = (result.payload as Record<string, unknown>).status;
+        if (status === undefined) {
+            return;
+        }
+        const statusList =
+            typeof status === "object" && status !== null
+                ? (status as Record<string, unknown>).status_list
+                : undefined;
+        if (statusList !== undefined) {
+            return;
+        }
+
+        const reason =
+            "The credential's status claim contains no supported status mechanism, so its status could not be checked";
+        if (failClosed) {
+            throw new BadRequestException(reason);
+        }
+        this.logger.warn(`${reason}; accepting it in best-effort mode`);
     }
 
     /**

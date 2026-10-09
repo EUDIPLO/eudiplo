@@ -119,4 +119,54 @@ describe("SdjwtvcverifierService revocation mode", () => {
         expect(instanceConfigs[0].statusListFetcher).toBeUndefined();
         expect(instanceConfigs[0].statusVerifier).toBeUndefined();
     });
+
+    describe("status claim without a status list", () => {
+        const verifyWith = (failClosed: boolean, enabled = true) =>
+            service.verify("credential", {
+                policy: {
+                    requireX5c: true,
+                    revocation: { enabled, failClosed },
+                },
+            } as any);
+
+        it("accepts a credential without a status claim in strict mode", async () => {
+            verifyMock.mockResolvedValue({ payload: { sub: "abc" } });
+
+            await expect(verifyWith(true)).resolves.toEqual({
+                payload: { sub: "abc" },
+            });
+        });
+
+        it("rejects it in strict mode", async () => {
+            // The shape the test helpers produced by nesting createEntry's
+            // result under `status`.
+            verifyMock.mockResolvedValue({
+                payload: {
+                    status: { status: { status_list: { idx: 0, uri: "x" } } },
+                },
+            });
+
+            await expect(verifyWith(true)).rejects.toThrow(
+                "no supported status mechanism",
+            );
+        });
+
+        it("accepts it with a warning in best-effort mode", async () => {
+            const payload = { status: { unknown_mechanism: {} } };
+            verifyMock.mockResolvedValue({ payload });
+
+            await expect(verifyWith(false)).resolves.toEqual({ payload });
+            expect(logger.warn).toHaveBeenCalledOnce();
+        });
+
+        it("accepts it when revocation is disabled", async () => {
+            const payload = { status: { unknown_mechanism: {} } };
+            verifyMock.mockResolvedValue({ payload });
+
+            await expect(verifyWith(false, false)).resolves.toEqual({
+                payload,
+            });
+            expect(logger.warn).not.toHaveBeenCalled();
+        });
+    });
 });
