@@ -22,12 +22,15 @@ import request from "supertest";
 import { DataSource } from "typeorm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { TenantEntity } from "../../src/auth/tenant/entities/tenant.entity.js";
+import { IssuanceConfig } from "../../src/issuer/configuration/issuance/entities/issuance-config.entity.js";
 import { StatusListEntity } from "../../src/issuer/status-list/entities/status-list.entity.js";
 import { ConfigBundleService } from "../../src/platform/config-portability/config-bundle.service.js";
 import { ConfigBundleApplyService } from "../../src/platform/config-portability/config-bundle-apply.service.js";
 import { ConfigBundleArchiveService } from "../../src/platform/config-portability/config-bundle-archive.service.js";
 import { ConfigFolderBundleService } from "../../src/platform/config-portability/config-folder-bundle.service.js";
 import { ConfigOwnershipService } from "../../src/platform/config-portability/config-ownership.service.js";
+import type { ConfigImportPlan } from "../../src/platform/config-portability/config-resource.types.js";
+import { ConfigResourceMetadataEntity } from "../../src/platform/config-portability/entities/config-resource-metadata.entity.js";
 
 describe("startup configuration reconciliation", () => {
     let app: INestApplication;
@@ -452,6 +455,123 @@ describe("startup configuration reconciliation", () => {
         expect(await app.get(ConfigOwnershipService).list("haip")).toHaveLength(
             24,
         );
+    });
+
+    it("skips detached or diverged resources at startup and reattaches them to the folder version", async () => {
+        const root = join(
+            app.get(ConfigService).getOrThrow<string>("CONFIG_FOLDER"),
+            "haip",
+        );
+        const source = `folder:${root}`;
+        const ownership = app.get(ConfigOwnershipService);
+        const service = app.get(ConfigBundleService);
+        const folder = app.get(ConfigFolderBundleService);
+        const repository = app.get(DataSource).getRepository(IssuanceConfig);
+        const startupPlan = async () =>
+            service.plan(
+                "haip",
+                folder.buildBundle("haip", root),
+                "upsert",
+                source,
+            );
+        const issuanceItem = (plan: ConfigImportPlan) =>
+            plan.items.find((item) => item.kind === "IssuanceConfig")!;
+
+        // Detach and edit twice, as the UI would.
+        await ownership.detach("haip", "IssuanceConfig", "issuance");
+        await repository.update({ tenantId: "haip" }, { batchSize: 3 });
+        await ownership.recordApiMutation(
+            "haip",
+            "IssuanceConfig",
+            "issuance",
+            false,
+        );
+        await ownership.recordApiMutation(
+            "haip",
+            "IssuanceConfig",
+            "issuance",
+            false,
+        );
+        expect(
+            await ownership.get("haip", "IssuanceConfig", "issuance"),
+        ).toMatchObject({ ownership: "detached", source, generation: 3 });
+
+        let plan = await startupPlan();
+        expect(plan.applicable, JSON.stringify(plan.issues)).toBe(true);
+        expect(issuanceItem(plan)).toMatchObject({
+            action: "skip",
+            issues: [expect.objectContaining({ code: "RESOURCE_DETACHED" })],
+        });
+
+        // Resources detached before the detached state existed are plain
+        // unmanaged with a newer generation; startup skips those too.
+        await app
+            .get(DataSource)
+            .getRepository(ConfigResourceMetadataEntity)
+            .update(
+                {
+                    tenantId: "haip",
+                    kind: "IssuanceConfig",
+                    resourceId: "issuance",
+                },
+                { ownership: "unmanaged", source: null as any },
+            );
+        plan = await startupPlan();
+        expect(plan.applicable, JSON.stringify(plan.issues)).toBe(true);
+        expect(issuanceItem(plan)).toMatchObject({
+            action: "skip",
+            issues: [
+                expect.objectContaining({
+                    code: "STALE_GENERATION",
+                    severity: "warning",
+                }),
+            ],
+        });
+        // An uploaded bundle still has to resolve the conflict explicitly.
+        plan = await service.plan(
+            "haip",
+            folder.buildBundle("haip", root),
+            "upsert",
+        );
+        expect(plan.applicable).toBe(false);
+        expect(issuanceItem(plan).action).toBe("blocked");
+
+        const reattachPlan = await folder.planReattach(
+            "haip",
+            "IssuanceConfig",
+            "issuance",
+        );
+        expect(reattachPlan.applicable).toBe(true);
+        expect(reattachPlan.items).toEqual([
+            expect.objectContaining({
+                kind: "IssuanceConfig",
+                action: "update",
+            }),
+        ]);
+        expect(reattachPlan.assets?.map((asset) => asset.path)).toEqual([
+            "images/company.png",
+        ]);
+        await folder.reattach(
+            "haip",
+            "IssuanceConfig",
+            "issuance",
+            reattachPlan.planFingerprint!,
+        );
+        expect(
+            (await repository.findOneByOrFail({ tenantId: "haip" })).batchSize,
+        ).toBe(10);
+        expect(
+            await ownership.get("haip", "IssuanceConfig", "issuance"),
+        ).toMatchObject({ ownership: "file-managed", source, generation: 1 });
+        const afterReattach = issuanceItem(await startupPlan());
+        expect(afterReattach.issues).toEqual([]);
+        expect(
+            afterReattach.changes?.map((change) => change.path),
+        ).not.toContain("/spec/batchSize");
+
+        await expect(
+            folder.planReattach("haip", "WebhookEndpoint", "missing"),
+        ).rejects.toThrow("is not defined in the config folder");
     });
 });
 

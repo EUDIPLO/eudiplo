@@ -55,6 +55,8 @@ export class ConfigPortabilityComponent implements OnInit {
   bundleArchive?: File;
   bundleFileName = '';
   plan?: ConfigImportPlan;
+  /** Set while the shown plan resets one resource to its file version. */
+  reattachTarget?: ConfigResourceMetadata;
   resources: ConfigResourceMetadata[] = [];
   operations: ConfigOperation[] = [];
   selected = new Set<string>();
@@ -121,6 +123,7 @@ export class ConfigPortabilityComponent implements OnInit {
       }
       this.bundleFileName = file.name;
       this.plan = undefined;
+      this.reattachTarget = undefined;
     } catch (error) {
       this.bundle = undefined;
       this.bundleArchive = undefined;
@@ -135,6 +138,7 @@ export class ConfigPortabilityComponent implements OnInit {
 
   async planImport(): Promise<void> {
     if (!this.bundle && !this.bundleArchive) return;
+    this.reattachTarget = undefined;
     await this.run(async () => {
       this.plan = this.bundleArchive
         ? await this.portability.planArchive(this.bundleArchive, this.mode)
@@ -147,7 +151,8 @@ export class ConfigPortabilityComponent implements OnInit {
       (!this.bundle && !this.bundleArchive) ||
       !this.plan?.applicable ||
       !this.plan.planFingerprint ||
-      this.plan.operationId
+      this.plan.operationId ||
+      this.reattachTarget
     )
       return;
     const confirmed =
@@ -184,6 +189,38 @@ export class ConfigPortabilityComponent implements OnInit {
       this.selected.delete(this.resourceKey(resource));
       await this.refreshResources();
     }, 'Could not detach resource');
+  }
+
+  async planReattach(resource: ConfigResourceMetadata): Promise<void> {
+    await this.run(async () => {
+      this.plan = await this.portability.planReattach(resource.kind, resource.resourceId);
+      this.reattachTarget = resource;
+      // The plan renders above the ownership table, out of view of the clicked row.
+      setTimeout(() =>
+        document.getElementById('config-plan')?.scrollIntoView({ behavior: 'smooth' })
+      );
+    }, 'Could not plan the reset to the file version');
+  }
+
+  async applyReattach(): Promise<void> {
+    const target = this.reattachTarget;
+    if (!target || !this.plan?.applicable || !this.plan.planFingerprint || this.plan.operationId)
+      return;
+    if (
+      !globalThis.confirm(
+        `Reset ${this.resourceKey(target)} to the file version? Changes made through the API or UI are discarded.`
+      )
+    ) {
+      return;
+    }
+    const fingerprint = this.plan.planFingerprint;
+    await this.run(async () => {
+      this.plan = await this.portability.reattach(target.kind, target.resourceId, fingerprint);
+      await this.refreshResources();
+      this.snackBar.open(`${this.resourceKey(target)} is file-managed again`, 'Close', {
+        duration: 3000,
+      });
+    }, 'Could not reset the resource to the file version');
   }
 
   resourceKey(resource: ConfigResourceMetadata): string {
@@ -285,6 +322,7 @@ export class ConfigPortabilityComponent implements OnInit {
 
   onModeChange(): void {
     this.plan = undefined;
+    this.reattachTarget = undefined;
   }
 
   downloadImportResult(): void {

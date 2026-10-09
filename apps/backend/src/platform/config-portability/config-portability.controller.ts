@@ -28,6 +28,7 @@ import { Token, TokenPayload } from "../../auth/token.decorator.js";
 import { ConfigBundleService } from "./config-bundle.service.js";
 import { ConfigBundleApplyService } from "./config-bundle-apply.service.js";
 import { ConfigBundleArchiveService } from "./config-bundle-archive.service.js";
+import { ConfigFolderBundleService } from "./config-folder-bundle.service.js";
 import { ConfigImportJournalService } from "./config-import-journal.service.js";
 import { ConfigMigrationService } from "./config-migration.service.js";
 import { ConfigOwnershipService } from "./config-ownership.service.js";
@@ -51,6 +52,7 @@ export class ConfigPortabilityController {
         private readonly ownershipService: ConfigOwnershipService,
         private readonly auditLogService: AuditLogService,
         private readonly journal: ConfigImportJournalService,
+        private readonly folderBundleService: ConfigFolderBundleService,
     ) {}
 
     @Get("export")
@@ -323,12 +325,7 @@ export class ConfigPortabilityController {
         @Param("kind") rawKind: string,
         @Param("id") id: string,
     ) {
-        if (!CONFIG_RESOURCE_KINDS.includes(rawKind as ConfigResourceKind)) {
-            throw new BadRequestException(
-                `Unsupported resource kind: ${rawKind}`,
-            );
-        }
-        const kind = rawKind as ConfigResourceKind;
+        const kind = this.assertKind(rawKind);
         const tenantId = requireTenantContext(token);
         const metadata = await this.journal.run(tenantId, "detach", async () =>
             this.ownershipService.detach(tenantId, kind, id),
@@ -341,6 +338,75 @@ export class ConfigPortabilityController {
             requestMeta: extractRequestMeta(request),
         });
         return metadata;
+    }
+
+    @Post("resources/:kind/:id/reattach/plan")
+    @ApiOperation({
+        summary:
+            "Plan resetting a resource to its version in the config folder",
+    })
+    planReattach(
+        @Token() token: TokenPayload,
+        @Param("kind") rawKind: string,
+        @Param("id") id: string,
+    ) {
+        return this.folderBundleService.planReattach(
+            requireTenantContext(token),
+            this.assertKind(rawKind),
+            id,
+        );
+    }
+
+    @ApiQuery({
+        name: "planFingerprint",
+        required: true,
+        type: String,
+        description: "Fingerprint from the reviewed reattach plan",
+    })
+    @Post("resources/:kind/:id/reattach")
+    @ApiOperation({
+        summary:
+            "Reset a resource to its version in the config folder and make it file-managed again",
+    })
+    async reattach(
+        @Token() token: TokenPayload,
+        @Req() request: Request,
+        @Param("kind") rawKind: string,
+        @Param("id") id: string,
+        @Query("planFingerprint") planFingerprint?: string,
+    ) {
+        const kind = this.assertKind(rawKind);
+        if (!planFingerprint || !/^[a-f0-9]{64}$/.test(planFingerprint))
+            throw new BadRequestException(
+                "A planFingerprint from a reviewed plan is required",
+            );
+        const tenantId = requireTenantContext(token);
+        const plan = await this.folderBundleService.reattach(
+            tenantId,
+            kind,
+            id,
+            planFingerprint,
+        );
+        await this.auditLogService.record({
+            tenantId,
+            actionType: "config_resource_reattached",
+            actor: resolveAuditActor(token),
+            after: {
+                kind,
+                id,
+                action: plan.items[0]?.action,
+                operationId: plan.operationId,
+            },
+            requestMeta: extractRequestMeta(request),
+        });
+        return plan;
+    }
+
+    private assertKind(kind: string): ConfigResourceKind {
+        if (!CONFIG_RESOURCE_KINDS.includes(kind as ConfigResourceKind)) {
+            throw new BadRequestException(`Unsupported resource kind: ${kind}`);
+        }
+        return kind as ConfigResourceKind;
     }
 
     private assertMode(mode: string): asserts mode is ConfigImportMode {

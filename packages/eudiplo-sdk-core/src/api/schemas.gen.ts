@@ -821,6 +821,7 @@ export const AuditLogResponseDtoSchema = {
                 'config_bundle_imported',
                 'config_client_secret_generated',
                 'config_resource_detached',
+                'config_resource_reattached',
                 'session_cancelled'
             ],
             type: 'string'
@@ -11688,7 +11689,8 @@ export const ConfigResourceMetadataEntitySchema = {
         ownership: {
             enum: [
                 'unmanaged',
-                'file-managed'
+                'file-managed',
+                'detached'
             ],
             type: 'string'
         },

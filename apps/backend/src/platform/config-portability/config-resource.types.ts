@@ -11,8 +11,20 @@ export type {
     ConfigResourceKind,
 } from "@eudiplo/config-format/config-format.js";
 export { CONFIG_RESOURCE_KINDS } from "@eudiplo/config-format/config-format.js";
-export type ConfigOwnership = "unmanaged" | "file-managed";
+/**
+ * `detached` marks a resource that was file-managed until an operator detached it.
+ * Imports from its former source skip it until it is reattached.
+ */
+export type ConfigOwnership = "unmanaged" | "file-managed" | "detached";
 export type ConfigImportMode = "disabled" | "create" | "upsert" | "replace";
+
+export interface ConfigPlanOptions {
+    /**
+     * Apply the documents even when their resources are detached or carry an
+     * older generation, and take file ownership again.
+     */
+    reattach?: boolean;
+}
 
 export interface ConfigMigrationResult<T = Record<string, unknown>> {
     document: ConfigDocument<T>;

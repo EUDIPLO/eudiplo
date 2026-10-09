@@ -146,6 +146,8 @@ describe("apply reconciliation and recovery", () => {
                 resourceId: "same",
                 ownership: "file-managed",
             }),
+            undefined,
+            undefined,
         );
     });
     it("reports partial completion and preserves generated secrets when a later operation fails", async () => {

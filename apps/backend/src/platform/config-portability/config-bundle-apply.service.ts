@@ -47,6 +47,7 @@ import type {
     ConfigDocument,
     ConfigImportMode,
     ConfigImportPlan,
+    ConfigPlanOptions,
     ConfigResourceKind,
 } from "./config-resource.types.js";
 import type { ConfigImportRunEntity } from "./entities/config-import-run.entity.js";
@@ -134,16 +135,21 @@ export class ConfigBundleApplyService {
         mode: ConfigImportMode,
         ownershipSource = `bundle:${bundle.manifest.tenant}`,
         expectedFingerprint?: string,
+        options: ConfigPlanOptions = {},
     ): Promise<ConfigImportPlan> {
-        return this.journal.run(tenantId, mode, (run) =>
-            this.applyLocked(
-                tenantId,
-                bundle,
-                mode,
-                ownershipSource,
-                run,
-                expectedFingerprint,
-            ),
+        return this.journal.run(
+            tenantId,
+            options.reattach ? "reattach" : mode,
+            (run) =>
+                this.applyLocked(
+                    tenantId,
+                    bundle,
+                    mode,
+                    ownershipSource,
+                    run,
+                    expectedFingerprint,
+                    options,
+                ),
         );
     }
 
@@ -154,12 +160,14 @@ export class ConfigBundleApplyService {
         ownershipSource: string,
         run: ConfigImportRunEntity,
         expectedFingerprint?: string,
+        options: ConfigPlanOptions = {},
     ): Promise<ConfigImportPlan> {
         const plan = await this.bundleService.plan(
             tenantId,
             bundle,
             mode,
             ownershipSource,
+            options,
         );
         if (
             expectedFingerprint &&
@@ -261,6 +269,7 @@ export class ConfigBundleApplyService {
                                 await this.ownershipService.markApplied(
                                     ownership,
                                     manager,
+                                    options.reattach,
                                 );
                             },
                         );
@@ -298,7 +307,11 @@ export class ConfigBundleApplyService {
                     id: resourceId(document),
                 },
                 async () => {
-                    await this.ownershipService.markApplied(ownership);
+                    await this.ownershipService.markApplied(
+                        ownership,
+                        undefined,
+                        options.reattach,
+                    );
                 },
             );
         }
