@@ -23,8 +23,8 @@ Every portable resource is one JSON document:
 | Field                 | Required | Meaning                                                                                                   |
 | --------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
 | `$schema`             | yes      | Resource type and format version. Only the canonical URLs below are accepted; they are resolved from schemas bundled with the backend and CLI, never fetched. |
-| `metadata.generation` | no       | Integer ≥ 1. An import whose generation is lower than the stored one is blocked (`STALE_GENERATION`).      |
-| `metadata.ownership`  | no       | `unmanaged` or `file-managed`. Reported on export; ignored on import, which always records `file-managed`. |
+| `metadata.generation` | no       | Integer ≥ 1. A bundle import whose generation is lower than the stored one is blocked (`STALE_GENERATION`); the startup import skips that resource instead. |
+| `metadata.ownership`  | no       | `unmanaged` or `file-managed`. Reported on export, where a detached resource is reported as `unmanaged`; ignored on import, which always records `file-managed`. |
 | `spec`                | yes      | The desired configuration, without runtime state. The ID is `spec.id`, for clients `spec.clientId`.       |
 
 Tenant, KMS, registrar and issuance settings exist once per tenant and have no ID.
@@ -162,7 +162,7 @@ placeholders are handled according to `CONFIG_VARIABLE_STRICT`:
 | `create`    | The resource will be created                                                                |
 | `update`    | The resource will change; the plan lists redacted field changes                            |
 | `unchanged` | Already matches; only ownership metadata may be updated                                     |
-| `skip`      | Exists and is left alone (`create` mode)                                                    |
+| `skip`      | Exists and is left alone: in `create` mode (`RESOURCE_EXISTS`), or in a startup import when the resource was detached from that folder (`RESOURCE_DETACHED`) or has a newer stored generation (`STALE_GENERATION`) |
 | `delete`    | Will be removed (`replace` mode)                                                            |
 | `blocked`   | Cannot be applied, for example `STALE_GENERATION`, `MISSING_RESOURCE_REFERENCE`, `STATUS_LIST_LAYOUT_IMMUTABLE` or a missing secret or key. One blocked item blocks the whole plan |
 
@@ -190,6 +190,8 @@ All endpoints act on the tenant of the access token and accept `tenant:admin` or
 | `GET /api/config-bundles/operations`, `GET …/operations/:id`      | Latest 50 operation reports, or one report |
 | `POST /api/config-bundles/operations/:id/acknowledge-interruption?confirmWorkerStopped=true` | Release the lock of an interrupted operation |
 | `GET /api/config-bundles/resources`                               | Ownership and generation of every resource |
-| `POST /api/config-bundles/resources/:kind/:id/detach`             | Make a `file-managed` resource `unmanaged` |
+| `POST /api/config-bundles/resources/:kind/:id/detach`             | Make a `file-managed` resource `detached`  |
+| `POST /api/config-bundles/resources/:kind/:id/reattach/plan`      | Plan resetting a resource to its version in `CONFIG_FOLDER` |
+| `POST /api/config-bundles/resources/:kind/:id/reattach?planFingerprint=…` | Apply that plan and make the resource `file-managed` again |
 
-Exports, imports and detach actions are recorded in the tenant audit log.
+Exports, imports, detach and reattach actions are recorded in the tenant audit log.

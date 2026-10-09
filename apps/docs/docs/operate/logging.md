@@ -87,7 +87,7 @@ To go from a log line or a pasted offer link to the session, search the session 
 Changes to a tenant and to its credential, issuance, presentation and
 status-list configurations, webhook endpoints and attribute providers are
 recorded with actor, time and changed fields, as are bundle imports, exports,
-detach actions, generated client secrets and cancelled sessions (with the
+detach and reattach actions, generated client secrets and cancelled sessions (with the
 reason). Not audited: key chains, trust lists, API clients and users (including
 role changes and secret rotation), KMS provider and registrar configuration,
 and session retention settings. Read the audit log with

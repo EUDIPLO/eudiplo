@@ -34,6 +34,20 @@ import {
           <a mat-button routerLink="/settings/config-portability">View ownership</a>
         </mat-card-content>
       </mat-card>
+    } @else if (metadata?.ownership === 'detached') {
+      <mat-card appearance="outlined" class="managed-notice">
+        <mat-card-content>
+          <mat-icon>link_off</mat-icon>
+          <div class="message">
+            <strong>Detached from {{ metadata?.source || 'its configuration source' }}</strong>
+            <span>
+              Startup imports skip this resource. Reset it to the file version to make it
+              file-managed again.
+            </span>
+          </div>
+          <a mat-button routerLink="/settings/config-portability">View ownership</a>
+        </mat-card-content>
+      </mat-card>
     }
   `,
   styleUrl: './config-ownership-notice.component.scss',
