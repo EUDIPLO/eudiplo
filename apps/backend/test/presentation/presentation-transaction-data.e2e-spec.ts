@@ -113,7 +113,7 @@ async function preparePresentationWithTransactionData(
     const credential = await createCredentialWithStatus({
         claims: {
             vct: "http://localhost:3000/issuers/demo/credentials-metadata/vct/pid",
-            status,
+            ...status,
             birthdate: "1990-01-01",
             address: {
                 locality: "Berlin",

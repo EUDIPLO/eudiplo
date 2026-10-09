@@ -231,16 +231,19 @@ export async function preparePresentation(
     x5c: string[],
     statusListService: StatusListService,
     credentialConfigId: string,
+    sessionId = "1",
 ) {
+    // createEntry returns `{ status: { status_list } }`, so it is spread into
+    // the claims to put `status_list` at `status.status_list`.
     const status = await statusListService.createEntry(
-        { tenantId: "root", id: "1" } as any,
+        { tenantId: "root", id: sessionId } as any,
         credentialConfigId,
     );
 
     const credential = await createCredential({
         claims: {
             vct: "http://localhost:3000/issuers/demo/credentials-metadata/vct/pid",
-            status,
+            ...status,
             // Include claims that can be selectively disclosed
             birthdate: "1990-01-01",
             address: {
