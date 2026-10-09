@@ -558,6 +558,62 @@ describe("StatusListService SQLite concurrency", () => {
             expect(signJWT).not.toHaveBeenCalled();
         });
 
+        test("reads the current status of each of a session's credentials", async () => {
+            await dataSource
+                .getRepository(StatusListEntity)
+                .update(
+                    { id: "list-2", tenantId: "tenant-1" },
+                    { elements: [2, 1] },
+                );
+            await dataSource
+                .getRepository(StatusMapping)
+                .insert([
+                    mapping("x", "list-2", 1, "config-wide"),
+                    mapping("x", "list-1", 0, "config-narrow"),
+                    mapping("x", "list-2", 0, "config-wide"),
+                    mapping("y", "list-1", 1, "config-narrow"),
+                ]);
+
+            await expect(
+                service.getSessionStatus("tenant-1", "x"),
+            ).resolves.toEqual([
+                {
+                    credentialConfigurationId: "config-narrow",
+                    statusListId: "list-1",
+                    index: 0,
+                    status: 0,
+                    bits: 1,
+                },
+                {
+                    credentialConfigurationId: "config-wide",
+                    statusListId: "list-2",
+                    index: 0,
+                    status: 2,
+                    bits: 2,
+                },
+                {
+                    credentialConfigurationId: "config-wide",
+                    statusListId: "list-2",
+                    index: 1,
+                    status: 1,
+                    bits: 2,
+                },
+            ]);
+        });
+
+        test("reads no status for a session without status entries or of another tenant", async () => {
+            await dataSource
+                .getRepository(StatusMapping)
+                .insert(mapping("x", "list-1", 0, "config-narrow"));
+
+            await expect(
+                service.getSessionStatus("tenant-1", "unknown"),
+            ).resolves.toEqual([]);
+            await expect(
+                service.getSessionStatus("tenant-2", "x"),
+            ).resolves.toEqual([]);
+        });
+
         test("keeps an update that corrects an entry while other entries still prevent publishing", async () => {
             await dataSource
                 .getRepository(StatusListEntity)

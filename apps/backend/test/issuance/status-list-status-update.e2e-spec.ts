@@ -140,4 +140,68 @@ describe("Status List - status updates", () => {
         expect(await publishedStatus(narrowListId, narrowIndex)).toBe(1);
         expect(await publishedStatus(wideListId, wideIndex)).toBe(1);
     });
+
+    test("reads the status of a session's credentials before and after a change", async () => {
+        const offer = await request(app.getHttpServer())
+            .post("/issuer/offer")
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                response_type: "uri",
+                credentialConfigurationIds: ["pid-no-key"],
+                flow: "pre_authorized_code",
+            })
+            .expect(201);
+        const sessionId: string = offer.body.session;
+        const narrow = await allocate(sessionId, NARROW_CONFIG, narrowListId);
+        const wide = await allocate(sessionId, WIDE_CONFIG, wideListId);
+
+        const readStatus = () =>
+            request(app.getHttpServer())
+                .get(`/session/${sessionId}/credential-status`)
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200)
+                .then((response) => response.body);
+
+        expect(await readStatus()).toEqual(
+            [
+                {
+                    credentialConfigurationId: NARROW_CONFIG,
+                    statusListId: narrowListId,
+                    index: narrow,
+                    status: 0,
+                    bits: 1,
+                },
+                {
+                    credentialConfigurationId: WIDE_CONFIG,
+                    statusListId: wideListId,
+                    index: wide,
+                    status: 0,
+                    bits: 2,
+                },
+            ].sort((a, b) =>
+                a.credentialConfigurationId.localeCompare(
+                    b.credentialConfigurationId,
+                ),
+            ),
+        );
+
+        await updateStatus({
+            sessionId,
+            credentialConfigurationId: WIDE_CONFIG,
+            status: 2,
+        }).expect(204);
+
+        expect(await readStatus()).toContainEqual(
+            expect.objectContaining({
+                credentialConfigurationId: WIDE_CONFIG,
+                status: 2,
+            }),
+        );
+        expect(await readStatus()).toContainEqual(
+            expect.objectContaining({
+                credentialConfigurationId: NARROW_CONFIG,
+                status: 0,
+            }),
+        );
+    });
 });

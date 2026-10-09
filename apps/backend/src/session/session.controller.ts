@@ -24,6 +24,7 @@ import {
 import { Role } from "../auth/roles/role.enum.js";
 import { Secured } from "../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../auth/token.decorator.js";
+import { CredentialStatusDto } from "../issuer/status-list/dto/credential-status.dto.js";
 import { StatusUpdateDto } from "../issuer/status-list/dto/status-update.dto.js";
 import { StatusListService } from "../issuer/status-list/status-list.service.js";
 import {
@@ -167,6 +168,33 @@ export class SessionController {
             sessionScope(token),
         );
         return this.logStoreService.findBySessionId(id);
+    }
+
+    /**
+     * Retrieves the current status of the credentials issued in a session.
+     * @param id - The session ID.
+     */
+    @Get(":id/credential-status")
+    // Credential status is issuer data, like changing it with POST /revoke.
+    @Secured([Role.IssuanceOffer, Role.Issuances])
+    @ApiParam({ name: "id", description: "The session ID", type: String })
+    @ApiOperation({
+        summary: "Get the status of the credentials issued in a session",
+        description:
+            "Lists one entry per issued credential that carries a status, with its current value in the status list and the list's bits per entry. The list is empty when no credential of the session carries a status. Change the status with `POST /session/revoke`.",
+    })
+    @ApiResponse({ status: 200, type: [CredentialStatusDto] })
+    @ApiResponse({ status: 404, description: "Session not found" })
+    async getCredentialStatus(
+        @Param("id") id: string,
+        @Token() token: TokenPayload,
+    ): Promise<CredentialStatusDto[]> {
+        await this.sessions.getForTenant(
+            token.entity!.id,
+            id,
+            sessionScope(token),
+        );
+        return this.statusListService.getSessionStatus(token.entity!.id, id);
     }
 
     /**

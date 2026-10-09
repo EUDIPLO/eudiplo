@@ -50,6 +50,7 @@ import {
     StatusListValuesOutOfRange,
     StatusValueOutOfRange,
 } from "./domain/status-value.js";
+import { CredentialStatusDto } from "./dto/credential-status.dto.js";
 import { StatusListImportSchema } from "./dto/status-list.schema.js";
 import { StatusListImportDto } from "./dto/status-list-import.dto.js";
 import { StatusUpdateDto } from "./dto/status-update.dto.js";
@@ -1360,6 +1361,61 @@ export class StatusListService implements OnApplicationBootstrap {
         }
 
         return updateCommitted;
+    }
+
+    /**
+     * The current status of every credential issued in a session, ordered by
+     * credential configuration, status list and index. Empty when the session
+     * holds no status entries, for example a presentation session or an
+     * issuance whose credentials carry no status.
+     * @param tenantId The tenant ID.
+     * @param sessionId The session ID.
+     */
+    async getSessionStatus(
+        tenantId: string,
+        sessionId: string,
+    ): Promise<CredentialStatusDto[]> {
+        const entries = await this.statusMappingRepository.find({
+            select: {
+                statusListId: true,
+                index: true,
+                credentialConfigurationId: true,
+            },
+            where: { tenantId, sessionId },
+            order: {
+                credentialConfigurationId: "ASC",
+                statusListId: "ASC",
+                index: "ASC",
+            },
+        });
+        if (entries.length === 0) {
+            return [];
+        }
+        const lists = await this.statusListRepository.find({
+            select: { id: true, bits: true, elements: true },
+            where: {
+                tenantId,
+                id: In([
+                    ...new Set(entries.map((entry) => entry.statusListId)),
+                ]),
+            },
+        });
+        const listsById = new Map(lists.map((list) => [list.id, list]));
+        return entries.flatMap((entry) => {
+            // Mappings are deleted with their list, so a missing list only
+            // shows up when the list is deleted while this read runs.
+            const list = listsById.get(entry.statusListId);
+            if (!list) return [];
+            return [
+                {
+                    credentialConfigurationId: entry.credentialConfigurationId,
+                    statusListId: entry.statusListId,
+                    index: entry.index,
+                    status: list.elements[entry.index] ?? 0,
+                    bits: list.bits,
+                },
+            ];
+        });
     }
 
     /**

@@ -22,13 +22,14 @@ function createController() {
     };
     const logs = { findBySessionId: vi.fn().mockResolvedValue([]) };
     const cancel = { execute: vi.fn().mockResolvedValue(undefined) };
+    const statusList = { getSessionStatus: vi.fn().mockResolvedValue([]) };
     const controller = new SessionController(
         sessions as unknown as SessionStore,
-        {} as StatusListService,
+        statusList as unknown as StatusListService,
         logs as unknown as SessionLogStoreService,
         cancel as unknown as CancelSession,
     );
-    return { controller, sessions, logs, cancel };
+    return { controller, sessions, logs, cancel, statusList };
 }
 
 const token = (roles: Role[]) =>
@@ -44,11 +45,14 @@ describe("SessionController", () => {
             [[Role.PresentationRequest], false],
             [[Role.PresentationRequest, Role.Presentations], false],
         ])(
-            "lets a client with %j change credential status: %s",
+            "lets a client with %j read and change credential status: %s",
             (roles, allowed) => {
                 expect(rolesAllow(SessionController, "revokeAll", roles)).toBe(
                     allowed,
                 );
+                expect(
+                    rolesAllow(SessionController, "getCredentialStatus", roles),
+                ).toBe(allowed);
             },
         );
 
@@ -113,6 +117,49 @@ describe("SessionController", () => {
                 ),
             ).rejects.toBeInstanceOf(SessionNotFound);
             expect(logs.findBySessionId).not.toHaveBeenCalled();
+        });
+    });
+
+    describe("credential status", () => {
+        it("reads the status of a session in the caller's scope", async () => {
+            const { controller, sessions, statusList } = createController();
+            const entry = {
+                credentialConfigurationId: "pid",
+                statusListId: "list-1",
+                index: 3,
+                status: 1,
+                bits: 1,
+            };
+            statusList.getSessionStatus.mockResolvedValue([entry]);
+
+            await expect(
+                controller.getCredentialStatus(
+                    "session-1",
+                    token([Role.Issuances]),
+                ),
+            ).resolves.toEqual([entry]);
+            expect(sessions.getForTenant).toHaveBeenCalledExactlyOnceWith(
+                "tenant-1",
+                "session-1",
+                "issuance",
+            );
+            expect(statusList.getSessionStatus).toHaveBeenCalledWith(
+                "tenant-1",
+                "session-1",
+            );
+        });
+
+        it("reads no status of a session outside the scope", async () => {
+            const { controller, sessions, statusList } = createController();
+            sessions.getForTenant.mockRejectedValue(new SessionNotFound());
+
+            await expect(
+                controller.getCredentialStatus(
+                    "session-1",
+                    token([Role.IssuanceOffer]),
+                ),
+            ).rejects.toBeInstanceOf(SessionNotFound);
+            expect(statusList.getSessionStatus).not.toHaveBeenCalled();
         });
     });
 
