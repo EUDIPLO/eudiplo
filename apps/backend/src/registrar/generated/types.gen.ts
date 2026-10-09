@@ -24,12 +24,12 @@ export type OrganisationSettings = {
 };
 
 export type ServiceDescriptionTranslationDto = {
-    lang: "en-US" | "de-DE";
+    lang: "en" | "de";
     content: string;
 };
 
 export type PurposeTranslationDto = {
-    lang: "en-US" | "de-DE";
+    lang: "en" | "de";
     content: string;
 };
 
@@ -79,17 +79,31 @@ export type CompleteJourneyDto = {
 
 export type RelyingParty = {
     name: string;
+    /**
+     * ETSI EN 319 412-1 semantic identifier derived from the organisation
+     * identifier asserted by the login. Set once at creation and used verbatim
+     * in certificates and the certificate event log. Nullable only for legacy
+     * relying parties whose former identifiers could not be migrated.
+     */
+    identifier?: string;
+    /**
+     * Annex I point 11: whether the WRP is a public sector body.
+     */
+    publicBody: boolean;
+    /**
+     * Annex I point 5: a URL belonging to the WRP.
+     */
+    infoUri?: string;
+    /**
+     * Annex I points 1 and 3: the official record of name and identifier.
+     */
+    officialRecord?: {
+        [key: string]: unknown;
+    } | null;
     id: string;
     legalName?: string;
     tradeName?: string;
     country?: string;
-    EORI?: string;
-    NTR?: string;
-    LEI?: string;
-    VAT?: string;
-    EX?: string;
-    TAX?: string;
-    EUID?: string;
     supportUri?: string;
     email?: string;
     phone?: string;
@@ -97,21 +111,32 @@ export type RelyingParty = {
     createdAt: string;
 };
 
+export type OfficialRecordDto = {
+    register: string;
+    authority?: string;
+    country?: string;
+    reference?: string;
+};
+
 export type RelyingPartyRegistration = {
     legalName?: string;
     tradeName?: string;
     country?: string;
-    LEI?: string;
-    EORI?: string;
-    EUID?: string;
-    NTR?: string;
-    VAT?: string;
-    EX?: string;
-    TAX?: string;
     supportUri?: string;
     email?: string;
     phone?: string;
-    registrationStatus?: "active" | "suspended" | "cancelled";
+    /**
+     * Whether the WRP is a public sector body (Annex I point 11). Defaults to false.
+     */
+    publicBody?: boolean;
+    /**
+     * A URL belonging to the WRP (Annex I point 5).
+     */
+    infoUri?: string;
+    /**
+     * The official record that states the name and identifier (Annex I points 1 and 3).
+     */
+    officialRecord?: OfficialRecordDto;
 };
 
 export type AccessCertificate = {
@@ -119,8 +144,8 @@ export type AccessCertificate = {
     relyingPartyId: string;
     displayName?: string;
     certificate: string;
-    issuanceMethod: "csr" | "legacy-public-key";
-    profile: "generic-wrpac" | "mdoc-reader-auth";
+    issuanceMethod: "legacy-public-key" | "csr" | "renewal";
+    profile: "mdoc-reader-auth" | "generic-wrpac";
     revoked: string | null;
     createdAt: string;
 };
@@ -208,7 +233,7 @@ export type RegistrationCertificateCreation = {
      */
     credentials?: Array<CredentialDef>;
     /**
-     * The relying party id of the intermediary
+     * The intermediary: its organisation identifier, or its relying party id
      */
     intermediary?: string;
     /**
@@ -219,6 +244,13 @@ export type RegistrationCertificateCreation = {
      * The relying party id
      */
     rpId: string;
+    /**
+     * Id of a valid access certificate of the relying party: not revoked, inside
+     * its validity period and, when mdoc credentials are requested, a
+     * reader-authentication certificate. It is linked to the registration
+     * certificate.
+     */
+    accessCertificateId: string;
     /**
      * Either email, phone number or URL where the relying party can be contacted
      */
@@ -832,158 +864,81 @@ export type InternalSchemaMetadataDto = {
     updatedAt: string;
 };
 
-export type IdentifierDto = {
-    type: string;
-    value: string;
-};
-
-export type WalletRelyingPartySummaryDto = {
-    wrp_id: string;
-    display_name: string;
-    legal_name?: string;
-    country: string;
-    identifiers: Array<IdentifierDto>;
-    entitlements?: Array<string>;
-    status: "active" | "historic";
-    intended_use_count?: number;
-    active_intended_use_count?: number;
-    links: {
-        [key: string]: string;
-    };
-};
-
-export type PaginationDto = {
-    limit: number;
-    next_cursor?: string | null;
-    total_count?: number;
-};
-
-export type WalletRelyingPartySearchResponseDto = {
-    summary: {
-        matched_wrp_count?: number;
-    };
-    data: Array<WalletRelyingPartySummaryDto>;
-    pagination: PaginationDto;
-};
-
-export type WalletRelyingPartyDto = {
-    wrp_id: string;
-    display_name: string;
-    legal_name?: string;
-    country: string;
-    identifiers: Array<IdentifierDto>;
-    entitlements?: Array<string>;
-    status: "active" | "historic";
-    intended_use_count?: number;
-    active_intended_use_count?: number;
-    links: {
-        [key: string]: string;
-    };
-    info_uri?: string;
-    support_uri?: Array<string>;
-    privacy_policy?: string;
-    service_descriptions?: Array<{
-        [key: string]: unknown;
-    }>;
-    is_public_sector_body?: boolean;
-    first_registered_at?: string;
-    last_updated_at?: string;
+export type RegistrationStatusChange = {
+    /**
+     * suspended and cancelled revoke all valid certificates (reasons registration_suspended / registration_cancelled). Reinstating to active does not restore revoked certificates. cancelled is final.
+     */
+    status: "active" | "suspended" | "cancelled";
 };
 
 export type RegistryMetadataDto = {
     registrar_id: string;
     country: string;
     api_base_url: string;
+    /**
+     * The register identifier: the value certificates and registration records carry as registry_uri and signed statements as iss. A client resolves <registry_uri>/.well-known/registrar-api to find this document.
+     */
+    registry_uri: string;
     openapi_url: string;
+    /**
+     * Human-readable documentation of the API.
+     */
+    api_documentation_url: string;
+    /**
+     * The national website with the register in human-readable form (Art. 3(4), 3(5) of (EU) 2025/848), when configured.
+     */
     human_readable_registry_url?: string;
+    /**
+     * The national registration policy (Art. 4), when configured.
+     */
+    registration_policy_url?: string;
     api_version: string;
+    /**
+     * Publication time of the latest certificate event.
+     */
     latest_registry_update: string;
     certificate_event_log_uri: string;
+    /**
+     * Tree head of the event log (RFC 6962 Merkle tree); proofs are under the same path.
+     */
+    certificate_event_log_tree_head_uri: string;
+    /**
+     * Latest snapshot of the Insights API: the log position (as_of_sequence) and evaluation time of the register state it currently serves.
+     */
+    register_snapshot_uri: string;
+    /**
+     * PEM certificate of the registrar CA (trust anchor for monitors): issuer of access certificates, signer of registration certificates, and issuer of the statement signing certificates that sign application/jwt API responses (x5c[0], extended key usage id-kp-documentSigning).
+     */
+    certificate_authority_uri: string;
+    /**
+     * Values of revocation_reason in certificate_revoked events.
+     */
+    supported_revocation_reasons: Array<
+        | "unspecified"
+        | "key_compromise"
+        | "cessation_of_operation"
+        | "superseded"
+        | "registration_suspended"
+        | "registration_cancelled"
+    >;
+    supported_event_types: Array<
+        "certificate_issued" | "certificate_revoked" | "registration_recorded"
+    >;
+    /**
+     * JWS typ values: register_statement for application/jwt API responses, registration_record for the records in registration_recorded events.
+     */
+    statement_types: {
+        [key: string]: string;
+    };
     certificate_event_log_id: string;
     certificate_event_log_epoch: number;
+    /**
+     * Head of the log. Sequence numbers are gap-free, starting at 1.
+     */
     latest_certificate_event_sequence: string;
     supported_signing_algorithms: Array<string>;
     supported_event_media_types: Array<string>;
     supported_credential_formats: Array<string>;
-};
-
-export type RequestedClaimDto = {
-    path: Array<string>;
-    normalized_path?: string;
-    claim_name?: string;
-};
-
-export type RequestedCredentialDto = {
-    format: string;
-    meta: {
-        [key: string]: unknown;
-    };
-    claims?: Array<RequestedClaimDto>;
-};
-
-export type IntendedUseSummaryDto = {
-    intended_use_id: string;
-    wrp_id: string;
-    wrp_display_name?: string;
-    purpose: Array<{
-        [key: string]: unknown;
-    }>;
-    requested_credentials: Array<RequestedCredentialDto>;
-    requested_claims?: Array<RequestedClaimDto>;
-    status: "active" | "historic";
-    first_registered_at: string;
-    last_confirmed_at?: string;
-    links: {
-        [key: string]: string;
-    };
-};
-
-export type IntendedUseSearchResponseDto = {
-    summary: {
-        matched_intended_use_count?: number;
-        matched_wrp_count?: number;
-    };
-    data: Array<IntendedUseSummaryDto>;
-    pagination: PaginationDto;
-};
-
-export type IntendedUseDto = {
-    intended_use_id: string;
-    wrp_id: string;
-    wrp_display_name?: string;
-    purpose: Array<{
-        [key: string]: unknown;
-    }>;
-    requested_credentials: Array<RequestedCredentialDto>;
-    requested_claims?: Array<RequestedClaimDto>;
-    status: "active" | "historic";
-    first_registered_at: string;
-    last_confirmed_at?: string;
-    links: {
-        [key: string]: string;
-    };
-};
-
-export type ProvidedAttestationDto = {
-    attestation_type: string;
-    schema_uri?: string;
-    wrp_id?: string;
-    intended_use_id?: string;
-    purpose?: Array<{
-        [key: string]: unknown;
-    }>;
-    links?: {
-        [key: string]: string;
-    };
-};
-
-export type ProvidedAttestationSearchResponseDto = {
-    summary: {
-        matched_attestation_count?: number;
-        matched_wrp_count?: number;
-    };
-    data: Array<ProvidedAttestationDto>;
-    pagination: PaginationDto;
 };
 
 export type CertificateArtifactDto = {
@@ -997,7 +952,10 @@ export type CertificateArtifactDto = {
 export type CertificateEventDto = {
     event_id: string;
     sequence_number: string;
-    event_type: "certificate_issued" | "certificate_revoked";
+    event_type:
+        | "certificate_issued"
+        | "certificate_revoked"
+        | "registration_recorded";
     effective_at?: string;
     published_at: string;
     /**
@@ -1009,22 +967,95 @@ export type CertificateEventDto = {
      */
     certificate_fingerprint?: string;
     /**
+     * Present only for revocation events. Older events without a recorded reason report unspecified.
+     */
+    revocation_reason?:
+        | "unspecified"
+        | "key_compromise"
+        | "cessation_of_operation"
+        | "superseded"
+        | "registration_suspended"
+        | "registration_cancelled";
+    /**
      * Present only for certificate issuance events.
      */
     certificate?: CertificateArtifactDto;
+    /**
+     * Present only for registration_recorded events: the registration record as a compact JWS (typ wrp-registration+jwt) signed by the registrar statement key. It states the WRP-level Annex I information and the registration status; the latest record of a WRP is its current registration.
+     */
+    registration_record?: CertificateArtifactDto;
 };
 
 export type CertificateEventPaginationDto = {
     limit: number;
+    /**
+     * after_sequence of the next page (keep through_sequence). null when the range up to through_sequence is exhausted; a follower then resumes later with after_sequence = through_sequence.
+     */
     next_after_sequence?: string | null;
 };
 
 export type CertificateEventSearchResponseDto = {
     log_id: string;
+    /**
+     * Changes when existing sequence numbers change meaning; replicas then start over.
+     */
     log_epoch: number;
+    /**
+     * Upper bound of this replay. Pass it on to the following pages; every event up to it was considered.
+     */
     through_sequence: string;
     data: Array<CertificateEventDto>;
     pagination: CertificateEventPaginationDto;
+};
+
+export type LogTreeHeadDto = {
+    log_id: string;
+    log_epoch: number;
+    hash_algorithm: string;
+    /**
+     * Number of events in the tree: the events with sequence numbers 1 to tree_size.
+     */
+    tree_size: string;
+    /**
+     * Merkle tree hash (RFC 6962 section 2.1) over the events, hex. Leaf i is SHA-256(0x00 || canonical JSON of event i+1 as published, keys sorted, no whitespace); inner nodes SHA-256(0x01 || left || right).
+     */
+    root_hash: string;
+    /**
+     * Publication time of the last event in the tree.
+     */
+    timestamp?: string;
+};
+
+export type LogInclusionProofDto = {
+    log_id: string;
+    log_epoch: number;
+    hash_algorithm: string;
+    tree_size: string;
+    sequence_number: string;
+    /**
+     * sequence_number - 1.
+     */
+    leaf_index: number;
+    /**
+     * Leaf hash of the event, hex.
+     */
+    leaf_hash: string;
+    /**
+     * Audit path PATH(m, D[n]) of RFC 6962 section 2.1.1, hex.
+     */
+    audit_path: Array<string>;
+};
+
+export type LogConsistencyProofDto = {
+    log_id: string;
+    log_epoch: number;
+    hash_algorithm: string;
+    first_tree_size: string;
+    second_tree_size: string;
+    /**
+     * Consistency proof PROOF(m, D[n]) of RFC 6962 section 2.1.2, hex.
+     */
+    consistency_path: Array<string>;
 };
 
 export type HealthControllerCheckData = {
@@ -1362,7 +1393,12 @@ export type AccessCertificateControllerDeleteData = {
     path: {
         id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Published as revocation_reason in the certificate event log. Defaults to cessation_of_operation.
+         */
+        reason?: "cessation_of_operation" | "key_compromise";
+    };
     url: "/access-certificates/{id}";
 };
 
@@ -1424,7 +1460,12 @@ export type RegistrationCertificateControllerDeleteData = {
     path: {
         id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Published as revocation_reason in the certificate event log. Defaults to cessation_of_operation.
+         */
+        reason?: "cessation_of_operation" | "key_compromise";
+    };
     url: "/registration-certificates/{id}";
 };
 
@@ -2035,63 +2076,21 @@ export type SchemaMetadataControllerGetInternalMetadataResponses = {
 export type SchemaMetadataControllerGetInternalMetadataResponse =
     SchemaMetadataControllerGetInternalMetadataResponses[keyof SchemaMetadataControllerGetInternalMetadataResponses];
 
-export type WrpReadControllerSearchWalletRelyingPartiesData = {
-    body?: never;
-    path?: never;
-    query?: {
-        /**
-         * Free-text WRP search.
-         */
-        q?: string;
-        /**
-         * Stable WRP identifier.
-         */
-        wrp_id?: string;
-        /**
-         * Partial legal or display name.
-         */
-        name?: string;
-        /**
-         * Partial official identifier.
-         */
-        identifier?: string;
-        /**
-         * Identifier type such as LEI or EUID.
-         */
-        identifier_type?: string;
-        /**
-         * ISO 3166-1 alpha-2 country code.
-         */
-        country?: string;
-        status?: "active" | "historic";
-        limit?: string;
-        cursor?: string;
-    };
-    url: "/wrps";
-};
-
-export type WrpReadControllerSearchWalletRelyingPartiesResponses = {
-    200: WalletRelyingPartySearchResponseDto;
-};
-
-export type WrpReadControllerSearchWalletRelyingPartiesResponse =
-    WrpReadControllerSearchWalletRelyingPartiesResponses[keyof WrpReadControllerSearchWalletRelyingPartiesResponses];
-
-export type WrpReadControllerGetWalletRelyingPartyData = {
-    body?: never;
+export type CertificateLifecycleControllerChangeRegistrationStatusData = {
+    body: RegistrationStatusChange;
     path: {
-        wrp_id: string;
+        id: string;
     };
     query?: never;
-    url: "/wrps/{wrp_id}";
+    url: "/relying-parties/{id}/registration-status";
 };
 
-export type WrpReadControllerGetWalletRelyingPartyResponses = {
-    200: WalletRelyingPartyDto;
+export type CertificateLifecycleControllerChangeRegistrationStatusResponses = {
+    200: RelyingParty;
 };
 
-export type WrpReadControllerGetWalletRelyingPartyResponse =
-    WrpReadControllerGetWalletRelyingPartyResponses[keyof WrpReadControllerGetWalletRelyingPartyResponses];
+export type CertificateLifecycleControllerChangeRegistrationStatusResponse =
+    CertificateLifecycleControllerChangeRegistrationStatusResponses[keyof CertificateLifecycleControllerChangeRegistrationStatusResponses];
 
 export type MetadataReadControllerGetMetadataData = {
     body?: never;
@@ -2106,101 +2105,6 @@ export type MetadataReadControllerGetMetadataResponses = {
 
 export type MetadataReadControllerGetMetadataResponse =
     MetadataReadControllerGetMetadataResponses[keyof MetadataReadControllerGetMetadataResponses];
-
-export type IntendedUseReadControllerSearchIntendedUsesData = {
-    body?: never;
-    path?: never;
-    query?: {
-        /**
-         * Optional WRP attribution filter.
-         */
-        wrp_id?: string;
-        /**
-         * Partial, case-insensitive purpose text.
-         */
-        purpose?: string;
-        /**
-         * Requested SD-JWT VC type.
-         */
-        vct?: string;
-        /**
-         * Requested mdoc document type.
-         */
-        doctype?: string;
-        /**
-         * Requested credential format.
-         */
-        format?: string;
-        /**
-         * Dot-notation requested claim path.
-         */
-        claim_path?: string;
-        status?: "active" | "historic";
-        limit?: string;
-        cursor?: string;
-    };
-    url: "/intended-uses";
-};
-
-export type IntendedUseReadControllerSearchIntendedUsesResponses = {
-    200: IntendedUseSearchResponseDto;
-};
-
-export type IntendedUseReadControllerSearchIntendedUsesResponse =
-    IntendedUseReadControllerSearchIntendedUsesResponses[keyof IntendedUseReadControllerSearchIntendedUsesResponses];
-
-export type IntendedUseReadControllerGetIntendedUseData = {
-    body?: never;
-    path: {
-        intended_use_id: string;
-    };
-    query?: never;
-    url: "/intended-uses/{intended_use_id}";
-};
-
-export type IntendedUseReadControllerGetIntendedUseResponses = {
-    200: IntendedUseDto;
-};
-
-export type IntendedUseReadControllerGetIntendedUseResponse =
-    IntendedUseReadControllerGetIntendedUseResponses[keyof IntendedUseReadControllerGetIntendedUseResponses];
-
-export type IntendedUseReadControllerSearchProvidedAttestationsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        /**
-         * Optional provider WRP filter.
-         */
-        wrp_id?: string;
-        /**
-         * Provided attestation type or VCT.
-         */
-        vct?: string;
-        /**
-         * Provided mdoc document type.
-         */
-        doctype?: string;
-        /**
-         * Exact provided schema URI.
-         */
-        schema_uri?: string;
-        /**
-         * Partial intended-use purpose text.
-         */
-        purpose?: string;
-        limit?: string;
-        cursor?: string;
-    };
-    url: "/provided-attestations";
-};
-
-export type IntendedUseReadControllerSearchProvidedAttestationsResponses = {
-    200: ProvidedAttestationSearchResponseDto;
-};
-
-export type IntendedUseReadControllerSearchProvidedAttestationsResponse =
-    IntendedUseReadControllerSearchProvidedAttestationsResponses[keyof IntendedUseReadControllerSearchProvidedAttestationsResponses];
 
 export type CertificateEventReadControllerSearchCertificateEventsData = {
     body?: never;
@@ -2223,7 +2127,10 @@ export type CertificateEventReadControllerSearchCertificateEventsData = {
          */
         wrp_id?: string;
         certificate_type?: "access_certificate" | "registration_certificate";
-        event_type?: "certificate_issued" | "certificate_revoked";
+        event_type?:
+            | "certificate_issued"
+            | "certificate_revoked"
+            | "registration_recorded";
     };
     url: "/certificate-events";
 };
@@ -2270,3 +2177,83 @@ export type CertificateEventReadControllerGetCertificateEventResponses = {
 
 export type CertificateEventReadControllerGetCertificateEventResponse =
     CertificateEventReadControllerGetCertificateEventResponses[keyof CertificateEventReadControllerGetCertificateEventResponses];
+
+export type LogTreeControllerTreeHeadData = {
+    body?: never;
+    path?: never;
+    query?: {
+        tree_size?: string;
+    };
+    url: "/logs/public-certificates/tree-head";
+};
+
+export type LogTreeControllerTreeHeadErrors = {
+    /**
+     * The requested representation is not supported.
+     */
+    406: unknown;
+};
+
+export type LogTreeControllerTreeHeadResponses = {
+    /**
+     * The tree head. As JSON, or as a JWS-signed statement with Accept: application/jwt; the requester chooses.
+     */
+    200: LogTreeHeadDto;
+};
+
+export type LogTreeControllerTreeHeadResponse =
+    LogTreeControllerTreeHeadResponses[keyof LogTreeControllerTreeHeadResponses];
+
+export type LogTreeControllerInclusionData = {
+    body?: never;
+    path?: never;
+    query: {
+        sequence_number: string;
+        tree_size?: string;
+    };
+    url: "/logs/public-certificates/proofs/inclusion";
+};
+
+export type LogTreeControllerInclusionErrors = {
+    /**
+     * The requested representation is not supported.
+     */
+    406: unknown;
+};
+
+export type LogTreeControllerInclusionResponses = {
+    /**
+     * The inclusion proof. As JSON, or as a JWS-signed statement with Accept: application/jwt; the requester chooses.
+     */
+    200: LogInclusionProofDto;
+};
+
+export type LogTreeControllerInclusionResponse =
+    LogTreeControllerInclusionResponses[keyof LogTreeControllerInclusionResponses];
+
+export type LogTreeControllerConsistencyData = {
+    body?: never;
+    path?: never;
+    query: {
+        first_tree_size: string;
+        second_tree_size?: string;
+    };
+    url: "/logs/public-certificates/proofs/consistency";
+};
+
+export type LogTreeControllerConsistencyErrors = {
+    /**
+     * The requested representation is not supported.
+     */
+    406: unknown;
+};
+
+export type LogTreeControllerConsistencyResponses = {
+    /**
+     * The consistency proof. As JSON, or as a JWS-signed statement with Accept: application/jwt; the requester chooses.
+     */
+    200: LogConsistencyProofDto;
+};
+
+export type LogTreeControllerConsistencyResponse =
+    LogTreeControllerConsistencyResponses[keyof LogTreeControllerConsistencyResponses];

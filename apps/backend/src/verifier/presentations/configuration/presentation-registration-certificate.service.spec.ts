@@ -113,6 +113,7 @@ describe("PresentationRegistrationCertificateService.getOrIssueRegistrationCerti
             { resolved: true },
             "request",
             "tenant",
+            { accessKeyChainId: undefined },
         );
         const newCache = {
             jwt: "fresh-jwt",
@@ -145,9 +146,14 @@ describe("PresentationRegistrationCertificateService.reissue", () => {
         ).rejects.toThrow("Registrar is not enabled for this tenant");
     });
 
-    it("bypasses a valid cache and resolves <TENANT_URL> in the DCQL query", async () => {
+    it("bypasses a valid cache, resolves <TENANT_URL> in the DCQL query and passes the access key chain", async () => {
         const { service, registrarService } = createService();
-        await service.reissue(config({ registrationCertCache: validCache }));
+        await service.reissue(
+            config({
+                registrationCertCache: validCache,
+                accessKeyChainId: "access",
+            }),
+        );
 
         expect(
             registrarService.resolveRegistrationCertificate,
@@ -158,6 +164,7 @@ describe("PresentationRegistrationCertificateService.reissue", () => {
             },
             "reissue-config",
             "tenant",
+            { accessKeyChainId: "access" },
         );
     });
 });

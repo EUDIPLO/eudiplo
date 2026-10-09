@@ -10,6 +10,7 @@ import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { decodeJwt } from "jose";
 import { Repository } from "typeorm";
+import { AccessCertificateService } from "./access-certificate.service.js";
 import { RegistrarConfigEntity } from "./entities/registrar-config.entity.js";
 import {
     type RegistrationCertificateCreation,
@@ -18,6 +19,18 @@ import {
     registrationCertificateControllerRegister,
 } from "./generated/index.js";
 import { RegistrarAuthService } from "./registrar-auth.service.js";
+
+/**
+ * Options for resolving a registration certificate.
+ */
+export interface RegistrationCertificateOptions {
+    /**
+     * Access key chain whose registrar access certificate is linked to a newly
+     * created registration certificate. The tenant's default access key chain
+     * when omitted.
+     */
+    accessKeyChainId?: string;
+}
 
 /**
  * Handles registration certificate lifecycle:
@@ -35,6 +48,7 @@ export class RegistrationCertificateService {
         private readonly configRepository: Repository<RegistrarConfigEntity>,
         private readonly authService: RegistrarAuthService,
         configService: ConfigService,
+        private readonly accessCertificateService: AccessCertificateService,
     ) {
         this.skipOveraskingCheck =
             configService.get<boolean>("SKIP_OVERASKING_CHECK") ?? false;
@@ -52,12 +66,14 @@ export class RegistrationCertificateService {
         dcqlQuery: any,
         requestId: string,
         tenantId: string,
+        options: RegistrationCertificateOptions = {},
     ): Promise<string> {
         const resolved = await this.resolveRegistrationCertificate(
             req,
             dcqlQuery,
             requestId,
             tenantId,
+            options,
         );
         return resolved.jwt;
     }
@@ -79,6 +95,7 @@ export class RegistrationCertificateService {
         dcqlQuery: any,
         requestId: string,
         tenantId: string,
+        options: RegistrationCertificateOptions = {},
     ): Promise<{
         jwt: string;
         payload: Record<string, any>;
@@ -209,9 +226,19 @@ export class RegistrationCertificateService {
             }
         }
 
+        const accessCertificateId =
+            mergedBody.accessCertificateId ||
+            (await this.accessCertificateService.findRegistrarAccessCertificateId(
+                tenantId,
+                client,
+                relyingPartyId,
+                options.accessKeyChainId,
+            ));
+
         const bodyWithRpId: RegistrationCertificateCreation = {
             ...mergedBody,
             rpId: relyingPartyId,
+            accessCertificateId,
         } as RegistrationCertificateCreation;
 
         const res = await registrationCertificateControllerRegister({

@@ -4,7 +4,10 @@ import { AccessCertificateService } from "./access-certificate.service.js";
 import { RegistrarConfigEntity } from "./entities/registrar-config.entity.js";
 import { type RegistrationCertificateCreation } from "./generated/index.js";
 import { RegistrarConfigService } from "./registrar-config.service.js";
-import { RegistrationCertificateService } from "./registration-certificate.service.js";
+import {
+    type RegistrationCertificateOptions,
+    RegistrationCertificateService,
+} from "./registration-certificate.service.js";
 import { SchemaMetadataService } from "./schema-metadata/schema-metadata.service.js";
 import type {
     CreateAccessCertificate,
@@ -87,12 +90,14 @@ export class RegistrarService {
         dcqlQuery: any,
         requestId: string,
         tenantId: string,
+        options?: RegistrationCertificateOptions,
     ): Promise<string> {
         return this.regCertSvc.addRegistrationCertificate(
             req,
             dcqlQuery,
             requestId,
             tenantId,
+            options,
         );
     }
 
@@ -105,6 +110,7 @@ export class RegistrarService {
         dcqlQuery: any,
         requestId: string,
         tenantId: string,
+        options?: RegistrationCertificateOptions,
     ): Promise<{
         jwt: string;
         payload: Record<string, any>;
@@ -115,6 +121,7 @@ export class RegistrarService {
             dcqlQuery,
             requestId,
             tenantId,
+            options,
         );
     }
 

@@ -24,6 +24,8 @@ import type {
     CertificateEventReadControllerSearchCertificateEventsData,
     CertificateEventReadControllerSearchCertificateEventsErrors,
     CertificateEventReadControllerSearchCertificateEventsResponses,
+    CertificateLifecycleControllerChangeRegistrationStatusData,
+    CertificateLifecycleControllerChangeRegistrationStatusResponses,
     CryptoControllerCpsData,
     CryptoControllerCpsResponses,
     CryptoControllerOwnCertData,
@@ -33,12 +35,15 @@ import type {
     HealthControllerCheckData,
     HealthControllerCheckErrors,
     HealthControllerCheckResponses,
-    IntendedUseReadControllerGetIntendedUseData,
-    IntendedUseReadControllerGetIntendedUseResponses,
-    IntendedUseReadControllerSearchIntendedUsesData,
-    IntendedUseReadControllerSearchIntendedUsesResponses,
-    IntendedUseReadControllerSearchProvidedAttestationsData,
-    IntendedUseReadControllerSearchProvidedAttestationsResponses,
+    LogTreeControllerConsistencyData,
+    LogTreeControllerConsistencyErrors,
+    LogTreeControllerConsistencyResponses,
+    LogTreeControllerInclusionData,
+    LogTreeControllerInclusionErrors,
+    LogTreeControllerInclusionResponses,
+    LogTreeControllerTreeHeadData,
+    LogTreeControllerTreeHeadErrors,
+    LogTreeControllerTreeHeadResponses,
     MetadataReadControllerGetMetadataData,
     MetadataReadControllerGetMetadataResponses,
     PrometheusControllerIndexData,
@@ -131,10 +136,6 @@ import type {
     WorkspaceControllerSaveSettingsResponses,
     WorkspaceControllerSettingsData,
     WorkspaceControllerSettingsResponses,
-    WrpReadControllerGetWalletRelyingPartyData,
-    WrpReadControllerGetWalletRelyingPartyResponses,
-    WrpReadControllerSearchWalletRelyingPartiesData,
-    WrpReadControllerSearchWalletRelyingPartiesResponses,
 } from "./types.gen.js";
 
 export type Options<
@@ -360,7 +361,7 @@ export const relyingPartyControllerRegister = <
     });
 
 /**
- * Get a relying party by ID
+ * Get one of the caller's relying parties by ID
  */
 export const relyingPartyControllerFindOne = <
     ThrowOnError extends boolean = false,
@@ -375,7 +376,11 @@ export const relyingPartyControllerFindOne = <
         RelyingPartyControllerFindOneResponses,
         unknown,
         ThrowOnError
-    >({ url: "/relying-parties/{id}", ...options });
+    >({
+        security: [{ scheme: "bearer", type: "http" }],
+        url: "/relying-parties/{id}",
+        ...options,
+    });
 
 /**
  * Returns the certificate of the RP registrar.
@@ -463,7 +468,7 @@ export const accessCertificateControllerRegister = <
     });
 
 /**
- * Delete a certificate by id
+ * Revoke a certificate by id
  */
 export const accessCertificateControllerDelete = <
     ThrowOnError extends boolean = false,
@@ -1097,47 +1102,35 @@ export const schemaMetadataControllerGetInternalMetadata = <
     });
 
 /**
- * Search Wallet-Relying Parties
+ * Suspend, cancel or reinstate a registration (registrar only)
  *
- * Returns a flat, paginated WRP list with the number of WRPs matching the current filters.
+ * Implements Art. 9 of (EU) 2025/848. Suspension and cancellation revoke every valid certificate of the relying party; the certificate event log publishes the reason.
  */
-export const wrpReadControllerSearchWalletRelyingParties = <
+export const certificateLifecycleControllerChangeRegistrationStatus = <
     ThrowOnError extends boolean = false,
 >(
-    options?: Options<
-        WrpReadControllerSearchWalletRelyingPartiesData,
+    options: Options<
+        CertificateLifecycleControllerChangeRegistrationStatusData,
         ThrowOnError
     >,
 ): RequestResult<
-    WrpReadControllerSearchWalletRelyingPartiesResponses,
+    CertificateLifecycleControllerChangeRegistrationStatusResponses,
     unknown,
     ThrowOnError
 > =>
-    (options?.client ?? client).get<
-        WrpReadControllerSearchWalletRelyingPartiesResponses,
+    (options.client ?? client).put<
+        CertificateLifecycleControllerChangeRegistrationStatusResponses,
         unknown,
         ThrowOnError
-    >({ url: "/wrps", ...options });
-
-/**
- * Get Wallet-Relying Party detail
- *
- * Returns one public WRP profile and a link to its filtered event history.
- */
-export const wrpReadControllerGetWalletRelyingParty = <
-    ThrowOnError extends boolean = false,
->(
-    options: Options<WrpReadControllerGetWalletRelyingPartyData, ThrowOnError>,
-): RequestResult<
-    WrpReadControllerGetWalletRelyingPartyResponses,
-    unknown,
-    ThrowOnError
-> =>
-    (options.client ?? client).get<
-        WrpReadControllerGetWalletRelyingPartyResponses,
-        unknown,
-        ThrowOnError
-    >({ url: "/wrps/{wrp_id}", ...options });
+    >({
+        security: [{ scheme: "bearer", type: "http" }],
+        url: "/relying-parties/{id}/registration-status",
+        ...options,
+        headers: {
+            "Content-Type": "application/json",
+            ...options.headers,
+        },
+    });
 
 /**
  * Get public transparency API metadata
@@ -1158,75 +1151,9 @@ export const metadataReadControllerGetMetadata = <
     >({ url: "/.well-known/registrar-api", ...options });
 
 /**
- * Search intended-use projections
- *
- * Searches intended uses across all WRPs by VCT, doctype, format, claim path, purpose, and status. The response includes matching intended-use and distinct-WRP counts.
- */
-export const intendedUseReadControllerSearchIntendedUses = <
-    ThrowOnError extends boolean = false,
->(
-    options?: Options<
-        IntendedUseReadControllerSearchIntendedUsesData,
-        ThrowOnError
-    >,
-): RequestResult<
-    IntendedUseReadControllerSearchIntendedUsesResponses,
-    unknown,
-    ThrowOnError
-> =>
-    (options?.client ?? client).get<
-        IntendedUseReadControllerSearchIntendedUsesResponses,
-        unknown,
-        ThrowOnError
-    >({ url: "/intended-uses", ...options });
-
-/**
- * Get intended-use detail
- *
- * Returns a single intended-use projection identified by registrar-assigned intended-use ID.
- */
-export const intendedUseReadControllerGetIntendedUse = <
-    ThrowOnError extends boolean = false,
->(
-    options: Options<IntendedUseReadControllerGetIntendedUseData, ThrowOnError>,
-): RequestResult<
-    IntendedUseReadControllerGetIntendedUseResponses,
-    unknown,
-    ThrowOnError
-> =>
-    (options.client ?? client).get<
-        IntendedUseReadControllerGetIntendedUseResponses,
-        unknown,
-        ThrowOnError
-    >({ url: "/intended-uses/{intended_use_id}", ...options });
-
-/**
- * Search provided attestations
- *
- * Searches provided attestations across all WRPs and reports matching attestation and distinct-WRP counts.
- */
-export const intendedUseReadControllerSearchProvidedAttestations = <
-    ThrowOnError extends boolean = false,
->(
-    options?: Options<
-        IntendedUseReadControllerSearchProvidedAttestationsData,
-        ThrowOnError
-    >,
-): RequestResult<
-    IntendedUseReadControllerSearchProvidedAttestationsResponses,
-    unknown,
-    ThrowOnError
-> =>
-    (options?.client ?? client).get<
-        IntendedUseReadControllerSearchProvidedAttestationsResponses,
-        unknown,
-        ThrowOnError
-    >({ url: "/provided-attestations", ...options });
-
-/**
  * Replay the global certificate publication log
  *
- * Returns the authoritative, globally ordered event feed as JSON, or a JWT signing the complete replay page when requested with Accept: application/jwt.
+ * Returns the authoritative, globally ordered event feed: certificate issuances and revocations, and registration records. As JSON, or as a JWS signing the complete replay page and the request when requested with Accept: application/jwt; the requester chooses. Sequence numbers are gap-free. A page requested with a through_sequence at or below the head never changes and is served with Cache-Control: immutable.
  */
 export const certificateEventReadControllerSearchCertificateEvents = <
     ThrowOnError extends boolean = false,
@@ -1268,3 +1195,61 @@ export const certificateEventReadControllerGetCertificateEvent = <
         CertificateEventReadControllerGetCertificateEventErrors,
         ThrowOnError
     >({ url: "/certificate-events/{event_id}", ...options });
+
+/**
+ * Tree head of the event log
+ *
+ * The Merkle tree hash over the first tree_size events (default: the head). With Accept: application/jwt it is a signed tree head.
+ */
+export const logTreeControllerTreeHead = <ThrowOnError extends boolean = false>(
+    options?: Options<LogTreeControllerTreeHeadData, ThrowOnError>,
+): RequestResult<
+    LogTreeControllerTreeHeadResponses,
+    LogTreeControllerTreeHeadErrors,
+    ThrowOnError
+> =>
+    (options?.client ?? client).get<
+        LogTreeControllerTreeHeadResponses,
+        LogTreeControllerTreeHeadErrors,
+        ThrowOnError
+    >({ url: "/logs/public-certificates/tree-head", ...options });
+
+/**
+ * Inclusion proof of an event
+ *
+ * Audit path of the event with sequence_number in the tree of tree_size events (default: the head).
+ */
+export const logTreeControllerInclusion = <
+    ThrowOnError extends boolean = false,
+>(
+    options: Options<LogTreeControllerInclusionData, ThrowOnError>,
+): RequestResult<
+    LogTreeControllerInclusionResponses,
+    LogTreeControllerInclusionErrors,
+    ThrowOnError
+> =>
+    (options.client ?? client).get<
+        LogTreeControllerInclusionResponses,
+        LogTreeControllerInclusionErrors,
+        ThrowOnError
+    >({ url: "/logs/public-certificates/proofs/inclusion", ...options });
+
+/**
+ * Consistency proof between two tree sizes
+ *
+ * Proves that the tree of first_tree_size events is a prefix of the tree of second_tree_size events (default: the head).
+ */
+export const logTreeControllerConsistency = <
+    ThrowOnError extends boolean = false,
+>(
+    options: Options<LogTreeControllerConsistencyData, ThrowOnError>,
+): RequestResult<
+    LogTreeControllerConsistencyResponses,
+    LogTreeControllerConsistencyErrors,
+    ThrowOnError
+> =>
+    (options.client ?? client).get<
+        LogTreeControllerConsistencyResponses,
+        LogTreeControllerConsistencyErrors,
+        ThrowOnError
+    >({ url: "/logs/public-certificates/proofs/consistency", ...options });

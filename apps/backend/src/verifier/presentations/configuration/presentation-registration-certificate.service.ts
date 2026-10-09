@@ -83,6 +83,10 @@ export class PresentationRegistrationCertificateService {
                 resolvedDcqlQuery,
                 requestId,
                 presentationConfig.tenantId,
+                {
+                    accessKeyChainId:
+                        presentationConfig.accessKeyChainId ?? undefined,
+                },
             );
 
         const newCache = this.toCache(
@@ -244,6 +248,7 @@ export class PresentationRegistrationCertificateService {
                     resolvedDcql,
                     next.id ?? "presentation-config-save",
                     next.tenantId,
+                    { accessKeyChainId: next.accessKeyChainId ?? undefined },
                 );
             next.registrationCertCache = this.toCache(
                 resolved,

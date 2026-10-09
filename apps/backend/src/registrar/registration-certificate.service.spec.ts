@@ -1,6 +1,12 @@
 import { BadRequestException } from "@nestjs/common";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { registrationCertificateControllerRegister } from "./generated/index.js";
 import { RegistrationCertificateService } from "./registration-certificate.service.js";
+
+vi.mock("./generated/index.js", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("./generated/index.js")>()),
+    registrationCertificateControllerRegister: vi.fn(),
+}));
 
 function unsignedJwt(payload: Record<string, unknown>): string {
     const encode = (value: unknown) =>
@@ -14,6 +20,7 @@ function createService(env: Record<string, unknown> = {}) {
         {} as any,
         {} as any,
         configService as any,
+        {} as any,
     );
 }
 
@@ -135,5 +142,92 @@ describe("RegistrationCertificateService overasking check", () => {
             "tenant",
         );
         expect(resolved.jwt).toBe(certificate);
+    });
+});
+
+describe("RegistrationCertificateService creation via the registrar", () => {
+    const client = {};
+    const issued = unsignedJwt({
+        exp: Math.floor(Date.now() / 1000) + 3600,
+        credentials: dcqlQuery.credentials,
+    });
+    let accessCertificateService: {
+        findRegistrarAccessCertificateId: ReturnType<typeof vi.fn>;
+    };
+    let defaults: Record<string, unknown>;
+    let service: RegistrationCertificateService;
+
+    beforeEach(() => {
+        defaults = {
+            privacy_policy: "https://rp.example/privacy",
+            support_uri: "https://rp.example/support",
+        };
+        vi.mocked(registrationCertificateControllerRegister).mockReset();
+        vi.mocked(registrationCertificateControllerRegister).mockResolvedValue({
+            data: { jwt: issued },
+        } as any);
+        accessCertificateService = {
+            findRegistrarAccessCertificateId: vi
+                .fn()
+                .mockResolvedValue("ac-signing"),
+        };
+        service = new RegistrationCertificateService(
+            {
+                findOneBy: vi.fn().mockImplementation(async () => ({
+                    registrationCertificateDefaults: defaults,
+                })),
+            } as any,
+            {
+                getClient: vi.fn().mockResolvedValue(client),
+                getRelyingPartyId: vi.fn().mockResolvedValue("rp-1"),
+            } as any,
+            { get: () => undefined } as any,
+            accessCertificateService as any,
+        );
+    });
+
+    const body = { purpose: [{ lang: "en", value: "Age check" }] } as any;
+
+    it("links the access certificate of the access key chain", async () => {
+        await service.resolveRegistrationCertificate(
+            { body },
+            dcqlQuery,
+            "r",
+            "tenant",
+            { accessKeyChainId: "access" },
+        );
+
+        expect(
+            accessCertificateService.findRegistrarAccessCertificateId,
+        ).toHaveBeenCalledWith("tenant", client, "rp-1", "access");
+        expect(registrationCertificateControllerRegister).toHaveBeenCalledWith(
+            expect.objectContaining({
+                body: expect.objectContaining({
+                    rpId: "rp-1",
+                    accessCertificateId: "ac-signing",
+                }),
+            }),
+        );
+    });
+
+    it("keeps an access certificate named in the registrar defaults", async () => {
+        defaults.accessCertificateId = "ac-explicit";
+        await service.resolveRegistrationCertificate(
+            { body },
+            dcqlQuery,
+            "r",
+            "tenant",
+        );
+
+        expect(
+            accessCertificateService.findRegistrarAccessCertificateId,
+        ).not.toHaveBeenCalled();
+        expect(registrationCertificateControllerRegister).toHaveBeenCalledWith(
+            expect.objectContaining({
+                body: expect.objectContaining({
+                    accessCertificateId: "ac-explicit",
+                }),
+            }),
+        );
     });
 });

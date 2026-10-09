@@ -61,7 +61,7 @@ export const ServiceDescriptionTranslationDtoSchema = {
     properties: {
         lang: {
             type: "string",
-            enum: ["en-US", "de-DE"],
+            enum: ["en", "de"],
         },
         content: {
             type: "string",
@@ -77,7 +77,7 @@ export const PurposeTranslationDtoSchema = {
     properties: {
         lang: {
             type: "string",
-            enum: ["en-US", "de-DE"],
+            enum: ["en", "de"],
         },
         content: {
             type: "string",
@@ -281,6 +281,29 @@ export const RelyingPartySchema = {
             type: "string",
             example: "Relying Party Name",
         },
+        identifier: {
+            type: "string",
+            description:
+                "ETSI EN 319 412-1 semantic identifier derived from the organisation\nidentifier asserted by the login. Set once at creation and used verbatim\nin certificates and the certificate event log. Nullable only for legacy\nrelying parties whose former identifiers could not be migrated.",
+            example: "NTRDE-HRB12345",
+        },
+        publicBody: {
+            type: "boolean",
+            description:
+                "Annex I point 11: whether the WRP is a public sector body.",
+            example: false,
+        },
+        infoUri: {
+            type: "string",
+            description: "Annex I point 5: a URL belonging to the WRP.",
+            example: "https://example.com",
+        },
+        officialRecord: {
+            type: "object",
+            nullable: true,
+            description:
+                "Annex I points 1 and 3: the official record of name and identifier.",
+        },
         id: {
             type: "string",
         },
@@ -291,27 +314,6 @@ export const RelyingPartySchema = {
             type: "string",
         },
         country: {
-            type: "string",
-        },
-        EORI: {
-            type: "string",
-        },
-        NTR: {
-            type: "string",
-        },
-        LEI: {
-            type: "string",
-        },
-        VAT: {
-            type: "string",
-        },
-        EX: {
-            type: "string",
-        },
-        TAX: {
-            type: "string",
-        },
-        EUID: {
             type: "string",
         },
         supportUri: {
@@ -332,7 +334,35 @@ export const RelyingPartySchema = {
             type: "string",
         },
     },
-    required: ["name", "id", "registrationStatus", "createdAt"],
+    required: ["name", "publicBody", "id", "registrationStatus", "createdAt"],
+} as const;
+
+export const OfficialRecordDtoSchema = {
+    type: "object",
+    properties: {
+        register: {
+            type: "string",
+            maxLength: 200,
+            example: "Handelsregister",
+        },
+        authority: {
+            type: "string",
+            maxLength: 200,
+            example: "Amtsgericht Charlottenburg",
+        },
+        country: {
+            type: "string",
+            minLength: 2,
+            maxLength: 2,
+            example: "DE",
+        },
+        reference: {
+            type: "string",
+            maxLength: 500,
+            example: "HRB 12345 B",
+        },
+    },
+    required: ["register"],
 } as const;
 
 export const RelyingPartyRegistrationSchema = {
@@ -350,34 +380,6 @@ export const RelyingPartyRegistrationSchema = {
             type: "string",
             example: "DE",
         },
-        LEI: {
-            type: "string",
-            example: "LEIXG-529900T8BM49AURSDO55",
-        },
-        EORI: {
-            type: "string",
-            example: "EORIDE-1234567890",
-        },
-        EUID: {
-            type: "string",
-            example: "EI:SE-5567971433",
-        },
-        NTR: {
-            type: "string",
-            example: "NTRDE-HRB12345",
-        },
-        VAT: {
-            type: "string",
-            example: "VATDE-123456789",
-        },
-        EX: {
-            type: "string",
-            example: "EXCDE-987654321",
-        },
-        TAX: {
-            type: "string",
-            example: "DE:TX-123456789",
-        },
         supportUri: {
             type: "string",
             example: "https://example.com/wallet-support",
@@ -390,10 +392,26 @@ export const RelyingPartyRegistrationSchema = {
             type: "string",
             example: "+49-30-1234567",
         },
-        registrationStatus: {
-            enum: ["active", "suspended", "cancelled"],
+        publicBody: {
+            type: "boolean",
+            description:
+                "Whether the WRP is a public sector body (Annex I point 11). Defaults to false.",
+            example: false,
+        },
+        infoUri: {
             type: "string",
-            example: "active",
+            format: "uri",
+            description: "A URL belonging to the WRP (Annex I point 5).",
+            example: "https://example.com",
+        },
+        officialRecord: {
+            description:
+                "The official record that states the name and identifier (Annex I points 1 and 3).",
+            allOf: [
+                {
+                    $ref: "#/components/schemas/OfficialRecordDto",
+                },
+            ],
         },
     },
 } as const;
@@ -415,11 +433,11 @@ export const AccessCertificateSchema = {
         },
         issuanceMethod: {
             type: "string",
-            enum: ["csr", "legacy-public-key"],
+            enum: ["legacy-public-key", "csr", "renewal"],
         },
         profile: {
             type: "string",
-            enum: ["generic-wrpac", "mdoc-reader-auth"],
+            enum: ["mdoc-reader-auth", "generic-wrpac"],
         },
         revoked: {
             format: "date-time",
@@ -657,7 +675,7 @@ export const MultiLangSchema = {
         lang: {
             type: "string",
             maxLength: 10,
-            example: "en-US",
+            example: "en",
         },
         content: {
             type: "string",
@@ -698,7 +716,8 @@ export const RegistrationCertificateCreationSchema = {
         },
         intermediary: {
             type: "string",
-            description: "The relying party id of the intermediary",
+            description:
+                "The intermediary: its organisation identifier, or its relying party id",
             maxLength: 200,
             example: "",
         },
@@ -718,6 +737,12 @@ export const RegistrationCertificateCreationSchema = {
             description: "The relying party id",
             maxLength: 200,
         },
+        accessCertificateId: {
+            type: "string",
+            description:
+                "Id of a valid access certificate of the relying party: not revoked, inside\nits validity period and, when mdoc credentials are requested, a\nreader-authentication certificate. It is linked to the registration\ncertificate.",
+            maxLength: 200,
+        },
         support_uri: {
             type: "string",
             description:
@@ -733,7 +758,7 @@ export const RegistrationCertificateCreationSchema = {
             },
         },
     },
-    required: ["privacy_policy", "rpId", "support_uri"],
+    required: ["privacy_policy", "rpId", "accessCertificateId", "support_uri"],
 } as const;
 
 export const OmitRegistrationCertificateRevokedSchema = {
@@ -862,8 +887,7 @@ export const CreateTrustAuthorityDtoSchema = {
                 "Required for etsi_tl: PEM-encoded X.509 certificate used to verify the trust list signature.",
             example: {
                 type: "X509Certificate",
-                certificatePem:
-                    "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----",
+                x509Certificate: "MIIBczCCARmgAwIBAgIU...",
             },
         },
     },
@@ -1829,193 +1853,17 @@ export const InternalSchemaMetadataDtoSchema = {
     required: ["id", "version", "issuer", "issuedAt", "createdAt", "updatedAt"],
 } as const;
 
-export const IdentifierDtoSchema = {
+export const RegistrationStatusChangeSchema = {
     type: "object",
     properties: {
-        type: {
-            type: "string",
-        },
-        value: {
-            type: "string",
-        },
-    },
-    required: ["type", "value"],
-} as const;
-
-export const WalletRelyingPartySummaryDtoSchema = {
-    type: "object",
-    properties: {
-        wrp_id: {
-            type: "string",
-        },
-        display_name: {
-            type: "string",
-        },
-        legal_name: {
-            type: "string",
-        },
-        country: {
-            type: "string",
-        },
-        identifiers: {
-            type: "array",
-            items: {
-                $ref: "#/components/schemas/IdentifierDto",
-            },
-        },
-        entitlements: {
-            type: "array",
-            items: {
-                type: "string",
-            },
-        },
         status: {
-            enum: ["active", "historic"],
+            enum: ["active", "suspended", "cancelled"],
             type: "string",
-        },
-        intended_use_count: {
-            type: "number",
-        },
-        active_intended_use_count: {
-            type: "number",
-        },
-        links: {
-            type: "object",
-            additionalProperties: {
-                type: "string",
-            },
+            description:
+                "suspended and cancelled revoke all valid certificates (reasons registration_suspended / registration_cancelled). Reinstating to active does not restore revoked certificates. cancelled is final.",
         },
     },
-    required: [
-        "wrp_id",
-        "display_name",
-        "country",
-        "identifiers",
-        "status",
-        "links",
-    ],
-} as const;
-
-export const PaginationDtoSchema = {
-    type: "object",
-    properties: {
-        limit: {
-            type: "number",
-        },
-        next_cursor: {
-            type: "string",
-            nullable: true,
-        },
-        total_count: {
-            type: "number",
-        },
-    },
-    required: ["limit"],
-} as const;
-
-export const WalletRelyingPartySearchResponseDtoSchema = {
-    type: "object",
-    properties: {
-        summary: {
-            type: "object",
-            properties: {
-                matched_wrp_count: {
-                    type: "number",
-                },
-            },
-        },
-        data: {
-            type: "array",
-            items: {
-                $ref: "#/components/schemas/WalletRelyingPartySummaryDto",
-            },
-        },
-        pagination: {
-            $ref: "#/components/schemas/PaginationDto",
-        },
-    },
-    required: ["summary", "data", "pagination"],
-} as const;
-
-export const WalletRelyingPartyDtoSchema = {
-    type: "object",
-    properties: {
-        wrp_id: {
-            type: "string",
-        },
-        display_name: {
-            type: "string",
-        },
-        legal_name: {
-            type: "string",
-        },
-        country: {
-            type: "string",
-        },
-        identifiers: {
-            type: "array",
-            items: {
-                $ref: "#/components/schemas/IdentifierDto",
-            },
-        },
-        entitlements: {
-            type: "array",
-            items: {
-                type: "string",
-            },
-        },
-        status: {
-            enum: ["active", "historic"],
-            type: "string",
-        },
-        intended_use_count: {
-            type: "number",
-        },
-        active_intended_use_count: {
-            type: "number",
-        },
-        links: {
-            type: "object",
-            additionalProperties: {
-                type: "string",
-            },
-        },
-        info_uri: {
-            type: "string",
-        },
-        support_uri: {
-            type: "array",
-            items: {
-                type: "string",
-            },
-        },
-        privacy_policy: {
-            type: "string",
-        },
-        service_descriptions: {
-            type: "array",
-            items: {
-                type: "object",
-            },
-        },
-        is_public_sector_body: {
-            type: "boolean",
-        },
-        first_registered_at: {
-            type: "string",
-        },
-        last_updated_at: {
-            type: "string",
-        },
-    },
-    required: [
-        "wrp_id",
-        "display_name",
-        "country",
-        "identifiers",
-        "status",
-        "links",
-    ],
+    required: ["status"],
 } as const;
 
 export const RegistryMetadataDtoSchema = {
@@ -2030,20 +1878,91 @@ export const RegistryMetadataDtoSchema = {
         api_base_url: {
             type: "string",
         },
+        registry_uri: {
+            type: "string",
+            description:
+                "The register identifier: the value certificates and registration records carry as registry_uri and signed statements as iss. A client resolves <registry_uri>/.well-known/registrar-api to find this document.",
+        },
         openapi_url: {
             type: "string",
         },
+        api_documentation_url: {
+            type: "string",
+            description: "Human-readable documentation of the API.",
+        },
         human_readable_registry_url: {
             type: "string",
+            description:
+                "The national website with the register in human-readable form (Art. 3(4), 3(5) of (EU) 2025/848), when configured.",
+        },
+        registration_policy_url: {
+            type: "string",
+            description:
+                "The national registration policy (Art. 4), when configured.",
         },
         api_version: {
             type: "string",
         },
         latest_registry_update: {
             type: "string",
+            description: "Publication time of the latest certificate event.",
         },
         certificate_event_log_uri: {
             type: "string",
+        },
+        certificate_event_log_tree_head_uri: {
+            type: "string",
+            description:
+                "Tree head of the event log (RFC 6962 Merkle tree); proofs are under the same path.",
+        },
+        register_snapshot_uri: {
+            type: "string",
+            description:
+                "Latest snapshot of the Insights API: the log position (as_of_sequence) and evaluation time of the register state it currently serves.",
+        },
+        certificate_authority_uri: {
+            type: "string",
+            description:
+                "PEM certificate of the registrar CA (trust anchor for monitors): issuer of access certificates, signer of registration certificates, and issuer of the statement signing certificates that sign application/jwt API responses (x5c[0], extended key usage id-kp-documentSigning).",
+        },
+        supported_revocation_reasons: {
+            type: "array",
+            items: {
+                type: "string",
+                enum: [
+                    "unspecified",
+                    "key_compromise",
+                    "cessation_of_operation",
+                    "superseded",
+                    "registration_suspended",
+                    "registration_cancelled",
+                ],
+            },
+            description:
+                "Values of revocation_reason in certificate_revoked events.",
+        },
+        supported_event_types: {
+            type: "array",
+            items: {
+                type: "string",
+                enum: [
+                    "certificate_issued",
+                    "certificate_revoked",
+                    "registration_recorded",
+                ],
+            },
+        },
+        statement_types: {
+            type: "object",
+            additionalProperties: {
+                type: "string",
+            },
+            description:
+                "JWS typ values: register_statement for application/jwt API responses, registration_record for the records in registration_recorded events.",
+            example: {
+                register_statement: "register-statement+jwt",
+                registration_record: "wrp-registration+jwt",
+            },
         },
         certificate_event_log_id: {
             type: "string",
@@ -2053,6 +1972,8 @@ export const RegistryMetadataDtoSchema = {
         },
         latest_certificate_event_sequence: {
             type: "string",
+            description:
+                "Head of the log. Sequence numbers are gap-free, starting at 1.",
         },
         supported_signing_algorithms: {
             type: "array",
@@ -2077,10 +1998,18 @@ export const RegistryMetadataDtoSchema = {
         "registrar_id",
         "country",
         "api_base_url",
+        "registry_uri",
         "openapi_url",
+        "api_documentation_url",
         "api_version",
         "latest_registry_update",
         "certificate_event_log_uri",
+        "certificate_event_log_tree_head_uri",
+        "register_snapshot_uri",
+        "certificate_authority_uri",
+        "supported_revocation_reasons",
+        "supported_event_types",
+        "statement_types",
         "certificate_event_log_id",
         "certificate_event_log_epoch",
         "latest_certificate_event_sequence",
@@ -2088,246 +2017,6 @@ export const RegistryMetadataDtoSchema = {
         "supported_event_media_types",
         "supported_credential_formats",
     ],
-} as const;
-
-export const RequestedClaimDtoSchema = {
-    type: "object",
-    properties: {
-        path: {
-            type: "array",
-            items: {
-                type: "string",
-            },
-        },
-        normalized_path: {
-            type: "string",
-        },
-        claim_name: {
-            type: "string",
-        },
-    },
-    required: ["path"],
-} as const;
-
-export const RequestedCredentialDtoSchema = {
-    type: "object",
-    properties: {
-        format: {
-            type: "string",
-        },
-        meta: {
-            type: "object",
-            additionalProperties: true,
-        },
-        claims: {
-            type: "array",
-            items: {
-                $ref: "#/components/schemas/RequestedClaimDto",
-            },
-        },
-    },
-    required: ["format", "meta"],
-} as const;
-
-export const IntendedUseSummaryDtoSchema = {
-    type: "object",
-    properties: {
-        intended_use_id: {
-            type: "string",
-        },
-        wrp_id: {
-            type: "string",
-        },
-        wrp_display_name: {
-            type: "string",
-        },
-        purpose: {
-            type: "array",
-            items: {
-                type: "object",
-            },
-        },
-        requested_credentials: {
-            type: "array",
-            items: {
-                $ref: "#/components/schemas/RequestedCredentialDto",
-            },
-        },
-        requested_claims: {
-            type: "array",
-            items: {
-                $ref: "#/components/schemas/RequestedClaimDto",
-            },
-        },
-        status: {
-            enum: ["active", "historic"],
-            type: "string",
-        },
-        first_registered_at: {
-            type: "string",
-        },
-        last_confirmed_at: {
-            type: "string",
-        },
-        links: {
-            type: "object",
-            additionalProperties: {
-                type: "string",
-            },
-        },
-    },
-    required: [
-        "intended_use_id",
-        "wrp_id",
-        "purpose",
-        "requested_credentials",
-        "status",
-        "first_registered_at",
-        "links",
-    ],
-} as const;
-
-export const IntendedUseSearchResponseDtoSchema = {
-    type: "object",
-    properties: {
-        summary: {
-            type: "object",
-            properties: {
-                matched_intended_use_count: {
-                    type: "number",
-                },
-                matched_wrp_count: {
-                    type: "number",
-                },
-            },
-        },
-        data: {
-            type: "array",
-            items: {
-                $ref: "#/components/schemas/IntendedUseSummaryDto",
-            },
-        },
-        pagination: {
-            $ref: "#/components/schemas/PaginationDto",
-        },
-    },
-    required: ["summary", "data", "pagination"],
-} as const;
-
-export const IntendedUseDtoSchema = {
-    type: "object",
-    properties: {
-        intended_use_id: {
-            type: "string",
-        },
-        wrp_id: {
-            type: "string",
-        },
-        wrp_display_name: {
-            type: "string",
-        },
-        purpose: {
-            type: "array",
-            items: {
-                type: "object",
-            },
-        },
-        requested_credentials: {
-            type: "array",
-            items: {
-                $ref: "#/components/schemas/RequestedCredentialDto",
-            },
-        },
-        requested_claims: {
-            type: "array",
-            items: {
-                $ref: "#/components/schemas/RequestedClaimDto",
-            },
-        },
-        status: {
-            enum: ["active", "historic"],
-            type: "string",
-        },
-        first_registered_at: {
-            type: "string",
-        },
-        last_confirmed_at: {
-            type: "string",
-        },
-        links: {
-            type: "object",
-            additionalProperties: {
-                type: "string",
-            },
-        },
-    },
-    required: [
-        "intended_use_id",
-        "wrp_id",
-        "purpose",
-        "requested_credentials",
-        "status",
-        "first_registered_at",
-        "links",
-    ],
-} as const;
-
-export const ProvidedAttestationDtoSchema = {
-    type: "object",
-    properties: {
-        attestation_type: {
-            type: "string",
-        },
-        schema_uri: {
-            type: "string",
-        },
-        wrp_id: {
-            type: "string",
-        },
-        intended_use_id: {
-            type: "string",
-        },
-        purpose: {
-            type: "array",
-            items: {
-                type: "object",
-            },
-        },
-        links: {
-            type: "object",
-            additionalProperties: {
-                type: "string",
-            },
-        },
-    },
-    required: ["attestation_type"],
-} as const;
-
-export const ProvidedAttestationSearchResponseDtoSchema = {
-    type: "object",
-    properties: {
-        summary: {
-            type: "object",
-            properties: {
-                matched_attestation_count: {
-                    type: "number",
-                },
-                matched_wrp_count: {
-                    type: "number",
-                },
-            },
-        },
-        data: {
-            type: "array",
-            items: {
-                $ref: "#/components/schemas/ProvidedAttestationDto",
-            },
-        },
-        pagination: {
-            $ref: "#/components/schemas/PaginationDto",
-        },
-    },
-    required: ["summary", "data", "pagination"],
 } as const;
 
 export const CertificateArtifactDtoSchema = {
@@ -2356,7 +2045,11 @@ export const CertificateEventDtoSchema = {
             type: "string",
         },
         event_type: {
-            enum: ["certificate_issued", "certificate_revoked"],
+            enum: [
+                "certificate_issued",
+                "certificate_revoked",
+                "registration_recorded",
+            ],
             type: "string",
         },
         effective_at: {
@@ -2375,8 +2068,30 @@ export const CertificateEventDtoSchema = {
             description:
                 "Present only for revocation events; identifies the previously issued artifact by its SHA-256 fingerprint.",
         },
+        revocation_reason: {
+            enum: [
+                "unspecified",
+                "key_compromise",
+                "cessation_of_operation",
+                "superseded",
+                "registration_suspended",
+                "registration_cancelled",
+            ],
+            type: "string",
+            description:
+                "Present only for revocation events. Older events without a recorded reason report unspecified.",
+        },
         certificate: {
             description: "Present only for certificate issuance events.",
+            allOf: [
+                {
+                    $ref: "#/components/schemas/CertificateArtifactDto",
+                },
+            ],
+        },
+        registration_record: {
+            description:
+                "Present only for registration_recorded events: the registration record as a compact JWS (typ wrp-registration+jwt) signed by the registrar statement key. It states the WRP-level Annex I information and the registration status; the latest record of a WRP is its current registration.",
             allOf: [
                 {
                     $ref: "#/components/schemas/CertificateArtifactDto",
@@ -2402,6 +2117,8 @@ export const CertificateEventPaginationDtoSchema = {
         next_after_sequence: {
             type: "string",
             nullable: true,
+            description:
+                "after_sequence of the next page (keep through_sequence). null when the range up to through_sequence is exhausted; a follower then resumes later with after_sequence = through_sequence.",
         },
     },
     required: ["limit"],
@@ -2415,9 +2132,13 @@ export const CertificateEventSearchResponseDtoSchema = {
         },
         log_epoch: {
             type: "number",
+            description:
+                "Changes when existing sequence numbers change meaning; replicas then start over.",
         },
         through_sequence: {
             type: "string",
+            description:
+                "Upper bound of this replay. Pass it on to the following pages; every event up to it was considered.",
         },
         data: {
             type: "array",
@@ -2430,4 +2151,127 @@ export const CertificateEventSearchResponseDtoSchema = {
         },
     },
     required: ["log_id", "log_epoch", "through_sequence", "data", "pagination"],
+} as const;
+
+export const LogTreeHeadDtoSchema = {
+    type: "object",
+    properties: {
+        log_id: {
+            type: "string",
+        },
+        log_epoch: {
+            type: "number",
+        },
+        hash_algorithm: {
+            type: "string",
+            example: "sha-256",
+        },
+        tree_size: {
+            type: "string",
+            description:
+                "Number of events in the tree: the events with sequence numbers 1 to tree_size.",
+        },
+        root_hash: {
+            type: "string",
+            description:
+                "Merkle tree hash (RFC 6962 section 2.1) over the events, hex. Leaf i is SHA-256(0x00 || canonical JSON of event i+1 as published, keys sorted, no whitespace); inner nodes SHA-256(0x01 || left || right).",
+        },
+        timestamp: {
+            type: "string",
+            description: "Publication time of the last event in the tree.",
+        },
+    },
+    required: [
+        "log_id",
+        "log_epoch",
+        "hash_algorithm",
+        "tree_size",
+        "root_hash",
+    ],
+} as const;
+
+export const LogInclusionProofDtoSchema = {
+    type: "object",
+    properties: {
+        log_id: {
+            type: "string",
+        },
+        log_epoch: {
+            type: "number",
+        },
+        hash_algorithm: {
+            type: "string",
+            example: "sha-256",
+        },
+        tree_size: {
+            type: "string",
+        },
+        sequence_number: {
+            type: "string",
+        },
+        leaf_index: {
+            type: "number",
+            description: "sequence_number - 1.",
+        },
+        leaf_hash: {
+            type: "string",
+            description: "Leaf hash of the event, hex.",
+        },
+        audit_path: {
+            description:
+                "Audit path PATH(m, D[n]) of RFC 6962 section 2.1.1, hex.",
+            type: "array",
+            items: {
+                type: "string",
+            },
+        },
+    },
+    required: [
+        "log_id",
+        "log_epoch",
+        "hash_algorithm",
+        "tree_size",
+        "sequence_number",
+        "leaf_index",
+        "leaf_hash",
+        "audit_path",
+    ],
+} as const;
+
+export const LogConsistencyProofDtoSchema = {
+    type: "object",
+    properties: {
+        log_id: {
+            type: "string",
+        },
+        log_epoch: {
+            type: "number",
+        },
+        hash_algorithm: {
+            type: "string",
+            example: "sha-256",
+        },
+        first_tree_size: {
+            type: "string",
+        },
+        second_tree_size: {
+            type: "string",
+        },
+        consistency_path: {
+            description:
+                "Consistency proof PROOF(m, D[n]) of RFC 6962 section 2.1.2, hex.",
+            type: "array",
+            items: {
+                type: "string",
+            },
+        },
+    },
+    required: [
+        "log_id",
+        "log_epoch",
+        "hash_algorithm",
+        "first_tree_size",
+        "second_tree_size",
+        "consistency_path",
+    ],
 } as const;
