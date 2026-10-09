@@ -210,6 +210,23 @@ describe("RegistrationCertificateService creation via the registrar", () => {
         );
     });
 
+    it("leaves the access certificate out when none is found", async () => {
+        accessCertificateService.findRegistrarAccessCertificateId.mockResolvedValue(
+            undefined,
+        );
+
+        await service.resolveRegistrationCertificate(
+            { body },
+            dcqlQuery,
+            "r",
+            "tenant",
+        );
+
+        const [request] = vi.mocked(registrationCertificateControllerRegister)
+            .mock.calls[0];
+        expect(request.body).not.toHaveProperty("accessCertificateId");
+    });
+
     it("keeps an access certificate named in the registrar defaults", async () => {
         defaults.accessCertificateId = "ac-explicit";
         await service.resolveRegistrationCertificate(

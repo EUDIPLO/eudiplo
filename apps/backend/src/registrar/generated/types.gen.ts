@@ -245,12 +245,13 @@ export type RegistrationCertificateCreation = {
      */
     rpId: string;
     /**
-     * Id of a valid access certificate of the relying party: not revoked, inside
-     * its validity period and, when mdoc credentials are requested, a
-     * reader-authentication certificate. It is linked to the registration
-     * certificate.
+     * Id of an access certificate of the relying party. When given, it must be
+     * valid: not revoked, inside its validity period and, when mdoc credentials
+     * are requested, a reader-authentication certificate. It is linked to the
+     * registration certificate. Without it, no access certificate is checked or
+     * linked.
      */
-    accessCertificateId: string;
+    accessCertificateId?: string;
     /**
      * Either email, phone number or URL where the relying party can be contacted
      */

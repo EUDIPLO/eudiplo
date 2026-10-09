@@ -25,9 +25,9 @@ import { RegistrarAuthService } from "./registrar-auth.service.js";
  */
 export interface RegistrationCertificateOptions {
     /**
-     * Access key chain whose registrar access certificate is linked to a newly
-     * created registration certificate. The tenant's default access key chain
-     * when omitted.
+     * Access key chain whose registrar access certificate, if any, is linked to
+     * a newly created registration certificate. The tenant's default access
+     * key chain when omitted.
      */
     accessKeyChainId?: string;
 }
@@ -238,7 +238,7 @@ export class RegistrationCertificateService {
         const bodyWithRpId: RegistrationCertificateCreation = {
             ...mergedBody,
             rpId: relyingPartyId,
-            accessCertificateId,
+            ...(accessCertificateId ? { accessCertificateId } : {}),
         } as RegistrationCertificateCreation;
 
         const res = await registrationCertificateControllerRegister({

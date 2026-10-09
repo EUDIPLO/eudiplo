@@ -1,5 +1,4 @@
 import { webcrypto } from "node:crypto";
-import { BadRequestException } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { KeyUsageType } from "../crypto/key/types/key-usage-type.js";
@@ -62,6 +61,7 @@ describe("AccessCertificateService.findRegistrarAccessCertificateId", () => {
     });
 
     beforeEach(() => {
+        vi.mocked(accessCertificateControllerAccessCertificates).mockReset();
         certService = {
             find: vi
                 .fn()
@@ -113,16 +113,35 @@ describe("AccessCertificateService.findRegistrarAccessCertificateId", () => {
 
         await expect(
             service.findRegistrarAccessCertificateId("tenant", client, "rp-1"),
-        ).rejects.toThrow(BadRequestException);
+        ).resolves.toBeUndefined();
     });
 
-    it("rejects a certificate the registrar did not issue", async () => {
+    it("returns nothing for a certificate the registrar did not issue", async () => {
         registrarReturns(registrarEntry("ac-other", other));
 
         await expect(
             service.findRegistrarAccessCertificateId("tenant", client, "rp-1"),
-        ).rejects.toThrow(
-            "The certificate of access key chain 'access' is not an active access certificate at the registrar",
-        );
+        ).resolves.toBeUndefined();
+    });
+
+    it("returns nothing without an access key chain", async () => {
+        certService.find.mockRejectedValue(new Error("not found"));
+
+        await expect(
+            service.findRegistrarAccessCertificateId("tenant", client, "rp-1"),
+        ).resolves.toBeUndefined();
+        expect(
+            accessCertificateControllerAccessCertificates,
+        ).not.toHaveBeenCalled();
+    });
+
+    it("returns nothing when the registrar cannot list access certificates", async () => {
+        vi.mocked(
+            accessCertificateControllerAccessCertificates,
+        ).mockResolvedValue({ error: { statusCode: 500 } } as any);
+
+        await expect(
+            service.findRegistrarAccessCertificateId("tenant", client, "rp-1"),
+        ).resolves.toBeUndefined();
     });
 });

@@ -740,7 +740,7 @@ export const RegistrationCertificateCreationSchema = {
         accessCertificateId: {
             type: "string",
             description:
-                "Id of a valid access certificate of the relying party: not revoked, inside\nits validity period and, when mdoc credentials are requested, a\nreader-authentication certificate. It is linked to the registration\ncertificate.",
+                "Id of an access certificate of the relying party. When given, it must be\nvalid: not revoked, inside its validity period and, when mdoc credentials\nare requested, a reader-authentication certificate. It is linked to the\nregistration certificate. Without it, no access certificate is checked or\nlinked.",
             maxLength: 200,
         },
         support_uri: {
@@ -758,7 +758,7 @@ export const RegistrationCertificateCreationSchema = {
             },
         },
     },
-    required: ["privacy_policy", "rpId", "accessCertificateId", "support_uri"],
+    required: ["privacy_policy", "rpId", "support_uri"],
 } as const;
 
 export const OmitRegistrationCertificateRevokedSchema = {

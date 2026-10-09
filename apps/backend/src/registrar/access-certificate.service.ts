@@ -86,29 +86,37 @@ export class AccessCertificateService {
 
     /**
      * Find the registrar id of the access certificate held by an access key
-     * chain. The registrar links every registration certificate to an active
-     * access certificate of the relying party, so the certificate that signs
-     * requests is matched against the relying party's certificates at the
-     * registrar.
+     * chain, so a registration certificate can be linked to the access
+     * certificate that signs requests. The link is optional at the registrar:
+     * when the key chain is missing, its certificate was not issued by the
+     * registrar or the registrar cannot be queried, no id is returned.
      *
      * @param tenantId - The tenant ID
      * @param client - Authenticated registrar client
      * @param relyingPartyId - The relying party at the registrar
      * @param accessKeyChainId - Access key chain to match; the tenant's default access key chain when omitted
-     * @returns The registrar id of the matching access certificate
+     * @returns The registrar id of the matching active access certificate, if any
      */
     async findRegistrarAccessCertificateId(
         tenantId: string,
         client: Client,
         relyingPartyId: string,
         accessKeyChainId?: string,
-    ): Promise<string> {
-        const cert = await this.certService.find({
-            tenantId,
-            type: KeyUsageType.Access,
-            keyId: accessKeyChainId,
-            skipValidation: true,
-        });
+    ): Promise<string | undefined> {
+        const cert = await this.certService
+            .find({
+                tenantId,
+                type: KeyUsageType.Access,
+                keyId: accessKeyChainId,
+                skipValidation: true,
+            })
+            .catch(() => undefined);
+        if (!cert) {
+            this.logger.warn(
+                `[${tenantId}] No access key chain found; the registration certificate is not linked to an access certificate`,
+            );
+            return undefined;
+        }
         const fingerprint = new X509Certificate(cert.crt[0]).fingerprint256;
 
         const res = await accessCertificateControllerAccessCertificates({
@@ -116,13 +124,11 @@ export class AccessCertificateService {
             query: { rp: relyingPartyId },
         });
         if (res.error) {
-            this.logger.error(
+            this.logger.warn(
                 { error: res.error },
-                `[${tenantId}] Failed to fetch access certificates`,
+                `[${tenantId}] Failed to fetch access certificates; the registration certificate is not linked to an access certificate`,
             );
-            throw new BadRequestException(
-                "Failed to query access certificates from the registrar",
-            );
+            return undefined;
         }
 
         const match = res.data?.find(
@@ -132,10 +138,10 @@ export class AccessCertificateService {
                     fingerprint,
         );
         if (!match) {
-            throw new BadRequestException(
-                `The certificate of access key chain '${cert.keyId}' is not an active access certificate at the registrar. Create the access certificate for this key chain via the registrar.`,
+            this.logger.warn(
+                `[${tenantId}] The certificate of access key chain '${cert.keyId}' is not an active access certificate at the registrar; the registration certificate is not linked to an access certificate`,
             );
         }
-        return match.id;
+        return match?.id;
     }
 }
