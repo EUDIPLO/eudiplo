@@ -144,8 +144,8 @@ export type AccessCertificate = {
     relyingPartyId: string;
     displayName?: string;
     certificate: string;
-    issuanceMethod: "legacy-public-key" | "csr" | "renewal";
-    profile: "mdoc-reader-auth" | "generic-wrpac";
+    issuanceMethod: "csr" | "legacy-public-key" | "renewal";
+    profile: "generic-wrpac" | "mdoc-reader-auth";
     revoked: string | null;
     createdAt: string;
 };
@@ -908,7 +908,7 @@ export type RegistryMetadataDto = {
      */
     register_snapshot_uri: string;
     /**
-     * PEM certificate of the registrar CA (trust anchor for monitors): issuer of access certificates, signer of registration certificates, and issuer of the statement signing certificates that sign application/jwt API responses (x5c[0], extended key usage id-kp-documentSigning).
+     * PEM certificate of the registrar root CA, the trust anchor for monitors (with LEGACY_CA=true, the single CA). The root certifies the issuing CA, which issues access certificates and the signing certificates of registration certificates, the status list and the statements that sign application/jwt API responses (x5c[0], extended key usage id-kp-documentSigning).
      */
     certificate_authority_uri: string;
     /**
@@ -1339,6 +1339,55 @@ export type CryptoControllerOwnCertDerResponses = {
 export type CryptoControllerOwnCertDerResponse =
     CryptoControllerOwnCertDerResponses[keyof CryptoControllerOwnCertDerResponses];
 
+export type CryptoControllerRootCertData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: "/pki/root.crt";
+};
+
+export type CryptoControllerRootCertResponses = {
+    200: string;
+};
+
+export type CryptoControllerRootCertResponse =
+    CryptoControllerRootCertResponses[keyof CryptoControllerRootCertResponses];
+
+export type CryptoControllerRootCertDerData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: "/pki/root.der";
+};
+
+export type CryptoControllerRootCertDerResponses = {
+    200: unknown;
+};
+
+export type CryptoControllerRootCrlData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: "/pki/root.crl";
+};
+
+export type CryptoControllerRootCrlResponses = {
+    200: unknown;
+};
+
+export type CryptoControllerIssuingData = {
+    body?: never;
+    path: {
+        file: string;
+    };
+    query?: never;
+    url: "/pki/issuing/{file}";
+};
+
+export type CryptoControllerIssuingResponses = {
+    200: unknown;
+};
+
 export type CryptoControllerCpsData = {
     body?: never;
     path?: never;
@@ -1503,6 +1552,22 @@ export type StatusListControllerGetListResponses = {
 
 export type StatusListControllerGetListResponse =
     StatusListControllerGetListResponses[keyof StatusListControllerGetListResponses];
+
+export type StatusListControllerGetListByIdData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: "/status-management/status-lists/{id}";
+};
+
+export type StatusListControllerGetListByIdResponses = {
+    200: string;
+};
+
+export type StatusListControllerGetListByIdResponse =
+    StatusListControllerGetListByIdResponses[keyof StatusListControllerGetListByIdResponses];
 
 export type StatusListControllerCrlFileData = {
     body?: never;

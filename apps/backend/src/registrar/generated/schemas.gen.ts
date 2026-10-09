@@ -433,11 +433,11 @@ export const AccessCertificateSchema = {
         },
         issuanceMethod: {
             type: "string",
-            enum: ["legacy-public-key", "csr", "renewal"],
+            enum: ["csr", "legacy-public-key", "renewal"],
         },
         profile: {
             type: "string",
-            enum: ["mdoc-reader-auth", "generic-wrpac"],
+            enum: ["generic-wrpac", "mdoc-reader-auth"],
         },
         revoked: {
             format: "date-time",
@@ -1923,7 +1923,7 @@ export const RegistryMetadataDtoSchema = {
         certificate_authority_uri: {
             type: "string",
             description:
-                "PEM certificate of the registrar CA (trust anchor for monitors): issuer of access certificates, signer of registration certificates, and issuer of the statement signing certificates that sign application/jwt API responses (x5c[0], extended key usage id-kp-documentSigning).",
+                "PEM certificate of the registrar root CA, the trust anchor for monitors (with LEGACY_CA=true, the single CA). The root certifies the issuing CA, which issues access certificates and the signing certificates of registration certificates, the status list and the statements that sign application/jwt API responses (x5c[0], extended key usage id-kp-documentSigning).",
         },
         supported_revocation_reasons: {
             type: "array",
