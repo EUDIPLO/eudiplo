@@ -6,9 +6,13 @@ import { ConfigDocumentValidationService } from "./config-document-validation.se
 import { ConfigResourceRegistry } from "./config-resource.registry.js";
 import type { ConfigDocument } from "./config-resource.types.js";
 
-function service(current: Record<string, unknown>) {
+function service(
+    current: Record<string, unknown>,
+    files: { id: string; filename: string }[] = [],
+) {
     const result = Object.create(ConfigBundleService.prototype) as any;
     result.currentSpec = async () => structuredClone(current);
+    result.files = { find: async () => files };
     result.registry = new ConfigResourceRegistry();
     result.documentValidationService = Object.create(
         ConfigDocumentValidationService.prototype,
@@ -50,6 +54,34 @@ describe("configuration comparisons", () => {
                 redacted: true,
             },
         ]);
+    });
+    it("compares stored storage URLs with the bundle filenames they serve", async () => {
+        const document: ConfigDocument = {
+            $schema: schemaUrl("IssuanceConfig"),
+            kind: "IssuanceConfig",
+            metadata: {},
+            spec: {
+                display: [{ name: "Issuer", logo: { uri: "company.png" } }],
+            },
+        };
+        const stored = (uri: string) => ({
+            display: [{ name: "Issuer", logo: { uri } }],
+        });
+        const files = [{ id: "569e", filename: "company.png" }];
+        expect(
+            await service(
+                stored("http://localhost:3000/storage/569e"),
+                files,
+            ).compareDocument("tenant", document),
+        ).toEqual({ unchanged: true, changes: [] });
+        expect(
+            (
+                await service(
+                    stored("http://localhost:3000/storage/other"),
+                    files,
+                ).compareDocument("tenant", document)
+            ).unchanged,
+        ).toBe(false);
     });
     it("preserves omitted update fields while detecting role changes", async () => {
         const result = service({ ...client.spec, description: "Retained" });

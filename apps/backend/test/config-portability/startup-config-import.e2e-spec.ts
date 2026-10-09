@@ -268,6 +268,26 @@ describe("startup configuration reconciliation", () => {
         ).toEqual([]);
     });
 
+    it("plans resources with unchanged image references as unchanged", async () => {
+        const root = join(
+            app.get(ConfigService).getOrThrow<string>("CONFIG_FOLDER"),
+            "haip",
+        );
+        const bundle = app
+            .get(ConfigFolderBundleService)
+            .buildBundle("haip", root);
+        const plan = await app
+            .get(ConfigBundleService)
+            .plan("haip", bundle, "upsert", `folder:${root}`);
+        // The folder references company.png; storage holds its public URL.
+        const issuance = plan.items.find(
+            (item) => item.kind === "IssuanceConfig",
+        );
+        expect(issuance, JSON.stringify(plan.items, null, 2)).toMatchObject({
+            action: "unchanged",
+        });
+    });
+
     it("reapplying matching definitions preserves live status data and ownership timestamps", async () => {
         const root = join(
             app.get(ConfigService).getOrThrow<string>("CONFIG_FOLDER"),

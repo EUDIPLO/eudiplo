@@ -1154,6 +1154,16 @@ export class ConfigBundleService {
         tenantId: string,
         documents: ConfigDocument[],
     ): Promise<void> {
+        const rewrite = await this.assetReferenceRewriter(tenantId);
+        for (const document of documents) {
+            document.spec = rewrite(document.spec) as Record<string, unknown>;
+        }
+    }
+
+    /** Maps public storage URLs of tenant files back to their bundle filenames. */
+    private async assetReferenceRewriter(
+        tenantId: string,
+    ): Promise<(value: unknown) => unknown> {
         const byId = new Map(
             (await this.files.find({ where: { tenantId } })).map((file) => [
                 file.id,
@@ -1166,16 +1176,20 @@ export class ConfigBundleService {
                 return match && byId.has(match[1]) ? byId.get(match[1]) : value;
             }
             if (Array.isArray(value)) return value.map(rewrite);
-            if (!value || typeof value !== "object") return value;
+            // Leave non-plain values (dates, buffers) of stored entities intact.
+            if (
+                !value ||
+                typeof value !== "object" ||
+                Object.getPrototypeOf(value) !== Object.prototype
+            )
+                return value;
             return Object.fromEntries(
                 Object.entries(value as Record<string, unknown>).map(
                     ([key, item]) => [key, rewrite(item)],
                 ),
             );
         };
-        for (const document of documents) {
-            document.spec = rewrite(document.spec) as Record<string, unknown>;
-        }
+        return rewrite;
     }
 
     private assertBundle(bundle: ConfigBundle): void {
@@ -1238,8 +1252,12 @@ export class ConfigBundleService {
         tenantId: string,
         document: ConfigDocument,
     ): Promise<{ unchanged: boolean; changes: ConfigChange[] }> {
-        const current = await this.currentSpec(tenantId, document);
-        if (!current) return { unchanged: false, changes: [] };
+        const stored = await this.currentSpec(tenantId, document);
+        if (!stored) return { unchanged: false, changes: [] };
+        // Stored image references are storage URLs; bundles name the file.
+        const current = (await this.assetReferenceRewriter(tenantId))(
+            stored,
+        ) as Record<string, any>;
         let desired = structuredClone(document.spec) as Record<string, any>;
         // Importers derive the identifier from metadata when it is omitted.
         if (document.kind === "Client")
