@@ -55,6 +55,7 @@ interface ConfigPlanItem {
   targetVersion: string;
   migrations: string[];
   issues: ConfigPlanIssue[];
+  changes?: { path: string }[];
 }
 
 export interface ConfigImportPlan {
@@ -165,5 +166,17 @@ export class ConfigPortabilityService {
 
   detach(kind: string, id: string): Promise<ConfigResourceMetadata> {
     return this.ownership.detach(kind as ConfigResourceKind, id);
+  }
+
+  async planReattach(kind: string, id: string): Promise<ConfigImportPlan> {
+    return (await this.ownership.planReattach(kind as ConfigResourceKind, id)) as ConfigImportPlan;
+  }
+
+  async reattach(kind: string, id: string, planFingerprint: string): Promise<ConfigImportPlan> {
+    return (await this.ownership.reattach(
+      kind as ConfigResourceKind,
+      id,
+      planFingerprint
+    )) as ConfigImportPlan;
   }
 }

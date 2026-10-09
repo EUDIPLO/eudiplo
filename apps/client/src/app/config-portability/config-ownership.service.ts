@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core';
 import {
   configPortabilityControllerDetach,
+  configPortabilityControllerPlanReattach,
+  configPortabilityControllerReattach,
   configPortabilityControllerResources,
   type ConfigResourceMetadataEntity,
 } from '@eudiplo/sdk-core';
@@ -24,7 +26,7 @@ export interface ConfigResourceMetadata {
   tenantId: string;
   kind: ConfigResourceKind;
   resourceId: string;
-  ownership: 'unmanaged' | 'file-managed';
+  ownership: 'unmanaged' | 'file-managed' | 'detached';
   generation: number;
   source?: string;
   lastAppliedAt?: string;
@@ -69,6 +71,29 @@ export class ConfigOwnershipService {
     const metadata = result.data as ConfigResourceMetadataEntity as ConfigResourceMetadata;
     await this.list(true);
     return metadata;
+  }
+
+  /** Plans resetting a resource to its version in the server's config folder. */
+  async planReattach(kind: ConfigResourceKind, resourceId: string): Promise<unknown> {
+    const result = await configPortabilityControllerPlanReattach<true>({
+      client: this.api.client,
+      path: { kind, id: resourceId },
+    });
+    return result.data;
+  }
+
+  async reattach(
+    kind: ConfigResourceKind,
+    resourceId: string,
+    planFingerprint: string
+  ): Promise<unknown> {
+    const result = await configPortabilityControllerReattach<true>({
+      client: this.api.client,
+      path: { kind, id: resourceId },
+      query: { planFingerprint },
+    });
+    await this.list(true);
+    return result.data;
   }
 
   invalidate(): void {

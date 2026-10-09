@@ -417,7 +417,7 @@ export type UpdateTenantDto = {
 export type AuditLogResponseDto = {
     id: string;
     tenantId: string;
-    actionType: 'tenant_created' | 'tenant_updated' | 'tenant_deleted' | 'presentation_config_created' | 'presentation_config_updated' | 'presentation_config_deleted' | 'issuance_config_updated' | 'credential_config_created' | 'credential_config_updated' | 'credential_config_deleted' | 'status_list_config_updated' | 'status_list_config_reset' | 'webhook_endpoint_created' | 'webhook_endpoint_updated' | 'webhook_endpoint_deleted' | 'attribute_provider_created' | 'attribute_provider_updated' | 'attribute_provider_deleted' | 'config_bundle_exported' | 'config_bundle_imported' | 'config_client_secret_generated' | 'config_resource_detached' | 'session_cancelled';
+    actionType: 'tenant_created' | 'tenant_updated' | 'tenant_deleted' | 'presentation_config_created' | 'presentation_config_updated' | 'presentation_config_deleted' | 'issuance_config_updated' | 'credential_config_created' | 'credential_config_updated' | 'credential_config_deleted' | 'status_list_config_updated' | 'status_list_config_reset' | 'webhook_endpoint_created' | 'webhook_endpoint_updated' | 'webhook_endpoint_deleted' | 'attribute_provider_created' | 'attribute_provider_updated' | 'attribute_provider_deleted' | 'config_bundle_exported' | 'config_bundle_imported' | 'config_client_secret_generated' | 'config_resource_detached' | 'config_resource_reattached' | 'session_cancelled';
     actorType: 'user' | 'client' | 'system';
     actorId?: string;
     actorDisplay?: string;
@@ -5410,7 +5410,7 @@ export type ConfigResourceMetadataEntity = {
     tenantId: string;
     kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'StatusList';
     resourceId: string;
-    ownership: 'unmanaged' | 'file-managed';
+    ownership: 'unmanaged' | 'file-managed' | 'detached';
     generation: number;
     source?: string;
     sourceHash?: string;
@@ -8033,3 +8033,44 @@ export type ConfigPortabilityControllerDetachResponses = {
 };
 
 export type ConfigPortabilityControllerDetachResponse = ConfigPortabilityControllerDetachResponses[keyof ConfigPortabilityControllerDetachResponses];
+
+export type ConfigPortabilityControllerPlanReattachData = {
+    body?: never;
+    path: {
+        kind: string;
+        id: string;
+    };
+    query?: never;
+    url: '/api/config-bundles/resources/{kind}/{id}/reattach/plan';
+};
+
+export type ConfigPortabilityControllerPlanReattachResponses = {
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type ConfigPortabilityControllerPlanReattachResponse = ConfigPortabilityControllerPlanReattachResponses[keyof ConfigPortabilityControllerPlanReattachResponses];
+
+export type ConfigPortabilityControllerReattachData = {
+    body?: never;
+    path: {
+        kind: string;
+        id: string;
+    };
+    query: {
+        /**
+         * Fingerprint from the reviewed reattach plan
+         */
+        planFingerprint: string;
+    };
+    url: '/api/config-bundles/resources/{kind}/{id}/reattach';
+};
+
+export type ConfigPortabilityControllerReattachResponses = {
+    201: {
+        [key: string]: unknown;
+    };
+};
+
+export type ConfigPortabilityControllerReattachResponse = ConfigPortabilityControllerReattachResponses[keyof ConfigPortabilityControllerReattachResponses];

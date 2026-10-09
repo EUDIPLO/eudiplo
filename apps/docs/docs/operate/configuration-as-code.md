@@ -30,7 +30,25 @@ curl -X POST "$EUDIPLO_URL/api/config-bundles/resources/PresentationConfig/age-c
   -H "Authorization: Bearer $EUDIPLO_TOKEN"
 ```
 
-The web client lists ownership and offers the detach action under
+A detached resource has the ownership `detached` and stays detached while you
+edit it. The startup import skips it with the warning `RESOURCE_DETACHED`, and
+the rest of the tenant is still imported.
+
+To discard your edits and return to the file version, reattach the resource. Plan
+first, review the changes, then apply with the plan's fingerprint:
+
+```bash
+curl -X POST "$EUDIPLO_URL/api/config-bundles/resources/PresentationConfig/age-check/reattach/plan" \
+  -H "Authorization: Bearer $EUDIPLO_TOKEN"
+curl -X POST "$EUDIPLO_URL/api/config-bundles/resources/PresentationConfig/age-check/reattach?planFingerprint=$FINGERPRINT" \
+  -H "Authorization: Bearer $EUDIPLO_TOKEN"
+```
+
+Reattaching reads the resource from the tenant folder in `CONFIG_FOLDER`,
+applies it, and makes the resource `file-managed` again. Its stored generation
+becomes the file's generation, so later startups apply the folder again.
+
+The web client lists ownership and offers **Detach** and **Reset to file** under
 **Settings > Config Portability** (shown with `tenant:admin` or
 `tenants:manage`).
 
@@ -49,6 +67,13 @@ CONFIG_IMPORT_MODE=create
 | `create`             | Creates missing resources, leaves existing ones untouched                           |
 | `upsert`             | Creates missing and updates existing resources                                      |
 | `replace`            | Like `upsert`, and deletes resources this folder created earlier but no longer contains |
+
+If a resource in the folder has a lower `metadata.generation` than the stored
+one, it was changed through the API or web client. The startup import skips it
+with the warning `STALE_GENERATION` and imports the rest of the tenant. Reattach
+the resource to apply the file version, or raise `metadata.generation` in the
+file to at least the stored generation shown under **Settings > Config
+Portability**.
 
 A folder of a tenant that does not exist yet is imported only if it contains
 `info.json`. String values can reference environment variables as `${VAR}` or
