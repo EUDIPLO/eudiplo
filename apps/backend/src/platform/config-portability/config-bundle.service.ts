@@ -28,7 +28,10 @@ import { ConfigBundleRepositories } from "./config-bundle-repositories.service.j
 import { ConfigDocumentValidationService } from "./config-document-validation.service.js";
 import { ConfigKmsReferenceService } from "./config-kms-reference.service.js";
 import { ConfigMigrationService } from "./config-migration.service.js";
-import { ConfigOwnershipService } from "./config-ownership.service.js";
+import {
+    ConfigOwnershipService,
+    sourceInScope,
+} from "./config-ownership.service.js";
 import { ConfigResourceRegistry } from "./config-resource.registry.js";
 import type {
     ConfigBundle,
@@ -38,6 +41,7 @@ import type {
     ConfigImportPlan,
     ConfigImportPlanItem,
     ConfigMigrationIssue,
+    ConfigPlanOptions,
     ConfigResourceKind,
 } from "./config-resource.types.js";
 
@@ -413,6 +417,7 @@ export class ConfigBundleService {
         bundle: ConfigBundle,
         mode: ConfigImportMode,
         ownershipSource = `bundle:${bundle.manifest.tenant}`,
+        options: ConfigPlanOptions = {},
     ): Promise<ConfigImportPlan> {
         try {
             this.assertBundle(bundle);
@@ -446,19 +451,45 @@ export class ConfigBundleService {
                 ...this.documentValidationService.validate(result.document),
             );
             this.collectUnresolvedRequirements(result.document, itemIssues);
+            const reference = {
+                kind: result.document.kind,
+                id: resourceId(result.document),
+            };
+            // A startup folder import must not fail the whole tenant because
+            // one resource diverged; it skips that resource and says how to recover.
+            const startupFolder = ownershipSource.startsWith("folder:");
+            let skipDiverged = false;
             if (
                 exists &&
+                !options.reattach &&
+                metadata.ownership === "detached" &&
+                sourceInScope(metadata.source, ownershipSource)
+            ) {
+                skipDiverged = true;
+                itemIssues.push({
+                    severity: "warning",
+                    code: "RESOURCE_DETACHED",
+                    path: "/metadata",
+                    message:
+                        "Resource was detached from this source and is skipped. Reattach it to apply the file version.",
+                    resource: reference,
+                });
+            } else if (
+                exists &&
+                !options.reattach &&
                 (result.document.metadata.generation ?? 1) < metadata.generation
             ) {
+                skipDiverged = startupFolder;
                 itemIssues.push({
-                    severity: "error",
+                    severity: startupFolder ? "warning" : "error",
                     code: "STALE_GENERATION",
                     path: "/metadata/generation",
-                    message: `Generation ${result.document.metadata.generation ?? 1} is older than stored generation ${metadata.generation}.`,
-                    resource: {
-                        kind: result.document.kind,
-                        id: resourceId(result.document),
-                    },
+                    message: `Generation ${result.document.metadata.generation ?? 1} is older than stored generation ${metadata.generation}.${
+                        startupFolder
+                            ? " The resource was changed through the API or UI and is skipped. Reattach it to apply the file version, or raise metadata.generation in the file."
+                            : ""
+                    }`,
+                    resource: reference,
                 });
             }
             if (
@@ -489,7 +520,7 @@ export class ConfigBundleService {
                         });
                 }
             }
-            const skipExisting = exists && mode === "create";
+            const skipExisting = exists && mode === "create" && !skipDiverged;
             if (skipExisting) {
                 itemIssues.push({
                     severity: "warning",
@@ -509,7 +540,7 @@ export class ConfigBundleService {
                     issue.severity === "required-input",
             );
             const comparison =
-                exists && mode !== "create" && !blocked
+                exists && mode !== "create" && !blocked && !skipDiverged
                     ? await this.compareDocument(tenantId, result.document)
                     : undefined;
             const metadataChanged =
@@ -524,7 +555,7 @@ export class ConfigBundleService {
                 id: resourceId(result.document),
                 action: blocked
                     ? "blocked"
-                    : skipExisting
+                    : skipExisting || skipDiverged
                       ? "skip"
                       : comparison?.unchanged
                         ? "unchanged"
@@ -598,6 +629,7 @@ export class ConfigBundleService {
                     tenantId,
                     mode,
                     ownershipSource,
+                    ...(options.reattach ? { reattach: true } : {}),
                     bundle,
                     revision,
                     assets,
@@ -1028,7 +1060,11 @@ export class ConfigBundleService {
             kind,
             metadata: {
                 generation: metadata.generation,
-                ownership: metadata.ownership,
+                // Detachment is local instance state, not part of the bundle format.
+                ownership:
+                    metadata.ownership === "detached"
+                        ? "unmanaged"
+                        : metadata.ownership,
             },
             spec: spec as Record<string, unknown>,
         });

@@ -89,7 +89,12 @@
           mat-button
           (click)="applyImport()"
           [disabled]="
-            busy || !plan?.applicable || !plan?.planFingerprint || !!plan?.operationId || !canApply
+            busy ||
+            !plan?.applicable ||
+            !plan?.planFingerprint ||
+            !!plan?.operationId ||
+            !!reattachTarget ||
+            !canApply
           "
         >
           Apply bundle
@@ -102,10 +107,12 @@
   </div>
 
   @if (plan) {
-    <mat-card>
+    <mat-card id="config-plan">
       <mat-card-header>
         <mat-icon mat-card-avatar>{{ plan.applicable ? 'check_circle' : 'error' }}</mat-icon>
-        <mat-card-title>Import plan</mat-card-title>
+        <mat-card-title>
+          {{ reattachTarget ? 'Reset ' + resourceKey(reattachTarget) + ' to file' : 'Import plan' }}
+        </mat-card-title>
         <mat-card-subtitle>
           {{
             plan.operationId
@@ -158,6 +165,16 @@
           <tr mat-header-row *matHeaderRowDef="planColumns"></tr>
           <tr mat-row *matRowDef="let row; columns: planColumns"></tr>
         </table>
+        @for (item of plan.items; track item.kind + item.id) {
+          @if (reattachTarget && item.changes?.length) {
+            <h3>Changes</h3>
+            @for (change of item.changes; track change.path) {
+              <p>
+                <code>{{ change.path }}</code>
+              </p>
+            }
+          }
+        }
         @if (plan.assets?.length) {
           <h3>Assets</h3>
           @for (asset of plan.assets; track asset.path) {
@@ -167,6 +184,18 @@
           }
         }
       </mat-card-content>
+      @if (reattachTarget) {
+        <mat-card-actions>
+          <button
+            mat-flat-button
+            (click)="applyReattach()"
+            [disabled]="busy || !plan.applicable || !plan.planFingerprint || !!plan.operationId"
+          >
+            <mat-icon>restore</mat-icon>
+            Reset to file
+          </button>
+        </mat-card-actions>
+      }
     </mat-card>
 
     @if (plan.generatedSecrets?.length) {
@@ -200,7 +229,8 @@
       <mat-icon mat-card-avatar>policy</mat-icon>
       <mat-card-title>Resource ownership</mat-card-title>
       <mat-card-subtitle
-        >File-managed resources are read-only until explicitly detached.</mat-card-subtitle
+        >File-managed resources are read-only until explicitly detached. Startup imports skip
+        detached resources until you reset them to the file version.</mat-card-subtitle
       >
     </mat-card-header>
     <mat-card-content class="table-scroll">
@@ -278,13 +308,20 @@
                   <mat-icon>open_in_new</mat-icon>
                 </button>
               }
-              <button
-                mat-button
-                (click)="detach(item)"
-                [disabled]="busy || !canApply || item.ownership !== 'file-managed'"
-              >
-                Detach
-              </button>
+              @if (item.ownership === 'file-managed') {
+                <button mat-button (click)="detach(item)" [disabled]="busy || !canApply">
+                  Detach
+                </button>
+              } @else if (item.kind !== 'Tenant') {
+                <button
+                  mat-button
+                  (click)="planReattach(item)"
+                  [disabled]="busy || !canApply"
+                  matTooltip="Discard API and UI changes and apply the version from the config folder"
+                >
+                  Reset to file
+                </button>
+              }
             </td>
           </ng-container>
           <tr mat-header-row *matHeaderRowDef="resourceColumns"></tr>

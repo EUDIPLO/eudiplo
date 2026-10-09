@@ -61,29 +61,11 @@ export class ConfigOwnershipService {
         source: string,
     ): Promise<ConfigResourceMetadataEntity[]> {
         const managed = await this.list(tenantId);
-        if (!source.startsWith("folder:")) {
-            return managed.filter(
-                (entry) =>
-                    entry.ownership === "file-managed" &&
-                    entry.source === source,
-            );
-        }
-        let folder = source.slice("folder:".length);
-        while (folder.endsWith("/") || folder.endsWith("\\")) {
-            folder = folder.slice(0, -1);
-        }
-        return managed.filter((entry) => {
-            if (entry.ownership !== "file-managed" || !entry.source) {
-                return false;
-            }
-            if (entry.source === source) {
-                return true;
-            }
-            return (
-                entry.source.startsWith(`${folder}/`) ||
-                entry.source.startsWith(`${folder}\\`)
-            );
-        });
+        return managed.filter(
+            (entry) =>
+                entry.ownership === "file-managed" &&
+                sourceInScope(entry.source, source),
+        );
     }
 
     async markApplied(
@@ -97,6 +79,7 @@ export class ConfigOwnershipService {
             sourceHash?: string;
         },
         manager?: EntityManager,
+        allowGenerationReset = false,
     ): Promise<ConfigResourceMetadataEntity> {
         const repository =
             manager?.getRepository(ConfigResourceMetadataEntity) ??
@@ -108,6 +91,7 @@ export class ConfigOwnershipService {
                 resourceId: options.resourceId,
             })) ?? repository.create({ ...options, generation: 1 });
         if (
+            !allowGenerationReset &&
             options.ownership === "file-managed" &&
             options.generation !== undefined &&
             options.generation < current.generation
@@ -124,16 +108,22 @@ export class ConfigOwnershipService {
         });
     }
 
+    /** Keeps the former source so imports from it can skip the resource until reattached. */
     async detach(
         tenantId: string,
         kind: ConfigResourceKind,
         resourceId: string,
     ): Promise<ConfigResourceMetadataEntity> {
         const current = await this.get(tenantId, kind, resourceId);
+        if (current.ownership === "detached") return current;
+        if (current.ownership !== "file-managed") {
+            throw new ConflictException(
+                `${kind} '${resourceId}' is not file-managed and cannot be detached.`,
+            );
+        }
         return this.repository.save({
             ...current,
-            ownership: "unmanaged",
-            source: undefined,
+            ownership: "detached",
             sourceHash: undefined,
             lastAppliedAt: new Date(),
         });
@@ -167,11 +157,13 @@ export class ConfigOwnershipService {
             kind,
             resourceId,
         });
+        // A detached resource stays detached, so its former source keeps skipping it.
+        const detached = stored?.ownership === "detached";
         return this.repository.save({
             ...(stored ?? { tenantId, kind, resourceId }),
-            ownership: "unmanaged",
+            ownership: detached ? "detached" : "unmanaged",
             generation: create && !stored ? 1 : (stored?.generation ?? 1) + 1,
-            source: undefined,
+            source: detached ? stored.source : undefined,
             sourceHash: undefined,
         });
     }
@@ -187,4 +179,25 @@ export class ConfigOwnershipService {
     async removeTenant(tenantId: string): Promise<void> {
         await this.repository.delete({ tenantId });
     }
+}
+
+/**
+ * Whether a stored ownership source belongs to an import source. A folder
+ * source also covers sources recorded for files below that folder.
+ */
+export function sourceInScope(
+    entrySource: string | undefined,
+    source: string,
+): boolean {
+    if (!entrySource) return false;
+    if (entrySource === source) return true;
+    if (!source.startsWith("folder:")) return false;
+    let folder = source.slice("folder:".length);
+    while (folder.endsWith("/") || folder.endsWith("\\")) {
+        folder = folder.slice(0, -1);
+    }
+    return (
+        entrySource.startsWith(`${folder}/`) ||
+        entrySource.startsWith(`${folder}\\`)
+    );
 }
