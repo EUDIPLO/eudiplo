@@ -33,6 +33,10 @@ on:
 
 permissions: {}
 
+# Docker Hub login is optional: without the secrets, jobs pull anonymously.
+env:
+  HAS_DOCKERHUB_LOGIN: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+
 concurrency:
   group: load-tests-${{ github.ref }}
   cancel-in-progress: true
@@ -58,6 +62,15 @@ jobs:
       # -------------------------------------------------------------------
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Authenticated pulls avoid Docker Hub's anonymous rate limit. Skipped
+      # where the secrets are unavailable (forks, Dependabot).
+      - name: Log in to Docker Hub
+        if: env.HAS_DOCKERHUB_LOGIN == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # -------------------------------------------------------------------
       # Install k6
