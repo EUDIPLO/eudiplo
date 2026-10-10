@@ -1,6 +1,8 @@
+import { HttpModule } from "@nestjs/axios";
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { CryptoModule } from "../crypto/crypto.module.js";
+import { OutboundUrlPolicyModule } from "../webhook/outbound-url-policy.module.js";
 import { AccessCertificateService } from "./access-certificate.service.js";
 import { RegistrarConfigEntity } from "./entities/registrar-config.entity.js";
 import { RegistrarController } from "./registrar.controller.js";
@@ -19,7 +21,12 @@ import { SchemaMetadataService } from "./schema-metadata/schema-metadata.service
  * - Imported from config files (registrar.json in tenant folder)
  */
 @Module({
-    imports: [CryptoModule, TypeOrmModule.forFeature([RegistrarConfigEntity])],
+    imports: [
+        CryptoModule,
+        HttpModule,
+        OutboundUrlPolicyModule,
+        TypeOrmModule.forFeature([RegistrarConfigEntity]),
+    ],
     controllers: [RegistrarController],
     providers: [
         RegistrarAuthService,

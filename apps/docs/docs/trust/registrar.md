@@ -31,6 +31,8 @@ The same configuration via the API (`POST /api/registrar/config` creates or repl
 
 File imports are not checked against the registrar, because it may be unreachable at startup.
 
+Both URLs must be `http(s)` base URLs without query, fragment or credentials. Every request to the registrar and its OIDC provider, including the token endpoint named by the OIDC discovery document, goes through the [outbound URL policy](../concepts/security-model.md): HTTPS only and no private addresses by default, no redirects, at most 10 seconds and 5 MB per response. A URL the policy blocks is rejected with `400` when the configuration is saved. For a registrar on a private network or plain HTTP, set `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` or `OUTBOUND_URL_ALLOW_HTTP`.
+
 :::warning[Stored credentials]
 The password and client secret are encrypted in the database with the [data-at-rest key](../operate/encryption-keys.md). The API returns neither; `hasPassword` and `hasClientSecret` show whether they are set. Use a registrar account dedicated to this tenant.
 :::

@@ -145,12 +145,13 @@ export class RegistrarConfigService {
 
     /**
      * Create or replace the registrar configuration for a tenant.
-     * Credentials are validated before saving.
+     * URLs and credentials are validated before saving.
      */
     async saveConfig(
         tenantId: string,
         dto: CreateRegistrarConfig,
     ): Promise<RegistrarConfigEntity> {
+        await this.authService.assertSafeUrls(dto);
         await this.authService.testCredentials(dto);
 
         const config = await this.configRepository.save({
@@ -165,7 +166,8 @@ export class RegistrarConfigService {
 
     /**
      * Partially update the registrar configuration for a tenant.
-     * Credentials are re-validated only when auth-related fields are changed.
+     * Changed URLs are checked against the outbound URL policy; credentials
+     * are re-validated only when auth-related fields are changed.
      */
     async updateConfig(
         tenantId: string,
@@ -177,6 +179,8 @@ export class RegistrarConfigService {
                 `No registrar configuration found for tenant ${tenantId}`,
             );
         }
+
+        await this.authService.assertSafeUrls(dto);
 
         const hasAuthChanges =
             dto.oidcUrl !== undefined ||
