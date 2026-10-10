@@ -3712,7 +3712,7 @@ export const WebHookAuthConfigNoneSchema = {
         type: {
             type: 'string',
             const: 'none',
-            description: 'The type of authentication used for the webhook.',
+            description: 'Disable authentication.',
             enum: [
                 'none'
             ]
@@ -3729,11 +3729,13 @@ export const ApiKeyConfigSchema = {
     properties: {
         headerName: {
             type: 'string',
-            description: 'The name of the header where the API key will be sent.'
+            minLength: 1,
+            description: 'The header name used to send the API key.'
         },
         value: {
             type: 'string',
-            description: 'The value of the API key to be sent in the header.'
+            minLength: 1,
+            description: 'The API key value.'
         }
     },
     required: [
@@ -3749,7 +3751,7 @@ export const WebHookAuthConfigHeaderSchema = {
         type: {
             type: 'string',
             const: 'apiKey',
-            description: 'The type of authentication used for the webhook.',
+            description: 'Use API key authentication.',
             enum: [
                 'apiKey'
             ]
@@ -3757,14 +3759,18 @@ export const WebHookAuthConfigHeaderSchema = {
         config: {
             properties: {
                 headerName: {
-                    type: 'string'
+                    type: 'string',
+                    minLength: 1,
+                    description: 'The header name used to send the API key.'
                 },
                 value: {
-                    type: 'string'
+                    type: 'string',
+                    minLength: 1,
+                    description: 'The API key value.'
                 }
             },
             additionalProperties: false,
-            description: 'Configuration for API key authentication.\nThis is required if the type is \'apiKey\'.',
+            description: 'API key authentication settings.',
             allOf: [
                 {
                     $ref: '#/components/schemas/ApiKeyConfig'
@@ -3791,17 +3797,18 @@ export const WebhookConfigSchema = {
                     $ref: '#/components/schemas/WebHookAuthConfigHeader'
                 }
             ],
-            description: 'Optional authentication configuration for the webhook.\nIf not provided, no authentication will be used.'
+            description: 'Webhook authentication strategy.'
         },
         includeRawTokensFor: {
+            description: 'List of credential IDs to include raw tokens for (for example [\'sca_credential\']).',
             items: {
                 type: 'string'
             },
-            description: 'List of credential IDs to include raw tokens for (e.g., [\'sca_credential\'])',
             type: 'array'
         },
         url: {
             type: 'string',
+            minLength: 1,
             description: 'The URL to which the webhook will send notifications.'
         }
     },
@@ -3914,7 +3921,7 @@ export const SessionSchema = {
         },
         refresh_token: {
             type: 'string',
-            description: 'Refresh token for the session - used to obtain a new access token.'
+            description: 'SHA-256 hash of the refresh token for the session, which is used to\nobtain a new access token. The token itself is not stored.'
         },
         refresh_token_expires_at: {
             format: 'date-time',
@@ -4031,7 +4038,7 @@ export const SessionSchema = {
             description: 'Redirect URI to which the user-agent should be redirected after the presentation is completed.'
         },
         parsedWebhook: {
-            description: 'Where to send the claims webhook response.',
+            description: 'Where to send the claims webhook response.\nThe webhook API key is encrypted at rest.',
             allOf: [
                 {
                     $ref: '#/components/schemas/WebhookConfig'
@@ -4993,26 +5000,26 @@ export const SchemaUriEntrySchema = {
     type: 'object',
     properties: {
         credentialConfigId: {
+            description: 'Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.',
             type: 'string',
-            description: 'Credential config ID to resolve and upload its schema content. When set, uri can be omitted and is resolved server-side.',
             example: 'pid_de_credential_config'
         },
         format: {
+            description: 'Attestation format of the schema, for example `dc+sd-jwt` or `mso_mdoc`. Required with `uri`; with `credentialConfigId`, the format of the configuration takes precedence.',
             type: 'string',
-            description: 'Attestation format this schema URI applies to (e.g. dc+sd-jwt, mso_mdoc)',
             example: 'dc+sd-jwt'
         },
         uri: {
-            type: 'string',
-            description: 'URI pointing to the schema document for this format'
+            description: 'URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.',
+            type: 'string'
         },
         meta: {
+            description: 'Format-specific schema metadata, for example `{ "vct": "urn:example:vct" }` for `dc+sd-jwt`. Required with `uri`.',
             type: 'object',
             propertyNames: {
                 type: 'string'
             },
-            additionalProperties: true,
-            description: 'Schema-format specific metadata (for example { vct: \'urn:example:vct\' } for dc+sd-jwt).'
+            additionalProperties: true
         }
     },
     additionalProperties: false
@@ -5022,24 +5029,25 @@ export const TrustAuthorityEntrySchema = {
     type: 'object',
     properties: {
         trustListId: {
-            type: 'string',
-            description: 'Trust list ID to resolve from the database. When set, frameworkType, value, and verificationMethod are derived automatically.'
+            description: 'Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the certificate of the trust list\'s key chain; the other fields are not needed.',
+            type: 'string'
         },
         frameworkType: {
+            description: 'Trust framework of an external authority. `x509` takes a root certificate in `value` and no `verificationMethod`.',
             type: 'string',
             enum: [
                 'aki',
                 'etsi_tl',
                 'openid_federation',
                 'x509'
-            ],
-            description: 'Trust framework type (ignored when trustListId is set)'
+            ]
         },
         value: {
-            type: 'string',
-            description: 'Trust list URI for etsi_tl or base64-encoded DER root certificate for x509 (ignored when trustListId is set)'
+            description: 'Authority value, for example the trust list URL for `etsi_tl` or the base64 DER root certificate for `x509`.',
+            type: 'string'
         },
         verificationMethod: {
+            description: 'Verification material of an external authority, for example a JWK, as object or JSON string. Required, except for `x509` (must be omitted) and for a `value` that is a trust list URL of this tenant (EUDIPLO adds the certificate).',
             anyOf: [
                 {
                     type: 'object',
@@ -5052,7 +5060,6 @@ export const TrustAuthorityEntrySchema = {
                     type: 'string'
                 }
             ],
-            description: 'Optional verification material for external trusted authorities (for example a JWK). Required for etsi_tl and omitted for x509 root certificate anchors. For internal trust-list URLs, EUDIPLO resolves verification material from the database.',
             oneOf: [
                 {
                     type: 'object',
@@ -5072,23 +5079,23 @@ export const SchemaMetaConfigSchema = {
     type: 'object',
     properties: {
         id: {
+            description: 'Schema ID (attestation identifier URI). `publish` passes it to the registrar when set; `publish-version` requires the ID of the existing schema. With `credentialConfigId` and no `rulebookURI`, `publish` only links that credential configuration to this ID and uploads nothing.',
             type: 'string',
-            description: 'Optional override for the schema ID (attestation identifier URI). When not set, derived from vct (dc+sd-jwt) or docType (mso_mdoc).',
             example: 'https://example.com/attestations/my-credential'
         },
         name: {
+            description: 'Human-readable name. Required when publishing; not needed for a link-only request.',
             type: 'string',
-            description: 'Human-readable name of the schema metadata entry. Required when publishing new schema metadata; optional when linking an existing schema metadata id to a credential config.',
             example: 'German PID'
         },
         version: {
             type: 'string',
-            description: 'Schema version in SemVer format',
+            description: 'Schema version, for example `1.0.0`.',
             example: '1.0.0'
         },
         rulebookURI: {
+            description: 'URL of the attestation rulebook, which EUDIPLO downloads and uploads to the registrar. Required when publishing.',
             type: 'string',
-            description: 'URI of the Attestation Rulebook. Required when publishing new schema metadata; optional when linking an existing schema metadata id to a credential config.',
             example: 'https://example.com/rulebooks/my-credential/1.0.0.md'
         },
         attestationLoS: {
@@ -5099,7 +5106,7 @@ export const SchemaMetaConfigSchema = {
                 'iso_18045_enhanced-basic',
                 'iso_18045_basic'
             ],
-            description: 'Attestation Level of Security'
+            description: 'Attestation level of security.'
         },
         bindingType: {
             type: 'string',
@@ -5109,22 +5116,27 @@ export const SchemaMetaConfigSchema = {
                 'biometric',
                 'none'
             ],
-            description: 'Cryptographic binding type'
+            description: 'Cryptographic binding type.'
         },
         schemaURIs: {
+            description: 'Schemas per attestation format. When omitted, the schema of `credentialConfigId` is used.',
             items: {
                 type: 'object',
                 properties: {
                     credentialConfigId: {
+                        description: 'Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.',
                         type: 'string'
                     },
                     format: {
+                        description: 'Attestation format of the schema, for example `dc+sd-jwt` or `mso_mdoc`. Required with `uri`; with `credentialConfigId`, the format of the configuration takes precedence.',
                         type: 'string'
                     },
                     uri: {
+                        description: 'URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.',
                         type: 'string'
                     },
                     meta: {
+                        description: 'Format-specific schema metadata, for example `{ "vct": "urn:example:vct" }` for `dc+sd-jwt`. Required with `uri`.',
                         type: 'object',
                         propertyNames: {
                             type: 'string'
@@ -5134,17 +5146,19 @@ export const SchemaMetaConfigSchema = {
                 },
                 additionalProperties: false
             },
-            description: 'Schema URIs per attestation format. When omitted, the format is derived from the credential config format field.',
             type: 'array'
         },
         trustedAuthorities: {
+            description: 'Trusted authorities for issuers of this attestation. Required when publishing: at least one entry must provide an X.509 certificate (`trustListId`, an `x509` entry or a `verificationMethod` with `x509Certificate`).',
             items: {
                 type: 'object',
                 properties: {
                     trustListId: {
+                        description: 'Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the certificate of the trust list\'s key chain; the other fields are not needed.',
                         type: 'string'
                     },
                     frameworkType: {
+                        description: 'Trust framework of an external authority. `x509` takes a root certificate in `value` and no `verificationMethod`.',
                         type: 'string',
                         enum: [
                             'aki',
@@ -5154,9 +5168,11 @@ export const SchemaMetaConfigSchema = {
                         ]
                     },
                     value: {
+                        description: 'Authority value, for example the trust list URL for `etsi_tl` or the base64 DER root certificate for `x509`.',
                         type: 'string'
                     },
                     verificationMethod: {
+                        description: 'Verification material of an external authority, for example a JWK, as object or JSON string. Required, except for `x509` (must be omitted) and for a `value` that is a trust list URL of this tenant (EUDIPLO adds the certificate).',
                         anyOf: [
                             {
                                 type: 'object',
@@ -5173,10 +5189,14 @@ export const SchemaMetaConfigSchema = {
                 },
                 additionalProperties: false
             },
-            description: 'Trust authorities for this attestation schema',
             type: 'array'
         }
     },
+    required: [
+        'version',
+        'attestationLoS',
+        'bindingType'
+    ],
     additionalProperties: false
 } as const;
 
@@ -9048,7 +9068,9 @@ export const AuthenticationUrlConfigSchema = {
         webhook: {
             properties: {
                 url: {
-                    type: 'string'
+                    type: 'string',
+                    minLength: 1,
+                    description: 'The URL to which the webhook will send notifications.'
                 },
                 auth: {
                     oneOf: [
@@ -9057,7 +9079,8 @@ export const AuthenticationUrlConfigSchema = {
                             properties: {
                                 type: {
                                     type: 'string',
-                                    const: 'none'
+                                    const: 'none',
+                                    description: 'Disable authentication.'
                                 }
                             },
                             required: [
@@ -9070,23 +9093,29 @@ export const AuthenticationUrlConfigSchema = {
                             properties: {
                                 type: {
                                     type: 'string',
-                                    const: 'apiKey'
+                                    const: 'apiKey',
+                                    description: 'Use API key authentication.'
                                 },
                                 config: {
                                     type: 'object',
                                     properties: {
                                         headerName: {
-                                            type: 'string'
+                                            type: 'string',
+                                            minLength: 1,
+                                            description: 'The header name used to send the API key.'
                                         },
                                         value: {
-                                            type: 'string'
+                                            type: 'string',
+                                            minLength: 1,
+                                            description: 'The API key value.'
                                         }
                                     },
                                     required: [
                                         'headerName',
                                         'value'
                                     ],
-                                    additionalProperties: false
+                                    additionalProperties: false,
+                                    description: 'API key authentication settings.'
                                 }
                             },
                             required: [
@@ -9095,9 +9124,11 @@ export const AuthenticationUrlConfigSchema = {
                             ],
                             additionalProperties: false
                         }
-                    ]
+                    ],
+                    description: 'Webhook authentication strategy.'
                 },
                 includeRawTokensFor: {
+                    description: 'List of credential IDs to include raw tokens for (for example [\'sca_credential\']).',
                     type: 'array',
                     items: {
                         type: 'string'
@@ -9138,7 +9169,9 @@ export const AuthenticationMethodAuthSchema = {
                     type: 'object',
                     properties: {
                         url: {
-                            type: 'string'
+                            type: 'string',
+                            minLength: 1,
+                            description: 'The URL to which the webhook will send notifications.'
                         },
                         auth: {
                             oneOf: [
@@ -9147,7 +9180,8 @@ export const AuthenticationMethodAuthSchema = {
                                     properties: {
                                         type: {
                                             type: 'string',
-                                            const: 'none'
+                                            const: 'none',
+                                            description: 'Disable authentication.'
                                         }
                                     },
                                     required: [
@@ -9160,23 +9194,29 @@ export const AuthenticationMethodAuthSchema = {
                                     properties: {
                                         type: {
                                             type: 'string',
-                                            const: 'apiKey'
+                                            const: 'apiKey',
+                                            description: 'Use API key authentication.'
                                         },
                                         config: {
                                             type: 'object',
                                             properties: {
                                                 headerName: {
-                                                    type: 'string'
+                                                    type: 'string',
+                                                    minLength: 1,
+                                                    description: 'The header name used to send the API key.'
                                                 },
                                                 value: {
-                                                    type: 'string'
+                                                    type: 'string',
+                                                    minLength: 1,
+                                                    description: 'The API key value.'
                                                 }
                                             },
                                             required: [
                                                 'headerName',
                                                 'value'
                                             ],
-                                            additionalProperties: false
+                                            additionalProperties: false,
+                                            description: 'API key authentication settings.'
                                         }
                                     },
                                     required: [
@@ -9185,9 +9225,11 @@ export const AuthenticationMethodAuthSchema = {
                                     ],
                                     additionalProperties: false
                                 }
-                            ]
+                            ],
+                            description: 'Webhook authentication strategy.'
                         },
                         includeRawTokensFor: {
+                            description: 'List of credential IDs to include raw tokens for (for example [\'sca_credential\']).',
                             type: 'array',
                             items: {
                                 type: 'string'
@@ -10249,15 +10291,19 @@ export const SignSchemaMetaConfigDtoSchema = {
         config: {
             properties: {
                 id: {
+                    description: 'Schema ID (attestation identifier URI). `publish` passes it to the registrar when set; `publish-version` requires the ID of the existing schema. With `credentialConfigId` and no `rulebookURI`, `publish` only links that credential configuration to this ID and uploads nothing.',
                     type: 'string'
                 },
                 name: {
+                    description: 'Human-readable name. Required when publishing; not needed for a link-only request.',
                     type: 'string'
                 },
                 version: {
-                    type: 'string'
+                    type: 'string',
+                    description: 'Schema version, for example `1.0.0`.'
                 },
                 rulebookURI: {
+                    description: 'URL of the attestation rulebook, which EUDIPLO downloads and uploads to the registrar. Required when publishing.',
                     type: 'string'
                 },
                 attestationLoS: {
@@ -10267,7 +10313,8 @@ export const SignSchemaMetaConfigDtoSchema = {
                         'iso_18045_moderate',
                         'iso_18045_enhanced-basic',
                         'iso_18045_basic'
-                    ]
+                    ],
+                    description: 'Attestation level of security.'
                 },
                 bindingType: {
                     type: 'string',
@@ -10276,23 +10323,29 @@ export const SignSchemaMetaConfigDtoSchema = {
                         'key',
                         'biometric',
                         'none'
-                    ]
+                    ],
+                    description: 'Cryptographic binding type.'
                 },
                 schemaURIs: {
+                    description: 'Schemas per attestation format. When omitted, the schema of `credentialConfigId` is used.',
                     type: 'array',
                     items: {
                         type: 'object',
                         properties: {
                             credentialConfigId: {
+                                description: 'Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.',
                                 type: 'string'
                             },
                             format: {
+                                description: 'Attestation format of the schema, for example `dc+sd-jwt` or `mso_mdoc`. Required with `uri`; with `credentialConfigId`, the format of the configuration takes precedence.',
                                 type: 'string'
                             },
                             uri: {
+                                description: 'URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.',
                                 type: 'string'
                             },
                             meta: {
+                                description: 'Format-specific schema metadata, for example `{ "vct": "urn:example:vct" }` for `dc+sd-jwt`. Required with `uri`.',
                                 type: 'object',
                                 propertyNames: {
                                     type: 'string'
@@ -10304,14 +10357,17 @@ export const SignSchemaMetaConfigDtoSchema = {
                     }
                 },
                 trustedAuthorities: {
+                    description: 'Trusted authorities for issuers of this attestation. Required when publishing: at least one entry must provide an X.509 certificate (`trustListId`, an `x509` entry or a `verificationMethod` with `x509Certificate`).',
                     type: 'array',
                     items: {
                         type: 'object',
                         properties: {
                             trustListId: {
+                                description: 'Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the certificate of the trust list\'s key chain; the other fields are not needed.',
                                 type: 'string'
                             },
                             frameworkType: {
+                                description: 'Trust framework of an external authority. `x509` takes a root certificate in `value` and no `verificationMethod`.',
                                 type: 'string',
                                 enum: [
                                     'aki',
@@ -10321,9 +10377,11 @@ export const SignSchemaMetaConfigDtoSchema = {
                                 ]
                             },
                             value: {
+                                description: 'Authority value, for example the trust list URL for `etsi_tl` or the base64 DER root certificate for `x509`.',
                                 type: 'string'
                             },
                             verificationMethod: {
+                                description: 'Verification material of an external authority, for example a JWK, as object or JSON string. Required, except for `x509` (must be omitted) and for a `value` that is a trust list URL of this tenant (EUDIPLO adds the certificate).',
                                 anyOf: [
                                     {
                                         type: 'object',
@@ -10351,17 +10409,17 @@ export const SignSchemaMetaConfigDtoSchema = {
             ]
         },
         credentialConfigId: {
-            type: 'string',
-            description: 'ID of the credential config to link back after submission. When provided, schemaMeta.id on the credential config is updated with the reserved attestation ID.'
+            description: 'Credential configuration to link to the published schema metadata ID.',
+            type: 'string'
         },
         pinMode: {
+            description: 'How to update the schema metadata pin of `credentialConfigId`: `keep_current` (default) keeps a pin to the same ID, `update_to_new_version` updates the pinned version under the same ID, `replace_id` repoints the pin to the new ID. A configuration without a pin is always linked. If it is pinned to another ID, only `replace_id` succeeds; the others answer `400` after the schema metadata was published.',
             type: 'string',
             enum: [
                 'keep_current',
                 'update_to_new_version',
                 'replace_id'
             ],
-            description: 'How to update credential config pinning after publish. keep_current: do not change existing pin (unless empty). update_to_new_version: update pinned version under current id. replace_id: repoint pin to a different schema id.',
             default: 'keep_current'
         }
     },
@@ -10377,15 +10435,19 @@ export const SignVersionSchemaMetaConfigDtoSchema = {
         config: {
             properties: {
                 id: {
+                    description: 'Schema ID (attestation identifier URI). `publish` passes it to the registrar when set; `publish-version` requires the ID of the existing schema. With `credentialConfigId` and no `rulebookURI`, `publish` only links that credential configuration to this ID and uploads nothing.',
                     type: 'string'
                 },
                 name: {
+                    description: 'Human-readable name. Required when publishing; not needed for a link-only request.',
                     type: 'string'
                 },
                 version: {
-                    type: 'string'
+                    type: 'string',
+                    description: 'Schema version, for example `1.0.0`.'
                 },
                 rulebookURI: {
+                    description: 'URL of the attestation rulebook, which EUDIPLO downloads and uploads to the registrar. Required when publishing.',
                     type: 'string'
                 },
                 attestationLoS: {
@@ -10395,7 +10457,8 @@ export const SignVersionSchemaMetaConfigDtoSchema = {
                         'iso_18045_moderate',
                         'iso_18045_enhanced-basic',
                         'iso_18045_basic'
-                    ]
+                    ],
+                    description: 'Attestation level of security.'
                 },
                 bindingType: {
                     type: 'string',
@@ -10404,23 +10467,29 @@ export const SignVersionSchemaMetaConfigDtoSchema = {
                         'key',
                         'biometric',
                         'none'
-                    ]
+                    ],
+                    description: 'Cryptographic binding type.'
                 },
                 schemaURIs: {
+                    description: 'Schemas per attestation format. When omitted, the schema of `credentialConfigId` is used.',
                     type: 'array',
                     items: {
                         type: 'object',
                         properties: {
                             credentialConfigId: {
+                                description: 'Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.',
                                 type: 'string'
                             },
                             format: {
+                                description: 'Attestation format of the schema, for example `dc+sd-jwt` or `mso_mdoc`. Required with `uri`; with `credentialConfigId`, the format of the configuration takes precedence.',
                                 type: 'string'
                             },
                             uri: {
+                                description: 'URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.',
                                 type: 'string'
                             },
                             meta: {
+                                description: 'Format-specific schema metadata, for example `{ "vct": "urn:example:vct" }` for `dc+sd-jwt`. Required with `uri`.',
                                 type: 'object',
                                 propertyNames: {
                                     type: 'string'
@@ -10432,14 +10501,17 @@ export const SignVersionSchemaMetaConfigDtoSchema = {
                     }
                 },
                 trustedAuthorities: {
+                    description: 'Trusted authorities for issuers of this attestation. Required when publishing: at least one entry must provide an X.509 certificate (`trustListId`, an `x509` entry or a `verificationMethod` with `x509Certificate`).',
                     type: 'array',
                     items: {
                         type: 'object',
                         properties: {
                             trustListId: {
+                                description: 'Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the certificate of the trust list\'s key chain; the other fields are not needed.',
                                 type: 'string'
                             },
                             frameworkType: {
+                                description: 'Trust framework of an external authority. `x509` takes a root certificate in `value` and no `verificationMethod`.',
                                 type: 'string',
                                 enum: [
                                     'aki',
@@ -10449,9 +10521,11 @@ export const SignVersionSchemaMetaConfigDtoSchema = {
                                 ]
                             },
                             value: {
+                                description: 'Authority value, for example the trust list URL for `etsi_tl` or the base64 DER root certificate for `x509`.',
                                 type: 'string'
                             },
                             verificationMethod: {
+                                description: 'Verification material of an external authority, for example a JWK, as object or JSON string. Required, except for `x509` (must be omitted) and for a `value` that is a trust list URL of this tenant (EUDIPLO adds the certificate).',
                                 anyOf: [
                                     {
                                         type: 'object',
@@ -10479,17 +10553,17 @@ export const SignVersionSchemaMetaConfigDtoSchema = {
             ]
         },
         credentialConfigId: {
-            type: 'string',
-            description: 'Optional credential config to update pinning for after successful version publish.'
+            description: 'Credential configuration to link to the new version.',
+            type: 'string'
         },
         pinMode: {
+            description: 'How to update the schema metadata pin of `credentialConfigId`: `keep_current` (default) keeps a pin to the same ID, `update_to_new_version` updates the pinned version under the same ID, `replace_id` repoints the pin to `config.id`. A configuration without a pin is always linked. If it is pinned to another ID, only `replace_id` succeeds; the others answer `400` after the schema metadata was published.',
             type: 'string',
             enum: [
                 'keep_current',
                 'update_to_new_version',
                 'replace_id'
             ],
-            description: 'How to update credential config pinning after version publish. keep_current: do not change existing pin (unless empty). update_to_new_version: update pinned version under current id. replace_id: repoint pin to config.id.',
             default: 'keep_current'
         }
     },
@@ -11393,7 +11467,9 @@ export const PresentationRequestSchema = {
             description: 'Webhook configuration to receive the response.\nIf not provided, the configured webhook from the configuration will be used.',
             properties: {
                 url: {
-                    type: 'string'
+                    type: 'string',
+                    minLength: 1,
+                    description: 'The URL to which the webhook will send notifications.'
                 },
                 auth: {
                     oneOf: [
@@ -11402,7 +11478,8 @@ export const PresentationRequestSchema = {
                             properties: {
                                 type: {
                                     type: 'string',
-                                    const: 'none'
+                                    const: 'none',
+                                    description: 'Disable authentication.'
                                 }
                             },
                             required: [
@@ -11415,23 +11492,29 @@ export const PresentationRequestSchema = {
                             properties: {
                                 type: {
                                     type: 'string',
-                                    const: 'apiKey'
+                                    const: 'apiKey',
+                                    description: 'Use API key authentication.'
                                 },
                                 config: {
                                     type: 'object',
                                     properties: {
                                         headerName: {
-                                            type: 'string'
+                                            type: 'string',
+                                            minLength: 1,
+                                            description: 'The header name used to send the API key.'
                                         },
                                         value: {
-                                            type: 'string'
+                                            type: 'string',
+                                            minLength: 1,
+                                            description: 'The API key value.'
                                         }
                                     },
                                     required: [
                                         'headerName',
                                         'value'
                                     ],
-                                    additionalProperties: false
+                                    additionalProperties: false,
+                                    description: 'API key authentication settings.'
                                 }
                             },
                             required: [
@@ -11440,9 +11523,11 @@ export const PresentationRequestSchema = {
                             ],
                             additionalProperties: false
                         }
-                    ]
+                    ],
+                    description: 'Webhook authentication strategy.'
                 },
                 includeRawTokensFor: {
+                    description: 'List of credential IDs to include raw tokens for (for example [\'sca_credential\']).',
                     type: 'array',
                     items: {
                         type: 'string'

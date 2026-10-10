@@ -1627,45 +1627,49 @@ export type OfferRequestDto = {
 
 export type WebHookAuthConfigNone = {
     /**
-     * The type of authentication used for the webhook.
+     * Disable authentication.
      */
     type: 'none';
 };
 
 export type ApiKeyConfig = {
     /**
-     * The name of the header where the API key will be sent.
+     * The header name used to send the API key.
      */
     headerName: string;
     /**
-     * The value of the API key to be sent in the header.
+     * The API key value.
      */
     value: string;
 };
 
 export type WebHookAuthConfigHeader = {
     /**
-     * The type of authentication used for the webhook.
+     * Use API key authentication.
      */
     type: 'apiKey';
     /**
-     * Configuration for API key authentication.
-     * This is required if the type is 'apiKey'.
+     * API key authentication settings.
      */
     config: ApiKeyConfig & {
+        /**
+         * The header name used to send the API key.
+         */
         headerName?: string;
+        /**
+         * The API key value.
+         */
         value?: string;
     };
 };
 
 export type WebhookConfig = {
     /**
-     * Optional authentication configuration for the webhook.
-     * If not provided, no authentication will be used.
+     * Webhook authentication strategy.
      */
     auth: WebHookAuthConfigNone | WebHookAuthConfigHeader;
     /**
-     * List of credential IDs to include raw tokens for (e.g., ['sca_credential'])
+     * List of credential IDs to include raw tokens for (for example ['sca_credential']).
      */
     includeRawTokensFor?: Array<string>;
     /**
@@ -1746,7 +1750,8 @@ export type Session = {
      */
     client_key_jkt?: string;
     /**
-     * Refresh token for the session - used to obtain a new access token.
+     * SHA-256 hash of the refresh token for the session, which is used to
+     * obtain a new access token. The token itself is not stored.
      */
     refresh_token?: string;
     /**
@@ -1852,6 +1857,7 @@ export type Session = {
     redirectUri?: string | null;
     /**
      * Where to send the claims webhook response.
+     * The webhook API key is encrypted at rest.
      */
     parsedWebhook?: WebhookConfig;
     /**
@@ -2269,19 +2275,19 @@ export type WebhookEndpointEntity = {
 
 export type SchemaUriEntry = {
     /**
-     * Credential config ID to resolve and upload its schema content. When set, uri can be omitted and is resolved server-side.
+     * Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.
      */
     credentialConfigId?: string;
     /**
-     * Attestation format this schema URI applies to (e.g. dc+sd-jwt, mso_mdoc)
+     * Attestation format of the schema, for example `dc+sd-jwt` or `mso_mdoc`. Required with `uri`; with `credentialConfigId`, the format of the configuration takes precedence.
      */
     format?: string;
     /**
-     * URI pointing to the schema document for this format
+     * URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.
      */
     uri?: string;
     /**
-     * Schema-format specific metadata (for example { vct: 'urn:example:vct' } for dc+sd-jwt).
+     * Format-specific schema metadata, for example `{ "vct": "urn:example:vct" }` for `dc+sd-jwt`. Required with `uri`.
      */
     meta?: {
         [key: string]: unknown;
@@ -2290,19 +2296,19 @@ export type SchemaUriEntry = {
 
 export type TrustAuthorityEntry = {
     /**
-     * Trust list ID to resolve from the database. When set, frameworkType, value, and verificationMethod are derived automatically.
+     * Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the certificate of the trust list's key chain; the other fields are not needed.
      */
     trustListId?: string;
     /**
-     * Trust framework type (ignored when trustListId is set)
+     * Trust framework of an external authority. `x509` takes a root certificate in `value` and no `verificationMethod`.
      */
     frameworkType?: 'aki' | 'etsi_tl' | 'openid_federation' | 'x509';
     /**
-     * Trust list URI for etsi_tl or base64-encoded DER root certificate for x509 (ignored when trustListId is set)
+     * Authority value, for example the trust list URL for `etsi_tl` or the base64 DER root certificate for `x509`.
      */
     value?: string;
     /**
-     * Optional verification material for external trusted authorities (for example a JWK). Required for etsi_tl and omitted for x509 root certificate anchors. For internal trust-list URLs, EUDIPLO resolves verification material from the database.
+     * Verification material of an external authority, for example a JWK, as object or JSON string. Required, except for `x509` (must be omitted) and for a `value` that is a trust list URL of this tenant (EUDIPLO adds the certificate).
      */
     verificationMethod?: {
         [key: string]: unknown;
@@ -2311,47 +2317,71 @@ export type TrustAuthorityEntry = {
 
 export type SchemaMetaConfig = {
     /**
-     * Optional override for the schema ID (attestation identifier URI). When not set, derived from vct (dc+sd-jwt) or docType (mso_mdoc).
+     * Schema ID (attestation identifier URI). `publish` passes it to the registrar when set; `publish-version` requires the ID of the existing schema. With `credentialConfigId` and no `rulebookURI`, `publish` only links that credential configuration to this ID and uploads nothing.
      */
     id?: string;
     /**
-     * Human-readable name of the schema metadata entry. Required when publishing new schema metadata; optional when linking an existing schema metadata id to a credential config.
+     * Human-readable name. Required when publishing; not needed for a link-only request.
      */
     name?: string;
     /**
-     * Schema version in SemVer format
+     * Schema version, for example `1.0.0`.
      */
-    version?: string;
+    version: string;
     /**
-     * URI of the Attestation Rulebook. Required when publishing new schema metadata; optional when linking an existing schema metadata id to a credential config.
+     * URL of the attestation rulebook, which EUDIPLO downloads and uploads to the registrar. Required when publishing.
      */
     rulebookURI?: string;
     /**
-     * Attestation Level of Security
+     * Attestation level of security.
      */
-    attestationLoS?: 'iso_18045_high' | 'iso_18045_moderate' | 'iso_18045_enhanced-basic' | 'iso_18045_basic';
+    attestationLoS: 'iso_18045_high' | 'iso_18045_moderate' | 'iso_18045_enhanced-basic' | 'iso_18045_basic';
     /**
-     * Cryptographic binding type
+     * Cryptographic binding type.
      */
-    bindingType?: 'claim' | 'key' | 'biometric' | 'none';
+    bindingType: 'claim' | 'key' | 'biometric' | 'none';
     /**
-     * Schema URIs per attestation format. When omitted, the format is derived from the credential config format field.
+     * Schemas per attestation format. When omitted, the schema of `credentialConfigId` is used.
      */
     schemaURIs?: Array<{
+        /**
+         * Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.
+         */
         credentialConfigId?: string;
+        /**
+         * Attestation format of the schema, for example `dc+sd-jwt` or `mso_mdoc`. Required with `uri`; with `credentialConfigId`, the format of the configuration takes precedence.
+         */
         format?: string;
+        /**
+         * URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.
+         */
         uri?: string;
+        /**
+         * Format-specific schema metadata, for example `{ "vct": "urn:example:vct" }` for `dc+sd-jwt`. Required with `uri`.
+         */
         meta?: {
             [key: string]: unknown;
         };
     }>;
     /**
-     * Trust authorities for this attestation schema
+     * Trusted authorities for issuers of this attestation. Required when publishing: at least one entry must provide an X.509 certificate (`trustListId`, an `x509` entry or a `verificationMethod` with `x509Certificate`).
      */
     trustedAuthorities?: Array<{
+        /**
+         * Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the certificate of the trust list's key chain; the other fields are not needed.
+         */
         trustListId?: string;
+        /**
+         * Trust framework of an external authority. `x509` takes a root certificate in `value` and no `verificationMethod`.
+         */
         frameworkType?: 'aki' | 'etsi_tl' | 'openid_federation' | 'x509';
+        /**
+         * Authority value, for example the trust list URL for `etsi_tl` or the base64 DER root certificate for `x509`.
+         */
         value?: string;
+        /**
+         * Verification material of an external authority, for example a JWK, as object or JSON string. Required, except for `x509` (must be omitted) and for a `value` that is a trust list URL of this tenant (EUDIPLO adds the certificate).
+         */
         verificationMethod?: {
             [key: string]: unknown;
         } | string;
@@ -4166,16 +4196,40 @@ export type AuthenticationUrlConfig = {
      * Optional webhook configuration for authentication callbacks
      */
     webhook?: WebhookConfig & {
+        /**
+         * The URL to which the webhook will send notifications.
+         */
         url?: string;
+        /**
+         * Webhook authentication strategy.
+         */
         auth?: {
+            /**
+             * Disable authentication.
+             */
             type: 'none';
         } | {
+            /**
+             * Use API key authentication.
+             */
             type: 'apiKey';
+            /**
+             * API key authentication settings.
+             */
             config: {
+                /**
+                 * The header name used to send the API key.
+                 */
                 headerName: string;
+                /**
+                 * The API key value.
+                 */
                 value: string;
             };
         };
+        /**
+         * List of credential IDs to include raw tokens for (for example ['sca_credential']).
+         */
         includeRawTokensFor?: Array<string>;
     };
 };
@@ -4185,16 +4239,40 @@ export type AuthenticationMethodAuth = {
     config: AuthenticationUrlConfig & {
         url?: string;
         webhook?: {
+            /**
+             * The URL to which the webhook will send notifications.
+             */
             url: string;
+            /**
+             * Webhook authentication strategy.
+             */
             auth: {
+                /**
+                 * Disable authentication.
+                 */
                 type: 'none';
             } | {
+                /**
+                 * Use API key authentication.
+                 */
                 type: 'apiKey';
+                /**
+                 * API key authentication settings.
+                 */
                 config: {
+                    /**
+                     * The header name used to send the API key.
+                     */
                     headerName: string;
+                    /**
+                     * The API key value.
+                     */
                     value: string;
                 };
             };
+            /**
+             * List of credential IDs to include raw tokens for (for example ['sca_credential']).
+             */
             includeRawTokensFor?: Array<string>;
         };
     };
@@ -4706,35 +4784,83 @@ export type SignSchemaMetaConfigDto = {
      * The schema metadata configuration to submit. Registrar builds and signs the final schema metadata.
      */
     config: SchemaMetaConfig & {
+        /**
+         * Schema ID (attestation identifier URI). `publish` passes it to the registrar when set; `publish-version` requires the ID of the existing schema. With `credentialConfigId` and no `rulebookURI`, `publish` only links that credential configuration to this ID and uploads nothing.
+         */
         id?: string;
+        /**
+         * Human-readable name. Required when publishing; not needed for a link-only request.
+         */
         name?: string;
+        /**
+         * Schema version, for example `1.0.0`.
+         */
         version?: string;
+        /**
+         * URL of the attestation rulebook, which EUDIPLO downloads and uploads to the registrar. Required when publishing.
+         */
         rulebookURI?: string;
+        /**
+         * Attestation level of security.
+         */
         attestationLoS?: 'iso_18045_high' | 'iso_18045_moderate' | 'iso_18045_enhanced-basic' | 'iso_18045_basic';
+        /**
+         * Cryptographic binding type.
+         */
         bindingType?: 'claim' | 'key' | 'biometric' | 'none';
+        /**
+         * Schemas per attestation format. When omitted, the schema of `credentialConfigId` is used.
+         */
         schemaURIs?: Array<{
+            /**
+             * Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.
+             */
             credentialConfigId?: string;
+            /**
+             * Attestation format of the schema, for example `dc+sd-jwt` or `mso_mdoc`. Required with `uri`; with `credentialConfigId`, the format of the configuration takes precedence.
+             */
             format?: string;
+            /**
+             * URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.
+             */
             uri?: string;
+            /**
+             * Format-specific schema metadata, for example `{ "vct": "urn:example:vct" }` for `dc+sd-jwt`. Required with `uri`.
+             */
             meta?: {
                 [key: string]: unknown;
             };
         }>;
+        /**
+         * Trusted authorities for issuers of this attestation. Required when publishing: at least one entry must provide an X.509 certificate (`trustListId`, an `x509` entry or a `verificationMethod` with `x509Certificate`).
+         */
         trustedAuthorities?: Array<{
+            /**
+             * Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the certificate of the trust list's key chain; the other fields are not needed.
+             */
             trustListId?: string;
+            /**
+             * Trust framework of an external authority. `x509` takes a root certificate in `value` and no `verificationMethod`.
+             */
             frameworkType?: 'aki' | 'etsi_tl' | 'openid_federation' | 'x509';
+            /**
+             * Authority value, for example the trust list URL for `etsi_tl` or the base64 DER root certificate for `x509`.
+             */
             value?: string;
+            /**
+             * Verification material of an external authority, for example a JWK, as object or JSON string. Required, except for `x509` (must be omitted) and for a `value` that is a trust list URL of this tenant (EUDIPLO adds the certificate).
+             */
             verificationMethod?: {
                 [key: string]: unknown;
             } | string;
         }>;
     };
     /**
-     * ID of the credential config to link back after submission. When provided, schemaMeta.id on the credential config is updated with the reserved attestation ID.
+     * Credential configuration to link to the published schema metadata ID.
      */
     credentialConfigId?: string;
     /**
-     * How to update credential config pinning after publish. keep_current: do not change existing pin (unless empty). update_to_new_version: update pinned version under current id. replace_id: repoint pin to a different schema id.
+     * How to update the schema metadata pin of `credentialConfigId`: `keep_current` (default) keeps a pin to the same ID, `update_to_new_version` updates the pinned version under the same ID, `replace_id` repoints the pin to the new ID. A configuration without a pin is always linked. If it is pinned to another ID, only `replace_id` succeeds; the others answer `400` after the schema metadata was published.
      */
     pinMode?: 'keep_current' | 'update_to_new_version' | 'replace_id';
 };
@@ -4744,35 +4870,83 @@ export type SignVersionSchemaMetaConfigDto = {
      * The schema metadata configuration to submit as a new version. Must include the existing id.
      */
     config: SchemaMetaConfig & {
+        /**
+         * Schema ID (attestation identifier URI). `publish` passes it to the registrar when set; `publish-version` requires the ID of the existing schema. With `credentialConfigId` and no `rulebookURI`, `publish` only links that credential configuration to this ID and uploads nothing.
+         */
         id?: string;
+        /**
+         * Human-readable name. Required when publishing; not needed for a link-only request.
+         */
         name?: string;
+        /**
+         * Schema version, for example `1.0.0`.
+         */
         version?: string;
+        /**
+         * URL of the attestation rulebook, which EUDIPLO downloads and uploads to the registrar. Required when publishing.
+         */
         rulebookURI?: string;
+        /**
+         * Attestation level of security.
+         */
         attestationLoS?: 'iso_18045_high' | 'iso_18045_moderate' | 'iso_18045_enhanced-basic' | 'iso_18045_basic';
+        /**
+         * Cryptographic binding type.
+         */
         bindingType?: 'claim' | 'key' | 'biometric' | 'none';
+        /**
+         * Schemas per attestation format. When omitted, the schema of `credentialConfigId` is used.
+         */
         schemaURIs?: Array<{
+            /**
+             * Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.
+             */
             credentialConfigId?: string;
+            /**
+             * Attestation format of the schema, for example `dc+sd-jwt` or `mso_mdoc`. Required with `uri`; with `credentialConfigId`, the format of the configuration takes precedence.
+             */
             format?: string;
+            /**
+             * URL of a schema document that EUDIPLO downloads and uploads to the registrar. Requires `format` and `meta`.
+             */
             uri?: string;
+            /**
+             * Format-specific schema metadata, for example `{ "vct": "urn:example:vct" }` for `dc+sd-jwt`. Required with `uri`.
+             */
             meta?: {
                 [key: string]: unknown;
             };
         }>;
+        /**
+         * Trusted authorities for issuers of this attestation. Required when publishing: at least one entry must provide an X.509 certificate (`trustListId`, an `x509` entry or a `verificationMethod` with `x509Certificate`).
+         */
         trustedAuthorities?: Array<{
+            /**
+             * Trust list of the tenant. EUDIPLO publishes it as `etsi_tl` authority with its URL and the certificate of the trust list's key chain; the other fields are not needed.
+             */
             trustListId?: string;
+            /**
+             * Trust framework of an external authority. `x509` takes a root certificate in `value` and no `verificationMethod`.
+             */
             frameworkType?: 'aki' | 'etsi_tl' | 'openid_federation' | 'x509';
+            /**
+             * Authority value, for example the trust list URL for `etsi_tl` or the base64 DER root certificate for `x509`.
+             */
             value?: string;
+            /**
+             * Verification material of an external authority, for example a JWK, as object or JSON string. Required, except for `x509` (must be omitted) and for a `value` that is a trust list URL of this tenant (EUDIPLO adds the certificate).
+             */
             verificationMethod?: {
                 [key: string]: unknown;
             } | string;
         }>;
     };
     /**
-     * Optional credential config to update pinning for after successful version publish.
+     * Credential configuration to link to the new version.
      */
     credentialConfigId?: string;
     /**
-     * How to update credential config pinning after version publish. keep_current: do not change existing pin (unless empty). update_to_new_version: update pinned version under current id. replace_id: repoint pin to config.id.
+     * How to update the schema metadata pin of `credentialConfigId`: `keep_current` (default) keeps a pin to the same ID, `update_to_new_version` updates the pinned version under the same ID, `replace_id` repoints the pin to `config.id`. A configuration without a pin is always linked. If it is pinned to another ID, only `replace_id` succeeds; the others answer `400` after the schema metadata was published.
      */
     pinMode?: 'keep_current' | 'update_to_new_version' | 'replace_id';
 };
@@ -5293,16 +5467,40 @@ export type PresentationRequest = {
      * If not provided, the configured webhook from the configuration will be used.
      */
     webhook?: WebhookConfig & {
+        /**
+         * The URL to which the webhook will send notifications.
+         */
         url?: string;
+        /**
+         * Webhook authentication strategy.
+         */
         auth?: {
+            /**
+             * Disable authentication.
+             */
             type: 'none';
         } | {
+            /**
+             * Use API key authentication.
+             */
             type: 'apiKey';
+            /**
+             * API key authentication settings.
+             */
             config: {
+                /**
+                 * The header name used to send the API key.
+                 */
                 headerName: string;
+                /**
+                 * The API key value.
+                 */
                 value: string;
             };
         };
+        /**
+         * List of credential IDs to include raw tokens for (for example ['sca_credential']).
+         */
         includeRawTokensFor?: Array<string>;
     };
     /**
@@ -6008,7 +6206,7 @@ export type RegistrarControllerCreateAccessCertificateData = {
 
 export type RegistrarControllerCreateAccessCertificateErrors = {
     /**
-     * No relying party found at registrar or failed to create certificate
+     * The registrar rejected the relying-party registration or the certificate request
      */
     400: unknown;
     /**
@@ -6025,11 +6223,15 @@ export type RegistrarControllerCreateAccessCertificateResponses = {
         /**
          * The certificate ID at the registrar
          */
-        id?: string;
+        id: string;
+        /**
+         * ID of the key chain that now holds the certificate
+         */
+        certId: string;
         /**
          * The certificate in PEM format
          */
-        crt?: string;
+        crt: string;
     };
 };
 

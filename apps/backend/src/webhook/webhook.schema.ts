@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { WebhookAuthType } from "./domain/webhook-configuration.js";
 
-const ApiKeyConfigSchema = z
+export const ApiKeyConfigSchema = z
     .object({
         headerName: z
             .string()
@@ -11,22 +12,26 @@ const ApiKeyConfigSchema = z
     .describe("Configuration for API key authentication.")
     .strict();
 
-const WebHookAuthConfigHeaderSchema = z
+export const WebHookAuthConfigHeaderSchema = z
     .object({
-        type: z.literal("apiKey").describe("Use API key authentication."),
+        type: z
+            .literal(WebhookAuthType.API_KEY)
+            .describe("Use API key authentication."),
         config: ApiKeyConfigSchema.describe("API key authentication settings."),
     })
     .describe("Webhook API key authentication variant.")
     .strict();
 
-const WebHookAuthConfigNoneSchema = z
+export const WebHookAuthConfigNoneSchema = z
     .object({
-        type: z.literal("none").describe("Disable authentication."),
+        type: z
+            .literal(WebhookAuthType.NONE)
+            .describe("Disable authentication."),
     })
     .describe("Webhook no-authentication variant.")
     .strict();
 
-const WebHookAuthConfigSchema = z
+export const WebHookAuthConfigSchema = z
     .discriminatedUnion("type", [
         WebHookAuthConfigNoneSchema,
         WebHookAuthConfigHeaderSchema,

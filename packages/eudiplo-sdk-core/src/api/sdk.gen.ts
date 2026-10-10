@@ -225,7 +225,7 @@ export const registrarControllerCreateConfig = <ThrowOnError extends boolean = t
 /**
  * Create an access certificate for a key
  *
- * Creates an access certificate at the registrar for the specified key. Requires a relying party to be already registered at the registrar. The certificate is automatically stored in EUDIPLO.
+ * Creates an access certificate at the registrar for the specified key. Registers the tenant as relying party at the registrar if it is not yet. The certificate is automatically stored in EUDIPLO.
  */
 export const registrarControllerCreateAccessCertificate = <ThrowOnError extends boolean = true>(options: Options<RegistrarControllerCreateAccessCertificateData, ThrowOnError>): RequestResult<RegistrarControllerCreateAccessCertificateResponses, RegistrarControllerCreateAccessCertificateErrors, ThrowOnError> => (options.client ?? client).post<RegistrarControllerCreateAccessCertificateResponses, RegistrarControllerCreateAccessCertificateErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],

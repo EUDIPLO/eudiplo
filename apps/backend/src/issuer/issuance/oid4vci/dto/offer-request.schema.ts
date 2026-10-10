@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ResponseType } from "../../../../verifier/oid4vp/dto/presentation-request.schema.js";
-import { WebhookConfigSchema } from "../../../../webhook/webhook.dto.schema.js";
+import { WebhookConfigSchema } from "../../../../webhook/webhook.schema.js";
 
 export const FlowType = {
     AUTH_CODE: "authorization_code",

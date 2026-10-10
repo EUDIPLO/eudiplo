@@ -34,7 +34,8 @@ export class AccessCertificateService {
      *
      * @param tenantId - The tenant ID
      * @param dto - The access certificate creation data
-     * @returns The registrar cert ID, local cert ID, and certificate PEM
+     * @returns The registrar's certificate ID, the ID of the key chain that
+     * now holds the certificate, and the certificate PEM
      */
     async createAccessCertificate(
         tenantId: string,

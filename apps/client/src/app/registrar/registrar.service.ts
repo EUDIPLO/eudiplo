@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { ApiService } from '../core';
 import { firstValueFrom } from 'rxjs';
+import type { RegistrarControllerCreateAccessCertificateResponse } from '@eudiplo/sdk-core';
 
 /**
  * Registrar configuration response from the API.
@@ -37,14 +38,7 @@ export interface RegistrarConfigRequest {
 /**
  * Response from creating an access certificate.
  */
-export interface AccessCertificateResponse {
-  /** The registrar's certificate ID */
-  id: string;
-  /** The local EUDIPLO key chain ID */
-  keyChainId: string;
-  /** The certificate content */
-  crt: string;
-}
+export type AccessCertificateResponse = RegistrarControllerCreateAccessCertificateResponse;
 
 /**
  * Service for managing registrar configuration and creating access certificates.

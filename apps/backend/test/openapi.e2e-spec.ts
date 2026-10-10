@@ -136,6 +136,35 @@ describe("OpenAPI contract", () => {
         );
     });
 
+    test("documents every field of the access certificate response", () => {
+        const operation = getOperation(
+            document,
+            "/api/registrar/access-certificate",
+            "post",
+        );
+        const schema = operation.responses["201"].content?.["application/json"]
+            .schema as { properties?: object; required?: string[] };
+
+        expect(Object.keys(schema.properties ?? {}).sort()).toEqual([
+            "certId",
+            "crt",
+            "id",
+        ]);
+        expect(schema.required?.sort()).toEqual(["certId", "crt", "id"]);
+    });
+
+    test("marks the required schema metadata values as required", () => {
+        const schema = document.components?.schemas?.SchemaMetaConfig as {
+            required?: string[];
+        };
+
+        expect(schema.required?.sort()).toEqual([
+            "attestationLoS",
+            "bindingType",
+            "version",
+        ]);
+    });
+
     test("documents key JSON, form, binary, SSE, and no-content responses", () => {
         const versionOperation = getOperation(document, "/api/version", "get");
         expect(
