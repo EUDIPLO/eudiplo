@@ -12,6 +12,7 @@ Upgrade one major version at a time and read every guide on the way.
 
 | From | To | Guide |
 | --- | --- | --- |
+| 9.x | 10.0 | [9.x to 10.0](./9.x-to-10.0.md): webhook time and size limits, checked webhook redirects |
 | 8.x | 9.0 | [8.x to 9.0](./8.x-to-9.0.md): object storage, outbound URL and schema synchronization defaults, TLS fails closed, stricter OAuth and OID4VP, role-scoped sessions, key export and KMS configuration, session expiry, presentation webhooks, new configuration file formats |
 | 7.x | 8.0 | [7.x to 8.0](./7.x-to-8.0.md): canonical `$schema` envelopes for configuration files |
 | 6.x | 7.0 | [6.x to 7.0](./6.x-to-7.0.md): verifier material for wallet-provider trust lists |

@@ -17,16 +17,17 @@ describe("WebhookService presentation payloads", () => {
 
     function setup() {
         const post = vi.fn().mockReturnValue(of({ data: {} }));
+        const policy = {
+            assertSafeUrl: vi.fn().mockResolvedValue(undefined),
+            safeLookup: vi.fn(),
+        };
         const service = new WebhookService(
             { post } as never,
             { updateForTenant: vi.fn() } as never,
-            {
-                assertSafeUrl: vi.fn().mockResolvedValue(undefined),
-                safeLookup: vi.fn(),
-            } as never,
+            policy as never,
             { setContext: vi.fn(), debug: vi.fn(), error: vi.fn() } as never,
         );
-        return { service, post };
+        return { service, post, policy };
     }
 
     it("adds status and outcome to a completed presentation, keeping the existing fields", async () => {
@@ -162,6 +163,41 @@ describe("WebhookService presentation payloads", () => {
             reference: "order-4711",
             reason: "sent to wrong recipient",
         });
+    });
+
+    it("bounds every webhook request and follows redirects itself", async () => {
+        const { service, post, policy } = setup();
+        const webhook = {
+            url: "https://result.example/hook",
+            auth: {
+                type: "apiKey" as const,
+                config: { headerName: "x-api-key", value: "secret" },
+            },
+        };
+
+        await service.sendWebhook({ webhook, session, expectResponse: false });
+        await service.sendWebhookNotification(webhook, session, {
+            id: "n-1",
+            credentialConfigurationId: "pid",
+        });
+        await service.sendSessionCancelledWebhook(webhook, session);
+        await service.sendClaimsWebhook({
+            webhook,
+            session: "session-1",
+            credentialConfigurationId: "pid",
+        });
+
+        expect(post).toHaveBeenCalledTimes(4);
+        for (const [, , options] of post.mock.calls)
+            expect(options).toMatchObject({
+                headers: { "x-api-key": "secret" },
+                lookup: policy.safeLookup,
+                maxRedirects: 0,
+                signal: expect.any(AbortSignal),
+                maxContentLength: 5 * 1024 * 1024,
+                httpAgent: false,
+                httpsAgent: false,
+            });
     });
 
     it("omits the reason of a cancelled session when none was given", async () => {
