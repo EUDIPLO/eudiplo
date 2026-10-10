@@ -1,5 +1,6 @@
 import { resourceId } from "@eudiplo/config-format/config-format.js";
 import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import type { z } from "zod";
 import { CreateClientSchema } from "../../auth/client/schemas/client.schema.js";
 import { UpdateTenantSchema } from "../../auth/tenant/schemas/create-tenant.schema.js";
@@ -13,6 +14,7 @@ import { CreateWebhookEndpointSchema } from "../../issuer/configuration/webhook-
 import { StatusListImportSchema } from "../../issuer/status-list/dto/status-list.schema.js";
 import { TrustListCreateSchema } from "../../issuer/trust-list/schemas/trust-list.schema.js";
 import { CreateRegistrarConfigSchema } from "../../registrar/schemas/registrar.schema.js";
+import { missingTrustedAuthorities } from "../../verifier/presentations/domain/trusted-authority-requirement.js";
 import { PresentationConfigCreateSchema } from "../../verifier/presentations/schemas/presentation-config.schema.js";
 import { ConfigMigrationService } from "./config-migration.service.js";
 import type {
@@ -23,7 +25,10 @@ import type {
 
 @Injectable()
 export class ConfigDocumentValidationService {
-    constructor(private readonly migrationService: ConfigMigrationService) {}
+    constructor(
+        private readonly migrationService: ConfigMigrationService,
+        private readonly configService: ConfigService,
+    ) {}
 
     validate(document: ConfigDocument): ConfigMigrationIssue[] {
         const identityField =
@@ -49,6 +54,9 @@ export class ConfigDocumentValidationService {
         }
         if (document.kind === "KeyChain") {
             identityIssues.push(...this.validatePortableKeyChain(document));
+        }
+        if (document.kind === "PresentationConfig") {
+            identityIssues.push(...this.validateTrustedAuthorities(document));
         }
         const schema = this.schema(document.kind, document);
         if (!schema) return identityIssues;
@@ -136,6 +144,38 @@ export class ConfigDocumentValidationService {
             );
         }
         return issues;
+    }
+
+    /**
+     * Every DCQL credential query needs a trusted authority unless
+     * `SKIP_TRUST_AUTHORITY` is set, so the plan reports what apply would
+     * reject.
+     */
+    private validateTrustedAuthorities(
+        document: ConfigDocument,
+    ): ConfigMigrationIssue[] {
+        const credentials = (document.spec as Record<string, any>).dcql_query
+            ?.credentials;
+        if (!Array.isArray(credentials)) return [];
+        const violation = missingTrustedAuthorities(
+            credentials.filter(
+                (credential) => credential && typeof credential === "object",
+            ),
+            this.configService.get<boolean>("SKIP_TRUST_AUTHORITY") ?? false,
+        );
+        if (!violation) return [];
+        return [
+            {
+                severity: "error",
+                code: "TRUSTED_AUTHORITY_REQUIRED",
+                path: "/spec/dcql_query/credentials",
+                message: violation,
+                resource: {
+                    kind: document.kind,
+                    id: resourceId(document),
+                },
+            },
+        ];
     }
 
     normalizeForComparison(document: ConfigDocument): Record<string, unknown> {

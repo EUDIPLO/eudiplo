@@ -14,7 +14,10 @@ import {
     GLOBAL_PREFIX_EXCLUSIONS,
 } from "./main.helpers.js";
 import { splitCorsOrigins } from "./platform/config/cors-validation.schema.js";
-import { getActiveSkipFlags } from "./platform/config/skip-validation.schema.js";
+import {
+    getActiveSkipFlags,
+    skippedProtection,
+} from "./platform/config/skip-validation.schema.js";
 import { loadTlsOptions } from "./platform/config/tls-options.js";
 import { ValidationErrorFilter } from "./shared/common/filters/validation-error.filter.js";
 import { createAppValidationPipe } from "./shared/common/zod/zod-schema.util.js";
@@ -256,10 +259,12 @@ async function bootstrap() {
             if (activeSkipFlags.length > 0) {
                 logger.log("");
                 logger.warn(
-                    "⚠️  Checks skipped (development/testing only, never in production):",
+                    "⚠️  Protection mechanisms disabled (development and testing only, never in production):",
                 );
                 for (const flag of activeSkipFlags) {
-                    logger.warn(`   → ${flag}=true`);
+                    logger.warn(
+                        `   → ${skippedProtection(flag)} (${flag}=true)`,
+                    );
                 }
             }
         });

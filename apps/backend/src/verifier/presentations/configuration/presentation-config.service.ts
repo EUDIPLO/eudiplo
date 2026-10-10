@@ -1,4 +1,9 @@
-import { ConflictException, Injectable } from "@nestjs/common";
+import {
+    BadRequestException,
+    ConflictException,
+    Inject,
+    Injectable,
+} from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import type { AuditLogRequestMeta } from "../../../audit-log/audit-log.service.js";
@@ -14,9 +19,17 @@ import {
     ImportPhase,
 } from "../../../platform/config-import/config-import-orchestrator.service.js";
 import { loadJsonFile } from "../../../shared/utils/config-file-loader.util.js";
+import {
+    type CredentialQueryAuthorities,
+    missingTrustedAuthorities,
+} from "../domain/trusted-authority-requirement.js";
 import { PresentationConfigCreateDto } from "../dto/presentation-config-create.dto.js";
 import { PresentationConfigUpdateDto } from "../dto/presentation-config-update.dto.js";
 import { PresentationConfig } from "../entities/presentation-config.entity.js";
+import {
+    PRESENTATION_SETTINGS,
+    type PresentationSettings,
+} from "../presentation-settings.js";
 import { PresentationRegistrationCertificateService } from "./presentation-registration-certificate.service.js";
 import { normalizeRegistrationCertFormFields } from "./registration-cert-form-fields.js";
 
@@ -33,6 +46,8 @@ export class PresentationConfigService {
         private readonly configImportService: ConfigImportService,
         configImportOrchestrator: ConfigImportOrchestratorService,
         private readonly auditLogService: AuditLogService,
+        @Inject(PRESENTATION_SETTINGS)
+        private readonly settings: PresentationSettings,
     ) {
         // Register presentation config import in REFERENCES phase
         // This runs after CORE (keys, certs) and CONFIGURATION phases
@@ -70,6 +85,9 @@ export class PresentationConfigService {
                         .catch(() => false);
                 },
                 deleteExisting: async (tid, data) => {
+                    // Reject before deleting, so an invalid file does not
+                    // remove the stored config.
+                    this.requireTrustedAuthorities(data);
                     await this.repository.delete({
                         id: data.id,
                         tenantId: tid,
@@ -126,6 +144,7 @@ export class PresentationConfigService {
         actorToken?: TokenPayload,
         requestMeta?: AuditLogRequestMeta,
     ) {
+        this.requireTrustedAuthorities(vprequest);
         const normalizedRequest =
             normalizeRegistrationCertFormFields(vprequest);
         const merged = {
@@ -181,6 +200,7 @@ export class PresentationConfigService {
             id,
             tenantId,
         } as PresentationConfig;
+        this.requireTrustedAuthorities(merged);
 
         // Return quickly; resolve registration-certificate cache asynchronously.
         const cacheRelevantChanged =
@@ -218,6 +238,23 @@ export class PresentationConfigService {
         }
 
         return saved;
+    }
+
+    /**
+     * Every DCQL credential query needs a trusted authority unless
+     * `SKIP_TRUST_AUTHORITY` is set.
+     * @throws BadRequestException naming the queries without one.
+     */
+    private requireTrustedAuthorities(config: {
+        dcql_query?: { credentials: readonly CredentialQueryAuthorities[] };
+    }): void {
+        const violation = missingTrustedAuthorities(
+            config.dcql_query?.credentials ?? [],
+            this.settings.skipTrustAuthority,
+        );
+        if (violation) {
+            throw new BadRequestException(violation);
+        }
     }
 
     /**

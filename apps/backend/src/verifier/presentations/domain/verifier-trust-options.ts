@@ -33,7 +33,8 @@ export function trustListAuthorities(
  *   federation trust is not yet authenticated against the trust anchor.
  * - only `openid_federation`: the issuer must chain to one of its trust
  *   anchors (`federation-only`).
- * - none: the issuer is not checked.
+ * - none: the issuer is not checked. Only reachable with
+ *   `SKIP_TRUST_AUTHORITY` (see {@link missingTrustedAuthorities}).
  */
 export function verifierTrustOptions(input: {
     trustLists: TrustListRef[];

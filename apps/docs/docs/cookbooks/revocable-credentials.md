@@ -43,11 +43,11 @@ Choose **Save Configuration**. Capacity and bits only apply to lists created aft
 
 **Checkpoint:** the page shows the saved values after a reload.
 
-## Step 2: Create a status list signing key
+## Step 2: Check the status list signing key
 
-Open **Cryptographic Assets → Keys**, choose **Create Key**, select **Status List Signing**, enter the description `Membership status list signing` and choose **Create Key Chain**. Without such a key, EUDIPLO signs status lists with the credential signing key.
+Open **Cryptographic Assets → Keys** and check that the key chain `Membership status list signing` with usage **Status List Signing** exists; [chapter 3](first-presentation.md) created it for the trust list. EUDIPLO signs status lists with it. Without such a key, EUDIPLO signs status lists with the credential signing key.
 
-**Checkpoint:** the new key chain appears under **Keys**.
+**Checkpoint:** `Membership status list signing` appears under **Keys**.
 
 ## Step 3: Turn on status management
 

@@ -113,6 +113,7 @@ describe("Iso18013Service.processResponse presentation webhook", () => {
     let announce: ReturnType<typeof vi.fn>;
     let publish: ReturnType<typeof vi.fn>;
     let verify: ReturnType<typeof vi.fn>;
+    let mdlQuery: Record<string, unknown>;
     let service: Iso18013Service;
 
     beforeEach(() => {
@@ -144,15 +145,19 @@ describe("Iso18013Service.processResponse presentation webhook", () => {
         announce = vi.fn();
         publish = vi.fn().mockResolvedValue({});
         verify = vi.fn();
+        mdlQuery = {
+            id: "mdl",
+            format: "mso_mdoc",
+            claims: [],
+            trusted_authorities: [
+                { type: "etsi_tl", values: [{ trustListId: "mdl-issuers" }] },
+            ],
+        };
 
         service = new Iso18013Service(
             {
                 getPresentationConfig: vi.fn().mockResolvedValue({
-                    dcql_query: {
-                        credentials: [
-                            { id: "mdl", format: "mso_mdoc", claims: [] },
-                        ],
-                    },
+                    dcql_query: { credentials: [mdlQuery] },
                 }),
             } as any,
             {} as any, // createSession
@@ -170,7 +175,10 @@ describe("Iso18013Service.processResponse presentation webhook", () => {
                 logFlowComplete: vi.fn(),
                 logCredentialVerification: vi.fn(),
             } as any,
-            { getOrThrow: () => "https://eudiplo.example" } as any,
+            {
+                getOrThrow: () => "https://eudiplo.example",
+                get: () => undefined,
+            } as any,
             {} as any, // certService
             {} as any, // keyChainService
             { findOneBy: vi.fn() } as any,
@@ -230,6 +238,20 @@ describe("Iso18013Service.processResponse presentation webhook", () => {
             status: "failed",
             outcome,
         });
+    });
+
+    it("rejects an mso_mdoc query without trusted_authorities before verifying", async () => {
+        delete mdlQuery.trusted_authorities;
+
+        const error = await service
+            .processResponse("session", "encrypted")
+            .catch((error) => error);
+
+        expect(error.getStatus()).toBe(400);
+        expect(error.message).toContain(
+            "Credential queries without trusted_authorities: mdl.",
+        );
+        expect(verify).not.toHaveBeenCalled();
     });
 
     it("reports an undecryptable response as failed", async () => {

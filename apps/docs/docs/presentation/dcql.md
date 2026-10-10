@@ -7,7 +7,7 @@ The `dcql_query` of a presentation configuration tells the wallet which credenti
 
 ## Request a credential
 
-Each entry in `credentials` is one credential query. `id`, `format` and `meta` are required; `meta` identifies the credential type.
+Each entry in `credentials` is one credential query. `id`, `format`, `meta` and `trusted_authorities` are required; `meta` identifies the credential type, `trusted_authorities` the issuers you accept ([below](#accept-only-trusted-issuers)). The examples on this page leave `trusted_authorities` out to focus on the other options.
 
 ```json
 {
@@ -138,7 +138,7 @@ For `mso_mdoc` claims, `intent_to_retain: true` tells the wallet and the user th
 
 ## Accept only trusted issuers
 
-Without `trusted_authorities`, EUDIPLO verifies the credential's signature but not who issued it. Add `trusted_authorities` to a credential query to accept only issuers from a trust list or an OpenID Federation:
+Every credential query names the issuers it accepts in `trusted_authorities`, from a trust list or an OpenID Federation:
 
 ```json
 {
@@ -147,3 +147,5 @@ Without `trusted_authorities`, EUDIPLO verifies the credential's signature but n
 ```
 
 How trust lists are resolved, what the wallet receives (`aki` values) and how the issuer chain is checked is described in [Trust Lists](../trust/trust-lists.md#use-a-trust-list-in-a-presentation); federation trust anchors in [OpenID Federation](../trust/federation.md).
+
+A presentation configuration with a credential query without `trusted_authorities` is rejected with `400`, and a configuration stored before 9.0 without them fails verification. For development and interoperability tests, `SKIP_TRUST_AUTHORITY=true` allows such queries; EUDIPLO then verifies the signature but not who issued the credential. See [Skip flags](../reference/environment-variables.md#skip-flags).

@@ -6,7 +6,11 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { KeyChainImportDto } from "../../src/crypto/key/dto/key-chain-import.dto.js";
 import { KeyUsageType } from "../../src/crypto/key/types/key-usage-type.js";
 import { ResponseType } from "../../src/verifier/oid4vp/dto/presentation-request.dto.js";
-import { PresentationTestContext, setupPresentationTestApp } from "../utils.js";
+import {
+    FIXTURE_TRUSTED_AUTHORITIES,
+    PresentationTestContext,
+    setupPresentationTestApp,
+} from "../utils.js";
 
 /**
  * Compute the x509_hash client_id from the DER bytes of a PEM certificate.
@@ -150,6 +154,7 @@ describe("Presentation - Offer Creation", () => {
                             id: "pid",
                             format: "dc+sd-jwt",
                             meta: { vct_values: ["https://example.com/pid"] },
+                            trusted_authorities: FIXTURE_TRUSTED_AUTHORITIES,
                         },
                     ],
                 },

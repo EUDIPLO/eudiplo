@@ -4,7 +4,7 @@ title: Trust Lists
 
 import SchemaReference from "@site/src/components/SchemaReference";
 
-A trust list names the issuers you accept. EUDIPLO uses Lists of Trusted Entities (LoTE, ETSI TS 119 602) as signed JWTs: it publishes lists you manage and reads lists published by others. ETSI TS 119 612 XML trusted lists are not supported. For a complete walkthrough, follow the [trusted issuers cookbook](../cookbooks/trusted-issuers.md).
+A trust list names the issuers you accept. EUDIPLO uses Lists of Trusted Entities (LoTE, ETSI TS 119 602) as signed JWTs: it publishes lists you manage and reads lists published by others. ETSI TS 119 612 XML trusted lists are not supported. For a complete walkthrough, follow [chapter 3 of the cookbook](../cookbooks/first-presentation.md), which publishes a trust list and verifies against it, and [Accept only trusted issuers](../cookbooks/trusted-issuers.md), which tests an untrusted issuer and an external list.
 
 ## How a trust list is used
 
@@ -90,7 +90,7 @@ Reference trust lists in the `trusted_authorities` of a [DCQL](../presentation/d
 - `url` references an external LoTE JWT. `verifierX509Der` (base64 DER certificate) or `verifierKey` (public JWK) is required to check its signature; without them loading the list fails (`trust_list_unavailable`). `<TENANT_URL>` in the URL is replaced with `<PUBLIC_URL>/issuers/<tenant>`.
 - Put several lists into the `values` of one `etsi_tl` entry: only the first `etsi_tl` entry of a credential query is used for verification.
 
-A credential query without `trusted_authorities` is verified without any issuer check.
+Every credential query needs `trusted_authorities`; EUDIPLO rejects a presentation configuration without them. For development and interoperability tests, `SKIP_TRUST_AUTHORITY=true` allows such queries, which are then verified without any issuer check.
 
 ### What the wallet receives
 
