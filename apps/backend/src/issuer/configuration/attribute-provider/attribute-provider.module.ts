@@ -2,7 +2,7 @@ import { Module } from "@nestjs/common";
 import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
 import type { Repository } from "typeorm";
 import { AuditLogModule } from "../../../audit-log/audit-log.module.js";
-import { WebhookModule } from "../../../webhook/webhook.module.js";
+import { OutboundUrlPolicyModule } from "../../../webhook/outbound-url-policy.module.js";
 import { TypeOrmAttributeProviderRepository } from "./adapters/typeorm-attribute-provider.repository.js";
 import { AttributeProviderController } from "./attribute-provider.controller.js";
 import { AttributeProviderService } from "./attribute-provider.service.js";
@@ -13,7 +13,7 @@ import { ATTRIBUTE_PROVIDER_REPOSITORY } from "./ports/attribute-provider.reposi
     imports: [
         TypeOrmModule.forFeature([AttributeProviderEntity]),
         AuditLogModule,
-        WebhookModule,
+        OutboundUrlPolicyModule,
     ],
     controllers: [AttributeProviderController],
     providers: [

@@ -8,7 +8,6 @@ import {
 } from "axios";
 import { PinoLogger } from "nestjs-pino";
 import { firstValueFrom } from "rxjs";
-import { SessionStore } from "../session/application/session-store.js";
 import type {
     Notification,
     SessionData as Session,
@@ -125,7 +124,6 @@ function deliveryError(err: unknown): string {
 export class WebhookService {
     constructor(
         private readonly httpService: HttpService,
-        private readonly sessionStore: SessionStore,
         private readonly outboundUrlPolicyService: OutboundUrlPolicyService,
         private readonly logger: PinoLogger,
     ) {
@@ -233,7 +231,6 @@ export class WebhookService {
         webhook: WebhookConfig;
         session: Session;
         credentials?: any[];
-        expectResponse: boolean;
         rawPresentationPayload?: any;
         result?: PresentationWebhookResult;
     }): Promise<WebhookResponse> {
@@ -246,7 +243,6 @@ export class WebhookService {
         webhook: WebhookConfig;
         session: Session;
         credentials?: any[];
-        expectResponse: boolean;
         rawPresentationPayload?: any;
         result?: PresentationWebhookResult;
     }): Promise<WebhookResponse> {
@@ -292,21 +288,7 @@ export class WebhookService {
             ...referenceOf(values.session),
             transaction_data: values.session.transaction_data,
         }).then(
-            async (webhookResponse) => {
-                if (webhookResponse.data?.redirectUri) {
-                    // redirectUri is returned but no special handling needed here
-                } else if (webhookResponse.data && values.expectResponse) {
-                    await this.sessionStore.updateForTenant(
-                        values.session.tenantId,
-                        values.session.id,
-                        {
-                            credentialPayload: values.session.credentialPayload,
-                        },
-                    );
-                }
-
-                return webhookResponse.data;
-            },
+            (webhookResponse) => webhookResponse.data,
             (err) => {
                 throw this.deliveryFailure(
                     err,

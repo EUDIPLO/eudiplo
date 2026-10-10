@@ -23,7 +23,6 @@ describe("WebhookService presentation payloads", () => {
         };
         const service = new WebhookService(
             { post } as never,
-            { updateForTenant: vi.fn() } as never,
             policy as never,
             { setContext: vi.fn(), debug: vi.fn(), error: vi.fn() } as never,
         );
@@ -43,7 +42,6 @@ describe("WebhookService presentation payloads", () => {
             credentials: [{ id: "pid", values: [{ given_name: "Erika" }] }],
             rawPresentationPayload: { vp_token: { pid: ["raw-sd-jwt"] } },
             result: { status: "completed", outcome },
-            expectResponse: false,
         });
 
         expect(post.mock.calls[0][1]).toEqual({
@@ -73,7 +71,6 @@ describe("WebhookService presentation payloads", () => {
             webhook,
             session,
             result: { status: "failed", outcome },
-            expectResponse: false,
         });
 
         const payload = JSON.parse(JSON.stringify(post.mock.calls[0][1]));
@@ -91,7 +88,6 @@ describe("WebhookService presentation payloads", () => {
         await service.sendWebhook({
             webhook,
             session,
-            expectResponse: true,
         });
 
         expect(Object.keys(post.mock.calls[0][1])).toEqual([
@@ -111,7 +107,6 @@ describe("WebhookService presentation payloads", () => {
         await service.sendWebhook({
             webhook,
             session: referenced as never,
-            expectResponse: true,
         });
         await service.sendWebhookNotification(webhook, referenced as never, {
             id: "n-1",
@@ -175,7 +170,7 @@ describe("WebhookService presentation payloads", () => {
             },
         };
 
-        await service.sendWebhook({ webhook, session, expectResponse: false });
+        await service.sendWebhook({ webhook, session });
         await service.sendWebhookNotification(webhook, session, {
             id: "n-1",
             credentialConfigurationId: "pid",
