@@ -1,5 +1,5 @@
 {
-    "sonarCloudOrganization": "openwallet-foundation",
-    "projectKey": "openwallet-foundation_eudiplo",
+    "sonarCloudOrganization": "eudiplo",
+    "projectKey": "EUDIPLO_eudiplo",
     "region": "EU"
 }

@@ -132,7 +132,7 @@
   ],
   "sonarlint.connectedMode.project": {
     "connectionId": "eudiplo",
-    "projectKey": "openwallet-foundation_eudiplo"
+    "projectKey": "EUDIPLO_eudiplo"
   },
   "git.alwaysSignOff": true
 }
