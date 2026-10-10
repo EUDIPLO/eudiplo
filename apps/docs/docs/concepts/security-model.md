@@ -36,7 +36,7 @@ For outgoing requests to URLs that tenants configure or that credentials and cer
 
 Two exceptions keep standard deployments working. Trust lists, status lists, federation entity configurations and authorization server keys (JWKS) on EUDIPLO's own `PUBLIC_URL` or `INTERNAL_URL` origin skip the policy, because managed trust lists, the status lists of credentials EUDIPLO issued and the keys of its chained and OID4VP-based authorization servers are fetched from there; a redirect to another origin is checked again. CRL distribution points may use plain HTTP regardless of `OUTBOUND_URL_ALLOW_HTTP`, as is usual for CRLs (RFC 5280); their address is still checked, and a CRL only counts if the CA that issued the certificate signed it ([revocation check](../trust/keys-and-certificates.md#revocation-check)).
 
-The token request to the upstream provider and token introspection requests do not follow redirects. KMS providers, including those in a tenant's KMS configuration, are called without the policy; restrict EUDIPLO's egress at the network level if they must not reach internal services.
+Webhooks and attribute providers check every redirect target against the policy and send their API key only to the origin of the configured URL. The token request to the upstream provider and token introspection requests do not follow redirects. KMS providers, including those in a tenant's KMS configuration, are called without the policy; restrict EUDIPLO's egress at the network level if they must not reach internal services.
 
 ### Trust decisions
 

@@ -30,7 +30,7 @@ A failed presentation, for example because the user declined, sends `"status": "
 
 - **Raw tokens:** list credential query IDs in `includeRawTokensFor` of an inline request `webhook` to also receive the presented token (for example the SD-JWT) as `rawToken`. Webhook endpoints have no such option.
 - **Redirect override:** answer with `{ "redirectUri": "https://shop.example.com/done" }` to send the user there instead of the configured `redirectUri`. This works for completed and, for OpenID4VP, failed presentations.
-- **Delivery:** EUDIPLO sends one request and does not retry. A failed delivery is logged and does not change the session, so reconcile missed results by [polling](#polling). Webhook URLs must pass the [outbound URL policy](../reference/webhooks.md).
+- **Delivery:** EUDIPLO makes one delivery attempt (following [redirects](../reference/webhooks.md#delivery)) and does not retry. A failed delivery is logged and does not change the session, so reconcile missed results by [polling](#polling). Webhook URLs must pass the [outbound URL policy](../reference/webhooks.md).
 
 ## Server-Sent Events
 
