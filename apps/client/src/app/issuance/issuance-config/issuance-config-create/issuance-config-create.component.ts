@@ -806,7 +806,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
                 upstream: {
                   issuer: server.chained?.issuer,
                   clientId: server.chained?.clientId,
-                  clientSecret: server.chained?.clientSecret,
+                  // Shown as <redacted> when stored, which keeps it; empty means no secret.
+                  clientSecret: server.chained?.clientSecret || undefined,
                   scopes: server.chained?.scopes,
                 },
               };

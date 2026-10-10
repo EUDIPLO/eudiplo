@@ -27,6 +27,7 @@ import { Token, TokenPayload } from "../auth/token.decorator.js";
 import { CredentialStatusDto } from "../issuer/status-list/dto/credential-status.dto.js";
 import { StatusUpdateDto } from "../issuer/status-list/dto/status-update.dto.js";
 import { StatusListService } from "../issuer/status-list/status-list.service.js";
+import { redactSecrets } from "../shared/utils/write-only-secrets.util.js";
 import {
     CancelSession,
     SessionNotCancellable,
@@ -76,14 +77,19 @@ export class SessionController {
     @ApiParam({ name: "id", description: "The session ID", type: String })
     @ApiResponse({ status: 200, type: Session })
     @Get(":id")
-    getSession(
+    async getSession(
         @Param("id") id: string,
         @Token() token: TokenPayload,
     ): Promise<SessionData> {
-        return this.sessions.getForTenant(
-            token.entity!.id,
-            id,
-            sessionScope(token),
+        // API keys of the webhooks the session calls are write-only.
+        return redactSecrets(
+            await this.sessions.getForTenant(
+                token.entity!.id,
+                id,
+                sessionScope(token),
+            ),
+            "parsedWebhook.auth.config.value",
+            "credentialPayload.credentialClaims.*.webhook.auth.config.value",
         );
     }
 

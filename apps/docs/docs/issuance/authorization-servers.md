@@ -98,7 +98,7 @@ EUDIPLO acts as the authorization server towards the wallet and delegates the lo
 ```
 
 - Register `{PUBLIC_URL}/issuers/{tenant}/chained-as/callback` as redirect URI of the upstream client.
-- EUDIPLO uses OpenID Connect discovery, the authorization code flow with PKCE (`S256`), and sends `client_id` and `client_secret` in the token request body. Omit `clientSecret` for a public client. `scopes` defaults to `["openid"]`.
+- EUDIPLO uses OpenID Connect discovery, the authorization code flow with PKCE (`S256`), and sends `client_id` and `client_secret` in the token request body. Omit `clientSecret` for a public client. `scopes` defaults to `["openid"]`. The API returns `clientSecret` as `<redacted>`; sending `<redacted>` back keeps the stored secret of the server with the same `id`, unless `upstream.issuer` changes, which needs the secret again.
 - EUDIPLO fetches the discovery document and calls the token endpoint under the [outbound URL policy](../concepts/security-model.md#https-and-tls): both need HTTPS on a public address unless `OUTBOUND_URL_ALLOW_HTTP` or `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` is set, and the token endpoint must answer without a redirect.
 - Attribute providers receive the upstream user as `identity`: `iss` and `sub` of the upstream ID token and the ID token claims merged over the upstream access token claims.
 - EUDIPLO's access token contains `issuer_state`, `client_id`, `upstream_iss` and `upstream_sub`; its `sub` is the wallet's `client_id`.
