@@ -28,7 +28,7 @@
               "type": "etsi_tl",
               "values": [
                 {
-                  "trustListId": "580831bc-ef11-43f4-a3be-a2b6bf1b29a3"
+                  "trustListId": "oidf-mdoc-issuers"
                 }
               ]
             }

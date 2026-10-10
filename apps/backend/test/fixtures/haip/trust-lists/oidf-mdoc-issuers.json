@@ -1,0 +1,23 @@
+{
+  "$schema": "https://eudiplo.dev/schemas/v1/TrustListConfigFile.schema.json",
+  "metadata": {
+    "generation": 1
+  },
+  "spec": {
+    "id": "oidf-mdoc-issuers",
+    "description": "OIDF conformance suite mDOC document signer (CN=certification.openid.net, release-v5.2.2, valid until 2027-08-03); the suite signs mDOC presentations with this fixed key",
+    "keyChainId": "570852d7-7e7f-40af-a0e3-a6ebffd75ed0",
+    "entities": [
+      {
+        "type": "external",
+        "providerType": "attestation-provider",
+        "issuerCertPem": "-----BEGIN CERTIFICATE-----\nMIICqzCCAlCgAwIBAgIULSsWFZgeqNOj8G3xd228JGgWiOUwCgYIKoZIzj0EAwIw\ngYcxCzAJBgNVBAYTAlVTMRgwFgYDVQQIDA9TdGF0ZSBvZiBVdG9waWExEjAQBgNV\nBAcMCVNhbiBSYW1vbjEaMBgGA1UECgwRT3BlbklEIEZvdW5kYXRpb24xCzAJBgNV\nBAsMAklUMSEwHwYDVQQDDBhjZXJ0aWZpY2F0aW9uLm9wZW5pZC5uZXQwHhcNMjYw\nODAzMTYxMjAxWhcNMjcwODAzMTYxMjAxWjCBhzELMAkGA1UEBhMCVVMxGDAWBgNV\nBAgMD1N0YXRlIG9mIFV0b3BpYTESMBAGA1UEBwwJU2FuIFJhbW9uMRowGAYDVQQK\nDBFPcGVuSUQgRm91bmRhdGlvbjELMAkGA1UECwwCSVQxITAfBgNVBAMMGGNlcnRp\nZmljYXRpb24ub3BlbmlkLm5ldDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJ5o\nlgDBiHqNhN7rFkSy/xD34dQcOSR4KvEWMyb62jI+UGUofeAi/55RIt74pBsQz9+B\n48WXI8xhIphoNN7AejajgZcwgZQwHQYDVR0OBBYEFHhk9LVVH8Gt9ZgfxgyhSl92\n1XOhMBIGA1UdEwEB/wQIMAYBAf8CAQAwDgYDVR0PAQH/BAQDAgEGMCEGA1UdEgQa\nMBiBFmNlcnRpZmljYXRpb25Ab2lkZi5vcmcwLAYDVR0fBCUwIzAhoB+gHYYbaHR0\ncDovL2V4YW1wbGUuY29tL215Y2EuY3JsMAoGCCqGSM49BAMCA0kAMEYCIQCB7MlD\nX8n8PDNoXfVpnHwQRfLC3bZzAs3zkGrHt7X2LwIhAJPQaIyvIb4LJIa0R4HQSvk0\n4OnujikkVHszNwSbyFlZ\n-----END CERTIFICATE-----\n",
+        "revocationCertPem": "-----BEGIN CERTIFICATE-----\nMIICqzCCAlCgAwIBAgIULSsWFZgeqNOj8G3xd228JGgWiOUwCgYIKoZIzj0EAwIw\ngYcxCzAJBgNVBAYTAlVTMRgwFgYDVQQIDA9TdGF0ZSBvZiBVdG9waWExEjAQBgNV\nBAcMCVNhbiBSYW1vbjEaMBgGA1UECgwRT3BlbklEIEZvdW5kYXRpb24xCzAJBgNV\nBAsMAklUMSEwHwYDVQQDDBhjZXJ0aWZpY2F0aW9uLm9wZW5pZC5uZXQwHhcNMjYw\nODAzMTYxMjAxWhcNMjcwODAzMTYxMjAxWjCBhzELMAkGA1UEBhMCVVMxGDAWBgNV\nBAgMD1N0YXRlIG9mIFV0b3BpYTESMBAGA1UEBwwJU2FuIFJhbW9uMRowGAYDVQQK\nDBFPcGVuSUQgRm91bmRhdGlvbjELMAkGA1UECwwCSVQxITAfBgNVBAMMGGNlcnRp\nZmljYXRpb24ub3BlbmlkLm5ldDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJ5o\nlgDBiHqNhN7rFkSy/xD34dQcOSR4KvEWMyb62jI+UGUofeAi/55RIt74pBsQz9+B\n48WXI8xhIphoNN7AejajgZcwgZQwHQYDVR0OBBYEFHhk9LVVH8Gt9ZgfxgyhSl92\n1XOhMBIGA1UdEwEB/wQIMAYBAf8CAQAwDgYDVR0PAQH/BAQDAgEGMCEGA1UdEgQa\nMBiBFmNlcnRpZmljYXRpb25Ab2lkZi5vcmcwLAYDVR0fBCUwIzAhoB+gHYYbaHR0\ncDovL2V4YW1wbGUuY29tL215Y2EuY3JsMAoGCCqGSM49BAMCA0kAMEYCIQCB7MlD\nX8n8PDNoXfVpnHwQRfLC3bZzAs3zkGrHt7X2LwIhAJPQaIyvIb4LJIa0R4HQSvk0\n4OnujikkVHszNwSbyFlZ\n-----END CERTIFICATE-----\n",
+        "info": {
+          "name": "OIDF Conformance Suite mDOC Issuer",
+          "lang": "en"
+        }
+      }
+    ]
+  }
+}
