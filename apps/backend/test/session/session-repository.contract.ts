@@ -4,8 +4,6 @@ import { DataSource } from "typeorm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ClientEntity } from "../../src/auth/client/entities/client.entity.js";
 import { TenantEntity } from "../../src/auth/tenant/entities/tenant.entity.js";
-import { DataEncryptionService } from "../../src/platform/data-encryption/data-encryption.service.js";
-import { initializeEncryptionTransformer } from "../../src/platform/data-encryption/encrypted-column.transformer.js";
 import { TypeOrmSessionRepository } from "../../src/session/adapters/typeorm-session.repository.js";
 import { TypeOrmSessionRetentionPolicies } from "../../src/session/adapters/typeorm-session-retention-policies.js";
 import type { SessionListQuery } from "../../src/session/domain/session-list.js";
@@ -22,14 +20,7 @@ const offer: CredentialOfferObject = {
     credential_configuration_ids: ["pid"],
 };
 
-export async function initializeTestEncryption() {
-    const encryption = new DataEncryptionService({
-        name: "contract-test",
-        getKey: async () => Buffer.alloc(32, 7),
-    });
-    await encryption.initialize();
-    initializeEncryptionTransformer(encryption);
-}
+export { initializeTestEncryption } from "../persistence/test-encryption.js";
 
 /** The same observable contract runs against real SQLite and PostgreSQL adapters. */
 export function sessionRepositoryContract(getDataSource: () => DataSource) {

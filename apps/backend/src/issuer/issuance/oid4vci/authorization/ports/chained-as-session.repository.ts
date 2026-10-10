@@ -31,9 +31,10 @@ export interface ChainedAsSessionRepository {
         tenantId: string,
         authorizationCode: string,
     ): Promise<ChainedAsSession | null>;
+    /** Session holding this refresh token hash, see `hashRefreshToken`. */
     findByRefreshToken(
         tenantId: string,
-        refreshToken: string,
+        refreshTokenHash: string,
     ): Promise<ChainedAsSession | null>;
     /** Session of the tenant's issuance session with this `issuer_state`. */
     findByIssuerState(

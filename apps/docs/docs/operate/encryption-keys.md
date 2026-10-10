@@ -5,25 +5,29 @@ title: Encryption Keys
 # Encryption Keys
 
 Choose where the key for data at rest comes from and keep it stable. EUDIPLO
-encrypts private keys and personal session data in the database with AES-256-GCM
-under one 256-bit key, which the backend loads at startup from
-`ENCRYPTION_KEY_SOURCE`.
+encrypts private keys, secrets in the configuration and personal session data in
+the database with AES-256-GCM under one 256-bit key, which the backend loads at
+startup from `ENCRYPTION_KEY_SOURCE`.
 
 ## What is encrypted
 
 | Table                              | Columns                                                                                 |
 | ---------------------------------- | --------------------------------------------------------------------------------------- |
 | Key chains                         | `rootJwk`, `activeJwk`, `previousJwk` (private keys of `db` key chains)                  |
-| Sessions                           | `credentials` (verified presentations), `credentialPayload` (offer claims), `offer`, `auth_queries`, `responseEncryptionPrivateJwk` (per-request key that decrypts the wallet response) |
+| Registrar configuration            | `password`, `clientSecret`                                                              |
+| Webhook endpoints, attribute providers | The API key in `auth` (`config.value`)                                              |
+| Issuance configuration             | The upstream client secret of chained authorization servers in `authorizationServers`  |
+| Sessions                           | `credentials` (verified presentations), `credentialPayload` (offer claims), `offer`, `auth_queries`, `responseEncryptionPrivateJwk` (per-request key that decrypts the wallet response), the webhook API key in `parsedWebhook` |
 | Interactive authorization sessions | `authorizationDetails`, `presentationData`, `completedStepsData`                         |
+| Chained authorization sessions     | `upstreamIdTokenClaims`, `upstreamAccessTokenClaims`                                    |
 
-Public keys, certificates and configuration are stored in plain text. This
-includes the secrets inside the configuration: authentication headers of webhook
-endpoints and attribute providers, the upstream client secret of a chained
-authorization server, and the registrar password and client secret. Protect
-database backups and dumps like these secrets. Keys in an
-external [KMS](kms.md) never reach the database. Values written before
-encryption was introduced are still read and are encrypted on their next write.
+In JSON columns that mix settings and secrets, only the secret value is
+encrypted, so the rest of the setting stays readable in the database. Refresh
+tokens of the built-in and chained authorization servers are stored as SHA-256
+hashes and API client secrets as bcrypt hashes. Public keys, certificates and the
+rest of the configuration are stored in plain text. Keys in an
+external [KMS](kms.md) never reach the database. Secrets stored by 8.x are
+encrypted by a migration on the first start of 9.0.
 
 The same key also derives the HMAC key for the pseudonymous subject keys of the
 single-active-credential policy, so the slot of a returning user is found again
@@ -33,14 +37,18 @@ without storing their identity.
 
 | `ENCRYPTION_KEY_SOURCE` | Key comes from                                                    | Use                                     |
 | ----------------------- | ----------------------------------------------------------------- | --------------------------------------- |
-| `env` (default)         | Derived from `MASTER_SECRET` with HKDF-SHA256                     | Development, single-VM installations    |
-| `vault`                 | A HashiCorp Vault KV v2 secret                                    | Production                              |
-| `aws`                   | An AWS Secrets Manager secret                                     | Production on AWS                       |
-| `azure`                 | An Azure Key Vault secret                                         | Production on Azure                     |
+| `env` (default)         | Derived from `MASTER_SECRET` with HKDF-SHA256                     | Any installation, no extra service      |
+| `vault`                 | A HashiCorp Vault KV v2 secret                                    | Optional, key managed in Vault          |
+| `aws`                   | An AWS Secrets Manager secret                                     | Optional, on AWS                        |
+| `azure`                 | An Azure Key Vault secret                                         | Optional, on Azure                      |
 
-With `vault`, `aws` and `azure` the key exists only in the backend's memory, not
-in its environment, and `MASTER_SECRET` no longer protects stored data. The key
-must be 32 bytes, stored as base64 (44 characters) or hex (64 characters):
+The default needs no secret store: keep `MASTER_SECRET` random and as protected
+as the database credentials, because whoever has both `MASTER_SECRET` and a copy
+of the database can decrypt the stored data. An external key source is an
+optional extra step: with `vault`, `aws` and `azure` the key exists only in the
+backend's memory, not in its environment, and `MASTER_SECRET` no longer protects
+stored data. The key must be 32 bytes, stored as base64 (44 characters) or hex
+(64 characters):
 
 ```bash
 openssl rand -base64 32

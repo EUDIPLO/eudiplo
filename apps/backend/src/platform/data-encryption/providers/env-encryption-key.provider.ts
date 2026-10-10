@@ -4,14 +4,14 @@ import { ConfigService } from "@nestjs/config";
 import { EncryptionKeyProvider } from "./encryption-key-provider.interface.js";
 
 /**
- * Environment-based encryption key provider.
- * Derives the encryption key from MASTER_SECRET using HKDF.
+ * Default encryption key provider.
+ * Derives the encryption key from MASTER_SECRET using HKDF, so no external
+ * secret store is needed.
  *
- * WARNING: This provider is intended for development only.
- * In production, use 'vault', 'aws', or 'azure' to fetch keys at runtime.
- *
- * Security consideration: The key is derived from an environment variable,
- * which can be read by any process with access to the container.
+ * Whoever has MASTER_SECRET and the database can decrypt the stored data, and
+ * changing MASTER_SECRET makes it unreadable. The vault, aws and azure
+ * providers are an optional alternative that keeps the key out of the
+ * process environment.
  */
 @Injectable()
 export class EnvEncryptionKeyProvider implements EncryptionKeyProvider {
@@ -28,10 +28,9 @@ export class EnvEncryptionKeyProvider implements EncryptionKeyProvider {
             );
         }
 
-        this.logger.warn(
-            "Using env-based encryption key derivation. " +
-                "For production, use ENCRYPTION_KEY_SOURCE=vault|aws|azure " +
-                "to fetch keys at runtime (keys only in RAM, not env vars).",
+        this.logger.log(
+            "Deriving the data-at-rest encryption key from MASTER_SECRET. " +
+                "Changing MASTER_SECRET makes encrypted data unreadable.",
         );
 
         // Derive a 256-bit encryption key from MASTER_SECRET using HKDF

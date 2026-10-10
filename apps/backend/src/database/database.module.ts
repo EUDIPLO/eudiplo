@@ -3,6 +3,7 @@ import { Logger, Module, OnModuleInit } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { TypeOrmModule, TypeOrmModuleOptions } from "@nestjs/typeorm";
 import { DataSource, DataSourceOptions } from "typeorm";
+import { DataEncryptionService } from "../platform/data-encryption/data-encryption.service.js";
 import * as migrations from "./migrations/index.js";
 import { buildPostgresSslOptions } from "./postgres-ssl-options.js";
 
@@ -10,9 +11,12 @@ import { buildPostgresSslOptions } from "./postgres-ssl-options.js";
     imports: [
         TypeOrmModule.forRootAsync({
             imports: [ConfigModule],
-            inject: [ConfigService],
+            // DataEncryptionService is injected only so that the encryption
+            // key is loaded before migrations run: they encrypt stored secrets.
+            inject: [ConfigService, DataEncryptionService],
             useFactory: (
                 configService: ConfigService,
+                _encryption: DataEncryptionService,
             ): TypeOrmModuleOptions => {
                 const dbType = configService.get<"sqlite" | "postgres">(
                     "DB_TYPE",

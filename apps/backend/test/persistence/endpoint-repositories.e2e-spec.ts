@@ -13,11 +13,13 @@ import {
 import { endpointRepositoryContract } from "./endpoint-repository.contract.js";
 import { issuanceRepositoryContract } from "./issuance-repository.contract.js";
 import { tenantRepositoryContract } from "./tenant-repository.contract.js";
+import { initializeTestEncryption } from "./test-encryption.js";
 
 describeWithContainers("PostgreSQL configuration endpoint repositories", () => {
     let db: DataSource;
     let container: StartedPostgreSqlContainer;
     beforeAll(async () => {
+        await initializeTestEncryption();
         container = await new PostgreSqlContainer("postgres:16-alpine").start();
         db = await new DataSource({
             type: "postgres",
