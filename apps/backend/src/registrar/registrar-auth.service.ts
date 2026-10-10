@@ -183,6 +183,15 @@ export class RegistrarAuthService {
                 client,
                 body: {},
             });
+            if (createRes.error) {
+                this.logger.error(
+                    { error: createRes.error },
+                    `[${tenantId}] Failed to register relying party`,
+                );
+                throw new BadRequestException(
+                    "Failed to register relying party at registrar",
+                );
+            }
             return createRes.data!.id;
         }
 
