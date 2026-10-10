@@ -4,6 +4,7 @@ import { DataSource } from "typeorm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ClientEntity } from "../../src/auth/client/entities/client.entity.js";
 import { TenantEntity } from "../../src/auth/tenant/entities/tenant.entity.js";
+import { hashAuthorizationCode } from "../../src/issuer/issuance/oid4vci/authorization/domain/token-grant-rules.js";
 import { TypeOrmSessionRepository } from "../../src/session/adapters/typeorm-session.repository.js";
 import { TypeOrmSessionRetentionPolicies } from "../../src/session/adapters/typeorm-session-retention-policies.js";
 import type { SessionListQuery } from "../../src/session/domain/session-list.js";
@@ -614,7 +615,8 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
                         createdAt: new Date("2026-10-02T08:00:00Z"),
                         updatedAt: new Date("2026-10-02T08:05:00Z"),
                         credentialConfigurationIds: ["pid", "pid-mdoc"],
-                        authorization_code: "pre-auth-code",
+                        authorization_code:
+                            hashAuthorizationCode("pre-auth-code"),
                         reference: "order-4711",
                     },
                     {
@@ -649,7 +651,8 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
                         tenantId: "tenant-b",
                         createdAt: new Date("2026-10-02T08:00:00Z"),
                         credentialConfigurationIds: ["pid"],
-                        authorization_code: "pre-auth-code",
+                        authorization_code:
+                            hashAuthorizationCode("pre-auth-code"),
                         reference: "order-4711",
                         requestId: "age-check",
                         failureCode: "trust_chain_not_trusted",

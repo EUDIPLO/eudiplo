@@ -163,7 +163,7 @@ export class InteractiveAuthSessionEntity implements InteractiveAuthSession {
     completedStepsData?: string;
 
     /**
-     * Authorization code once issued.
+     * SHA-256 hash of the authorization code once issued.
      */
     @Column("varchar", { nullable: true })
     authorizationCode?: string;

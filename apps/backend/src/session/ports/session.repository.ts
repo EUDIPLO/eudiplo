@@ -74,9 +74,10 @@ export interface SessionRepository {
     /** Wallet nonce first, then legacy session-ID fallback for existing wallet URLs. */
     findForWalletRequest(nonce: string): Promise<SessionData | null>;
     findIso18013Session(id: string): Promise<SessionData | null>;
+    /** Session holding this code hash (only the hash of a code is stored). */
     findByAuthorizationCode(
         tenantId: string,
-        code: string,
+        codeHash: string,
     ): Promise<SessionData | null>;
     /** Session holding this refresh token hash (only the hash is stored). */
     findByRefreshToken(

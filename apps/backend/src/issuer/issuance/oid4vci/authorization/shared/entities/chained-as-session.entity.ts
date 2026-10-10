@@ -141,7 +141,8 @@ export class ChainedAsSessionEntity implements ChainedAsSession {
     upstreamAccessTokenClaims?: Record<string, unknown>;
 
     /**
-     * Authorization code we issue to the wallet (after upstream callback).
+     * SHA-256 hash of the authorization code we issue to the wallet (after
+     * upstream callback), see `hashAuthorizationCode`.
      */
     @Column("varchar", { nullable: true })
     authorizationCode?: string;

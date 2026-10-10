@@ -10,6 +10,7 @@ import { OAuthError } from "../domain/oauth-error.js";
 import {
     type AuthorizationServerTokenSettings,
     enforcedRefreshTokenExpiry,
+    hashAuthorizationCode,
     hashRefreshToken,
     type RefreshTokenPolicy,
     refreshTokenExpiresAt,
@@ -152,7 +153,7 @@ export async function resolveSessionForTokenRequest(
 
     const session = await sessionRepository.findAuthorizedByCode(
         tenantId,
-        request.code,
+        hashAuthorizationCode(request.code),
     );
 
     if (!session) {

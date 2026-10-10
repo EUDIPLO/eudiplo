@@ -7,6 +7,7 @@ import {
     AUTHORIZATION_CODE_LIFETIME_SECONDS,
     buildAuthorizationResponseUrl,
 } from "../domain/pushed-authorization-request.js";
+import { hashAuthorizationCode } from "../domain/token-grant-rules.js";
 import { builtInAuthorizationServerIssuer } from "./build-built-in-authorization-server-metadata.js";
 
 /** The authorization request did not reference a pushed request. */
@@ -106,7 +107,7 @@ export class AuthorizePushedRequest {
 
         const code = randomUUID();
         await this.sessions.updateForTenant(tenantId, session.id, {
-            authorization_code: code,
+            authorization_code: hashAuthorizationCode(code),
             authorization_code_expires_at: new Date(
                 Date.now() + AUTHORIZATION_CODE_LIFETIME_SECONDS * 1000,
             ),

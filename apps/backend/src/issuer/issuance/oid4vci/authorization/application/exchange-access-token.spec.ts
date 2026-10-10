@@ -6,7 +6,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionData } from "../../../../../session/domain/session-data.js";
 import type { Oid4vciSettings } from "../../oid4vci-settings.js";
-import { hashRefreshToken } from "../domain/token-grant-rules.js";
+import {
+    hashAuthorizationCode,
+    hashRefreshToken,
+} from "../domain/token-grant-rules.js";
 import { ExchangeAccessToken } from "./exchange-access-token.js";
 
 const NOW = new Date("2026-06-01T00:00:00Z");
@@ -37,7 +40,7 @@ function issuanceSession(overrides: Partial<SessionData> = {}): SessionData {
         id: "session-1",
         tenantId: "tenant-1",
         createdAt: new Date(NOW.getTime() - DAY_MS),
-        authorization_code: "code",
+        authorization_code: hashAuthorizationCode("code"),
         credentialPayload: { flow: "pre_authorized_code" },
         ...overrides,
     } as SessionData;

@@ -95,6 +95,15 @@ export function hashRefreshToken(refreshToken: string): string {
     return createHash("sha256").update(refreshToken).digest("base64url");
 }
 
+/**
+ * Value stored in place of an authorization code or pre-authorized code, for
+ * the same reason as {@link hashRefreshToken}. Codes are random UUIDs or
+ * 256-bit values, so an unsalted hash cannot be reversed by guessing either.
+ */
+export function hashAuthorizationCode(code: string): string {
+    return createHash("sha256").update(code).digest("base64url");
+}
+
 /** Refresh token policy of the built-in authorization server entry. */
 export function resolveRefreshTokenPolicy(
     issuanceConfig: IssuanceAuthorizationSettings,

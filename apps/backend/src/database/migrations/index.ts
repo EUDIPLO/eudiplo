@@ -57,3 +57,4 @@ export { RemoveRegistrationCertProvidedAttestations1784200000000 } from "./17842
 export { AddSessionListFilters1784300000000 } from "./1784300000000-AddSessionListFilters.js";
 export { ChangeSessionOauthBindingsToTimestamp1784400000000 } from "./1784400000000-ChangeSessionOauthBindingsToTimestamp.js";
 export { EncryptStoredSecrets1784500000000 } from "./1784500000000-EncryptStoredSecrets.js";
+export { HashAuthorizationCodes1784700000000 } from "./1784700000000-HashAuthorizationCodes.js";

@@ -2,6 +2,7 @@ import type { CreateSession } from "../../../../session/application/create-sessi
 import type { SessionStore } from "../../../../session/application/session-store.js";
 import type { SessionOfferRequest } from "../../../../session/domain/session-data.js";
 import type { IssuanceConfigRepository } from "../../../configuration/issuance/ports/issuance-config.repository.js";
+import { hashAuthorizationCode } from "../authorization/domain/token-grant-rules.js";
 import type { CredentialOfferProtocol } from "../ports/credential-offer-protocol.js";
 import { BuildCredentialOfferGrants } from "./build-credential-offer-grants.js";
 import type { SelectAuthorizationServer } from "./select-authorization-server.js";
@@ -64,7 +65,9 @@ export class CreateCredentialOffer {
             credentialPayload: request,
             credentialConfigurationIds: request.credentialConfigurationIds,
             reference: request.reference,
-            authorization_code: authorizationCode,
+            // The offer carries the code; the lookup column only its hash.
+            authorization_code:
+                authorizationCode && hashAuthorizationCode(authorizationCode),
             webhookEndpointId: request.webhookEndpointId,
             authorizationServerId: selection.sessionServerId,
             ...(lifetimeSeconds

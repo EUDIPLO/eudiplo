@@ -61,9 +61,9 @@ export class SessionStore {
 
     getByAuthorizationCode(
         tenantId: string,
-        code: string | undefined,
+        codeHash: string | undefined,
     ): Promise<SessionData> {
-        return this.lookup(code, (value) =>
+        return this.lookup(codeHash, (value) =>
             this.sessions.findByAuthorizationCode(tenantId, value),
         );
     }

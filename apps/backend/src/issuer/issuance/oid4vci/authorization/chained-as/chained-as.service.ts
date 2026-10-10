@@ -29,7 +29,10 @@ import {
     DPOP_PROOF_REPLAY_REGISTRY,
     type DpopProofReplayRegistry,
 } from "../../ports/dpop-proof-replay-registry.js";
-import { refreshTokenPolicy } from "../domain/token-grant-rules.js";
+import {
+    hashAuthorizationCode,
+    refreshTokenPolicy,
+} from "../domain/token-grant-rules.js";
 import {
     CHAINED_AS_SESSION_REPOSITORY,
     type ChainedAsSessionRepository,
@@ -694,7 +697,7 @@ export class ChainedAsService {
         // Generate our authorization code for the wallet
         const authorizationCode = randomBytes(32).toString("base64url");
         session.status = ChainedAsSessionStatus.AUTHORIZED;
-        session.authorizationCode = authorizationCode;
+        session.authorizationCode = hashAuthorizationCode(authorizationCode);
         session.authorizationCodeExpiresAt = new Date(
             Date.now() + this.AUTH_CODE_LIFETIME_SECONDS * 1000,
         );

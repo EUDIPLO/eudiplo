@@ -115,7 +115,8 @@ export class Session {
 
     // issuance specific fields
     /**
-     * Authorization code for the session.
+     * SHA-256 hash of the authorization or pre-authorized code of the
+     * session, see `hashAuthorizationCode`. The code itself is not stored.
      */
     @Column("varchar", { nullable: true })
     authorization_code?: string;
