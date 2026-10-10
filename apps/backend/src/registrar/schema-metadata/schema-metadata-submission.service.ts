@@ -15,6 +15,10 @@ import {
     OutboundUrlPolicyService,
 } from "../../webhook/outbound-url-policy.service.js";
 import { type CreateSchemaMetadataMultipartDto } from "../generated/index.js";
+import {
+    REMOTE_FILE_MAX_BYTES,
+    REMOTE_FILE_TIMEOUT_MS,
+} from "../registrar-http.js";
 import { type UpdateSchemaMetadataDto } from "./dto/schema-metadata.dto.js";
 import { SchemaMetadataService } from "./schema-metadata.service.js";
 
@@ -24,9 +28,7 @@ type TrustedAuthorityInput = NonNullable<
 
 type RegistrarMetadataPayload = CreateSchemaMetadataMultipartDto;
 
-/** Limits for fetching rulebooks and schemas referenced by URL. */
-const REMOTE_FILE_TIMEOUT_MS = 10_000;
-const REMOTE_FILE_MAX_BYTES = 5 * 1024 * 1024;
+/** Redirects followed when fetching rulebooks and schemas referenced by URL. */
 const REMOTE_FILE_MAX_REDIRECTS = 3;
 
 @Injectable()

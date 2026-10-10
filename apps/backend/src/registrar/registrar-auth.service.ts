@@ -3,6 +3,7 @@ import {
     OAuth2HttpError,
     OAuth2Token,
 } from "@badgateway/oauth2-client";
+import { HttpService } from "@nestjs/axios";
 import {
     BadRequestException,
     Injectable,
@@ -12,12 +13,15 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
+import { OutboundUrlPolicyService } from "../webhook/outbound-url-policy.service.js";
 import { RegistrarConfigEntity } from "./entities/registrar-config.entity.js";
-import { client as registrarClient } from "./generated/client.gen.js";
+import { createClient, createConfig } from "./generated/client/index.js";
 import {
     relyingPartyControllerFindAll,
     relyingPartyControllerRegister,
 } from "./generated/index.js";
+import type { ClientOptions } from "./generated/types.gen.js";
+import { registrarFetch } from "./registrar-http.js";
 
 /**
  * Cached OAuth2 token with its expiration time.
@@ -38,10 +42,33 @@ export class RegistrarAuthService {
 
     private readonly tokenCache = new Map<string, CachedToken>();
 
+    /** `fetch` under the outbound URL policy for all registrar requests. */
+    private readonly fetch: typeof fetch;
+
     constructor(
         @InjectRepository(RegistrarConfigEntity)
         private readonly configRepository: Repository<RegistrarConfigEntity>,
-    ) {}
+        private readonly outboundUrlPolicy: OutboundUrlPolicyService,
+        http: HttpService,
+    ) {
+        this.fetch = registrarFetch(http, outboundUrlPolicy);
+    }
+
+    /**
+     * Check the configured registrar and OIDC URLs against the outbound URL
+     * policy, so a configuration pointing at a blocked target is rejected
+     * with a clear error before it is saved.
+     */
+    async assertSafeUrls(urls: {
+        registrarUrl?: string;
+        oidcUrl?: string;
+    }): Promise<void> {
+        for (const url of [urls.registrarUrl, urls.oidcUrl]) {
+            if (url !== undefined) {
+                await this.outboundUrlPolicy.assertSafeUrl(url);
+            }
+        }
+    }
 
     /**
      * Test OIDC credentials by attempting to obtain an access token.
@@ -54,12 +81,7 @@ export class RegistrarAuthService {
         username: string;
         password: string;
     }): Promise<void> {
-        const oauth2Client = new OAuth2Client({
-            server: `${config.oidcUrl}/protocol/openid-connect/token`,
-            clientId: config.clientId,
-            clientSecret: config.clientSecret,
-            discoveryEndpoint: `${config.oidcUrl}/.well-known/openid-configuration`,
-        });
+        const oauth2Client = await this.createOAuth2Client(config);
 
         try {
             await oauth2Client.password({
@@ -76,12 +98,14 @@ export class RegistrarAuthService {
                     `Invalid registrar credentials (HTTP ${error.httpCode}). Please check your username, password, client ID and secret.`,
                 );
             }
-            // Network-level failure (DNS, connection refused, timeout, etc.)
+            // Network-level failure (DNS, connection refused, timeout, a
+            // blocked target, etc.). The details stay in the log: echoing them
+            // would tell the caller whether an address is reachable.
             this.logger.warn(
                 `Registrar is not reachable during credential check: ${error.message}`,
             );
             throw new ServiceUnavailableException(
-                `Registrar OIDC endpoint is not reachable. Credentials could not be verified. Error: ${error.message}`,
+                "Registrar OIDC endpoint is not reachable. Credentials could not be verified.",
             );
         }
     }
@@ -102,12 +126,7 @@ export class RegistrarAuthService {
             );
         }
 
-        const oauth2Client = new OAuth2Client({
-            server: `${config.oidcUrl}/protocol/openid-connect/token`,
-            clientId: config.clientId,
-            clientSecret: config.clientSecret,
-            discoveryEndpoint: `${config.oidcUrl}/.well-known/openid-configuration`,
-        });
+        const oauth2Client = await this.createOAuth2Client(config);
 
         let tokenResponse: OAuth2Token;
         try {
@@ -120,7 +139,9 @@ export class RegistrarAuthService {
                 `[${tenantId}] Failed to obtain access token: ${error.message}`,
             );
             throw new BadRequestException(
-                `Failed to authenticate with registrar: ${error.message}`,
+                error instanceof OAuth2HttpError
+                    ? `Failed to authenticate with registrar (HTTP ${error.httpCode})`
+                    : "Failed to authenticate with registrar: OIDC endpoint is not reachable",
             );
         }
 
@@ -139,6 +160,10 @@ export class RegistrarAuthService {
 
     /**
      * Create a configured registrar API client for the given tenant.
+     *
+     * Every call gets its own client: a shared client reconfigured per call
+     * could send one tenant's request with another tenant's URL and token
+     * when both call the registrar at the same time.
      */
     async getClient(tenantId: string) {
         const config = await this.configRepository.findOneBy({ tenantId });
@@ -148,15 +173,18 @@ export class RegistrarAuthService {
             );
         }
 
-        const client = registrarClient;
+        // Checked before the token is requested, so no credentials are sent
+        // for a configuration whose registrar URL is blocked.
+        await this.outboundUrlPolicy.assertSafeUrl(config.registrarUrl);
         const accessToken = await this.getAccessToken(tenantId);
 
-        client.setConfig({
-            baseUrl: config.registrarUrl,
-            auth: () => accessToken,
-        });
-
-        return client;
+        return createClient(
+            createConfig<ClientOptions>({
+                baseUrl: config.registrarUrl,
+                auth: () => accessToken,
+                fetch: this.fetch,
+            }),
+        );
     }
 
     /**
@@ -196,6 +224,26 @@ export class RegistrarAuthService {
         }
 
         return relyingParties[0].id;
+    }
+
+    /**
+     * OAuth2 client for the registrar's OIDC provider. The discovery document
+     * can name a token endpoint on any host, so the client's own requests go
+     * through the outbound URL policy too.
+     */
+    private async createOAuth2Client(config: {
+        oidcUrl: string;
+        clientId: string;
+        clientSecret?: string;
+    }): Promise<OAuth2Client> {
+        await this.outboundUrlPolicy.assertSafeUrl(config.oidcUrl);
+        return new OAuth2Client({
+            server: `${config.oidcUrl}/protocol/openid-connect/token`,
+            clientId: config.clientId,
+            clientSecret: config.clientSecret,
+            discoveryEndpoint: `${config.oidcUrl}/.well-known/openid-configuration`,
+            fetch: this.fetch,
+        });
     }
 
     /**

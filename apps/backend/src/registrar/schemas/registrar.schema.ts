@@ -8,11 +8,43 @@ const RegistrationCertificateDefaultsSchema = z
         "Optional default values used when generating registration certificates.",
     );
 
+/**
+ * The registrar client appends API paths to the registrar URL and the OAuth2
+ * client appends OIDC paths to the OIDC URL, so both must be plain http(s)
+ * base URLs: a query or fragment would swallow the appended path (for example
+ * a trailing `#`), and credentials do not belong in a stored URL. This is a
+ * refinement, so the published JSON schema stays unchanged.
+ */
+function isRegistrarBaseUrl(value: string): boolean {
+    let url: URL;
+    try {
+        url = new URL(value);
+    } catch {
+        return false;
+    }
+    return (
+        (url.protocol === "https:" || url.protocol === "http:") &&
+        url.username === "" &&
+        url.password === "" &&
+        // Checked on the raw value: an empty query or fragment ("?" or "#")
+        // is not visible in URL.search or URL.hash.
+        !value.includes("?") &&
+        !value.includes("#")
+    );
+}
+
+const REGISTRAR_BASE_URL_MESSAGE =
+    "Must be an http(s) URL without query, fragment or credentials";
+
 export const CreateRegistrarConfigSchema = z
     .object({
-        registrarUrl: z.url().describe("Base URL of the registrar service."),
+        registrarUrl: z
+            .url()
+            .refine(isRegistrarBaseUrl, REGISTRAR_BASE_URL_MESSAGE)
+            .describe("Base URL of the registrar service."),
         oidcUrl: z
             .url()
+            .refine(isRegistrarBaseUrl, REGISTRAR_BASE_URL_MESSAGE)
             .describe("OIDC discovery or issuer URL used for authentication."),
         clientId: z
             .string()
