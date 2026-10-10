@@ -134,6 +134,15 @@ replaces the credential. `<redacted>` for a credential the tenant file does not
 store, for example of a global provider copied from `effectiveConfig`, is
 rejected with `400`.
 
+A stored credential is also kept only while the setting that says where it is
+sent stays the same: `vaultUrl` for `vaultToken`, `baseUrl` for an `http`
+bearer `token` and for the CSC `sad` and `authorizeAuthData` values,
+`auth.tokenUrl` and `tokenUrl` for OAuth client secrets, and `library` for the
+PKCS#11 `pin`. A `PUT` that changes one of these settings must send the
+credential again; with `<redacted>` it is rejected with `400`, so that nobody
+who may edit the configuration can redirect a credential they cannot read. The
+AWS secret access key only signs requests and is kept when `region` changes.
+
 The API needs `CONFIG_FOLDER` to be writable. The tenant `kms.json` is also part
 of [configuration bundles](configuration-as-code.md), with secrets exported as
 placeholders.
