@@ -100,12 +100,13 @@ export class WebhookEndpointController {
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        const stored = await this.service.getById(user.entity!.id, id);
+        const endpoint = await this.service.getById(user.entity!.id, id);
+        const endpointUpdate = restoreApiKey(dto, endpoint);
         return redactApiKey(
             await this.service.update(
                 user.entity!.id,
                 id,
-                restoreApiKey(dto, stored),
+                endpointUpdate,
                 user,
                 requestMeta,
             ),

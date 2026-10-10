@@ -90,12 +90,13 @@ export class AttributeProviderController {
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        const stored = await this.service.getById(user.entity!.id, id);
+        const provider = await this.service.getById(user.entity!.id, id);
+        const providerUpdate = restoreApiKey(dto, provider);
         return redactApiKey(
             await this.service.update(
                 user.entity!.id,
                 id,
-                restoreApiKey(dto, stored),
+                providerUpdate,
                 user,
                 requestMeta,
             ),
