@@ -15,20 +15,13 @@ import { Role } from "../../../auth/roles/role.enum.js";
 import { Secured } from "../../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../../auth/token.decorator.js";
 import {
-    assertApiKeyKeptOnlyForSameUrl,
-    redactSecrets,
-    restoreSecrets,
+    redactApiKey,
+    restoreApiKey,
 } from "../../../shared/utils/write-only-secrets.util.js";
 import { AttributeProviderService } from "./attribute-provider.service.js";
-import type { AttributeProviderData } from "./domain/attribute-provider-data.js";
 import { CreateAttributeProviderDto } from "./dto/create-attribute-provider.dto.js";
 import { UpdateAttributeProviderDto } from "./dto/update-attribute-provider.dto.js";
 import { AttributeProviderEntity } from "./entities/attribute-provider.entity.js";
-
-/** The API key is write-only: returned as `<redacted>`, which keeps it on update. */
-const SECRET = "auth.config.value";
-const redact = (provider: AttributeProviderData) =>
-    redactSecrets(provider, SECRET);
 
 @ApiTags("Issuer")
 @Secured([Role.Issuances])
@@ -44,7 +37,7 @@ export class AttributeProviderController {
         type: [AttributeProviderEntity],
     })
     async getAll(@Token() user: TokenPayload) {
-        return (await this.service.getAll(user.entity!.id)).map(redact);
+        return (await this.service.getAll(user.entity!.id)).map(redactApiKey);
     }
 
     @Get(":id")
@@ -56,7 +49,7 @@ export class AttributeProviderController {
     })
     @ApiResponse({ status: 404, description: "Attribute provider not found" })
     async getById(@Param("id") id: string, @Token() user: TokenPayload) {
-        return redact(await this.service.getById(user.entity!.id, id));
+        return redactApiKey(await this.service.getById(user.entity!.id, id));
     }
 
     @Post()
@@ -72,10 +65,10 @@ export class AttributeProviderController {
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return redact(
+        return redactApiKey(
             await this.service.create(
                 user.entity!.id,
-                restoreSecrets(dto, undefined, SECRET),
+                restoreApiKey(dto),
                 user,
                 requestMeta,
             ),
@@ -98,12 +91,11 @@ export class AttributeProviderController {
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
         const stored = await this.service.getById(user.entity!.id, id);
-        assertApiKeyKeptOnlyForSameUrl(dto, stored);
-        return redact(
+        return redactApiKey(
             await this.service.update(
                 user.entity!.id,
                 id,
-                restoreSecrets(dto, stored, SECRET),
+                restoreApiKey(dto, stored),
                 user,
                 requestMeta,
             ),

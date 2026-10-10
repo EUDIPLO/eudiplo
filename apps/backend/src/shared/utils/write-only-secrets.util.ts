@@ -157,8 +157,29 @@ export function assertApiKeyKeptOnlyForSameUrl(
             : update.auth.type === "apiKey" &&
               update.auth.config?.value === REDACTED_SECRET;
     if (keepsKey && update.url !== undefined && update.url !== stored.url) {
-        throw new SecretTargetChangedError("auth.config.value", "url");
+        throw new SecretTargetChangedError(API_KEY, "url");
     }
+}
+
+/** Path of the API key in a webhook endpoint or attribute provider. */
+const API_KEY = "auth.config.value";
+
+/** A webhook endpoint or attribute provider for an API response. */
+export function redactApiKey<T>(entry: T): T {
+    return redactSecrets(entry, API_KEY);
+}
+
+/**
+ * A create (without `stored`) or update of a webhook endpoint or attribute
+ * provider with a redacted API key replaced by the stored one.
+ *
+ * @throws SecretNotStoredError, SecretTargetChangedError
+ */
+export function restoreApiKey<
+    T extends { url?: string; auth?: WebhookAuthLike },
+>(update: T, stored?: { url: string; auth?: WebhookAuthLike }): T {
+    if (stored) assertApiKeyKeptOnlyForSameUrl(update, stored);
+    return restoreSecrets(update, stored, API_KEY);
 }
 
 interface AuthorizationServerLike {

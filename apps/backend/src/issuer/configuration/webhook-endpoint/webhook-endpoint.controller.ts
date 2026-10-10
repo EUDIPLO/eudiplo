@@ -15,20 +15,14 @@ import { Role } from "../../../auth/roles/role.enum.js";
 import { Secured } from "../../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../../auth/token.decorator.js";
 import {
-    assertApiKeyKeptOnlyForSameUrl,
-    redactSecrets,
-    restoreSecrets,
+    redactApiKey,
+    restoreApiKey,
 } from "../../../shared/utils/write-only-secrets.util.js";
 import type { WebhookEndpointData } from "./domain/webhook-endpoint-data.js";
 import { CreateWebhookEndpointDto } from "./dto/create-webhook-endpoint.dto.js";
 import { UpdateWebhookEndpointDto } from "./dto/update-webhook-endpoint.dto.js";
 import { WebhookEndpointEntity } from "./entities/webhook-endpoint.entity.js";
 import { WebhookEndpointService } from "./webhook-endpoint.service.js";
-
-/** The API key is write-only: returned as `<redacted>`, which keeps it on update. */
-const SECRET = "auth.config.value";
-const redact = (endpoint: WebhookEndpointData) =>
-    redactSecrets(endpoint, SECRET);
 
 // Webhook endpoints are referenced from both sides: issuance configs and,
 // since 7.0 replaced the inline `webhook` payload with `webhookEndpointId`,
@@ -53,7 +47,7 @@ export class WebhookEndpointController {
         type: [WebhookEndpointEntity],
     })
     async getAll(@Token() user: TokenPayload): Promise<WebhookEndpointData[]> {
-        return (await this.service.getAll(user.entity!.id)).map(redact);
+        return (await this.service.getAll(user.entity!.id)).map(redactApiKey);
     }
 
     @Get(":id")
@@ -65,7 +59,7 @@ export class WebhookEndpointController {
     })
     @ApiResponse({ status: 404, description: "Webhook endpoint not found" })
     async getById(@Param("id") id: string, @Token() user: TokenPayload) {
-        return redact(await this.service.getById(user.entity!.id, id));
+        return redactApiKey(await this.service.getById(user.entity!.id, id));
     }
 
     @Post()
@@ -81,10 +75,10 @@ export class WebhookEndpointController {
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return redact(
+        return redactApiKey(
             await this.service.create(
                 user.entity!.id,
-                restoreSecrets(dto, undefined, SECRET),
+                restoreApiKey(dto),
                 user,
                 requestMeta,
             ),
@@ -107,12 +101,11 @@ export class WebhookEndpointController {
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
         const stored = await this.service.getById(user.entity!.id, id);
-        assertApiKeyKeptOnlyForSameUrl(dto, stored);
-        return redact(
+        return redactApiKey(
             await this.service.update(
                 user.entity!.id,
                 id,
-                restoreSecrets(dto, stored, SECRET),
+                restoreApiKey(dto, stored),
                 user,
                 requestMeta,
             ),
