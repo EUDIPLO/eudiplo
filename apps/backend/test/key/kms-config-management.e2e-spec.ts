@@ -192,6 +192,28 @@ describe("Key Chain — KMS configuration management (e2e)", () => {
         });
     });
 
+    test("rejects <redacted> when the provider's URL changes", async () => {
+        const current = await request(app.getHttpServer())
+            .get("/key-chain/providers/config")
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        const update = current.body.tenantConfig;
+        const storedUrl = storedTenantConfig().providers[1].vaultUrl;
+        update.providers[1].vaultUrl = "https://attacker.example.com";
+
+        const res = await request(app.getHttpServer())
+            .put("/key-chain/providers/config")
+            .set("Authorization", `Bearer ${authToken}`)
+            .send(update)
+            .expect(400);
+
+        expect(res.body.message).toContain("vaultUrl changes");
+        expect(storedTenantConfig().providers[1]).toMatchObject({
+            vaultUrl: storedUrl,
+            vaultToken: TENANT_SECRET,
+        });
+    });
+
     test("replaces a stored credential that is sent with a new value", async () => {
         const res = await request(app.getHttpServer())
             .put("/key-chain/providers/config")

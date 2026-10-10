@@ -5,6 +5,7 @@ import {
 } from "../schemas/kms-config.schema.js";
 import {
     KMS_REDACTED_SECRET,
+    KmsSecretDestinationChangedError,
     KmsSecretNotStoredError,
     redactKmsConfig,
     restoreKmsSecrets,
@@ -184,5 +185,97 @@ describe("KMS configuration secrets", () => {
                 ],
             }),
         ).toThrow(/providers\[0\] \('vault'\)\.vaultToken/);
+    });
+
+    describe("a kept credential follows its destination", () => {
+        /** The redacted configuration with one setting of provider `id` changed. */
+        function moved(id: string, change: (provider: any) => void) {
+            const update = redactKmsConfig(config, {
+                keepEnvPlaceholders: false,
+            });
+            change(update.providers.find((provider) => provider.id === id));
+            return update;
+        }
+
+        it.each([
+            [
+                "vault",
+                "vaultUrl",
+                (p: any) => (p.vaultUrl = "https://evil.example"),
+            ],
+            ["hsm", "library", (p: any) => (p.library = "/tmp/evil.so")],
+            [
+                "remote-bearer",
+                "baseUrl",
+                (p: any) => (p.baseUrl = "https://evil.example"),
+            ],
+            [
+                "remote-oauth",
+                "auth.tokenUrl",
+                (p: any) => (p.auth.tokenUrl = "https://evil.example/token"),
+            ],
+            [
+                "csc",
+                "tokenUrl",
+                (p: any) => (p.tokenUrl = "https://evil.example/token"),
+            ],
+            [
+                "csc",
+                "baseUrl",
+                (p: any) => (p.baseUrl = "https://evil.example"),
+            ],
+        ])(
+            "rejects keeping the credential of %s when %s changes",
+            (id, destination, change) => {
+                expect(() =>
+                    restoreKmsSecrets(moved(id, change), config),
+                ).toThrow(KmsSecretDestinationChangedError);
+                expect(() =>
+                    restoreKmsSecrets(moved(id, change), config),
+                ).toThrow(`but ${destination} changes`);
+            },
+        );
+
+        it("accepts a new destination together with a new credential", () => {
+            const update = moved("vault", (p) => {
+                p.vaultUrl = "https://vault-2.example.com";
+                p.vaultToken = "new-token";
+            });
+
+            expect(
+                restoreKmsSecrets(update, config).providers.find(
+                    (provider) => provider.id === "vault",
+                ),
+            ).toMatchObject({
+                vaultUrl: "https://vault-2.example.com",
+                vaultToken: "new-token",
+            });
+        });
+
+        it("keeps credentials whose destination is unchanged or that are never sent", () => {
+            // The bearer token goes to baseUrl only; another health path is fine.
+            const update = moved(
+                "remote-bearer",
+                (p) => (p.healthPath = "/ready"),
+            );
+            // The AWS secret key only signs requests to AWS.
+            const aws = update.providers.find(
+                (provider) => provider.id === "aws",
+            ) as { region: string };
+            aws.region = "eu-west-1";
+
+            expect(restoreKmsSecrets(update, config).providers).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        id: "remote-bearer",
+                        auth: { type: "bearer", token: "bearer-token" },
+                    }),
+                    expect.objectContaining({
+                        id: "aws",
+                        secretAccessKey: "aws-secret",
+                    }),
+                ]),
+            );
+        });
     });
 });
