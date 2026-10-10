@@ -4139,6 +4139,97 @@ export const PaginatedSessionResponseDtoSchema = {
     ]
 } as const;
 
+export const SessionStatusCountsDtoSchema = {
+    type: 'object',
+    properties: {
+        active: {
+            type: 'number',
+            description: 'Sessions waiting for the wallet'
+        },
+        fetched: {
+            type: 'number',
+            description: 'Issuance: first credential issued. Presentation: the wallet fetched the request object.'
+        },
+        completed: {
+            type: 'number',
+            description: 'Issuance: the wallet reported credential_accepted. Presentation: response verified.'
+        },
+        expired: {
+            type: 'number',
+            description: 'Sessions that expired before completion'
+        },
+        failed: {
+            type: 'number',
+            description: 'Issuance: the wallet reported credential_failure or credential_deleted. Presentation: verification failed, or the wallet sent an error.'
+        },
+        cancelled: {
+            type: 'number',
+            description: 'Offers and requests an operator cancelled'
+        }
+    },
+    required: [
+        'active',
+        'fetched',
+        'completed',
+        'expired',
+        'failed',
+        'cancelled'
+    ]
+} as const;
+
+export const SessionTypeStatsDtoSchema = {
+    type: 'object',
+    properties: {
+        total: {
+            type: 'number',
+            description: 'Number of sessions of this type'
+        },
+        byStatus: {
+            description: 'Number of sessions per status, 0 for a status without any',
+            allOf: [
+                {
+                    $ref: '#/components/schemas/SessionStatusCountsDto'
+                }
+            ]
+        },
+        lastCompletedAt: {
+            type: [
+                'string',
+                'null'
+            ],
+            format: 'date-time',
+            description: 'Last update of the most recently updated completed session, or null when none completed'
+        }
+    },
+    required: [
+        'total',
+        'byStatus',
+        'lastCompletedAt'
+    ]
+} as const;
+
+export const SessionStatsResponseDtoSchema = {
+    type: 'object',
+    properties: {
+        issuance: {
+            description: 'Issuance sessions; present only when the caller may read them, as in GET /api/session',
+            allOf: [
+                {
+                    $ref: '#/components/schemas/SessionTypeStatsDto'
+                }
+            ]
+        },
+        presentation: {
+            description: 'Presentation sessions; present only when the caller may read them, as in GET /api/session',
+            allOf: [
+                {
+                    $ref: '#/components/schemas/SessionTypeStatsDto'
+                }
+            ]
+        }
+    }
+} as const;
+
 export const CancelSessionDtoSchema = {
     type: 'object',
     properties: {

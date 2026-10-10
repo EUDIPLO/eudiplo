@@ -4,6 +4,11 @@ import type {
     SessionPage,
     SessionType,
 } from "../domain/session-list.js";
+import { SessionStatus } from "../domain/session-state.js";
+import {
+    type SessionStats,
+    sessionTypeStats,
+} from "../domain/session-stats.js";
 import type {
     SessionCredentialOffer,
     SessionRepository,
@@ -28,6 +33,8 @@ type SessionStoreRepository = Pick<
     | "updateUnconsumedForTenant"
     | "consumeRequestUri"
     | "listForTenant"
+    | "countForTenant"
+    | "lastUpdatedForTenant"
     | "deleteForTenant"
     | "findCredentialOffer"
     | "consumeCredentialOffer"
@@ -160,6 +167,34 @@ export class SessionStore {
             pageSize: query.pageSize,
             totalPages: Math.ceil(total / query.pageSize),
         };
+    }
+
+    /** Session counts per type and status, for the types in `scope` only. */
+    async statsForTenant(
+        tenantId: string,
+        scope?: SessionType,
+    ): Promise<SessionStats> {
+        const types: SessionType[] = scope
+            ? [scope]
+            : ["issuance", "presentation"];
+        const [counts, lastCompleted] = await Promise.all([
+            this.sessions.countForTenant(tenantId, scope),
+            Promise.all(
+                types.map((type) =>
+                    this.sessions.lastUpdatedForTenant(
+                        tenantId,
+                        type,
+                        SessionStatus.Completed,
+                    ),
+                ),
+            ),
+        ]);
+        return Object.fromEntries(
+            types.map((type, index) => [
+                type,
+                sessionTypeStats(type, counts, lastCompleted[index]),
+            ]),
+        );
     }
 
     /** Missing sessions, other tenants' sessions and sessions outside `scope` are no-ops. */

@@ -23,6 +23,7 @@ import { PresentationManagementService } from '../presentation-config/presentati
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { EditorComponent, extractSchema } from '../../utils/editor/editor.component';
 import { transactionDataArraySchema } from '../../utils/schemas';
+import { getApiErrorMessage } from '../../utils/error-message';
 
 type PresentationRequestWithClientIdScheme = PresentationRequest & {
   clientIdScheme?: 'x509_hash' | 'x509_san_dns';
@@ -209,7 +210,9 @@ export class PresentationRequestComponent implements OnInit {
       }
     } catch (error) {
       console.error('Error generating presentation request:', error);
-      this.snackBar.open('Failed to generate presentation request', 'Close', {
+      // The backend names a missing access certificate here.
+      const message = getApiErrorMessage(error, 'Failed to generate presentation request');
+      this.snackBar.open(message, 'Close', {
         duration: 3000,
         panelClass: ['error-snackbar'],
       });

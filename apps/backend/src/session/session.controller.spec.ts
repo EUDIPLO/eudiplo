@@ -17,6 +17,7 @@ import { SessionController } from "./session.controller.js";
 function createController() {
     const sessions = {
         listForTenant: vi.fn().mockResolvedValue({ items: [] }),
+        statsForTenant: vi.fn().mockResolvedValue({}),
         getForTenant: vi.fn().mockResolvedValue({ id: "session-1" }),
         deleteForTenant: vi.fn().mockResolvedValue(undefined),
     };
@@ -58,6 +59,7 @@ describe("SessionController", () => {
 
         it.each([
             "getAllSessions",
+            "getSessionStats",
             "getSession",
             "deleteSession",
             "getSessionLogs",
@@ -85,6 +87,7 @@ describe("SessionController", () => {
             const caller = token(roles);
 
             await controller.getAllSessions(caller, query);
+            await controller.getSessionStats(caller);
             await controller.getSession("session-1", caller);
             await controller.deleteSession("session-1", caller);
             await controller.getSessionLogs("session-1", caller);
@@ -92,6 +95,10 @@ describe("SessionController", () => {
             expect(sessions.listForTenant).toHaveBeenCalledExactlyOnceWith(
                 "tenant-1",
                 query,
+                scope,
+            );
+            expect(sessions.statsForTenant).toHaveBeenCalledExactlyOnceWith(
+                "tenant-1",
                 scope,
             );
             expect(sessions.getForTenant).toHaveBeenCalledTimes(2);

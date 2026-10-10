@@ -10,12 +10,12 @@ import type {
     SessionSummary,
     SessionType,
 } from "../domain/session-list.js";
-
 import type {
     SessionLifecycleContext,
     SessionStateUpdate,
     SessionStatus,
 } from "../domain/session-state.js";
+import type { SessionTypeStatusCount } from "../domain/session-stats.js";
 
 export const SESSION_REPOSITORY = Symbol("SESSION_REPOSITORY");
 
@@ -107,6 +107,17 @@ export interface SessionRepository {
         tenantId: string,
         query: SessionListQuery,
     ): Promise<{ items: SessionSummary[]; total: number }>;
+    /** The tenant's session counts per type and status; empty ones are omitted. */
+    countForTenant(
+        tenantId: string,
+        type?: SessionType,
+    ): Promise<SessionTypeStatusCount[]>;
+    /** Last update of the tenant's most recently updated session of this type and status. */
+    lastUpdatedForTenant(
+        tenantId: string,
+        type: SessionType,
+        status: SessionStatus,
+    ): Promise<Date | null>;
     /**
      * Missing sessions, sessions owned by another tenant and, with `type`,
      * sessions of the other type are all no-ops.

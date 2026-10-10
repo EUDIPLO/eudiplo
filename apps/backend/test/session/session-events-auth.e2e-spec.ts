@@ -5,6 +5,7 @@ import { Role } from "../../src/auth/roles/role.enum.js";
 import { ResponseType } from "../../src/verifier/oid4vp/dto/presentation-request.dto.js";
 import { PresentationConfigCreateDto } from "../../src/verifier/presentations/dto/presentation-config-create.dto.js";
 import {
+    clientToken,
     type IssuanceTestContext,
     readConfig,
     setupIssuanceTestApp,
@@ -21,23 +22,6 @@ describe("Session events authorization", () => {
     let presentationSession: string;
     let verifierToken: string;
     let clientsOnlyToken: string;
-
-    async function clientToken(clientId: string, roles: Role[]) {
-        const client = await request(ctx.app.getHttpServer())
-            .post("/client")
-            .set("Authorization", `Bearer ${ctx.authToken}`)
-            .send({ clientId, roles })
-            .expect(201);
-        const response = await request(ctx.app.getHttpServer())
-            .post("/api/oauth2/token")
-            .send({
-                client_id: clientId,
-                client_secret: client.body.clientSecret,
-                grant_type: "client_credentials",
-            })
-            .expect(201);
-        return response.body.access_token as string;
-    }
 
     /** Opens the stream like a backend would and reads the first event. */
     async function subscribe(
@@ -110,12 +94,18 @@ describe("Session events authorization", () => {
                 .expect(201)
         ).body.session;
 
-        verifierToken = await clientToken("events-verifier", [
-            Role.PresentationRequest,
-        ]);
-        clientsOnlyToken = await clientToken("events-client-admin", [
-            Role.Clients,
-        ]);
+        verifierToken = await clientToken(
+            ctx.app,
+            ctx.authToken,
+            "events-verifier",
+            [Role.PresentationRequest],
+        );
+        clientsOnlyToken = await clientToken(
+            ctx.app,
+            ctx.authToken,
+            "events-client-admin",
+            [Role.Clients],
+        );
     });
 
     afterAll(async () => {

@@ -1938,6 +1938,59 @@ export type PaginatedSessionResponseDto = {
     totalPages: number;
 };
 
+export type SessionStatusCountsDto = {
+    /**
+     * Sessions waiting for the wallet
+     */
+    active: number;
+    /**
+     * Issuance: first credential issued. Presentation: the wallet fetched the request object.
+     */
+    fetched: number;
+    /**
+     * Issuance: the wallet reported credential_accepted. Presentation: response verified.
+     */
+    completed: number;
+    /**
+     * Sessions that expired before completion
+     */
+    expired: number;
+    /**
+     * Issuance: the wallet reported credential_failure or credential_deleted. Presentation: verification failed, or the wallet sent an error.
+     */
+    failed: number;
+    /**
+     * Offers and requests an operator cancelled
+     */
+    cancelled: number;
+};
+
+export type SessionTypeStatsDto = {
+    /**
+     * Number of sessions of this type
+     */
+    total: number;
+    /**
+     * Number of sessions per status, 0 for a status without any
+     */
+    byStatus: SessionStatusCountsDto;
+    /**
+     * Last update of the most recently updated completed session, or null when none completed
+     */
+    lastCompletedAt: string | null;
+};
+
+export type SessionStatsResponseDto = {
+    /**
+     * Issuance sessions; present only when the caller may read them, as in GET /api/session
+     */
+    issuance?: SessionTypeStatsDto;
+    /**
+     * Presentation sessions; present only when the caller may read them, as in GET /api/session
+     */
+    presentation?: SessionTypeStatsDto;
+};
+
 export type CancelSessionDto = {
     /**
      * Why the offer was cancelled. Stored in the audit logs and sent to the session webhook.
@@ -6572,6 +6625,19 @@ export type SessionControllerGetAllSessionsResponses = {
 };
 
 export type SessionControllerGetAllSessionsResponse = SessionControllerGetAllSessionsResponses[keyof SessionControllerGetAllSessionsResponses];
+
+export type SessionControllerGetSessionStatsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/session/stats';
+};
+
+export type SessionControllerGetSessionStatsResponses = {
+    200: SessionStatsResponseDto;
+};
+
+export type SessionControllerGetSessionStatsResponse = SessionControllerGetSessionStatsResponses[keyof SessionControllerGetSessionStatsResponses];
 
 export type SessionControllerDeleteSessionData = {
     body?: never;

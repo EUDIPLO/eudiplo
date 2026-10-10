@@ -390,6 +390,34 @@ export const getSignJwtCallback = (privateJwks: Jwk[]): SignJwtCallback => {
 };
 
 /**
+ * Creates a client with `roles` in the tenant of `authToken` and returns an
+ * access token of that client.
+ */
+export async function clientToken(
+    app: INestApplication,
+    authToken: string,
+    clientId: string,
+    roles: Role[],
+): Promise<string> {
+    const client = await request(app.getHttpServer())
+        .post("/client")
+        .trustLocalhost()
+        .set("Authorization", `Bearer ${authToken}`)
+        .send({ clientId, roles })
+        .expect(201);
+    const response = await request(app.getHttpServer())
+        .post("/api/oauth2/token")
+        .trustLocalhost()
+        .send({
+            client_id: clientId,
+            client_secret: client.body.clientSecret,
+            grant_type: "client_credentials",
+        })
+        .expect(201);
+    return response.body.access_token as string;
+}
+
+/**
  * Creates a tenant and returns the access token for a client.
  * @param app
  * @param clientId

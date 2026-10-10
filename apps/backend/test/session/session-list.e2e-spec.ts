@@ -3,8 +3,9 @@ import { ConfigService } from "@nestjs/config";
 import request from "supertest";
 import { App } from "supertest/types";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { Role } from "../../src/auth/roles/role.enum.js";
 import { ResponseType } from "../../src/verifier/oid4vp/dto/presentation-request.dto.js";
-import { getToken, setupIssuanceTestApp } from "../utils.js";
+import { clientToken, getToken, setupIssuanceTestApp } from "../utils.js";
 
 describe("Session list filters and search", () => {
     let app: INestApplication<App>;
@@ -81,6 +82,54 @@ describe("Session list filters and search", () => {
             reference: "order-4711",
             credentialConfigurationIds: ["pid-no-key"],
         });
+    });
+
+    test("counts sessions per type and status, within the caller's scope", async () => {
+        const stats = (token: string) =>
+            request(app.getHttpServer())
+                .get("/session/stats")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${token}`)
+                .expect(200)
+                .then((response) => response.body);
+        const oneActive = {
+            total: 1,
+            byStatus: {
+                active: 1,
+                fetched: 0,
+                completed: 0,
+                expired: 0,
+                failed: 0,
+                cancelled: 0,
+            },
+            lastCompletedAt: null,
+        };
+
+        expect(await stats(authToken)).toEqual({
+            issuance: oneActive,
+            presentation: oneActive,
+        });
+
+        const verifierToken = await clientToken(
+            app,
+            authToken,
+            "stats-verifier",
+            [Role.PresentationRequest],
+        );
+        expect(await stats(verifierToken)).toEqual({
+            presentation: oneActive,
+        });
+
+        const config = app.get(ConfigService);
+        const otherToken = await getToken(
+            app,
+            config.getOrThrow("AUTH_CLIENT_ID"),
+            config.getOrThrow("AUTH_CLIENT_SECRET"),
+            "stats-other",
+        );
+        const otherStats = await stats(otherToken);
+        expect(otherStats.issuance.total).toBe(0);
+        expect(otherStats.presentation.total).toBe(0);
     });
 
     test("finds the session behind a pasted offer or request link", async () => {
