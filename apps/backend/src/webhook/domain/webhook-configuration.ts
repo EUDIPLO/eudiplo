@@ -14,3 +14,12 @@ export interface WebhookConfiguration {
         | { type: typeof WebhookAuthType.NONE };
     includeRawTokensFor?: string[];
 }
+
+/** `auth` with the API key replaced by `[REDACTED]`, for the audit log. */
+export function redactWebhookAuth(
+    auth: WebhookConfiguration["auth"],
+): WebhookConfiguration["auth"] {
+    return auth?.type === WebhookAuthType.API_KEY
+        ? { ...auth, config: { ...auth.config, value: "[REDACTED]" } }
+        : auth;
+}

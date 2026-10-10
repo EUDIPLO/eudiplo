@@ -130,7 +130,7 @@ Exports never contain secret values or database-held private keys:
 
 | Value                                                                 | In the export                                                | Requirement code         | On import                                                             |
 | --------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------ | --------------------------------------------------------------------- |
-| Retrievable secrets (KMS, registrar, webhook and attribute-provider credentials) | `${…}` placeholder                              | `SECRET_REQUIRED`        | Set the environment variable or replace the value                    |
+| Retrievable secrets (KMS, registrar, webhook and attribute-provider credentials, upstream client secrets of chained authorization servers) | `${…}` placeholder | `SECRET_REQUIRED`        | Set the environment variable or replace the value                    |
 | Client secrets (stored as bcrypt hash)                                | `${…}` placeholder                                           | `CLIENT_SECRET_REQUIRED` | Supply a secret, or `"secret": "!generate"` to get a new one once in `generatedSecrets` |
 | Private keys of `db` key chains                                       | `keySource: { "type": "required", "publicJwk": … }`          | `PRIVATE_KEY_REQUIRED`   | Supply `private-jwk`, or `{ "type": "regenerate" }` for new key material |
 | Keys in an external KMS                                               | `keySource: { "type": "external-reference", provider, externalKeyId, publicJwk }` | -  | The target provider must reach the same key; checked by signing a challenge |

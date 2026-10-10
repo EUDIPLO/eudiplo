@@ -16,6 +16,10 @@ import { AddOfferLifetimeToIssuanceConfig1784100000000 } from "../src/database/m
 import { AddSessionListFilters1784300000000 } from "../src/database/migrations/1784300000000-AddSessionListFilters.js";
 import { ChangeSessionOauthBindingsToTimestamp1784400000000 } from "../src/database/migrations/1784400000000-ChangeSessionOauthBindingsToTimestamp.js";
 import { describeWithContainers } from "./container-runtime.js";
+import {
+    redactAuditLogSecretsContract,
+    redactAuditLogSecretsEntities,
+} from "./persistence/redact-audit-log-secrets.contract.js";
 
 /**
  * Migration tests that verify migrations work correctly on both SQLite and PostgreSQL.
@@ -1260,5 +1264,30 @@ describe("Migration tests", () => {
                 );
             });
         });
+    });
+
+    // The same contract runs on SQLite in the unit tests.
+    describeWithContainers("RedactAuditLogSecrets on PostgreSQL", () => {
+        let postgresContainer: StartedPostgreSqlContainer;
+
+        beforeAll(async () => {
+            postgresContainer = await new PostgreSqlContainer(
+                "postgres:alpine",
+            ).start();
+        }, 60_000);
+
+        afterAll(async () => {
+            await postgresContainer?.stop();
+        });
+
+        redactAuditLogSecretsContract(() =>
+            new DataSource({
+                type: "postgres",
+                url: postgresContainer.getConnectionUri(),
+                entities: redactAuditLogSecretsEntities,
+                synchronize: true,
+                dropSchema: true,
+            }).initialize(),
+        );
     });
 });

@@ -3,6 +3,7 @@ import type { AuditLogRequestMeta } from "../../../audit-log/audit-log.service.j
 import { AuditLogService } from "../../../audit-log/audit-log.service.js";
 import {
     getChangedFields,
+    getChangedFieldsForKeys,
     resolveAuditActor,
 } from "../../../audit-log/audit-log-context.util.js";
 import { TokenPayload } from "../../../auth/token.decorator.js";
@@ -12,6 +13,7 @@ import {
     ImportPhase,
 } from "../../../platform/config-import/config-import-orchestrator.service.js";
 import { loadConfigDto } from "../../../shared/utils/config-file-loader.util.js";
+import { redactWebhookAuth } from "../../../webhook/domain/webhook-configuration.js";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
 import type { WebhookEndpointData } from "./domain/webhook-endpoint-data.js";
 import { CreateWebhookEndpointDto } from "./dto/create-webhook-endpoint.dto.js";
@@ -133,10 +135,14 @@ export class WebhookEndpointService {
                 tenantId,
                 actionType: "webhook_endpoint_updated",
                 actor: resolveAuditActor(actorToken),
-                changedFields: getChangedFields(
-                    this.sanitizeWebhookEndpointForLog(existing),
-                    this.sanitizeWebhookEndpointForLog(saved),
-                ),
+                // Compared before redaction, so a new API key is listed.
+                changedFields: getChangedFieldsForKeys(existing, saved, [
+                    "id",
+                    "name",
+                    "url",
+                    "description",
+                    "auth",
+                ]),
                 before: this.sanitizeWebhookEndpointForLog(existing),
                 after: this.sanitizeWebhookEndpointForLog(saved),
                 requestMeta,
@@ -176,7 +182,7 @@ export class WebhookEndpointService {
             name: endpoint.name,
             url: endpoint.url,
             description: endpoint.description,
-            auth: endpoint.auth,
+            auth: redactWebhookAuth(endpoint.auth),
         };
     }
 }

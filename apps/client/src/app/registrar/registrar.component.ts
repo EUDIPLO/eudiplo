@@ -102,7 +102,7 @@ export class RegistrarComponent implements OnInit {
           registrarUrl: this.config.registrarUrl,
           oidcUrl: this.config.oidcUrl,
           clientId: this.config.clientId,
-          clientSecret: this.config.clientSecret || '',
+          clientSecret: '', // Never returned; user must enter a new one to change it
           username: this.config.username,
           password: '', // Password is never returned; user must enter new one to change it
           registrationCertificateDefaults: {
