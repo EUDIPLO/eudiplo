@@ -1055,10 +1055,6 @@ export const RegistrarConfigResponseDtoSchema = {
             description: 'The OIDC client ID for the registrar',
             example: 'registrar-client'
         },
-        clientSecret: {
-            type: 'string',
-            description: 'The OIDC client secret (optional, for confidential clients)'
-        },
         username: {
             type: 'string',
             description: 'The username for OIDC login',
@@ -1080,6 +1076,11 @@ export const RegistrarConfigResponseDtoSchema = {
             type: 'boolean',
             description: 'Indicates whether a password is configured (actual password is never returned)',
             example: true
+        },
+        hasClientSecret: {
+            type: 'boolean',
+            description: 'Indicates whether a client secret is configured (actual client secret is never returned)',
+            example: false
         }
     },
     required: [
@@ -1087,7 +1088,8 @@ export const RegistrarConfigResponseDtoSchema = {
         'oidcUrl',
         'clientId',
         'username',
-        'hasPassword'
+        'hasPassword',
+        'hasClientSecret'
     ]
 } as const;
 

@@ -12,6 +12,10 @@ import {
     ImportPhase,
 } from "../../../platform/config-import/config-import-orchestrator.service.js";
 import { loadConfigDto } from "../../../shared/utils/config-file-loader.util.js";
+import {
+    changedEndpointFields,
+    redactWebhookAuth,
+} from "../../../webhook/domain/webhook-configuration.js";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
 import type { WebhookEndpointData } from "./domain/webhook-endpoint-data.js";
 import { CreateWebhookEndpointDto } from "./dto/create-webhook-endpoint.dto.js";
@@ -133,10 +137,7 @@ export class WebhookEndpointService {
                 tenantId,
                 actionType: "webhook_endpoint_updated",
                 actor: resolveAuditActor(actorToken),
-                changedFields: getChangedFields(
-                    this.sanitizeWebhookEndpointForLog(existing),
-                    this.sanitizeWebhookEndpointForLog(saved),
-                ),
+                changedFields: changedEndpointFields(existing, saved),
                 before: this.sanitizeWebhookEndpointForLog(existing),
                 after: this.sanitizeWebhookEndpointForLog(saved),
                 requestMeta,
@@ -176,7 +177,7 @@ export class WebhookEndpointService {
             name: endpoint.name,
             url: endpoint.url,
             description: endpoint.description,
-            auth: endpoint.auth,
+            auth: redactWebhookAuth(endpoint.auth),
         };
     }
 }

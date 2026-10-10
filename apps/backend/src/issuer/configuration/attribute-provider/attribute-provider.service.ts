@@ -12,6 +12,10 @@ import {
     ImportPhase,
 } from "../../../platform/config-import/config-import-orchestrator.service.js";
 import { loadConfigDto } from "../../../shared/utils/config-file-loader.util.js";
+import {
+    changedEndpointFields,
+    redactWebhookAuth,
+} from "../../../webhook/domain/webhook-configuration.js";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
 import type { AttributeProviderData } from "./domain/attribute-provider-data.js";
 import { CreateAttributeProviderDto } from "./dto/create-attribute-provider.dto.js";
@@ -133,10 +137,7 @@ export class AttributeProviderService {
                 tenantId,
                 actionType: "attribute_provider_updated",
                 actor: resolveAuditActor(actorToken),
-                changedFields: getChangedFields(
-                    this.sanitizeAttributeProviderForLog(existing),
-                    this.sanitizeAttributeProviderForLog(saved),
-                ),
+                changedFields: changedEndpointFields(existing, saved),
                 before: this.sanitizeAttributeProviderForLog(existing),
                 after: this.sanitizeAttributeProviderForLog(saved),
                 requestMeta,
@@ -176,7 +177,7 @@ export class AttributeProviderService {
             name: provider.name,
             description: provider.description,
             url: provider.url,
-            auth: provider.auth,
+            auth: redactWebhookAuth(provider.auth),
         };
     }
 }

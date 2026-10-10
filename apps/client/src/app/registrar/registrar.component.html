@@ -85,7 +85,11 @@
                   matInput
                   formControlName="clientSecret"
                   [type]="showPassword ? 'text' : 'password'"
-                  placeholder="Optional client secret"
+                  [placeholder]="
+                    config?.hasClientSecret
+                      ? 'Leave empty to keep existing'
+                      : 'Optional client secret'
+                  "
                 />
                 <button
                   mat-icon-button
@@ -95,6 +99,9 @@
                 >
                   <mat-icon>{{ showPassword ? 'visibility_off' : 'visibility' }}</mat-icon>
                 </button>
+                @if (config?.hasClientSecret) {
+                  <mat-hint>Client secret is set. Enter a new value to change it.</mat-hint>
+                }
               </mat-form-field>
             </div>
 

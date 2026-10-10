@@ -5,18 +5,20 @@ import { firstValueFrom } from 'rxjs';
 
 /**
  * Registrar configuration response from the API.
- * The password is never returned for security reasons; instead hasPassword indicates if one is set.
+ * The password and client secret are never returned for security reasons; instead
+ * hasPassword and hasClientSecret indicate if one is set.
  */
 export interface RegistrarConfig {
   tenantId?: string;
   registrarUrl: string;
   oidcUrl: string;
   clientId: string;
-  clientSecret?: string;
   username: string;
   registrationCertificateDefaults?: Record<string, unknown> | null;
   /** Indicates whether a password is configured (actual password is never returned) */
   hasPassword: boolean;
+  /** Indicates whether a client secret is configured (actual secret is never returned) */
+  hasClientSecret: boolean;
 }
 
 /**

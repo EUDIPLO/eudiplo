@@ -109,3 +109,49 @@ describe("IssuanceService.storeIssuanceConfiguration", () => {
         expect(save).toHaveBeenCalledOnce();
     });
 });
+
+describe("IssuanceService audit log", () => {
+    const upstream = (clientSecret: string) => ({
+        issuer: "https://idp.example",
+        clientId: "c",
+        clientSecret,
+    });
+    const chained = (clientSecret: string) => ({
+        type: "chained",
+        id: "chained",
+        upstream: upstream(clientSecret),
+    });
+
+    it("lists a new upstream client secret as a changed field without storing it", async () => {
+        const record = vi.fn();
+        const issuance = Object.assign(
+            Object.create(IssuanceService.prototype),
+            {
+                issuanceConfigRepo: {
+                    getForTenant: vi.fn().mockResolvedValue({
+                        tenantId: "tenant-1",
+                        authorizationServers: [chained("old-secret")],
+                    }),
+                    save: vi.fn(async (config) => config),
+                },
+                tenantActionLogService: { record },
+            },
+        ) as IssuanceService;
+
+        await issuance.storeIssuanceConfiguration(
+            "tenant-1",
+            { authorizationServers: [chained("new-secret")] } as any,
+            { client: { clientId: "admin" } } as any,
+        );
+
+        const [entry] = record.mock.calls[0];
+        expect(entry.changedFields).toEqual(["authorizationServers"]);
+        expect(entry.before.authorizationServers[0].upstream).toEqual(
+            upstream("[REDACTED]"),
+        );
+        expect(entry.after.authorizationServers[0].upstream).toEqual(
+            upstream("[REDACTED]"),
+        );
+        expect(JSON.stringify(entry)).not.toMatch(/old-secret|new-secret/);
+    });
+});
