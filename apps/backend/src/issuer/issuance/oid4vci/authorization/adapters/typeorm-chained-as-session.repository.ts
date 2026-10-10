@@ -55,8 +55,10 @@ export class TypeOrmChainedAsSessionRepository
         });
     }
 
-    findByRefreshToken(tenantId: string, refreshToken: string) {
-        return this.sessions.findOne({ where: { tenantId, refreshToken } });
+    findByRefreshToken(tenantId: string, refreshTokenHash: string) {
+        return this.sessions.findOne({
+            where: { tenantId, refreshToken: refreshTokenHash },
+        });
     }
 
     findByIssuerState(tenantId: string, issuerState: string) {

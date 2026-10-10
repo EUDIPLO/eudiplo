@@ -5,6 +5,7 @@ import {
 } from "@nestjs/swagger";
 import { Column, Entity, ManyToOne, PrimaryColumn } from "typeorm";
 import { TenantEntity } from "../../../../auth/tenant/entities/tenant.entity.js";
+import { encryptedJsonPaths } from "../../../../platform/data-encryption/encrypted-column.transformer.js";
 import {
     WebHookAuthConfigHeader,
     WebHookAuthConfigNone,
@@ -47,6 +48,7 @@ export class AttributeProviderEntity {
             { $ref: getSchemaPath(WebHookAuthConfigHeader) },
         ],
     })
-    @Column("json")
+    // The API key is encrypted at rest.
+    @Column("json", { transformer: encryptedJsonPaths("config.value") })
     auth!: WebHookAuthConfigNone | WebHookAuthConfigHeader;
 }

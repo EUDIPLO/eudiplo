@@ -12,10 +12,12 @@ again after major upgrades. Each item links to the guide that explains it.
 - [ ] `MASTER_SECRET` is a random value of at least 32 characters
       (`openssl rand -base64 32`), kept in a secret manager and never changed
       while the data exists ([Encryption keys](encryption-keys.md#keep-the-key-stable)).
-- [ ] The encryption key comes from `vault`, `aws` or `azure` instead of being
-      derived from `MASTER_SECRET` ([Encryption keys](encryption-keys.md#choose-a-key-source)),
-      and is backed up. The bundled Vault of the `full` preset runs in
-      development mode and loses the key on every restart
+- [ ] The encryption key is backed up: `MASTER_SECRET` with the default
+      `ENCRYPTION_KEY_SOURCE=env`, or the key in `vault`, `aws` or `azure`
+      ([Encryption keys](encryption-keys.md#choose-a-key-source)). An external
+      key source is optional; it keeps the key out of the backend's
+      environment. The bundled Vault of the `full` preset runs in development
+      mode and loses the key on every restart
       ([presets](index.md#presets-and-profiles)).
 - [ ] `AUTH_CLIENT_SECRET` is random. Changing it in the environment later has
       no effect; rotate it with `POST /api/client/<id>/rotate-secret`

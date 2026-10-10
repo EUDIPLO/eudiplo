@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Column, Entity, ManyToOne, PrimaryColumn } from "typeorm";
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
+import { EncryptedStringTransformer } from "../../platform/data-encryption/encrypted-column.transformer.js";
 
 /**
  * Typed defaults for registrar registration certificate creation.
@@ -25,10 +26,7 @@ export class RegistrationCertificateDefaults {
 /**
  * Stores the configuration for connecting to an external registrar service.
  * Each tenant can have their own registrar configuration with OIDC credentials.
- *
- * Note: Credentials are stored in plaintext for ease of use without the client.
- * For production environments with higher security requirements, consider
- * using a secrets manager like HashiCorp Vault.
+ * The client secret and password are encrypted at rest.
  */
 @Entity()
 export class RegistrarConfigEntity {
@@ -86,7 +84,10 @@ export class RegistrarConfigEntity {
         description:
             "The OIDC client secret (optional, for confidential clients)",
     })
-    @Column("varchar", { nullable: true })
+    @Column("varchar", {
+        nullable: true,
+        transformer: EncryptedStringTransformer,
+    })
     clientSecret?: string;
 
     /**
@@ -101,12 +102,11 @@ export class RegistrarConfigEntity {
 
     /**
      * The password for OIDC Resource Owner Password Credentials (ROPC) flow.
-     * Note: Stored in plaintext for ease of use. Use a secrets manager for production.
      */
     @ApiProperty({
-        description: "The password for OIDC login (stored in plaintext)",
+        description: "The password for OIDC login (encrypted at rest)",
     })
-    @Column("varchar")
+    @Column("varchar", { transformer: EncryptedStringTransformer })
     password!: string;
 
     /**
