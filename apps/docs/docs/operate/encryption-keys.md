@@ -23,8 +23,10 @@ startup from `ENCRYPTION_KEY_SOURCE`.
 
 In JSON columns that mix settings and secrets, only the secret value is
 encrypted, so the rest of the setting stays readable in the database. Refresh
-tokens of the built-in and chained authorization servers are stored as SHA-256
-hashes and API client secrets as bcrypt hashes. Public keys, certificates and the
+tokens, authorization codes and pre-authorized codes of the built-in and chained
+authorization servers are stored as SHA-256 hashes and API client secrets as
+bcrypt hashes. The pre-authorized code is still part of the encrypted `offer`,
+which the wallet fetches. Public keys, certificates and the
 rest of the configuration are stored in plain text. Keys in an
 external [KMS](kms.md) never reach the database. Secrets stored by 8.x are
 encrypted by a migration on the first start of 9.0.

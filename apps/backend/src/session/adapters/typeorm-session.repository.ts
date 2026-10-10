@@ -12,6 +12,7 @@ import {
     type SelectQueryBuilder,
 } from "typeorm";
 import type { QueryDeepPartialEntity } from "typeorm/query-builder/QueryPartialEntity.js";
+import { hashAuthorizationCode } from "../../issuer/issuance/oid4vci/authorization/domain/token-grant-rules.js";
 import type {
     ExternalSessionBinding,
     NewSession,
@@ -128,8 +129,8 @@ export class TypeOrmSessionRepository implements SessionRepository {
     findIso18013Session(id: string) {
         return this.findSession({ id, dcApiProtocol: "iso-18013-7" });
     }
-    findByAuthorizationCode(tenantId: string, authorization_code: string) {
-        return this.findSession({ tenantId, authorization_code });
+    findByAuthorizationCode(tenantId: string, codeHash: string) {
+        return this.findSession({ tenantId, authorization_code: codeHash });
     }
     findByRefreshToken(tenantId: string, refreshTokenHash: string) {
         return this.findSession({ tenantId, refresh_token: refreshTokenHash });
@@ -331,7 +332,10 @@ export class TypeOrmSessionRepository implements SessionRepository {
                 });
             if (search.authorizationCode)
                 qb.orWhere("s.authorization_code = :searchAuthorizationCode", {
-                    searchAuthorizationCode: search.authorizationCode,
+                    // Only the hash of the code is stored.
+                    searchAuthorizationCode: hashAuthorizationCode(
+                        search.authorizationCode,
+                    ),
                 });
             if (search.reference)
                 qb.orWhere("s.reference = :searchReference", {

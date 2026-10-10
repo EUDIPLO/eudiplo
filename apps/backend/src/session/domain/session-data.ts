@@ -88,6 +88,7 @@ export interface SessionData {
     /** Caller reference of the offer; plaintext, never personal data. */
     reference?: string | null;
     status: SessionStatus;
+    /** SHA-256 hash of the authorization or pre-authorized code. */
     authorization_code?: string;
     authorization_code_expires_at?: Date;
     dpop_jkt?: string;

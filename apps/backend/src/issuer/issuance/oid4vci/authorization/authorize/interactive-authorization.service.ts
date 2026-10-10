@@ -40,6 +40,7 @@ import { OAuthError } from "../domain/oauth-error.js";
 import { assertOfferRedeemable } from "../domain/offer-redemption.js";
 import { assertS256CodeChallenge, checkS256Pkce } from "../domain/pkce.js";
 import { AUTHORIZATION_CODE_LIFETIME_SECONDS } from "../domain/pushed-authorization-request.js";
+import { hashAuthorizationCode } from "../domain/token-grant-rules.js";
 import {
     INTERACTIVE_AUTH_SESSION_REPOSITORY,
     type InteractiveAuthSessionRepository,
@@ -1029,9 +1030,9 @@ export class InteractiveAuthorizationService {
     ): Promise<InteractiveAuthorizationResponse> {
         const authorizationCode = randomUUID();
 
-        // Update the session with the authorization code
+        // Update the session with the authorization code (only its hash is stored)
         await this.authSessionRepository.update(authSession.id, {
-            authorizationCode,
+            authorizationCode: hashAuthorizationCode(authorizationCode),
             status: "code_issued",
         });
 
@@ -1042,7 +1043,8 @@ export class InteractiveAuthorizationService {
                     authSession.tenantId,
                     authSession.issuerState,
                     {
-                        authorization_code: authorizationCode,
+                        authorization_code:
+                            hashAuthorizationCode(authorizationCode),
                         // Short-lived like codes of the authorization endpoint.
                         authorization_code_expires_at: new Date(
                             Date.now() +

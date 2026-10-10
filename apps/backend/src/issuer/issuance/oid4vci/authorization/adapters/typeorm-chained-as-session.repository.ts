@@ -45,11 +45,11 @@ export class TypeOrmChainedAsSessionRepository
         });
     }
 
-    findAuthorizedByCode(tenantId: string, authorizationCode: string) {
+    findAuthorizedByCode(tenantId: string, authorizationCodeHash: string) {
         return this.sessions.findOne({
             where: {
                 tenantId,
-                authorizationCode,
+                authorizationCode: authorizationCodeHash,
                 status: ChainedAsSessionStatus.AUTHORIZED,
             },
         });

@@ -10,6 +10,7 @@ import { Oauth2ServerErrorResponseError } from "@openid4vc/oauth2";
 import { lastValueFrom, timeout, toArray } from "rxjs";
 import { DataSource } from "typeorm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { hashAuthorizationCode } from "../../src/issuer/issuance/oid4vci/authorization/domain/token-grant-rules.js";
 
 describe("session lifecycle module wiring", () => {
     let app: INestApplication;
@@ -209,7 +210,8 @@ describe("session lifecycle module wiring", () => {
         await repository.save({
             id,
             tenantId: "tenant-a",
-            authorization_code: id,
+            // Sessions store the hash of the pre-authorized code.
+            authorization_code: hashAuthorizationCode(id),
             credentialPayload: { flow: "pre_authorized_code", tx_code: "1234" },
         });
         // Rejections use the real library error shape (code in errorResponse).

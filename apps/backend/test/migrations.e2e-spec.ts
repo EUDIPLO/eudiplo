@@ -21,6 +21,10 @@ import {
     encryptStoredSecretsEntities,
 } from "./persistence/encrypt-stored-secrets.contract.js";
 import {
+    hashAuthorizationCodesContract,
+    hashAuthorizationCodesEntities,
+} from "./persistence/hash-authorization-codes.contract.js";
+import {
     redactAuditLogSecretsContract,
     redactAuditLogSecretsEntities,
 } from "./persistence/redact-audit-log-secrets.contract.js";
@@ -1299,6 +1303,16 @@ describe("Migration tests", () => {
                 type: "postgres",
                 url: postgresContainer.getConnectionUri(),
                 entities: redactAuditLogSecretsEntities,
+                synchronize: true,
+                dropSchema: true,
+            }).initialize(),
+        );
+
+        hashAuthorizationCodesContract(() =>
+            new DataSource({
+                type: "postgres",
+                url: postgresContainer.getConnectionUri(),
+                entities: hashAuthorizationCodesEntities,
                 synchronize: true,
                 dropSchema: true,
             }).initialize(),

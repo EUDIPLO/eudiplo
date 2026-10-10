@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionOfferRequest } from "../../../../session/domain/session-data.js";
+import { hashAuthorizationCode } from "../authorization/domain/token-grant-rules.js";
 import { CreateCredentialOffer } from "./create-credential-offer.js";
 
 function fixture(offerLifetimeSeconds?: number | null) {
@@ -81,7 +82,8 @@ describe("CreateCredentialOffer", () => {
             expect.objectContaining({
                 tenantId: "tenant",
                 id: "session",
-                authorization_code: "code",
+                // The offer carries the code; the session only its hash.
+                authorization_code: hashAuthorizationCode("code"),
                 authorizationServerId: "selected",
             }),
         );

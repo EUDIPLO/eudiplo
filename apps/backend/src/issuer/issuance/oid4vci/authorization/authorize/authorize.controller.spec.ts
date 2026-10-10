@@ -17,7 +17,10 @@ import { AuthorizePushedRequest } from "../application/authorize-pushed-request.
 import { BuildBuiltInAuthorizationServerMetadata } from "../application/build-built-in-authorization-server-metadata.js";
 import { ExchangeAccessToken } from "../application/exchange-access-token.js";
 import { PushAuthorizationRequest } from "../application/push-authorization-request.js";
-import { hashRefreshToken } from "../domain/token-grant-rules.js";
+import {
+    hashAuthorizationCode,
+    hashRefreshToken,
+} from "../domain/token-grant-rules.js";
 import { AuthorizeController } from "./authorize.controller.js";
 import { AuthorizeService } from "./authorize.service.js";
 
@@ -216,7 +219,23 @@ function createHarness(issuanceConfig: Record<string, unknown> = {}) {
         ),
         new ExchangeAccessToken(
             servers,
-            sessions as never,
+            {
+                ...sessions,
+                // The store finds a session by the hash of the presented
+                // code, so that session holds this hash.
+                getByAuthorizationCode: async (
+                    tenantId: string,
+                    codeHash: string,
+                ) => {
+                    const found = await sessions.getByAuthorizationCode(
+                        tenantId,
+                        codeHash,
+                    );
+                    return found?.authorization_code
+                        ? { ...found, authorization_code: codeHash }
+                        : found;
+                },
+            } as never,
             recordFailedTxCodeAttempt,
             configuration,
             metadata,
@@ -365,7 +384,7 @@ describe("Built-in authorization server token endpoint", () => {
             );
             expect(h.sessions.getByAuthorizationCode).toHaveBeenCalledWith(
                 TENANT,
-                "x",
+                hashAuthorizationCode("x"),
             );
         });
 
@@ -387,7 +406,7 @@ describe("Built-in authorization server token endpoint", () => {
             );
             expect(h.sessions.getByAuthorizationCode).toHaveBeenCalledWith(
                 TENANT,
-                "pre-1",
+                hashAuthorizationCode("pre-1"),
             );
         });
 
@@ -1208,7 +1227,8 @@ describe("Built-in authorization server token endpoint", () => {
                 h.oauth.verifyAuthorizationCodeAccessTokenRequest,
             ).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    expectedCode: "code-1",
+                    // The presented code, whose hash the session holds.
+                    expectedCode: "c",
                     codeExpiresAt: new Date(1000),
                     dpop: {
                         required: false,
@@ -1722,7 +1742,7 @@ describe("Built-in authorization server authorize endpoint", () => {
             TENANT,
             "session-1",
             {
-                authorization_code: code,
+                authorization_code: hashAuthorizationCode(code!),
                 authorization_code_expires_at: expect.any(Date),
             },
         );
