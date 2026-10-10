@@ -88,6 +88,19 @@ describe("Presentation - Offer Creation", () => {
             });
     });
 
+    test("rejects an inline webhook with an empty URL", async () => {
+        await request(app.getHttpServer())
+            .post("/verifier/offer")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                response_type: ResponseType.URI,
+                requestId: "pid",
+                webhook: { url: "", auth: { type: "none" } },
+            })
+            .expect(400);
+    });
+
     test("rejects presentation configs with claim_sets but no claim ids", async () => {
         await request(app.getHttpServer())
             .post("/verifier/config")

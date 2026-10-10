@@ -22,6 +22,7 @@ import { FlexLayoutModule } from 'ngx-flexible-layout';
 import {
   CredentialConfig,
   TrustList,
+  type SchemaMetaConfig,
   type VocabularyEntryDto,
   trustListControllerGetAllTrustLists,
 } from '@eudiplo/sdk-core';
@@ -402,7 +403,8 @@ export class SchemaCreateComponent implements OnInit {
       // it to the registrar in a single call — we just receive the resulting
       // metadata entry.
       const created = await this.schemaService.publishSchemaMetadata(
-        this.buildConfigFromForm(),
+        // Version, LoS and binding type are required controls of the form.
+        this.buildConfigFromForm() as Omit<SchemaMetaConfig, 'id'>,
         undefined,
         this.resolveLinkedCredentialConfigId()
       );

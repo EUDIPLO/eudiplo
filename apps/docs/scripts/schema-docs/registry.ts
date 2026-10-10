@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import { CreateAttributeProviderSchema } from "../../../backend/src/issuer/configuration/attribute-provider/schemas/attribute-provider.schema.js";
 import { CredentialConfigCreateSchema } from "../../../backend/src/issuer/configuration/credentials/schemas/credential-config.schema.js";
+import { SignSchemaMetaConfigSchema } from "../../../backend/src/issuer/configuration/credentials/dto/schema-meta-config.schema.js";
 import { OfferRequestSchema } from "../../../backend/src/issuer/issuance/oid4vci/dto/offer-request.schema.js";
 import {
     AwsKmsConfigSchema,
@@ -64,6 +65,7 @@ export const schemaDocs: SchemaDoc[] = [
         },
     },
     { name: "trust-list", schema: TrustListCreateSchema },
+    { name: "schema-metadata-publish", schema: SignSchemaMetaConfigSchema },
     { name: "kms-config", schema: KmsConfigSchema },
     { name: "kms-provider-db", schema: DbKmsConfigSchema },
     { name: "kms-provider-vault", schema: VaultKmsConfigSchema },

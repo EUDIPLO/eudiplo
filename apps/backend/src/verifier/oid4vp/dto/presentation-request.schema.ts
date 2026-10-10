@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { WebhookConfigSchema } from "../../../webhook/webhook.dto.schema.js";
+import { WebhookConfigSchema } from "../../../webhook/webhook.schema.js";
 import { TransactionDataSchema } from "../../presentations/schemas/presentation-config.schema.js";
 
 export const ResponseType = {

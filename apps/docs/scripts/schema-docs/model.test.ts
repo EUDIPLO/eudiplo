@@ -55,11 +55,11 @@ test("extracted webhook schema keeps both auth branches and strict validation", 
     assert.equal(PresentationRequestSchema.safeParse({
         ...base, webhook: { url: "https://example.com", auth: { type: "none", extra: true } },
     }).success, false);
-    // The DTO's existing schema accepted empty strings; the separate webhook config
-    // schema has stronger min(1) rules and must not silently replace it here.
+    // Inline webhooks use the published WebhookConfig schema, which rejects
+    // an empty URL, header name or API key.
     assert.equal(PresentationRequestSchema.safeParse({
         ...base, webhook: { url: "", auth: { type: "apiKey", config: { headerName: "", value: "" } } },
-    }).success, true);
+    }).success, false);
 });
 
 test("nullable fields keep their type and are marked nullable", () => {

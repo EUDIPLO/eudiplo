@@ -145,17 +145,17 @@ export class RegistrarController {
     /**
      * Create an access certificate for a specific key.
      * The certificate will be fetched from the registrar and stored in EUDIPLO.
-     * Requires a relying party to be already registered at the registrar.
+     * Registers the tenant as relying party at the registrar if it is not yet.
      * @param token - The token payload from the auth context
      * @param dto - The key ID to create the certificate for
-     * @returns The access certificate ID and PEM
+     * @returns The registrar's certificate ID, the key chain ID and the PEM
      */
     @Post("access-certificate")
     @ApiOperation({
         summary: "Create an access certificate for a key",
         description:
             "Creates an access certificate at the registrar for the specified key. " +
-            "Requires a relying party to be already registered at the registrar. " +
+            "Registers the tenant as relying party at the registrar if it is not yet. " +
             "The certificate is automatically stored in EUDIPLO.",
     })
     @ApiResponse({
@@ -163,10 +163,16 @@ export class RegistrarController {
         description: "Access certificate created successfully",
         schema: {
             type: "object",
+            required: ["id", "certId", "crt"],
             properties: {
                 id: {
                     type: "string",
                     description: "The certificate ID at the registrar",
+                },
+                certId: {
+                    type: "string",
+                    description:
+                        "ID of the key chain that now holds the certificate",
                 },
                 crt: {
                     type: "string",
@@ -178,7 +184,7 @@ export class RegistrarController {
     @ApiResponse({
         status: 400,
         description:
-            "No relying party found at registrar or failed to create certificate",
+            "The registrar rejected the relying-party registration or the certificate request",
     })
     @ApiResponse({
         status: 404,
@@ -187,7 +193,7 @@ export class RegistrarController {
     async createAccessCertificate(
         @Token() token: TokenPayload,
         @Body() dto: CreateAccessCertificateDto,
-    ): Promise<{ id: string; crt: string }> {
+    ): Promise<{ id: string; certId: string; crt: string }> {
         return this.registrarService.createAccessCertificate(
             token.entity!.id,
             dto,

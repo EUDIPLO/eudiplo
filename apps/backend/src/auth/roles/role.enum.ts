@@ -7,7 +7,7 @@ export enum Role {
     Presentations = "presentation:manage",
     // to create presentation requests, read presentation configurations and read or delete presentation sessions
     PresentationRequest = "presentation:request",
-    // to manage issuer resources: credential and issuance configurations, attribute providers, status lists, key chains and webhook endpoints
+    // to manage issuer resources: credential and issuance configurations, attribute providers, status lists, key chains and webhook endpoints, and to publish schema metadata at the registrar
     Issuances = "issuance:manage",
     // to create credential offers, complete or fail deferred issuance, revoke or suspend credentials, and read or delete issuance sessions
     IssuanceOffer = "issuance:offer",
@@ -19,7 +19,7 @@ export enum Role {
     Tenants = "tenants:manage",
     // to manage the current tenant's full configuration: configuration bundles, key export and KMS provider settings
     TenantAdmin = "tenant:admin",
-    // to manage the registrar configuration and request registration certificates
+    // to manage the registrar configuration, enroll access certificates, and list, update, deprecate and delete schema metadata at the registrar
     Registrar = "registrar:manage",
 }
 
