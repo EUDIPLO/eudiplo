@@ -3,6 +3,7 @@ import {
   configPortabilityControllerExport,
   configPortabilityControllerImport,
   configPortabilityControllerImportArchive,
+  configPortabilityControllerOperations,
   configPortabilityControllerPlan,
   configPortabilityControllerPlanArchive,
 } from '@eudiplo/sdk-core';
@@ -153,11 +154,8 @@ export class ConfigPortabilityService {
   }
 
   async listOperations(): Promise<ConfigOperation[]> {
-    const result = await this.api.client.get({
-      url: '/api/config-bundles/operations',
-      throwOnError: true,
-    });
-    return result.data as ConfigOperation[];
+    const result = await configPortabilityControllerOperations<true>({ client: this.api.client });
+    return result.data as unknown as ConfigOperation[];
   }
 
   listResources(): Promise<ConfigResourceMetadata[]> {
