@@ -130,7 +130,7 @@ For other credentials, **Import from Issuer** fills in the types and claim paths
 On **3. Settings**:
 
 1. Keep **Lifetime of the request** at `300` seconds and **Status List Check Mode** at **Strict**. The cookbook credential has no status entry, so there is nothing to check yet.
-2. In **Access Key Chain (optional)**, select `Membership verifier access`. Do not select the credential signing key.
+2. Open **Request and verification options** and select `Membership verifier access` in **Access Key Chain (optional)**. Do not select the credential signing key.
 3. Leave the registration certificate empty unless your wallet requires one.
 4. Leave redirect URI, webhook and the other options empty.
 5. Choose **Continue**, check that the review lists `name` and `member_id`, then choose **Create Configuration**.
