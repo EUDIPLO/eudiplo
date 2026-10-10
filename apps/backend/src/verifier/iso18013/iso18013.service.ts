@@ -53,6 +53,7 @@ import { WebhookConfig } from "../../webhook/webhook.dto.js";
 import { CredentialVerifierFormatRegistry } from "../presentations/application/credential-verifier-format-registry.js";
 import { PresentationConfigService } from "../presentations/configuration/presentation-config.service.js";
 import { verificationFailureDetails } from "../presentations/credential/verification-failure.js";
+import { missingTrustedAuthorities } from "../presentations/domain/trusted-authority-requirement.js";
 import {
     trustListAuthorities,
     verifierTrustOptions,
@@ -497,6 +498,13 @@ export class Iso18013Service {
         );
         if (!mdocCred) {
             throw new BadRequestException("No mso_mdoc credential in config");
+        }
+        const missingAuthorities = missingTrustedAuthorities(
+            [mdocCred],
+            this.configService.get<boolean>("SKIP_TRUST_AUTHORITY") ?? false,
+        );
+        if (missingAuthorities) {
+            throw new BadRequestException(missingAuthorities);
         }
 
         // Build VerifierOptions from the credential's trusted_authorities config,

@@ -37,6 +37,7 @@ Rules that the table cannot show:
 
 - `dcql_query.credentials` needs at least one entry; credential query IDs contain only letters, digits, `_` and `-`, and are unique.
 - `meta` is required: `vct_values` (at least one) for `dc+sd-jwt`, `doctype_value` for `mso_mdoc`.
+- Every credential query needs `trusted_authorities` with an `etsi_tl` trust list or an `openid_federation` trust anchor, unless `SKIP_TRUST_AUTHORITY=true`. See [DCQL](../presentation/dcql.md#accept-only-trusted-issuers).
 - Every ID in `claim_sets` must reference the `id` of a claim in the same credential query; claim IDs are unique.
 - `transaction_data` entries whose `type` starts with `urn:eudi:sca:` must be a supported [TS12 type with a valid payload](../presentation/transaction-data.md#ts12-sca-transaction-data).
 

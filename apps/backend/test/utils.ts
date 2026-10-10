@@ -687,6 +687,18 @@ export async function setupIssuanceTestApp(): Promise<IssuanceTestContext> {
 }
 
 /**
+ * `trusted_authorities` of a DCQL credential query that accepts the test
+ * issuer (attestation key chain), listed in the fixture trust list
+ * `haip/trust-lists/pid-tl.json`.
+ */
+export const FIXTURE_TRUSTED_AUTHORITIES = [
+    {
+        type: "etsi_tl" as const,
+        values: [{ trustListId: "580831bc-ef11-43f4-a3be-a2b6bf1b29a3" }],
+    },
+];
+
+/**
  * Shared test context returned by setupPresentationTestApp
  */
 export interface PresentationTestContext {

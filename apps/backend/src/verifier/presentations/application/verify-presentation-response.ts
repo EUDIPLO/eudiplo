@@ -21,12 +21,16 @@ import {
     missingClaimsViolation,
     type VerifierCredentialFormat,
 } from "../domain/dcql-claim-policy.js";
+import { missingTrustedAuthorities } from "../domain/trusted-authority-requirement.js";
 import {
     type DcqlTrustedAuthority,
     trustListAuthorities,
     verifierTrustOptions,
 } from "../domain/verifier-trust-options.js";
-import type { TrustListRefResolver } from "../ports/trust-list-ref-resolver.js";
+import {
+    InvalidTrustedAuthoritiesError,
+    type TrustListRefResolver,
+} from "../ports/trust-list-ref-resolver.js";
 import type { PresentationSettings } from "../presentation-settings.js";
 import type { CredentialVerifierFormatRegistry } from "./credential-verifier-format-registry.js";
 
@@ -108,13 +112,15 @@ export class CredentialVerificationFailedError extends Error {
  * Verifies every credential in the `vp_token` of an OID4VP response against
  * the presentation config's DCQL query and returns the disclosed claims.
  *
- * Checks, in order: all required credentials are present with at least one
- * presentation; per credential id, it is part of the query, it has a single
- * presentation unless the query allows `multiple`, its trusted authorities
- * resolve, its claim sets are well formed; then every presented value is
- * verified by its format and must disclose the requested claims (or one
- * claim set) with one of their requested `values`. A value mismatch is
- * reported before missing claims.
+ * Checks, in order: every credential query names a trusted authority (unless
+ * `SKIP_TRUST_AUTHORITY`), so a config stored before 9.0 without one does
+ * not verify without an issuer check; all required credentials are present
+ * with at least one presentation; per credential id, it is part of the query,
+ * it has a single presentation unless the query allows `multiple`, its
+ * trusted authorities resolve, its claim sets are well formed; then every
+ * presented value is verified by its format and must disclose the requested
+ * claims (or one claim set) with one of their requested `values`. A value
+ * mismatch is reported before missing claims.
  *
  * Throws the errors above, `UnknownClaimSetReferenceError`,
  * `UnsupportedCredentialVerifierFormat`, `InvalidTrustedAuthoritiesError`, or
@@ -138,6 +144,14 @@ export class VerifyPresentationResponse {
             (credentialId) => response.vp_token[credentialId].length > 0,
         );
         const tenantHost = `${this.settings.publicUrl}/issuers/${query.tenantId}`;
+
+        const missingAuthorities = missingTrustedAuthorities(
+            query.dcql_query.credentials,
+            this.settings.skipTrustAuthority,
+        );
+        if (missingAuthorities) {
+            throw new InvalidTrustedAuthoritiesError(missingAuthorities);
+        }
 
         const missingCredentials = findMissingCredentials(
             credentialIds,
