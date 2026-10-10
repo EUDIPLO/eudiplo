@@ -60,7 +60,6 @@ interface DashboardFocusOption {
   styleUrls: ['./dashboard.component.scss'],
 })
 export class DashboardComponent implements OnInit, OnDestroy {
-  private readonly refreshInterval?: NodeJS.Timeout;
   private tokenCheckInterval?: NodeJS.Timeout;
   grafanaEnabled = false;
   customizePanelOpen = false;
@@ -116,9 +115,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    if (this.refreshInterval) {
-      clearInterval(this.refreshInterval);
-    }
     if (this.tokenCheckInterval) {
       clearInterval(this.tokenCheckInterval);
     }

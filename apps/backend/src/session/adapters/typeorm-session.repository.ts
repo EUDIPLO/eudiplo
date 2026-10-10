@@ -35,12 +35,42 @@ import {
     type SessionStateUpdate,
     SessionStatus,
 } from "../domain/session-state.js";
+import type { SessionTypeStatusCount } from "../domain/session-stats.js";
 import { Session } from "../entities/session.entity.js";
 import type {
     SessionCount,
     SessionCredentialOffer,
     SessionRepository,
 } from "../ports/session.repository.js";
+
+/** Issuance sessions have no `requestId`, as in {@link typeWhere}. */
+const ISSUANCE_CASE = "CASE WHEN s.requestId IS NULL THEN 1 ELSE 0 END";
+
+interface TypeStatusCountRow {
+    issuance: number | string | boolean;
+    status: SessionStatus;
+    count: number | string;
+}
+
+/** Replace the selection with counts per session type and status. */
+function countByTypeAndStatus(
+    query: SelectQueryBuilder<Session>,
+): SelectQueryBuilder<Session> {
+    return query
+        .select(ISSUANCE_CASE, "issuance")
+        .addSelect("s.status", "status")
+        .addSelect("COUNT(*)", "count")
+        .groupBy(ISSUANCE_CASE)
+        .addGroupBy("s.status");
+}
+
+function toTypeStatusCount(row: TypeStatusCountRow): SessionTypeStatusCount {
+    return {
+        type: Number(row.issuance) === 1 ? "issuance" : "presentation",
+        status: row.status,
+        count: Number(row.count),
+    };
+}
 
 /** Where clause selecting one session type; any type when omitted. */
 function typeWhere(type?: SessionType): FindOptionsWhere<Session> {
@@ -244,10 +274,37 @@ export class TypeOrmSessionRepository implements SessionRepository {
         };
     }
 
+    async countForTenant(
+        tenantId: string,
+        type?: SessionType,
+    ): Promise<SessionTypeStatusCount[]> {
+        const rows: TypeStatusCountRow[] = await countByTypeAndStatus(
+            this.filteredSessions(tenantId, { type }),
+        ).getRawMany();
+        return rows.map(toTypeStatusCount);
+    }
+
+    async lastUpdatedForTenant(
+        tenantId: string,
+        type: SessionType,
+        status: SessionStatus,
+    ): Promise<Date | null> {
+        // Read through the entity, so both databases return a Date.
+        const session = await this.filteredSessions(tenantId, {
+            type,
+            status: [status],
+        })
+            .select(["s.id", "s.updatedAt"])
+            .orderBy("s.updatedAt", "DESC")
+            .limit(1)
+            .getOne();
+        return session?.updatedAt ?? null;
+    }
+
     /** The tenant's sessions matching every filter of the query. */
     private filteredSessions(
         tenantId: string,
-        query: SessionListQuery,
+        query: Omit<SessionListQuery, "page" | "pageSize">,
     ): SelectQueryBuilder<Session> {
         const qb = this.sessions
             .createQueryBuilder("s")
@@ -386,30 +443,20 @@ export class TypeOrmSessionRepository implements SessionRepository {
     }
 
     async countSessionsByStatus(): Promise<SessionCount[]> {
-        const rows: {
-            tenantId: string;
-            issuance: number | string | boolean;
-            status: SessionStatus;
-            count: number | string;
-        }[] = await this.sessions
-            .createQueryBuilder("s")
-            .select("s.tenantId", "tenantId")
-            .addSelect(
-                "CASE WHEN s.requestId IS NULL THEN 1 ELSE 0 END",
-                "issuance",
-            )
-            .addSelect("s.status", "status")
-            .addSelect("COUNT(*)", "count")
-            .groupBy("s.tenantId")
-            .addGroupBy("CASE WHEN s.requestId IS NULL THEN 1 ELSE 0 END")
-            .addGroupBy("s.status")
-            .getRawMany();
-        return rows.map((row) => ({
-            tenantId: row.tenantId,
-            kind: Number(row.issuance) === 1 ? "issuance" : "verification",
-            status: row.status,
-            count: Number(row.count),
-        }));
+        const rows: (TypeStatusCountRow & { tenantId: string })[] =
+            await countByTypeAndStatus(this.sessions.createQueryBuilder("s"))
+                .addSelect("s.tenantId", "tenantId")
+                .addGroupBy("s.tenantId")
+                .getRawMany();
+        return rows.map((row) => {
+            const { type, status, count } = toTypeStatusCount(row);
+            return {
+                tenantId: row.tenantId,
+                kind: type === "issuance" ? "issuance" : "verification",
+                status,
+                count,
+            };
+        });
     }
 
     async deleteSessionsCreatedBefore(
@@ -432,9 +479,8 @@ export class TypeOrmSessionRepository implements SessionRepository {
         tenantId: string,
         cutoff: Date,
     ): Promise<number> {
-        const result = await this.sessions
-            .createQueryBuilder()
-            .update()
+        const query = this.sessions.createQueryBuilder().update();
+        const result = await query
             .set({
                 credentials: () => "NULL",
                 credentialPayload: () => "NULL",
@@ -442,6 +488,8 @@ export class TypeOrmSessionRepository implements SessionRepository {
                 offer: () => "NULL",
                 requestObject: () => "NULL",
                 responseEncryptionPrivateJwk: () => "NULL",
+                // Otherwise TypeORM sets it to now; anonymizing keeps the timestamps.
+                updatedAt: () => query.escape("updatedAt"),
             })
             .where("tenantId = :tenantId", { tenantId })
             .andWhere("createdAt < :cutoffDate", { cutoffDate: cutoff })

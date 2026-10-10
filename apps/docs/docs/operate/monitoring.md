@@ -127,7 +127,7 @@ for `{service_name="eudiplo-backend"}`.
 | Metric                                         | Type      | Labels                                                    | Meaning                                                    |
 | ---------------------------------------------- | --------- | --------------------------------------------------------- | ---------------------------------------------------------- |
 | `http_server_request_duration_seconds`         | histogram | `http_route`, `http_request_method`, `http_response_status_code` | Duration of handled HTTP requests                   |
-| `sessions`                                     | gauge     | `tenant_id`, `session_type` (`issuance`, `verification`), `status` (`active`, `fetched`, `completed`, `expired`, `failed`) | Current number of sessions in the database |
+| `sessions`                                     | gauge     | `tenant_id`, `session_type` (`issuance`, `verification`), `status` (`active`, `fetched`, `completed`, `expired`, `failed`, `cancelled`) | Current number of sessions in the database |
 | `tenant_total`                                 | gauge     | -                                                         | Number of tenants                                          |
 | `federation_trust_cache_hits_total`, `_misses_total`, `_stale_total` | counter | -                                 | OpenID Federation trust cache                              |
 | `federation_trust_fetches_total`               | counter   | -                                                         | Outbound federation entity configuration fetches           |

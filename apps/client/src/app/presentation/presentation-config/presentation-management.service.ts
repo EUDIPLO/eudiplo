@@ -10,11 +10,14 @@ import {
   verifierOfferControllerGetOffer,
   PresentationConfigCreateDto,
 } from '@eudiplo/sdk-core';
+import { JwtService } from '../../services/jwt.service';
 
 @Injectable({
   providedIn: 'root',
 })
 export class PresentationManagementService {
+  constructor(private readonly jwtService: JwtService) {}
+
   createConfiguration(value: PresentationConfigCreateDto) {
     return presentationManagementControllerStorePresentationConfig({ body: value }).then(
       (response) => response.data
@@ -53,6 +56,12 @@ export class PresentationManagementService {
         ready: false,
         reason: 'Presentation configuration not found',
       };
+    }
+
+    // Reading key chains needs a manage role. Without one, the backend checks
+    // the access certificate when the request is created.
+    if (!this.jwtService.hasRole(['issuance:manage', 'presentation:manage'])) {
+      return { ready: true };
     }
 
     const keyChainsResponse = await keyChainControllerGetAll({});

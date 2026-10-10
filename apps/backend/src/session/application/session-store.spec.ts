@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SessionData } from "../domain/session-data.js";
+import { SessionStatus } from "../domain/session-state.js";
 import type { SessionRepository } from "../ports/session.repository.js";
 import { SessionNotFound } from "./session-errors.js";
 import { SessionStore } from "./session-store.js";
@@ -22,6 +23,8 @@ function createStore(
         updateUnconsumedForTenant: vi.fn().mockResolvedValue(true),
         consumeRequestUri: vi.fn().mockResolvedValue(true),
         listForTenant: vi.fn(),
+        countForTenant: vi.fn().mockResolvedValue([]),
+        lastUpdatedForTenant: vi.fn().mockResolvedValue(null),
         deleteForTenant: vi.fn().mockResolvedValue(undefined),
         findCredentialOffer: vi.fn(),
         consumeCredentialOffer: vi.fn(),
@@ -224,5 +227,66 @@ describe("SessionStore", () => {
             totalPages: 0,
         });
         expect(repository.listForTenant).not.toHaveBeenCalled();
+    });
+
+    it("counts both types for an unscoped caller", async () => {
+        const lastPresentation = new Date("2026-10-10T08:00:00Z");
+        const { store, repository } = createStore({
+            countForTenant: vi.fn().mockResolvedValue([
+                { type: "issuance", status: SessionStatus.Active, count: 2 },
+                {
+                    type: "presentation",
+                    status: SessionStatus.Completed,
+                    count: 4,
+                },
+            ]),
+            lastUpdatedForTenant: vi.fn(async (_tenant, type) =>
+                type === "presentation" ? lastPresentation : null,
+            ),
+        });
+
+        const stats = await store.statsForTenant("tenant-a");
+
+        expect(stats.issuance).toMatchObject({
+            total: 2,
+            byStatus: { active: 2, completed: 0 },
+            lastCompletedAt: null,
+        });
+        expect(stats.presentation).toMatchObject({
+            total: 4,
+            byStatus: { active: 0, completed: 4 },
+            lastCompletedAt: lastPresentation,
+        });
+        expect(repository.countForTenant).toHaveBeenCalledExactlyOnceWith(
+            "tenant-a",
+            undefined,
+        );
+        expect(repository.lastUpdatedForTenant).toHaveBeenCalledWith(
+            "tenant-a",
+            "issuance",
+            SessionStatus.Completed,
+        );
+        expect(repository.lastUpdatedForTenant).toHaveBeenCalledWith(
+            "tenant-a",
+            "presentation",
+            SessionStatus.Completed,
+        );
+    });
+
+    it("counts only the scoped type", async () => {
+        const { store, repository } = createStore();
+
+        const stats = await store.statsForTenant("tenant-a", "presentation");
+
+        expect(Object.keys(stats)).toEqual(["presentation"]);
+        expect(repository.countForTenant).toHaveBeenCalledExactlyOnceWith(
+            "tenant-a",
+            "presentation",
+        );
+        expect(repository.lastUpdatedForTenant).toHaveBeenCalledExactlyOnceWith(
+            "tenant-a",
+            "presentation",
+            SessionStatus.Completed,
+        );
     });
 });

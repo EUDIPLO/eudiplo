@@ -3,12 +3,15 @@ import {
   credentialConfigControllerGetConfigs,
   presentationManagementControllerConfiguration,
   sessionControllerGetAllSessions,
+  sessionControllerGetSessionStats,
   keyChainControllerGetAll,
   issuanceConfigControllerGetIssuanceConfigurations,
   registrarControllerGetConfig,
   trustListControllerGetAllTrustLists,
   KeyChainResponseDto,
   Session,
+  SessionStatsResponseDto,
+  SessionStatusCountsDto,
 } from '@eudiplo/sdk-core';
 import { JwtService } from '../services/jwt.service';
 
@@ -22,12 +25,10 @@ export class DashboardService {
 
   credentialConfigs = 0;
   presentationConfigs = 0;
-  sessionActive = 0;
-  sessionCompleted = 0;
-  sessionFetched = 0;
-  sessionFailed = 0;
-  sessionExpired = 0;
-  sessionCancelled = 0;
+  /** Only holds the session types the user may read. */
+  sessionStats: SessionStatsResponseDto = {};
+  /** False until the session counts arrive, and when their request fails. */
+  sessionStatsLoaded = false;
   totalKeyChains = 0;
   accessKeyChains = 0;
   hasActiveAccessCertificate = false;
@@ -38,10 +39,9 @@ export class DashboardService {
   trustListCount = 0;
   hasTrustList = false;
   hasRegistrarConfig = false;
-  lastSuccessfulIssuanceAt: string | null = null;
-  lastSuccessfulPresentationAt: string | null = null;
   hasIssuanceConfig = false;
   recentSessions: Session[] = [];
+  recentSessionsLoaded = false;
   isLoading = true;
 
   constructor(private readonly jwtService: JwtService) {}
@@ -49,12 +49,8 @@ export class DashboardService {
   async getCounters(): Promise<void> {
     this.isLoading = true;
     // Reset counters
-    this.sessionActive = 0;
-    this.sessionCompleted = 0;
-    this.sessionFetched = 0;
-    this.sessionFailed = 0;
-    this.sessionExpired = 0;
-    this.sessionCancelled = 0;
+    this.sessionStats = {};
+    this.sessionStatsLoaded = false;
     this.totalKeyChains = 0;
     this.accessKeyChains = 0;
     this.hasActiveAccessCertificate = false;
@@ -65,24 +61,18 @@ export class DashboardService {
     this.trustListCount = 0;
     this.hasTrustList = false;
     this.hasRegistrarConfig = false;
-    this.lastSuccessfulIssuanceAt = null;
-    this.lastSuccessfulPresentationAt = null;
     this.credentialConfigs = 0;
     this.presentationConfigs = 0;
     this.hasIssuanceConfig = false;
     this.recentSessions = [];
+    this.recentSessionsLoaded = false;
 
     try {
       // Build list of promises based on user roles
       const promises: Promise<any>[] = [];
       const promiseKeys: string[] = [];
 
-      // Key chains require issuance:manage OR presentation:manage
-      const canManageKeyChains =
-        this.jwtService.hasRole('issuance:manage') ||
-        this.jwtService.hasRole('presentation:manage');
-
-      if (canManageKeyChains) {
+      if (this.canManageKeyChains) {
         promises.push(keyChainControllerGetAll());
         promiseKeys.push('keyChains');
       }
@@ -95,22 +85,28 @@ export class DashboardService {
         promiseKeys.push('issuance');
       }
 
-      // Presentation configs require presentation:manage
-      if (this.jwtService.hasRole('presentation:manage')) {
+      // Presentation configs require presentation:manage OR presentation:request
+      if (this.canReadPresentationConfigs) {
         promises.push(presentationManagementControllerConfiguration());
         promiseKeys.push('presentations');
+      }
 
+      // Trust lists require presentation:manage
+      if (this.canManagePresentation) {
         promises.push(trustListControllerGetAllTrustLists());
         promiseKeys.push('trustLists');
       }
 
       // Sessions require issuance:offer OR presentation:request
-      if (
-        this.jwtService.hasRole('issuance:offer') ||
-        this.jwtService.hasRole('presentation:request')
-      ) {
-        promises.push(sessionControllerGetAllSessions());
-        promiseKeys.push('sessions');
+      if (this.canViewSessions) {
+        promises.push(sessionControllerGetSessionStats());
+        promiseKeys.push('sessionStats');
+        promises.push(
+          sessionControllerGetAllSessions({
+            query: { pageSize: 5, sortBy: 'updatedAt', sortOrder: 'desc' },
+          })
+        );
+        promiseKeys.push('recentSessions');
       }
 
       if (this.canManageRegistrar) {
@@ -131,39 +127,13 @@ export class DashboardService {
             case 'presentations':
               this.presentationConfigs = result.value.data.length;
               break;
-            case 'sessions':
-              this.recentSessions = [...result.value.data.items]
-                .sort(
-                  (left: Session, right: Session) =>
-                    new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
-                )
-                .slice(0, 5);
-              result.value.data.items.forEach((session: Session) => {
-                switch (session.status) {
-                  case 'active':
-                    this.sessionActive++;
-                    break;
-                  case 'completed':
-                    this.sessionCompleted++;
-                    break;
-                  case 'fetched':
-                    this.sessionFetched++;
-                    break;
-                  case 'failed':
-                    this.sessionFailed++;
-                    break;
-                  case 'expired':
-                    this.sessionExpired++;
-                    break;
-                  case 'cancelled':
-                    this.sessionCancelled++;
-                    break;
-                }
-
-                if (session.status === 'completed') {
-                  this.captureLastSuccessfulFlowTimestamp(session);
-                }
-              });
+            case 'sessionStats':
+              this.sessionStats = result.value.data;
+              this.sessionStatsLoaded = true;
+              break;
+            case 'recentSessions':
+              this.recentSessions = result.value.data.items;
+              this.recentSessionsLoaded = true;
               break;
             case 'keyChains': {
               this.totalKeyChains = result.value.data.filter(
@@ -199,10 +169,9 @@ export class DashboardService {
   }
 
   // Role-based visibility helpers
+  // Key chains require issuance:manage OR presentation:manage
   get canManageKeyChains(): boolean {
-    return (
-      this.jwtService.hasRole('issuance:manage') || this.jwtService.hasRole('presentation:manage')
-    );
+    return this.jwtService.hasRole(['issuance:manage', 'presentation:manage']);
   }
 
   get canManageIssuance(): boolean {
@@ -227,22 +196,60 @@ export class DashboardService {
     );
   }
 
+  get canReadPresentationConfigs(): boolean {
+    return this.canManagePresentation || this.jwtService.hasRole('presentation:request');
+  }
+
   get totalSessions(): number {
+    return (this.sessionStats.issuance?.total ?? 0) + (this.sessionStats.presentation?.total ?? 0);
+  }
+
+  get sessionActive(): number {
+    return this.countSessions('active');
+  }
+
+  get sessionFetched(): number {
+    return this.countSessions('fetched');
+  }
+
+  get sessionCompleted(): number {
+    return this.countSessions('completed');
+  }
+
+  get sessionExpired(): number {
+    return this.countSessions('expired');
+  }
+
+  get sessionFailed(): number {
+    return this.countSessions('failed');
+  }
+
+  get sessionCancelled(): number {
+    return this.countSessions('cancelled');
+  }
+
+  get lastSuccessfulIssuanceAt(): string | null {
+    return this.sessionStats.issuance?.lastCompletedAt ?? null;
+  }
+
+  get lastSuccessfulPresentationAt(): string | null {
+    return this.sessionStats.presentation?.lastCompletedAt ?? null;
+  }
+
+  /** At least one health signal of the operational health card applies to the user. */
+  get hasHealthSignals(): boolean {
     return (
-      this.sessionActive +
-      this.sessionCompleted +
-      this.sessionFetched +
-      this.sessionFailed +
-      this.sessionExpired
+      this.canManageKeyChains ||
+      this.canManagePresentation ||
+      this.canManageRegistrar ||
+      !!this.sessionStats.issuance ||
+      !!this.sessionStats.presentation
     );
   }
 
   // Prerequisites check - only relevant if user can manage key chains
   get hasPrerequisites(): boolean {
-    if (!this.canManageKeyChains) {
-      return true; // Not relevant for this user
-    }
-    return this.totalKeyChains > 0 && this.accessKeyChains > 0 && this.hasUsableAccessCertificate;
+    return this.prerequisiteReason === null;
   }
 
   // Issuance readiness
@@ -255,15 +262,20 @@ export class DashboardService {
 
   // Verification readiness
   get isReadyToVerify(): boolean {
-    if (!this.canManagePresentation) {
-      return false; // User can't manage presentations
+    if (!this.canReadPresentationConfigs) {
+      return false; // User can't see presentation configs
     }
     return this.hasPrerequisites && this.presentationConfigs > 0;
   }
 
   // Overall setup complete (at least one path is ready)
+  // Request-only access to presentations is not a setup the user completed
+  private get isVerificationSetUp(): boolean {
+    return this.canManagePresentation && this.isReadyToVerify;
+  }
+
   get isSetupComplete(): boolean {
-    return this.isReadyToIssue || this.isReadyToVerify;
+    return this.isReadyToIssue || this.isVerificationSetUp;
   }
 
   // Show setup guide if prerequisites are not met OR neither path is ready
@@ -272,24 +284,16 @@ export class DashboardService {
       return false;
     }
 
-    return !this.hasPrerequisites || (!this.isReadyToIssue && !this.isReadyToVerify);
+    return !this.hasPrerequisites || (!this.isReadyToIssue && !this.isVerificationSetUp);
   }
 
   get issueReadinessReason(): string | null {
     if (!this.canManageIssuance) {
       return 'Read-only: missing issuance:manage role';
     }
-    if (this.totalKeyChains === 0) {
-      return 'No key chain configured';
-    }
-    if (this.accessKeyChains === 0) {
-      return 'No access key chain configured';
-    }
-    if (!this.hasActiveAccessCertificate) {
-      return 'No access certificate configured';
-    }
-    if (!this.hasUsableAccessCertificate) {
-      return 'Access certificate is expired';
+    const prerequisite = this.prerequisiteReason;
+    if (prerequisite) {
+      return prerequisite;
     }
     if (!this.hasIssuanceConfig) {
       return 'No issuance config';
@@ -301,8 +305,25 @@ export class DashboardService {
   }
 
   get verifyReadinessReason(): string | null {
-    if (!this.canManagePresentation) {
-      return 'Read-only: missing presentation:manage role';
+    if (!this.canReadPresentationConfigs) {
+      return 'Read-only: missing presentation:manage or presentation:request role';
+    }
+    const prerequisite = this.prerequisiteReason;
+    if (prerequisite) {
+      return prerequisite;
+    }
+    if (this.presentationConfigs === 0) {
+      return this.canManagePresentation
+        ? 'No presentation config'
+        : 'No presentation config; ask a user with presentation:manage to create one';
+    }
+    return null;
+  }
+
+  // Key chains are only loaded for users who can manage them; not relevant otherwise.
+  private get prerequisiteReason(): string | null {
+    if (!this.canManageKeyChains) {
+      return null;
     }
     if (this.totalKeyChains === 0) {
       return 'No key chain configured';
@@ -315,9 +336,6 @@ export class DashboardService {
     }
     if (!this.hasUsableAccessCertificate) {
       return 'Access certificate is expired';
-    }
-    if (this.presentationConfigs === 0) {
-      return 'No presentation config';
     }
     return null;
   }
@@ -350,18 +368,9 @@ export class DashboardService {
 
   get warningMessages(): string[] {
     const warnings: string[] = [];
-    if (!this.hasActiveAccessCertificate) {
-      warnings.push(
-        'No access certificate configured. Issuance and presentation flows cannot start.'
-      );
-    } else if (!this.hasUsableAccessCertificate) {
-      warnings.push(
-        'Access certificate is expired. Renew it before issuing or requesting presentations.'
-      );
-    } else if (this.accessCertificateStatus === 'expiring') {
-      warnings.push(
-        `Access certificate expires within ${this.accessCertificateExpiringSoonDays} days. Plan renewal to avoid interruptions.`
-      );
+    const certificateWarning = this.accessCertificateWarning;
+    if (certificateWarning) {
+      warnings.push(certificateWarning);
     }
 
     if (this.canManagePresentation && !this.hasTrustList) {
@@ -374,21 +383,30 @@ export class DashboardService {
       );
     }
 
-    if (
-      this.canViewSessions &&
-      this.sessionActive +
-        this.sessionCompleted +
-        this.sessionFetched +
-        this.sessionFailed +
-        this.sessionExpired ===
-        0
-    ) {
+    if (this.canViewSessions && this.sessionStatsLoaded && this.totalSessions === 0) {
       warnings.push(
         'No sessions recorded yet. Run an issuance or presentation flow to validate end-to-end setup.'
       );
     }
 
     return warnings;
+  }
+
+  private get accessCertificateWarning(): string | null {
+    // Key chains are only loaded for users who can manage them.
+    if (!this.canManageKeyChains) {
+      return null;
+    }
+    if (!this.hasActiveAccessCertificate) {
+      return 'No access certificate configured. Issuance and presentation flows cannot start.';
+    }
+    if (!this.hasUsableAccessCertificate) {
+      return 'Access certificate is expired. Renew it before issuing or requesting presentations.';
+    }
+    if (this.accessCertificateStatus === 'expiring') {
+      return `Access certificate expires within ${this.accessCertificateExpiringSoonDays} days. Plan renewal to avoid interruptions.`;
+    }
+    return null;
   }
 
   get hasWarnings(): boolean {
@@ -485,35 +503,10 @@ export class DashboardService {
     this.accessCertificateStatus = 'healthy';
   }
 
-  private captureLastSuccessfulFlowTimestamp(session: Session): void {
-    const timestamp = session.updatedAt || session.createdAt;
-    if (!timestamp) {
-      return;
-    }
-
-    if (this.isPresentationSession(session)) {
-      this.lastSuccessfulPresentationAt = this.maxIso(this.lastSuccessfulPresentationAt, timestamp);
-      return;
-    }
-
-    if (this.isIssuanceSession(session)) {
-      this.lastSuccessfulIssuanceAt = this.maxIso(this.lastSuccessfulIssuanceAt, timestamp);
-    }
-  }
-
-  private isPresentationSession(session: Session): boolean {
-    return !!session.requestUrl || !!session.requestObject || !!session.vp_nonce;
-  }
-
-  private isIssuanceSession(session: Session): boolean {
-    return !!session.credentialPayload || !!session.offerUrl;
-  }
-
-  private maxIso(current: string | null, incoming: string): string {
-    if (!current) {
-      return incoming;
-    }
-
-    return Date.parse(incoming) > Date.parse(current) ? incoming : current;
+  private countSessions(status: keyof SessionStatusCountsDto): number {
+    return (
+      (this.sessionStats.issuance?.byStatus[status] ?? 0) +
+      (this.sessionStats.presentation?.byStatus[status] ?? 0)
+    );
   }
 }

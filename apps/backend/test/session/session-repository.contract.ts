@@ -801,6 +801,79 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
                     );
             });
 
+            it("counts the tenant's sessions per type and status", async () => {
+                const counts = await adapter.countForTenant("tenant-a");
+                expect(counts).toHaveLength(4);
+                expect(counts).toEqual(
+                    expect.arrayContaining([
+                        {
+                            type: "issuance",
+                            status: SessionStatus.Active,
+                            count: 1,
+                        },
+                        {
+                            type: "issuance",
+                            status: SessionStatus.Fetched,
+                            count: 1,
+                        },
+                        {
+                            type: "presentation",
+                            status: SessionStatus.Failed,
+                            count: 1,
+                        },
+                        {
+                            type: "presentation",
+                            status: SessionStatus.Active,
+                            count: 1,
+                        },
+                    ]),
+                );
+                const presentations = await adapter.countForTenant(
+                    "tenant-a",
+                    "presentation",
+                );
+                expect(presentations.map((count) => count.type)).toEqual([
+                    "presentation",
+                    "presentation",
+                ]);
+                await expect(
+                    adapter.countForTenant("tenant-unknown"),
+                ).resolves.toEqual([]);
+            });
+
+            it("returns the last update per type and status, within the tenant", async () => {
+                await getDataSource()
+                    .getRepository(Session)
+                    .save(
+                        [
+                            ["tenant-a", "2026-10-03T09:00:00Z"],
+                            ["tenant-a", "2026-10-03T10:00:00Z"],
+                            ["tenant-b", "2026-10-04T10:00:00Z"],
+                        ].map(([tenantId, updatedAt]) => ({
+                            id: randomUUID(),
+                            tenantId,
+                            requestId: "age-check",
+                            status: SessionStatus.Completed,
+                            createdAt: new Date("2026-10-03T08:00:00Z"),
+                            updatedAt: new Date(updatedAt),
+                        })),
+                    );
+                const last = (
+                    type: "issuance" | "presentation",
+                    status: SessionStatus,
+                ) => adapter.lastUpdatedForTenant("tenant-a", type, status);
+
+                await expect(
+                    last("presentation", SessionStatus.Completed),
+                ).resolves.toEqual(new Date("2026-10-03T10:00:00Z"));
+                await expect(
+                    last("issuance", SessionStatus.Fetched),
+                ).resolves.toEqual(new Date("2026-10-02T09:00:00Z"));
+                await expect(
+                    last("issuance", SessionStatus.Completed),
+                ).resolves.toBeNull();
+            });
+
             it("sorts by update time and returns the summary fields", async () => {
                 const page = await adapter.listForTenant("tenant-a", {
                     page: 1,
@@ -1034,6 +1107,7 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
                 id: sessionId,
                 tenantId: "tenant-a",
                 createdAt: new Date("2025-01-01T12:00:00Z"),
+                updatedAt: new Date("2025-01-01T13:00:00Z"),
                 credentials: [],
                 credentialPayload: { credentialConfigurationIds: ["pid"] },
                 auth_queries: {},
@@ -1067,6 +1141,7 @@ export function sessionRepositoryContract(getDataSource: () => DataSource) {
                 status: SessionStatus.Completed,
                 requestId: "presentation",
                 errorReason: "preserved",
+                updatedAt: new Date("2025-01-01T13:00:00Z"),
             });
             const fields = [
                 "credentials",

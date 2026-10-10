@@ -54,4 +54,22 @@ describe('PresentationRequestComponent', () => {
       clientIdScheme: 'x509_san_dns',
     });
   });
+
+  it('shows the reason the backend gives for a failed request', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    // The component's own injector provides the snack bar it uses.
+    const open = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open');
+    service.getOffer.mockRejectedValue({
+      message: "No key chain found with usage type 'access' for tenant demo",
+    });
+    component.form.patchValue({ requestId: 'pid-verification' });
+
+    await component.onSubmit();
+
+    expect(open).toHaveBeenCalledWith(
+      "Failed to generate presentation request: No key chain found with usage type 'access' for tenant demo",
+      'Close',
+      expect.anything()
+    );
+  });
 });

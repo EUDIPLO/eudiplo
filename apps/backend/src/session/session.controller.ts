@@ -38,6 +38,7 @@ import { CancelSessionDto } from "./dto/cancel-session.dto.js";
 import { PaginatedSessionResponseDto } from "./dto/paginated-session-response.dto.js";
 import { SessionLogEntryResponseDto } from "./dto/session-log-entry-response.dto.js";
 import { SessionQueryDto } from "./dto/session-query.dto.js";
+import { SessionStatsResponseDto } from "./dto/session-stats-response.dto.js";
 import { Session } from "./entities/session.entity.js";
 import { SessionLogStoreService } from "./logging/session-log-store.service.js";
 import { sessionScope } from "./session-scope.js";
@@ -66,6 +67,25 @@ export class SessionController {
         return this.sessions.listForTenant(
             token.entity!.id,
             query,
+            sessionScope(token),
+        );
+    }
+
+    /**
+     * Counts the tenant's sessions per type and status, over all pages.
+     */
+    @ApiOperation({
+        summary: "Get session counts per type and status",
+        description:
+            "Counts all stored sessions of the tenant, not one page. Only the session types the caller may read are included.",
+    })
+    @ApiResponse({ status: 200, type: SessionStatsResponseDto })
+    @Get("stats")
+    getSessionStats(
+        @Token() token: TokenPayload,
+    ): Promise<SessionStatsResponseDto> {
+        return this.sessions.statsForTenant(
+            token.entity!.id,
             sessionScope(token),
         );
     }

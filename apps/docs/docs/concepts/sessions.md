@@ -125,6 +125,20 @@ The search term can contain a pre-authorized code, so its value is replaced by `
 
 Once a wallet request has resolved its session (by offer ID, `walletNonce`, `issuer_state`, code or access token), every following log line of that request carries `sessionId` and `tenantId`, with or without OpenTelemetry, and the request's trace gets the `session.id` attribute. See [Logging](../operate/logging.md#correlate-logs-with-sessions).
 
+### Counting sessions
+
+`GET /api/session/stats` counts the tenant's sessions over all pages, with the same role scope as the list. It has one entry per session type the client may read, `issuance` and `presentation`, each with the `total`, a count for every state in `byStatus` (`0` when there is none) and `lastCompletedAt`, the last update of the most recently updated completed session (`null` when none completed). Only stored sessions count: in the default `full` [cleanup](#session-cleanup) mode, sessions older than the TTL are deleted and drop out. The web client's dashboard shows these numbers.
+
+```json
+{
+  "presentation": {
+    "total": 42,
+    "byStatus": { "active": 3, "fetched": 1, "completed": 35, "expired": 2, "failed": 1, "cancelled": 0 },
+    "lastCompletedAt": "2026-10-10T08:12:44.000Z"
+  }
+}
+```
+
 ## Session cleanup
 
 Sessions contain personal data: claims, offers, authorization requests and presented credentials. Sensitive fields are encrypted at rest ([Security model](security-model.md#encryption-at-rest)), and sessions are kept only for a retention period:
