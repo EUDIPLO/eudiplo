@@ -14,6 +14,10 @@ import { AuditMeta } from "../../../audit-log/audit-log-context.util.js";
 import { Role } from "../../../auth/roles/role.enum.js";
 import { Secured } from "../../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../../auth/token.decorator.js";
+import {
+    redactApiKey,
+    restoreApiKey,
+} from "../../../shared/utils/write-only-secrets.util.js";
 import { AttributeProviderService } from "./attribute-provider.service.js";
 import { CreateAttributeProviderDto } from "./dto/create-attribute-provider.dto.js";
 import { UpdateAttributeProviderDto } from "./dto/update-attribute-provider.dto.js";
@@ -32,8 +36,8 @@ export class AttributeProviderController {
         description: "List of attribute providers",
         type: [AttributeProviderEntity],
     })
-    getAll(@Token() user: TokenPayload) {
-        return this.service.getAll(user.entity!.id);
+    async getAll(@Token() user: TokenPayload) {
+        return (await this.service.getAll(user.entity!.id)).map(redactApiKey);
     }
 
     @Get(":id")
@@ -44,8 +48,8 @@ export class AttributeProviderController {
         type: AttributeProviderEntity,
     })
     @ApiResponse({ status: 404, description: "Attribute provider not found" })
-    getById(@Param("id") id: string, @Token() user: TokenPayload) {
-        return this.service.getById(user.entity!.id, id);
+    async getById(@Param("id") id: string, @Token() user: TokenPayload) {
+        return redactApiKey(await this.service.getById(user.entity!.id, id));
     }
 
     @Post()
@@ -56,12 +60,19 @@ export class AttributeProviderController {
         type: AttributeProviderEntity,
     })
     @ApiBody({ type: CreateAttributeProviderDto })
-    create(
+    async create(
         @Body() dto: CreateAttributeProviderDto,
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return this.service.create(user.entity!.id, dto, user, requestMeta);
+        return redactApiKey(
+            await this.service.create(
+                user.entity!.id,
+                restoreApiKey(dto),
+                user,
+                requestMeta,
+            ),
+        );
     }
 
     @Patch(":id")
@@ -73,13 +84,23 @@ export class AttributeProviderController {
     })
     @ApiResponse({ status: 404, description: "Attribute provider not found" })
     @ApiBody({ type: UpdateAttributeProviderDto })
-    update(
+    async update(
         @Param("id") id: string,
         @Body() dto: UpdateAttributeProviderDto,
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return this.service.update(user.entity!.id, id, dto, user, requestMeta);
+        const provider = await this.service.getById(user.entity!.id, id);
+        const providerUpdate = restoreApiKey(dto, provider);
+        return redactApiKey(
+            await this.service.update(
+                user.entity!.id,
+                id,
+                providerUpdate,
+                user,
+                requestMeta,
+            ),
+        );
     }
 
     @Delete(":id")

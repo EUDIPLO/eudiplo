@@ -11,6 +11,30 @@ export const KMS_REDACTED_SECRET = "<redacted>";
 
 const ENV_PLACEHOLDER = /^\$\{[A-Z0-9_]+\}$/;
 
+/**
+ * Settings that name where a credential is sent, by provider type and
+ * credential path (relative to the provider, `*` for any array index). A
+ * credential sent as {@link KMS_REDACTED_SECRET} is kept only while these stay
+ * the same; otherwise whoever may edit the KMS configuration could send the
+ * stored credential to a server of their choice without knowing it.
+ *
+ * `aws-kms` is not listed: the secret access key only signs requests to AWS
+ * and is never sent.
+ */
+const CREDENTIAL_DESTINATIONS: Record<string, Record<string, string[]>> = {
+    vault: { vaultToken: ["vaultUrl"] },
+    pkcs11: { pin: ["library"] },
+    http: {
+        "auth.token": ["baseUrl"],
+        "auth.clientSecret": ["auth.tokenUrl"],
+    },
+    csc: {
+        clientSecret: ["tokenUrl"],
+        sad: ["baseUrl"],
+        "authorizeAuthData.*.value": ["baseUrl"],
+    },
+};
+
 /** A redacted credential was sent for a provider that has no stored value. */
 export class KmsSecretNotStoredError extends Error {
     constructor(path: string) {
@@ -21,16 +45,36 @@ export class KmsSecretNotStoredError extends Error {
     }
 }
 
-function isSecretPath(path: (string | number)[]): boolean {
-    return KMS_SECRET_PATHS.some((pattern) => {
-        const parts = pattern.split(".");
-        return (
-            parts.length === path.length &&
-            parts.every(
-                (part, index) => part === "*" || part === `${path[index]}`,
-            )
+/** A redacted credential was sent for a provider whose destination changes. */
+export class KmsSecretDestinationChangedError extends Error {
+    constructor(path: string, destination: string) {
+        super(
+            `${path} is '${KMS_REDACTED_SECRET}' but ${destination} changes; send the credential again, a stored credential is not sent to a new address`,
         );
-    });
+        this.name = "KmsSecretDestinationChangedError";
+    }
+}
+
+function matches(pattern: string, path: (string | number)[]): boolean {
+    const parts = pattern.split(".");
+    return (
+        parts.length === path.length &&
+        parts.every((part, index) => part === "*" || part === `${path[index]}`)
+    );
+}
+
+function isSecretPath(path: (string | number)[]): boolean {
+    return KMS_SECRET_PATHS.some((pattern) => matches(pattern, path));
+}
+
+function valueAt(node: unknown, path: (string | number)[]): unknown {
+    return path.reduce<unknown>(
+        (current, key) =>
+            current && typeof current === "object"
+                ? (current as Record<string, unknown>)[key]
+                : undefined,
+        node,
+    );
 }
 
 /** Replace the value of every credential field of `value` using `replace`. */
@@ -84,6 +128,8 @@ export function redactKmsConfig(
  * and `type`.
  *
  * @throws KmsSecretNotStoredError when there is no stored credential.
+ * @throws KmsSecretDestinationChangedError when the setting that names where
+ * the credential is sent changes ({@link CREDENTIAL_DESTINATIONS}).
  */
 export function restoreKmsSecrets(
     update: KmsConfig,
@@ -97,25 +143,29 @@ export function restoreKmsSecrets(
         // path = ["providers", <index>, ...field path]
         const provider = update.providers[path[1] as number];
         const storedProvider = storedProviders.get(provider.id);
+        const fieldPath = path.slice(2);
+        const label = `providers[${path[1]}] ('${provider.id}').${fieldPath.join(".")}`;
         const storedSecret =
             storedProvider?.type === provider.type
-                ? path
-                      .slice(2)
-                      .reduce<unknown>(
-                          (node, key) =>
-                              node && typeof node === "object"
-                                  ? (node as Record<string, unknown>)[key]
-                                  : undefined,
-                          storedProvider,
-                      )
+                ? valueAt(storedProvider, fieldPath)
                 : undefined;
         if (
             storedSecret === undefined ||
             storedSecret === KMS_REDACTED_SECRET
         ) {
-            throw new KmsSecretNotStoredError(
-                `providers[${path[1]}] ('${provider.id}').${path.slice(2).join(".")}`,
-            );
+            throw new KmsSecretNotStoredError(label);
+        }
+        const destinations = Object.entries(
+            CREDENTIAL_DESTINATIONS[provider.type] ?? {},
+        ).find(([pattern]) => matches(pattern, fieldPath))?.[1];
+        for (const destination of destinations ?? []) {
+            const destinationPath = destination.split(".");
+            if (
+                valueAt(provider, destinationPath) !==
+                valueAt(storedProvider, destinationPath)
+            ) {
+                throw new KmsSecretDestinationChangedError(label, destination);
+            }
         }
         return storedSecret;
     }) as KmsConfig;

@@ -12,12 +12,13 @@ import {
     type KmsConfig,
     parseRawKmsConfig,
 } from "../schemas/kms-config.schema.js";
+import { KmsConfigService } from "./kms-config.service.js";
 import {
+    KmsSecretDestinationChangedError,
     KmsSecretNotStoredError,
     redactKmsConfig,
     restoreKmsSecrets,
 } from "./kms-config-secrets.js";
-import { KmsConfigService } from "./kms-config.service.js";
 import { KmsProviderRegistry } from "./kms-provider.registry.js";
 
 @Injectable()
@@ -107,7 +108,8 @@ export class KmsTenantConfigService {
 
     /**
      * Replace the tenant configuration from an API request. A credential sent
-     * as the redaction marker keeps the stored value of the same provider.
+     * as the redaction marker keeps the stored value of the same provider, as
+     * long as the address it is sent to stays the same.
      */
     updateTenantConfig(tenantId: string, config: KmsConfig): KmsConfig {
         let restored: KmsConfig;
@@ -117,7 +119,10 @@ export class KmsTenantConfigService {
                 this.getTenantConfig(tenantId),
             );
         } catch (error) {
-            if (error instanceof KmsSecretNotStoredError) {
+            if (
+                error instanceof KmsSecretNotStoredError ||
+                error instanceof KmsSecretDestinationChangedError
+            ) {
                 throw new BadRequestException(error.message);
             }
             throw error;

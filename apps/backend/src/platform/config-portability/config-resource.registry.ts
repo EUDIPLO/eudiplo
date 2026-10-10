@@ -73,7 +73,7 @@ const DEFINITIONS: Omit<ConfigResourceDefinition, "slug" | "currentVersion">[] =
             legacyFolders: ["issuance"],
             bundlePath: "issuance/config.json",
             singletonId: "issuance",
-            sensitivePaths: [],
+            sensitivePaths: ["authorizationServers.*.upstream.clientSecret"],
         },
         {
             kind: "CredentialConfig",

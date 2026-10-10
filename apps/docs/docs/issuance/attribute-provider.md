@@ -44,7 +44,7 @@ curl -X POST "$EUDIPLO_URL/api/issuer/attribute-providers" \
   }'
 ```
 
-`auth` is required: use `{ "type": "none" }` or an API key that EUDIPLO sends in the named header. Check it in your endpoint. In the web client, open **Attribute Providers**.
+`auth` is required: use `{ "type": "none" }` or an API key that EUDIPLO sends in the named header. Check it in your endpoint. The API returns the key as `<redacted>` and keeps it when you send `<redacted>` back, as for [webhook endpoints](../reference/webhooks.md#webhook-endpoints). In the web client, open **Attribute Providers**.
 
 ## 3. Use it
 

@@ -58,6 +58,50 @@ describe("ConfigBundleService secret handling", () => {
         ).toBe(true);
     });
 
+    it("replaces upstream client secrets of chained authorization servers with a requirement", () => {
+        const requirements: ConfigBundleRequirement[] = [];
+        const redact = Reflect.get(service, "redact") as (
+            kind: ConfigResourceKind,
+            id: string,
+            value: unknown,
+            requirements: ConfigBundleRequirement[],
+        ) => unknown;
+
+        const output = redact.call(
+            service,
+            "IssuanceConfig",
+            "issuance",
+            {
+                authorizationServers: [
+                    { type: "built-in", id: "built-in" },
+                    {
+                        type: "chained",
+                        id: "chained",
+                        upstream: {
+                            issuer: "https://idp.example",
+                            clientId: "c",
+                            clientSecret: "upstream-secret",
+                        },
+                    },
+                ],
+            },
+            requirements,
+        ) as { authorizationServers: { upstream?: unknown }[] };
+
+        expect(output.authorizationServers[1].upstream).toEqual({
+            issuer: "https://idp.example",
+            clientId: "c",
+            clientSecret:
+                "${ISSUANCECONFIG_ISSUANCE_AUTHORIZATIONSERVERS_1_UPSTREAM_CLIENTSECRET}",
+        });
+        expect(requirements).toMatchObject([
+            {
+                code: "SECRET_REQUIRED",
+                path: "/spec/authorizationServers/1/upstream/clientSecret",
+            },
+        ]);
+    });
+
     it("removes private parameters from exported public JWKs", () => {
         const toPublicJwk = Reflect.get(service, "toPublicJwk") as (
             value: unknown,

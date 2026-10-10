@@ -10,7 +10,7 @@ import { v4 } from "uuid";
 import type { AuditLogRequestMeta } from "../../../audit-log/audit-log.service.js";
 import { AuditLogService } from "../../../audit-log/audit-log.service.js";
 import {
-    getChangedFields,
+    getChangedFieldsForKeys,
     resolveAuditActor,
 } from "../../../audit-log/audit-log-context.util.js";
 import { TokenPayload } from "../../../auth/token.decorator.js";
@@ -392,16 +392,20 @@ export class IssuanceService {
         });
 
         if (actorToken) {
+            const after = this.sanitizeIssuanceConfigForLog(saved);
             await this.tenantActionLogService.record({
                 tenantId,
                 actionType: "issuance_config_updated",
                 actor: resolveAuditActor(actorToken),
-                changedFields: getChangedFields(
-                    before,
-                    this.sanitizeIssuanceConfigForLog(saved),
+                // Compared before redaction, so a new upstream client secret
+                // is listed.
+                changedFields: getChangedFieldsForKeys(
+                    existingConfig,
+                    saved,
+                    Object.keys(after) as (keyof IssuanceConfig)[],
                 ),
                 before,
-                after: this.sanitizeIssuanceConfigForLog(saved),
+                after,
                 requestMeta,
             });
         }
@@ -432,16 +436,25 @@ export class IssuanceService {
         };
 
         const authorizationServers = config.authorizationServers?.map(
-            (server) => ({
-                ...server,
-                walletProviderTrustLists: sanitizeWalletProviderTrustLists(
-                    (
-                        server as typeof server & {
-                            walletProviderTrustLists?: TrustListRef[];
-                        }
-                    ).walletProviderTrustLists,
-                ),
-            }),
+            (server) => {
+                const { upstream } = server as typeof server & {
+                    upstream?: { clientSecret?: string };
+                };
+                return {
+                    ...server,
+                    // Upstream client secret of chained servers.
+                    ...(upstream?.clientSecret && {
+                        upstream: { ...upstream, clientSecret: "[REDACTED]" },
+                    }),
+                    walletProviderTrustLists: sanitizeWalletProviderTrustLists(
+                        (
+                            server as typeof server & {
+                                walletProviderTrustLists?: TrustListRef[];
+                            }
+                        ).walletProviderTrustLists,
+                    ),
+                };
+            },
         );
 
         let walletProviderTrustListsRaw: ReturnType<

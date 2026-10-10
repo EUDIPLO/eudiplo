@@ -44,6 +44,8 @@ A webhook endpoint is a reusable, tenant-scoped target, managed under `/api/issu
 
 With `apiKey`, EUDIPLO sends `value` in the header named `headerName`. Webhook requests are not signed, so use HTTPS and check the header. In configuration files, use a `${VAR}` placeholder for `value` ([Configuration as code](../operate/configuration-as-code.md)).
 
+The API never returns `value`: webhook endpoint and attribute provider responses and session details show `<redacted>` instead. Send `<redacted>` back in a `PATCH` to keep the stored key. It is rejected with `400` when no key is stored, and when the same `PATCH` changes `url`: send the key again then, so that it never goes to a new address without you supplying it.
+
 ### Where webhooks are referenced
 
 | Place                                   | Field               | Effect                                                                                                    |

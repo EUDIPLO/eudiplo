@@ -14,6 +14,10 @@ import { AuditMeta } from "../../../audit-log/audit-log-context.util.js";
 import { Role } from "../../../auth/roles/role.enum.js";
 import { Secured } from "../../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../../auth/token.decorator.js";
+import {
+    redactApiKey,
+    restoreApiKey,
+} from "../../../shared/utils/write-only-secrets.util.js";
 import type { WebhookEndpointData } from "./domain/webhook-endpoint-data.js";
 import { CreateWebhookEndpointDto } from "./dto/create-webhook-endpoint.dto.js";
 import { UpdateWebhookEndpointDto } from "./dto/update-webhook-endpoint.dto.js";
@@ -42,8 +46,8 @@ export class WebhookEndpointController {
         description: "List of webhook endpoints",
         type: [WebhookEndpointEntity],
     })
-    getAll(@Token() user: TokenPayload): Promise<WebhookEndpointData[]> {
-        return this.service.getAll(user.entity!.id);
+    async getAll(@Token() user: TokenPayload): Promise<WebhookEndpointData[]> {
+        return (await this.service.getAll(user.entity!.id)).map(redactApiKey);
     }
 
     @Get(":id")
@@ -54,8 +58,8 @@ export class WebhookEndpointController {
         type: WebhookEndpointEntity,
     })
     @ApiResponse({ status: 404, description: "Webhook endpoint not found" })
-    getById(@Param("id") id: string, @Token() user: TokenPayload) {
-        return this.service.getById(user.entity!.id, id);
+    async getById(@Param("id") id: string, @Token() user: TokenPayload) {
+        return redactApiKey(await this.service.getById(user.entity!.id, id));
     }
 
     @Post()
@@ -66,12 +70,19 @@ export class WebhookEndpointController {
         type: WebhookEndpointEntity,
     })
     @ApiBody({ type: CreateWebhookEndpointDto })
-    create(
+    async create(
         @Body() dto: CreateWebhookEndpointDto,
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return this.service.create(user.entity!.id, dto, user, requestMeta);
+        return redactApiKey(
+            await this.service.create(
+                user.entity!.id,
+                restoreApiKey(dto),
+                user,
+                requestMeta,
+            ),
+        );
     }
 
     @Patch(":id")
@@ -83,13 +94,23 @@ export class WebhookEndpointController {
     })
     @ApiResponse({ status: 404, description: "Webhook endpoint not found" })
     @ApiBody({ type: UpdateWebhookEndpointDto })
-    update(
+    async update(
         @Param("id") id: string,
         @Body() dto: UpdateWebhookEndpointDto,
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return this.service.update(user.entity!.id, id, dto, user, requestMeta);
+        const endpoint = await this.service.getById(user.entity!.id, id);
+        const endpointUpdate = restoreApiKey(dto, endpoint);
+        return redactApiKey(
+            await this.service.update(
+                user.entity!.id,
+                id,
+                endpointUpdate,
+                user,
+                requestMeta,
+            ),
+        );
     }
 
     @Delete(":id")

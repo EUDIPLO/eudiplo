@@ -24,6 +24,10 @@ import {
     hashAuthorizationCodesContract,
     hashAuthorizationCodesEntities,
 } from "./persistence/hash-authorization-codes.contract.js";
+import {
+    redactAuditLogSecretsContract,
+    redactAuditLogSecretsEntities,
+} from "./persistence/redact-audit-log-secrets.contract.js";
 
 /**
  * Migration tests that verify migrations work correctly on both SQLite and PostgreSQL.
@@ -1289,6 +1293,16 @@ describe("Migration tests", () => {
                 type: "postgres",
                 url: postgresContainer.getConnectionUri(),
                 entities: encryptStoredSecretsEntities,
+                synchronize: true,
+                dropSchema: true,
+            }).initialize(),
+        );
+
+        redactAuditLogSecretsContract(() =>
+            new DataSource({
+                type: "postgres",
+                url: postgresContainer.getConnectionUri(),
+                entities: redactAuditLogSecretsEntities,
                 synchronize: true,
                 dropSchema: true,
             }).initialize(),

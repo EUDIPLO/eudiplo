@@ -88,7 +88,10 @@ Changes to a tenant and to its credential, issuance, presentation and
 status-list configurations, webhook endpoints and attribute providers are
 recorded with actor, time and changed fields, as are bundle imports, exports,
 detach and reattach actions, generated client secrets and cancelled sessions (with the
-reason). Not audited: key chains, trust lists, API clients and users (including
+reason). Secrets are not recorded: the API keys of webhook endpoints and
+attribute providers and the upstream client secrets of chained authorization
+servers appear as `[REDACTED]`, and a changed secret is still listed among the
+changed fields. Not audited: key chains, trust lists, API clients and users (including
 role changes and secret rotation), KMS provider and registrar configuration,
 and session retention settings. Read the audit log with
 `GET /api/admin/audit-logs` (role `clients:manage`) or in the web client. The

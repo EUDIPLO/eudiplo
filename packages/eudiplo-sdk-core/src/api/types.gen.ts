@@ -510,10 +510,6 @@ export type RegistrarConfigResponseDto = {
      */
     clientId: string;
     /**
-     * The OIDC client secret (optional, for confidential clients)
-     */
-    clientSecret?: string;
-    /**
      * The username for OIDC login
      */
     username: string;
@@ -525,6 +521,10 @@ export type RegistrarConfigResponseDto = {
      * Indicates whether a password is configured (actual password is never returned)
      */
     hasPassword: boolean;
+    /**
+     * Indicates whether a client secret is configured (actual client secret is never returned)
+     */
+    hasClientSecret: boolean;
 };
 
 export type CreateRegistrarConfigDto = {
