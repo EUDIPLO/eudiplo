@@ -29,7 +29,6 @@ export class WebhookPresentationResultPublisher
                           | undefined,
                   }
                 : {}),
-            expectResponse: false,
         });
         return response?.redirectUri
             ? { redirectUri: response.redirectUri }

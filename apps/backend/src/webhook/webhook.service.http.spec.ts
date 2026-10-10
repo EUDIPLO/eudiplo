@@ -145,7 +145,6 @@ describe("WebhookService deliveries", () => {
         };
         service = new WebhookService(
             new HttpService(axios.create()),
-            { updateForTenant: vi.fn() } as never,
             new OutboundUrlPolicyService({
                 get: (key: string) => config[key],
             } as never),
@@ -236,7 +235,6 @@ describe("WebhookService deliveries", () => {
                 service.sendWebhook({
                     webhook: webhook("/redirect-blocked"),
                     session,
-                    expectResponse: false,
                 }),
         ],
         [

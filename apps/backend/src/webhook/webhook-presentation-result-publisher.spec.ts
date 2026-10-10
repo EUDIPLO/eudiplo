@@ -39,7 +39,6 @@ describe("WebhookPresentationResultPublisher", () => {
             result: { status: "completed", outcome },
             credentials: [{ id: "pid" }],
             rawPresentationPayload: { vp_token: "raw" },
-            expectResponse: false,
         });
     });
 
@@ -68,7 +67,6 @@ describe("WebhookPresentationResultPublisher", () => {
             webhook,
             session,
             result: { status: "failed", outcome },
-            expectResponse: false,
         });
     });
 });
