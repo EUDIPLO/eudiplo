@@ -203,11 +203,8 @@ test('issue and verify cookbook', async ({ page }) => {
     );
     await page.getByRole('button', { name: 'Next' }).click();
     await page.getByRole('button', { name: 'Use Pre-configured Default Values' }).click();
-    // The claim inputs carry no label: claims without display labels have no
-    // schema title for the form to show.
-    const claimInputs = page.locator('formly-form input');
-    await expect(claimInputs.nth(0)).toHaveValue('Max');
-    await expect(claimInputs.nth(1)).toHaveValue('M-001');
+    await expect(page.getByRole('textbox', { name: 'name' })).toHaveValue('Max');
+    await expect(page.getByRole('textbox', { name: 'member_id' })).toHaveValue('M-001');
     await expect(page.getByRole('textbox', { name: 'Transaction Code (Optional)' })).toHaveValue(
       ''
     );
