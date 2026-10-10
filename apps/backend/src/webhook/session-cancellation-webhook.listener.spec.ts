@@ -69,6 +69,18 @@ describe("SessionCancellationWebhookListener", () => {
         );
     });
 
+    it("sends nothing when the stored webhook endpoint was deleted", async () => {
+        const { listener, webhooks, endpoints, logger } = setup({
+            webhookEndpointId: "endpoint-1",
+        });
+        endpoints.findForTenant.mockResolvedValue(undefined);
+
+        await listener.handleSessionCancelled(event);
+
+        expect(webhooks.sendSessionCancelledWebhook).not.toHaveBeenCalled();
+        expect(logger.warn).not.toHaveBeenCalled();
+    });
+
     it("reads the session within the tenant of the event", async () => {
         const { listener, sessions } = setup({});
 
