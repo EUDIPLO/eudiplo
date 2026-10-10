@@ -5,6 +5,7 @@ import { request as httpsRequest } from "node:https";
 import { isIP, type LookupFunction } from "node:net";
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { isNonPublicIp } from "./domain/non-public-ip.js";
 
 /** Response of {@link OutboundUrlPolicyService.get}; redirects are not followed. */
 export interface OutboundResponse {
@@ -57,9 +58,7 @@ export class OutboundUrlPolicyService {
                 if (
                     !this.allowPrivateNetwork() &&
                     (addresses.length === 0 ||
-                        addresses.some(({ address }) =>
-                            this.isPrivateIp(address),
-                        ))
+                        addresses.some(({ address }) => isNonPublicIp(address)))
                 ) {
                     return callback(
                         new Error(
@@ -233,9 +232,10 @@ export class OutboundUrlPolicyService {
             );
         }
 
-        const directIpVersion = isIP(hostname);
-        if (directIpVersion > 0) {
-            if (this.isPrivateIp(hostname)) {
+        // URL hostnames carry IPv6 literals in brackets.
+        const literal = hostname.replace(/^\[(.*)\]$/, "$1");
+        if (isIP(literal) > 0) {
+            if (isNonPublicIp(literal)) {
                 throw new BadRequestException(
                     "Outbound URL target resolves to a private or loopback IP",
                 );
@@ -258,7 +258,7 @@ export class OutboundUrlPolicyService {
             );
         }
 
-        if (resolved.some((entry) => this.isPrivateIp(entry.address))) {
+        if (resolved.some((entry) => isNonPublicIp(entry.address))) {
             throw new BadRequestException(
                 "Outbound URL target resolves to a private or loopback IP",
             );
@@ -319,41 +319,5 @@ export class OutboundUrlPolicyService {
 
     private isReservedHost(hostname: string): boolean {
         return hostname === "localhost" || hostname.endsWith(".localhost");
-    }
-
-    private isPrivateIp(address: string): boolean {
-        const normalized = address.toLowerCase();
-
-        if (normalized.startsWith("::ffff:")) {
-            return this.isPrivateIp(normalized.slice("::ffff:".length));
-        }
-
-        const version = isIP(normalized);
-        if (version === 4) {
-            const octets = normalized
-                .split(".")
-                .map((v) => Number.parseInt(v, 10));
-            const [a, b] = octets;
-            if (a === 10) return true;
-            if (a === 127) return true;
-            if (a === 100 && b >= 64 && b <= 127) return true; // carrier-grade NAT
-            if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking
-            if (a === 169 && b === 254) return true;
-            if (a === 172 && b >= 16 && b <= 31) return true;
-            if (a === 192 && b === 168) return true;
-            if (a === 0) return true;
-            return false;
-        }
-
-        if (version === 6) {
-            if (normalized === "::1" || normalized === "::") return true;
-            if (normalized.startsWith("fc") || normalized.startsWith("fd")) {
-                return true;
-            }
-            if (/^fe[89ab]/i.test(normalized)) return true;
-            return false;
-        }
-
-        return true;
     }
 }

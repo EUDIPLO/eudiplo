@@ -13,7 +13,7 @@ export const WEBHOOK_VALIDATION_SCHEMA = Joi.object({
     OUTBOUND_URL_ALLOW_PRIVATE_NETWORK: Joi.boolean()
         .default(false)
         .description(
-            "Allow outbound calls (webhooks, attribute providers, metadata imports, trust lists, status lists, federation entities, CRLs, external authorization servers and the upstream provider of a chained authorization server) to private, loopback, or link-local IP ranges, e.g. for services inside the same cluster or for local development. The address actually connected to is checked as well (DNS rebinding protection). EUDIPLO's own PUBLIC_URL and INTERNAL_URL are always reachable for trust lists, status lists and authorization server keys.",
+            "Allow outbound calls (webhooks, attribute providers, metadata imports, trust lists, status lists, federation entities, CRLs, external authorization servers and the upstream provider of a chained authorization server) to non-public addresses: private, loopback, link-local, carrier-grade NAT, reserved and the other ranges listed in the security model, e.g. for services inside the same cluster or for local development. The address actually connected to is checked as well (DNS rebinding protection). EUDIPLO's own PUBLIC_URL and INTERNAL_URL are always reachable for trust lists, status lists, federation entity configurations and authorization server keys.",
         )
         .meta({ group: "webhook", order: 20 }),
     OUTBOUND_URL_ALLOWED_HOSTS: Joi.string()
