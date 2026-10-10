@@ -63,11 +63,11 @@ export class RegistrarAuthService {
         registrarUrl?: string;
         oidcUrl?: string;
     }): Promise<void> {
-        for (const url of [urls.registrarUrl, urls.oidcUrl]) {
-            if (url !== undefined) {
-                await this.outboundUrlPolicy.assertSafeUrl(url);
-            }
-        }
+        await Promise.all(
+            [urls.registrarUrl, urls.oidcUrl]
+                .filter((url): url is string => url !== undefined)
+                .map((url) => this.outboundUrlPolicy.assertSafeUrl(url)),
+        );
     }
 
     /**
