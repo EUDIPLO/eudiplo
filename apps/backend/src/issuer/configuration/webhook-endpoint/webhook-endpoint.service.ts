@@ -13,7 +13,10 @@ import {
     ImportPhase,
 } from "../../../platform/config-import/config-import-orchestrator.service.js";
 import { loadConfigDto } from "../../../shared/utils/config-file-loader.util.js";
-import { redactWebhookAuth } from "../../../webhook/domain/webhook-configuration.js";
+import {
+    AUDITED_ENDPOINT_FIELDS,
+    redactWebhookAuth,
+} from "../../../webhook/domain/webhook-configuration.js";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
 import type { WebhookEndpointData } from "./domain/webhook-endpoint-data.js";
 import { CreateWebhookEndpointDto } from "./dto/create-webhook-endpoint.dto.js";
@@ -137,11 +140,7 @@ export class WebhookEndpointService {
                 actor: resolveAuditActor(actorToken),
                 // Compared before redaction, so a new API key is listed.
                 changedFields: getChangedFieldsForKeys(existing, saved, [
-                    "id",
-                    "name",
-                    "url",
-                    "description",
-                    "auth",
+                    ...AUDITED_ENDPOINT_FIELDS,
                 ]),
                 before: this.sanitizeWebhookEndpointForLog(existing),
                 after: this.sanitizeWebhookEndpointForLog(saved),

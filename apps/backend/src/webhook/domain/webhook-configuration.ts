@@ -15,6 +15,15 @@ export interface WebhookConfiguration {
     includeRawTokensFor?: string[];
 }
 
+/** Fields of a webhook endpoint or attribute provider in the audit log. */
+export const AUDITED_ENDPOINT_FIELDS = [
+    "id",
+    "name",
+    "url",
+    "description",
+    "auth",
+] as const;
+
 /** `auth` with the API key replaced by `[REDACTED]`, for the audit log. */
 export function redactWebhookAuth(
     auth: WebhookConfiguration["auth"],
