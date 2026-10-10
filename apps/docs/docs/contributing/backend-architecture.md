@@ -145,7 +145,7 @@ A pure source move of an entity needs no migration. Migrations run on startup, s
 2. Read the value once into typed settings in the module; do not inject `ConfigService` into core code.
 3. The [environment variable reference](../reference/environment-variables.md) is generated from this schema at docs build time (`<ConfigTable group="…" />`); a new group needs a section there.
 4. If the variable is required, add a placeholder to `.env.example`; CI runs `pnpm check:env-example`.
-5. A switch that turns off a check of the normal flow is named `SKIP_<CHECK>`, defaults to `false` and goes into `platform/config/skip-validation.schema.ts`, so it is logged on startup.
+5. A switch that turns off a check of the normal flow is named `SKIP_<CHECK>`, defaults to `false` and goes into `platform/config/skip-validation.schema.ts` with a `disables` meta, so the startup warning names the protection it turns off.
 
 ### An adapter or format
 

@@ -112,7 +112,7 @@ describe("eudiplo config validate tenant(s)", () => {
 
         expect(code).toBe(0);
         expect(output.stdout).toContain("PASS haip");
-        expect(output.stdout).toContain("24 configuration file(s)");
+        expect(output.stdout).toContain("25 configuration file(s)");
         expect(output.stdout).toContain("1 attribute provider");
     });
 

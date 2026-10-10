@@ -22,6 +22,16 @@
               ],
               "intent_to_retain": false
             }
+          ],
+          "trusted_authorities": [
+            {
+              "type": "etsi_tl",
+              "values": [
+                {
+                  "trustListId": "oidf-mdoc-issuers"
+                }
+              ]
+            }
           ]
         }
       ]

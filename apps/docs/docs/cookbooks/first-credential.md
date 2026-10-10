@@ -115,7 +115,7 @@ It keeps status lists out of the first run. [Revocable credentials](revocable-cr
 
 1. Open **Credential Issuance → New Issuance**.
 2. In **Select Flow**, choose **Pre-Authorized Code** and **Next**.
-3. In **Select Credentials**, select `membership` under **Credential Configuration IDs** and continue.
+3. In **Select Credentials**, check that `membership` is selected under **Credential Configuration IDs** and continue. As the tenant's only credential type, it is preselected; selecting it again removes it.
 4. In **Configure Claims**, keep **Form Input** and choose **Use Pre-configured Default Values**. The form now shows `name: Max` and `member_id: M-001`.
 5. Leave **Transaction Code (Optional)** empty, then choose **Generate Offer**.
 6. Scan the QR code with the wallet's credential-offer scanner and accept the credential.

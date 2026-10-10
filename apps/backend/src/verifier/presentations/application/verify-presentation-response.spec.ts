@@ -6,6 +6,8 @@ import type {
     CredentialVerifierFormat,
 } from "../domain/credential-verifier-format.js";
 import { UnknownClaimSetReferenceError } from "../domain/dcql-claim-policy.js";
+import { InvalidTrustedAuthoritiesError } from "../ports/trust-list-ref-resolver.js";
+import type { PresentationSettings } from "../presentation-settings.js";
 import { CredentialVerifierFormatRegistry } from "./credential-verifier-format-registry.js";
 import {
     CredentialVerificationFailedError,
@@ -24,6 +26,7 @@ function setup(
     result: Partial<CredentialVerificationResult> = {},
     request: Record<string, unknown> = {},
     credentialSets?: PresentationQuery["dcql_query"]["credential_sets"],
+    settings: Partial<PresentationSettings> = {},
 ) {
     const format: CredentialVerifierFormat = {
         format: "dc+sd-jwt",
@@ -41,7 +44,13 @@ function setup(
     const useCase = new VerifyPresentationResponse(
         new CredentialVerifierFormatRegistry([format]),
         trustLists,
-        { publicUrl: "https://eudiplo.example" },
+        {
+            publicUrl: "https://eudiplo.example",
+            // Most cases are about other checks; the requirement itself has
+            // its own cases.
+            skipTrustAuthority: true,
+            ...settings,
+        },
     );
     const payload = {
         nonce: "request-nonce",
@@ -93,6 +102,61 @@ describe("VerifyPresentationResponse", () => {
                 }),
                 claimSets: undefined,
             }),
+        );
+    });
+
+    it("rejects credential queries without trusted_authorities before verifying anything", async () => {
+        const { run, format } = setup(
+            [
+                {
+                    id: "pid",
+                    trusted_authorities: [
+                        {
+                            type: "etsi_tl",
+                            values: [
+                                { url: "https://trust.example/pid-issuers" },
+                            ],
+                        },
+                    ],
+                },
+                { id: "mdl" },
+            ],
+            {},
+            {},
+            undefined,
+            { skipTrustAuthority: false },
+        );
+
+        const error = await run({ pid: ["vp"], mdl: ["vp"] }).catch((e) => e);
+        expect(error).toBeInstanceOf(InvalidTrustedAuthoritiesError);
+        expect(error.message).toContain(
+            "Credential queries without trusted_authorities: mdl.",
+        );
+        expect(format.verify).not.toHaveBeenCalled();
+    });
+
+    it("verifies credential queries with trusted_authorities without SKIP_TRUST_AUTHORITY", async () => {
+        const authorities = [
+            {
+                type: "etsi_tl" as const,
+                values: [{ url: "https://trust.example/pid-issuers" }],
+            },
+        ];
+        const { run, trustLists } = setup(
+            [{ id: "pid", trusted_authorities: authorities }],
+            {},
+            {},
+            undefined,
+            { skipTrustAuthority: false },
+        );
+
+        await expect(run({ pid: ["vp"] })).resolves.toEqual([
+            { id: "pid", values: [{ given_name: "Erika" }] },
+        ]);
+        expect(trustLists.resolveTrustListRefsForTenant).toHaveBeenCalledWith(
+            authorities[0].values,
+            "tenant",
+            "https://eudiplo.example/issuers/tenant",
         );
     });
 

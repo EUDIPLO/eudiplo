@@ -56,8 +56,9 @@ import ConfigTable from "@site/src/components/ConfigTable";
 ## Skip Flags
 
 Every switch that turns off a check of the normal flow is named `SKIP_<CHECK>`
-and defaults to `false`. The startup log lists active skip flags as warnings.
-Use them only for development and interoperability tests.
+and defaults to `false`. On startup, EUDIPLO warns that protection mechanisms
+are disabled and lists the active skip flags with the protection each one turns
+off. Use them only for development and interoperability tests.
 
 <ConfigTable group="skip" />
 

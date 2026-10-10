@@ -27,7 +27,7 @@ function createService(registrar: Record<string, unknown> = {}) {
     const service = new PresentationRegistrationCertificateService(
         repository as any,
         registrarService as any,
-        { publicUrl: "https://eudiplo.example" },
+        { publicUrl: "https://eudiplo.example", skipTrustAuthority: false },
         logger as any,
     );
     return { service, repository, registrarService, logger };

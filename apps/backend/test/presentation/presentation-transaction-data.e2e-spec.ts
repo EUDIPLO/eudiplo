@@ -24,6 +24,7 @@ import {
     createPresentationRequest,
     createTestFetch,
     encryptVpToken,
+    FIXTURE_TRUSTED_AUTHORITIES,
     PresentationTestContext,
     setupPresentationTestApp,
 } from "../utils.js";
@@ -309,12 +310,7 @@ describe("Presentation - Transaction Data", () => {
                                     path: ["address", "locality"],
                                 },
                             ],
-                            // No trusted_authorities: these tests exercise
-                            // transaction data, not trust-list validation. The
-                            // previous value referenced a trust list that was
-                            // never created, so it only ever "passed" because
-                            // trust validation used to fail open on load errors
-                            // (fixed in credential-chain-validation.service.ts).
+                            trusted_authorities: FIXTURE_TRUSTED_AUTHORITIES,
                         },
                     ],
                 },

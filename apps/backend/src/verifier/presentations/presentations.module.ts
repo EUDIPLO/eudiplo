@@ -61,8 +61,10 @@ export const verifyPresentationResponseProvider: Provider = {
         {
             provide: PRESENTATION_SETTINGS,
             inject: [ConfigService],
-            useFactory: (config: ConfigService) => ({
+            useFactory: (config: ConfigService): PresentationSettings => ({
                 publicUrl: config.getOrThrow<string>("PUBLIC_URL"),
+                skipTrustAuthority:
+                    config.get<boolean>("SKIP_TRUST_AUTHORITY") ?? false,
             }),
         },
         SdjwtvcverifierService,

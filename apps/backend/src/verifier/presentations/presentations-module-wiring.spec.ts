@@ -33,13 +33,25 @@ describe("PresentationsModule wiring", () => {
                 },
                 {
                     provide: PRESENTATION_SETTINGS,
-                    useValue: { publicUrl: "https://eudiplo.example" },
+                    useValue: {
+                        publicUrl: "https://eudiplo.example",
+                        skipTrustAuthority: false,
+                    },
                 },
                 verifyPresentationResponseProvider,
             ],
         }).compile();
 
-        const credentials = [{ id: "mdl", format: "mso_mdoc" }];
+        const trustLists = [{ url: "https://trust.example/mdl-issuers" }];
+        const credentials = [
+            {
+                id: "mdl",
+                format: "mso_mdoc",
+                trusted_authorities: [
+                    { type: "etsi_tl" as const, values: trustLists },
+                ],
+            },
+        ];
         const result = await moduleRef
             .get(VerifyPresentationResponse)
             .execute(
@@ -56,7 +68,7 @@ describe("PresentationsModule wiring", () => {
             { id: "mdl", values: [{ age_over_18: true }] },
         ]);
         expect(resolveTrustListRefsForTenant).toHaveBeenCalledWith(
-            undefined,
+            trustLists,
             "tenant",
             "https://eudiplo.example/issuers/tenant",
         );

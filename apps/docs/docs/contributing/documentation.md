@@ -41,7 +41,7 @@ The sidebar order is Start, Cookbooks, Issuance, Presentation, Trust, Operate, R
 
 Page types:
 
-- **Cookbook**: title "Cookbook: …"; sections *What you will build* (one paragraph, optional diagram), *Before you start* (prerequisites, the recipe it starts from), numbered steps that each end with a **Checkpoint**, *Troubleshooting* (symptom → cause → fix), *Next steps* (2–4 links). Reuse the values of the issue-and-verify recipe where possible (`membership-demo`, `membership`, `urn:example:membership:1`, `membership-check`).
+- **Cookbook**: title "Cookbook: …"; sections *What you will build* (one paragraph, optional diagram), *Before you start* (prerequisites, the recipe it starts from), numbered steps that each end with a **Checkpoint**, *Troubleshooting* (symptom → cause → fix), *Next steps* (2–4 links). Reuse the values of the issue-and-verify recipe where possible (`membership-demo`, `membership`, `urn:example:membership:1`, `membership-check`). Chapters 2 and 3 of that recipe are walked by `apps/client/e2e/cookbook.spec.ts`; change it together with their steps.
 - **How-to**: the goal in one sentence, prerequisites, steps, a minimal example, links to the reference.
 - **Reference**: tables and generated components, no tutorials.
 - **Concept**: explanation and diagrams, links to the how-tos.

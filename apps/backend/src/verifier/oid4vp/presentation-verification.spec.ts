@@ -48,6 +48,7 @@ function setup(
         sdJwtPayload?: Record<string, unknown>;
         mdocResult?: Record<string, unknown>;
         resolveTrustListRefs?: ReturnType<typeof vi.fn>;
+        skipTrustAuthority?: boolean;
     } = {},
 ) {
     const sdJwt = {
@@ -85,7 +86,12 @@ function setup(
             new MdocCredentialVerifierFormat(mdoc as any, logger as any),
         ]),
         trustedAuthorities as any,
-        { publicUrl: "https://eudiplo.example" },
+        {
+            publicUrl: "https://eudiplo.example",
+            // These cases are about other checks; the requirement itself
+            // has its own case.
+            skipTrustAuthority: options.skipTrustAuthority ?? true,
+        },
     );
     const oid4vp = Object.assign(
         Object.create(Oid4vpService.prototype) as Oid4vpService,
@@ -414,6 +420,25 @@ describe("OID4VP presentation verification", () => {
             ),
         ).rejects.toThrow(new BadRequestException("invalid"));
     });
+    it("rejects a config without trusted_authorities as a bad request", async () => {
+        const { service, config, session, sdJwt } = setup(
+            [{ id: "pid", format: "dc+sd-jwt" }],
+            { skipTrustAuthority: false },
+        );
+        const error = await service
+            .parseResponse(
+                { vp_token: { pid: ["vp"] } } as any,
+                config,
+                session,
+            )
+            .catch((e) => e);
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect(error.message).toContain(
+            "Credential queries without trusted_authorities: pid.",
+        );
+        expect(sdJwt.verify).not.toHaveBeenCalled();
+    });
+
     it("rejects credentials of unsupported formats as a conflict", async () => {
         const { service, config, session } = setup([
             { id: "pid", format: "jwt_vc_json" as any },
