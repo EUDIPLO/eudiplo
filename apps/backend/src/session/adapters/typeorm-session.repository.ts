@@ -131,8 +131,8 @@ export class TypeOrmSessionRepository implements SessionRepository {
     findByAuthorizationCode(tenantId: string, authorization_code: string) {
         return this.findSession({ tenantId, authorization_code });
     }
-    findByRefreshToken(tenantId: string, refresh_token: string) {
-        return this.findSession({ tenantId, refresh_token });
+    findByRefreshToken(tenantId: string, refreshTokenHash: string) {
+        return this.findSession({ tenantId, refresh_token: refreshTokenHash });
     }
     findByRequestUri(tenantId: string, request_uri: string) {
         return this.findSession({ tenantId, request_uri });

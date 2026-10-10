@@ -17,6 +17,7 @@ import { AuthorizePushedRequest } from "../application/authorize-pushed-request.
 import { BuildBuiltInAuthorizationServerMetadata } from "../application/build-built-in-authorization-server-metadata.js";
 import { ExchangeAccessToken } from "../application/exchange-access-token.js";
 import { PushAuthorizationRequest } from "../application/push-authorization-request.js";
+import { hashRefreshToken } from "../domain/token-grant-rules.js";
 import { AuthorizeController } from "./authorize.controller.js";
 import { AuthorizeService } from "./authorize.service.js";
 
@@ -1258,7 +1259,7 @@ describe("Built-in authorization server token endpoint", () => {
                     CLIENT_KEY,
                     "sha256",
                 ),
-                refresh_token: "refresh-token",
+                refresh_token: hashRefreshToken("refresh-token"),
                 refresh_token_expires_at: expect.any(Date),
             });
             expect(

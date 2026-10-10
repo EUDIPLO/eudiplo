@@ -14,6 +14,7 @@ import {
     UpdateDateColumn,
 } from "typeorm";
 import { TenantEntity } from "../../../../auth/tenant/entities/tenant.entity.js";
+import { encryptedJsonPaths } from "../../../../platform/data-encryption/encrypted-column.transformer.js";
 import {
     AuthenticationMethodAuth,
     AuthenticationMethodNone,
@@ -164,7 +165,12 @@ export class IssuanceConfig {
             },
         },
     })
-    @Column({ type: "json", nullable: true })
+    // Upstream OIDC client secrets of chained servers are encrypted at rest.
+    @Column({
+        type: "json",
+        nullable: true,
+        transformer: encryptedJsonPaths("*.upstream.clientSecret"),
+    })
     authorizationServers!: ManagedAuthorizationServerConfig[];
 
     /**

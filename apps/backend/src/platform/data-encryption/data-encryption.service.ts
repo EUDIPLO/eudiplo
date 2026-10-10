@@ -10,13 +10,12 @@ import {
  * Uses AES-256-GCM for authenticated encryption.
  *
  * The encryption key is fetched at runtime from the configured provider:
- * - env: Derived from MASTER_SECRET (development only)
- * - vault: Fetched from HashiCorp Vault (production)
- * - aws: Fetched from AWS Secrets Manager (production)
- * - azure: Fetched from Azure Key Vault (production)
+ * - env (default): Derived from MASTER_SECRET
+ * - vault: Fetched from HashiCorp Vault (optional)
+ * - aws: Fetched from AWS Secrets Manager (optional)
+ * - azure: Fetched from Azure Key Vault (optional)
  *
- * Security: When using vault/aws/azure, the key is only in RAM,
- * not exposed via environment variables.
+ * With vault/aws/azure the key is only in RAM, not in environment variables.
  */
 @Injectable()
 export class DataEncryptionService {

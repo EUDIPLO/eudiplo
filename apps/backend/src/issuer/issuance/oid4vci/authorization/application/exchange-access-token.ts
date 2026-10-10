@@ -33,6 +33,7 @@ import {
     DEFAULT_TX_CODE_MAX_ATTEMPTS,
     enforcedRefreshTokenExpiry,
     findBuiltInAuthorizationServer,
+    hashRefreshToken,
     isTxCodeLocked,
     preAuthorizedCodeExpiresAt,
     refreshTokenExpiresAt,
@@ -322,7 +323,10 @@ export class ExchangeAccessToken {
                 .verifyRefreshTokenAccessTokenRequest({
                     grant: parsed.grant as RefreshTokenGrant,
                     accessTokenRequest: parsed.accessTokenRequest,
-                    expectedRefreshToken: session.refresh_token!,
+                    // The session was found by the hash of this token, and
+                    // only the hash is stored.
+                    expectedRefreshToken: (parsed.grant as RefreshTokenGrant)
+                        .refreshToken,
                     request,
                     // RFC 9449 Section 5: refresh tokens of public clients stay bound to the DPoP key;
                     // attested clients are bound via client authentication and may use a new key.
@@ -413,7 +417,9 @@ export class ExchangeAccessToken {
                     client_key_jkt: clientKeyJkt,
                     ...(tokenResponse.refresh_token
                         ? {
-                              refresh_token: tokenResponse.refresh_token,
+                              refresh_token: hashRefreshToken(
+                                  tokenResponse.refresh_token,
+                              ),
                               refresh_token_expires_at: refreshTokenExpiry,
                           }
                         : {}),
@@ -436,7 +442,10 @@ export class ExchangeAccessToken {
     ): Promise<SessionData> {
         if (parsed.grant.grantType === refreshTokenGrantIdentifier) {
             return this.sessions
-                .getByRefreshToken(tenantId, parsed.grant.refreshToken)
+                .getByRefreshToken(
+                    tenantId,
+                    hashRefreshToken(parsed.grant.refreshToken),
+                )
                 .catch(() => {
                     throw new OAuthError(
                         "invalid_grant",

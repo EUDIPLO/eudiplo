@@ -10,6 +10,7 @@ import { OAuthError } from "../domain/oauth-error.js";
 import {
     type AuthorizationServerTokenSettings,
     enforcedRefreshTokenExpiry,
+    hashRefreshToken,
     type RefreshTokenPolicy,
     refreshTokenExpiresAt,
     refreshTokenPolicy,
@@ -122,7 +123,7 @@ export async function resolveSessionForTokenRequest(
 
         const session = await sessionRepository.findByRefreshToken(
             tenantId,
-            request.refresh_token,
+            hashRefreshToken(request.refresh_token),
         );
 
         if (!session) {
@@ -312,7 +313,8 @@ export function issueRefreshTokenIfEnabled(
                   policy,
               )
             : refreshTokenExpiresAt(policy, new Date());
-    session.refreshToken = randomBytes(32).toString("base64url");
+    const refreshToken = randomBytes(32).toString("base64url");
+    session.refreshToken = hashRefreshToken(refreshToken);
 
-    return session.refreshToken;
+    return refreshToken;
 }

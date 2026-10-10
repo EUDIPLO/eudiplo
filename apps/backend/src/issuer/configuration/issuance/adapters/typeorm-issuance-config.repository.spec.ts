@@ -3,6 +3,7 @@ import { DataSource } from "typeorm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { endpointEntities } from "../../../../../test/persistence/endpoint-repository.contract.js";
 import { issuanceRepositoryContract } from "../../../../../test/persistence/issuance-repository.contract.js";
+import { initializeTestEncryption } from "../../../../../test/persistence/test-encryption.js";
 import { TenantEntity } from "../../../../auth/tenant/entities/tenant.entity.js";
 import { IssuanceConfig } from "../entities/issuance-config.entity.js";
 import { TypeOrmIssuanceConfigRepository } from "./typeorm-issuance-config.repository.js";
@@ -10,6 +11,7 @@ import { TypeOrmIssuanceConfigRepository } from "./typeorm-issuance-config.repos
 describe("SQLite issuance repository", () => {
     let db: DataSource;
     beforeAll(async () => {
+        await initializeTestEncryption();
         db = await new DataSource({
             type: "better-sqlite3",
             database: ":memory:",

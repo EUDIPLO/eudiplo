@@ -32,7 +32,7 @@ The same configuration via the API (`POST /api/registrar/config` creates or repl
 File imports are not checked against the registrar, because it may be unreachable at startup.
 
 :::warning[Stored credentials]
-The password and client secret are stored unencrypted in the database. The API never returns the password but does return the client secret. Use a registrar account dedicated to this tenant.
+The password and client secret are encrypted in the database with the [data-at-rest key](../operate/encryption-keys.md). The API never returns the password but does return the client secret. Use a registrar account dedicated to this tenant.
 :::
 
 EUDIPLO acts as one relying party at the registrar. If the account has none yet, EUDIPLO registers one on first use; otherwise it uses the first relying party of the account.
