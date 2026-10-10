@@ -58,13 +58,17 @@ function walk(
                           field(stored, key),
                           rest,
                           leaf,
-                          path ? `${path}.${key}` : key,
+                          childPath(path, key),
                       )
                     : item,
             ]),
         );
     }
     return value;
+}
+
+function childPath(path: string, key: string): string {
+    return path ? `${path}.${key}` : key;
 }
 
 function field(value: unknown, key: string): unknown {
