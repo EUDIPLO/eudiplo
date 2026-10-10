@@ -64,10 +64,23 @@ target and its public API URL. Instances are stored in `~/.eudiplo/config.json`
 
 ```bash
 eudiplo instance ls                  # list, the default is marked
+eudiplo instance show staging        # details; the default without a name
 eudiplo instance use production      # make it the default
 eudiplo doctor --instance staging    # or pick one per command
+eudiplo instance update staging --url https://staging.example.com
+eudiplo instance update staging --no-client-url   # drop the client URL
+eudiplo instance rename prod production           # the default follows the rename
 eudiplo instance remove old-staging  # unregister (does not touch the deployment)
+eudiplo instance remove production --default staging  # remove the default, pick the next
 ```
+
+Use these commands instead of editing the file by hand. Every change is
+validated before it is written, so a mistyped URL is rejected instead of
+breaking later commands, and the file is replaced atomically with mode `0600`
+(where the platform supports it). The default instance always points at a
+registered instance: removing it requires `--default <name>`, unless it is the
+last one. `list` and `show` mask credentials embedded in a URL
+(`https://***@host`).
 
 Commands that call the management API read credentials from the environment,
 never from the instance file: `doctor` uses `EUDIPLO_CLIENT_ID` and

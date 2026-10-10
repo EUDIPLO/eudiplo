@@ -44,7 +44,11 @@ async function completionCandidates(
     const current = resolveCommand(root, words);
     const lastOption = findOption(current, words.at(-1));
     if (lastOption) {
-        if (lastOption.long === "--instance") {
+        if (
+            lastOption.long === "--instance" ||
+            (lastOption.long === "--default" &&
+                current.parent?.name() === "instance")
+        ) {
             return instanceCandidates(context);
         }
         const choices = optionChoices(lastOption);

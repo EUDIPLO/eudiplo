@@ -1,5 +1,6 @@
 import { readStringFlag } from "../options.js";
 import type { CliConfig, ParsedArgs } from "../types.js";
+import { getInstance } from "./cli-config.js";
 
 export function resolveInstance(
     config: CliConfig,
@@ -12,9 +13,5 @@ export function resolveInstance(
             "No instance selected. Use --instance or add an instance first.",
         );
     }
-    const instance = config.instances[name];
-    if (!instance) {
-        throw new Error(`Unknown instance: ${name}`);
-    }
-    return [name, instance];
+    return [name, getInstance(config, name)];
 }

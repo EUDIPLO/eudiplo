@@ -222,7 +222,9 @@ describe("EUDIPLO CLI", () => {
         expect(output.stdout).toContain("list|ls");
         expect(output.stdout).toContain("show [name]");
         expect(output.stdout).toContain("use <name>");
-        expect(output.stdout).toContain("remove|rm <name>");
+        expect(output.stdout).toContain("update [options] <name>");
+        expect(output.stdout).toContain("rename <old-name> <new-name>");
+        expect(output.stdout).toContain("remove|rm [options] <name>");
         expect(output.stdout).toContain("add [options] <name>");
 
         output.stdout = "";

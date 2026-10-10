@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import {
@@ -34,15 +35,59 @@ export async function loadConfig(path: string): Promise<CliConfig> {
     }
 }
 
+/**
+ * Writes the config atomically: the content goes to a new file in the same
+ * directory, which then replaces the config in one rename. A crash or a full
+ * disk never leaves a truncated config behind, and the new file is created
+ * with mode 0600 where the platform supports it.
+ *
+ * The config is validated first, so no command can save a config that the
+ * next command would fail to load.
+ */
 export async function saveConfig(
     path: string,
     config: CliConfig,
 ): Promise<void> {
+    const contents = `${JSON.stringify(config, null, 4)}\n`;
+    validateConfig(JSON.parse(contents));
+
     await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    await writeFile(path, `${JSON.stringify(config, null, 4)}\n`, {
-        encoding: "utf8",
-        mode: 0o600,
-    });
+    const temporaryPath = `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+    try {
+        await writeFile(temporaryPath, contents, {
+            encoding: "utf8",
+            mode: 0o600,
+            flag: "wx",
+        });
+        await replaceFile(temporaryPath, path);
+    } catch (error) {
+        await rm(temporaryPath, { force: true });
+        throw error;
+    }
+}
+
+/**
+ * Renames over the existing file. On Windows a rename can fail briefly while
+ * another process (an editor, a virus scanner) holds the target open.
+ */
+async function replaceFile(source: string, target: string): Promise<void> {
+    for (let attempt = 1; ; attempt += 1) {
+        try {
+            await rename(source, target);
+            return;
+        } catch (error) {
+            const retryable =
+                process.platform === "win32" &&
+                isNodeError(error) &&
+                (error.code === "EPERM" ||
+                    error.code === "EACCES" ||
+                    error.code === "EBUSY");
+            if (!retryable || attempt >= 5) {
+                throw error;
+            }
+            await new Promise((done) => setTimeout(done, attempt * 20));
+        }
+    }
 }
 
 function validateConfig(value: unknown): CliConfig {
@@ -82,23 +127,121 @@ export function upsertInstance(
     };
 }
 
-export function setDefaultInstance(config: CliConfig, name: string): CliConfig {
+/**
+ * Looks up an instance by name. Only the config's own entries count, so names
+ * such as `constructor` are unknown instead of resolving to Object members.
+ */
+export function getInstance(config: CliConfig, name: string): InstanceConfig {
     if (!Object.hasOwn(config.instances, name)) {
         throw new Error(`Unknown instance: ${name}`);
     }
+    return config.instances[name];
+}
+
+export function setDefaultInstance(config: CliConfig, name: string): CliConfig {
+    getInstance(config, name);
     return { ...config, defaultInstance: name };
 }
 
-export function removeInstance(config: CliConfig, name: string): CliConfig {
-    if (!Object.hasOwn(config.instances, name)) {
-        throw new Error(`Unknown instance: ${name}`);
+export interface InstanceUpdate {
+    url?: string;
+    /** A URL replaces the client URL, `null` removes it. */
+    clientUrl?: string | null;
+}
+
+export function updateInstance(
+    config: CliConfig,
+    name: string,
+    update: InstanceUpdate,
+): CliConfig {
+    const current = getInstance(config, name);
+    if (update.url === undefined && update.clientUrl === undefined) {
+        throw new Error(
+            "Nothing to update. Pass --url, --client-url or --no-client-url.",
+        );
+    }
+    if (update.url !== undefined) {
+        validateHttpUrl(update.url, "--url");
+    }
+    if (typeof update.clientUrl === "string") {
+        validateHttpUrl(update.clientUrl, "--client-url");
+    }
+
+    const next: InstanceConfig = { ...current };
+    if (update.url !== undefined) {
+        next.url = update.url;
+    }
+    if (update.clientUrl === null) {
+        delete next.clientUrl;
+    } else if (update.clientUrl !== undefined) {
+        next.clientUrl = update.clientUrl;
+    }
+    return {
+        ...config,
+        instances: { ...config.instances, [name]: next },
+    };
+}
+
+/**
+ * Renames an instance, keeping its position in the config file and moving the
+ * default along with it.
+ */
+export function renameInstance(
+    config: CliConfig,
+    oldName: string,
+    newName: string,
+): CliConfig {
+    getInstance(config, oldName);
+    if (newName.length === 0) {
+        throw new Error("New instance name must not be empty.");
+    }
+    if (newName === oldName) {
+        throw new Error(`Instance ${oldName} already has that name.`);
+    }
+    if (Object.hasOwn(config.instances, newName)) {
+        throw new Error(`Instance ${newName} already exists.`);
+    }
+
+    const instances: Record<string, InstanceConfig> = {};
+    for (const [name, instance] of Object.entries(config.instances)) {
+        instances[name === oldName ? newName : name] = instance;
+    }
+    return {
+        defaultInstance:
+            config.defaultInstance === oldName
+                ? newName
+                : config.defaultInstance,
+        instances,
+    };
+}
+
+/**
+ * Removes an instance. The default can only be removed while it is the last
+ * instance, or when `newDefault` names the instance that replaces it, so the
+ * default never points at a missing instance.
+ */
+export function removeInstance(
+    config: CliConfig,
+    name: string,
+    options: { newDefault?: string } = {},
+): CliConfig {
+    getInstance(config, name);
+    const { newDefault } = options;
+    if (newDefault !== undefined) {
+        if (newDefault === name) {
+            throw new Error(
+                `Cannot make ${name} the default while removing it.`,
+            );
+        }
+        getInstance(config, newDefault);
     }
     if (
         config.defaultInstance === name &&
+        newDefault === undefined &&
         Object.keys(config.instances).length > 1
     ) {
         throw new Error(
-            `Cannot remove default instance ${name}. Select another with: eudiplo instance use <name>`,
+            `Cannot remove default instance ${name}. Select another with: eudiplo instance use <name>, or pass --default <name>.`,
         );
     }
 
@@ -106,11 +249,33 @@ export function removeInstance(config: CliConfig, name: string): CliConfig {
     delete instances[name];
     return {
         defaultInstance:
-            config.defaultInstance === name
+            newDefault ??
+            (config.defaultInstance === name
                 ? undefined
-                : config.defaultInstance,
+                : config.defaultInstance),
         instances,
     };
+}
+
+/**
+ * Hides user info such as `user:password@` in a URL before it is printed.
+ * Other URLs are returned exactly as configured.
+ */
+export function redactUrl(value: string): string {
+    try {
+        const url = new URL(value);
+        if (url.username === "" && url.password === "") {
+            return value;
+        }
+    } catch {
+        return value;
+    }
+    return value.replace(/^([a-z][a-z\d+.-]*:\/\/)[^/?#]*@/i, "$1***@");
+}
+
+/** Throws unless `value` is an absolute HTTP(S) URL, as config loading requires. */
+export function assertHttpUrl(value: string, label: string): void {
+    validateHttpUrl(value, label);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

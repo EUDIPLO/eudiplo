@@ -1,8 +1,13 @@
 import { readStringFlag } from "../../options.js";
 import {
+    assertHttpUrl,
+    getInstance,
+    redactUrl,
     removeInstance,
+    renameInstance,
     saveConfig,
     setDefaultInstance,
+    updateInstance,
     upsertInstance,
 } from "../../services/cli-config.js";
 import { parseTarget } from "../../services/deployment-target.js";
@@ -30,10 +35,15 @@ export async function runInstanceAdd(
         throw new Error("--url is required.");
     }
 
+    assertHttpUrl(url, "--url");
+
     const target = parseTarget(
         readStringFlag(parsed.flags, "target") ?? "external",
     );
     const clientUrl = readStringFlag(parsed.flags, "client-url");
+    if (clientUrl !== undefined) {
+        assertHttpUrl(clientUrl, "--client-url");
+    }
     const kubernetes =
         target === "kubernetes"
             ? readKubernetesOptions(parsed.flags)
@@ -66,7 +76,7 @@ export function runInstanceList(
         const defaultLabel =
             name === config.defaultInstance ? " (default)" : "";
         context.stdout.write(
-            `- ${name}${defaultLabel}: ${instance.target} ${instance.url}\n`,
+            `- ${name}${defaultLabel}: ${instance.target} ${redactUrl(instance.url)}\n`,
         );
     }
     return 0;
@@ -83,16 +93,19 @@ export function runInstanceShow(
             "No instance selected. Specify a name or add an instance first.",
         );
     }
-    const instance = config.instances[name];
-    if (!instance) {
-        throw new Error(`Unknown instance: ${name}`);
-    }
+    const instance = getInstance(config, name);
 
     const defaultLabel = name === config.defaultInstance ? " (default)" : "";
     context.stdout.write(`Instance ${name}${defaultLabel}\n`);
     context.stdout.write(`Target: ${instance.target}\n`);
-    context.stdout.write(`API URL: ${instance.url}\n`);
-    writeOptionalValue(context, "Client URL", instance.clientUrl);
+    context.stdout.write(`API URL: ${redactUrl(instance.url)}\n`);
+    writeOptionalValue(
+        context,
+        "Client URL",
+        instance.clientUrl === undefined
+            ? undefined
+            : redactUrl(instance.clientUrl),
+    );
     writeOptionalValue(context, "Project directory", instance.projectDirectory);
     writeOptionalValue(context, "Compose file", instance.composeFile);
     writeOptionalList(context, "Compose files", instance.composeFiles);
@@ -161,9 +174,56 @@ export async function runInstanceRemove(
     context: CommandContext,
 ): Promise<number> {
     const name = requireInstanceName(parsed);
-    await saveConfig(configPath, removeInstance(config, name));
+    const newDefault = readStringFlag(parsed.flags, "default");
+    const nextConfig = removeInstance(config, name, { newDefault });
+    await saveConfig(configPath, nextConfig);
     context.stdout.write(`Unregistered instance ${name}.\n`);
+    if (nextConfig.defaultInstance !== config.defaultInstance) {
+        context.stdout.write(
+            nextConfig.defaultInstance === undefined
+                ? "No default instance is set.\n"
+                : `Default instance set to ${nextConfig.defaultInstance}.\n`,
+        );
+    }
     context.stdout.write("Deployment resources were not removed.\n");
+    return 0;
+}
+
+export async function runInstanceUpdate(
+    configPath: string,
+    config: CliConfig,
+    parsed: ParsedArgs,
+    context: CommandContext,
+): Promise<number> {
+    const name = requireInstanceName(parsed);
+    const url = readStringFlag(parsed.flags, "url");
+    const clientUrl =
+        parsed.flags["no-client-url"] === true
+            ? null
+            : readStringFlag(parsed.flags, "client-url");
+    await saveConfig(
+        configPath,
+        updateInstance(config, name, { url, clientUrl }),
+    );
+    context.stdout.write(`Updated instance ${name}.\n`);
+    return 0;
+}
+
+export async function runInstanceRename(
+    configPath: string,
+    config: CliConfig,
+    parsed: ParsedArgs,
+    context: CommandContext,
+): Promise<number> {
+    const [oldName, newName] = parsed.positionals;
+    if (!oldName || newName === undefined) {
+        throw new Error("Old and new instance names are required.");
+    }
+    await saveConfig(configPath, renameInstance(config, oldName, newName));
+    context.stdout.write(`Renamed instance ${oldName} to ${newName}.\n`);
+    if (config.defaultInstance === oldName) {
+        context.stdout.write(`Default instance is now ${newName}.\n`);
+    }
     return 0;
 }
 

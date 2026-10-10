@@ -5,7 +5,9 @@ import {
     runInstanceAdd,
     runInstanceList,
     runInstanceRemove,
+    runInstanceRename,
     runInstanceShow,
+    runInstanceUpdate,
     runInstanceUse,
 } from "./action.js";
 
@@ -52,16 +54,51 @@ export function createInstanceCommand(
             );
         });
     instance
+        .command("update <name>")
+        .description("Change the API or client URL of an instance")
+        .option("--url <url>", "new EUDIPLO API URL")
+        .option("--client-url <url>", "new web client URL")
+        .option("--no-client-url", "remove the web client URL")
+        .action(async (name, options) => {
+            const { configPath, config } = await loadCliState(context);
+            setExitCode(
+                await runInstanceUpdate(
+                    configPath,
+                    config,
+                    parsedArgs("instance", "update", [name], options),
+                    context,
+                ),
+            );
+        });
+    instance
+        .command("rename <old-name> <new-name>")
+        .description("Rename an instance; the default follows it")
+        .action(async (oldName, newName) => {
+            const { configPath, config } = await loadCliState(context);
+            setExitCode(
+                await runInstanceRename(
+                    configPath,
+                    config,
+                    parsedArgs("instance", "rename", [oldName, newName], {}),
+                    context,
+                ),
+            );
+        });
+    instance
         .command("remove <name>")
         .alias("rm")
         .description("Unregister an EUDIPLO instance")
-        .action(async (name) => {
+        .option(
+            "--default <name>",
+            "instance to make the default when removing the current default",
+        )
+        .action(async (name, options) => {
             const { configPath, config } = await loadCliState(context);
             setExitCode(
                 await runInstanceRemove(
                     configPath,
                     config,
-                    parsedArgs("instance", "remove", [name], {}),
+                    parsedArgs("instance", "remove", [name], options),
                     context,
                 ),
             );

@@ -1,5 +1,6 @@
 import { basename, isAbsolute, join } from "node:path";
 import { readStringFlag } from "../../../options.js";
+import { redactUrl } from "../../../services/cli-config.js";
 import type { CliConfig, CommandContext, ParsedArgs } from "../../../types.js";
 import { buildJsonReport, formatTextReport } from "./report.js";
 import { loadTenantConfigSchemas } from "./schemas.js";
@@ -27,7 +28,9 @@ export async function runValidate(
     }
     for (const name of instanceNames) {
         const instance = config.instances[name];
-        context.stdout.write(`- ${name}: ${instance.target} ${instance.url}\n`);
+        context.stdout.write(
+            `- ${name}: ${instance.target} ${redactUrl(instance.url)}\n`,
+        );
     }
     return 0;
 }
