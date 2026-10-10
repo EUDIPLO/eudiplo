@@ -117,6 +117,40 @@ describe('IssuanceOfferComponent', () => {
     });
   });
 
+  it('labels claim inputs with the claim name when the claim has no display label', async () => {
+    component.credentialConfigs = [
+      {
+        id: 'membership',
+        config: { format: 'dc+sd-jwt' },
+        fields: [
+          { path: ['name'], type: 'string', mandatory: true },
+          { path: ['member_id'], type: 'string', mandatory: true },
+          {
+            path: ['level'],
+            type: 'string',
+            display: [{ locale: 'en-US', name: 'Membership level' }],
+          },
+          { path: ['address', 'street'], type: 'string' },
+        ],
+      } as any,
+    ];
+
+    await component.setClaimFormFields(['membership']);
+
+    const fieldGroup = component.fields[0].fieldGroup ?? [];
+    const labelOf = (key: string) => fieldGroup.find((field) => field.key === key)?.props?.label;
+    expect(labelOf('name')).toBe('name');
+    expect(labelOf('member_id')).toBe('member_id');
+    expect(labelOf('level')).toBe('Membership level');
+
+    // The object keeps its group header and no extra label; its leaves get their own name.
+    const address = fieldGroup.find((field) => field.key === 'address');
+    expect(address?.props?.label).toBeFalsy();
+    expect(address?.fieldGroup?.find((field) => field.key === 'street')?.props?.label).toBe(
+      'street'
+    );
+  });
+
   it('includes configured authorization server options in order for pre-authorized flow', () => {
     component.issuanceConfig = {
       authorizationServers: [

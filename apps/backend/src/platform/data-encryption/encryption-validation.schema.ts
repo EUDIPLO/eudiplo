@@ -4,17 +4,17 @@ import Joi from "joi";
  * Validation schema for encryption key source configuration.
  *
  * Configures where the encryption key for data at rest is fetched from:
- * - env (default): Derived from MASTER_SECRET (development only)
- * - vault: Fetched from HashiCorp Vault (production)
- * - aws: Fetched from AWS Secrets Manager (production)
- * - azure: Fetched from Azure Key Vault (production)
+ * - env (default): Derived from MASTER_SECRET
+ * - vault: Fetched from HashiCorp Vault (optional)
+ * - aws: Fetched from AWS Secrets Manager (optional)
+ * - azure: Fetched from Azure Key Vault (optional)
  */
 export const ENCRYPTION_VALIDATION_SCHEMA = Joi.object({
     ENCRYPTION_KEY_SOURCE: Joi.string()
         .valid("env", "vault", "aws", "azure")
         .default("env")
         .description(
-            "Source for encryption key: env (dev), vault/aws/azure (prod - key only in RAM)",
+            "Source for the data-at-rest encryption key: env (default, derived from MASTER_SECRET), or optionally vault/aws/azure (key held only in memory)",
         )
         .meta({ group: "encryption", order: 10 }),
 

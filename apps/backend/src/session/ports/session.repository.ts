@@ -78,9 +78,10 @@ export interface SessionRepository {
         tenantId: string,
         code: string,
     ): Promise<SessionData | null>;
+    /** Session holding this refresh token hash (only the hash is stored). */
     findByRefreshToken(
         tenantId: string,
-        token: string,
+        refreshTokenHash: string,
     ): Promise<SessionData | null>;
     findByRequestUri(
         tenantId: string,

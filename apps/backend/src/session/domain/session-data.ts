@@ -92,6 +92,7 @@ export interface SessionData {
     authorization_code_expires_at?: Date;
     dpop_jkt?: string;
     client_key_jkt?: string;
+    /** SHA-256 hash of the refresh token; the token itself is not stored. */
     refresh_token?: string;
     refresh_token_expires_at?: Date;
     request_uri?: string;

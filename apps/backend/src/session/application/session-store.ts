@@ -68,8 +68,11 @@ export class SessionStore {
         );
     }
 
-    getByRefreshToken(tenantId: string, token: string): Promise<SessionData> {
-        return this.lookup(token, (value) =>
+    getByRefreshToken(
+        tenantId: string,
+        refreshTokenHash: string,
+    ): Promise<SessionData> {
+        return this.lookup(refreshTokenHash, (value) =>
             this.sessions.findByRefreshToken(tenantId, value),
         );
     }

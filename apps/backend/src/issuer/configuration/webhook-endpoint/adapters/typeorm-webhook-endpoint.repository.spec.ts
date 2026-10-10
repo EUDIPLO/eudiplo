@@ -4,10 +4,12 @@ import {
     endpointEntities,
     endpointRepositoryContract,
 } from "../../../../../test/persistence/endpoint-repository.contract.js";
+import { initializeTestEncryption } from "../../../../../test/persistence/test-encryption.js";
 
 describe("SQLite webhook-endpoint repository", () => {
     let db: DataSource;
     beforeAll(async () => {
+        await initializeTestEncryption();
         db = await new DataSource({
             type: "better-sqlite3",
             database: ":memory:",

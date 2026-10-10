@@ -21,7 +21,7 @@ export function initializeEncryptionTransformer(
  * Get the encryption service instance.
  * Throws if not initialized.
  */
-function getEncryptionService(): DataEncryptionService {
+export function getEncryptionService(): DataEncryptionService {
     if (!encryptionServiceInstance) {
         throw new Error(
             "DataEncryptionService not initialized. Call initializeEncryptionTransformer() during bootstrap.",
@@ -113,3 +113,82 @@ export const EncryptedStringTransformer: ValueTransformer = {
         return service.decrypt(value);
     },
 };
+
+/**
+ * Apply `fn` to the string values at `path` in a JSON value and return a copy;
+ * the input is left unchanged. Path segments are object keys or array
+ * indexes, and `*` matches every key or index.
+ *
+ * Example: `mapJsonPath(servers, "*.upstream.clientSecret", fn)`
+ */
+export function mapJsonPath(
+    value: unknown,
+    path: string,
+    fn: (leaf: string) => string,
+): unknown {
+    return mapSegments(value, path.split("."), fn);
+}
+
+function mapSegments(
+    value: unknown,
+    [segment, ...rest]: string[],
+    fn: (leaf: string) => string,
+): unknown {
+    if (segment === undefined) {
+        return typeof value === "string" ? fn(value) : value;
+    }
+    if (Array.isArray(value)) {
+        return value.map((item, index) =>
+            segment === "*" || segment === String(index)
+                ? mapSegments(item, rest, fn)
+                : item,
+        );
+    }
+    if (value && typeof value === "object") {
+        return Object.fromEntries(
+            Object.entries(value).map(([key, item]) => [
+                key,
+                segment === "*" || segment === key
+                    ? mapSegments(item, rest, fn)
+                    : item,
+            ]),
+        );
+    }
+    return value;
+}
+
+/**
+ * TypeORM column transformer for JSON columns that hold a secret next to
+ * plain configuration. Only the string values at `paths` are encrypted; the
+ * rest of the document stays readable in the database.
+ *
+ * Usage:
+ * @Column("json", { transformer: encryptedJsonPaths("config.value") })
+ * auth: WebhookAuth;
+ */
+export function encryptedJsonPaths(...paths: string[]): ValueTransformer {
+    const apply = (value: unknown, fn: (leaf: string) => string) =>
+        paths.reduce((current, path) => mapJsonPath(current, path, fn), value);
+
+    return {
+        to(value: unknown): unknown {
+            if (value === null || value === undefined) {
+                return value;
+            }
+            const service = getEncryptionService();
+            return apply(value, (leaf) => service.encrypt(leaf));
+        },
+
+        from(value: unknown): unknown {
+            if (value === null || value === undefined) {
+                return value;
+            }
+            const service = getEncryptionService();
+            // Values written before EncryptStoredSecrets1784500000000 ran are
+            // still plaintext.
+            return apply(value, (leaf) =>
+                service.isEncrypted(leaf) ? service.decrypt(leaf) : leaf,
+            );
+        },
+    };
+}

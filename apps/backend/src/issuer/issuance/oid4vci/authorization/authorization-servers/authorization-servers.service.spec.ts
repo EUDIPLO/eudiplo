@@ -4,6 +4,7 @@ import {
     type ChainedAsSession,
     ChainedAsSessionStatus,
 } from "../domain/chained-as-session.js";
+import { hashRefreshToken } from "../domain/token-grant-rules.js";
 import type { ChainedAsTokenRequestDto } from "../shared/dto/chained-as.dto.js";
 import { AuthorizationServersService } from "./authorization-servers.service.js";
 
@@ -103,7 +104,9 @@ describe("AuthorizationServersService refresh tokens", () => {
         );
 
         expect(response.refresh_token).toBeDefined();
-        expect(session.refreshToken).toBe(response.refresh_token);
+        expect(session.refreshToken).toBe(
+            hashRefreshToken(response.refresh_token!),
+        );
         expect(session.refreshTokenExpiresAt).toEqual(
             new Date(NOW.getTime() + 30 * DAY_MS),
         );

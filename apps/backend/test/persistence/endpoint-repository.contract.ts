@@ -67,6 +67,25 @@ export function endpointRepositoryContract(
             expect(loaded).not.toHaveProperty("tenant");
         });
 
+        it("stores the API key encrypted and the rest of the auth readable", async () => {
+            await adapter.save(config);
+            const row = await getDb()
+                .getRepository(entity)
+                .createQueryBuilder("endpoint")
+                .select("endpoint.auth", "auth")
+                .where("endpoint.id = :id AND endpoint.tenantId = :tenantId", {
+                    id: config.id,
+                    tenantId: "tenant-a",
+                })
+                .getRawOne();
+            // SQLite returns the JSON text, PostgreSQL the parsed value.
+            const stored =
+                typeof row.auth === "string" ? JSON.parse(row.auth) : row.auth;
+            expect(stored.type).toBe("apiKey");
+            expect(stored.config.headerName).toBe("X-Key");
+            expect(stored.config.value).not.toBe("secret");
+        });
+
         it("isolates identical IDs across tenants for reads, updates and deletes", async () => {
             await adapter.save(config);
             await adapter.save({
