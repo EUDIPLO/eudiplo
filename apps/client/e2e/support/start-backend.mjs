@@ -69,6 +69,9 @@ Object.assign(process.env, {
   CONFIG_IMPORT_MODE: 'create',
   PORT: apiUrl.port || '3000',
   PUBLIC_URL: apiUrl.origin,
+  // Managed trust lists are fetched through INTERNAL_URL, which defaults to
+  // port 3000 even when PORT differs.
+  INTERNAL_URL: process.env['INTERNAL_URL'] ?? `http://127.0.0.1:${apiUrl.port || '3000'}`,
   MASTER_SECRET: process.env['MASTER_SECRET'] ?? 'e2e-master-secret-with-at-least-32-chars',
   AUTH_CLIENT_ID: process.env['AUTH_CLIENT_ID'] ?? 'root',
   AUTH_CLIENT_SECRET: process.env['AUTH_CLIENT_SECRET'] ?? 'root',

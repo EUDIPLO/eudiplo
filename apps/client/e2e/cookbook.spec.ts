@@ -219,7 +219,45 @@ test('issue and verify cookbook', async ({ page }) => {
     await expect(page.locator('mat-chip').first()).toHaveText(/fetched|completed/);
   });
 
-  await test.step('chapter 3, steps 1 and 2: define the verification request', async () => {
+  await test.step('chapter 3, step 1: create the keys for the trust list', async () => {
+    await createKeyChain(page, ['Trust List Signing'], 'Membership trust list signing');
+    await createKeyChain(page, ['Status List Signing'], 'Membership status list signing');
+    await openNav(page, 'Keys');
+    await expect(page.getByText('Membership trust list signing')).toBeVisible();
+    await expect(page.getByText('Membership status list signing')).toBeVisible();
+  });
+
+  await test.step('chapter 3, step 2: publish the trust list', async () => {
+    await openNav(page, 'Trust Lists');
+    await iconButton(page, 'Create new Trust List').click();
+    await page.getByRole('textbox', { name: 'ID', exact: true }).fill('membership-issuers');
+    await page
+      .getByRole('textbox', { name: 'Description' })
+      .fill('Issuers accepted for membership checks');
+    await selectOption(page, 'Signing Key Chain', /Membership trust list signing/);
+    await page.getByRole('button', { name: 'Add Internal Entity' }).click();
+    await expect(page.getByRole('combobox', { name: 'Provider type' })).toHaveText(
+      'Credential provider'
+    );
+    await selectOption(page, 'Issuer Key Chain', /Membership credential signing/);
+    await selectOption(page, 'Revocation Key Chain', /Membership status list signing/);
+    await page.getByRole('textbox', { name: 'Entity Name' }).fill('Membership Demo');
+    await page.getByRole('button', { name: 'Create Trust List' }).click();
+    await expect(page).toHaveURL(/\/trust-list$/);
+
+    await page
+      .getByRole('row', { name: /membership-issuers/ })
+      .locator('button[mattooltip="View details"]')
+      .click();
+    const trustListUrl = `${resolvedE2EConfig.apiBaseUrl}/issuers/${tenantId}/trust-list/membership-issuers`;
+    await expect(page.getByRole('textbox', { name: 'Trust List URL' })).toHaveValue(trustListUrl);
+    // The URL serves the signed trust list JWT.
+    const trustList = await fetch(trustListUrl);
+    expect(trustList.status).toBe(200);
+    expect(await trustList.text()).toMatch(/^eyJ/);
+  });
+
+  await test.step('chapter 3, steps 3 and 4: define the verification request', async () => {
     await openNav(page, 'Verification Configs');
     await iconButton(page, 'Create Configuration').click();
 
@@ -238,6 +276,9 @@ test('issue and verify cookbook', async ({ page }) => {
     await page.getByRole('textbox', { name: 'Claim path' }).fill('name');
     await page.getByRole('button', { name: 'Add claim' }).click();
     await page.getByRole('textbox', { name: 'Claim path' }).nth(1).fill('member_id');
+    await page.getByRole('button', { name: 'Issuer trust' }).click();
+    await page.getByRole('button', { name: 'Add managed trust list' }).click();
+    await selectOption(page, 'Managed trust list', /\(membership-issuers\)/);
     await expect(page.getByRole('combobox', { name: 'Which credentials are needed?' })).toHaveText(
       'Require all selected credentials'
     );
@@ -263,7 +304,7 @@ test('issue and verify cookbook', async ({ page }) => {
     await expect(page.getByText('membership-check', { exact: true })).toBeVisible();
   });
 
-  await test.step('chapter 3, step 3: generate and approve a request', async () => {
+  await test.step('chapter 3, step 5: generate and approve a request', async () => {
     await openNav(page, 'New Verification');
     await selectOption(page, 'Presentation Configuration', 'membership-check');
     await page.getByRole('button', { name: 'Generate Request' }).click();
@@ -274,7 +315,7 @@ test('issue and verify cookbook', async ({ page }) => {
     expect(response.status, await response.text()).toBe(200);
   });
 
-  await test.step('chapter 3, step 4: inspect the verified session', async () => {
+  await test.step('chapter 3, step 6: inspect the verified session', async () => {
     await expect(page.locator('mat-chip').first()).toHaveText('completed');
     await page.getByRole('tab', { name: 'Credentials (1)' }).click();
     const credentials = page.getByRole('tabpanel');
