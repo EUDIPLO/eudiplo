@@ -81,6 +81,8 @@ pnpm --filter @eudiplo/backend build && pnpm --filter @eudiplo/client build
 E2E_USE_BUILD=true pnpm --filter @eudiplo/client e2e
 ```
 
+`e2e/cookbook.spec.ts` walks the [Issue and verify](../cookbooks/index.md) cookbook through the client, from tenant creation to the verified presentation. It signs in as root (`AUTH_CLIENT_ID` / `AUTH_CLIENT_SECRET`, `root`/`root` in build mode), creates a new tenant per run, and uses the headless wallet in `e2e/support/wallet.ts` in place of the phone.
+
 `PLAYWRIGHT_API_URL` and `PLAYWRIGHT_TEST_BASE_URL` move the backend and client off ports 3000 and 4200. CI uploads the HTML report as the `client-e2e-report` artifact.
 
 Specs import `test` and `expect` from `e2e/support/test.ts` instead of `@playwright/test`. With `E2E_COVERAGE=true`, that fixture records Chromium's JavaScript coverage of every page, and after the run `monocart-coverage-reports` maps it back to `src/**/*.ts` through the build's source maps (`e2e/support/coverage.ts`). Files no test loaded count as uncovered; templates are not included. The HTML, LCOV and Cobertura reports land in `apps/client/coverage/e2e/`.
