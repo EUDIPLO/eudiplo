@@ -84,3 +84,7 @@ build
 /apps/cli/templates/schemas/
 /apps/cli/templates/schemas.manifest.json
 /apps/client/src/app/utils/schemas.json
+
+# Claude Code: local worktrees and personal settings
+.claude/worktrees/
+.claude/settings.local.json
