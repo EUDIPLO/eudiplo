@@ -99,7 +99,10 @@
             />
             <mat-icon matSuffix>lock</mat-icon>
             @if (!create) {
-              <mat-hint>Leave empty to keep existing value</mat-hint>
+              <mat-hint
+                >The stored key is kept unless you enter a new one. Enter it again when you change
+                the URL.</mat-hint
+              >
             }
           </mat-form-field>
         }

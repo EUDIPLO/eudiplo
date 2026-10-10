@@ -6,6 +6,11 @@ import { Role } from "../../../auth/roles/role.enum.js";
 import { Secured } from "../../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../../auth/token.decorator.js";
 import { createConfigBodyPipe } from "../../../shared/common/zod/zod-schema.util.js";
+import {
+    assertUpstreamSecretsKeptOnlyForSameIssuer,
+    redactSecrets,
+    restoreSecrets,
+} from "../../../shared/utils/write-only-secrets.util.js";
 import type { IssuanceConfiguration } from "./domain/issuance-configuration.js";
 import { IssuanceDto } from "./dto/issuance.dto.js";
 import { UpdateIssuanceDto } from "./dto/update-issuance.dto.js";
@@ -22,6 +27,13 @@ const readOnly = [
     "updatedAt",
 ];
 
+/**
+ * Upstream client secrets of chained servers are write-only: returned as
+ * `<redacted>`, which keeps the stored secret of the server with the same id.
+ */
+const SECRET = "authorizationServers.*.upstream.clientSecret";
+const redact = (config: IssuanceConfiguration) => redactSecrets(config, SECRET);
+
 @ApiTags("Issuer")
 @Secured([Role.Issuances])
 @Controller("issuer/config")
@@ -35,17 +47,19 @@ export class IssuanceConfigController {
     @Get()
     @ApiOperation({ summary: "Get issuance configuration" })
     @ApiResponse({ status: 200, type: IssuanceConfig })
-    getIssuanceConfigurations(
+    async getIssuanceConfigurations(
         @Token() user: TokenPayload,
     ): Promise<IssuanceConfiguration> {
-        return this.issuanceService
-            .getIssuanceConfiguration(user.entity!.id)
-            .catch(() =>
-                this.issuanceService.storeIssuanceConfiguration(
-                    user.entity!.id,
-                    {} as IssuanceDto,
+        return redact(
+            await this.issuanceService
+                .getIssuanceConfiguration(user.entity!.id)
+                .catch(() =>
+                    this.issuanceService.storeIssuanceConfiguration(
+                        user.entity!.id,
+                        {} as IssuanceDto,
+                    ),
                 ),
-            );
+        );
     }
 
     /**
@@ -57,7 +71,7 @@ export class IssuanceConfigController {
     @ApiOperation({ summary: "Create or replace issuance configuration" })
     @ApiBody({ type: UpdateIssuanceDto })
     @ApiResponse({ status: 200, type: IssuanceConfig })
-    storeIssuanceConfiguration(
+    async storeIssuanceConfiguration(
         // The stored configuration is updated field by field.
         @Body(
             createConfigBodyPipe(IssuanceConfigSchema, {
@@ -69,11 +83,20 @@ export class IssuanceConfigController {
         @Token() user: TokenPayload,
         @AuditMeta() requestMeta: AuditLogRequestMeta,
     ) {
-        return this.issuanceService.storeIssuanceConfiguration(
-            user.entity!.id,
-            config,
-            user,
-            requestMeta,
+        const stored = await this.issuanceService
+            .getIssuanceConfiguration(user.entity!.id)
+            .catch(() => undefined);
+        assertUpstreamSecretsKeptOnlyForSameIssuer(
+            config.authorizationServers,
+            stored?.authorizationServers,
+        );
+        return redact(
+            await this.issuanceService.storeIssuanceConfiguration(
+                user.entity!.id,
+                restoreSecrets(config, stored, SECRET),
+                user,
+                requestMeta,
+            ),
         );
     }
 
@@ -96,11 +119,13 @@ export class IssuanceConfigController {
         description:
             "Registration certificate is not enabled/generate mode or registrar is unavailable",
     })
-    reissueRegistrationCertificate(
+    async reissueRegistrationCertificate(
         @Token() user: TokenPayload,
     ): Promise<IssuanceConfiguration> {
-        return this.issuanceService.reissueRegistrationCertificate(
-            user.entity!.id,
+        return redact(
+            await this.issuanceService.reissueRegistrationCertificate(
+                user.entity!.id,
+            ),
         );
     }
 }

@@ -3,7 +3,10 @@ import request from "supertest";
 import { App } from "supertest/types";
 import { Agent, setGlobalDispatcher } from "undici";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { AttributeProviderService } from "../../src/issuer/configuration/attribute-provider/attribute-provider.service.js";
 import { IssuanceDto } from "../../src/issuer/configuration/issuance/dto/issuance.dto.js";
+import { IssuanceService } from "../../src/issuer/configuration/issuance/issuance.service.js";
+import { WebhookEndpointService } from "../../src/issuer/configuration/webhook-endpoint/webhook-endpoint.service.js";
 import { IssuanceTestContext, setupIssuanceTestApp } from "../utils.js";
 
 setGlobalDispatcher(
@@ -361,5 +364,132 @@ describe("Issuance - Configuration", () => {
                 .send({ description: "patched" })
                 .expect(200);
         });
+    });
+
+    describe("secrets are write-only", () => {
+        const api = () => request(app.getHttpServer());
+
+        test("upstream client secrets are returned redacted and kept when sent back", async () => {
+            await ensureBaselineConfig();
+            const current = await api()
+                .get("/issuer/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            expect(current.body.authorizationServers[0].upstream).toEqual({
+                ...chainedAuthorizationServer.upstream,
+                clientSecret: "<redacted>",
+            });
+
+            const saved = await api()
+                .post("/issuer/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send(current.body)
+                .expect(201);
+            expect(
+                saved.body.authorizationServers[0].upstream.clientSecret,
+            ).toBe("<redacted>");
+
+            const stored = await app
+                .get(IssuanceService)
+                .getIssuanceConfiguration(current.body.tenantId);
+            expect(stored.authorizationServers[0]).toMatchObject({
+                upstream: { clientSecret: "test-secret" },
+            });
+        });
+
+        test("a redacted secret for a new chained server is rejected", async () => {
+            await ensureBaselineConfig();
+            const res = await api()
+                .post("/issuer/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    authorizationServers: [
+                        {
+                            ...chainedAuthorizationServer,
+                            id: "chained-new",
+                            upstream: {
+                                ...chainedAuthorizationServer.upstream,
+                                clientSecret: "<redacted>",
+                            },
+                        },
+                    ],
+                })
+                .expect(400);
+            expect(res.body.message).toContain("no value is stored");
+        });
+
+        test.each([
+            ["/issuer/webhook-endpoints", WebhookEndpointService],
+            ["/issuer/attribute-providers", AttributeProviderService],
+        ])(
+            "%s returns the API key redacted and keeps it when sent back",
+            async (path, Service) => {
+                const created = await api()
+                    .post(path)
+                    .trustLocalhost()
+                    .set("Authorization", `Bearer ${authToken}`)
+                    .send({
+                        id: "write-only",
+                        name: "Write-only",
+                        url: "https://endpoint.example.com/hook",
+                        auth: {
+                            type: "apiKey",
+                            config: { headerName: "X-Key", value: "api-key" },
+                        },
+                    })
+                    .expect(201);
+                expect(created.body.auth.config.value).toBe("<redacted>");
+
+                const current = await api()
+                    .get(`${path}/write-only`)
+                    .trustLocalhost()
+                    .set("Authorization", `Bearer ${authToken}`)
+                    .expect(200);
+                expect(current.body.auth.config).toEqual({
+                    headerName: "X-Key",
+                    value: "<redacted>",
+                });
+
+                await api()
+                    .patch(`${path}/write-only`)
+                    .trustLocalhost()
+                    .set("Authorization", `Bearer ${authToken}`)
+                    .send({ name: "Renamed", auth: current.body.auth })
+                    .expect(200);
+                const stored = await app
+                    .get<WebhookEndpointService>(Service)
+                    .getById(current.body.tenantId, "write-only");
+                expect(stored).toMatchObject({
+                    name: "Renamed",
+                    auth: { config: { value: "api-key" } },
+                });
+
+                await api()
+                    .post(path)
+                    .trustLocalhost()
+                    .set("Authorization", `Bearer ${authToken}`)
+                    .send({
+                        id: "write-only-new",
+                        name: "New",
+                        url: "https://endpoint.example.com/hook",
+                        auth: current.body.auth,
+                    })
+                    .expect(400);
+
+                // The stored key is never sent to a new URL.
+                const moved = await api()
+                    .patch(`${path}/write-only`)
+                    .trustLocalhost()
+                    .set("Authorization", `Bearer ${authToken}`)
+                    .send({ url: "https://other.example.com/hook" })
+                    .expect(400);
+                expect(moved.body.message).toContain(
+                    "must be sent again when url changes",
+                );
+            },
+        );
     });
 });
