@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { expect, test } from './support/test';
 import { hasRootCredentials, resolvedE2EConfig } from './support/e2e-config';
@@ -11,9 +12,9 @@ import { acceptCredentialOffer, type HolderCredential, presentCredential } from 
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
-// A new tenant per run, so the spec also passes against a reused dev backend.
-// Everything else uses the cookbook's shared values.
-const tenantId = `membership-demo-${Date.now().toString(36)}`;
+// A new tenant per run, so the spec also passes against a reused dev backend
+// and in parallel workers. Everything else uses the cookbook's shared values.
+const tenantId = `membership-demo-${randomBytes(4).toString('hex')}`;
 const vct = 'urn:example:membership:1';
 
 function openNav(page: Page, item: string) {
