@@ -387,7 +387,9 @@ export class IssuanceOfferComponent implements OnInit {
 
       // Generate form fields from schema (only needed for pre-auth flow)
       if (schemaForForm) {
-        const baseConfig = this.formlyJsonschema.toFieldConfig(schemaForForm as any);
+        const baseConfig = this.formlyJsonschema.toFieldConfig(schemaForForm as any, {
+          map: (field) => this.addClaimNameLabel(field),
+        });
         this.fields.push(this.addGroupHeaders(baseConfig));
       } else {
         this.fields.push({} as any); // Empty field config as fallback
@@ -586,6 +588,21 @@ export class IssuanceOfferComponent implements OnInit {
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#039;');
+  }
+
+  /**
+   * The derived schema only has a title for claims with display labels. Fall back
+   * to the claim name so every input has a visible label and an accessible name.
+   * Objects and arrays get their header from addGroupHeaders instead.
+   */
+  private addClaimNameLabel(field: FormlyFieldConfig): FormlyFieldConfig {
+    const isLeaf = !field.fieldGroup && !field.fieldArray;
+    const key = Array.isArray(field.key) ? field.key.at(-1) : field.key;
+    if (isLeaf && key != null && !field.props?.label) {
+      field.props ??= {};
+      field.props.label = String(key);
+    }
+    return field;
   }
 
   private addGroupHeaders(field: FormlyFieldConfig, level = 0): FormlyFieldConfig {
