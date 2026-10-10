@@ -16,13 +16,32 @@ export interface WebhookConfiguration {
 }
 
 /** Fields of a webhook endpoint or attribute provider in the audit log. */
-export const AUDITED_ENDPOINT_FIELDS = [
+const AUDITED_ENDPOINT_FIELDS = [
     "id",
     "name",
     "url",
     "description",
     "auth",
 ] as const;
+
+type AuditedEndpoint = Partial<
+    Record<(typeof AUDITED_ENDPOINT_FIELDS)[number], unknown>
+>;
+
+/**
+ * Audited fields of a webhook endpoint or attribute provider that differ,
+ * compared before the API key is redacted, so that a new key is listed.
+ */
+export function changedEndpointFields(
+    before: AuditedEndpoint,
+    after: AuditedEndpoint,
+): string[] {
+    return AUDITED_ENDPOINT_FIELDS.filter(
+        (field) =>
+            JSON.stringify(before[field] ?? null) !==
+            JSON.stringify(after[field] ?? null),
+    );
+}
 
 /** `auth` with the API key replaced by `[REDACTED]`, for the audit log. */
 export function redactWebhookAuth(

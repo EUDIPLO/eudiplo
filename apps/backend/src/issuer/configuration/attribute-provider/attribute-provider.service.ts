@@ -3,7 +3,6 @@ import type { AuditLogRequestMeta } from "../../../audit-log/audit-log.service.j
 import { AuditLogService } from "../../../audit-log/audit-log.service.js";
 import {
     getChangedFields,
-    getChangedFieldsForKeys,
     resolveAuditActor,
 } from "../../../audit-log/audit-log-context.util.js";
 import { TokenPayload } from "../../../auth/token.decorator.js";
@@ -14,7 +13,7 @@ import {
 } from "../../../platform/config-import/config-import-orchestrator.service.js";
 import { loadConfigDto } from "../../../shared/utils/config-file-loader.util.js";
 import {
-    AUDITED_ENDPOINT_FIELDS,
+    changedEndpointFields,
     redactWebhookAuth,
 } from "../../../webhook/domain/webhook-configuration.js";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
@@ -138,10 +137,7 @@ export class AttributeProviderService {
                 tenantId,
                 actionType: "attribute_provider_updated",
                 actor: resolveAuditActor(actorToken),
-                // Compared before redaction, so a new API key is listed.
-                changedFields: getChangedFieldsForKeys(existing, saved, [
-                    ...AUDITED_ENDPOINT_FIELDS,
-                ]),
+                changedFields: changedEndpointFields(existing, saved),
                 before: this.sanitizeAttributeProviderForLog(existing),
                 after: this.sanitizeAttributeProviderForLog(saved),
                 requestMeta,
