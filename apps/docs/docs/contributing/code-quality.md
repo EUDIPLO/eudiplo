@@ -34,7 +34,7 @@ The **Lint Codebase** job runs on every pull request:
 - a license check of the production dependencies of backend and client (MIT, Apache-2.0, BSD, ISC, 0BSD, OFL-1.1),
 - `pnpm knip`.
 
-The **Check Config Schemas and Website** job checks that the generated schemas match the code and that published schema versions were not changed ([Configuration schemas](./configuration-schemas.md)). [SonarCloud](https://sonarcloud.io/project/overview?id=openwallet-foundation_eudiplo) analyzes the backend and client sources; its findings are good first contributions.
+The **Check Config Schemas and Website** job checks that the generated schemas match the code and that published schema versions were not changed ([Configuration schemas](./configuration-schemas.md)). [SonarCloud](https://sonarcloud.io/project/overview?id=EUDIPLO_eudiplo) analyzes the backend and client sources; its findings are good first contributions.
 
 ## Git hooks
 

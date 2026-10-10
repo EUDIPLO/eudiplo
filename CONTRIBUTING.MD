@@ -22,7 +22,7 @@ Open an issue with the `feature request` label and describe the problem you want
 ## Finding something to work on
 
 - Issues labeled [`good first issue`](https://github.com/EUDIPLO/eudiplo/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
-- Findings on the [SonarCloud dashboard](https://sonarcloud.io/project/overview?id=openwallet-foundation_eudiplo) (code smells, bugs, security hotspots). They are self-contained and a good way to learn the codebase.
+- Findings on the [SonarCloud dashboard](https://sonarcloud.io/project/overview?id=EUDIPLO_eudiplo) (code smells, bugs, security hotspots). They are self-contained and a good way to learn the codebase.
 - For backend refactoring, the [refactoring plan](apps/backend/docs/refactoring-plan.md). Pick one bounded slice before you start.
 
 ---
