@@ -52,6 +52,44 @@ export function issuanceRepositoryContract(database: () => DataSource) {
         await db.getRepository(TenantEntity).delete([{ id }, { id: other }]);
     });
 
+    it("stores upstream client secrets of chained servers encrypted", async () => {
+        const db = database();
+        const id = randomUUID();
+        await db.getRepository(TenantEntity).save({ id });
+        const repo = new TypeOrmIssuanceConfigRepository(
+            db.getRepository(IssuanceConfig),
+        );
+        const upstream = {
+            issuer: "https://idp.example",
+            clientId: "client",
+            clientSecret: "upstream-secret",
+        };
+        const chained = { type: "chained" as const, id: "chained", upstream };
+        await repo.save({
+            tenantId: id,
+            authorizationServers: [{ type: "built-in", id: "local" }, chained],
+        });
+
+        expect(
+            (await repo.getForTenant(id)).authorizationServers?.[1],
+        ).toMatchObject({ upstream });
+        const row = await db
+            .getRepository(IssuanceConfig)
+            .createQueryBuilder("config")
+            .select("config.authorizationServers", "servers")
+            .where("config.tenantId = :id", { id })
+            .getRawOne();
+        // SQLite returns the JSON text, PostgreSQL the parsed value.
+        const [, stored] =
+            typeof row.servers === "string"
+                ? JSON.parse(row.servers)
+                : row.servers;
+        expect(stored.upstream.clientId).toBe("client");
+        expect(stored.upstream.clientSecret).not.toBe("upstream-secret");
+        await repo.deleteForTenant(id);
+        await db.getRepository(TenantEntity).delete({ id });
+    });
+
     it("updates the registration certificate cache without overwriting other settings", async () => {
         const db = database();
         const id = randomUUID();

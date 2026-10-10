@@ -6,6 +6,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionData } from "../../../../../session/domain/session-data.js";
 import type { Oid4vciSettings } from "../../oid4vci-settings.js";
+import { hashRefreshToken } from "../domain/token-grant-rules.js";
 import { ExchangeAccessToken } from "./exchange-access-token.js";
 
 const NOW = new Date("2026-06-01T00:00:00Z");
@@ -144,7 +145,7 @@ describe("ExchangeAccessToken", () => {
             "tenant-1",
             "session-1",
             expect.objectContaining({
-                refresh_token: "new-refresh",
+                refresh_token: hashRefreshToken("new-refresh"),
                 refresh_token_expires_at: new Date(NOW.getTime() + 30 * DAY_MS),
             }),
         );
@@ -232,10 +233,33 @@ describe("ExchangeAccessToken", () => {
         ).not.toHaveBeenCalled();
     });
 
+    it("finds the session by the refresh token hash and verifies the presented token", async () => {
+        const session = issuanceSession({
+            consumed: true,
+            refresh_token: hashRefreshToken("refresh"),
+        });
+        const { execute, server, sessions } = exchange(
+            { authorizationServers: [{ type: "built-in", id: "built-in" }] },
+            refreshTokenRequest,
+            session,
+        );
+
+        await execute();
+
+        expect(sessions.getByRefreshToken).toHaveBeenCalledWith(
+            "tenant-1",
+            hashRefreshToken("refresh"),
+        );
+        expect(
+            server.verifyRefreshTokenAccessTokenRequest.mock.calls[0][0]
+                .expectedRefreshToken,
+        ).toBe("refresh");
+    });
+
     it("enforces an expiry for refresh tokens stored without one", async () => {
         const session = issuanceSession({
             consumed: true,
-            refresh_token: "refresh",
+            refresh_token: hashRefreshToken("refresh"),
         });
         const { execute, server } = exchange(
             { authorizationServers: [{ type: "built-in", id: "built-in" }] },

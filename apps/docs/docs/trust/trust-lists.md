@@ -86,7 +86,7 @@ Reference trust lists in the `trusted_authorities` of a [DCQL](../presentation/d
 }
 ```
 
-- `trustListId` references a managed list of this tenant. EUDIPLO fetches it from `<INTERNAL_URL or PUBLIC_URL>/issuers/<tenant>/trust-list/<id>` and pins the certificate that signs it. Set `INTERNAL_URL` if the backend cannot reach its own `PUBLIC_URL`.
+- `trustListId` references a managed list of this tenant. EUDIPLO fetches it from `<INTERNAL_URL>/issuers/<tenant>/trust-list/<id>` and pins the certificate that signs it. `INTERNAL_URL` defaults to `http://127.0.0.1:<PORT>`; with `TLS_ENABLED=true` or a `PORT` that is not a number it has no default, and the list is fetched from `PUBLIC_URL`. Set `INTERNAL_URL` if the backend reaches itself at another address.
 - `url` references an external LoTE JWT. `verifierX509Der` (base64 DER certificate) or `verifierKey` (public JWK) is required to check its signature; without them loading the list fails (`trust_list_unavailable`). `<TENANT_URL>` in the URL is replaced with `<PUBLIC_URL>/issuers/<tenant>`.
 - Put several lists into the `values` of one `etsi_tl` entry: only the first `etsi_tl` entry of a credential query is used for verification.
 

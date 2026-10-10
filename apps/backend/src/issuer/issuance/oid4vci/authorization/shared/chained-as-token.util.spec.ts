@@ -4,7 +4,10 @@ import {
     type ChainedAsSession,
     ChainedAsSessionStatus,
 } from "../domain/chained-as-session.js";
-import { refreshTokenPolicy } from "../domain/token-grant-rules.js";
+import {
+    hashRefreshToken,
+    refreshTokenPolicy,
+} from "../domain/token-grant-rules.js";
 import {
     issueRefreshTokenIfEnabled,
     resolveSessionForTokenRequest,
@@ -52,7 +55,7 @@ describe("issueRefreshTokenIfEnabled", () => {
         );
 
         expect(refreshToken).toBeDefined();
-        expect(session.refreshToken).toBe(refreshToken);
+        expect(session.refreshToken).toBe(hashRefreshToken(refreshToken!));
         expect(session.refreshTokenExpiresAt).toEqual(
             new Date(NOW.getTime() + 30 * DAY_MS),
         );

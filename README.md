@@ -25,7 +25,7 @@ Organizations joining the EUDI Wallet ecosystem face a tough choice: patch
 together protocol libraries that may not exist for their stack, or rely on
 proprietary solutions that risk vendor lock-in.
 
-**EUDIPLO** solves this by providing a lightweight, source-available, protocol
+**EUDIPLO** solves this by providing a lightweight, open-source protocol
 abstraction layer. It communicates over HTTP and integrates easily with your
 existing backend stack—so you can focus on your business logic, not
 cryptographic plumbing.
@@ -35,8 +35,8 @@ It supports all core flows of electronic attribute attestations—**issuing**,
 compatible with multiple
 [wallets](./apps/docs/docs/reference/wallet-compatibility.md).
 
-While still in early development, EUDIPLO is built for production: secure key
-management, scalable database support, and clean API boundaries.
+EUDIPLO is built for production: secure key management, scalable database
+support, and clean API boundaries.
 
 ![EUDIPLO architecture overview](./apps/docs/static/img/overview.svg)
 

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { preAuthorizedCodeGrantIdentifier } from "@openid4vc/oauth2";
 import { calculateJwkThumbprint, decodeJwt, type JWK } from "jose";
 import { OAuthError } from "./oauth-error.js";
@@ -83,6 +84,15 @@ export function enforcedRefreshTokenExpiry(
     policy: RefreshTokenPolicy,
 ): Date {
     return storedExpiresAt ?? refreshTokenExpiresAt(policy, sessionCreatedAt);
+}
+
+/**
+ * Value stored in place of a refresh token, so that the database never holds
+ * a usable token: the base64url SHA-256 hash. Refresh tokens are 256-bit
+ * random values, so an unsalted hash cannot be reversed by guessing.
+ */
+export function hashRefreshToken(refreshToken: string): string {
+    return createHash("sha256").update(refreshToken).digest("base64url");
 }
 
 /** Refresh token policy of the built-in authorization server entry. */
