@@ -1,13 +1,24 @@
+import { HttpModule, HttpService } from "@nestjs/axios";
 import { Module, type Provider } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { CryptoModule } from "../crypto/crypto.module.js";
 import { TrustListModule } from "../issuer/trust-list/trustlist.module.js";
+import { outboundFetch } from "../webhook/outbound-fetch.js";
 import { OutboundUrlPolicyModule } from "../webhook/outbound-url-policy.module.js";
-import { OpenIdFederationResolver } from "./adapters/openid-federation-resolver.js";
+import { OutboundUrlPolicyService } from "../webhook/outbound-url-policy.service.js";
+import {
+    HttpFederationResolver,
+    TRUST_ENGINE_MAX_BYTES,
+    TRUST_ENGINE_TIMEOUT_MS,
+} from "./adapters/http-federation-resolver.js";
+import { LocalFederationResolver } from "./adapters/local-federation-resolver.js";
 import { VerifiedLoteProvider } from "./adapters/verified-lote-provider.js";
 import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
-import { EvaluateFederationTrustChain } from "./application/evaluate-federation-trust-chain.js";
 import { CacheController } from "./cache.controller.js";
+import {
+    FEDERATION_RESOLVER_SETTINGS,
+    type FederationResolverSettings,
+} from "./federation-resolver-settings.js";
 import { FederationTrustService } from "./federation-trust.service.js";
 import { LoteParserService } from "./lote-parser.service.js";
 import {
@@ -28,19 +39,45 @@ import { WALLET_ATTESTATION_SETTINGS } from "./wallet-attestation-settings.js";
 import { X509ValidationService } from "./x509-validation.service.js";
 
 /**
- * `EvaluateFederationTrustChain` is framework-free and depends on the
- * `FederationResolver` port, so it must be constructed explicitly: a bare
- * class provider would be instantiated without its resolver.
+ * The federation resolver selected by `FEDERATION_RESOLVER`: local trust
+ * chain resolution, or an external trust engine. Both send their requests
+ * under the outbound URL policy.
  */
-export const evaluateFederationTrustChainProvider: Provider = {
-    provide: EvaluateFederationTrustChain,
-    inject: [FEDERATION_RESOLVER],
-    useFactory: (resolver: FederationResolver) =>
-        new EvaluateFederationTrustChain(resolver),
+export const federationResolverProvider: Provider = {
+    provide: FEDERATION_RESOLVER,
+    inject: [
+        FEDERATION_RESOLVER_SETTINGS,
+        TrustFetchService,
+        HttpService,
+        OutboundUrlPolicyService,
+    ],
+    useFactory: (
+        settings: FederationResolverSettings,
+        trustFetch: TrustFetchService,
+        http: HttpService,
+        policy: OutboundUrlPolicyService,
+    ): FederationResolver =>
+        settings.type === "http"
+            ? new HttpFederationResolver(
+                  settings,
+                  outboundFetch(http, policy, {
+                      timeoutMs: TRUST_ENGINE_TIMEOUT_MS,
+                      maxBytes: TRUST_ENGINE_MAX_BYTES,
+                  }),
+              )
+            : new LocalFederationResolver(
+                  trustFetch,
+                  settings.clockToleranceSeconds,
+              ),
 };
 
 @Module({
-    imports: [CryptoModule, TrustListModule, OutboundUrlPolicyModule],
+    imports: [
+        CryptoModule,
+        TrustListModule,
+        OutboundUrlPolicyModule,
+        HttpModule,
+    ],
     controllers: [CacheController],
     providers: [
         TrustFetchService,
@@ -78,13 +115,28 @@ export const evaluateFederationTrustChainProvider: Provider = {
         X509ValidationService,
         StatusListVerifierService,
         WalletAttestationService,
-        FederationTrustService,
-        evaluateFederationTrustChainProvider,
-        OpenIdFederationResolver,
         {
-            provide: FEDERATION_RESOLVER,
-            useExisting: OpenIdFederationResolver,
+            provide: FEDERATION_RESOLVER_SETTINGS,
+            inject: [ConfigService],
+            useFactory: (config: ConfigService): FederationResolverSettings =>
+                config.get<string>("FEDERATION_RESOLVER") === "http"
+                    ? {
+                          type: "http",
+                          url: config.getOrThrow<string>(
+                              "FEDERATION_RESOLVER_URL",
+                          ),
+                          token:
+                              config.get<string>("FEDERATION_RESOLVER_TOKEN") ||
+                              undefined,
+                      }
+                    : {
+                          type: "local",
+                          clockToleranceSeconds:
+                              config.getOrThrow<number>("CRYPTO_TOLERANCE"),
+                      },
         },
+        federationResolverProvider,
+        FederationTrustService,
     ],
     exports: [
         TrustStoreService,

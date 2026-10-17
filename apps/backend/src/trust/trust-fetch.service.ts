@@ -8,6 +8,14 @@ import {
     type TrustStoreSettings,
 } from "./trust-store-settings.js";
 
+/** A response with a status other than 2xx. */
+export class TrustFetchStatusError extends Error {
+    constructor(readonly status: number) {
+        super(`Request failed with status code ${status}`);
+        this.name = "TrustFetchStatusError";
+    }
+}
+
 /** The axios client used for these fetches before followed five redirects. */
 const MAX_REDIRECTS = 5;
 
@@ -15,6 +23,11 @@ export interface TrustFetchOptions {
     timeoutMs: number;
     maxBytes: number;
     accept?: string;
+    /**
+     * Verify TLS certificates also outside production. Trust lists and status
+     * lists still skip the check outside `NODE_ENV=production`.
+     */
+    verifyTls?: boolean;
 }
 
 /**
@@ -57,14 +70,15 @@ export class TrustFetchService {
                 maxRedirects: MAX_REDIRECTS,
                 trustedOrigins: this.ownOrigins,
                 // Unchanged from before the policy applied: TLS certificates
-                // of these hosts are only verified in production.
-                rejectUnauthorized: process.env.NODE_ENV === "production",
+                // of these hosts are only verified in production, unless the
+                // caller asks for it.
+                rejectUnauthorized:
+                    options.verifyTls === true ||
+                    process.env.NODE_ENV === "production",
             },
         );
         if (response.status < 200 || response.status >= 300) {
-            throw new Error(
-                `Request failed with status code ${response.status}`,
-            );
+            throw new TrustFetchStatusError(response.status);
         }
         return response;
     }

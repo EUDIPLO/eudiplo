@@ -129,8 +129,8 @@ for `{service_name="eudiplo-backend"}`.
 | `http_server_request_duration_seconds`         | histogram | `http_route`, `http_request_method`, `http_response_status_code` | Duration of handled HTTP requests                   |
 | `sessions`                                     | gauge     | `tenant_id`, `session_type` (`issuance`, `verification`), `status` (`active`, `fetched`, `completed`, `expired`, `failed`, `cancelled`) | Current number of sessions in the database |
 | `tenant_total`                                 | gauge     | -                                                         | Number of tenants                                          |
-| `federation_trust_cache_hits_total`, `_misses_total`, `_stale_total` | counter | -                                 | OpenID Federation trust cache                              |
-| `federation_trust_fetches_total`               | counter   | -                                                         | Outbound federation entity configuration fetches           |
+| `federation_trust_cache_hits_total`, `_misses_total`, `_stale_total` | counter | `entity`                          | OpenID Federation trust cache                              |
+| `federation_trust_fetches_total`               | counter   | `entity`                                                  | OpenID Federation trust chain resolutions                  |
 | `oid4vci_as_metadata_cache_hits_total`, `_misses_total`, `_stale_total` | counter | -                              | Cache of external authorization server metadata            |
 | `oid4vci_as_metadata_fetches_total`            | counter   | -                                                         | Outbound authorization server metadata fetches             |
 | `chained_as_discovery_cache_hits_total`, `_misses_total`, `_stale_total` | counter | -                             | Cache of the chained authorization server's upstream discovery |

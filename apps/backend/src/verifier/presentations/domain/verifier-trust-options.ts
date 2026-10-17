@@ -29,10 +29,12 @@ export function trustListAuthorities(
  *
  * Which `trusted_authorities` entry decides:
  * - an `etsi_tl` trust list: the issuer must be listed in it. An
- *   `openid_federation` entry of the same query does not widen it, because
- *   federation trust is not yet authenticated against the trust anchor.
- * - only `openid_federation`: the issuer must chain to one of its trust
- *   anchors (`federation-only`).
+ *   `openid_federation` entry of the same query does not widen it: a
+ *   credential is checked one way, by its certificate chain.
+ * - only `openid_federation`: the SD-JWT VC issuer named in `iss` must chain
+ *   to one of its trust anchors, and the credential must be signed with the
+ *   key `kid` of its resolved `openid_credential_issuer` metadata
+ *   (`federation-only`). No `x5c` is needed; mDOCs are rejected.
  * - none: the issuer is not checked. Only reachable with
  *   `SKIP_TRUST_AUTHORITY` (see {@link missingTrustedAuthorities}).
  */
@@ -77,7 +79,8 @@ export function verifierTrustOptions(input: {
               }
             : undefined,
         policy: {
-            requireX5c: true,
+            // Under federation the key comes from the issuer's metadata.
+            requireX5c: !federationDecides,
             revocation: revocationModeToPolicy(input.statusCheckMode),
         },
         skewSeconds: input.skewSeconds ?? DEFAULT_VERIFIER_SKEW_SECONDS,

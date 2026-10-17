@@ -386,6 +386,18 @@ export class MdocverifierService {
         mdocDocument: any,
         options: VerifierOptions,
     ): Promise<ChainValidationResult> {
+        // An mDOC names no issuer entity, so OpenID Federation cannot bind
+        // its signing key to trusted federation metadata.
+        if (options.federationTrustSource) {
+            return {
+                verified: false,
+                matchedEntity: null,
+                error: "federation_not_supported",
+                errorDetails:
+                    "OpenID Federation trust is only supported for SD-JWT VCs; add an etsi_tl trusted authority for mso_mdoc",
+            };
+        }
+
         // Extract x5chain from IssuerAuth (COSE Sign1 unprotected headers)
         const issuerAuth = mdocDocument?.issuerSigned?.issuerAuth;
         const x5chain: Uint8Array[] | undefined = issuerAuth?.x5chain;
@@ -417,7 +429,6 @@ export class MdocverifierService {
                 requireX5c: options.policy?.requireX5c,
                 pinnedCertMode: options.policy?.pinnedCertMode ?? "leaf",
                 serviceTypeFilter: "/Issuance",
-                federationTrustSource: options.federationTrustSource,
             },
         );
     }

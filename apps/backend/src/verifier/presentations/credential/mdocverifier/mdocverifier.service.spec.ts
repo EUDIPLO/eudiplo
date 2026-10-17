@@ -28,6 +28,34 @@ describe("MdocverifierService failure classification", () => {
         );
     });
 
+    it("rejects an mDOC whose only trusted authority is an OpenID Federation", async () => {
+        const result = await (service as any).validateIssuerCertificateChain(
+            {
+                issuerSigned: {
+                    issuerAuth: { x5chain: [new Uint8Array([1])] },
+                },
+            },
+            {
+                federationTrustSource: {
+                    mode: "federation-only",
+                    trustAnchors: [
+                        {
+                            entityId: "https://ta.example.org",
+                            entityConfigurationUri:
+                                "https://ta.example.org/.well-known/openid-federation",
+                        },
+                    ],
+                },
+                policy: { requireX5c: false },
+            },
+        );
+
+        expect(result).toMatchObject({
+            verified: false,
+            error: "federation_not_supported",
+        });
+    });
+
     it("maps chain error codes to stable failure types", () => {
         const map = (code?: string) =>
             (service as any).mapChainErrorToFailureType(code);

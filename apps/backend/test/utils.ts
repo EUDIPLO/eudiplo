@@ -186,6 +186,8 @@ async function createCredential(options: {
     x5c: string[];
     /** Algorithm of the issuer key and of the generated holder key. */
     alg: KmsSigningAlg;
+    /** Added to the JWT header; without `x5c`, no x5c header is set. */
+    header?: Record<string, unknown>;
 }) {
     //create keypair for holder
     const { privateKeyHolder, publicKeyHolder } = await OWF_ALGS[options.alg]
@@ -225,7 +227,8 @@ async function createCredential(options: {
             undefined,
             {
                 header: {
-                    x5c: options.x5c,
+                    ...(options.x5c.length > 0 ? { x5c: options.x5c } : {}),
+                    ...options.header,
                 },
             },
         )
@@ -244,13 +247,26 @@ export async function preparePresentation(
     sessionId = "1",
     /** Algorithm of `privateKey`; the holder key and KB-JWT use the same. */
     alg: KmsSigningAlg = "ES256",
+    /**
+     * Extra issuer JWT header parameters and claims, for example `kid` and
+     * `iss` of a federation issuer. `withStatus: false` issues the
+     * credential without a status list entry.
+     */
+    extra: {
+        header?: Record<string, unknown>;
+        claims?: Record<string, unknown>;
+        withStatus?: boolean;
+    } = {},
 ) {
     // createEntry returns `{ status: { status_list } }`, so it is spread into
     // the claims to put `status_list` at `status.status_list`.
-    const status = await statusListService.createEntry(
-        { tenantId: "root", id: sessionId } as any,
-        credentialConfigId,
-    );
+    const status =
+        extra.withStatus === false
+            ? {}
+            : await statusListService.createEntry(
+                  { tenantId: "root", id: sessionId } as any,
+                  credentialConfigId,
+              );
 
     const credential = await createCredential({
         claims: {
@@ -262,10 +278,12 @@ export async function preparePresentation(
                 locality: "Berlin",
                 country: "DE",
             },
+            ...extra.claims,
         },
         privateKey,
         x5c,
         alg,
+        header: extra.header,
     });
 
     const sdjwt = new SDJwtVcInstance({

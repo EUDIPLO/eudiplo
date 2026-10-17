@@ -10,7 +10,7 @@ import {
     vi,
 } from "vitest";
 import { OutboundUrlPolicyService } from "../webhook/outbound-url-policy.service.js";
-import { OpenIdFederationResolver } from "./adapters/openid-federation-resolver.js";
+import { LocalFederationResolver } from "./adapters/local-federation-resolver.js";
 import { isStatusListUnavailableError } from "./revocation-policy.util.js";
 import { StatusListVerifierService } from "./status-list-verifier.service.js";
 import { TrustFetchService } from "./trust-fetch.service.js";
@@ -154,6 +154,33 @@ describe("TrustFetchService", () => {
         ).toEqual([true, false]);
     });
 
+    it("verifies TLS certificates outside production when the caller asks for it", async () => {
+        const outboundUrlPolicy = policy();
+        const getFollowingRedirects = vi
+            .spyOn(outboundUrlPolicy, "getFollowingRedirects")
+            .mockResolvedValue({
+                status: 200,
+                body: "",
+                bytes: Buffer.alloc(0),
+                url: "https://federation.example/.well-known/openid-federation",
+            });
+        const trustFetch = fetcher(
+            { publicUrl: "https://eudiplo.example" },
+            outboundUrlPolicy,
+        );
+
+        vi.stubEnv("NODE_ENV", "development");
+        await trustFetch.get(
+            "https://federation.example/.well-known/openid-federation",
+            { ...options, verifyTls: true },
+        );
+        vi.unstubAllEnvs();
+
+        expect(getFollowingRedirects.mock.calls[0][1].rejectUnauthorized).toBe(
+            true,
+        );
+    });
+
     describe("callers", () => {
         const trustFetch = () =>
             fetcher({ publicUrl: "https://eudiplo.example" });
@@ -199,12 +226,16 @@ describe("TrustFetchService", () => {
         });
 
         it("does not resolve a federation entity on a private address", async () => {
-            // The entity ID comes from the presented certificate's SAN.
+            // The entity ID comes from the presented credential's iss.
             await expect(
-                new OpenIdFederationResolver(
-                    trustFetch(),
-                ).resolveEntityConfiguration(loopbackIp),
-            ).rejects.toThrow("must use HTTPS");
+                new LocalFederationResolver(trustFetch(), 0).resolveEntity({
+                    entityId: loopbackIp,
+                    trustAnchors: [{ entityId: "https://ta.example.org" }],
+                }),
+            ).rejects.toMatchObject({
+                failure: "unavailable",
+                message: expect.stringContaining("must use HTTPS"),
+            });
             expect(requests).toEqual([]);
         });
     });

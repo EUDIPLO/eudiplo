@@ -157,7 +157,7 @@ A pure source move of an entity needs no migration. Migrations run on startup, s
 | KMS provider | `KmsAdapter` (`crypto/key/kms/kms-adapter.ts`) | `kms-provider.registry.ts` and the provider schema in `crypto/key/schemas/kms-config.schema.ts` |
 | Claims source | `CredentialClaimsProvider` (`issuer/configuration/credentials/domain/credential-claims.ts`) | `ConfiguredCredentialClaimsProvider` in `application/`, with the webhook adapters |
 
-OpenID Federation is split the same way: the `FederationResolver` port (`trust/ports/`) with the `OpenIdFederationResolver` HTTP adapter, the `EvaluateFederationTrustChain` use case (`trust/application/`) and `FederationTrustService` for trust modes, caching and metrics.
+OpenID Federation is split the same way: the `FederationResolver` port (`trust/ports/`) with the `LocalFederationResolver` (`@openid-federation/core`) and `HttpFederationResolver` (external trust engine) adapters in `trust/adapters/`, selected by `FEDERATION_RESOLVER` in `trust.module.ts`, and `FederationTrustService` for trust modes, caching and metrics. Another resolver is added as an adapter of the port and a `FEDERATION_RESOLVER` value.
 
 ## Current boundary enforcement
 

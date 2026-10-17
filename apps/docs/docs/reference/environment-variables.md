@@ -33,6 +33,12 @@ import ConfigTable from "@site/src/components/ConfigTable";
 
 <ConfigTable group="encryption" />
 
+## Federation
+
+See [OpenID Federation](../trust/federation.md).
+
+<ConfigTable group="federation" />
+
 ## General
 
 <ConfigTable group="general" />

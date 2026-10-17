@@ -1,34 +1,40 @@
+import { HttpService } from "@nestjs/axios";
 import { Test } from "@nestjs/testing";
 import { describe, expect, it } from "vitest";
-import { EvaluateFederationTrustChain } from "./application/evaluate-federation-trust-chain.js";
+import { OutboundUrlPolicyService } from "../webhook/outbound-url-policy.service.js";
+import { HttpFederationResolver } from "./adapters/http-federation-resolver.js";
+import { LocalFederationResolver } from "./adapters/local-federation-resolver.js";
 import {
-    FEDERATION_RESOLVER,
-    type FederationResolver,
-} from "./ports/federation-resolver.js";
-import { evaluateFederationTrustChainProvider } from "./trust.module.js";
+    FEDERATION_RESOLVER_SETTINGS,
+    type FederationResolverSettings,
+} from "./federation-resolver-settings.js";
+import { FEDERATION_RESOLVER } from "./ports/federation-resolver.js";
+import { federationResolverProvider } from "./trust.module.js";
+import { TrustFetchService } from "./trust-fetch.service.js";
 
 describe("TrustModule wiring", () => {
-    it("constructs EvaluateFederationTrustChain with the configured resolver", async () => {
-        const resolver: FederationResolver = {
-            resolveEntityConfiguration: async (entityId: string) => ({
-                sub: entityId,
-                authority_hints: ["https://anchor.example"],
-            }),
-        };
-
+    async function resolverFor(settings: FederationResolverSettings) {
         const moduleRef = await Test.createTestingModule({
             providers: [
-                { provide: FEDERATION_RESOLVER, useValue: resolver },
-                evaluateFederationTrustChainProvider,
+                { provide: FEDERATION_RESOLVER_SETTINGS, useValue: settings },
+                { provide: TrustFetchService, useValue: { get: () => {} } },
+                { provide: HttpService, useValue: {} },
+                { provide: OutboundUrlPolicyService, useValue: {} },
+                federationResolverProvider,
             ],
         }).compile();
+        return moduleRef.get(FEDERATION_RESOLVER);
+    }
 
-        const evaluator = moduleRef.get(EvaluateFederationTrustChain);
+    it("resolves trust chains locally by default", async () => {
         await expect(
-            evaluator.execute({
-                entityId: "https://leaf.example",
-                trustAnchors: ["https://anchor.example"],
-            }),
-        ).resolves.toMatchObject({ trusted: true });
+            resolverFor({ type: "local", clockToleranceSeconds: 5 }),
+        ).resolves.toBeInstanceOf(LocalFederationResolver);
+    });
+
+    it("delegates to a trust engine with FEDERATION_RESOLVER=http", async () => {
+        await expect(
+            resolverFor({ type: "http", url: "https://trust-engine.example" }),
+        ).resolves.toBeInstanceOf(HttpFederationResolver);
     });
 });

@@ -26,7 +26,7 @@ Open **Credential Verification → Verification Configs → Create**. The guided
 
 For SD-JWT VC, enter the credential type (VCT) and one field per claim path; use dots for nested paths such as `address.locality`, or paste a list of paths. For mDOC, enter the document type, namespace and element names. Type and paths must match the credential in the wallet, so importing them from the issuer avoids typos.
 
-Each claim has optional settings for its ID, accepted values and (mDOC) intent to retain. **Issuer trust** selects a managed trust list, an external trust list or an OpenID Federation trust anchor ([Trust Lists](../trust/trust-lists.md)); every credential needs at least one. **Accepted credential combinations** defaults to requiring every credential; add alternatives to let the wallet choose (`credential_sets`).
+Each claim has optional settings for its ID, accepted values and (mDOC) intent to retain. **Issuer trust** selects a managed trust list, an external trust list or an OpenID Federation trust anchor ([Trust Lists](../trust/trust-lists.md), [OpenID Federation](../trust/federation.md); federation works for SD-JWT VCs only, use a trust list for mDOCs); every credential needs at least one. **Accepted credential combinations** defaults to requiring every credential; add alternatives to let the wallet choose (`credential_sets`).
 
 **Edit DCQL JSON** opens the raw query for rules the builder does not cover, such as claim sets. A query that uses such rules stays in JSON mode so they are preserved. See [DCQL](dcql.md) for the query language.
 

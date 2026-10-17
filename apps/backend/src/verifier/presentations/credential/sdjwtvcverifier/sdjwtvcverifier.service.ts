@@ -2,10 +2,19 @@ import { createHash } from "node:crypto";
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { digest } from "@owf/crypto";
 import { SDJwtVcInstance, VerificationResult } from "@sd-jwt/sd-jwt-vc";
-import { base64url, JWK } from "jose";
+import { base64url, decodeJwt, decodeProtectedHeader, JWK } from "jose";
 import { Span } from "nestjs-otel";
 import { PinoLogger } from "nestjs-pino";
 import { CryptoImplementationService } from "../../../../crypto/key/crypto-implementation/crypto-implementation.service.js";
+import {
+    CREDENTIAL_ISSUER_METADATA_TYPE,
+    findFederationProtocolKey,
+} from "../../../../trust/domain/federation-protocol-keys.js";
+import { FederationTrustService } from "../../../../trust/federation-trust.service.js";
+import {
+    type FederationResolution,
+    FederationResolutionError,
+} from "../../../../trust/ports/federation-resolver.js";
 import {
     isStatusListUnavailableError,
     resolveRevocationPolicy,
@@ -44,6 +53,7 @@ export class SdjwtvcverifierService {
         private readonly resolverService: ResolverService,
         private readonly cryptoService: CryptoImplementationService,
         private readonly chainValidation: CredentialChainValidationService,
+        private readonly federationTrust: FederationTrustService,
         private readonly logger: PinoLogger,
     ) {
         this.logger.setContext(SdjwtvcverifierService.name);
@@ -81,17 +91,22 @@ export class SdjwtvcverifierService {
         ): Promise<VerificationResult> => {
             // Closure to capture the matched TrustedEntity during verification
             let matchedEntity: MatchedTrustedEntity | null = null;
+            // Or, under OpenID Federation, the resolved issuer entity
+            let federationIssuer: FederationResolution | undefined;
 
             // Create a fresh instance per verification to ensure thread safety
             const sdjwtInstance = new SDJwtVcInstance({
                 hasher: digest,
                 verifier: async (data: string, signature: string) => {
-                    const result = await this.verifyCredential(
-                        data,
-                        signature,
-                        options,
-                    );
+                    const result = options.federationTrustSource
+                        ? await this.verifyFederationCredential(
+                              data,
+                              signature,
+                              options,
+                          )
+                        : await this.verifyCredential(data, signature, options);
                     matchedEntity = result.matchedEntity;
+                    federationIssuer = result.federationIssuer;
                     if (!result.verified) {
                         // The library throws a generic error on failure, so the
                         // structured reason has to be captured here or it is lost.
@@ -115,13 +130,21 @@ export class SdjwtvcverifierService {
                           statusListFetcher: (uri: string) =>
                               this.chainValidation.fetchStatusListJwt(uri),
                           statusVerifier: (data: string, signature: string) => {
-                              // Verify status list JWT using the revocation cert from the same entity
-                              return this.verifyStatusList(
-                                  data,
-                                  signature,
-                                  options,
-                                  matchedEntity,
-                              );
+                              // Verify status list JWT with a key of the same
+                              // federation entity, or the revocation cert of
+                              // the same trusted entity
+                              return options.federationTrustSource
+                                  ? this.verifyFederationStatusList(
+                                        data,
+                                        signature,
+                                        federationIssuer,
+                                    )
+                                  : this.verifyStatusList(
+                                        data,
+                                        signature,
+                                        options,
+                                        matchedEntity,
+                                    );
                           },
                       }
                     : {}),
@@ -375,6 +398,7 @@ export class SdjwtvcverifierService {
     ): Promise<{
         verified: boolean;
         matchedEntity: MatchedTrustedEntity | null;
+        federationIssuer?: FederationResolution;
         failureType?: VerificationFailureType;
         failureReason?: string;
     }> {
@@ -414,7 +438,6 @@ export class SdjwtvcverifierService {
                     requireX5c: options?.policy.requireX5c,
                     pinnedCertMode: options?.policy.pinnedCertMode ?? "leaf",
                     serviceTypeFilter: "/Issuance",
-                    federationTrustSource: options.federationTrustSource,
                 },
             );
 
@@ -442,6 +465,145 @@ export class SdjwtvcverifierService {
                 failureType: "verification_error",
                 failureReason: e?.message ?? String(e),
             };
+        }
+    }
+
+    /**
+     * Verifies an SD-JWT VC issued under OpenID Federation: `iss` names the
+     * issuer entity, whose trust chain must lead to a configured trust anchor,
+     * and the signature must validate with the key `kid` of its resolved
+     * `openid_credential_issuer` metadata. An `x5c` header is not used.
+     */
+    private async verifyFederationCredential(
+        data: string,
+        signature: string,
+        options: VerifierOptions,
+    ): Promise<{
+        verified: boolean;
+        matchedEntity: null;
+        federationIssuer?: FederationResolution;
+        failureType?: VerificationFailureType;
+        failureReason?: string;
+    }> {
+        const rejected = (
+            failureType: VerificationFailureType,
+            failureReason: string,
+        ) => ({
+            verified: false,
+            matchedEntity: null,
+            failureType,
+            failureReason,
+        });
+        const parts = decodeJwsParts(data);
+        if (!parts) {
+            return rejected(
+                "verification_error",
+                "The SD-JWT VC header or payload cannot be decoded",
+            );
+        }
+        const { header, payload } = parts;
+        if (typeof payload.iss !== "string" || !payload.iss) {
+            return rejected(
+                "verification_error",
+                "An SD-JWT VC verified through OpenID Federation needs an iss claim",
+            );
+        }
+        if (typeof header.kid !== "string" || !header.kid) {
+            return rejected(
+                "verification_error",
+                "An SD-JWT VC verified through OpenID Federation needs a kid header",
+            );
+        }
+
+        let issuerKey: Awaited<
+            ReturnType<FederationTrustService["resolveCredentialIssuerKey"]>
+        >;
+        try {
+            issuerKey = await this.federationTrust.resolveCredentialIssuerKey(
+                payload.iss,
+                header.kid,
+                options.federationTrustSource,
+            );
+        } catch (error) {
+            const reason =
+                error instanceof Error ? error.message : String(error);
+            return rejected(
+                error instanceof FederationResolutionError &&
+                    error.failure === "unavailable"
+                    ? "trust_list_unavailable"
+                    : "no_trust_chain_to_root",
+                reason,
+            );
+        }
+
+        const sigOk = await this.verifyWithJwk(
+            data,
+            signature,
+            header.alg,
+            issuerKey.jwk,
+        );
+        if (!sigOk) {
+            return rejected(
+                "signature_invalid",
+                "SD-JWT-VC issuer signature is invalid",
+            );
+        }
+        return {
+            verified: true,
+            matchedEntity: null,
+            federationIssuer: issuerKey.resolution,
+        };
+    }
+
+    /**
+     * Verifies a status list JWT of a credential verified through OpenID
+     * Federation: it must be signed with a key `kid` of the same issuer
+     * entity's `openid_credential_issuer` metadata. A key of any other
+     * entity could serve a list in which a revoked credential is valid.
+     */
+    private async verifyFederationStatusList(
+        data: string,
+        signature: string,
+        issuer: FederationResolution | undefined,
+    ): Promise<boolean> {
+        if (!issuer) return false;
+        const header = decodeJwsParts(data)?.header;
+        if (typeof header?.kid !== "string") {
+            this.logger.warn(
+                `Status list of federation issuer ${issuer.entityId} has no kid header`,
+            );
+            return false;
+        }
+        const jwk = findFederationProtocolKey(
+            issuer.metadata,
+            CREDENTIAL_ISSUER_METADATA_TYPE,
+            header.kid,
+        );
+        if (!jwk) {
+            this.logger.warn(
+                `Status list is not signed with a key of federation issuer ${issuer.entityId} (kid '${header.kid}')`,
+            );
+            return false;
+        }
+        return this.verifyWithJwk(data, signature, header.alg, jwk);
+    }
+
+    /** Signature check with a trusted key; the header must not pick another algorithm. */
+    private async verifyWithJwk(
+        data: string,
+        signature: string,
+        alg: unknown,
+        jwk: JWK,
+    ): Promise<boolean> {
+        if (jwk.alg && alg !== jwk.alg) return false;
+        try {
+            const crypto = this.cryptoService.getCryptoFromJwk(jwk);
+            if (alg !== crypto.alg) return false;
+            const verifier = await crypto.getVerifier(jwk);
+            return await verifier(data, signature);
+        } catch (e: any) {
+            this.logger.debug(`Signature check failed: ${e?.message ?? e}`);
+            return false;
         }
     }
 
@@ -498,7 +660,6 @@ export class SdjwtvcverifierService {
                 options.trustListSource,
                 {
                     pinnedCertMode: options.policy.pinnedCertMode ?? "leaf",
-                    federationTrustSource: options.federationTrustSource,
                 },
             );
         } catch (e: any) {
@@ -585,5 +746,25 @@ export class SdjwtvcverifierService {
         const crypto = this.cryptoService.getCryptoFromJwk(jwk);
         const verifier = await crypto.getVerifier(jwk);
         return verifier(data, signature);
+    }
+}
+
+/**
+ * Header and payload of `<b64url(header)>.<b64url(payload)>`, or `undefined`
+ * when they cannot be decoded.
+ */
+function decodeJwsParts(
+    data: string,
+):
+    | { header: Record<string, unknown>; payload: Record<string, unknown> }
+    | undefined {
+    try {
+        const compact = `${data}.`;
+        return {
+            header: decodeProtectedHeader(compact),
+            payload: decodeJwt(compact),
+        };
+    } catch {
+        return undefined;
     }
 }

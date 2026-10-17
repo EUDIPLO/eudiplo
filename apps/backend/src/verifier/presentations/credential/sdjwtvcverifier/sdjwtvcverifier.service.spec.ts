@@ -45,6 +45,7 @@ describe("SdjwtvcverifierService revocation mode", () => {
             resolverService as any,
             cryptoService as any,
             chainValidation as any,
+            {} as any, // federationTrust — unused without a federation trust source
             logger as any,
         );
     });
@@ -211,6 +212,7 @@ describe("SdjwtvcverifierService status list signature", () => {
             { resolvePublicKey: vi.fn().mockResolvedValue(publicKey) } as any,
             { getCryptoFromJwk: () => cryptoImpl } as any,
             chainValidation as any,
+            {} as any,
             { setContext: vi.fn(), debug: vi.fn(), error: vi.fn() } as any,
         );
         const verifyStatusList = (data: string, signature: string) =>

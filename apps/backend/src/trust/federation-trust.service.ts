@@ -1,7 +1,16 @@
-import { X509Certificate } from "node:crypto";
-import { Injectable, Logger, Optional } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
+import type { JWK } from "jose";
 import { MetricService } from "nestjs-otel";
-import { EvaluateFederationTrustChain } from "./application/evaluate-federation-trust-chain.js";
+import {
+    CREDENTIAL_ISSUER_METADATA_TYPE,
+    findFederationProtocolKey,
+} from "./domain/federation-protocol-keys.js";
+import {
+    FEDERATION_RESOLVER,
+    type FederationResolution,
+    FederationResolutionError,
+    type FederationResolver,
+} from "./ports/federation-resolver.js";
 import { FederationTrustMode, FederationTrustSource } from "./types.js";
 
 type FederationTrustEvaluation = {
@@ -9,22 +18,57 @@ type FederationTrustEvaluation = {
     reason: string;
 };
 
-type CachedEvaluation = {
-    value: FederationTrustEvaluation;
-    fetchedAt: number;
-    expiresAt: number;
-};
+type CachedResolution =
+    | {
+          resolution: FederationResolution;
+          expiresAt: number;
+          obtainedAt: number;
+      }
+    | { error: FederationResolutionError; expiresAt: number };
 
-const FEDERATION_TRUST_STALE_TTL_MS = 60 * 60 * 1000; // 1 hour stale grace window
-const FEDERATION_TRUST_NEGATIVE_TTL_MS = 10 * 1000; // 10s negative cache for fetch failures
+/** Failed resolutions are retried after this time. */
+const FEDERATION_NEGATIVE_TTL_MS = 10 * 1000;
 
+/**
+ * How long after it was obtained a resolution may be reused while the
+ * federation cannot be reached. An entity its superior removed could
+ * otherwise stay trusted until the chain expires by failing its own
+ * requests.
+ */
+const FEDERATION_STALE_TTL_MS = 15 * 60 * 1000;
+
+/**
+ * Upper bound of cached entries. Entity IDs come from presented
+ * credentials, so the cache must not grow with every new one.
+ */
+const FEDERATION_CACHE_MAX_ENTRIES = 1000;
+
+/** A credential issuer key found in trusted federation metadata. */
+export interface FederationIssuerKey {
+    jwk: JWK;
+    resolution: FederationResolution;
+}
+
+/**
+ * OpenID Federation trust decisions on top of the configured
+ * {@link FederationResolver}. Resolutions are cached for `cacheTtlSeconds`,
+ * never beyond the `exp` of the trust chain. A verification failure is final
+ * until the negative cache expires; only when the federation cannot be
+ * reached is an earlier resolution reused, for at most 15 minutes after it
+ * was obtained and only while its chain is valid.
+ */
 @Injectable()
 export class FederationTrustService {
     private readonly logger = new Logger(FederationTrustService.name);
-    private readonly trustCache = new Map<string, CachedEvaluation>();
-    private readonly inFlightEvaluations = new Map<
+    private readonly cache = new Map<string, CachedResolution>();
+    /** The last successful resolution per key, for transport failures. */
+    private readonly lastResolutions = new Map<
         string,
-        Promise<FederationTrustEvaluation>
+        { resolution: FederationResolution; obtainedAt: number }
+    >();
+    private readonly inFlight = new Map<
+        string,
+        Promise<FederationResolution>
     >();
 
     private readonly trustHitsCounter;
@@ -33,12 +77,14 @@ export class FederationTrustService {
     private readonly trustFetchesCounter;
 
     clearTrustCache(): void {
-        this.trustCache.clear();
-        this.inFlightEvaluations.clear();
+        this.cache.clear();
+        this.lastResolutions.clear();
+        this.inFlight.clear();
     }
 
     constructor(
-        private readonly evaluateFederationTrustChain: EvaluateFederationTrustChain,
+        @Inject(FEDERATION_RESOLVER)
+        private readonly resolver: FederationResolver,
         @Optional() private readonly metricService?: MetricService,
     ) {
         this.trustHitsCounter = this.metricService?.getCounter(
@@ -55,7 +101,7 @@ export class FederationTrustService {
         );
         this.trustFetchesCounter = this.metricService?.getCounter(
             "federation_trust_fetches_total",
-            { description: "Total outbound federation entity config fetches" },
+            { description: "Total federation trust chain resolutions" },
         );
     }
 
@@ -77,39 +123,11 @@ export class FederationTrustService {
         return mode === "federation-only" || mode === "hybrid";
     }
 
-    async evaluateCertificateEntityTrust(
-        x5c: string[] | undefined,
-        source?: FederationTrustSource,
-    ): Promise<FederationTrustEvaluation> {
-        if (!this.shouldUseFederation(source)) {
-            return { trusted: true, reason: "federation disabled by mode" };
-        }
-
-        if (!this.isEnabled(source)) {
-            return {
-                trusted: false,
-                reason: "federation mode requires trust anchors, none configured",
-            };
-        }
-
-        if (!x5c?.length) {
-            return {
-                trusted: false,
-                reason: "federation mode requires x5c for entity extraction",
-            };
-        }
-
-        const leafEntityId = this.tryExtractEntityIdFromLeaf(x5c[0]);
-        if (!leafEntityId) {
-            return {
-                trusted: false,
-                reason: "could not extract entity id from certificate SAN/CN",
-            };
-        }
-
-        return this.evaluateEntityTrust(leafEntityId, source);
-    }
-
+    /**
+     * Whether an authorization server is a federation entity with
+     * `oauth_authorization_server` or `openid_provider` metadata whose trust
+     * chain leads to a configured trust anchor.
+     */
     async evaluateAuthorizationServerTrust(
         issuerOrBaseUrl: string,
         source?: FederationTrustSource,
@@ -117,171 +135,188 @@ export class FederationTrustService {
         if (!this.shouldUseFederation(source)) {
             return { trusted: true, reason: "federation disabled by mode" };
         }
-
-        if (!this.isEnabled(source)) {
+        // An upstream OpenID provider publishes openid_provider metadata.
+        const types = ["oauth_authorization_server", "openid_provider"];
+        try {
+            const resolution = await this.resolveEntity(
+                issuerOrBaseUrl,
+                source,
+                types,
+            );
+            // Sections 5.1.3 and 5.1.4: the issuer is the entity identifier.
+            const mismatch = types.find(
+                (type) =>
+                    resolution.metadata[type] !== undefined &&
+                    resolution.metadata[type].issuer !== resolution.entityId,
+            );
+            if (mismatch) {
+                return {
+                    trusted: false,
+                    reason: `${mismatch} issuer of ${resolution.entityId} is missing or not its entity identifier`,
+                };
+            }
             return {
-                trusted: false,
-                reason: "federation mode requires trust anchors, none configured",
+                trusted: true,
+                reason: `authorization server chains to trust anchor ${resolution.trustAnchor}`,
             };
+        } catch (error) {
+            return { trusted: false, reason: reasonOf(error) };
         }
-
-        return this.evaluateEntityTrust(issuerOrBaseUrl, source);
     }
 
-    async evaluateEntityTrust(
-        entityId: string,
+    /**
+     * The signing key `kid` of credential issuer `issuer`, taken from the
+     * `openid_credential_issuer` metadata of its validated trust chain.
+     *
+     * @throws FederationResolutionError when the issuer is not trusted, its
+     * chain cannot be resolved or its metadata has no key `kid`
+     */
+    async resolveCredentialIssuerKey(
+        issuer: string,
+        kid: string,
         source?: FederationTrustSource,
-    ): Promise<FederationTrustEvaluation> {
-        if (!this.shouldUseFederation(source)) {
-            return { trusted: true, reason: "federation disabled by mode" };
+    ): Promise<FederationIssuerKey> {
+        const resolution = await this.resolveEntity(issuer, source, [
+            CREDENTIAL_ISSUER_METADATA_TYPE,
+        ]);
+        const jwk = findFederationProtocolKey(
+            resolution.metadata,
+            CREDENTIAL_ISSUER_METADATA_TYPE,
+            kid,
+        );
+        if (!jwk) {
+            throw new FederationResolutionError(
+                `${CREDENTIAL_ISSUER_METADATA_TYPE} metadata of ${issuer} has no key '${kid}'`,
+                "untrusted",
+            );
         }
+        return { jwk, resolution };
+    }
 
+    /**
+     * Resolves and validates the trust chain of `entityId` to one of the
+     * trust anchors of `source`.
+     *
+     * @throws FederationResolutionError
+     */
+    async resolveEntity(
+        entityId: string,
+        source: FederationTrustSource | undefined,
+        metadataTypes?: string[],
+    ): Promise<FederationResolution> {
         if (!this.isEnabled(source)) {
-            return {
-                trusted: false,
-                reason: "federation mode requires trust anchors, none configured",
-            };
+            throw new FederationResolutionError(
+                "federation mode requires trust anchors, none configured",
+                "untrusted",
+            );
         }
-
-        const normalizedEntityId = entityId.replace(/\/$/, "");
-        const cacheKey = `${normalizedEntityId}::${JSON.stringify(source?.trustAnchors ?? [])}`;
+        const trustAnchors = source!.trustAnchors.map((anchor) => ({
+            entityId: anchor.entityId,
+        }));
+        // Entity IDs are compared exactly (OpenID Federation Section 16), so
+        // the cache key uses them unchanged.
+        const key = JSON.stringify([
+            entityId,
+            trustAnchors.map((anchor) => anchor.entityId),
+            metadataTypes ?? [],
+        ]);
+        const labels = { entity: entityId };
 
         const now = Date.now();
-        const cached = this.trustCache.get(cacheKey);
-
-        if (cached && cached.expiresAt > now) {
-            this.trustHitsCounter?.add(1, { entity: normalizedEntityId });
-            this.logger.debug(
-                `Federation trust cache hit for ${normalizedEntityId}`,
-            );
-            return cached.value;
+        const ttlMs = Math.max(5, source!.cacheTtlSeconds ?? 300) * 1000;
+        const cached = this.cache.get(key);
+        // Tenants share entries; each caller's own TTL applies on read.
+        if (
+            cached &&
+            cached.expiresAt > now &&
+            (!("obtainedAt" in cached) || now - cached.obtainedAt < ttlMs)
+        ) {
+            this.trustHitsCounter?.add(1, labels);
+            if ("error" in cached) throw cached.error;
+            return cached.resolution;
         }
 
-        const inFlight = this.inFlightEvaluations.get(cacheKey);
-        if (inFlight) {
-            this.logger.debug(
-                `Deduplicating in-flight trust evaluation for ${normalizedEntityId}`,
-            );
-            return inFlight;
-        }
+        const pending = this.inFlight.get(key);
+        if (pending) return pending;
 
-        this.trustMissesCounter?.add(1, { entity: normalizedEntityId });
-
-        const evalPromise = (async (): Promise<FederationTrustEvaluation> => {
-            const anchorIds = new Set(
-                (source?.trustAnchors ?? []).map((anchor) =>
-                    anchor.entityId.replace(/\/$/, ""),
-                ),
-            );
-
-            if (anchorIds.has(normalizedEntityId)) {
-                const value = {
-                    trusted: true,
-                    reason: "entity is a configured federation trust anchor",
-                };
-                this.setCache(cacheKey, source, value);
-                return value;
-            }
-
-            this.trustFetchesCounter?.add(1, { entity: normalizedEntityId });
-
-            let value: FederationTrustEvaluation;
+        this.trustMissesCounter?.add(1, labels);
+        const resolve = (async () => {
+            this.trustFetchesCounter?.add(1, labels);
             try {
-                value = await this.evaluateFederationTrustChain.execute({
-                    entityId: normalizedEntityId,
-                    trustAnchors: [...anchorIds],
+                const resolution = await this.resolver.resolveEntity({
+                    entityId,
+                    trustAnchors,
+                    metadataTypes,
                 });
+                setBounded(this.cache, key, {
+                    resolution,
+                    obtainedAt: Date.now(),
+                    expiresAt: Math.min(
+                        Date.now() + ttlMs,
+                        Date.parse(resolution.expiresAt),
+                    ),
+                });
+                setBounded(this.lastResolutions, key, {
+                    resolution,
+                    obtainedAt: Date.now(),
+                });
+                return resolution;
             } catch (error) {
-                this.logger.warn(
-                    `Failed to fetch federation entity configuration for ${normalizedEntityId}: ${String(error)}`,
-                );
+                // An unexpected error is not a known outage, so it does not
+                // bring an earlier resolution back.
+                const failure =
+                    error instanceof FederationResolutionError
+                        ? error
+                        : new FederationResolutionError(
+                              reasonOf(error),
+                              "untrusted",
+                          );
+                const last = this.lastResolutions.get(key);
                 if (
-                    cached &&
-                    now - cached.fetchedAt <= FEDERATION_TRUST_STALE_TTL_MS
+                    failure.failure === "unavailable" &&
+                    last &&
+                    Date.now() - last.obtainedAt <= FEDERATION_STALE_TTL_MS &&
+                    Date.parse(last.resolution.expiresAt) > Date.now()
                 ) {
-                    this.trustStaleCounter?.add(1, {
-                        entity: normalizedEntityId,
-                    });
+                    this.trustStaleCounter?.add(1, labels);
                     this.logger.warn(
-                        `Failed to fetch federation entity configuration for ${normalizedEntityId}, serving stale evaluation result`,
+                        `Could not resolve federation entity ${entityId}, reusing the resolution from ${new Date(last.obtainedAt).toISOString()}: ${failure.message}`,
                     );
-                    return cached.value;
+                    return last.resolution;
                 }
-
-                value = {
-                    trusted: false,
-                    reason: "could not fetch federation entity configuration",
-                };
-                this.setNegativeCache(cacheKey, value);
-                return value;
+                if (failure.failure === "untrusted") {
+                    // A rejected chain must never be replaced by an older one.
+                    this.lastResolutions.delete(key);
+                }
+                this.logger.warn(
+                    `Federation entity ${entityId} is not trusted: ${failure.message}`,
+                );
+                setBounded(this.cache, key, {
+                    error: failure,
+                    expiresAt: Date.now() + FEDERATION_NEGATIVE_TTL_MS,
+                });
+                throw failure;
             }
-
-            this.setCache(cacheKey, source, value);
-            return value;
         })();
 
-        this.inFlightEvaluations.set(cacheKey, evalPromise);
-
+        this.inFlight.set(key, resolve);
         try {
-            return await evalPromise;
+            return await resolve;
         } finally {
-            this.inFlightEvaluations.delete(cacheKey);
+            this.inFlight.delete(key);
         }
     }
+}
 
-    private setCache(
-        cacheKey: string,
-        source: FederationTrustSource | undefined,
-        value: FederationTrustEvaluation,
-    ) {
-        const ttlMs = Math.max(5, source?.cacheTtlSeconds ?? 300) * 1000;
-        this.trustCache.set(cacheKey, {
-            value,
-            fetchedAt: Date.now(),
-            expiresAt: Date.now() + ttlMs,
-        });
-    }
+function reasonOf(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
 
-    private setNegativeCache(
-        cacheKey: string,
-        value: FederationTrustEvaluation,
-    ) {
-        this.trustCache.set(cacheKey, {
-            value,
-            fetchedAt: Date.now(),
-            expiresAt: Date.now() + FEDERATION_TRUST_NEGATIVE_TTL_MS,
-        });
-    }
-
-    private tryExtractEntityIdFromLeaf(leafX5cBase64: string): string | null {
-        try {
-            const cert = new X509Certificate(
-                Buffer.from(leafX5cBase64, "base64"),
-            );
-
-            if (cert.subjectAltName) {
-                const uriMatch = cert.subjectAltName
-                    .split(",")
-                    .map((part) => part.trim())
-                    .find((part) => part.startsWith("URI:"));
-
-                if (uriMatch) {
-                    return uriMatch.slice(4);
-                }
-            }
-
-            // Node renders the subject as one RDN per line.
-            const cnMatch = cert.subject
-                .split("\n")
-                .map((part) => part.trim())
-                .find((part) => part.startsWith("CN="));
-
-            return cnMatch ? cnMatch.slice(3) : null;
-        } catch (error) {
-            this.logger.debug(
-                `Could not parse x5c leaf certificate: ${String(error)}`,
-            );
-            return null;
-        }
+/** `map.set` that drops the oldest entries above the size bound. */
+function setBounded<V>(map: Map<string, V>, key: string, value: V): void {
+    map.delete(key);
+    map.set(key, value);
+    while (map.size > FEDERATION_CACHE_MAX_ENTRIES) {
+        map.delete(map.keys().next().value as string);
     }
 }

@@ -38,6 +38,22 @@ describe("verifierTrustOptions", () => {
         expect(options.trustListSource?.lotes).toEqual([trustList]);
     });
 
+    it("requires x5c only when a trust list decides", () => {
+        const federationOnly = verifierTrustOptions({
+            trustLists: [],
+            authorities: [federation],
+            skewSeconds: undefined,
+        });
+        const withTrustList = verifierTrustOptions({
+            trustLists: [trustList],
+            authorities: [federation, { type: "etsi_tl", values: [trustList] }],
+            skewSeconds: undefined,
+        });
+
+        expect(federationOnly.policy.requireX5c).toBe(false);
+        expect(withTrustList.policy.requireX5c).toBe(true);
+    });
+
     it("configures no federation check without federation trust anchors", () => {
         for (const authorities of [
             undefined,

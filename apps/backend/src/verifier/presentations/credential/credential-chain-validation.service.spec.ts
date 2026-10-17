@@ -1,6 +1,5 @@
 import * as x509 from "@peculiar/x509";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { FederationTrustService } from "../../../trust/federation-trust.service.js";
 import type { TrustListSource } from "../../../trust/types.js";
 import { X509ValidationService } from "../../../trust/x509-validation.service.js";
 import {
@@ -24,21 +23,11 @@ describe("CredentialChainValidationService — trust list availability", () => {
     } as TrustListSource;
 
     let trustStore: { getTrustStore: ReturnType<typeof vi.fn> };
-    let federationTrustService: Record<string, ReturnType<typeof vi.fn>>;
     let x509v: Record<string, ReturnType<typeof vi.fn>>;
     let service: CredentialChainValidationService;
 
     beforeEach(() => {
         trustStore = { getTrustStore: vi.fn() };
-        // Plain LoTE mode: no federation, use LoTE, hybrid without enforced
-        // signing policy → enforceFederationPolicy = false (the vulnerable path).
-        federationTrustService = {
-            shouldUseFederation: vi.fn().mockReturnValue(false),
-            shouldUseLote: vi.fn().mockReturnValue(true),
-            getMode: vi.fn().mockReturnValue("hybrid"),
-            isEnabled: vi.fn().mockReturnValue(false),
-            evaluateCertificateEntityTrust: vi.fn(),
-        };
         x509v = {
             parseX5c: vi.fn().mockReturnValue([{ subject: "leaf" }]),
         };
@@ -51,7 +40,6 @@ describe("CredentialChainValidationService — trust list availability", () => {
 
         service = new CredentialChainValidationService(
             trustStore as any,
-            federationTrustService as any,
             x509v as any,
             {} as any, // statusListVerifier — unused on these paths
             logger as any,
@@ -97,88 +85,6 @@ describe("CredentialChainValidationService — trust list availability", () => {
             service.getTrustedCertificateBuffers(LOTE_SOURCE),
         ).resolves.toEqual([]);
     });
-});
-
-describe("CredentialChainValidationService — OpenID Federation without a trust list", () => {
-    const FEDERATION = {
-        trustAnchors: [
-            {
-                entityId: "https://ta.example.org",
-                entityConfigurationUri:
-                    "https://ta.example.org/.well-known/openid-federation",
-            },
-        ],
-    } as const;
-
-    function serviceWith(evaluation: { trusted: boolean; reason: string }) {
-        // Real mode handling, only the remote federation evaluation is faked.
-        const federationTrustService = Object.assign(
-            new FederationTrustService({} as never),
-            {
-                evaluateCertificateEntityTrust: vi
-                    .fn()
-                    .mockResolvedValue(evaluation),
-            },
-        );
-        const trustStore = { getTrustStore: vi.fn() };
-        const service = new CredentialChainValidationService(
-            trustStore as any,
-            federationTrustService,
-            { parseX5c: vi.fn().mockReturnValue([{ subject: "leaf" }]) } as any,
-            {} as any,
-            {
-                setContext: vi.fn(),
-                error: vi.fn(),
-                warn: vi.fn(),
-                debug: vi.fn(),
-            } as any,
-        );
-        return { service, trustStore };
-    }
-
-    it.each(["hybrid", "federation-only"] as const)(
-        "rejects an issuer outside the federation in %s mode",
-        async (mode) => {
-            const { service, trustStore } = serviceWith({
-                trusted: false,
-                reason: "entity did not chain to configured trust anchor",
-            });
-
-            const result = await service.validateChain(["<cert>"], undefined, {
-                federationTrustSource: {
-                    ...FEDERATION,
-                    mode,
-                    trustAnchors: [...FEDERATION.trustAnchors],
-                },
-            });
-
-            expect(result).toMatchObject({
-                verified: false,
-                error: "federation_trust_failed",
-            });
-            expect(trustStore.getTrustStore).not.toHaveBeenCalled();
-        },
-    );
-
-    it.each(["hybrid", "federation-only"] as const)(
-        "accepts an issuer that chains to the federation in %s mode",
-        async (mode) => {
-            const { service } = serviceWith({
-                trusted: true,
-                reason: "entity authority_hints chain to configured trust anchor",
-            });
-
-            const result = await service.validateChain(["<cert>"], undefined, {
-                federationTrustSource: {
-                    ...FEDERATION,
-                    mode,
-                    trustAnchors: [...FEDERATION.trustAnchors],
-                },
-            });
-
-            expect(result.verified).toBe(true);
-        },
-    );
 });
 
 /**
@@ -246,7 +152,6 @@ describe("CredentialChainValidationService — status list signer", () => {
             entityId: string;
             services: { serviceTypeIdentifier: string; cert: Cert }[];
         }[],
-        federationTrusts = false,
     ) {
         const store = {
             entities: entities.map((e) => ({
@@ -259,12 +164,6 @@ describe("CredentialChainValidationService — status list signer", () => {
         };
         return new CredentialChainValidationService(
             { getTrustStore: vi.fn().mockResolvedValue(store) } as any,
-            Object.assign(new FederationTrustService({} as never), {
-                evaluateCertificateEntityTrust: vi.fn().mockResolvedValue({
-                    trusted: federationTrusts,
-                    reason: "faked federation evaluation",
-                }),
-            }),
             new X509ValidationService(),
             {} as any,
             {
@@ -580,37 +479,6 @@ describe("CredentialChainValidationService — status list signer", () => {
                     pinnedCertMode: "pathEnd",
                 }),
             ).resolves.toBe(true);
-        });
-
-        it("rejects a status list that only an enforced federation policy trusts", async () => {
-            const service = serviceWith(entities(), true);
-            const policy: ChainValidationPolicy = {
-                federationTrustSource: {
-                    mode: "hybrid",
-                    enforceSigningPolicy: true,
-                    trustAnchors: [
-                        {
-                            entityId: "https://ta.example.org",
-                            entityConfigurationUri:
-                                "https://ta.example.org/.well-known/openid-federation",
-                        },
-                    ],
-                },
-            };
-            const matched = await credentialMatch(
-                service,
-                [b64(await issuedBy(issuerCa, "Credential"))],
-                policy,
-            );
-
-            await expect(
-                service.verifyStatusListSignature(
-                    [b64(await selfSigned("Federation Member", false))],
-                    matched,
-                    LOTE_SOURCE,
-                    policy,
-                ),
-            ).resolves.toBe(false);
         });
     });
 });

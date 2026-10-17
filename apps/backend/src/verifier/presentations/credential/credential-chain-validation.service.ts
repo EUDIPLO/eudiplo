@@ -1,17 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { PinoLogger } from "nestjs-pino";
-import { FederationTrustService } from "../../../trust/federation-trust.service.js";
 import { StatusListVerifierService } from "../../../trust/status-list-verifier.service.js";
 import {
     BuiltTrustStore,
     TrustStoreService,
 } from "../../../trust/trust-store.service.js";
-import {
-    FederationTrustSource,
-    TrustedEntity,
-    TrustListSource,
-} from "../../../trust/types.js";
+import { TrustedEntity, TrustListSource } from "../../../trust/types.js";
 import {
     MatchedTrustedEntity,
     X509ValidationService,
@@ -46,8 +41,6 @@ export interface ChainValidationPolicy {
     serviceTypeFilter?: string;
     /** Whether to verify status list (revocation) */
     verifyStatusList?: boolean;
-    /** OpenID Federation trust source used for federation-based trust checks. */
-    federationTrustSource?: FederationTrustSource;
 }
 
 /**
@@ -83,7 +76,6 @@ export interface ChainValidationResult {
 export class CredentialChainValidationService {
     constructor(
         private readonly trustStore: TrustStoreService,
-        private readonly federationTrustService: FederationTrustService,
         private readonly x509v: X509ValidationService,
         private readonly statusListVerifier: StatusListVerifierService,
         private readonly logger: PinoLogger,
@@ -124,21 +116,6 @@ export class CredentialChainValidationService {
             return { verified: true, matchedEntity: null };
         }
 
-        const federationTrustSource = policy.federationTrustSource;
-        const useFederation = this.federationTrustService.shouldUseFederation(
-            federationTrustSource,
-        );
-        const useLote = this.federationTrustService.shouldUseLote(
-            federationTrustSource,
-        );
-        const federationMode = this.federationTrustService.getMode(
-            federationTrustSource,
-        );
-        const enforceFederationPolicy =
-            federationMode === "federation-only" ||
-            (federationMode === "hybrid" &&
-                federationTrustSource?.enforceSigningPolicy === true);
-
         // 2) Parse the presented certificate chain
         let presented: x509.X509Certificate[];
         try {
@@ -154,64 +131,15 @@ export class CredentialChainValidationService {
 
         const leaf = presented[0];
 
-        // 3) Run federation trust evaluation when enabled
-        let federationTrustResult:
-            | { trusted: boolean; reason: string }
-            | undefined;
-        if (useFederation) {
-            federationTrustResult =
-                await this.federationTrustService.evaluateCertificateEntityTrust(
-                    x5c,
-                    federationTrustSource,
-                );
-
-            if (!federationTrustResult.trusted && !useLote) {
-                return {
-                    verified: false,
-                    matchedEntity: null,
-                    error: "federation_trust_failed",
-                    errorDetails: federationTrustResult.reason,
-                };
-            }
-        }
-
-        if (!useLote) {
-            if (federationTrustResult?.trusted) {
-                return { verified: true, matchedEntity: null };
-            }
-
-            return {
-                verified: false,
-                matchedEntity: null,
-                error: "federation_trust_failed",
-                errorDetails:
-                    federationTrustResult?.reason ??
-                    "federation trust evaluation failed",
-            };
-        }
-
-        // 4) Load trust store for LoTE-based validation.
+        // 3) Load trust store for LoTE-based validation.
         // A configured-but-unavailable trust list (fetch/parse/signature failure
         // or stale list) MUST fail closed — never accept a credential when a
-        // requested trust list cannot be evaluated. Under an enforced federation
-        // policy, defer to the federation result (LoTE is supplementary there).
+        // requested trust list cannot be evaluated.
         let store: BuiltTrustStore | null;
         try {
             store = await this.getTrustStoreIfConfigured(trustListSource);
         } catch (error) {
             if (error instanceof TrustListUnavailableError) {
-                if (enforceFederationPolicy) {
-                    return {
-                        verified: Boolean(federationTrustResult?.trusted),
-                        matchedEntity: null,
-                        error: federationTrustResult?.trusted
-                            ? undefined
-                            : "trust_list_unavailable",
-                        errorDetails:
-                            federationTrustResult?.reason ?? error.message,
-                    };
-                }
-
                 return {
                     verified: false,
                     matchedEntity: null,
@@ -222,26 +150,6 @@ export class CredentialChainValidationService {
             throw error;
         }
         if (!store) {
-            // Without a trust list to check against, configured federation
-            // trust anchors decide. Accepting the issuer here would skip the
-            // only configured issuer check.
-            if (
-                enforceFederationPolicy ||
-                (useFederation &&
-                    this.federationTrustService.isEnabled(
-                        federationTrustSource,
-                    ))
-            ) {
-                return {
-                    verified: Boolean(federationTrustResult?.trusted),
-                    matchedEntity: null,
-                    error: federationTrustResult?.trusted
-                        ? undefined
-                        : "federation_trust_failed",
-                    errorDetails: federationTrustResult?.reason,
-                };
-            }
-
             // No trust list configured - preserve existing behavior
             this.logger.debug(
                 "No trust list source configured, returning verified without LoTE trust validation",
@@ -249,13 +157,13 @@ export class CredentialChainValidationService {
             return { verified: true, matchedEntity: null };
         }
 
-        // 5) Get all certificates from entities for path building
+        // 4) Get all certificates from entities for path building
         const allCerts = store.entities.flatMap((e) =>
             e.services.map((s) => ({ certValue: s.certValue })),
         );
         const anchors = this.x509v.parseTrustAnchors(allCerts);
 
-        // 6) Build the certificate path
+        // 5) Build the certificate path
         let path: x509.X509Certificate[];
         try {
             path = await this.x509v.buildPath(leaf, presented, anchors, []);
@@ -267,13 +175,6 @@ export class CredentialChainValidationService {
                 e,
             );
 
-            if (enforceFederationPolicy && federationTrustResult?.trusted) {
-                this.logger.warn(
-                    `LoTE chain failed but federation policy accepted chain: ${errorDetails}`,
-                );
-                return { verified: true, matchedEntity: null };
-            }
-
             return {
                 verified: false,
                 matchedEntity: null,
@@ -284,7 +185,7 @@ export class CredentialChainValidationService {
 
         await this.logChainKeyIdentifiers(path, anchors);
 
-        // 7) Check time validity
+        // 6) Check time validity
         const now = new Date();
         for (const cert of path) {
             if (!this.x509v.isTimeValid(cert, now)) {
@@ -297,7 +198,7 @@ export class CredentialChainValidationService {
             }
         }
 
-        // 8) Match against TrustedEntities
+        // 7) Match against TrustedEntities
         const matchedEntity = await this.x509v.pathMatchesTrustedEntities(
             path,
             store.entities,
@@ -313,29 +214,11 @@ export class CredentialChainValidationService {
                 pinnedCertMode,
             );
 
-            if (enforceFederationPolicy && federationTrustResult?.trusted) {
-                this.logger.warn(
-                    `No LoTE entity match but federation policy accepted chain: ${errorDetails}`,
-                );
-                return { verified: true, matchedEntity: null };
-            }
-
             return {
                 verified: false,
                 matchedEntity: null,
                 error: "no_trusted_entity_match",
                 errorDetails,
-            };
-        }
-
-        if (enforceFederationPolicy && !federationTrustResult?.trusted) {
-            return {
-                verified: false,
-                matchedEntity: null,
-                error: "federation_trust_failed",
-                errorDetails:
-                    federationTrustResult?.reason ??
-                    "federation trust evaluation failed",
             };
         }
 

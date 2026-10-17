@@ -1,11 +1,12 @@
 import "reflect-metadata";
+import { deflateSync } from "node:zlib";
 import { INestApplication } from "@nestjs/common";
 import {
     Openid4vpAuthorizationRequest,
     Openid4vpClient,
 } from "@openid4vc/openid4vp";
 import * as x509Lib from "@peculiar/x509";
-import { CryptoKey, generateKeyPair } from "jose";
+import { generateKeyPair, SignJWT } from "jose";
 import nock from "nock";
 import request from "supertest";
 import { App } from "supertest/types";
@@ -19,10 +20,15 @@ import {
     expect,
     test,
 } from "vitest";
+import { FederationTrustService } from "../../src/trust/federation-trust.service.js";
 import {
     PresentationRequest,
     ResponseType,
 } from "../../src/verifier/oid4vp/dto/presentation-request.dto.js";
+import {
+    federationKey,
+    serveFederation,
+} from "../federation/federation-fixture.js";
 import {
     callbacks,
     createPresentationRequest,
@@ -109,43 +115,18 @@ describe("Presentation - OpenID Federation", () => {
         await app?.close();
     });
 
+    const TRUST_ANCHOR = "https://ta-fed.example.org";
+    const ISSUER = "https://issuer-fed.example.org";
+
     /**
-     * Present a PID signed by a self-signed issuer certificate for
-     * `issuerEntityId` whose entity configuration names `authorityHint`, and
-     * return the resulting session status.
+     * Present a PID with `iss` and `kid` of a federation issuer, signed with
+     * `signingKey`, and return the resulting session status.
      */
     async function presentFederationCredential(
-        issuerEntityId: string,
-        authorityHint: string,
-    ): Promise<string> {
-        x509Lib.cryptoProvider.set(globalThis.crypto);
-        const fedKeyPair = await generateKeyPair("ES256", {
-            extractable: true,
-        });
-
-        const fedCert = await x509Lib.X509CertificateGenerator.createSelfSigned(
-            {
-                serialNumber: "01",
-                name: `C=DE, CN=${issuerEntityId}`,
-                notBefore: new Date(),
-                notAfter: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-                signingAlgorithm: { name: "ECDSA", hash: "SHA-256" },
-                keys: {
-                    privateKey: fedKeyPair.privateKey,
-                    publicKey: fedKeyPair.publicKey,
-                },
-            },
-        );
-
-        const fedX5c = [fedCert.toString("base64")];
-
-        nock(new URL(issuerEntityId).origin)
-            .get(/\/\.well-known\/openid-federation\/?$/)
-            .reply(200, {
-                sub: issuerEntityId,
-                authority_hints: [authorityHint],
-            });
-
+        signingKey: CryptoKey,
+        header: Record<string, unknown>,
+        claims: Record<string, unknown> = {},
+    ): Promise<{ status: string; failureCode?: string; errorReason?: string }> {
         const presentationReq: PresentationRequest = {
             response_type: ResponseType.URI,
             requestId: "pid-fed-only",
@@ -174,10 +155,13 @@ describe("Presentation - OpenID Federation", () => {
                 aud: resolved.authorizationRequestPayload.client_id as string,
                 nonce: resolved.authorizationRequestPayload.nonce,
             },
-            fedKeyPair.privateKey as CryptoKey,
-            fedX5c,
+            signingKey,
+            [],
             statusListService,
             "pid",
+            "1",
+            "ES256",
+            { header, claims: { iss: ISSUER, ...claims }, withStatus: false },
         );
 
         const encryptedVp = await encryptVpToken(vpToken, "pid", resolved);
@@ -204,31 +188,202 @@ describe("Presentation - OpenID Federation", () => {
             .set("Authorization", `Bearer ${authToken}`)
             .expect(200);
 
-        return sessionRes.body.status;
+        return {
+            status: sessionRes.body.status,
+            failureCode: sessionRes.body.failureCode ?? undefined,
+            errorReason: sessionRes.body.errorReason ?? undefined,
+        };
     }
 
-    test("accepts an SD-JWT whose issuer chains to the configured federation trust anchor", async () => {
-        await expect(
-            presentFederationCredential(
-                "https://wallet-fed.example.org",
-                "https://ta-fed.example.org",
-            ),
-        ).resolves.toBe("completed");
+    const credentialKey = federationKey;
+
+    /** The credential issuer metadata listing the credential signing key. */
+    const issuerMetadata = (jwk: object) => ({
+        openid_credential_issuer: {
+            credential_issuer: ISSUER,
+            jwks: { keys: [jwk] },
+        },
     });
 
-    test("rejects an SD-JWT whose issuer is not in the configured federation", async () => {
-        // Only an openid_federation trusted authority is configured: the
-        // federation must decide, there is no trust list to fall back to.
-        // The issuer belongs to another federation whose anchor has no
-        // superior.
-        nock("https://other-ta.example.net")
-            .get(/\/\.well-known\/openid-federation\/?$/)
-            .reply(200, { sub: "https://other-ta.example.net" });
+    beforeEach(() => {
+        // The verifier caches federation resolutions
+        ctx.app.get(FederationTrustService).clearTrustCache();
+    });
+
+    test("accepts an SD-JWT signed with a key of its issuer's trusted federation metadata", async () => {
+        const key = await credentialKey("credential-1");
+        await serveFederation({
+            entity: ISSUER,
+            trustAnchor: TRUST_ANCHOR,
+            metadata: issuerMetadata(key.jwk),
+        });
+
+        await expect(
+            presentFederationCredential(key.privateKey, {
+                kid: "credential-1",
+            }),
+        ).resolves.toMatchObject({ status: "completed" });
+    });
+
+    /** Serves a status list in which index 0 is valid, signed with `key`. */
+    async function serveStatusList(
+        uri: string,
+        key: { privateKey: CryptoKey; jwk: { kid?: string } },
+    ) {
+        const lst = deflateSync(Buffer.from([0])).toString("base64url");
+        const jwt = await new SignJWT({
+            sub: uri,
+            status_list: { bits: 1, lst },
+        })
+            .setProtectedHeader({
+                alg: "ES256",
+                typ: "statuslist+jwt",
+                kid: key.jwk.kid,
+            })
+            .setIssuedAt()
+            .sign(key.privateKey);
+        const url = new URL(uri);
+        nock(url.origin)
+            .get(url.pathname)
+            .reply(200, jwt, { "content-type": "application/statuslist+jwt" });
+    }
+
+    test("checks the status list with a key of the same issuer entity", async () => {
+        const key = await credentialKey("credential-1");
+        const statusKey = await credentialKey("status-1");
+        await serveFederation({
+            entity: ISSUER,
+            trustAnchor: TRUST_ANCHOR,
+            metadata: {
+                openid_credential_issuer: {
+                    credential_issuer: ISSUER,
+                    jwks: { keys: [key.jwk, statusKey.jwk] },
+                },
+            },
+        });
+        const uri = `${ISSUER}/status/1`;
+        await serveStatusList(uri, statusKey);
+
         await expect(
             presentFederationCredential(
-                "https://rogue-issuer.example.net",
-                "https://other-ta.example.net",
+                key.privateKey,
+                { kid: "credential-1" },
+                { status: { status_list: { idx: 0, uri } } },
             ),
-        ).resolves.toBe("failed");
+        ).resolves.toMatchObject({ status: "completed" });
+    });
+
+    test("rejects a status list signed with a key its issuer does not list", async () => {
+        const key = await credentialKey("credential-1");
+        await serveFederation({
+            entity: ISSUER,
+            trustAnchor: TRUST_ANCHOR,
+            metadata: issuerMetadata(key.jwk),
+        });
+        const uri = `${ISSUER}/status/2`;
+        await serveStatusList(uri, await credentialKey("other-entity"));
+
+        await expect(
+            presentFederationCredential(
+                key.privateKey,
+                { kid: "credential-1" },
+                { status: { status_list: { idx: 0, uri } } },
+            ),
+        ).resolves.toMatchObject({
+            status: "failed",
+            errorReason: expect.stringMatching(/status/i),
+        });
+    });
+
+    test("rejects an SD-JWT whose kid is not in its issuer's metadata", async () => {
+        const key = await credentialKey("credential-1");
+        await serveFederation({
+            entity: ISSUER,
+            trustAnchor: TRUST_ANCHOR,
+            metadata: issuerMetadata(key.jwk),
+        });
+
+        await expect(
+            presentFederationCredential(key.privateKey, { kid: "unknown" }),
+        ).resolves.toMatchObject({
+            status: "failed",
+            failureCode: "no_trust_chain_to_root",
+        });
+    });
+
+    test("rejects a certificate that names a federation member but is signed with another key", async () => {
+        // The attacker's certificate names the honest issuer entity; only the
+        // key in the issuer's federation metadata is trusted.
+        const member = await credentialKey("credential-1");
+        const attacker = await credentialKey("credential-1");
+        await serveFederation({
+            entity: ISSUER,
+            trustAnchor: TRUST_ANCHOR,
+            metadata: issuerMetadata(member.jwk),
+        });
+        x509Lib.cryptoProvider.set(globalThis.crypto);
+        const keys = await generateKeyPair("ES256", { extractable: true });
+        const certificate =
+            await x509Lib.X509CertificateGenerator.createSelfSigned({
+                serialNumber: "01",
+                name: `C=DE, CN=${ISSUER}`,
+                notBefore: new Date(),
+                notAfter: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                signingAlgorithm: { name: "ECDSA", hash: "SHA-256" },
+                keys: keys as CryptoKeyPair,
+                extensions: [
+                    new x509Lib.SubjectAlternativeNameExtension([
+                        { type: "url", value: ISSUER },
+                    ]),
+                ],
+            });
+
+        await expect(
+            presentFederationCredential(attacker.privateKey, {
+                kid: "credential-1",
+                x5c: [certificate.toString("base64")],
+            }),
+        ).resolves.toMatchObject({
+            status: "failed",
+            failureCode: "signature_invalid",
+        });
+    });
+
+    test("rejects an SD-JWT whose issuer names the trust anchor but is not its subordinate", async () => {
+        // Matching an authority_hint alone does not establish trust.
+        const key = await credentialKey("credential-1");
+        await serveFederation({
+            entity: ISSUER,
+            trustAnchor: TRUST_ANCHOR,
+            metadata: issuerMetadata(key.jwk),
+            listed: false,
+        });
+
+        await expect(
+            presentFederationCredential(key.privateKey, {
+                kid: "credential-1",
+            }),
+        ).resolves.toMatchObject({
+            status: "failed",
+            failureCode: "no_trust_chain_to_root",
+        });
+    });
+
+    test("rejects an SD-JWT whose issuer is in another federation", async () => {
+        const key = await credentialKey("credential-1");
+        await serveFederation({
+            entity: ISSUER,
+            trustAnchor: "https://other-ta.example.net",
+            metadata: issuerMetadata(key.jwk),
+        });
+
+        await expect(
+            presentFederationCredential(key.privateKey, {
+                kid: "credential-1",
+            }),
+        ).resolves.toMatchObject({
+            status: "failed",
+            failureCode: "no_trust_chain_to_root",
+        });
     });
 });

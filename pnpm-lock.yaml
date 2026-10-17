@@ -162,6 +162,9 @@ importers:
       '@noble/hashes':
         specifier: ^2.4.0
         version: 2.4.0
+      '@openid-federation/core':
+        specifier: file:../../tmp/vendor/openid-federation-core-0.2.1.tgz
+        version: file:tmp/vendor/openid-federation-core-0.2.1.tgz
       '@openid4vc/oauth2':
         specifier: 0.7.0
         version: 0.7.0
@@ -4193,6 +4196,10 @@ packages:
 
   '@open-draft/until@3.0.1':
     resolution: {integrity: sha512-s7/9ELP4aP9YZtW7RJaa0Xf3RISaRH9+EFN18FtykJYRHGNrl8f9ymvoNXzjhrjmftFvkQudtuDU9RYhk0xs3A==}
+
+  '@openid-federation/core@file:tmp/vendor/openid-federation-core-0.2.1.tgz':
+    resolution: {integrity: sha512-6ASFCJRLPicfyfwlS9xXHygv/+7xlz2DDUaNOMwyFq/itlRD5WHxmFVE8/xW/0h6CUNaYeugT0XA5lIjFb52Aw==, tarball: file:tmp/vendor/openid-federation-core-0.2.1.tgz}
+    version: 0.2.1
 
   '@openid4vc/oauth2@0.7.0':
     resolution: {integrity: sha512-sd8FHCb71nLvoETBKX+zawPmf5xdFHKNbw2cpDbqFQvce174nfFq7aQtBwLVSXEFgJf40bEa+TytlXBtQpjjwQ==}
@@ -14001,6 +14008,9 @@ packages:
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
 
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
   zod@4.6.5:
     resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
 
@@ -18586,6 +18596,11 @@ snapshots:
       '@octokit/openapi-types': 29.0.1
 
   '@open-draft/until@3.0.1': {}
+
+  '@openid-federation/core@file:tmp/vendor/openid-federation-core-0.2.1.tgz':
+    dependencies:
+      buffer: 6.0.3
+      zod: 3.25.76
 
   '@openid4vc/oauth2@0.7.0':
     dependencies:
@@ -29569,6 +29584,8 @@ snapshots:
   zod-validation-error@5.0.0(zod@4.6.5):
     dependencies:
       zod: 4.6.5
+
+  zod@3.25.76: {}
 
   zod@4.6.5: {}
 

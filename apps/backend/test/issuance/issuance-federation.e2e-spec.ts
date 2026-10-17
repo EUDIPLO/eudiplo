@@ -14,6 +14,8 @@ import {
 } from "vitest";
 import { FederationTrustMode } from "../../src/issuer/configuration/issuance/dto/federation-config.dto.js";
 import { IssuanceDto } from "../../src/issuer/configuration/issuance/dto/issuance.dto.js";
+import { FederationTrustService } from "../../src/trust/federation-trust.service.js";
+import { serveFederation } from "../federation/federation-fixture.js";
 import { IssuanceTestContext, setupIssuanceTestApp } from "../utils.js";
 
 setGlobalDispatcher(
@@ -67,29 +69,12 @@ describe("Issuance - OpenID Federation", () => {
             .expect(201);
     }
 
-    function encodeBase64UrlJson(value: unknown): string {
-        return Buffer.from(JSON.stringify(value)).toString("base64url");
-    }
+    const TRUST_ANCHOR = "https://ta-fed.example.org";
 
-    function makeUnsignedJwt(payload: Record<string, unknown>): string {
-        const header = encodeBase64UrlJson({ alg: "none", typ: "JWT" });
-        const body = encodeBase64UrlJson(payload);
-        return `${header}.${body}.`;
-    }
-
-    test("issuer metadata includes federated auth server when trust chain is valid", async () => {
-        const authServer = "https://as-fed.example.org";
-        const trustAnchor = "https://ta-fed.example.org";
-
-        nock(authServer)
-            .get("/.well-known/openid-federation")
-            .reply(200, {
-                sub: authServer,
-                authority_hints: [trustAnchor],
-            });
-
+    function serveAuthorizationServerMetadata(authServer: string) {
         nock(authServer)
             .get("/.well-known/oauth-authorization-server")
+            .optionally()
             .reply(200, {
                 issuer: authServer,
                 authorization_endpoint: `${authServer}/authorize`,
@@ -99,7 +84,9 @@ describe("Issuance - OpenID Federation", () => {
                 grant_types_supported: ["authorization_code"],
                 token_endpoint_auth_methods_supported: ["private_key_jwt"],
             });
+    }
 
+    async function configureFederatedAuthorizationServer(authServer: string) {
         await updateIssuanceConfig({
             authorizationServers: [
                 {
@@ -114,125 +101,118 @@ describe("Issuance - OpenID Federation", () => {
                 entityId: "http://localhost:3000/issuers/root",
                 trustAnchors: [
                     {
-                        entityId: trustAnchor,
-                        entityConfigurationUri: `${trustAnchor}/.well-known/openid-federation`,
+                        entityId: TRUST_ANCHOR,
+                        entityConfigurationUri: `${TRUST_ANCHOR}/.well-known/openid-federation`,
                     },
                 ],
             },
         });
+    }
 
-        const metadata = await request(app.getHttpServer())
+    function getIssuerMetadata() {
+        return request(app.getHttpServer())
             .get("/.well-known/openid-credential-issuer/issuers/root")
             .trustLocalhost()
-            .set("Accept", "application/json")
-            .expect(200);
+            .set("Accept", "application/json");
+    }
 
-        expect(metadata.body.authorization_servers).toContain(authServer);
-    });
-
-    test("issuer metadata accepts JWT entity configuration for federation verification", async () => {
-        const authServer = "https://as-fed-jwt.example.org";
-        const trustAnchor = "https://ta-fed.example.org";
-
-        const federationScope = nock(authServer)
-            .get("/.well-known/openid-federation")
-            .reply(
-                200,
-                makeUnsignedJwt({
-                    sub: authServer,
-                    authority_hints: [trustAnchor],
-                }),
-                { "content-type": "application/entity-statement+jwt" },
-            );
-
-        nock(authServer)
-            .get("/.well-known/oauth-authorization-server")
-            .reply(200, {
-                issuer: authServer,
-                authorization_endpoint: `${authServer}/authorize`,
-                token_endpoint: `${authServer}/token`,
-                jwks_uri: `${authServer}/jwks`,
-                response_types_supported: ["code"],
-                grant_types_supported: ["authorization_code"],
-                token_endpoint_auth_methods_supported: ["private_key_jwt"],
-            });
-
-        await updateIssuanceConfig({
-            authorizationServers: [
-                {
-                    id: "external-fed-auth",
-                    type: "external",
-                    issuer: authServer,
-                    label: authServer,
-                },
-            ],
-            federation: {
-                mode: FederationTrustMode.FEDERATION_ONLY,
-                entityId: "http://localhost:3000/issuers/root",
-                trustAnchors: [
-                    {
-                        entityId: trustAnchor,
-                        entityConfigurationUri: `${trustAnchor}/.well-known/openid-federation`,
-                    },
-                ],
-            },
+    async function expectNotTrusted(reason: string) {
+        const metadata = await getIssuerMetadata().expect((res) => {
+            expect([400, 500]).toContain(res.status);
         });
-
-        const metadata = await request(app.getHttpServer())
-            .get("/.well-known/openid-credential-issuer/issuers/root")
-            .trustLocalhost()
-            .set("Accept", "application/json")
-            .expect(200);
-
-        expect(metadata.body.authorization_servers).toContain(authServer);
-        expect(federationScope.isDone()).toBe(true);
-    });
-
-    test("issuer metadata fails when configured auth server is not trusted by federation", async () => {
-        const authServer = "https://as-untrusted.example.org";
-        const trustAnchor = "https://ta-fed.example.org";
-
-        nock(authServer)
-            .get("/.well-known/openid-federation")
-            .reply(200, {
-                sub: authServer,
-                authority_hints: ["https://other-anchor.example.org"],
-            });
-
-        await updateIssuanceConfig({
-            authorizationServers: [
-                {
-                    id: "external-fed-auth",
-                    type: "external",
-                    issuer: authServer,
-                    label: authServer,
-                },
-            ],
-            federation: {
-                mode: FederationTrustMode.FEDERATION_ONLY,
-                entityId: "http://localhost:3000/issuers/root",
-                trustAnchors: [
-                    {
-                        entityId: trustAnchor,
-                        entityConfigurationUri: `${trustAnchor}/.well-known/openid-federation`,
-                    },
-                ],
-            },
-        });
-
-        const metadata = await request(app.getHttpServer())
-            .get("/.well-known/openid-credential-issuer/issuers/root")
-            .trustLocalhost()
-            .set("Accept", "application/json")
-            .expect((res) => {
-                expect(res.status).not.toBe(200);
-                expect([400, 500]).toContain(res.status);
-            });
-
         const message =
             typeof metadata.body?.message === "string"
                 ? metadata.body.message
                 : JSON.stringify(metadata.body);
-        expect(message).toContain("trusted");
+        expect(message).toContain(
+            "Authorization server is not trusted by OpenID Federation policy",
+        );
+        expect(message).toContain(reason);
+    }
+
+    beforeEach(() => {
+        app.get(FederationTrustService).clearTrustCache();
+    });
+
+    test("issuer metadata includes a federated authorization server whose trust chain is valid", async () => {
+        const authServer = "https://as-fed.example.org";
+        await serveFederation({
+            trustAnchor: TRUST_ANCHOR,
+            entity: authServer,
+            metadata: { oauth_authorization_server: { issuer: authServer } },
+        });
+        serveAuthorizationServerMetadata(authServer);
+        await configureFederatedAuthorizationServer(authServer);
+
+        const metadata = await getIssuerMetadata().expect(200);
+
+        expect(metadata.body.authorization_servers).toContain(authServer);
+    });
+
+    test("issuer metadata fails for an authorization server outside the federation", async () => {
+        const authServer = "https://as-untrusted.example.org";
+        await serveFederation({
+            trustAnchor: "https://other-anchor.example.org",
+            entity: authServer,
+            metadata: { oauth_authorization_server: { issuer: authServer } },
+        });
+        await configureFederatedAuthorizationServer(authServer);
+
+        await expectNotTrusted("does not chain to a configured trust anchor");
+    });
+
+    test("issuer metadata fails for an authorization server that only names the trust anchor", async () => {
+        // Matching an authority_hint alone does not establish trust.
+        const authServer = "https://as-unlisted.example.org";
+        await serveFederation({
+            trustAnchor: TRUST_ANCHOR,
+            entity: authServer,
+            metadata: { oauth_authorization_server: { issuer: authServer } },
+            listed: false,
+        });
+        await configureFederatedAuthorizationServer(authServer);
+
+        await expectNotTrusted("status 404");
+    });
+
+    test("issuer metadata fails for an unsigned entity configuration", async () => {
+        const authServer = "https://as-unsigned.example.org";
+        const encode = (value: unknown) =>
+            Buffer.from(JSON.stringify(value)).toString("base64url");
+        nock(authServer)
+            .get("/.well-known/openid-federation")
+            .reply(
+                200,
+                `${encode({ alg: "none", typ: "entity-statement+jwt", kid: "k" })}.${encode(
+                    {
+                        iss: authServer,
+                        sub: authServer,
+                        iat: Math.floor(Date.now() / 1000),
+                        exp: Math.floor(Date.now() / 1000) + 3600,
+                        jwks: { keys: [{ kty: "EC", kid: "k" }] },
+                        authority_hints: [TRUST_ANCHOR],
+                    },
+                )}.`,
+                { "content-type": "application/entity-statement+jwt" },
+            );
+        await configureFederatedAuthorizationServer(authServer);
+
+        await expectNotTrusted(
+            "entity configuration of 'https://as-unsigned.example.org'",
+        );
+    });
+
+    test("issuer metadata fails for a federation entity without authorization server metadata", async () => {
+        const authServer = "https://as-no-metadata.example.org";
+        await serveFederation({
+            trustAnchor: TRUST_ANCHOR,
+            entity: authServer,
+            metadata: {},
+        });
+        await configureFederatedAuthorizationServer(authServer);
+
+        await expectNotTrusted(
+            "has no oauth_authorization_server or openid_provider metadata",
+        );
     });
 });

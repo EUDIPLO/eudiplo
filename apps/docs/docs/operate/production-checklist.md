@@ -90,8 +90,7 @@ again after major upgrades. Each item links to the guide that explains it.
       ([Skip flags](../reference/environment-variables.md#skip-flags)).
 - [ ] Outside the container image, for example with `node dist/main.js` from a
       source build, `NODE_ENV=production` is set. Otherwise EUDIPLO skips TLS
-      certificate checks when it fetches status lists, trust lists and
-      federation entity configurations, returns internal error messages to API
+      certificate checks when it fetches status lists and trust lists, returns internal error messages to API
       callers, and `LOG_LEVEL` defaults to `debug` instead of `warn`
       ([Environment variables](../reference/environment-variables.md#general)).
 - [ ] Issuance configurations require DPoP and wallet attestation where your use

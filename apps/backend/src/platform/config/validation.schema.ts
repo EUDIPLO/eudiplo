@@ -20,7 +20,7 @@ export const BASE_VALIDATION_SCHEMA = Joi.object({
     NODE_ENV: Joi.string()
         .optional()
         .description(
-            "`production` turns on TLS certificate checks for status list, trust list and federation fetches, hides internal error messages from API responses and makes `warn` the default `LOG_LEVEL`. The container image sets it; set it yourself when you run the backend from source in production.",
+            "`production` turns on TLS certificate checks for status list and trust list fetches (federation fetches are always checked), hides internal error messages from API responses and makes `warn` the default `LOG_LEVEL`. The container image sets it; set it yourself when you run the backend from source in production.",
         )
         .meta({ group: "general", order: 11 }),
     // Read from process.env in bootstrap.ts. No Joi default: @nestjs/config
