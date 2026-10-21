@@ -1,4 +1,4 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 
 /**
  * The current status of one credential issued in a session, as published in
@@ -28,4 +28,11 @@ export class CredentialStatusDto {
         enum: [1, 2, 4, 8],
     })
     bits!: number;
+
+    @ApiPropertyOptional({
+        description:
+            "When the status value last changed, through POST /api/session/revoke or the active-credential limit (ISO 8601). Absent if it has not changed since issuance, or only changed before this field was recorded.",
+        format: "date-time",
+    })
+    statusUpdatedAt?: string;
 }

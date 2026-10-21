@@ -1358,6 +1358,14 @@ export class StatusListService implements OnApplicationBootstrap {
                 );
             }
 
+            if ((entry.elements[index] ?? 0) !== value) {
+                await manager.update(
+                    StatusMapping,
+                    { tenantId, statusListId: listId, index },
+                    { statusUpdatedAt: new Date() },
+                );
+            }
+
             await queryRunner.commitTransaction();
             updateCommitted = true;
         } catch (error) {
@@ -1387,6 +1395,7 @@ export class StatusListService implements OnApplicationBootstrap {
                 statusListId: true,
                 index: true,
                 credentialConfigurationId: true,
+                statusUpdatedAt: true,
             },
             where: { tenantId, sessionId },
             order: {
@@ -1420,6 +1429,7 @@ export class StatusListService implements OnApplicationBootstrap {
                     index: entry.index,
                     status: list.elements[entry.index] ?? 0,
                     bits: list.bits,
+                    statusUpdatedAt: entry.statusUpdatedAt?.toISOString(),
                 },
             ];
         });

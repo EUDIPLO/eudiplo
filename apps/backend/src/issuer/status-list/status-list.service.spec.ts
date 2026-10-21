@@ -606,6 +606,75 @@ describe("StatusListService SQLite concurrency", () => {
             ]);
         });
 
+        test("records when a session's status was last changed", async () => {
+            await dataSource
+                .getRepository(StatusMapping)
+                .insert([
+                    mapping("x", "list-2", 0, "config-wide"),
+                    mapping("x", "list-1", 0, "config-narrow"),
+                    mapping("y", "list-1", 1, "config-narrow"),
+                ]);
+
+            const before = Date.now();
+            await service.updateStatus(
+                { sessionId: "x", status: 1 } as never,
+                "tenant-1",
+            );
+            const after = Date.now();
+
+            const updated = await service.getSessionStatus("tenant-1", "x");
+            expect(updated).toHaveLength(2);
+            for (const entry of updated) {
+                expect(entry.status).toBe(1);
+                const at = Date.parse(entry.statusUpdatedAt ?? "");
+                expect(at).toBeGreaterThanOrEqual(before - 1000);
+                expect(at).toBeLessThanOrEqual(after + 1000);
+            }
+            const [untouched] = await service.getSessionStatus("tenant-1", "y");
+            expect(untouched.statusUpdatedAt).toBeUndefined();
+        });
+
+        test("keeps the time of the last change for updates that change nothing or are rejected", async () => {
+            await dataSource
+                .getRepository(StatusMapping)
+                .insert([mapping("x", "list-1", 0, "config-narrow")]);
+            const statusUpdatedAt = async () =>
+                (await service.getSessionStatus("tenant-1", "x"))[0]
+                    .statusUpdatedAt;
+
+            await service.updateStatus(
+                { sessionId: "x", status: 0 } as never,
+                "tenant-1",
+            );
+            expect(await statusUpdatedAt()).toBeUndefined();
+
+            vi.useFakeTimers({ toFake: ["Date"] });
+            try {
+                vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+                await service.updateStatus(
+                    { sessionId: "x", status: 1 } as never,
+                    "tenant-1",
+                );
+                vi.setSystemTime(new Date("2026-01-02T00:00:00Z"));
+                await service.updateStatus(
+                    { sessionId: "x", status: 1 } as never,
+                    "tenant-1",
+                );
+            } finally {
+                vi.useRealTimers();
+            }
+            const revokedAt = await statusUpdatedAt();
+            expect(revokedAt).toBe("2026-01-01T00:00:00.000Z");
+
+            await expect(
+                service.updateStatus(
+                    { sessionId: "x", status: 0 } as never,
+                    "tenant-1",
+                ),
+            ).rejects.toMatchObject({ status: 409 });
+            expect(await statusUpdatedAt()).toBe(revokedAt);
+        });
+
         test("reads no status for a session without status entries or of another tenant", async () => {
             await dataSource
                 .getRepository(StatusMapping)

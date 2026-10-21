@@ -71,12 +71,13 @@ curl "$EUDIPLO_URL/api/session/a6318799-dff4-4b60-9d1d-58703611bd23/credential-s
     "statusListId": "8f1c…",
     "index": 42,
     "status": 1,
-    "bits": 2
+    "bits": 2,
+    "statusUpdatedAt": "2026-10-21T09:12:44.000Z"
   }
 ]
 ```
 
-There is one entry per issued credential that carries a status, so a batch issuance returns several entries for the same type. The list is empty when no credential of the session carries a status. Allowed roles: `issuance:offer`, `issuance:manage`, `credentials:status` or `sessions:read`.
+There is one entry per issued credential that carries a status, so a batch issuance returns several entries for the same type. The list is empty when no credential of the session carries a status. `statusUpdatedAt` is when the status value last changed, through `POST /api/session/revoke` or the active-credential limit. An update that sets the value the credential already has, or is rejected, does not change it. It is absent if the status has not changed since issuance, or only changed before this field was recorded. Allowed roles: `issuance:offer`, `issuance:manage`, `credentials:status` or `sessions:read`.
 
 Verifiers resolve `status_list.uri` and read the bit at `idx`. Status list tokens are cached:
 

@@ -159,6 +159,21 @@ describe("StatusListService active-credential limit", () => {
         expect(await statusAt(second.status.status_list.idx)).toBe(
             STATUS_VALID,
         );
+        const mappings = dataSource.getRepository(StatusMapping);
+        expect(
+            (
+                await mappings.findOneByOrFail({
+                    index: first.status.status_list.idx,
+                })
+            ).statusUpdatedAt,
+        ).toBeInstanceOf(Date);
+        expect(
+            (
+                await mappings.findOneByOrFail({
+                    index: second.status.status_list.idx,
+                })
+            ).statusUpdatedAt,
+        ).toBeNull();
 
         // Still exactly one slot for the subject.
         expect(

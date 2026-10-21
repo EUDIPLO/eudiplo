@@ -67,3 +67,4 @@ export { AddRelyingPartyContactToRegistrarConfig1785200000000 } from "./17852000
 export { BackfillIssuanceWalletNonce1785300000000 } from "./1785300000000-BackfillIssuanceWalletNonce.js";
 export { SeparatePresentationWalletReferences1785400000000 } from "./1785400000000-SeparatePresentationWalletReferences.js";
 export { AddFederationTrustAnchor1785500000000 } from "./1785500000000-AddFederationTrustAnchor.js";
+export { AddStatusUpdatedAtToStatusMapping1785600000000 } from "./1785600000000-AddStatusUpdatedAtToStatusMapping.js";

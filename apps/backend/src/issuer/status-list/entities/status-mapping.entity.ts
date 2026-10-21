@@ -63,4 +63,7 @@ export class StatusMapping {
     @Column({ type: "varchar", nullable: true })
     @Index("IDX_status_mapping_issuance_set")
     issuanceSetId?: string | null;
+
+    @Column({ nullable: true })
+    statusUpdatedAt?: Date;
 }
