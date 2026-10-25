@@ -162,9 +162,6 @@ importers:
       '@noble/hashes':
         specifier: ^2.4.0
         version: 2.4.0
-      '@openid-federation/core':
-        specifier: workspace:*
-        version: link:../../vendor/openid-federation-core
       '@openid4vc/oauth2':
         specifier: 0.7.0
         version: 0.7.0
@@ -225,6 +222,9 @@ importers:
       '@owf/mdoc':
         specifier: ^0.8.1
         version: 0.8.2
+      '@owf/openid-federation':
+        specifier: ^0.6.0
+        version: 0.6.0
       '@owf/token-status-list':
         specifier: ^0.4.1
         version: 0.4.2
@@ -743,15 +743,6 @@ importers:
       vitest:
         specifier: 5.0.4
         version: 5.0.4(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(@vitest/coverage-v8@5.0.4)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
-
-  vendor/openid-federation-core:
-    dependencies:
-      buffer:
-        specifier: ^6.0.3
-        version: 6.0.3
-      zod:
-        specifier: ^4.6.7
-        version: 4.6.7
 
 packages:
 
@@ -4750,8 +4741,14 @@ packages:
   '@owf/identity-common@0.4.2':
     resolution: {integrity: sha512-z+iFDpBYo2Z2uVnE5UytKlAHPaKHReijHaVXl45Yb9LbeR12hGg5CdfzfY0Tfm5m/Dr8iClfAiFizA9JYuUJ0Q==}
 
+  '@owf/identity-common@0.6.0':
+    resolution: {integrity: sha512-ZWtjvU9nWKuOhxjNIEYM3jBAA3WY6xFZ5D/m22HZHhqETQtHOiH07EGLEOMstYT/rhkpzCdzR325XgLrV7vHBQ==}
+
   '@owf/mdoc@0.8.2':
     resolution: {integrity: sha512-Mmn8a7Xy2duwoX5x3LeNkzOeOIjrjInygfPWi43Xy6DnNQprXSymB1KTwHWDGvBoTcopg7APDL41oTgSWri0ZA==}
+
+  '@owf/openid-federation@0.6.0':
+    resolution: {integrity: sha512-NuuphIVgHIWx76kvy1JL9suKyhWFfvj/O8p3D2QCjmLoepADiaUp3/lRj0hREfGclJXb4b03yGcQNvquaa59CA==}
 
   '@owf/token-status-list@0.4.2':
     resolution: {integrity: sha512-vBIpSRvfgRTWq1pjs7ERafdEjKpkRRcPdMRpKM1BEsKp1mwB6p6cinf95oWOgXKWq8s3l0I4yTzZ1SdIM8/z0Q==}
@@ -19552,11 +19549,18 @@ snapshots:
 
   '@owf/identity-common@0.4.2': {}
 
+  '@owf/identity-common@0.6.0': {}
+
   '@owf/mdoc@0.8.2':
     dependencies:
       '@owf/cose': 0.4.2
       '@owf/identity-common': 0.4.2
       '@owf/token-status-list': 0.4.2
+      zod: 4.6.7
+
+  '@owf/openid-federation@0.6.0':
+    dependencies:
+      '@owf/identity-common': 0.6.0
       zod: 4.6.7
 
   '@owf/token-status-list@0.4.2':

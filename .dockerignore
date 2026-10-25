@@ -5,8 +5,6 @@ node_modules/
 # Build outputs and temporary files
 dist/
 **/dist/
-# Vendored libraries ship their build output
-!vendor/*/dist/
 tmp/
 .cache/
 .cache_ggshield

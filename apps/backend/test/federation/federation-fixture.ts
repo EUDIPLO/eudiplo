@@ -2,13 +2,13 @@ import {
     createEntityConfiguration,
     createEntityStatement,
     type JsonWebKey,
-} from "@openid-federation/core";
+} from "@owf/openid-federation";
 import { exportJWK, generateKeyPair } from "jose";
 import nock from "nock";
 
 /**
  * A signed OpenID Federation served through nock, built with
- * `@openid-federation/core`: entity configurations at
+ * `@owf/openid-federation`: entity configurations at
  * `{id}/.well-known/openid-federation` and subordinate statements at
  * `{id}/fetch?sub=...`.
  */

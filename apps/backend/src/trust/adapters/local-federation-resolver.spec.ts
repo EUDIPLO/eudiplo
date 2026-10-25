@@ -3,7 +3,7 @@ import {
     createEntityStatement,
     type JsonWebKey,
     type SignCallback,
-} from "@openid-federation/core";
+} from "@owf/openid-federation";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { OutboundFinalResponse } from "../../webhook/outbound-url-policy.service.js";
 import {
@@ -229,6 +229,99 @@ describe("LocalFederationResolver", () => {
         );
     });
 
+    it("keeps the query of a superior's fetch endpoint", async () => {
+        // Section 5.1.1 allows a query component in federation_fetch_endpoint
+        const fetchEndpoint = `${INTERMEDIATE}/fetch?realm=a`;
+        await federation.entity(INTERMEDIATE, intermediateKey, {
+            authority_hints: [TA],
+            metadata: {
+                federation_entity: { federation_fetch_endpoint: fetchEndpoint },
+            },
+        });
+        const sub = new URLSearchParams({ sub: LEAF });
+        const statement = federation.responses.get(
+            `${INTERMEDIATE}/fetch?${sub}`,
+        )!;
+        federation.responses.delete(`${INTERMEDIATE}/fetch?${sub}`);
+        federation.serve(`${fetchEndpoint}&${sub}`, statement.body);
+
+        await expect(resolver.resolveEntity(request())).resolves.toMatchObject({
+            trustAnchor: TA,
+        });
+    });
+
+    it("rejects a chain with naming_constraints, which are not evaluated", async () => {
+        // The leaf satisfies the constraint; it is rejected all the same
+        await federation.statement(TA, taKey, INTERMEDIATE, intermediateKey, {
+            constraints: {
+                naming_constraints: { permitted: [".example.org"] },
+            },
+        });
+
+        await expect(resolver.resolveEntity(request())).rejects.toMatchObject({
+            failure: "untrusted",
+            message: expect.stringContaining(
+                "sets naming_constraints, which are not supported",
+            ),
+        });
+    });
+
+    it("applies max_path_length", async () => {
+        await federation.statement(TA, taKey, INTERMEDIATE, intermediateKey, {
+            constraints: { max_path_length: 1 },
+        });
+        await expect(resolver.resolveEntity(request())).resolves.toMatchObject({
+            trustAnchor: TA,
+        });
+
+        await federation.statement(TA, taKey, INTERMEDIATE, intermediateKey, {
+            constraints: { max_path_length: 0 },
+        });
+        await expect(resolver.resolveEntity(request())).rejects.toMatchObject({
+            failure: "untrusted",
+            message: expect.stringContaining("allows 0 intermediates"),
+        });
+    });
+
+    it("keeps the metadata types that allowed_entity_types allows", async () => {
+        await federation.statement(TA, taKey, INTERMEDIATE, intermediateKey, {
+            constraints: { allowed_entity_types: ["openid_credential_issuer"] },
+        });
+
+        await expect(resolver.resolveEntity(request())).resolves.toMatchObject({
+            metadata: {
+                openid_credential_issuer: { jwks: { keys: [credentialKey] } },
+            },
+        });
+    });
+
+    it("drops the metadata types that allowed_entity_types excludes", async () => {
+        await federation.statement(TA, taKey, INTERMEDIATE, intermediateKey, {
+            constraints: { allowed_entity_types: ["openid_relying_party"] },
+        });
+
+        await expect(resolver.resolveEntity(request())).rejects.toMatchObject({
+            failure: "untrusted",
+            message: expect.stringContaining("has no openid_credential_issuer"),
+        });
+    });
+
+    it("rejects critical claims it does not understand", async () => {
+        await federation.entity(LEAF, leafKey, {
+            authority_hints: [INTERMEDIATE],
+            crit: ["unknown_claim"],
+            unknown_claim: true,
+            metadata: {
+                openid_credential_issuer: { jwks: { keys: [credentialKey] } },
+            },
+        });
+
+        await expect(resolver.resolveEntity(request())).rejects.toMatchObject({
+            failure: "untrusted",
+            message: expect.stringContaining("not understood: unknown_claim"),
+        });
+    });
+
     it("rejects an unknown trust anchor", async () => {
         await expect(
             resolver.resolveEntity(
@@ -346,6 +439,34 @@ describe("LocalFederationResolver", () => {
         await expect(resolver.resolveEntity(request())).rejects.toMatchObject({
             failure: "untrusted",
             message: expect.stringContaining("has expired"),
+        });
+    });
+
+    it("rejects an entity configuration issued in the future", async () => {
+        await federation.entity(LEAF, leafKey, {
+            authority_hints: [INTERMEDIATE],
+            iat: now() + DAY,
+        });
+
+        await expect(resolver.resolveEntity(request())).rejects.toMatchObject({
+            failure: "untrusted",
+            message: expect.stringContaining("has an iat in the future"),
+        });
+    });
+
+    it("rejects an entity configuration served with another content type", async () => {
+        const configuration = federation.responses.get(
+            `${LEAF}/.well-known/openid-federation`,
+        )!;
+        federation.serve(
+            `${LEAF}/.well-known/openid-federation`,
+            configuration.body,
+            "application/json",
+        );
+
+        await expect(resolver.resolveEntity(request())).rejects.toMatchObject({
+            failure: "untrusted",
+            message: expect.stringContaining("content-type"),
         });
     });
 
