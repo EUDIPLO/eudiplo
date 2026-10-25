@@ -350,7 +350,51 @@ describe('DashboardService', () => {
     await service.getCounters();
 
     expect(service.canManageKeyChains).toBe(true);
-    expect([...requests].sort()).toEqual(['/api/key-chain', '/api/key-chain/providers/health']);
+    expect([...requests].sort()).toEqual([
+      '/api/key-chain',
+      '/api/key-chain/access/default',
+      '/api/key-chain/providers/health',
+    ]);
+  });
+
+  it("checks only the tenant's default access key chain once one is set", async () => {
+    roles = ['keys:manage'];
+    responses['/api/key-chain'] = [accessKeyChain(365, 'valid'), accessKeyChain(-1, 'chosen')];
+    responses['/api/key-chain/access/default'] = {
+      defaultAccessKeyChainId: 'chosen',
+      keyChainId: 'chosen',
+    };
+
+    await service.getCounters();
+
+    expect(service.accessKeyChains).toBe(2);
+    expect(service.accessKeyChainId).toBe('chosen');
+    expect(service.hasUsableAccessCertificate).toBe(false);
+    expect(service.accessCertificateStatus).toBe('expired');
+  });
+
+  it('checks every access key chain when the default cannot be loaded', async () => {
+    roles = ['keys:manage'];
+    responses['/api/key-chain'] = [accessKeyChain(-1, 'expired'), accessKeyChain(365, 'valid')];
+    failures['/api/key-chain/access/default'] = 500;
+
+    await service.getCounters();
+
+    expect(service.hasUsableAccessCertificate).toBe(true);
+    expect(service.accessKeyChainId).toBe('valid');
+  });
+
+  it('reports a missing certificate when the default access key chain is gone', async () => {
+    roles = ['keys:manage'];
+    responses['/api/key-chain'] = [accessKeyChain(365, 'valid')];
+    responses['/api/key-chain/access/default'] = { defaultAccessKeyChainId: 'gone' };
+
+    await service.getCounters();
+
+    expect(service.accessCertificateStatus).toBe('missing');
+    expect(service.defaultAccessKeyChainMissing).toBe(true);
+    // The fix is choosing another default, not creating a key chain.
+    expect(service.accessCertificateRoute).toEqual(['/keys']);
   });
 
   it('sends key chain managers without an access key chain to create one', async () => {

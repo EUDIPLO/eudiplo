@@ -8,7 +8,7 @@ Configuration files name their format in `$schema`, for example `https://eudiplo
 
 ## Format versions
 
-Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eudiplo-config-format/src/config-format.ts`); it is independent of the application version. EUDIPLO 9.0 introduced the first bumps; `IssuanceConfig` v3 followed in 9.1, `CredentialConfig` v2, `KeyChain` v2, `Client` v2, `KmsConfig` v2, `RegistrarConfig` v2, `IssuanceConfig` v4 and v5 and `KeyChain` v3 in 10.0:
+Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eudiplo-config-format/src/config-format.ts`); it is independent of the application version. EUDIPLO 9.0 introduced the first bumps; `IssuanceConfig` v3 followed in 9.1, `CredentialConfig` v2, `KeyChain` v2, `Client` v2, `KmsConfig` v2, `RegistrarConfig` v2, `Tenant` v2, `IssuanceConfig` v4 and v5 and `KeyChain` v3 in 10.0:
 
 | Resource | Version | Change |
 | --- | --- | --- |
@@ -22,6 +22,7 @@ Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eud
 | `Client` | v2 | The roles `audit:read`, `sessions:read`, `credentials:status` and `keys:manage`. A v1 file is a valid v2 file. |
 | `KmsConfig` | v2 | Optional `algorithms` and `defaultAlgorithm` on providers. A v1 file is a valid v2 file; a bare `kms.json` with either field on a provider is read as v2 (`bareFileVersion`). |
 | `RegistrarConfig` | v2 | Optional `relyingPartyContact`. A v1 file is a valid v2 file; a bare `registrar.json` with the field is read as v2 (`bareFileVersion`). |
+| `Tenant` | v2 | Optional `defaultAccessKeyChainId`. A v1 file is a valid v2 file; a bare `info.json` with the field is read as v2 (`bareFileVersion`). |
 | `PresentationConfig` | v2 | `registration_cert.body.provided_attestations` is replaced by the registrar's `provides_attestations` (string array). The v1 → v2 step drops the old field with a warning. |
 | `PresentationConfig` | v3 | DCQL claim `values` accept integers and booleans besides strings and must be non-empty. A v2 file is a valid v3 file unless it has an empty `values` array. |
 | All other resources | v1 | |

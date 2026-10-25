@@ -37,6 +37,7 @@ export class ConfigResourceRouteService {
 
         const singletonRoutes: Array<[RegExp, ConfigResourceKind, string]> = [
             [/\/key-chain\/providers\/config\/?$/, "KmsConfig", "kms"],
+            [/\/key-chain\/access\/default\/?$/, "Tenant", "tenant"],
             [/\/issuer\/config\/?$/, "IssuanceConfig", "issuance"],
             [/\/registrar\/config\/?$/, "RegistrarConfig", "registrar"],
             [/\/session-config\/?$/, "Tenant", "tenant"],

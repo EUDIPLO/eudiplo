@@ -17,6 +17,7 @@ import {
     resolveAuditActor,
 } from "../../audit-log/audit-log-context.util.js";
 import { EncryptionService } from "../../crypto/encryption/encryption.service.js";
+import { KeyChainService } from "../../crypto/key/key-chain.service.js";
 import { ConfigImportModeService } from "../../platform/config-import/config-import-mode.service.js";
 import { ConfigImportOrchestratorService } from "../../platform/config-import/config-import-orchestrator.service.js";
 import { ConfigMigrationService } from "../../platform/config-portability/config-migration.service.js";
@@ -40,10 +41,27 @@ import type {
     UpdateTenant,
 } from "./schemas/create-tenant.schema.js";
 import { ImportTenantSchema } from "./schemas/create-tenant.schema.js";
+/**
+ * The tenant fields of `info.json` that are written before the other files
+ * are imported. The default access key chain names a key chain those files
+ * may create, so {@link TenantService.finishTenantSetup} applies it.
+ */
+function withoutDefaultAccessKeyChain<
+    T extends { defaultAccessKeyChainId?: string | null },
+>(spec: T): Omit<T, "defaultAccessKeyChainId"> {
+    const { defaultAccessKeyChainId: _applied, ...fields } = spec;
+    return fields;
+}
+
 @Injectable()
 export class TenantService implements OnApplicationBootstrap {
     private readonly logger = new Logger(TenantService.name);
     private readonly tenantTotal: UpDownCounter;
+    /**
+     * Default access key chains named in `info.json`, applied once the other
+     * files of the tenant are imported, since they may create the key chain.
+     */
+    private readonly pendingDefaultAccessKeyChains = new Map<string, string>();
 
     constructor(
         @Inject(CLIENTS_PROVIDER) private readonly clients: ClientsProvider,
@@ -59,6 +77,7 @@ export class TenantService implements OnApplicationBootstrap {
         private readonly configOwnershipService: ConfigOwnershipService,
         private readonly configMigrationService: ConfigMigrationService,
         private readonly configImportModeService: ConfigImportModeService,
+        private readonly keyChainService: KeyChainService,
     ) {
         this.tenantTotal = metricService.getUpDownCounter("tenant_total", {
             description: "Total number of tenants",
@@ -68,6 +87,7 @@ export class TenantService implements OnApplicationBootstrap {
         this.configImportOrchestrator.registerTenantSetup(
             "tenants",
             (tenantId) => this.setupTenant(tenantId),
+            (tenantId) => this.finishTenantSetup(tenantId),
         );
     }
 
@@ -84,6 +104,7 @@ export class TenantService implements OnApplicationBootstrap {
      */
     async setupTenant(tenantId: string): Promise<boolean> {
         const configPath = this.configService.getOrThrow("CONFIG_FOLDER");
+        this.pendingDefaultAccessKeyChains.delete(tenantId);
 
         // Check if tenant already exists
         const existing = await this.tenantRepository.findActive(tenantId);
@@ -111,10 +132,36 @@ export class TenantService implements OnApplicationBootstrap {
                                 `Tenant configuration generation ${generation} is older than stored generation ${stored.generation}`,
                             );
                         }
-                        await this.tenantRepository.update(
-                            tenantId,
-                            validationResult.data,
-                        );
+                        // An info.json without it removes the default, and one
+                        // that names a stored access key chain sets it, before
+                        // the other files are imported, so they may delete the
+                        // former default. A key chain the files create first
+                        // is set afterwards.
+                        const { defaultAccessKeyChainId } =
+                            validationResult.data;
+                        const applyNow =
+                            !defaultAccessKeyChainId ||
+                            (await this.isAccessKeyChain(
+                                tenantId,
+                                defaultAccessKeyChainId,
+                            ));
+                        await this.tenantRepository.update(tenantId, {
+                            ...withoutDefaultAccessKeyChain(
+                                validationResult.data,
+                            ),
+                            ...(applyNow
+                                ? {
+                                      defaultAccessKeyChainId:
+                                          defaultAccessKeyChainId ?? null,
+                                  }
+                                : {}),
+                        });
+                        if (!applyNow) {
+                            this.pendingDefaultAccessKeyChains.set(
+                                tenantId,
+                                defaultAccessKeyChainId!,
+                            );
+                        }
                         await this.configOwnershipService.markApplied({
                             tenantId,
                             kind: "Tenant",
@@ -169,9 +216,15 @@ export class TenantService implements OnApplicationBootstrap {
 
             // ID is always derived from folder name, not from config file
             await this.createTenant({
-                ...validationResult.data,
+                ...withoutDefaultAccessKeyChain(validationResult.data),
                 id: tenantId,
             } as CreateTenant);
+            if (validationResult.data.defaultAccessKeyChainId) {
+                this.pendingDefaultAccessKeyChains.set(
+                    tenantId,
+                    validationResult.data.defaultAccessKeyChainId,
+                );
+            }
             await this.configOwnershipService.markApplied({
                 tenantId,
                 kind: "Tenant",
@@ -190,6 +243,45 @@ export class TenantService implements OnApplicationBootstrap {
             );
             return false;
         }
+    }
+
+    private async isAccessKeyChain(
+        tenantId: string,
+        id: string,
+    ): Promise<boolean> {
+        try {
+            await this.keyChainService.assertAccessKeyChain(tenantId, id);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Applies the default access key chain that `info.json` names, once the
+     * other files of the tenant are imported. The folder import does not plan
+     * `info.json`, so the key chain is checked here; a key chain that is
+     * missing or has another usage type fails the tenant's import and leaves
+     * the stored default unchanged.
+     */
+    async finishTenantSetup(tenantId: string): Promise<void> {
+        const defaultAccessKeyChainId =
+            this.pendingDefaultAccessKeyChains.get(tenantId);
+        if (!defaultAccessKeyChainId) return;
+        this.pendingDefaultAccessKeyChains.delete(tenantId);
+        try {
+            await this.keyChainService.assertAccessKeyChain(
+                tenantId,
+                defaultAccessKeyChainId,
+            );
+        } catch (error) {
+            throw new Error(
+                `defaultAccessKeyChainId in info.json is not applied: ${(error as Error).message}`,
+            );
+        }
+        await this.tenantRepository.update(tenantId, {
+            defaultAccessKeyChainId,
+        });
     }
 
     private upgradeTenantConfig(raw: string): {
@@ -322,6 +414,12 @@ export class TenantService implements OnApplicationBootstrap {
         requestMeta?: AuditLogRequestMeta,
     ): Promise<TenantData> {
         const existing = await this.getTenant(id);
+        if (data.defaultAccessKeyChainId) {
+            await this.keyChainService.assertAccessKeyChain(
+                id,
+                data.defaultAccessKeyChainId,
+            );
+        }
         await this.tenantRepository.update(id, data);
         const updated = await this.getTenant(id);
 
@@ -338,6 +436,26 @@ export class TenantService implements OnApplicationBootstrap {
         }
 
         return updated;
+    }
+
+    /**
+     * Sets the tenant's default access key chain, or with null removes it,
+     * and returns the setting with the key chain now used where no
+     * configuration names one.
+     */
+    async setDefaultAccessKeyChain(
+        tenantId: string,
+        defaultAccessKeyChainId: string | null,
+        actorToken: TokenPayload,
+        requestMeta: AuditLogRequestMeta,
+    ): Promise<{ defaultAccessKeyChainId?: string; keyChainId?: string }> {
+        await this.updateTenant(
+            tenantId,
+            { defaultAccessKeyChainId },
+            actorToken,
+            requestMeta,
+        );
+        return this.keyChainService.getDefaultAccessKeyChain(tenantId);
     }
 
     /**
@@ -377,6 +495,7 @@ export class TenantService implements OnApplicationBootstrap {
             status: tenant.status,
             sessionConfig: tenant.sessionConfig,
             statusListConfig: tenant.statusListConfig,
+            defaultAccessKeyChainId: tenant.defaultAccessKeyChainId,
         };
     }
 
@@ -386,6 +505,7 @@ export class TenantService implements OnApplicationBootstrap {
             "description",
             "sessionConfig",
             "statusListConfig",
+            "defaultAccessKeyChainId",
         ]);
     }
 }

@@ -83,6 +83,42 @@ describe('Presentation configuration flow', () => {
     });
   }
 
+  describe("access hint with the tenant's default access key chain", () => {
+    const withCertificate = { id: 'chosen', activeCertificate: { pem: 'pem' } } as any;
+    const other = { id: 'other', activeCertificate: { pem: 'pem' } } as any;
+
+    function setUp(keyChains: any[], defaultAccess: Record<string, string>) {
+      component.keyChains = keyChains;
+      component.keyChainsLoaded = true;
+      (component as unknown as { defaultAccess: unknown }).defaultAccess = defaultAccess;
+    }
+
+    it('accepts a default with a certificate', () => {
+      setUp([withCertificate], { defaultAccessKeyChainId: 'chosen', keyChainId: 'chosen' });
+      expect(component.accessSetupMessage).toBeNull();
+    });
+
+    it('names a default that no longer exists, although another key chain has a certificate', () => {
+      setUp([other], { defaultAccessKeyChainId: 'gone' });
+      expect(component.accessSetupMessage).toContain(
+        'The default access key chain of the tenant does not exist'
+      );
+    });
+
+    it('names a default without certificate', () => {
+      setUp([other, { id: 'chosen' }], { defaultAccessKeyChainId: 'chosen', keyChainId: 'chosen' });
+      expect(component.accessSetupMessage).toContain(
+        'The default access key chain has no active access certificate'
+      );
+    });
+
+    it('checks the selected access key chain instead of the default', () => {
+      setUp([other], { defaultAccessKeyChainId: 'gone' });
+      component.form.patchValue({ accessKeyChainId: 'other' });
+      expect(component.accessSetupMessage).toBeNull();
+    });
+  });
+
   it('renders the guided creation flow and validates each step', async () => {
     fixture.detectChanges();
     await fixture.whenStable();

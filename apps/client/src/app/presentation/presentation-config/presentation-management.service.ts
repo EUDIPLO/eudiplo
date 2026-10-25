@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import {
+  defaultAccessKeyChainControllerGet,
   keyChainControllerGetAll,
   KeyChainResponseDto,
   presentationManagementControllerGetConfiguration,
@@ -99,6 +100,32 @@ export class PresentationManagementService {
         };
       }
 
+      return { ready: true };
+    }
+
+    // Requests without their own access key chain use the tenant's default when one is set.
+    const defaultAccess = await defaultAccessKeyChainControllerGet().then(
+      ({ data }) => data,
+      () => undefined
+    );
+    if (defaultAccess?.defaultAccessKeyChainId) {
+      const defaultKeyChain = accessKeyChains.find(
+        (keyChain) => keyChain.id === defaultAccess.keyChainId
+      );
+      if (!defaultKeyChain) {
+        return {
+          ready: false,
+          reason:
+            'The default access key chain of the tenant does not exist. Choose another one under Key Management.',
+        };
+      }
+      if (!hasActiveCertificate(defaultKeyChain)) {
+        return {
+          ready: false,
+          reason:
+            'The default access key chain has no active access certificate. Create or refresh the access certificate first.',
+        };
+      }
       return { ready: true };
     }
 

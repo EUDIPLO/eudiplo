@@ -104,9 +104,11 @@ describe("OID4VP request object of an existing session (e2e)", () => {
             .replaceAll(/\s/g, "");
     }
 
-    test("signs the request object with the key chain of the client_id after the default changed", async () => {
-        const pinned = await createAccessKeyChain("standalone");
-
+    /** Starts the presentation step of an interactive authorization. */
+    async function startPresentation(): Promise<{
+        initial: request.Response;
+        params: URLSearchParams;
+    }> {
         const offer = await api()
             .post("/issuer/offer")
             .trustLocalhost()
@@ -129,20 +131,33 @@ describe("OID4VP request object of an existing session (e2e)", () => {
             })
             .expect(200);
         expect(initial.body.type).toBe("openid4vp_presentation");
-        const params = new URLSearchParams(
-            initial.body.openid4vp_request.request,
-        );
+        return {
+            initial,
+            params: new URLSearchParams(initial.body.openid4vp_request.request),
+        };
+    }
+
+    const x509Hash = (leaf: string) =>
+        `x509_hash:${createHash("sha256")
+            .update(Buffer.from(leaf, "base64"))
+            .digest("base64url")}`;
+
+    /** IDs of the access key chains the first test creates. */
+    let pinned: string;
+    let internalChain: string;
+
+    test("signs the request object with the key chain of the client_id after the default changed", async () => {
+        pinned = await createAccessKeyChain("standalone");
+
+        const { initial, params } = await startPresentation();
         const clientId = params.get("client_id")!;
         const pinnedLeaf = await leafOf(pinned);
-        expect(clientId).toBe(
-            `x509_hash:${createHash("sha256")
-                .update(Buffer.from(pinnedLeaf, "base64"))
-                .digest("base64url")}`,
-        );
+        expect(clientId).toBe(x509Hash(pinnedLeaf));
 
         // An internal chain outranks the self-signed key chain, so it is the
         // tenant's default access key chain from now on.
         const newDefault = await createAccessKeyChain("internalChain");
+        internalChain = newDefault;
         expect(await leafOf(newDefault)).not.toBe(pinnedLeaf);
 
         const requestUri = new URL(params.get("request_uri")!);
@@ -163,5 +178,39 @@ describe("OID4VP request object of an existing session (e2e)", () => {
             responseMode: { type: "direct_post" },
         });
         expect(resolved.authorizationRequestPayload.client_id).toBe(clientId);
+    });
+
+    test("signs with the tenant's default access key chain over the one picked by rule", async () => {
+        // The internal chain outranks it, so only the setting makes it the default.
+        await api()
+            .put("/key-chain/access/default")
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({ defaultAccessKeyChainId: pinned })
+            .expect(200);
+        try {
+            const pinnedLeaf = await leafOf(pinned);
+            const { params } = await startPresentation();
+            expect(params.get("client_id")).toBe(x509Hash(pinnedLeaf));
+
+            const fetched = await api()
+                .get(new URL(params.get("request_uri")!).pathname)
+                .trustLocalhost()
+                .expect(200);
+            expect(decodeProtectedHeader(fetched.text).x5c?.[0]).toBe(
+                pinnedLeaf,
+            );
+        } finally {
+            await api()
+                .put("/key-chain/access/default")
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({ defaultAccessKeyChainId: null })
+                .expect(200);
+        }
+
+        // Without the setting, the rule picks the internal chain again.
+        const { params } = await startPresentation();
+        expect(params.get("client_id")).toBe(
+            x509Hash(await leafOf(internalChain)),
+        );
     });
 });

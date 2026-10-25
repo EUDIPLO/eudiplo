@@ -30,6 +30,14 @@ describe("ConfigResourceRouteService", () => {
         });
     });
 
+    it("treats the default access key chain as the tenant settings", () => {
+        expect(service.match("PUT", "/api/key-chain/access/default")).toEqual({
+            kind: "Tenant",
+            id: "tenant",
+            create: false,
+        });
+    });
+
     it("does not confuse key import with a key named import", () => {
         expect(
             service.match("POST", "/api/key-chain/import", { id: "issuer" }),

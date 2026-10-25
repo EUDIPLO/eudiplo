@@ -9,6 +9,9 @@ const RoleSchema = z.enum(
 
 const NonBlankStringSchema = z.string().trim().min(1);
 
+const DEFAULT_ACCESS_KEY_CHAIN_DESCRIPTION =
+    "ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.";
+
 export const CreateTenantSchema = z
     .strictObject({
         id: NonBlankStringSchema.describe("Unique tenant identifier."),
@@ -38,7 +41,14 @@ export const ImportTenantSchema = CreateTenantSchema.pick({
     description: true,
     sessionConfig: true,
     statusListConfig: true,
-}).describe("Payload used when importing tenant metadata from config files.");
+})
+    .extend({
+        // Key chains are imported after the tenant, so only a file names one.
+        defaultAccessKeyChainId: NonBlankStringSchema.optional().describe(
+            DEFAULT_ACCESS_KEY_CHAIN_DESCRIPTION,
+        ),
+    })
+    .describe("Payload used when importing tenant metadata from config files.");
 
 const TenantConfigMetadataSchema = z
     .object({
@@ -50,7 +60,7 @@ const TenantConfigMetadataSchema = z
 export const TenantConfigFileSchema = z.union([
     z.strictObject({
         $schema: z.literal(
-            "https://eudiplo.dev/schemas/v1/TenantConfigFile.schema.json",
+            "https://eudiplo.dev/schemas/v2/TenantConfigFile.schema.json",
         ),
         metadata: TenantConfigMetadataSchema,
         spec: ImportTenantSchema,
@@ -74,6 +84,11 @@ export const UpdateTenantSchema = z
         statusListConfig: StatusListConfigSchema.optional().describe(
             "Optional tenant-specific status list defaults.",
         ),
+        defaultAccessKeyChainId: NonBlankStringSchema.nullable()
+            .optional()
+            .describe(
+                `${DEFAULT_ACCESS_KEY_CHAIN_DESCRIPTION} Omit to keep the current value or set to null to remove it.`,
+            ),
     })
     .describe("Payload for partially updating tenant metadata.");
 

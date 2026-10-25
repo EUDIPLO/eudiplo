@@ -34,6 +34,11 @@ const privateJwk = {
 
 const rootJwk = { ...privateJwk, kid: "key-root" };
 
+/** Tenant repository whose tenant names `id` as its default access key chain. */
+const tenantWithDefault = (id: string | null) => ({
+    findOne: vi.fn(async () => ({ id: "tenant", defaultAccessKeyChainId: id })),
+});
+
 function keyChain(overrides: Partial<KeyChainEntity>): KeyChainEntity {
     return Object.assign(new KeyChainEntity(), {
         id: "key",
@@ -43,6 +48,7 @@ function keyChain(overrides: Partial<KeyChainEntity>): KeyChainEntity {
         activeJwk: privateJwk,
         activeCertificate: "",
         rotationEnabled: false,
+        createdAt: new Date(0),
         ...overrides,
     });
 }
@@ -429,6 +435,7 @@ describe("KeyChainService default access key chain", () => {
         });
         const rows = [selfSigned, enrolled];
         const service = Object.create(KeyChainService.prototype) as any;
+        service.tenantRepository = tenantWithDefault(null);
         service.keyChainRepository = {
             find: vi.fn(async () => rows),
             findOne: vi.fn(
@@ -452,6 +459,7 @@ describe("KeyChainService default access key chain", () => {
 
     it("throws not found without an access key chain", async () => {
         const service = Object.create(KeyChainService.prototype) as any;
+        service.tenantRepository = tenantWithDefault(null);
         service.keyChainRepository = { find: vi.fn(async () => []) };
 
         await expect(
@@ -460,6 +468,164 @@ describe("KeyChainService default access key chain", () => {
                 KeyUsageType.Access,
             ),
         ).rejects.toThrow("No key chain found with usage type 'access'");
+    });
+
+    /** Access key chains of the tenant, found by id and usage type. */
+    const accessRows = (rows: ReturnType<typeof keyChain>[]) => ({
+        find: vi.fn(async () => rows),
+        findOne: vi.fn(
+            async ({ where }) =>
+                rows.find(
+                    (row) =>
+                        row.id === where.id &&
+                        (where.usageType === undefined ||
+                            row.usageType === where.usageType),
+                ) ?? null,
+        ),
+    });
+
+    it("uses the tenant's default access key chain over the ranking", async () => {
+        const enrolled = keyChain({
+            id: "enrolled",
+            usageType: KeyUsageType.Access,
+            activeCertificate: await issuedCertificate(),
+        });
+        const chosen = keyChain({
+            id: "chosen",
+            usageType: KeyUsageType.Access,
+            activeCertificate: "self-signed",
+        });
+        const service = Object.create(KeyChainService.prototype) as any;
+        service.tenantRepository = tenantWithDefault("chosen");
+        service.keyChainRepository = accessRows([enrolled, chosen]);
+
+        const found = await (service as KeyChainService).findByUsageType(
+            "tenant",
+            KeyUsageType.Access,
+        );
+
+        expect(found.id).toBe("chosen");
+        expect(service.keyChainRepository.find).not.toHaveBeenCalled();
+    });
+
+    it("keeps a named key chain over the tenant's default", async () => {
+        const named = keyChain({ id: "named", usageType: KeyUsageType.Access });
+        const chosen = keyChain({
+            id: "chosen",
+            usageType: KeyUsageType.Access,
+        });
+        const service = Object.create(KeyChainService.prototype) as any;
+        service.tenantRepository = tenantWithDefault("chosen");
+        service.keyChainRepository = accessRows([named, chosen]);
+
+        const found = await (service as KeyChainService).findByUsageType(
+            "tenant",
+            KeyUsageType.Access,
+            "named",
+        );
+
+        expect(found.id).toBe("named");
+        expect(service.tenantRepository.findOne).not.toHaveBeenCalled();
+    });
+
+    it("fails when the tenant's default names a key chain of another usage type", async () => {
+        const chosen = keyChain({
+            id: "chosen",
+            usageType: KeyUsageType.Attestation,
+        });
+        const other = keyChain({ id: "other", usageType: KeyUsageType.Access });
+        const service = Object.create(KeyChainService.prototype) as any;
+        service.tenantRepository = tenantWithDefault("chosen");
+        service.keyChainRepository = accessRows([chosen, other]);
+        service.logger = { warn: vi.fn() };
+
+        await expect(
+            (service as KeyChainService).findByUsageType(
+                "tenant",
+                KeyUsageType.Access,
+            ),
+        ).rejects.toThrow(
+            "The tenant's default access key chain is not available.",
+        );
+    });
+
+    it("fails instead of falling back when the tenant's default access key chain is gone", async () => {
+        const other = keyChain({ id: "other", usageType: KeyUsageType.Access });
+        const service = Object.create(KeyChainService.prototype) as any;
+        service.tenantRepository = tenantWithDefault("gone");
+        service.keyChainRepository = accessRows([other]);
+        service.logger = { warn: vi.fn() };
+
+        await expect(
+            (service as KeyChainService).findByUsageType(
+                "tenant",
+                KeyUsageType.Access,
+            ),
+        ).rejects.toThrow(
+            "The tenant's default access key chain is not available.",
+        );
+        expect(service.logger.warn).toHaveBeenCalledWith(
+            expect.stringContaining('default access key chain "gone"'),
+        );
+    });
+
+    it("reports the setting and the key chain it resolves to", async () => {
+        const enrolled = keyChain({
+            id: "enrolled",
+            usageType: KeyUsageType.Access,
+            activeCertificate: await issuedCertificate(),
+        });
+        const chosen = keyChain({
+            id: "chosen",
+            usageType: KeyUsageType.Access,
+        });
+        const service = Object.create(KeyChainService.prototype) as any;
+        service.keyChainRepository = accessRows([enrolled, chosen]);
+
+        service.tenantRepository = tenantWithDefault(null);
+        await expect(
+            (service as KeyChainService).getDefaultAccessKeyChain("tenant"),
+        ).resolves.toEqual({ keyChainId: "enrolled" });
+
+        service.tenantRepository = tenantWithDefault("chosen");
+        await expect(
+            (service as KeyChainService).getDefaultAccessKeyChain("tenant"),
+        ).resolves.toEqual({
+            defaultAccessKeyChainId: "chosen",
+            keyChainId: "chosen",
+        });
+
+        service.tenantRepository = tenantWithDefault("gone");
+        await expect(
+            (service as KeyChainService).getDefaultAccessKeyChain("tenant"),
+        ).resolves.toEqual({ defaultAccessKeyChainId: "gone" });
+    });
+
+    it("accepts only access key chains of the tenant as the default", async () => {
+        const service = Object.create(KeyChainService.prototype) as any;
+        service.keyChainRepository = accessRows([
+            keyChain({ id: "access", usageType: KeyUsageType.Access }),
+            keyChain({
+                id: "attestation",
+                usageType: KeyUsageType.Attestation,
+            }),
+        ]);
+
+        await expect(
+            (service as KeyChainService).assertAccessKeyChain(
+                "tenant",
+                "access",
+            ),
+        ).resolves.toBeUndefined();
+        await expect(
+            (service as KeyChainService).assertAccessKeyChain(
+                "tenant",
+                "attestation",
+            ),
+        ).rejects.toThrow('has usage type "attestation"');
+        await expect(
+            (service as KeyChainService).assertAccessKeyChain("tenant", "gone"),
+        ).rejects.toThrow('Key chain "gone" does not exist in this tenant.');
     });
 });
 
