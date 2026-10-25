@@ -1192,6 +1192,25 @@ describe("Migration tests", () => {
                 `INSERT INTO "status_mapping" ("tenantId", "sessionId", "statusListId", "list", "index", "credentialConfigurationId") VALUES ('t', 's', 'list-1', 'https://issuer.example/list-1', 0, 'c')`,
             ],
             row: `"sessionId" = 's'`,
+            afterUp: async (dataSource) => {
+                const mappings = dataSource.getRepository("StatusMapping");
+                const changedAt = new Date("2026-03-01T10:15:30.250Z");
+                await mappings.update(
+                    { sessionId: "s" },
+                    { statusUpdatedAt: changedAt },
+                );
+                expect(
+                    (await mappings.findOneByOrFail({ sessionId: "s" }))
+                        .statusUpdatedAt,
+                ).toEqual(changedAt);
+                // Stored as epoch milliseconds, independent of the process
+                // time zone.
+                const [row] = await dataSource.query(
+                    `SELECT "statusUpdatedAt" FROM "status_mapping" WHERE "sessionId" = 's'`,
+                );
+                expect(row.statusUpdatedAt).not.toBeInstanceOf(Date);
+                expect(Number(row.statusUpdatedAt)).toBe(changedAt.getTime());
+            },
         },
     );
 
@@ -2179,6 +2198,8 @@ function describeNullableColumn(
         entities: () => Promise<Function[]>;
         seed: string[];
         row: string;
+        /** Extra checks on the migrated schema, before `down()`. */
+        afterUp?: (dataSource: DataSource) => Promise<void>;
     },
 ) {
     const { table, column } = options;
@@ -2240,6 +2261,7 @@ function describeNullableColumn(
             if (dataSource.options.type === "postgres") {
                 expect(await drift(dataSource)).toEqual(driftAfterSynchronize);
             }
+            await options.afterUp?.(dataSource);
 
             await migration.down(queryRunner);
             expect(

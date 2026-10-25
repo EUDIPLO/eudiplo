@@ -19,10 +19,9 @@ export class AddStatusUpdatedAtToStatusMapping1785600000000
                 "status_mapping",
                 new TableColumn({
                     name: "statusUpdatedAt",
-                    type:
-                        queryRunner.connection.options.type === "postgres"
-                            ? "timestamp"
-                            : "datetime",
+                    // Epoch milliseconds, like the entity's transformer:
+                    // PostgreSQL reads `timestamp` in the process time zone.
+                    type: "bigint",
                     isNullable: true,
                 }),
             );
