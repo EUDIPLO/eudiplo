@@ -15,13 +15,27 @@ export function defaultAccessChip(
   info: DefaultAccessKeyChainDto | undefined,
   keyChainId: string
 ): { label: string; tooltip: string } | undefined {
-  if (!info || info.keyChainId !== keyChainId) return undefined;
-  return info.defaultAccessKeyChainId === keyChainId
+  if (info?.keyChainId !== keyChainId) return undefined;
+  return info?.defaultAccessKeyChainId === keyChainId
     ? { label: 'Default', tooltip: `Default access key chain of this tenant. ${USED_FOR}` }
     : {
         label: 'Default by rule',
         tooltip: `No default access key chain is set, so EUDIPLO picks this one by rule. ${USED_FOR}`,
       };
+}
+
+/**
+ * The access key chains that requests without their own access key chain may use: only the
+ * tenant's default once one is set, else all of them. `defaultMissing` is true when the default
+ * names a key chain that is not among them.
+ */
+export function accessKeyChainsInUse<T extends { id: string }>(
+  accessKeyChains: T[],
+  info: DefaultAccessKeyChainDto | undefined
+): { keyChains: T[]; defaultMissing: boolean } {
+  if (!info?.defaultAccessKeyChainId) return { keyChains: accessKeyChains, defaultMissing: false };
+  const keyChains = accessKeyChains.filter((keyChain) => keyChain.id === info.keyChainId);
+  return { keyChains, defaultMissing: keyChains.length === 0 };
 }
 
 /** True when the tenant names the key chain as its default access key chain. */

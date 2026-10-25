@@ -21,6 +21,7 @@ import {
 import { JwtService } from '../services/jwt.service';
 import { SESSION_READER_ROLES } from '../session-management/session-roles';
 import { KEY_CHAIN_ROLES } from '../key-management/key-chain.service';
+import { accessKeyChainsInUse } from '../key-management/default-access-key-chain';
 import { apiErrorDetail, groupUnreachable, hasHttpStatus } from '../utils/error-message';
 import { lastDays, lastHours } from '../utils/local-day';
 
@@ -773,11 +774,11 @@ export class DashboardService {
     defaultAccess?: DefaultAccessKeyChainDto
   ): void {
     this.accessKeyChains = accessKeyChains.length;
-    const used = defaultAccess?.defaultAccessKeyChainId
-      ? accessKeyChains.filter((kc) => kc.id === defaultAccess.keyChainId)
-      : accessKeyChains;
-    this.defaultAccessKeyChainMissing =
-      !!defaultAccess?.defaultAccessKeyChainId && used.length === 0;
+    const { keyChains: used, defaultMissing } = accessKeyChainsInUse(
+      accessKeyChains,
+      defaultAccess
+    );
+    this.defaultAccessKeyChainMissing = defaultMissing;
     this.accessKeyChainId = used[0]?.id ?? null;
 
     const now = Date.now();

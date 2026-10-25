@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  accessKeyChainsInUse,
   defaultAccessChangedMessage,
   defaultAccessChip,
   defaultAccessToggleLabel,
@@ -43,5 +44,21 @@ describe('default access key chain', () => {
     expect(defaultAccessChangedMessage({ keyChainId: 'a' })).toBe(
       'Default access key chain removed; EUDIPLO picks one by rule'
     );
+  });
+
+  it('counts only the default once one is set', () => {
+    const chains = [{ id: 'a' }, { id: 'b' }];
+
+    expect(accessKeyChainsInUse(chains, undefined)).toEqual({
+      keyChains: chains,
+      defaultMissing: false,
+    });
+    expect(accessKeyChainsInUse(chains, { defaultAccessKeyChainId: 'b', keyChainId: 'b' })).toEqual(
+      { keyChains: [{ id: 'b' }], defaultMissing: false }
+    );
+    expect(accessKeyChainsInUse(chains, { defaultAccessKeyChainId: 'gone' })).toEqual({
+      keyChains: [],
+      defaultMissing: true,
+    });
   });
 });
