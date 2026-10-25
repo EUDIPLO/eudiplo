@@ -55,6 +55,24 @@ describe('groupCredentialStatus', () => {
     expect(group).toMatchObject({ canRevoke: true, canSuspend: false, canReinstate: false });
   });
 
+  it('takes the latest recorded change of a configuration', () => {
+    const [pid, mdl] = groupCredentialStatus([
+      { ...entry('pid', 2, 2, 0), statusUpdatedAt: '2026-10-25T09:00:00.000Z' },
+      entry('pid', 0, 2, 1),
+      { ...entry('pid', 1, 2, 2), statusUpdatedAt: '2026-10-25T14:03:00.000Z' },
+      { ...entry('pid', 2, 2, 3), statusUpdatedAt: '2026-10-24T18:00:00.000Z' },
+      entry('mdl', 0, 1),
+    ]);
+
+    expect(pid.lastChange).toEqual({
+      at: '2026-10-25T14:03:00.000Z',
+      status: 1,
+      statusListId: 'list-2',
+      index: 2,
+    });
+    expect(mdl.lastChange).toBeUndefined();
+  });
+
   it('offers nothing when every credential is revoked', () => {
     const [group] = groupCredentialStatus([entry('pid', 1)]);
 

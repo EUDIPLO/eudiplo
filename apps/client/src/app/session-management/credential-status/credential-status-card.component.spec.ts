@@ -12,6 +12,7 @@ describe('CredentialStatusCardComponent', () => {
   let sessions: {
     getCredentialStatus: ReturnType<typeof vi.fn>;
     updateCredentialStatus: ReturnType<typeof vi.fn>;
+    formatDate: SessionManagementService['formatDate'];
   };
   let dialog: { open: ReturnType<typeof vi.fn> };
   let snackBar: { open: ReturnType<typeof vi.fn> };
@@ -43,6 +44,7 @@ describe('CredentialStatusCardComponent', () => {
     sessions = {
       getCredentialStatus: vi.fn(),
       updateCredentialStatus: vi.fn().mockResolvedValue(undefined),
+      formatDate: SessionManagementService.prototype.formatDate,
     };
     dialog = { open: vi.fn().mockReturnValue({ afterClosed: () => of(true) }) };
     snackBar = { open: vi.fn() };
@@ -68,6 +70,28 @@ describe('CredentialStatusCardComponent', () => {
 
     expect(element.textContent).toContain('1 valid');
     expect(buttons(element).map((text) => text.replace(/^\w+\s+/, ''))).toEqual(['Revoke']);
+  });
+
+  it('shows when the status of a configuration last changed', async () => {
+    const changedAt = '2026-10-25T14:03:00.000Z';
+    const element = await render([{ ...valid, status: 1, statusUpdatedAt: changedAt }]);
+    const shown = new Date(changedAt).toLocaleString();
+
+    expect(element.querySelector('.last-changed')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      `Last change: list-1 #4 revoked, ${shown}`
+    );
+    expect(fixture.componentInstance.entryTooltip(fixture.componentInstance.groups[0])).toBe(
+      `list-1 #4: revoked (changed ${shown})`
+    );
+  });
+
+  it('shows no change time for a status that never changed', async () => {
+    const element = await render([valid]);
+
+    expect(element.querySelector('.last-changed')).toBeNull();
+    expect(fixture.componentInstance.entryTooltip(fixture.componentInstance.groups[0])).toBe(
+      'list-1 #4: valid'
+    );
   });
 
   it('shows the status without changes to a caller that may only read it', async () => {

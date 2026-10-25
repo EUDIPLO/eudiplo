@@ -84,9 +84,19 @@ export class CredentialStatusCardComponent implements OnChanges {
     );
   }
 
+  /** Formatted like the other dates on the session page. */
+  formatDate(value: string): string {
+    return this.sessions.formatDate(value);
+  }
+
   entryTooltip(group: CredentialStatusGroup): string {
     return group.entries
-      .map((entry) => `${entry.statusListId} #${entry.index}: ${statusLabel(entry.status)}`)
+      .map((entry) => {
+        const line = `${entry.statusListId} #${entry.index}: ${statusLabel(entry.status)}`;
+        return entry.statusUpdatedAt
+          ? `${line} (changed ${this.formatDate(entry.statusUpdatedAt)})`
+          : line;
+      })
       .join('\n');
   }
 
