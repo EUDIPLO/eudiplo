@@ -17,6 +17,8 @@ export interface CredentialStatusGroup {
   entries: CredentialStatusDto[];
   /** Number of entries per status value, in ascending order of the value. */
   counts: { status: number; count: number }[];
+  /** The most recent recorded change of an entry; absent while none recorded one. */
+  lastChange?: { at: string; status: number; statusListId: string; index: number };
   /** Some entry is not revoked yet. */
   canRevoke: boolean;
   /** No entry is revoked, every list has at least 2 bits and some entry is not suspended. */
@@ -60,6 +62,7 @@ export function groupCredentialStatus(entries: CredentialStatusDto[]): Credentia
       credentialConfigurationId,
       entries: group,
       counts: [...counts].sort(([a], [b]) => a - b).map(([status, count]) => ({ status, count })),
+      lastChange: latestChange(group),
       canRevoke: group.some((entry) => entry.status !== STATUS_REVOKED),
       canSuspend:
         !anyRevoked &&
@@ -68,4 +71,14 @@ export function groupCredentialStatus(entries: CredentialStatusDto[]): Credentia
       canReinstate: !anyRevoked && group.some((entry) => entry.status !== STATUS_VALID),
     };
   });
+}
+
+function latestChange(entries: CredentialStatusDto[]): CredentialStatusGroup['lastChange'] {
+  let latest: CredentialStatusGroup['lastChange'];
+  for (const { statusUpdatedAt, status, statusListId, index } of entries) {
+    if (statusUpdatedAt && (!latest || Date.parse(statusUpdatedAt) > Date.parse(latest.at))) {
+      latest = { at: statusUpdatedAt, status, statusListId, index };
+    }
+  }
+  return latest;
 }
