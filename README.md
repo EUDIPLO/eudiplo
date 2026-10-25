@@ -195,4 +195,4 @@ EUDIPLO is a project of [LF Decentralized Trust](https://www.lfdecentralizedtrus
 and follows the
 [LF Decentralized Trust Code of Conduct](https://lf-decentralized-trust.github.io/governance/governing-documents/code-of-conduct/).
 
-The Project Charter for EUDIPLO can be found [here](<https://github.com/openwallet-foundation/technical-project-charters/blob/main/EUDIPLO%20Technical%20Charter%20(FINAL%2008.11.25).pdf>).
+EUDIPLO is governed by its [technical charter](https://github.com/EUDIPLO/.github/blob/main/CHARTER.pdf). See [GOVERNANCE.md](https://github.com/EUDIPLO/.github/blob/main/GOVERNANCE.md) for how decisions are made.
