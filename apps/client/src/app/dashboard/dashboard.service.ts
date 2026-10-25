@@ -124,6 +124,21 @@ export interface DashboardWarning {
 }
 
 /** Network errors, timeouts, rate limits and server errors can pass on a retry. */
+/** The key chain whose still valid certificate expires first, or undefined if none is valid. */
+function nearestValidCertificate(
+  keyChains: KeyChainResponseDto[],
+  now: number
+): { id: string; expiresAt: number } | undefined {
+  let nearest: { id: string; expiresAt: number } | undefined;
+  for (const keyChain of keyChains) {
+    const notAfter = keyChain.activeCertificate?.notAfter;
+    const expiresAt = notAfter ? Date.parse(notAfter) : Number.NaN;
+    if (Number.isNaN(expiresAt) || expiresAt <= now) continue;
+    if (!nearest || expiresAt < nearest.expiresAt) nearest = { id: keyChain.id, expiresAt };
+  }
+  return nearest;
+}
+
 function isRetryable(error: unknown): boolean {
   const status = (error as { statusCode?: unknown } | null | undefined)?.statusCode;
   return typeof status !== 'number' || status >= 500 || status === 408 || status === 429;
@@ -794,28 +809,10 @@ export class DashboardService {
       return;
     }
 
-    let nearestValidExpiry: number | null = null;
-    let hasNonExpired = false;
+    const nearest = nearestValidCertificate(withCertificate, now);
+    this.hasUsableAccessCertificate = nearest !== undefined;
 
-    for (const keyChain of withCertificate) {
-      const notAfter = keyChain.activeCertificate?.notAfter;
-      const expiryMs = notAfter ? Date.parse(notAfter) : Number.NaN;
-      if (Number.isNaN(expiryMs)) {
-        continue;
-      }
-
-      if (expiryMs > now) {
-        hasNonExpired = true;
-        if (nearestValidExpiry === null || expiryMs < nearestValidExpiry) {
-          nearestValidExpiry = expiryMs;
-          this.accessKeyChainId = keyChain.id;
-        }
-      }
-    }
-
-    this.hasUsableAccessCertificate = hasNonExpired;
-
-    if (!hasNonExpired) {
+    if (!nearest) {
       this.accessKeyChainId = withCertificate[0].id;
       this.accessCertificateStatus = 'expired';
       this.accessCertificateExpiresAt = null;
@@ -823,18 +820,14 @@ export class DashboardService {
       return;
     }
 
-    this.accessCertificateExpiresAt =
-      nearestValidExpiry !== null ? new Date(nearestValidExpiry).toISOString() : null;
+    this.accessKeyChainId = nearest.id;
+    this.accessCertificateExpiresAt = new Date(nearest.expiresAt).toISOString();
+    this.accessCertificateDaysUntilExpiry = Math.max(
+      0,
+      Math.ceil((nearest.expiresAt - now) / (24 * 60 * 60 * 1000))
+    );
 
-    this.accessCertificateDaysUntilExpiry =
-      nearestValidExpiry !== null
-        ? Math.max(0, Math.ceil((nearestValidExpiry - now) / (24 * 60 * 60 * 1000)))
-        : null;
-
-    if (
-      nearestValidExpiry !== null &&
-      nearestValidExpiry - now <= this.accessCertificateExpiringSoonDays * 24 * 60 * 60 * 1000
-    ) {
+    if (nearest.expiresAt - now <= this.accessCertificateExpiringSoonDays * 24 * 60 * 60 * 1000) {
       this.accessCertificateStatus = 'expiring';
       return;
     }
