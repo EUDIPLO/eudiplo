@@ -1,4 +1,4 @@
-import { createEntityConfiguration } from "@openid-federation/core";
+import { createEntityConfiguration } from "@owf/openid-federation";
 import { toPublicJwk } from "../../crypto/key/domain/public-jwk.js";
 import type { KeyChainService } from "../../crypto/key/key-chain.service.js";
 import { KeyUsageType } from "../../crypto/key/types/key-usage-type.js";

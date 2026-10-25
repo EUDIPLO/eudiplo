@@ -1,8 +1,6 @@
 packages:
   - apps/*
   - packages/*
-  # Built libraries vendored until their upstream release (see each README.md)
-  - vendor/*
 
 publicHoistPattern:
   - '*'

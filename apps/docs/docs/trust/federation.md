@@ -19,7 +19,7 @@ An entity is not trusted because its entity configuration names a trust anchor i
 
 Protocol keys come from the resolved metadata, never from the federation keys of the entity configuration: the key that signs a credential is looked up by `kid` in `metadata.openid_credential_issuer.jwks`.
 
-Resolution uses [`@openid-federation/core`](https://github.com/openwallet-foundation-labs/openid-federation-ts). Not supported:
+Resolution uses [`@owf/openid-federation`](https://github.com/openwallet-foundation-labs/identity-common-ts/tree/main/packages/openid-federation). Not supported:
 
 - Chains with `naming_constraints` are rejected, as the constraint is not evaluated.
 - Trust marks are not verified, and they do not decide trust.

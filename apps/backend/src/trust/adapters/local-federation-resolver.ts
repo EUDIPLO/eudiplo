@@ -4,7 +4,7 @@ import {
     resolveTrustChainsWithFailures,
     type TrustChain,
     type VerifyCallback,
-} from "@openid-federation/core";
+} from "@owf/openid-federation";
 import { compactVerify, importJWK, type JWK } from "jose";
 import { FEDERATION_ALGORITHMS } from "../domain/federation-statement-signature.js";
 import {
@@ -46,7 +46,7 @@ const DEFAULT_LIMITS: FederationTraversalLimits = {
 class FederationFetchFailed extends Error {}
 
 /**
- * Resolves trust chains with `@openid-federation/core`. Every request goes
+ * Resolves trust chains with `@owf/openid-federation`. Every request goes
  * through {@link TrustFetchService}, so the outbound URL policy applies to
  * the URLs entity configurations name, and TLS certificates are verified.
  */

@@ -10,9 +10,6 @@
   "ignoreUnresolved": [
     "tslib"
   ],
-  "ignoreWorkspaces": [
-    "vendor/*"
-  ],
   "workspaces": {
     ".": {
       "entry": [
