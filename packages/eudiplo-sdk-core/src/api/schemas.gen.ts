@@ -9773,6 +9773,11 @@ export const CredentialStatusDtoSchema = {
                 4,
                 8
             ]
+        },
+        statusUpdatedAt: {
+            format: 'date-time',
+            type: 'string',
+            description: 'When the status value last changed, through POST /api/session/revoke or when activeCredentials revokes a previous credential (ISO 8601). Absent if it has not changed since issuance, or only changed before this field was recorded.'
         }
     },
     required: [

@@ -4594,6 +4594,10 @@ export type CredentialStatusDto = {
      * Bits per entry of the status list. Suspension (2) needs at least 2.
      */
     bits: 1 | 2 | 4 | 8;
+    /**
+     * When the status value last changed, through POST /api/session/revoke or when activeCredentials revokes a previous credential (ISO 8601). Absent if it has not changed since issuance, or only changed before this field was recorded.
+     */
+    statusUpdatedAt?: string;
 };
 
 export type StatusUpdateDto = {

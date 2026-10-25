@@ -1,5 +1,6 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne, Unique } from "typeorm";
 import { TenantEntity } from "../../../auth/tenant/entities/tenant.entity.js";
+import { epochMilliseconds } from "../../../database/epoch-milliseconds.transformer.js";
 import { StatusListEntity } from "./status-list.entity.js";
 
 @Entity()
@@ -63,4 +64,15 @@ export class StatusMapping {
     @Column({ type: "varchar", nullable: true })
     @Index("IDX_status_mapping_issuance_set")
     issuanceSetId?: string | null;
+
+    /**
+     * When the status value at `index` last changed. Null if it has not
+     * changed since issuance, or only changed before this was recorded.
+     */
+    @Column({
+        type: "bigint",
+        nullable: true,
+        transformer: epochMilliseconds,
+    })
+    statusUpdatedAt?: Date | null;
 }

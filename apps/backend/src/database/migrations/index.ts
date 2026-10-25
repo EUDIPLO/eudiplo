@@ -68,3 +68,4 @@ export { BackfillIssuanceWalletNonce1785300000000 } from "./1785300000000-Backfi
 export { SeparatePresentationWalletReferences1785400000000 } from "./1785400000000-SeparatePresentationWalletReferences.js";
 export { AddFederationTrustAnchor1785500000000 } from "./1785500000000-AddFederationTrustAnchor.js";
 export { AddDefaultAccessKeyChainIdToTenant1785600000000 } from "./1785600000000-AddDefaultAccessKeyChainIdToTenant.js";
+export { AddStatusUpdatedAtToStatusMapping1785700000000 } from "./1785700000000-AddStatusUpdatedAtToStatusMapping.js";

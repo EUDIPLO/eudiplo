@@ -23,6 +23,7 @@ import { BackfillIssuanceWalletNonce1785300000000 } from "../src/database/migrat
 import { SeparatePresentationWalletReferences1785400000000 } from "../src/database/migrations/1785400000000-SeparatePresentationWalletReferences.js";
 import { AddFederationTrustAnchor1785500000000 } from "../src/database/migrations/1785500000000-AddFederationTrustAnchor.js";
 import { AddDefaultAccessKeyChainIdToTenant1785600000000 } from "../src/database/migrations/1785600000000-AddDefaultAccessKeyChainIdToTenant.js";
+import { AddStatusUpdatedAtToStatusMapping1785700000000 } from "../src/database/migrations/1785700000000-AddStatusUpdatedAtToStatusMapping.js";
 import { describeWithContainers } from "./container-runtime.js";
 import {
     addTokensValidAfterContract,
@@ -1157,6 +1158,63 @@ describe("Migration tests", () => {
         "accessKeyChainId",
     );
 
+    describeNullableColumn(
+        "AddStatusUpdatedAtToStatusMapping1785700000000",
+        new AddStatusUpdatedAtToStatusMapping1785700000000(),
+        {
+            table: "status_mapping",
+            column: "statusUpdatedAt",
+            entities: async () => {
+                const [
+                    { StatusMapping },
+                    { StatusListEntity },
+                    { TenantEntity },
+                    { ClientEntity },
+                ] = await Promise.all([
+                    import(
+                        "../src/issuer/status-list/entities/status-mapping.entity.js"
+                    ),
+                    import(
+                        "../src/issuer/status-list/entities/status-list.entity.js"
+                    ),
+                    import("../src/auth/tenant/entities/tenant.entity.js"),
+                    import("../src/auth/client/entities/client.entity.js"),
+                ]);
+                return [
+                    StatusMapping,
+                    StatusListEntity,
+                    TenantEntity,
+                    ClientEntity,
+                ];
+            },
+            seed: [
+                `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't')`,
+                `INSERT INTO "status_list_entity" ("id", "tenantId", "elements", "stack", "bits", "version") VALUES ('list-1', 't', '[1]', '[]', 1, 1)`,
+                `INSERT INTO "status_mapping" ("tenantId", "sessionId", "statusListId", "list", "index", "credentialConfigurationId") VALUES ('t', 's', 'list-1', 'https://issuer.example/list-1', 0, 'c')`,
+            ],
+            row: `"sessionId" = 's'`,
+            afterUp: async (dataSource) => {
+                const mappings = dataSource.getRepository("StatusMapping");
+                const changedAt = new Date("2026-03-01T10:15:30.250Z");
+                await mappings.update(
+                    { sessionId: "s" },
+                    { statusUpdatedAt: changedAt },
+                );
+                expect(
+                    (await mappings.findOneByOrFail({ sessionId: "s" }))
+                        .statusUpdatedAt,
+                ).toEqual(changedAt);
+                // Stored as epoch milliseconds, independent of the process
+                // time zone.
+                const [row] = await dataSource.query(
+                    `SELECT "statusUpdatedAt" FROM "status_mapping" WHERE "sessionId" = 's'`,
+                );
+                expect(row.statusUpdatedAt).not.toBeInstanceOf(Date);
+                expect(Number(row.statusUpdatedAt)).toBe(changedAt.getTime());
+            },
+        },
+    );
+
     describeNullableSessionColumn(
         "AddCancelReasonToSession1785100000000",
         new AddCancelReasonToSession1785100000000(),
@@ -2249,18 +2307,11 @@ function describeNullableSessionColumn(
     migration: MigrationInterface,
     column: string,
 ) {
-    describe(name, () => {
-        const sessionId = "00000000-0000-4000-8000-000000000001";
-
-        /** Session schema from the entities, then the column removed again. */
-        async function sessionSchemaBefore(
-            options:
-                | { type: "better-sqlite3"; database: string }
-                | { type: "postgres"; url: string },
-        ): Promise<{
-            dataSource: DataSource;
-            driftAfterSynchronize: string[];
-        }> {
+    const sessionId = "00000000-0000-4000-8000-000000000001";
+    describeNullableColumn(name, migration, {
+        table: "session",
+        column,
+        entities: async () => {
             const [
                 { Session },
                 { SessionLogEntry },
@@ -2272,14 +2323,42 @@ function describeNullableSessionColumn(
                 import("../src/auth/tenant/entities/tenant.entity.js"),
                 import("../src/auth/client/entities/client.entity.js"),
             ]);
+            return [Session, SessionLogEntry, TenantEntity, ClientEntity];
+        },
+        seed: [
+            `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't')`,
+            `INSERT INTO "session" ("id", "tenantId") VALUES ('${sessionId}', 't')`,
+        ],
+        row: `"id" = '${sessionId}'`,
+    });
+}
+
+function describeNullableColumn(
+    name: string,
+    migration: MigrationInterface,
+    options: {
+        table: string;
+        column: string;
+        entities: () => Promise<Function[]>;
+        seed: string[];
+        row: string;
+        /** Extra checks on the migrated schema, before `down()`. */
+        afterUp?: (dataSource: DataSource) => Promise<void>;
+    },
+) {
+    const { table, column } = options;
+    describe(name, () => {
+        async function schemaBefore(
+            dataSourceOptions:
+                | { type: "better-sqlite3"; database: string }
+                | { type: "postgres"; url: string },
+        ): Promise<{
+            dataSource: DataSource;
+            driftAfterSynchronize: string[];
+        }> {
             const dataSource = new DataSource({
-                ...options,
-                entities: [
-                    Session,
-                    SessionLogEntry,
-                    TenantEntity,
-                    ClientEntity,
-                ],
+                ...dataSourceOptions,
+                entities: await options.entities(),
                 synchronize: true,
                 logging: false,
             });
@@ -2289,12 +2368,9 @@ function describeNullableSessionColumn(
             const queryRunner = dataSource.createQueryRunner();
             await migration.down(queryRunner);
             await queryRunner.release();
-            await dataSource.query(
-                `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't')`,
-            );
-            await dataSource.query(
-                `INSERT INTO "session" ("id", "tenantId") VALUES ('${sessionId}', 't')`,
-            );
+            for (const query of options.seed) {
+                await dataSource.query(query);
+            }
             return { dataSource, driftAfterSynchronize };
         }
 
@@ -2309,21 +2385,19 @@ function describeNullableSessionColumn(
         ) {
             const queryRunner = dataSource.createQueryRunner();
             expect(
-                (await queryRunner.getTable("session"))?.findColumnByName(
-                    column,
-                ),
+                (await queryRunner.getTable(table))?.findColumnByName(column),
             ).toBeUndefined();
 
             await migration.up(queryRunner);
             await migration.up(queryRunner);
 
-            const added = (
-                await queryRunner.getTable("session")
-            )?.findColumnByName(column);
+            const added = (await queryRunner.getTable(table))?.findColumnByName(
+                column,
+            );
             expect(added?.isNullable).toBe(true);
             await expect(
                 dataSource.query(
-                    `SELECT "${column}" FROM "session" WHERE "id" = '${sessionId}'`,
+                    `SELECT "${column}" FROM "${table}" WHERE ${options.row}`,
                 ),
             ).resolves.toEqual([{ [column]: null }]);
             // SQLite always rebuilds the table here; only the column order
@@ -2331,12 +2405,11 @@ function describeNullableSessionColumn(
             if (dataSource.options.type === "postgres") {
                 expect(await drift(dataSource)).toEqual(driftAfterSynchronize);
             }
+            await options.afterUp?.(dataSource);
 
             await migration.down(queryRunner);
             expect(
-                (await queryRunner.getTable("session"))?.findColumnByName(
-                    column,
-                ),
+                (await queryRunner.getTable(table))?.findColumnByName(column),
             ).toBeUndefined();
             await queryRunner.release();
         }
@@ -2348,11 +2421,10 @@ function describeNullableSessionColumn(
 
             beforeAll(async () => {
                 tmpDir = mkdtempSync(join(tmpdir(), "eudiplo-migration-test-"));
-                ({ dataSource, driftAfterSynchronize } =
-                    await sessionSchemaBefore({
-                        type: "better-sqlite3",
-                        database: join(tmpDir, "test.db"),
-                    }));
+                ({ dataSource, driftAfterSynchronize } = await schemaBefore({
+                    type: "better-sqlite3",
+                    database: join(tmpDir, "test.db"),
+                }));
             }, 30_000);
 
             afterAll(async () => {
@@ -2377,11 +2449,10 @@ function describeNullableSessionColumn(
                 postgresContainer = await new PostgreSqlContainer(
                     "postgres:alpine",
                 ).start();
-                ({ dataSource, driftAfterSynchronize } =
-                    await sessionSchemaBefore({
-                        type: "postgres",
-                        url: postgresContainer.getConnectionUri(),
-                    }));
+                ({ dataSource, driftAfterSynchronize } = await schemaBefore({
+                    type: "postgres",
+                    url: postgresContainer.getConnectionUri(),
+                }));
             }, 60_000);
 
             afterAll(async () => {

@@ -185,23 +185,26 @@ describe("Status List - status updates", () => {
             ),
         );
 
+        const before = Date.now();
         await updateStatus({
             sessionId,
             credentialConfigurationId: WIDE_CONFIG,
             status: 2,
         }).expect(204);
+        const after = Date.now();
 
-        expect(await readStatus()).toContainEqual(
-            expect.objectContaining({
-                credentialConfigurationId: WIDE_CONFIG,
-                status: 2,
-            }),
+        const entries: Record<string, unknown>[] = await readStatus();
+        const wideEntry = entries.find(
+            (entry) => entry.credentialConfigurationId === WIDE_CONFIG,
         );
-        expect(await readStatus()).toContainEqual(
-            expect.objectContaining({
-                credentialConfigurationId: NARROW_CONFIG,
-                status: 0,
-            }),
+        const narrowEntry = entries.find(
+            (entry) => entry.credentialConfigurationId === NARROW_CONFIG,
         );
+        expect(wideEntry).toMatchObject({ status: 2 });
+        const changedAt = Date.parse(wideEntry?.statusUpdatedAt as string);
+        expect(changedAt).toBeGreaterThanOrEqual(before - 1000);
+        expect(changedAt).toBeLessThanOrEqual(after + 1000);
+        expect(narrowEntry).toMatchObject({ status: 0 });
+        expect(narrowEntry).not.toHaveProperty("statusUpdatedAt");
     });
 });

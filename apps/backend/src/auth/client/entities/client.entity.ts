@@ -3,27 +3,10 @@ import {
     ApiProperty,
     ApiPropertyOptional,
 } from "@nestjs/swagger";
-import {
-    Column,
-    Entity,
-    ManyToOne,
-    PrimaryColumn,
-    type ValueTransformer,
-} from "typeorm";
+import { Column, Entity, ManyToOne, PrimaryColumn } from "typeorm";
+import { epochMilliseconds } from "../../../database/epoch-milliseconds.transformer.js";
 import { Role } from "../../roles/role.enum.js";
 import { TenantEntity } from "../../tenant/entities/tenant.entity.js";
-
-/**
- * Stores an instant as milliseconds since the epoch. Tokens carry the exact
- * value, so it must read back the same in every process: `timestamp` columns
- * are read in the process time zone on PostgreSQL.
- */
-const epochMilliseconds: ValueTransformer = {
-    to: (value?: Date | null) =>
-        value instanceof Date ? value.getTime() : value,
-    from: (value?: string | number | null) =>
-        value === null || value === undefined ? null : new Date(Number(value)),
-};
 
 /**
  * Represents a client in the system that belongs to a tenant.
