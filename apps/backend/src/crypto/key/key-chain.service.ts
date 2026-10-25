@@ -9,7 +9,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import * as x509 from "@peculiar/x509";
 import type { Signer } from "@sd-jwt/core";
 import type { JWK, JWSHeaderParameters, JWTPayload } from "jose";
-import { Repository } from "typeorm";
+import { type FindOptionsSelect, Repository } from "typeorm";
 import { v4 } from "uuid";
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
 import { KeyChainReferences } from "./application/key-chain-references.js";
@@ -17,7 +17,10 @@ import {
     CertificateBuilderService,
     certificateNotBefore,
 } from "./cert/certificate-builder.service.js";
-import { pickDefaultAccessKeyChain } from "./domain/default-access-key-chain.js";
+import {
+    defaultAccessUsageRefusal,
+    pickDefaultAccessKeyChain,
+} from "./domain/default-access-key-chain.js";
 import { toPublicJwk } from "./domain/public-jwk.js";
 import { KeyChainInUseError } from "./domain/key-chain-reference.js";
 import {
@@ -508,11 +511,97 @@ export class KeyChainService {
     }
 
     /**
-     * The access key chain used where none is named, chosen by
-     * {@link pickDefaultAccessKeyChain}. Only the columns the rule reads are
-     * loaded for every candidate, so no key material is decrypted for them.
+     * The access key chain used where none is named: the tenant's
+     * `defaultAccessKeyChainId`, else the one chosen by
+     * {@link pickDefaultAccessKeyChain}. A named key chain that is gone or
+     * has another usage type fails instead of falling back, so all requests
+     * keep the certificate the tenant chose.
      */
     private async findDefaultAccessKeyChain(
+        tenantId: string,
+    ): Promise<KeyChainEntity | null> {
+        const configured =
+            await this.configuredDefaultAccessKeyChainId(tenantId);
+        if (!configured) return this.rankedDefaultAccessKeyChain(tenantId);
+        const keyChain = await this.findAccessKeyChain(tenantId, configured);
+        if (!keyChain) {
+            // Wallets see this error, so only the log names the key chain.
+            this.logger.warn(
+                `[${tenantId}] The default access key chain ${JSON.stringify(configured)} does not exist or has no usage type "access". Set defaultAccessKeyChainId to an access key chain or remove it.`,
+            );
+            throw new NotFoundException(
+                "The tenant's default access key chain is not available.",
+            );
+        }
+        return keyChain;
+    }
+
+    /** The access key chain `id` of the tenant, or null if there is none. */
+    private findAccessKeyChain(
+        tenantId: string,
+        id: string,
+        select?: FindOptionsSelect<KeyChainEntity>,
+    ): Promise<KeyChainEntity | null> {
+        return this.keyChainRepository.findOne({
+            where: { tenantId, id, usageType: KeyUsageType.Access },
+            ...(select ? { select } : {}),
+        });
+    }
+
+    private async configuredDefaultAccessKeyChainId(
+        tenantId: string,
+    ): Promise<string | undefined> {
+        const tenant = await this.tenantRepository.findOne({
+            where: { id: tenantId },
+            select: { id: true, defaultAccessKeyChainId: true },
+        });
+        return tenant?.defaultAccessKeyChainId ?? undefined;
+    }
+
+    /**
+     * The tenant's default access key chain setting and the key chain that
+     * requests use where no configuration names one; `keyChainId` is absent
+     * when the tenant has no access key chain or names one that is gone.
+     */
+    async getDefaultAccessKeyChain(tenantId: string): Promise<{
+        defaultAccessKeyChainId?: string;
+        keyChainId?: string;
+    }> {
+        const configured =
+            await this.configuredDefaultAccessKeyChainId(tenantId);
+        const keyChain = configured
+            ? await this.findAccessKeyChain(tenantId, configured, { id: true })
+            : await this.rankedDefaultAccessKeyChain(tenantId);
+        return {
+            ...(configured ? { defaultAccessKeyChainId: configured } : {}),
+            ...(keyChain ? { keyChainId: keyChain.id } : {}),
+        };
+    }
+
+    /**
+     * Refuses an ID for the tenant's default access key chain that names no
+     * key chain of the tenant or one with another usage type.
+     */
+    async assertAccessKeyChain(tenantId: string, id: string): Promise<void> {
+        const keyChain = await this.keyChainRepository.findOne({
+            where: { tenantId, id },
+            select: { id: true, usageType: true },
+        });
+        if (!keyChain) {
+            throw new BadRequestException(
+                `Key chain ${JSON.stringify(id)} does not exist in this tenant.`,
+            );
+        }
+        const refusal = defaultAccessUsageRefusal(id, keyChain.usageType);
+        if (refusal) throw new BadRequestException(refusal);
+    }
+
+    /**
+     * The access key chain chosen by {@link pickDefaultAccessKeyChain}. Only
+     * the columns the rule reads are loaded for every candidate, so no key
+     * material is decrypted for them.
+     */
+    private async rankedDefaultAccessKeyChain(
         tenantId: string,
     ): Promise<KeyChainEntity | null> {
         const candidates = await this.keyChainRepository.find({

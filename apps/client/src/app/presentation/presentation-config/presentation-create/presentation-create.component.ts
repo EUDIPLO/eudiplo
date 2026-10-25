@@ -14,6 +14,8 @@ import {
   presentationManagementControllerUpdateConfiguration,
   presentationManagementControllerReissueRegistrationCertificate,
   keyChainControllerGetAll,
+  defaultAccessKeyChainControllerGet,
+  type DefaultAccessKeyChainDto,
   webhookEndpointControllerGetAll,
   KeyChainResponseDto,
   WebhookEndpointEntity,
@@ -127,6 +129,8 @@ export class PresentationCreateComponent implements OnInit {
   /** Set when the configuration to edit or copy could not be loaded; the form stays hidden. */
   loadError = '';
   public keyChainsLoaded = false;
+  /** The tenant's default access key chain; undefined while unknown, then all chains count. */
+  private defaultAccess?: DefaultAccessKeyChainDto;
   readonly stepDescriptions = [
     'Name your reusable request',
     'Choose credentials and claims',
@@ -220,6 +224,11 @@ export class PresentationCreateComponent implements OnInit {
         console.error('Failed to load key chains:', error);
         openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to load key chains'));
       }
+    );
+    // Without it the access hint checks every access key chain.
+    defaultAccessKeyChainControllerGet().then(
+      ({ data }) => (this.defaultAccess = data),
+      () => undefined
     );
 
     // Load webhook endpoints for the select dropdown
@@ -375,6 +384,18 @@ export class PresentationCreateComponent implements OnInit {
   get accessSetupMessage(): string | null {
     if (!this.keyChainsLoaded) return null;
     const selected = this.form.get('accessKeyChainId')?.value;
+    // Without its own access key chain, a request uses the tenant's default when one is set.
+    if (!selected && this.defaultAccess?.defaultAccessKeyChainId) {
+      const chain = this.keyChains.find(
+        (keyChain) => keyChain.id === this.defaultAccess?.keyChainId
+      );
+      if (!chain) {
+        return 'The default access key chain of the tenant does not exist. Choose another one under Key Management, or select an access key chain here.';
+      }
+      return chain.activeCertificate?.pem
+        ? null
+        : 'The default access key chain has no active access certificate. Create or refresh it under Key Management, or select another access key chain here.';
+    }
     const chains = selected
       ? this.keyChains.filter((chain) => chain.id === selected)
       : this.keyChains;

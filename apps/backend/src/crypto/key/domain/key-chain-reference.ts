@@ -6,6 +6,7 @@ export interface ReferencedKeyChain {
 
 /** Kinds of configuration that can name a key chain, in message order. */
 export const KEY_CHAIN_REFERENCE_KINDS = [
+    "Tenant",
     "IssuanceConfig",
     "CredentialConfig",
     "PresentationConfig",
@@ -24,20 +25,30 @@ export function isKeyChainReferenceKind(
 /** A configuration of the key chain's tenant that names the key chain. */
 export interface KeyChainReference {
     kind: KeyChainReferenceKind;
-    /** Configuration ID; absent for the issuance configuration, one per tenant. */
+    /**
+     * Configuration ID; absent for the tenant settings and the issuance
+     * configuration, which a tenant has once.
+     */
     id?: string;
     description?: string;
 }
 
+/** Kinds a tenant has once, whose references carry no ID. */
+type SingletonKind = "Tenant" | "IssuanceConfig";
+
+function isSingletonKind(kind: KeyChainReferenceKind): kind is SingletonKind {
+    return kind === "Tenant" || kind === "IssuanceConfig";
+}
+
 /**
- * The ID a reference to the configuration carries: none for the issuance
- * configuration, which a tenant has once.
+ * The ID a reference to the configuration carries: none for the tenant
+ * settings and the issuance configuration, which a tenant has once.
  */
 export function keyChainReferenceId(
     kind: KeyChainReferenceKind,
     id: string,
 ): string | undefined {
-    return kind === "IssuanceConfig" ? undefined : id;
+    return isSingletonKind(kind) ? undefined : id;
 }
 
 /**
@@ -56,7 +67,7 @@ export function keyChainIdNamesKeyChain(
 const NAMED_PER_KIND = 5;
 
 const kindNames: Record<
-    Exclude<KeyChainReferenceKind, "IssuanceConfig">,
+    Exclude<KeyChainReferenceKind, SingletonKind>,
     { singular: string; plural: string }
 > = {
     CredentialConfig: {
@@ -84,7 +95,7 @@ export type KeyChainReferenceReadRoles = (
 
 /** Names the IDs of one kind, or says which roles show them when they are hidden. */
 function describeKind(
-    kind: Exclude<KeyChainReferenceKind, "IssuanceConfig">,
+    kind: Exclude<KeyChainReferenceKind, SingletonKind>,
     references: KeyChainReference[],
     readRoles?: KeyChainReferenceReadRoles,
 ): string | undefined {
@@ -130,6 +141,9 @@ export function describeKeyChainReferences(
     readRoles?: KeyChainReferenceReadRoles,
 ): string {
     const parts = [
+        references.some((reference) => reference.kind === "Tenant")
+            ? "the tenant's default access key chain setting (defaultAccessKeyChainId)"
+            : undefined,
         references.some((reference) => reference.kind === "IssuanceConfig")
             ? "the issuance configuration"
             : undefined,

@@ -654,3 +654,129 @@ describe('KeyManagementShowComponent delete', () => {
     expect(keyChainService.delete).not.toHaveBeenCalled();
   });
 });
+
+describe('KeyManagementShowComponent default access key chain', () => {
+  function keyChain(usageType = 'access'): KeyChainResponseDto {
+    return {
+      id: 'access-key',
+      description: 'Registrar',
+      type: 'standalone',
+      usageType,
+      rotationPolicy: { enabled: false },
+    } as unknown as KeyChainResponseDto;
+  }
+
+  async function create(
+    key: KeyChainResponseDto,
+    keyChainService: Record<string, ReturnType<typeof vi.fn>>,
+    snackBar = { open: vi.fn() }
+  ): Promise<KeyManagementShowComponent> {
+    keyChainService['getById'] = vi.fn().mockResolvedValue(key);
+    const component = new KeyManagementShowComponent(
+      keyChainService as never,
+      { paramMap: of(convertToParamMap({ id: key.id })) } as never,
+      snackBar as never,
+      { navigate: vi.fn() } as never,
+      {} as never,
+      { hasRole: () => false } as never,
+      {} as never,
+      {} as never
+    );
+    component.ngOnInit();
+    await vi.waitFor(() => expect(component.keyChain).toBeDefined());
+    return component;
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('marks the key chain picked by rule and makes it the default', async () => {
+    const snackBar = { open: vi.fn() };
+    const setDefaultAccess = vi
+      .fn()
+      .mockResolvedValue({ defaultAccessKeyChainId: 'access-key', keyChainId: 'access-key' });
+    const component = await create(
+      keyChain(),
+      {
+        getDefaultAccess: vi.fn().mockResolvedValue({ keyChainId: 'access-key' }),
+        setDefaultAccess,
+      },
+      snackBar
+    );
+    await vi.waitFor(() => expect(component.defaultAccess).toBeDefined());
+
+    expect(component.defaultChip?.label).toBe('Default by rule');
+    expect(component.defaultToggleLabel).toBe(
+      'Use key chain Registrar as default access key chain'
+    );
+
+    await component.toggleDefaultAccess();
+
+    expect(setDefaultAccess).toHaveBeenCalledWith('access-key');
+    expect(component.defaultChip?.label).toBe('Default');
+    expect(component.isDefaultAccess).toBe(true);
+    expect(snackBar.open).toHaveBeenCalledWith('Default access key chain set', 'Dismiss', {
+      duration: 3000,
+    });
+  });
+
+  it('removes the configured default with null', async () => {
+    const setDefaultAccess = vi.fn().mockResolvedValue({ keyChainId: 'other' });
+    const component = await create(keyChain(), {
+      getDefaultAccess: vi
+        .fn()
+        .mockResolvedValue({ defaultAccessKeyChainId: 'access-key', keyChainId: 'access-key' }),
+      setDefaultAccess,
+    });
+    await vi.waitFor(() => expect(component.defaultAccess).toBeDefined());
+
+    await component.toggleDefaultAccess();
+
+    expect(setDefaultAccess).toHaveBeenCalledWith(null);
+    expect(component.defaultChip).toBeUndefined();
+  });
+
+  it('refuses to delete the configured default without asking', async () => {
+    const snackBar = { open: vi.fn() };
+    const remove = vi.fn();
+    const component = await create(
+      keyChain(),
+      {
+        getDefaultAccess: vi
+          .fn()
+          .mockResolvedValue({ defaultAccessKeyChainId: 'access-key', keyChainId: 'access-key' }),
+        delete: remove,
+      },
+      snackBar
+    );
+    await vi.waitFor(() => expect(component.defaultAccess).toBeDefined());
+    const confirm = vi.spyOn(window, 'confirm');
+
+    await component.deleteKey();
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(snackBar.open).toHaveBeenCalledWith(
+      expect.stringContaining("This is the tenant's default access key chain"),
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
+  it('does not read the default for other usage types', async () => {
+    const getDefaultAccess = vi.fn();
+    const component = await create(keyChain('attestation'), { getDefaultAccess });
+
+    expect(getDefaultAccess).not.toHaveBeenCalled();
+    expect(component.defaultAccess).toBeUndefined();
+  });
+
+  it('shows the key chain without default controls when the default cannot be loaded', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const getDefaultAccess = vi.fn().mockRejectedValue({ statusCode: 500 });
+    const component = await create(keyChain(), { getDefaultAccess });
+    await vi.waitFor(() => expect(getDefaultAccess).toHaveBeenCalled());
+
+    expect(component.loadError).toBe('');
+    expect(component.defaultAccess).toBeUndefined();
+  });
+});

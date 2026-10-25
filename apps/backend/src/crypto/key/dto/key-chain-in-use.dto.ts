@@ -14,7 +14,7 @@ export class KeyChainReferenceDto {
 
     @ApiPropertyOptional({
         description:
-            "ID of the configuration. Absent for the issuance configuration, of which a tenant has one, and for configurations the caller may not read.",
+            "ID of the configuration. Absent for the tenant's default access key chain setting and the issuance configuration, of which a tenant has one each, and for configurations the caller may not read.",
     })
     id?: string;
 

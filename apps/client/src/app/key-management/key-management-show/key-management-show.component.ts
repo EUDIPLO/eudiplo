@@ -9,9 +9,22 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
-import { KeyChainResponseDto, CertificateInfoDto } from '@eudiplo/sdk-core';
+import {
+  KeyChainResponseDto,
+  CertificateInfoDto,
+  type DefaultAccessKeyChainDto,
+} from '@eudiplo/sdk-core';
 import { MatDialog } from '@angular/material/dialog';
 import { keyChainDeleteQuestion } from '../key-chain-delete-question';
+import {
+  changeDefaultAccess,
+  defaultAccessChip,
+  defaultAccessDeleteRefusal,
+  defaultAccessToggleLabel,
+  defaultAccessToggleTooltip,
+  isConfiguredDefaultAccess,
+  loadDefaultAccess,
+} from '../default-access-key-chain';
 import { KeyChainService } from '../key-chain.service';
 import { Subscription } from 'rxjs';
 import { JsonViewDialogComponent } from '../../issuance/credential-config/credential-config-create/json-view-dialog/json-view-dialog.component';
@@ -51,6 +64,13 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
   /** Set when the key chain could not be loaded, instead of loading forever. */
   loadError = '';
   private requestedId = '';
+  /**
+   * The tenant's default access key chain, for an access key chain; undefined when it could
+   * not be loaded, so the page neither marks the key chain nor offers to change the default.
+   */
+  defaultAccess?: DefaultAccessKeyChainDto;
+  /** True while a request that changes the default access key chain runs. */
+  updatingDefault = false;
 
   private routeSubscription?: Subscription;
 
@@ -96,11 +116,56 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     this.keyChain = undefined;
     this.loadError = '';
 
+    this.defaultAccess = undefined;
+
     try {
       this.keyChain = await this.keyChainService.getById(id);
     } catch (error) {
       console.error('Load error:', error);
       this.loadError = getApiErrorMessage(error, 'Failed to load key chain');
+      return;
+    }
+    await this.loadDefaultAccess(id);
+  }
+
+  /** Loads the default access key chain for an access key chain; the page works without it. */
+  private async loadDefaultAccess(id: string): Promise<void> {
+    if (this.keyChain?.usageType !== 'access') return;
+    const info = await loadDefaultAccess(this.keyChainService, this.snackBar);
+    if (id === this.requestedId) this.defaultAccess = info;
+  }
+
+  get defaultChip(): { label: string; tooltip: string } | undefined {
+    return defaultAccessChip(this.defaultAccess, this.keyId);
+  }
+
+  get isDefaultAccess(): boolean {
+    return isConfiguredDefaultAccess(this.defaultAccess, this.keyId);
+  }
+
+  get defaultToggleTooltip(): string {
+    return defaultAccessToggleTooltip(this.defaultAccess, this.keyId);
+  }
+
+  get defaultToggleLabel(): string {
+    return defaultAccessToggleLabel(this.defaultAccess, this.keyId, this.description || this.keyId);
+  }
+
+  /** Makes this key chain the tenant's default access key chain, or removes it as default. */
+  async toggleDefaultAccess(): Promise<void> {
+    if (!this.keyChain || this.updatingDefault || !this.defaultAccess) return;
+    const id = this.keyChain.id;
+
+    this.updatingDefault = true;
+    try {
+      const info = await changeDefaultAccess(
+        this.keyChainService,
+        this.snackBar,
+        this.isDefaultAccess ? null : id
+      );
+      if (info && id === this.requestedId) this.defaultAccess = info;
+    } finally {
+      this.updatingDefault = false;
     }
   }
 
@@ -223,6 +288,12 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
   async deleteKey(): Promise<void> {
     const keyChain = this.keyChain;
     if (!keyChain || this.deleting) return;
+    // The backend refuses it; say so instead of asking first.
+    const refusal = defaultAccessDeleteRefusal(this.defaultAccess, keyChain.id);
+    if (refusal) {
+      openErrorSnackBar(this.snackBar, refusal);
+      return;
+    }
     const consequence =
       keyChain.usageType === 'federation'
         ? ' If this key signs your OpenID Federation entity configuration, the entity is no longer trusted until your trust anchor lists the public key of a replacement federation key (and federation.entityKeyChainId, if set, names it).'

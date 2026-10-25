@@ -1,9 +1,9 @@
 import { MigrationInterface, QueryRunner, TableColumn } from "typeorm";
 
-export class AddStatusUpdatedAtToStatusMapping1785600000000
+export class AddStatusUpdatedAtToStatusMapping1785700000000
     implements MigrationInterface
 {
-    name = "AddStatusUpdatedAtToStatusMapping1785600000000";
+    name = "AddStatusUpdatedAtToStatusMapping1785700000000";
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         const table = await queryRunner.getTable("status_mapping");

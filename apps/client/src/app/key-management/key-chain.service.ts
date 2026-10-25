@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import {
+  type DefaultAccessKeyChainDto,
   type KmsConfigDto,
   type KmsProvidersResponseDto,
   type KmsTenantConfigResponseDto,
@@ -19,6 +20,8 @@ import {
   keyChainControllerRotate,
   keyChainControllerUpdate,
   keyChainControllerUpdateTenantKmsConfig,
+  defaultAccessKeyChainControllerGet,
+  defaultAccessKeyChainControllerSet,
 } from '@eudiplo/sdk-core';
 import type { Role } from '../services/jwt.service';
 import { hasHttpStatus } from '../utils/error-message';
@@ -149,5 +152,25 @@ export class KeyChainService {
    */
   async rotate(id: string): Promise<void> {
     await keyChainControllerRotate({ path: { id } });
+  }
+
+  /**
+   * The tenant's default access key chain setting and the access key chain
+   * used where no configuration names one.
+   */
+  async getDefaultAccess(): Promise<DefaultAccessKeyChainDto> {
+    const response = await defaultAccessKeyChainControllerGet();
+    return response.data as DefaultAccessKeyChainDto;
+  }
+
+  /**
+   * Names the tenant's default access key chain, or with null lets the
+   * backend pick one by rule again.
+   */
+  async setDefaultAccess(keyChainId: string | null): Promise<DefaultAccessKeyChainDto> {
+    const response = await defaultAccessKeyChainControllerSet({
+      body: { defaultAccessKeyChainId: keyChainId },
+    });
+    return response.data as DefaultAccessKeyChainDto;
   }
 }

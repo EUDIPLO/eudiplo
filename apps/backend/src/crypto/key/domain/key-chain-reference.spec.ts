@@ -26,7 +26,8 @@ describe("keyChainIdNamesKeyChain", () => {
 });
 
 describe("keyChainReferenceId", () => {
-    it("carries no ID for the issuance configuration", () => {
+    it("carries no ID for the tenant settings and the issuance configuration", () => {
+        expect(keyChainReferenceId("Tenant", "tenant")).toBeUndefined();
         expect(keyChainReferenceId("IssuanceConfig", "acme")).toBeUndefined();
         expect(keyChainReferenceId("StatusList", "list")).toBe("list");
     });
@@ -52,6 +53,17 @@ describe("describeKeyChainReferences", () => {
 
         expect(describeKeyChainReferences(references)).toBe(
             'the issuance configuration, 2 credential configs ("pid" and "mdl"), 1 presentation config ("age"), 1 status list ("shared") and 1 trust list ("pid-issuers")',
+        );
+    });
+
+    it("names the tenant's default access key chain setting first", () => {
+        expect(
+            describeKeyChainReferences([
+                { kind: "PresentationConfig", id: "age" },
+                { kind: "Tenant" },
+            ]),
+        ).toBe(
+            'the tenant\'s default access key chain setting (defaultAccessKeyChainId) and 1 presentation config ("age")',
         );
     });
 

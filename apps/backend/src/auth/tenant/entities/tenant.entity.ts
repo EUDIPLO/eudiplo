@@ -68,6 +68,19 @@ export class TenantEntity {
     statusListConfig?: StatusListConfig | null;
 
     /**
+     * Access key chain used where no configuration names one. Without it,
+     * EUDIPLO picks one of the tenant's access key chains by rule.
+     */
+    @ApiPropertyOptional({
+        description:
+            "Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.",
+        nullable: true,
+        type: String,
+    })
+    @Column("varchar", { nullable: true })
+    defaultAccessKeyChainId?: string | null;
+
+    /**
      * The clients associated with the tenant.
      */
     @ApiPropertyOptional({

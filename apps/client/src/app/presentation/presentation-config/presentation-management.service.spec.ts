@@ -60,4 +60,54 @@ describe('PresentationManagementService', () => {
       reason: expect.stringContaining('No access key chain'),
     });
   });
+
+  describe("with the tenant's default access key chain", () => {
+    const withCertificate = (id: string) => ({
+      id,
+      usageType: 'access',
+      activeCertificate: { pem: '-----BEGIN CERTIFICATE-----' },
+    });
+
+    beforeEach(() => {
+      roles = ['presentation:manage'];
+    });
+
+    it('is ready when the default has a certificate', async () => {
+      responses['/api/key-chain'] = [withCertificate('chosen')];
+      responses['/api/key-chain/access/default'] = {
+        defaultAccessKeyChainId: 'chosen',
+        keyChainId: 'chosen',
+      };
+
+      await expect(service.checkPresentationReadiness('pid')).resolves.toEqual({ ready: true });
+    });
+
+    it('is not ready when the default is gone, although another key chain has a certificate', async () => {
+      responses['/api/key-chain'] = [withCertificate('other')];
+      responses['/api/key-chain/access/default'] = { defaultAccessKeyChainId: 'gone' };
+
+      await expect(service.checkPresentationReadiness('pid')).resolves.toMatchObject({
+        ready: false,
+        reason: expect.stringContaining('default access key chain of the tenant does not exist'),
+      });
+    });
+
+    it('is not ready when the default has no certificate', async () => {
+      responses['/api/key-chain'] = [
+        withCertificate('other'),
+        { id: 'chosen', usageType: 'access' },
+      ];
+      responses['/api/key-chain/access/default'] = {
+        defaultAccessKeyChainId: 'chosen',
+        keyChainId: 'chosen',
+      };
+
+      await expect(service.checkPresentationReadiness('pid')).resolves.toMatchObject({
+        ready: false,
+        reason: expect.stringContaining(
+          'default access key chain has no active access certificate'
+        ),
+      });
+    });
+  });
 });

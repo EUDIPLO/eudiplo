@@ -18,6 +18,7 @@ export interface TenantData {
         immediateUpdate?: boolean;
         enableAggregation?: boolean;
     } | null;
+    defaultAccessKeyChainId?: string | null;
     clients?: ClientData[];
 }
 export type TenantUpdate = Partial<Omit<TenantData, "id" | "clients">>;
@@ -26,4 +27,18 @@ export class TenantNotFound extends NotFoundError {
         super(`Tenant '${tenantId}' not found`);
         this.name = "TenantNotFound";
     }
+}
+
+/**
+ * The tenant fields a configuration document writes. A document without
+ * `defaultAccessKeyChainId` removes it, so the tenant picks its access key
+ * chain by rule again; the other omitted fields keep their stored value.
+ */
+export function tenantDocumentUpdate<
+    T extends { defaultAccessKeyChainId?: string | null },
+>(spec: T): T & { defaultAccessKeyChainId: string | null } {
+    return {
+        ...spec,
+        defaultAccessKeyChainId: spec.defaultAccessKeyChainId ?? null,
+    };
 }

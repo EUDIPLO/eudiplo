@@ -18,6 +18,7 @@ import {
 import { ClientAccessService } from "../../auth/client/client-access.service.js";
 import { isRole } from "../../auth/roles/role.enum.js";
 import { assertMayGrantRoles } from "../../auth/roles/role-grants.js";
+import { tenantDocumentUpdate } from "../../auth/tenant/domain/tenant-data.js";
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
 import { KeyChainType } from "../../crypto/key/dto/key-chain-create.dto.js";
 import { KeyUsage } from "../../crypto/key/entities/key-chain.entity.js";
@@ -339,7 +340,7 @@ export class ConfigBundleApplyService {
                                 await manager.update(
                                     TenantEntity,
                                     { id: tenantId },
-                                    document.spec,
+                                    tenantDocumentUpdate(document.spec),
                                 );
                                 await this.ownershipService.markApplied(
                                     ownership,
@@ -545,7 +546,10 @@ export class ConfigBundleApplyService {
         const spec = structuredClone(document.spec) as Record<string, any>;
         switch (document.kind) {
             case "Tenant":
-                await this.tenants.update({ id: tenantId }, spec);
+                await this.tenants.update(
+                    { id: tenantId },
+                    tenantDocumentUpdate(spec),
+                );
                 return;
             case "Client": {
                 const exists =

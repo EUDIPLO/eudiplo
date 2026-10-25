@@ -44,6 +44,7 @@ import { KeyUsageType } from "./types/key-usage-type.js";
 
 /** Roles that read each kind of configuration that can name a key chain. */
 const readRoles: Record<KeyChainReferenceKind, Role[]> = {
+    Tenant: [Role.Issuances, Role.Presentations, Role.Keys],
     IssuanceConfig: [Role.Issuances],
     CredentialConfig: [Role.Issuances],
     PresentationConfig: [Role.Presentations, Role.PresentationRequest],

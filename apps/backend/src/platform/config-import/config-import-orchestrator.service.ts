@@ -49,6 +49,7 @@ interface RegisteredImporter {
 interface TenantSetupFn {
     name: string;
     setup: (tenantId: string) => Promise<boolean>;
+    finish?: (tenantId: string) => Promise<void>;
 }
 
 interface PortableImportRunner {
@@ -98,17 +99,20 @@ export class ConfigImportOrchestratorService implements OnApplicationBootstrap {
      * This is called first for each tenant to ensure the tenant exists.
      * @param name - Human-readable name for logging
      * @param setupFn - Function that creates/verifies tenant, returns true if tenant is valid
+     * @param finishFn - Called after the tenant's imports succeeded, for
+     *   settings that name resources those imports create
      */
     registerTenantSetup(
         name: string,
         setupFn: (tenantId: string) => Promise<boolean>,
+        finishFn?: (tenantId: string) => Promise<void>,
     ): void {
         if (this.hasRun) {
             this.logger.warn(
                 `Tenant setup "${name}" registered after orchestration already ran`,
             );
         }
-        this.tenantSetup = { name, setup: setupFn };
+        this.tenantSetup = { name, setup: setupFn, finish: finishFn };
     }
 
     /**
@@ -241,6 +245,7 @@ export class ConfigImportOrchestratorService implements OnApplicationBootstrap {
                         }
                     }
                 }
+                await this.tenantSetup?.finish?.(tenantId);
 
                 this.logger.log(`[${tenantId}] Import completed`);
             } catch (error: any) {
