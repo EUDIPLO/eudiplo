@@ -11,6 +11,20 @@ export interface AccessKeyChainCandidate {
 }
 
 /**
+ * Why a key chain of `usageType` cannot be the tenant's default access key
+ * chain, or undefined when it can. Only an access key chain signs presentation
+ * requests and the issuer metadata.
+ */
+export function defaultAccessUsageRefusal(
+    keyChainId: string,
+    usageType: unknown,
+): string | undefined {
+    return usageType === "access"
+        ? undefined
+        : `Key chain ${JSON.stringify(keyChainId)} has usage type ${JSON.stringify(usageType)}; the default access key chain needs usage type "access".`;
+}
+
+/**
  * Picks the access key chain used when a presentation configuration, the ISO
  * 18013-7 flow or the signed issuer metadata names none. A tenant can hold
  * several access key chains, for example one with a registrar certificate and

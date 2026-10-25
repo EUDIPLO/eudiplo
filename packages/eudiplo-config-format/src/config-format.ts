@@ -1,7 +1,7 @@
 // Canonical portable-config identity and migration implementation.
 // The CLI bundles this module through assets:sync; do not maintain a second engine.
 export const CONFIG_FORMATS = {
-    Tenant: { slug: "tenant", file: "TenantConfigFile", version: 1 },
+    Tenant: { slug: "tenant", file: "TenantConfigFile", version: 2 },
     Client: { slug: "client", file: "ClientConfigFile", version: 2 },
     KmsConfig: { slug: "kms-config", file: "KmsConfigFile", version: 2 },
     KeyChain: { slug: "key-chain", file: "KeyChainConfigFile", version: 3 },
@@ -97,8 +97,9 @@ export function resourceId(input: ConfigFile<unknown>): string {
  * key chain export writes (v3 for usage type `federation`, which KeyChain v3
  * added), and a KMS configuration with a provider that sets
  * `algorithms` or `defaultAlgorithm`, which KmsConfig v2 added and which the
- * tenant `kms.json` is saved as, and a registrar configuration with
- * `relyingPartyContact`, which RegistrarConfig v2 added.
+ * tenant `kms.json` is saved as, a registrar configuration with
+ * `relyingPartyContact`, which RegistrarConfig v2 added, and a tenant
+ * `info.json` with `defaultAccessKeyChainId`, which TenantConfig v2 added.
  */
 export function bareFileVersion(
     kind: ConfigResourceKind,
@@ -110,6 +111,7 @@ export function bareFileVersion(
     }
     if (kind === "RegistrarConfig")
         return "relyingPartyContact" in spec ? 2 : 1;
+    if (kind === "Tenant") return "defaultAccessKeyChainId" in spec ? 2 : 1;
     if (kind === "KmsConfig") {
         const providers = Array.isArray(spec.providers) ? spec.providers : [];
         return providers.some(
@@ -323,6 +325,16 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         // v2 only adds the optional relyingPartyContact: a v1 spec is a
         // valid v2 spec, whose relying party is registered without contact
         // as before.
+        migrate: (spec) => ({ spec }),
+    },
+    {
+        id: "tenant-v2-default-access-key-chain",
+        kind: "Tenant",
+        from: 1,
+        to: 2,
+        // v2 only adds the optional defaultAccessKeyChainId: a v1 spec is a
+        // valid v2 spec, whose tenant keeps picking its access key chain by
+        // rule.
         migrate: (spec) => ({ spec }),
     },
     {

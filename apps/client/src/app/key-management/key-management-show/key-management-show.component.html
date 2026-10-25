@@ -45,6 +45,22 @@
             <mat-icon>download</mat-icon>
           </button>
         }
+        @if (defaultAccess) {
+          <button
+            mat-icon-button
+            (click)="toggleDefaultAccess()"
+            [disabled]="updatingDefault"
+            [attr.aria-busy]="updatingDefault"
+            disabledInteractive
+            [matTooltip]="defaultToggleTooltip"
+            [attr.aria-label]="defaultToggleLabel"
+            appConfigManaged
+            managedKind="Tenant"
+            managedResourceId="tenant"
+          >
+            <mat-icon>{{ isDefaultAccess ? 'star' : 'star_outline' }}</mat-icon>
+          </button>
+        }
         <button
           mat-icon-button
           (click)="deleteKey()"
@@ -73,6 +89,12 @@
             <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
               <span class="key-type-label">{{ getTypeLabel() }}</span>
               <mat-chip>{{ usageType }}</mat-chip>
+              @if (defaultChip; as chip) {
+                <mat-chip class="default-chip" [matTooltip]="chip.tooltip"
+                  >{{ chip.label
+                  }}<span class="visually-hidden">: {{ chip.tooltip }}</span></mat-chip
+                >
+              }
             </div>
             <span class="key-type-description">{{ getTypeDescription() }}</span>
           </div>

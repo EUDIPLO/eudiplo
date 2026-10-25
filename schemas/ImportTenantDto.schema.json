@@ -81,6 +81,11 @@
         }
       },
       "additionalProperties": false
+    },
+    "defaultAccessKeyChainId": {
+      "description": "ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.",
+      "type": "string",
+      "minLength": 1
     }
   },
   "required": [

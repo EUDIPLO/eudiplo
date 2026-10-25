@@ -162,6 +162,10 @@ export type ImportTenantDto = {
          */
         enableAggregation?: boolean;
     };
+    /**
+     * ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.
+     */
+    defaultAccessKeyChainId?: string;
 };
 
 export type SessionStorageConfig = {
@@ -250,6 +254,10 @@ export type TenantResponseDto = {
      * Status list configuration for this tenant. Capacity and bits apply to status lists created afterwards; TTL, update mode and aggregation apply to all status lists of the tenant.
      */
     statusListConfig?: StatusListConfig | null;
+    /**
+     * Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.
+     */
+    defaultAccessKeyChainId?: string | null;
     /**
      * Managed clients attached to the tenant
      */
@@ -353,6 +361,10 @@ export type TenantCreateResponseDto = {
      */
     statusListConfig?: StatusListConfig | null;
     /**
+     * Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.
+     */
+    defaultAccessKeyChainId?: string | null;
+    /**
      * One-time generated client credentials for admin access
      */
     client?: TenantClientCredentialsDto;
@@ -408,6 +420,31 @@ export type UpdateTenantDto = {
          */
         enableAggregation?: boolean;
     };
+    /**
+     * ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule. Omit to keep the current value or set to null to remove it.
+     */
+    defaultAccessKeyChainId?: string | null;
+};
+
+export type DefaultAccessKeyChainDto = {
+    /**
+     * Access key chain the tenant names as its default. Absent when EUDIPLO picks one by rule.
+     */
+    defaultAccessKeyChainId?: string;
+    /**
+     * Access key chain that requests use where no configuration names one: defaultAccessKeyChainId, else the one picked by rule. Absent when the tenant has no access key chain or names one that no longer exists.
+     */
+    keyChainId?: string;
+};
+
+/**
+ * The tenant's default access key chain.
+ */
+export type UpdateDefaultAccessKeyChainDto = {
+    /**
+     * ID of an access key chain of the tenant, or null to let EUDIPLO pick one by rule.
+     */
+    defaultAccessKeyChainId: string | null;
 };
 
 export type AuditLogResponseDto = {
@@ -1542,9 +1579,9 @@ export type KeyChainReferenceDto = {
     /**
      * Kind of configuration that names the key chain.
      */
-    kind: 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'StatusList' | 'TrustList';
+    kind: 'Tenant' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'StatusList' | 'TrustList';
     /**
-     * ID of the configuration. Absent for the issuance configuration, of which a tenant has one, and for configurations the caller may not read.
+     * ID of the configuration. Absent for the tenant's default access key chain setting and the issuance configuration, of which a tenant has one each, and for configurations the caller may not read.
      */
     id?: string;
     /**
@@ -1602,6 +1639,10 @@ export type TenantEntity = {
      * Status list configuration for this tenant. Capacity and bits apply to status lists created afterwards; TTL, update mode and aggregation apply to all status lists of the tenant.
      */
     statusListConfig?: StatusListConfig | null;
+    /**
+     * Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.
+     */
+    defaultAccessKeyChainId?: string | null;
     /**
      * Clients associated with the tenant
      */
@@ -6768,6 +6809,39 @@ export type TenantControllerUpdateTenantResponses = {
 };
 
 export type TenantControllerUpdateTenantResponse = TenantControllerUpdateTenantResponses[keyof TenantControllerUpdateTenantResponses];
+
+export type DefaultAccessKeyChainControllerGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/key-chain/access/default';
+};
+
+export type DefaultAccessKeyChainControllerGetResponses = {
+    200: DefaultAccessKeyChainDto;
+};
+
+export type DefaultAccessKeyChainControllerGetResponse = DefaultAccessKeyChainControllerGetResponses[keyof DefaultAccessKeyChainControllerGetResponses];
+
+export type DefaultAccessKeyChainControllerSetData = {
+    body: UpdateDefaultAccessKeyChainDto;
+    path?: never;
+    query?: never;
+    url: '/api/key-chain/access/default';
+};
+
+export type DefaultAccessKeyChainControllerSetErrors = {
+    /**
+     * The key chain does not exist in the tenant or has another usage type than access.
+     */
+    400: unknown;
+};
+
+export type DefaultAccessKeyChainControllerSetResponses = {
+    200: DefaultAccessKeyChainDto;
+};
+
+export type DefaultAccessKeyChainControllerSetResponse = DefaultAccessKeyChainControllerSetResponses[keyof DefaultAccessKeyChainControllerSetResponses];
 
 export type AuditLogControllerGetAuditLogsData = {
     body?: never;

@@ -4,6 +4,8 @@ import {
   presentationManagementControllerConfiguration,
   sessionControllerGetAllSessions,
   sessionControllerGetSessionStats,
+  defaultAccessKeyChainControllerGet,
+  type DefaultAccessKeyChainDto,
   keyChainControllerGetAll,
   keyChainControllerGetProvidersHealth,
   issuanceConfigControllerGetIssuanceConfigurations,
@@ -147,6 +149,8 @@ export class DashboardService {
   hasActiveAccessCertificate = false;
   hasUsableAccessCertificate = false;
   accessCertificateStatus: AccessCertificateStatus = 'missing';
+  /** True when the tenant names a default access key chain that no longer exists. */
+  defaultAccessKeyChainMissing = false;
   accessCertificateExpiresAt: string | null = null;
   accessCertificateDaysUntilExpiry: number | null = null;
   trustListCount = 0;
@@ -188,7 +192,16 @@ export class DashboardService {
     const promiseKeys: DashboardSource[] = [];
 
     if (this.canManageKeyChains) {
-      promises.push(keyChainControllerGetAll());
+      promises.push(
+        Promise.all([
+          keyChainControllerGetAll(),
+          // Without it the card checks every access key chain, as for a tenant without default.
+          defaultAccessKeyChainControllerGet().then(
+            ({ data }) => data,
+            () => undefined
+          ),
+        ]).then(([{ data }, defaultAccess]) => ({ data: { keyChains: data, defaultAccess } }))
+      );
       promiseKeys.push('keyChains');
     }
 
@@ -544,6 +557,9 @@ export class DashboardService {
     if (this.accessKeyChains === 0) {
       return 'No access key chain configured';
     }
+    if (this.defaultAccessKeyChainMissing) {
+      return 'The default access key chain no longer exists';
+    }
     if (!this.hasActiveAccessCertificate) {
       return 'No access certificate configured';
     }
@@ -562,9 +578,13 @@ export class DashboardService {
     return sources;
   }
 
-  /** Where to fix the access certificate: the affected key chain, or a new one. */
+  /**
+   * Where to fix the access certificate: the affected key chain, the key list for a default
+   * that no longer exists, or a new key chain.
+   */
   get accessCertificateRoute(): string[] {
-    return this.accessKeyChainId ? ['/keys', this.accessKeyChainId] : ['/keys/create'];
+    if (this.accessKeyChainId) return ['/keys', this.accessKeyChainId];
+    return this.defaultAccessKeyChainMissing ? ['/keys'] : ['/keys/create'];
   }
 
   get accessCertificateStatusLabel(): string {
@@ -663,6 +683,7 @@ export class DashboardService {
     this.hasActiveAccessCertificate = false;
     this.hasUsableAccessCertificate = false;
     this.accessCertificateStatus = 'missing';
+    this.defaultAccessKeyChainMissing = false;
     this.accessCertificateExpiresAt = null;
     this.accessCertificateDaysUntilExpiry = null;
     this.trustListCount = 0;
@@ -722,11 +743,12 @@ export class DashboardService {
         this.kmsProviders = data;
         break;
       case 'keyChains':
-        this.totalKeyChains = data.filter(
+        this.totalKeyChains = data.keyChains.filter(
           (kc: KeyChainResponseDto) => kc.usageType !== 'encrypt'
         ).length;
         this.applyAccessCertificateHealth(
-          data.filter((kc: KeyChainResponseDto) => kc.usageType === 'access')
+          data.keyChains.filter((kc: KeyChainResponseDto) => kc.usageType === 'access'),
+          data.defaultAccess
         );
         break;
       case 'issuance':
@@ -742,12 +764,24 @@ export class DashboardService {
     }
   }
 
-  private applyAccessCertificateHealth(accessKeyChains: KeyChainResponseDto[]): void {
+  /**
+   * With a default access key chain set for the tenant, requests without their own access key
+   * chain use only that one, so only its certificate counts.
+   */
+  private applyAccessCertificateHealth(
+    accessKeyChains: KeyChainResponseDto[],
+    defaultAccess?: DefaultAccessKeyChainDto
+  ): void {
     this.accessKeyChains = accessKeyChains.length;
-    this.accessKeyChainId = accessKeyChains[0]?.id ?? null;
+    const used = defaultAccess?.defaultAccessKeyChainId
+      ? accessKeyChains.filter((kc) => kc.id === defaultAccess.keyChainId)
+      : accessKeyChains;
+    this.defaultAccessKeyChainMissing =
+      !!defaultAccess?.defaultAccessKeyChainId && used.length === 0;
+    this.accessKeyChainId = used[0]?.id ?? null;
 
     const now = Date.now();
-    const withCertificate = accessKeyChains.filter((kc) => !!kc.activeCertificate?.pem);
+    const withCertificate = used.filter((kc) => !!kc.activeCertificate?.pem);
 
     this.hasActiveAccessCertificate = withCertificate.length > 0;
 

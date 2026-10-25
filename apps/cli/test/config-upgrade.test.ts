@@ -397,6 +397,37 @@ describe("config upgrade", () => {
         );
         expect(result.spec).toEqual(spec);
     });
+    it.each([
+        ["a v1 tenant file", 1],
+        ["a bare tenant file with a default access key chain", undefined],
+    ])("upgrades %s to v2 with the spec unchanged", async (_name, version) => {
+        const { cwd, context } = await setup();
+        const source = join(cwd, "tenant-folder");
+        await mkdir(source, { recursive: true });
+        const spec: Record<string, unknown> = { name: "Example" };
+        if (version === undefined) spec.defaultAccessKeyChainId = "access";
+        await writeFile(
+            join(source, "info.json"),
+            JSON.stringify(
+                version === undefined
+                    ? spec
+                    : {
+                          $schema: schemaUrl("Tenant", version),
+                          metadata: { generation: 1 },
+                          spec,
+                      },
+            ),
+        );
+
+        expect(await runCli(["config", "upgrade", source], context)).toBe(0);
+        const result = JSON.parse(
+            await readFile(join(`${source}.upgraded`, "info.json"), "utf8"),
+        );
+        expect(result.$schema).toBe(
+            "https://eudiplo.dev/schemas/v2/TenantConfigFile.schema.json",
+        );
+        expect(result.spec).toEqual(spec);
+    });
     it("validates the entire folder before writing any output", async () => {
         const { cwd, context } = await setup();
         const source = join(cwd, "folder");

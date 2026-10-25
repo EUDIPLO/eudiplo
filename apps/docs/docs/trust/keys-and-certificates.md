@@ -89,15 +89,16 @@ There is no certificate signing request (CSR) export. To use certificates from y
 
 `DELETE /api/key-chain/{id}` answers `204` and, where the KMS provider supports it, also deletes the key in the KMS. It answers `409` while a configuration of the tenant names the key chain, because that configuration could no longer sign or publish the key chain's certificate. These fields count:
 
+- `defaultAccessKeyChainId` of the tenant ([Default access key chain](#default-access-key-chain)),
 - `signingKeyId` of the issuance configuration, and `token.signingKeyId` of each of its authorization servers,
 - `keyChainId` of a credential configuration,
 - `accessKeyChainId` of a presentation configuration,
 - `keyChainId` of a status list,
 - `keyChainId` of a [trust list](trust-lists.md), which the key chain signs, and `issuerKeyChainId` or `revocationKeyChainId` of its internal entities. Deleting the signing key chain would also delete the trust list.
 
-A configuration that leaves the field out uses the tenant's default key chain of the usage type and does not count, so the default key chain itself can be deleted; such configurations then use another key chain of that usage type, or fail until one exists. Trust lists are the exception: a trust list created without `keyChainId` stores the trust list key chain picked at creation, so that key chain counts until the trust list is deleted, also when a bundle rewrites the trust list without `keyChainId`.
+A configuration that leaves the field out uses the tenant's default key chain of the usage type and does not count, so a default key chain picked by rule can be deleted; such configurations then use another key chain of that usage type, or fail until one exists. Trust lists are the exception: a trust list created without `keyChainId` stores the trust list key chain picked at creation, so that key chain counts until the trust list is deleted, also when a bundle rewrites the trust list without `keyChainId`.
 
-The response names the configurations in `message` and lists them in `references`. Configurations the caller's roles cannot read are only counted, without ID and description: the issuance configuration, credential configs and status lists need `issuance:manage`, presentation configs `presentation:manage` or `presentation:request`, and trust lists `issuance:manage` or `presentation:manage`.
+The response names the configurations in `message` and lists them in `references`. The tenant's default access key chain is a reference of kind `Tenant`, without ID. Configurations the caller's roles cannot read are only counted, without ID and description: the issuance configuration, credential configs and status lists need `issuance:manage`, presentation configs `presentation:manage` or `presentation:request`, and trust lists `issuance:manage` or `presentation:manage`.
 
 ```json
 {
@@ -113,7 +114,7 @@ The response names the configurations in `message` and lists them in `references
 }
 ```
 
-Point the configurations to another key chain, or remove the field, then delete the key chain. In the Web Client, deleting a key chain from the key list or its page shows this message. An unknown ID answers `404`. Sessions that are already running are not checked; an OpenID4VP request whose key chain is deleted before the wallet fetches it cannot be used ([Default access key chain](#default-access-key-chain)).
+Point the configurations to another key chain, or remove the field, then delete the key chain. In the Web Client, deleting a key chain from the key list or its page shows this message; the tenant's default access key chain is refused before any request, with a note to stop using it as default first. An unknown ID answers `404`. Sessions that are already running are not checked; an OpenID4VP request whose key chain is deleted before the wallet fetches it cannot be used ([Default access key chain](#default-access-key-chain)).
 
 A [configuration bundle](../operate/configuration-as-code.md#plan-and-import) or a [config folder](../operate/configuration-as-code.md#provision-tenants-from-a-folder) imported in `replace` mode deletes a key chain that it created and no longer contains. Its plan is blocked with `KEY_CHAIN_IN_USE` on that key chain while a configuration that survives the import names it by the rules above: a stored configuration the import neither deletes nor rewrites, or a document of the bundle with its new content. A document of the bundle that names the key chain is also blocked with `MISSING_RESOURCE_REFERENCE`. Keep the key chain in the bundle, or remove the references, then plan again.
 
@@ -132,13 +133,23 @@ A presentation configuration uses the access key chain in `accessKeyChainId`, or
 
 ### Default access key chain
 
-Presentation requests (OID4VP and ISO 18013-7) of a configuration without `accessKeyChainId`, signed issuer metadata and the link of a registration certificate to its access certificate use the tenant's default access key chain. With several access key chains, EUDIPLO picks it in this order:
+Presentation requests (OID4VP and ISO 18013-7) of a configuration without `accessKeyChainId`, signed issuer metadata and the link of a registration certificate to its access certificate use the tenant's default access key chain. A presentation configuration's `accessKeyChainId` always takes precedence; the issuer metadata has no such field, so all issuance of a tenant uses the default.
+
+To choose the default, set `defaultAccessKeyChainId` on the tenant:
+
+- In the Web Client, select the star (**Use as default access key chain**) on an access key chain in the key list or on its page. The list marks the default with **Default**, or with **Default by rule** while none is set. Select the star again to remove the setting.
+- Through the API, `PUT /api/key-chain/access/default` with `{"defaultAccessKeyChainId": "<id>"}`, or `null` to remove it; `GET` returns the setting and the key chain in use (`keyChainId`). Both need `issuance:manage`, `presentation:manage` or `keys:manage`. `PATCH /api/tenant/{id}` (`tenants:manage`) accepts the same field.
+- In a [config folder or bundle](../operate/configuration-as-code.md), as `defaultAccessKeyChainId` in `info.json` ([Tenant v2](../reference/config-bundle-format.md#resource-types-and-versions)). An `info.json` without the field removes the setting. At startup, the setting applies after the tenant's other files are imported; if it names no access key chain of the tenant, the import of that tenant fails, the log names the key chain, and the stored setting stays. A tenant whose `info.json` is file-managed cannot change it through the API or the Web Client.
+
+The key chain must belong to the tenant and have usage type `access`, else the request answers `400`. While it is the default, deleting it is refused with `KEY_CHAIN_IN_USE` ([Delete a key chain](#delete-a-key-chain)). If it is gone anyway, requests that need the default fail instead of falling back to another certificate; the backend log names the key chain, `GET /api/key-chain/access/default` returns the setting without `keyChainId`, and the Web Client's key list shows a warning with **Remove default**.
+
+Without the setting, EUDIPLO picks one of the tenant's access key chains in this order:
 
 1. A certificate that is valid now before an expired or not yet valid one, which could not sign.
 2. The kind of the active certificate: one issued by another CA, such as a registrar certificate or that of an imported key, before an internal chain (an External CA chain included), before a self-signed certificate.
 3. The key chain created first.
 
-A new access key chain therefore only becomes the default when its certificate is of a better kind, or when the certificate of the current default is no longer valid. To use a particular key chain, set `accessKeyChainId`.
+A new access key chain therefore only becomes the default when its certificate is of a better kind, or when the certificate of the current default is no longer valid. To use a particular key chain, set `defaultAccessKeyChainId`, or `accessKeyChainId` for one presentation configuration.
 
 An OpenID4VP request keeps the access key chain chosen when it was created: the request object a wallet fetches later is signed with the key chain its `client_id` was derived from, even when the default or the configuration's `accessKeyChainId` has changed in between. Its registration certificate is resolved for that key chain as well; see [Registration Certificates](registration-certificates.md#validation-and-caching). If that key chain is deleted or rotated before the wallet fetches the request, the wallet cannot use the request; create a new one.
 

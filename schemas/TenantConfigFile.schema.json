@@ -9,6 +9,137 @@
       "properties": {
         "$schema": {
           "type": "string",
+          "const": "https://eudiplo.dev/schemas/v2/TenantConfigFile.schema.json"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "ownership": {
+              "type": "string",
+              "enum": [
+                "unmanaged",
+                "file-managed"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "spec": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "default": "EUDIPLO",
+              "description": "Display name of the tenant.",
+              "type": "string",
+              "minLength": 1
+            },
+            "description": {
+              "description": "Optional tenant description.",
+              "type": "string",
+              "minLength": 1
+            },
+            "sessionConfig": {
+              "description": "Optional tenant-specific session storage configuration.",
+              "type": "object",
+              "properties": {
+                "ttlSeconds": {
+                  "description": "Session time-to-live in seconds.",
+                  "type": "integer",
+                  "minimum": 60,
+                  "maximum": 9007199254740991
+                },
+                "cleanupMode": {
+                  "description": "Whether to fully delete or anonymize expired sessions.",
+                  "type": "string",
+                  "enum": [
+                    "full",
+                    "anonymize"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "statusListConfig": {
+              "description": "Optional tenant-specific status list defaults.",
+              "type": "object",
+              "properties": {
+                "capacity": {
+                  "description": "Default status list capacity.",
+                  "type": "integer",
+                  "minimum": 100,
+                  "maximum": 9007199254740991
+                },
+                "bits": {
+                  "description": "Bits-per-status setting (1, 2, 4, or 8).",
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "const": 1
+                    },
+                    {
+                      "type": "number",
+                      "const": 2
+                    },
+                    {
+                      "type": "number",
+                      "const": 4
+                    },
+                    {
+                      "type": "number",
+                      "const": 8
+                    }
+                  ]
+                },
+                "ttl": {
+                  "description": "JWT TTL for status list tokens in seconds.",
+                  "type": "integer",
+                  "minimum": 60,
+                  "maximum": 9007199254740991
+                },
+                "immediateUpdate": {
+                  "description": "Regenerate status list JWTs immediately after status updates.",
+                  "type": "boolean"
+                },
+                "enableAggregation": {
+                  "description": "Include aggregation_uri in generated status list JWTs.",
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            },
+            "defaultAccessKeyChainId": {
+              "description": "ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.",
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false,
+          "description": "Payload used when importing tenant metadata from config files."
+        }
+      },
+      "required": [
+        "$schema",
+        "metadata",
+        "spec"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://eudiplo.dev/schemas/v1/TenantConfigFile.schema.json",
+      "title": "TenantConfigFile",
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string",
           "const": "https://eudiplo.dev/schemas/v1/TenantConfigFile.schema.json"
         },
         "metadata": {
@@ -209,6 +340,11 @@
             }
           },
           "additionalProperties": false
+        },
+        "defaultAccessKeyChainId": {
+          "description": "ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.",
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [

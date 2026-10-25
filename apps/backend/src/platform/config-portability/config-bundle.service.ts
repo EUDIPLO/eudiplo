@@ -35,6 +35,7 @@ import {
     KeyUsage,
 } from "../../crypto/key/entities/key-chain.entity.js";
 import { KmsTenantConfigService } from "../../crypto/key/kms/kms-tenant-config.service.js";
+import { defaultAccessUsageRefusal } from "../../crypto/key/domain/default-access-key-chain.js";
 import { withoutRemovedChainedVp } from "../../issuer/configuration/issuance/domain/removed-authorization-servers.js";
 import {
     type ConfigurationChange,
@@ -1284,6 +1285,49 @@ export class ConfigBundleService {
         return result;
     }
 
+    /**
+     * The tenant's default access key chain must have usage type `access`,
+     * else every request that falls back to it fails after the import. A
+     * missing key chain is already a MISSING_RESOURCE_REFERENCE.
+     */
+    private async checkDefaultAccessKeyChainUsage(
+        tenantId: string,
+        documents: ConfigDocument[],
+    ): Promise<ConfigMigrationIssue[]> {
+        const tenant = documents.find((document) => document.kind === "Tenant");
+        const keyChainId = (
+            tenant?.spec as { defaultAccessKeyChainId?: unknown }
+        )?.defaultAccessKeyChainId;
+        if (!tenant || typeof keyChainId !== "string") return [];
+        const bundled = documents.find(
+            (document) =>
+                document.kind === "KeyChain" &&
+                resourceId(document) === keyChainId,
+        );
+        const usageType = bundled
+            ? (bundled.spec as { usageType?: unknown }).usageType
+            : (
+                  await this.keyChains.findOne({
+                      where: { tenantId, id: keyChainId },
+                      select: { id: true, usageType: true },
+                  })
+              )?.usageType;
+        const refusal =
+            usageType === undefined
+                ? undefined
+                : defaultAccessUsageRefusal(keyChainId, usageType);
+        if (!refusal) return [];
+        return [
+            {
+                severity: "error",
+                code: "KEY_CHAIN_USAGE_MISMATCH",
+                path: "/spec/defaultAccessKeyChainId",
+                message: refusal,
+                resource: { kind: "Tenant", id: resourceId(tenant) },
+            },
+        ];
+    }
+
     private async validateReferences(
         tenantId: string,
         documents: ConfigDocument[],
@@ -1445,6 +1489,12 @@ export class ConfigBundleService {
         };
         for (const document of documents)
             visit(document, document.spec, "/spec");
+        issues.push(
+            ...(await this.checkDefaultAccessKeyChainUsage(
+                tenantId,
+                documents,
+            )),
+        );
 
         const includesKmsConfig = documents.some(
             (document) => document.kind === "KmsConfig",
@@ -1643,6 +1693,8 @@ export class ConfigBundleService {
             description: tenant.description ?? undefined,
             sessionConfig: tenant.sessionConfig ?? undefined,
             statusListConfig: tenant.statusListConfig ?? undefined,
+            defaultAccessKeyChainId:
+                tenant.defaultAccessKeyChainId ?? undefined,
         };
     }
 
@@ -2003,6 +2055,13 @@ export class ConfigBundleService {
             ])
                 if (desired[field] === null) delete desired[field];
         }
+        // A tenant document without a default access key chain removes it
+        // (tenantDocumentUpdate), unlike the other omitted tenant fields.
+        if (
+            document.kind === "Tenant" &&
+            !("defaultAccessKeyChainId" in desired)
+        )
+            desired.defaultAccessKeyChainId = undefined;
         // Compare with the settings the importers store for the document.
         if (document.kind === "KeyChain") {
             desired.rotationPolicy = appliedRotationPolicy(desired);

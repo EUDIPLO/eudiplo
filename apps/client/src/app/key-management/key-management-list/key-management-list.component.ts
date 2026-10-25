@@ -11,13 +11,23 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterModule } from '@angular/router';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
-import { KeyChainResponseDto } from '@eudiplo/sdk-core';
+import { type DefaultAccessKeyChainDto, KeyChainResponseDto } from '@eudiplo/sdk-core';
 import { KeyChainService } from '../key-chain.service';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { keyChainDeleteQuestion } from '../key-chain-delete-question';
+import {
+  changeDefaultAccess,
+  defaultAccessChip,
+  defaultAccessDeleteRefusal,
+  defaultAccessToggleLabel,
+  defaultAccessToggleTooltip,
+  isConfiguredDefaultAccess,
+  loadDefaultAccess,
+  missingDefaultAccessMessage,
+} from '../default-access-key-chain';
 
 type KeyUsageType = 'attestation' | 'statusList' | 'access' | 'trustList' | 'federation';
 
@@ -64,6 +74,13 @@ export class KeyManagementListComponent implements OnInit {
   readonly deletingIds = new Set<string>();
   /** Set when the keys could not be loaded, so the page does not claim there are none. */
   loadError = '';
+  /**
+   * The tenant's default access key chain; undefined when it could not be loaded, so no row is
+   * marked and no default can be changed.
+   */
+  defaultAccess?: DefaultAccessKeyChainDto;
+  /** True while a request that changes the default access key chain runs. */
+  updatingDefault = false;
   filteredItems: KeyDisplayItem[] = [];
   displayedColumns: string[] = [
     'usage',
@@ -127,6 +144,10 @@ export class KeyManagementListComponent implements OnInit {
     this.loadError = '';
     try {
       const keyChains = await this.keyChainService.getAll();
+      // The list stays usable without the default; it then marks no row. Loaded after the keys,
+      // so a backend that cannot be reached is reported once, by the load error.
+      const defaultAccess = await loadDefaultAccess(this.keyChainService, this.snackBar);
+      this.defaultAccess = defaultAccess;
 
       this.displayItems = this.convertKeyChains(keyChains);
       this.availableKmsProviders = [...new Set(this.displayItems.map((item) => item.kmsProvider))]
@@ -209,6 +230,13 @@ export class KeyManagementListComponent implements OnInit {
     event.stopPropagation();
     if (this.deletingIds.has(item.id)) return;
 
+    // The backend refuses it; say so instead of asking first.
+    const refusal = defaultAccessDeleteRefusal(this.defaultAccess, item.id);
+    if (refusal) {
+      openErrorSnackBar(this.snackBar, refusal, 'Dismiss');
+      return;
+    }
+
     if (!confirm(keyChainDeleteQuestion(item.id, item.description))) {
       return;
     }
@@ -227,6 +255,52 @@ export class KeyManagementListComponent implements OnInit {
       );
     } finally {
       this.deletingIds.delete(item.id);
+    }
+  }
+
+  defaultChip(item: KeyDisplayItem): { label: string; tooltip: string } | undefined {
+    return defaultAccessChip(this.defaultAccess, item.id);
+  }
+
+  /** Whether the row offers to set or remove the default access key chain. */
+  canToggleDefault(item: KeyDisplayItem): boolean {
+    return item.usageType === 'access' && this.defaultAccess !== undefined;
+  }
+
+  isDefault(item: KeyDisplayItem): boolean {
+    return isConfiguredDefaultAccess(this.defaultAccess, item.id);
+  }
+
+  defaultToggleTooltip(item: KeyDisplayItem): string {
+    return defaultAccessToggleTooltip(this.defaultAccess, item.id);
+  }
+
+  defaultToggleLabel(item: KeyDisplayItem): string {
+    return defaultAccessToggleLabel(this.defaultAccess, item.id, this.getDisplayName(item));
+  }
+
+  /** Set when the tenant's default access key chain no longer exists. */
+  get missingDefaultMessage(): string | undefined {
+    return missingDefaultAccessMessage(this.defaultAccess);
+  }
+
+  /** Makes the key chain the tenant's default access key chain, or removes it as default. */
+  async toggleDefault(item: KeyDisplayItem, event: Event): Promise<void> {
+    event.stopPropagation();
+    if (!this.canToggleDefault(item)) return;
+    await this.setDefault(this.isDefault(item) ? null : item.id);
+  }
+
+  /** Sets the default access key chain, or with null removes it; keeps the state on failure. */
+  async setDefault(keyChainId: string | null): Promise<void> {
+    if (this.updatingDefault) return;
+    this.updatingDefault = true;
+    try {
+      this.defaultAccess =
+        (await changeDefaultAccess(this.keyChainService, this.snackBar, keyChainId)) ??
+        this.defaultAccess;
+    } finally {
+      this.updatingDefault = false;
     }
   }
 

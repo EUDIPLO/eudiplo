@@ -48,7 +48,7 @@ If Paradym rejects the certificate, check the wallet version and test environmen
 
 1. Obtain the access key and certificate from the reference implementation's ecosystem operator.
 2. In **Keys → Create Key**, choose **Access Certificate → External Certificate** and provide the private key (EC JWK or PKCS#8 PEM) and the certificate chain, leaf first. Via the API, use `POST /api/key-chain/import` ([Keys and Certificates](keys-and-certificates.md#import-a-key-and-certificate)).
-3. Select this key chain as `accessKeyChainId` in the presentation configuration if the tenant has more than one access key chain. Without it, the [default access key chain](keys-and-certificates.md#default-access-key-chain) prefers this certificate over a self-signed one while it is valid.
+3. If the tenant has more than one access key chain, make this key chain the tenant's [default access key chain](keys-and-certificates.md#default-access-key-chain), which also signs the issuer metadata, or select it as `accessKeyChainId` in the presentation configuration. Without either, the default picked by rule prefers this certificate over a self-signed one while it is valid.
 4. Repeat the health, issuance and presentation checks with the wallet, keeping the public HTTPS address stable.
 
 ## German registrar path
