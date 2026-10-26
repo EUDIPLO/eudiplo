@@ -154,11 +154,15 @@ export async function buildAuthorizationResponse(
     return encryptJwe(payload, encryptionKey, chooseEnc(requestObject));
 }
 
-/** Post the encrypted response to the verifier. */
+/**
+ * Post the encrypted response to the verifier. `detail` explains a rejection
+ * in the failure message; the wallet-facing error body carries no reason.
+ */
 export function submitAuthorizationResponse(
     ctx: FlowContext,
     requestObject: RequestObject,
     response: string,
+    detail?: () => string,
 ): void {
     group('submit_response', () => {
         const res = http.post(
@@ -166,20 +170,56 @@ export function submitAuthorizationResponse(
             { response },
             { tags: stage(ctx, 'vp_response') },
         );
-        assertStatus(res, 200, 'authorization response');
+        assertStatus(res, 200, 'authorization response', detail);
     });
+}
+
+interface SessionView {
+    status?: string;
+    failureCode?: string;
+    errorReason?: string;
+}
+
+/** The operator's view of a session, or undefined when it cannot be read. */
+function getSession(
+    ctx: FlowContext,
+    adminToken: string,
+    sessionId: string,
+    stageName: string,
+): { res: ReturnType<typeof http.get>; session?: SessionView } {
+    const res = http.get(
+        `${ctx.baseUrl}/api/session/${sessionId}`,
+        authParams(adminToken, stage(ctx, stageName)),
+    );
+    if (res.status !== 200) return { res };
+    try {
+        return { res, session: res.json() as SessionView };
+    } catch {
+        return { res };
+    }
+}
+
+/**
+ * Why a rejected response failed, as `"; verifier: <failureCode>: <errorReason>"`
+ * when the verifier marked the session failed, `"; session: <status>"` when it
+ * did not (for example a response for an already used session), or `""` when
+ * the session cannot be read.
+ */
+export function sessionFailure(ctx: FlowContext, adminToken: string, sessionId: string): string {
+    const { session } = getSession(ctx, adminToken, sessionId, 'vp_diagnose');
+    if (!session) return '';
+    if (session.status !== 'failed') return `; session: ${session.status ?? 'unknown'}`;
+    const code = session.failureCode ?? 'failed';
+    return session.errorReason ? `; verifier: ${code}: ${session.errorReason}` : `; verifier: ${code}`;
 }
 
 /** Read the session the operator sees and check that verification succeeded. */
 export function checkSessionResult(ctx: FlowContext, adminToken: string, sessionId: string): void {
     group('session_result', () => {
-        const res = http.get(
-            `${ctx.baseUrl}/api/session/${sessionId}`,
-            authParams(adminToken, stage(ctx, 'vp_session')),
-        );
+        const { res, session } = getSession(ctx, adminToken, sessionId, 'vp_session');
         assertStatus(res, 200, 'session result');
-        check(res, {
-            'session result: status completed': (r) => r.json('status') === 'completed',
+        check(session, {
+            'session result: status completed': (sv) => sv?.status === 'completed',
         });
     });
 }
@@ -205,7 +245,10 @@ export async function presentCredential(
     thinkTime(ctx.think);
 
     const response = await buildAuthorizationResponse(requestObject, credential, holder);
-    submitAuthorizationResponse(ctx, requestObject, response);
+    // On a rejection, take the reason from the operator's view of the session.
+    submitAuthorizationResponse(ctx, requestObject, response, () =>
+        sessionFailure(ctx, adminToken, offer.session),
+    );
 
     if (envBool('CHECK_SESSION_RESULT', false)) {
         checkSessionResult(ctx, adminToken, offer.session);

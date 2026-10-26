@@ -163,18 +163,21 @@ export function extractPreAuthCode(credentialOffer: CredentialOffer): string {
 
 /**
  * Assert that an HTTP response has the expected status code and fail the iteration
- * with a helpful message if not.
+ * with a helpful message if not. `detail` adds context to the message (it is
+ * only evaluated on failure); it goes before ". Body:", so failures with the
+ * same detail are grouped in the CI annotation.
  */
 export function assertStatus(
     res: RefinedResponse<ResponseType | undefined>,
     expectedStatus: number,
     label: string,
+    detail?: () => string,
 ): void {
     const ok = check(res, {
         [`${label}: status ${expectedStatus}`]: (r) => r.status === expectedStatus,
     });
     if (!ok) {
-        fail(`${label}: unexpected status ${res.status}. Body: ${res.body}`);
+        fail(`${label}: unexpected status ${res.status}${detail ? detail() : ''}. Body: ${res.body}`);
     }
 }
 
