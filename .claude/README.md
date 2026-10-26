@@ -1,6 +1,18 @@
 # Claude Code setup for EUDIPLO
 
-This folder holds the project's Claude Code configuration: six read-only reviewer agents and a finding verifier in `agents/`, and the `/review` and `/audit` commands in `commands/`. The rules Claude follows in every session are in the repository root `CLAUDE.md`.
+This folder holds the project's Claude Code configuration: six read-only reviewer agents and a finding verifier in `agents/`, the `/review` and `/audit` commands in `commands/`, and task skills in `skills/`. The rules Claude follows in every session are in the repository root `CLAUDE.md`.
+
+## Skills
+
+Claude loads a skill on its own when a task matches its description; you can also call one by name, for example `/e2e`.
+
+| Skill | Use it for |
+| --- | --- |
+| `e2e` | Backend vitest and client Playwright E2E runs, including when another process holds port 3000 or 4200 |
+| `regen-sdk` | Regenerating `packages/eudiplo-sdk-core` from a backend you started yourself, and keeping the diff to your own change |
+| `config-format-bump` | A new configuration file format version: version choice, migration step, snapshot, docs and commit classification |
+
+Skills hold the steps and pitfalls; the contributor guides in `apps/docs/docs/contributing/` stay the reference.
 
 ## Commands
 
