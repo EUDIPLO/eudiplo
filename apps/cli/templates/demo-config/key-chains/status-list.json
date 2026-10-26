@@ -11,10 +11,10 @@
       "type": "private-jwk",
       "jwk": {
         "crv": "P-256",
-        "d": "oXPLTk02Mq9n8GfOTQ8hdoe3ENkNoN_Y2ymLnUmnbV0",
+        "d": "iAUEObUwUI-QDXsFYH9SLm7D-yuEUsOD73YG_jBgLGk",
         "kty": "EC",
-        "x": "HHkkbUgKSkkqXmL8utl-TLWIg8CYQS4WPJ8j_nO44Yw",
-        "y": "1NJY0LT3mEuucLQCZJWNrA7fVW8ypR4Zf5cuu85NjSw",
+        "x": "sSdNHYiCOK0E8lNE9rUQLUN3MbVeDnxjRwVwRiI9BqY",
+        "y": "xRP83r38x_MYGsteGhUW25Q0XVXA-ZRXlP38a8URPDg",
         "alg": "ES256"
       }
     },

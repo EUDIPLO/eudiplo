@@ -8,6 +8,21 @@ import {
 
 type X5cInput = string[]; // base64 DER entries
 
+/**
+ * Whether a trust-list service has the requested type. A filter starting
+ * with "/" matches by suffix (e.g. "/Issuance" matches PID/Issuance and
+ * EAA/Issuance); otherwise exact or base-role matching applies (e.g.
+ * WalletSolution matches WalletSolution/Issuance).
+ */
+function serviceMatchesFilter(
+    serviceTypeIdentifier: string,
+    serviceTypeFilter: string,
+): boolean {
+    return serviceTypeFilter.startsWith("/")
+        ? serviceTypeIdentifier.endsWith(serviceTypeFilter)
+        : serviceTypeMatches(serviceTypeIdentifier, serviceTypeFilter);
+}
+
 function arrayBufferToHex(buffer: ArrayBuffer): string {
     return Array.from(new Uint8Array(buffer))
         .map((b) => b.toString(16).padStart(2, "0"))
@@ -84,6 +99,40 @@ export class X509ValidationService {
     }
 
     /**
+     * The certificates of all trust-list services, as input for
+     * {@link parseTrustAnchors}, with those of services matching
+     * `serviceTypeFilter` first.
+     *
+     * The chain builder takes the first certificate whose subject matches
+     * the issuer and whose key verifies the signature. Two anchors can share
+     * both, for example when two key chains are imported with the same
+     * private key and each gets its own self-signed root. Without an order,
+     * the path could then end at the issuance anchor while a status list is
+     * checked against the revocation anchor, and the match fails although
+     * the revocation anchor signed the certificate. Listing the requested
+     * service type first makes the path end at an anchor of that type.
+     */
+    anchorCertValuesFor(
+        entities: TrustedEntity[],
+        serviceTypeFilter: string,
+    ): Array<{ certValue: string }> {
+        const preferred: Array<{ certValue: string }> = [];
+        const others: Array<{ certValue: string }> = [];
+        for (const entity of entities) {
+            for (const svc of entity.services) {
+                (serviceMatchesFilter(
+                    svc.serviceTypeIdentifier,
+                    serviceTypeFilter,
+                )
+                    ? preferred
+                    : others
+                ).push({ certValue: svc.certValue });
+            }
+        }
+        return [...preferred, ...others];
+    }
+
+    /**
      * Build a validated path from leaf using provided chain + anchors.
      * Returns path leaf..anchor if successful.
      */
@@ -148,15 +197,11 @@ export class X509ValidationService {
 
         for (const entity of entities) {
             // Find certificates matching the specified service type in this entity
-            // If filter starts with "/", use suffix matching (e.g., "/Issuance" matches PID/Issuance and EAA/Issuance)
-            // Otherwise use exact or base-role matching (e.g., WalletSolution matches WalletSolution/Issuance)
             const matchingServices = entity.services.filter((s) =>
-                serviceTypeFilter.startsWith("/")
-                    ? s.serviceTypeIdentifier.endsWith(serviceTypeFilter)
-                    : serviceTypeMatches(
-                          s.serviceTypeIdentifier,
-                          serviceTypeFilter,
-                      ),
+                serviceMatchesFilter(
+                    s.serviceTypeIdentifier,
+                    serviceTypeFilter,
+                ),
             );
 
             for (const svc of matchingServices) {

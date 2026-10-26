@@ -96,6 +96,20 @@ export class CredentialChainValidationService {
         trustListSource: TrustListSource | undefined,
         policy: ChainValidationPolicy = {},
     ): Promise<ChainValidationResult> {
+        return this.validateChainPreferring(x5c, trustListSource, policy, []);
+    }
+
+    /**
+     * {@link validateChain}, trying `preferredAnchors` as path anchors before
+     * all other trust-list certificates. Only the status list check uses it,
+     * with the services of the entity the status list must belong to.
+     */
+    private async validateChainPreferring(
+        x5c: string[],
+        trustListSource: TrustListSource | undefined,
+        policy: ChainValidationPolicy,
+        preferredAnchors: Array<{ certValue: string }>,
+    ): Promise<ChainValidationResult> {
         const {
             requireX5c = false,
             pinnedCertMode = "leaf",
@@ -157,11 +171,17 @@ export class CredentialChainValidationService {
             return { verified: true, matchedEntity: null };
         }
 
-        // 4) Get all certificates from entities for path building
-        const allCerts = store.entities.flatMap((e) =>
-            e.services.map((s) => ({ certValue: s.certValue })),
-        );
-        const anchors = this.x509v.parseTrustAnchors(allCerts);
+        // 4) Get all certificates from entities for path building: the
+        // preferred ones first, then those of the requested service type, so
+        // that the path ends at the anchor being checked when anchors share
+        // subject and key.
+        const anchors = this.x509v.parseTrustAnchors([
+            ...preferredAnchors,
+            ...this.x509v.anchorCertValuesFor(
+                store.entities,
+                serviceTypeFilter,
+            ),
+        ]);
 
         // 5) Build the certificate path
         let path: x509.X509Certificate[];
@@ -268,11 +288,22 @@ export class CredentialChainValidationService {
         const revocationServices = matchedEntity.entity.services.filter((s) =>
             s.serviceTypeIdentifier.endsWith("/Revocation"),
         );
-        const result = await this.validateChain(x5c, trustListSource, {
-            ...policy,
-            serviceTypeFilter:
-                revocationServices.length > 0 ? "/Revocation" : "/Issuance",
-        });
+        const serviceTypeFilter =
+            revocationServices.length > 0 ? "/Revocation" : "/Issuance";
+        const signerServices =
+            revocationServices.length > 0
+                ? revocationServices
+                : matchedEntity.entity.services.filter((s) =>
+                      s.serviceTypeIdentifier.endsWith("/Issuance"),
+                  );
+        // The status list must chain to this entity's certificates; try
+        // them before same-subject anchors of other entities.
+        const result = await this.validateChainPreferring(
+            x5c,
+            trustListSource,
+            { ...policy, serviceTypeFilter },
+            signerServices.map((s) => ({ certValue: s.certValue })),
+        );
         if (!result.verified || !result.path) {
             this.logger.warn(
                 `Status list chain validation failed for TrustedEntity ${entityId}: ${result.errorDetails ?? "no trusted entity matched"}`,

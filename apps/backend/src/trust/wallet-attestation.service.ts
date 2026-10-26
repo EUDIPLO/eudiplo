@@ -457,12 +457,20 @@ export class WalletAttestationService {
             const presented = this.x509ValidationService.parseX5c(x5c);
             const leaf = presented[0];
 
-            // Get all certs for path building
+            // Get all certs for path building, the expected signer first: when
+            // anchors share subject and key, the path then ends at the signer
+            // certificate that is checked below.
             const allCerts = trustStore.entities.flatMap((e) =>
                 e.services.map((s) => ({ certValue: s.certValue })),
             );
-            const anchors =
-                this.x509ValidationService.parseTrustAnchors(allCerts);
+            const anchors = this.x509ValidationService.parseTrustAnchors([
+                {
+                    certValue: Buffer.from(signer.cert.rawData).toString(
+                        "base64",
+                    ),
+                },
+                ...allCerts,
+            ]);
 
             let path: x509.X509Certificate[];
             try {

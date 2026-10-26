@@ -481,4 +481,148 @@ describe("CredentialChainValidationService — status list signer", () => {
             ).resolves.toBe(true);
         });
     });
+
+    /**
+     * Two key chains imported with the same private key each get their own
+     * self-signed root with the same subject. A leaf signed with that key
+     * verifies under both roots, so the path must end at the root of the
+     * service type being checked (the demo tenant's attestation and status
+     * list key chains shared a key).
+     */
+    describe("issuance and revocation CAs with the same subject and key", () => {
+        async function selfSignedWith(
+            keys: CryptoKeyPair,
+            name: string,
+        ): Promise<Cert> {
+            const cert = await x509.X509CertificateGenerator.createSelfSigned({
+                serialNumber: String(serial++).padStart(2, "0"),
+                name: `CN=${name}`,
+                notBefore: new Date(Date.now() - 60_000),
+                notAfter: new Date(Date.now() + 3_600_000),
+                keys,
+                signingAlgorithm: algorithm,
+                extensions: [
+                    new x509.BasicConstraintsExtension(true, undefined, true),
+                ],
+            });
+            return { cert, keys };
+        }
+
+        let issuanceRoot: Cert;
+        let revocationRoot: Cert;
+
+        beforeEach(async () => {
+            const sharedKey = await generateKeys();
+            issuanceRoot = await selfSignedWith(
+                sharedKey,
+                "Demo Tenant Root CA",
+            );
+            revocationRoot = await selfSignedWith(
+                sharedKey,
+                "Demo Tenant Root CA",
+            );
+        });
+
+        for (const order of ["issuance first", "revocation first"] as const) {
+            it(`accepts the status list and the credential (${order})`, async () => {
+                const services = [
+                    { serviceTypeIdentifier: PID_ISSUANCE, cert: issuanceRoot },
+                    {
+                        serviceTypeIdentifier: PID_REVOCATION,
+                        cert: revocationRoot,
+                    },
+                ];
+                const service = serviceWith([
+                    {
+                        entityId: "PID Provider",
+                        services:
+                            order === "issuance first"
+                                ? services
+                                : [...services].reverse(),
+                    },
+                ]);
+
+                const credentialResult = await service.validateChain(
+                    [b64(await issuedBy(issuanceRoot, "Demo Tenant"))],
+                    LOTE_SOURCE,
+                );
+                expect(credentialResult.verified).toBe(true);
+                expect(credentialResult.path?.at(-1)?.serialNumber).toBe(
+                    issuanceRoot.cert.serialNumber,
+                );
+
+                await expect(
+                    service.verifyStatusListSignature(
+                        [b64(await issuedBy(revocationRoot, "Demo Tenant"))],
+                        credentialResult.matchedEntity,
+                        LOTE_SOURCE,
+                    ),
+                ).resolves.toBe(true);
+            });
+        }
+
+        function withOtherEntity(otherRoot: Cert) {
+            // The other entity is listed first, so its root is the first
+            // candidate with the right subject.
+            return serviceWith([
+                {
+                    entityId: "Other",
+                    services: [
+                        {
+                            serviceTypeIdentifier: PID_REVOCATION,
+                            cert: otherRoot,
+                        },
+                    ],
+                },
+                {
+                    entityId: "PID Provider",
+                    services: [
+                        {
+                            serviceTypeIdentifier: PID_ISSUANCE,
+                            cert: issuanceRoot,
+                        },
+                        {
+                            serviceTypeIdentifier: PID_REVOCATION,
+                            cert: revocationRoot,
+                        },
+                    ],
+                },
+            ]);
+        }
+
+        it("prefers the matched entity's revocation root over another entity's root with the same subject and key", async () => {
+            const otherRoot = await selfSignedWith(
+                issuanceRoot.keys,
+                "Demo Tenant Root CA",
+            );
+            const service = withOtherEntity(otherRoot);
+            const matched = await credentialMatch(service, [
+                b64(await issuedBy(issuanceRoot, "Demo Tenant")),
+            ]);
+
+            await expect(
+                service.verifyStatusListSignature(
+                    [b64(await issuedBy(revocationRoot, "Demo Tenant"))],
+                    matched,
+                    LOTE_SOURCE,
+                ),
+            ).resolves.toBe(true);
+        });
+
+        it("rejects a status list signed under another entity's root with the same subject", async () => {
+            const otherRoot = await selfSigned("Demo Tenant Root CA", true);
+            const service = withOtherEntity(otherRoot);
+            const matched = await credentialMatch(service, [
+                b64(await issuedBy(issuanceRoot, "Demo Tenant")),
+            ]);
+
+            await expect(
+                service.verifyStatusListSignature(
+                    [b64(await issuedBy(otherRoot, "Demo Tenant"))],
+                    matched,
+                    LOTE_SOURCE,
+                ),
+            ).resolves.toBe(false);
+        });
+    });
 });
