@@ -22,6 +22,11 @@ import { basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const MAX_LINE = 400;
+/**
+ * Backend messages carry diagnostics (for example the certificates a chain
+ * check compared), so they are kept longer than k6 error lines.
+ */
+const MAX_BACKEND_LINE = 2000;
 const MAX_FAILURES = 20;
 
 /**
@@ -96,8 +101,14 @@ export function topBackendMessages(logText, limit = 5) {
     for (const raw of logText.split('\n')) {
         const m = BACKEND_LINE.exec(raw);
         if (!m || !['WARN', 'ERROR', 'FATAL'].includes(m[1])) continue;
-        const text = `${m[1]} ${m[2].trim()}`.slice(0, MAX_LINE);
-        entries.push({ key: text.replace(UUID, '<id>'), text });
+        const full = `${m[1]} ${m[2].trim()}`;
+        // Group on the first MAX_LINE characters (ids masked), so long
+        // diagnostics with varying tails still count as one message; keep
+        // up to MAX_BACKEND_LINE characters of the first one as the example.
+        entries.push({
+            key: full.replace(UUID, '<id>').slice(0, MAX_LINE),
+            text: full.slice(0, MAX_BACKEND_LINE),
+        });
     }
     return topGroups(entries, limit, 'backend ');
 }

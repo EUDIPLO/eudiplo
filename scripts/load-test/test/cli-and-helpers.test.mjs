@@ -243,6 +243,14 @@ describe('failure annotation', () => {
         assert.deepEqual(topBackendMessages('[2026-10-26 07:42:03] WARN: [X] y'), ['backend 1× WARN [X] y']);
         const many = Array.from({ length: 7 }, (_v, i) => backendLine('WARN', `[X] message ${i}`)).join('\n');
         assert.equal(topBackendMessages(many).length, 5);
+        const long = topBackendMessages(backendLine('WARN', `[X] ${'d'.repeat(5000)}`))[0];
+        assert.equal(long.replace(/^backend 1× /, '').length, 2000);
+        const prefix = `[X] Status list chain validation failed for TrustedEntity PID Provider: ${'p'.repeat(420)}`;
+        const tails = topBackendMessages(
+            [backendLine('WARN', `${prefix} thumbprint=aa`), backendLine('WARN', `${prefix} thumbprint=bb`)].join('\n'),
+        );
+        assert.equal(tails.length, 1);
+        assert.match(tails[0], /^backend 2× WARN .* thumbprint=aa$/);
     });
 
     test('orders failures, then k6 errors, then backend messages, then an unreadable summary', () => {
