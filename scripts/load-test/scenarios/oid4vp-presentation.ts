@@ -1,143 +1,77 @@
 /**
- * oid4vp-presentation scenario — OID4VP presentation request creation and retrieval.
+ * oid4vp-presentation scenario — complete OID4VP presentation including the
+ * wallet's response.
  *
- * Each VU iteration exercises the verifier-side flow up to (but NOT including)
- * the wallet's VP token submission, because a full VP response requires a real
- * wallet with an issued credential (a Holder-bound SD-JWT VC).  The parts
- * tested here cover the majority of the latency-sensitive code paths:
- *
- *   1. Obtain admin Bearer token (POST /api/oauth2/token)
- *   2. Create a presentation session (POST /verifier/offer)
- *   3. Fetch the authorization request object (GET /presentations/:sessionId/oid4vp/request)
- *
- * To extend this test with a full VP submission, provide a real credential
- * via the CREDENTIAL_JWT environment variable and implement the VP signing
- * step before calling the response endpoint.
+ * setup() issues CREDENTIAL_POOL_SIZE credentials to a generated holder key.
+ * Each iteration then runs the verifier and wallet side of one presentation
+ * (see lib/flows/presentation.ts): create the request, fetch the request
+ * object, build an SD-JWT presentation with key binding for the claims the
+ * DCQL query asks for, encrypt it for the verifier and submit it. The
+ * verifier's signature, trust-list, status-list and DCQL checks therefore
+ * run under load.
  *
  * Environment variables:
- *   BASE_URL        - Backend base URL (default: http://localhost:3000)
- *   CLIENT_ID       - OAuth2 client ID (default: test-client)
- *   CLIENT_SECRET   - OAuth2 client secret (default: test-client-secret)
- *   REQUEST_ID      - Verifier request config ID (default: age-over-18)
- *   K6_PROFILE      - Load profile: smoke | load | stress | spike (default: smoke)
+ *   BASE_URL              - Backend base URL (default: http://localhost:3000)
+ *   TENANT_ID             - Tenant that issues the test credential (default: demo)
+ *   CLIENT_ID             - OAuth2 client ID (default: test-client; needs
+ *                           issuance:offer for setup and presentation:request)
+ *   CLIENT_SECRET         - OAuth2 client secret (default: test-client-secret)
+ *   REQUEST_ID            - Verifier request config ID (default: age-over-18)
+ *   CREDENTIAL_CONFIG_ID  - Credential configuration issued in setup (default: pid)
+ *   CREDENTIAL_POOL_SIZE  - Credentials issued in setup (default: 5)
+ *   CREDENTIAL_JWT        - Present this SD-JWT VC instead of issuing one;
+ *                           needs HOLDER_PRIVATE_JWK (the key in its cnf claim)
+ *   DCQL_CREDENTIAL_ID    - DCQL credential query to answer (default: the
+ *                           first dc+sd-jwt query)
+ *   CHECK_SESSION_RESULT  - Also read /api/session/:id and expect "completed"
+ *                           (default: false)
+ *   SEED_SESSIONS         - Sessions created in setup before measuring (default: 0)
+ *   THINK_TIME_MIN/MAX    - Seconds between operator and wallet steps
+ *                           (default: 0 for once/smoke, 0–1 for spike, 1–5 otherwise)
+ *   K6_PROFILE            - Load profile: once | smoke | load | stress | spike (default: smoke)
  */
 
-import http from 'k6/http';
-import { check, group } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
-import type { Options } from 'k6/options';
-import {
-    getAdminToken,
-    assertStatus,
-    authParams,
-    parseQueryString,
-} from '../lib/helpers.ts';
-import { profileOptions } from '../k6.config.ts';
+import { scenarioOptions } from '../k6.config.ts';
+import { adminToken, envNumber, pickRandom } from '../lib/helpers.ts';
+import { flowContext, type WalletSetupData } from '../lib/flows/context.ts';
+import { presentCredential } from '../lib/flows/presentation.ts';
+import { seedSessions } from '../lib/flows/seed.ts';
+import { setupWallet } from '../lib/flows/setup.ts';
 
-// ---------------------------------------------------------------------------
-// Configuration
-// ---------------------------------------------------------------------------
+export { handleSummary } from '../lib/summary.ts';
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
-const CLIENT_ID = __ENV.CLIENT_ID || 'presentation-test';
-const CLIENT_SECRET = __ENV.CLIENT_SECRET || 'presentation-test-secret';
-const REQUEST_ID = __ENV.REQUEST_ID || 'age-over-18';
+const ctx = flowContext();
 
-const VERIFIER_OFFER_ENDPOINT = `${BASE_URL}/api/verifier/offer`;
-
-// ---------------------------------------------------------------------------
-// k6 options
-// ---------------------------------------------------------------------------
-
-export const options: Options = {
-    ...profileOptions(),
+export const options = scenarioOptions({
+    name: 'oid4vp_presentation',
+    // Complete presentations per second under the `load` profile.
+    baseRate: 10,
+    pauses: 2,
     thresholds: {
-        'http_req_duration{stage:offer}': ['p(95)<1000'],
-        'http_req_duration{stage:request_object}': ['p(95)<500'],
-        http_req_failed: ['rate<0.01'],
-        presentation_session_created: ['count>0'],
+        'http_req_duration{stage:vp_offer}': ['p(95)<100'],
+        'http_req_duration{stage:vp_request_object}': ['p(95)<50'],
+        // Verification: KB-JWT and issuer signature, trust list, status list, DCQL.
+        'http_req_duration{stage:vp_response}': ['p(95)<500', 'p(99)<1000'],
+        presentation_success: ['count>0'],
     },
-};
+});
 
-// ---------------------------------------------------------------------------
-// Custom metrics
-// ---------------------------------------------------------------------------
-
-const sessionCreated = new Counter('presentation_session_created');
-const requestObjectFetched = new Counter('presentation_request_object_fetched');
+const presentationSuccess = new Counter('presentation_success');
 const presentationDuration = new Trend('presentation_total_duration', true);
 
-// ---------------------------------------------------------------------------
-// Default VU function
-// ---------------------------------------------------------------------------
+export async function setup(): Promise<WalletSetupData> {
+    const data = await setupWallet(ctx, Math.max(1, envNumber('CREDENTIAL_POOL_SIZE', 5)));
+    seedSessions(ctx, data.adminToken.token);
+    return data;
+}
 
-export default function (): void {
-    const iterStart = Date.now();
+export default async function (data: WalletSetupData): Promise<void> {
+    const token = adminToken(ctx.baseUrl, ctx.clientId, ctx.clientSecret, data.adminToken);
+    const start = Date.now();
 
-    // -----------------------------------------------------------------------
-    // Step 1: Admin token
-    // -----------------------------------------------------------------------
-    let adminToken!: string;
-    group('admin_auth', () => {
-        adminToken = getAdminToken(BASE_URL, CLIENT_ID, CLIENT_SECRET);        
-    });
+    await presentCredential(ctx, token, pickRandom(data.credentials), data.holder);
 
-    // -----------------------------------------------------------------------
-    // Step 2: Create presentation session
-    // -----------------------------------------------------------------------
-    let sessionId!: string;
-    let requestUri!: string;
-    group('create_presentation_offer', () => {
-        const body = {
-            response_type: 'uri',
-            requestId: REQUEST_ID,
-        };
-
-        const res = http.post(VERIFIER_OFFER_ENDPOINT, JSON.stringify(body), {
-            ...authParams(adminToken),
-            tags: { stage: 'offer' },
-        });
-
-        assertStatus(res, 201, 'create presentation offer');
-
-        const offer = res.json() as { session: string; uri: string };
-        sessionId = offer.session;
-        requestUri = offer.uri; // openid4vp://?request_uri=...
-
-        check(offer, {
-            'session ID present': (o) => typeof o.session === 'string' && o.session.length > 0,
-            'offer URI present': (o) => typeof o.uri === 'string' && o.uri.startsWith('openid4vp://'),
-        });
-
-        sessionCreated.add(1);
-    });
-
-    // -----------------------------------------------------------------------
-    // Step 3: Fetch the authorization request object (wallet perspective)
-    // The wallet would normally follow the request_uri from the offer.
-    // -----------------------------------------------------------------------
-    group('fetch_request_object', () => {
-        // The request_uri from the offer points to the backend's request endpoint.
-        // Parse it to get the direct backend URL if needed.
-        const params = parseQueryString(requestUri);
-        const backendRequestUrl = params.request_uri
-            ? params.request_uri
-            : `${BASE_URL}/presentations/${sessionId}/oid4vp/request`;
-
-        const res = http.get(backendRequestUrl, {
-            headers: { Accept: 'application/oauth-authz-req+jwt, application/json' },
-            tags: { stage: 'request_object' },
-        });
-
-        const ok = check(res, {
-            'request object: status 200': (r) => r.status === 200,
-            'request object: non-empty body': (r) => !!r.body && r.body.length > 0,
-        });
-
-        if (ok) {
-            requestObjectFetched.add(1);
-        }
-    });
-
-    presentationDuration.add(Date.now() - iterStart);
+    presentationSuccess.add(1);
+    presentationDuration.add(Date.now() - start);
 }

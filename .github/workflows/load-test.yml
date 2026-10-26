@@ -11,6 +11,7 @@ on:
         type: choice
         options:
           - all
+          - mixed
           - api-auth
           - pre-auth-issuance
           - oid4vp-presentation
@@ -21,15 +22,30 @@ on:
         default: smoke
         type: choice
         options:
+          - once
           - smoke
           - load
           - stress
           - spike
+      seed_sessions:
+        description: Sessions to create before measuring (0 = none)
+        required: false
+        default: '0'
+        type: string
 
-  # Scheduled weekly regression — run the full suite with the smoke profile
-  # every Monday at 02:00 UTC.
+  # Changes to the suite itself are validated against a freshly built backend.
+  pull_request:
+    paths:
+      - scripts/load-test/**
+      - deployment/docker-compose/**
+      - .github/workflows/load-test.yml
+
+  # Scheduled regressions (UTC):
+  #   Monday 02:00     all scenarios, smoke profile
+  #   Wednesday 02:00  mixed workload, load profile, 20 000 pre-seeded sessions
   schedule:
     - cron: '0 2 * * 1'
+    - cron: '0 2 * * 3'
 
 permissions: {}
 
@@ -43,8 +59,9 @@ concurrency:
 
 jobs:
   load-test:
-    name: k6 Load Test (${{ inputs.scenario || 'all' }} / ${{ inputs.profile || 'smoke' }})
+    name: k6 Load Test (${{ inputs.scenario || (github.event.schedule == '0 2 * * 3' && 'mixed') || 'all' }} / ${{ inputs.profile || (github.event.schedule == '0 2 * * 3' && 'load') || 'smoke' }})
     runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     permissions:
       contents: read
@@ -55,6 +72,11 @@ jobs:
       CLIENT_ID: test-client
       CLIENT_SECRET: test-client-secret
       K6_ENV_FILE: ${{ github.workspace }}/deployment/docker-compose/k6.env
+      # The weekly load run measures the production-like mixed workload on a
+      # database that already holds sessions; everything else runs smoke.
+      SCENARIO: ${{ inputs.scenario || (github.event.schedule == '0 2 * * 3' && 'mixed') || 'all' }}
+      K6_PROFILE: ${{ inputs.profile || (github.event.schedule == '0 2 * * 3' && 'load') || 'smoke' }}
+      SEED_SESSIONS: ${{ inputs.seed_sessions || (github.event.schedule == '0 2 * * 3' && '20000') || '0' }}
 
     steps:
       # -------------------------------------------------------------------
@@ -71,6 +93,18 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # -------------------------------------------------------------------
+      # Unit tests of the suite (profiles, thresholds, wallet crypto,
+      # summaries, baseline) — fast, and fail before the image build
+      # -------------------------------------------------------------------
+      - name: Install Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+
+      - name: Unit tests of the load-test suite
+        run: node --import ./scripts/load-test/test/shims/register.mjs --test 'scripts/load-test/test/*.test.mjs'
 
       # -------------------------------------------------------------------
       # Install k6
@@ -92,18 +126,18 @@ jobs:
       - name: Run k6 load tests
         env:
           EUDIPLO_IMAGE: eudiplo:load-test
-          K6_PROFILE: ${{ inputs.profile || 'smoke' }}
         run: |
-          scenario="${{ inputs.scenario || 'all' }}"
           args=()
-          if [[ "${scenario}" != "all" ]]; then
-            args+=("${scenario}")
+          if [[ "${SCENARIO}" != "all" ]]; then
+            args+=("${SCENARIO}")
           fi
 
           bash scripts/load-test/run-all.sh "${args[@]}"
 
-      - name: Capture stack logs on failure
-        if: failure()
+      # Always keep the backend logs: a passing run can still log errors
+      # (retries, warnings) that explain a latency change.
+      - name: Capture stack logs
+        if: always()
         run: |
           mkdir -p scripts/load-test/results
           docker compose \

@@ -1,243 +1,81 @@
 /**
- * pre-auth-issuance scenario — Full OID4VCI pre-authorized_code credential issuance flow.
+ * pre-auth-issuance scenario — Full OID4VCI pre-authorized_code credential
+ * issuance flow, plus the status-list write path.
  *
- * Each VU iteration exercises the complete wallet-side issuance path:
+ * Each iteration runs the complete wallet-side issuance (see
+ * lib/flows/issuance.ts) and, for a share of the issued credentials, the
+ * operator-side revocation that rewrites and re-signs the status list.
  *
- *   1. Obtain admin Bearer token (POST /api/oauth2/token)
- *   2. Create a credential offer (POST /api/issuer/offer)
- *   3. Resolve the credential offer URI → extract pre-authorized_code
- *   4. Exchange pre-authorized_code for a wallet access token
- *      (POST /issuers/:tenantId/authorize/token)
- *   5. Fetch a fresh c_nonce (POST /issuers/:tenantId/vci/nonce)
- *   6. Sign an OID4VCI key-binding proof JWT (ECDSA P-256)
- *   7. Request the credential (POST /issuers/:tenantId/vci/credential)
+ * The operator token is obtained once in setup() and cached per VU; the
+ * holder key pair is generated once and shared by all VUs.
  *
  * Environment variables:
- *   BASE_URL      - Backend base URL (default: http://localhost:3000)
- *   TENANT_ID     - Issuer tenant ID (default: demo)
- *   CLIENT_ID     - OAuth2 client ID (default: test-client)
- *   CLIENT_SECRET - OAuth2 client secret (default: test-client-secret)
- *   K6_PROFILE    - Load profile: smoke | load | stress | spike (default: smoke)
+ *   BASE_URL              - Backend base URL (default: http://localhost:3000)
+ *   TENANT_ID             - Issuer tenant ID (default: demo)
+ *   CLIENT_ID             - OAuth2 client ID (default: test-client)
+ *   CLIENT_SECRET         - OAuth2 client secret (default: test-client-secret)
+ *   CREDENTIAL_CONFIG_ID  - Credential configuration to issue (default: pid)
+ *   REVOKE_RATIO          - Share of issued credentials to revoke, 0..1 (default: 0.1)
+ *   SEED_SESSIONS         - Sessions created in setup before measuring (default: 0)
+ *   THINK_TIME_MIN/MAX    - Seconds between operator and wallet steps
+ *                           (default: 0 for once/smoke, 0–1 for spike, 1–5 otherwise)
+ *   K6_PROFILE            - Load profile: once | smoke | load | stress | spike (default: smoke)
  *
  * Requirements:
  *   k6 >= 2.0.0   (global WebCrypto API)
  */
 
-import http from 'k6/http';
-import { check, group } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
-import type { Options } from 'k6/options';
-import {
-    getAdminToken,
-    formEncode,
-    resolveCredentialOffer,
-    extractPreAuthCode,
-    assertStatus,
-    authParams,
-} from '../lib/helpers.ts';
-import {
-    generateKeyPair,
-    exportKeyPair,
-    importPrivateKey,
-    signProofJwt,
-} from '../lib/crypto.ts';
-import { profileOptions } from '../k6.config.ts';
+import { scenarioOptions } from '../k6.config.ts';
+import { adminToken, envNumber } from '../lib/helpers.ts';
+import { flowContext, type WalletSetupData } from '../lib/flows/context.ts';
+import { issueCredential, revokeCredential } from '../lib/flows/issuance.ts';
+import { seedSessions } from '../lib/flows/seed.ts';
+import { setupWallet } from '../lib/flows/setup.ts';
 
-// ---------------------------------------------------------------------------
-// Configuration
-// ---------------------------------------------------------------------------
+export { handleSummary } from '../lib/summary.ts';
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
-const TENANT_ID = __ENV.TENANT_ID || 'demo';
-const CLIENT_ID = __ENV.CLIENT_ID || 'test-client';
-const CLIENT_SECRET = __ENV.CLIENT_SECRET || 'test-client-secret';
-const CREDENTIAL_CONFIG_ID = __ENV.CREDENTIAL_CONFIG_ID || 'pid';
+const ctx = flowContext();
+const REVOKE_RATIO = envNumber('REVOKE_RATIO', 0.1);
 
-const ISSUER_BASE = `${BASE_URL}/issuers/${TENANT_ID}`;
-const TOKEN_ENDPOINT = `${ISSUER_BASE}/authorize/token`;
-const NONCE_ENDPOINT = `${ISSUER_BASE}/vci/nonce`;
-const CREDENTIAL_ENDPOINT = `${ISSUER_BASE}/vci/credential`;
-const OFFER_ENDPOINT = `${BASE_URL}/api/issuer/offer`;
-
-// ---------------------------------------------------------------------------
-// k6 options
-// ---------------------------------------------------------------------------
-
-export const options: Options = {
-    ...profileOptions(),
+export const options = scenarioOptions({
+    name: 'pre_auth_issuance',
+    // Complete issuances per second under the `load` profile.
+    baseRate: 10,
+    pauses: 1,
     thresholds: {
-        // Credential issuance is crypto-heavy; allow up to 3 s at p(95).
-        'http_req_duration{stage:credential}': ['p(95)<3000'],
-        'http_req_duration{stage:offer}': ['p(95)<1000'],
-        'http_req_duration{stage:token_exchange}': ['p(95)<1000'],
-        http_req_failed: ['rate<0.01'],
+        'http_req_duration{stage:offer}': ['p(95)<100'],
+        'http_req_duration{stage:resolve_offer}': ['p(95)<50'],
+        'http_req_duration{stage:token_exchange}': ['p(95)<50'],
+        'http_req_duration{stage:nonce}': ['p(95)<50'],
+        // Credential issuance signs the SD-JWT and allocates a status entry.
+        'http_req_duration{stage:credential}': ['p(95)<250', 'p(99)<500'],
+        // Revocation rewrites and re-signs the status list.
+        'http_req_duration{stage:revoke}': ['p(95)<250'],
         issuance_success: ['count>0'],
     },
-};
-
-// ---------------------------------------------------------------------------
-// Custom metrics
-// ---------------------------------------------------------------------------
+});
 
 const issuanceSuccess = new Counter('issuance_success');
 const issuanceDuration = new Trend('issuance_total_duration', true);
+const revocations = new Counter('issuance_revocations');
 
-// ---------------------------------------------------------------------------
-// Setup data type
-// ---------------------------------------------------------------------------
-
-interface SetupData {
-    privateJwk: JsonWebKey;
-    publicJwk: JsonWebKey;
+export async function setup(): Promise<WalletSetupData> {
+    const data = await setupWallet(ctx, 0);
+    seedSessions(ctx, data.adminToken.token);
+    return data;
 }
 
-// ---------------------------------------------------------------------------
-// Setup — runs once before all VUs start
-// ---------------------------------------------------------------------------
+export default async function (data: WalletSetupData): Promise<void> {
+    const token = adminToken(ctx.baseUrl, ctx.clientId, ctx.clientSecret, data.adminToken);
+    const start = Date.now();
 
-export async function setup(): Promise<SetupData> {
-    // Generate an EC P-256 key pair.  CryptoKey objects cannot be serialised
-    // across the setup→VU boundary, so we export them as JWKs and re-import
-    // inside the default function.
-    const keyPair = await generateKeyPair();
-    const { privateJwk, publicJwk } = await exportKeyPair(keyPair);
+    const issued = await issueCredential(ctx, token, data.holder);
+    issuanceSuccess.add(1);
+    issuanceDuration.add(Date.now() - start);
 
-    return { privateJwk, publicJwk };
-}
-
-// ---------------------------------------------------------------------------
-// Default VU function
-// ---------------------------------------------------------------------------
-
-export default async function (data: SetupData): Promise<void> {
-    const { privateJwk, publicJwk } = data;
-    const iterStart = Date.now();
-
-    // -----------------------------------------------------------------------
-    // Step 1: Admin token (operator / backend system perspective)
-    // -----------------------------------------------------------------------
-    let adminToken!: string;
-    group('admin_auth', () => {
-        adminToken = getAdminToken(BASE_URL, CLIENT_ID, CLIENT_SECRET);
-    });
-
-    // -----------------------------------------------------------------------
-    // Step 2: Create credential offer
-    // -----------------------------------------------------------------------
-    let offerUri!: string;
-    let credentialIssuer!: string;
-    group('create_offer', () => {
-        const body = {
-            response_type: 'uri',
-            credentialConfigurationIds: [CREDENTIAL_CONFIG_ID],
-            flow: 'pre_authorized_code',
-        };
-
-        const res = http.post(OFFER_ENDPOINT, JSON.stringify(body), {
-            ...authParams(adminToken),
-            tags: { stage: 'offer' },
-        });
-
-        assertStatus(res, 201, 'create offer');
-
-        const offer = res.json() as { uri: string };
-        offerUri = offer.uri;
-        // The credential_issuer embedded in the offer equals the issuer URL used
-        // as 'aud' in the proof JWT.
-        credentialIssuer = `${BASE_URL}/issuers/${TENANT_ID}`;
-    });
-
-    // -----------------------------------------------------------------------
-    // Step 3: Resolve offer and extract pre-authorized_code
-    // -----------------------------------------------------------------------
-    let preAuthCode!: string;
-    group('resolve_offer', () => {
-        const credentialOffer = resolveCredentialOffer(offerUri);
-        preAuthCode = extractPreAuthCode(credentialOffer);
-    });
-
-    // -----------------------------------------------------------------------
-    // Step 4: Exchange pre-authorized_code for wallet access token
-    // -----------------------------------------------------------------------
-    let walletAccessToken!: string;
-    group('token_exchange', () => {
-        const body = formEncode({
-            grant_type: 'urn:ietf:params:oauth:grant-type:pre-authorized_code',
-            'pre-authorized_code': preAuthCode,
-        });
-
-        const res = http.post(TOKEN_ENDPOINT, body, {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            tags: { stage: 'token_exchange' },
-        });
-
-        assertStatus(res, 200, 'token exchange');
-        walletAccessToken = res.json('access_token') as string;
-    });
-
-    // -----------------------------------------------------------------------
-    // Step 5: Fetch c_nonce
-    // -----------------------------------------------------------------------
-    let cNonce!: string;
-    group('nonce', () => {
-        const res = http.post(
-            NONCE_ENDPOINT,
-            null,
-            {
-                headers: { 'Content-Type': 'application/json' },
-                tags: { stage: 'nonce' },
-            },
-        );
-
-        assertStatus(res, 200, 'nonce endpoint');
-        cNonce = res.json('c_nonce') as string;
-
-        check(cNonce, { 'c_nonce is non-empty string': (v) => typeof v === 'string' && v.length > 0 });
-    });
-
-    // -----------------------------------------------------------------------
-    // Step 6 + 7: Sign proof JWT and request credential
-    // -----------------------------------------------------------------------
-    // k6 group callbacks must be synchronous, so finish WebCrypto work first.
-    const privateKey = await importPrivateKey(privateJwk);
-    const proofJwt = await signProofJwt(privateKey, publicJwk, cNonce, credentialIssuer);
-
-    group('credential', () => {
-        const body = {
-            credential_identifier: CREDENTIAL_CONFIG_ID,
-            proofs: {
-                jwt: [proofJwt],
-            },
-        };
-
-        const res = http.post(CREDENTIAL_ENDPOINT, JSON.stringify(body), {
-            headers: {
-                Authorization: `Bearer ${walletAccessToken}`,
-                'Content-Type': 'application/json',
-            },
-            tags: { stage: 'credential' },
-        });
-
-        const ok = check(res, {
-            'credential: status 200': (r) => r.status === 200,
-            'credential: credentials array present': (r) => {
-                try {
-                    const body = r.json() as Record<string, unknown>;
-                    // Response is either { credential } or { credentials: [...] }
-                    return (
-                        (typeof body.credential === 'string' && body.credential.length > 0) ||
-                        (Array.isArray(body.credentials) && body.credentials.length > 0)
-                    );
-                } catch {
-                    return false;
-                }
-            },
-        });
-
-        if (ok) {
-            issuanceSuccess.add(1);
-        }
-    });
-
-    issuanceDuration.add(Date.now() - iterStart);
+    if (REVOKE_RATIO > 0 && Math.random() < REVOKE_RATIO) {
+        revokeCredential(ctx, token, issued.sessionId);
+        revocations.add(1);
+    }
 }

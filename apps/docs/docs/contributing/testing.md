@@ -16,6 +16,7 @@ All TypeScript packages test with [Vitest](https://vitest.dev). Run the unit tes
 | Client unit | `apps/client/src/**/*.spec.ts` | `pnpm --filter @eudiplo/client test` | Build Client |
 | Client browser (Playwright) | `apps/client/e2e/` | `E2E_USE_BUILD=true pnpm --filter @eudiplo/client e2e` | E2E Tests (Client) |
 | Documentation tooling | `apps/docs/scripts/` | `pnpm --filter @eudiplo/docs test` | Build Documentation |
+| Load-test suite | `scripts/load-test/test/*.test.mjs` | `node --import ./scripts/load-test/test/shims/register.mjs --test 'scripts/load-test/test/*.test.mjs'` | k6 Load Test |
 
 CI is defined in `.github/workflows/ci-and-release.yml` and runs on pull requests, the merge queue and pushes to `main`.
 

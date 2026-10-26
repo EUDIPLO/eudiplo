@@ -1,140 +1,71 @@
 /**
- * status-list scenario — Bitstring Status List read performance.
+ * status-list scenario — Token Status List read performance.
  *
- * Each VU iteration:
- *   1. Fetches the status list aggregation endpoint to discover available
- *      status list URIs (GET /issuers/:tenantId/status-management/status-list-aggregation)
- *   2. Fetches each discovered status list JWT (up to MAX_LISTS per iteration)
+ * Each iteration discovers the tenant's status lists through the aggregation
+ * endpoint and downloads each list JWT (up to MAX_LISTS). setup() issues one
+ * status-managed credential if the tenant has no status list yet, so the
+ * scenario is self-contained.
  *
- * Note: This scenario requires that at least one credential with statusManagement
- * enabled has been issued previously so that status lists exist.  If no lists
- * are found, the scenario logs a warning and skips step 2.
+ * Status lists are cached, signed documents, so this measures the cache
+ * path. The write path (revocation → re-signed list) is part of the
+ * pre-auth-issuance scenario (REVOKE_RATIO) and of the mixed workload.
  *
  * Environment variables:
  *   BASE_URL    - Backend base URL (default: http://localhost:3000)
  *   TENANT_ID   - Issuer tenant ID (default: demo)
  *   MAX_LISTS   - Max status lists to fetch per iteration (default: 5)
- *   K6_PROFILE  - Load profile: smoke | load | stress | spike (default: smoke)
+ *   K6_PROFILE  - Load profile: once | smoke | load | stress | spike (default: smoke)
  */
 
-import http from 'k6/http';
-import { check, group } from 'k6';
+import { check } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
-import type { Options } from 'k6/options';
-import { assertStatus } from '../lib/helpers.ts';
-import { profileOptions } from '../k6.config.ts';
+import { scenarioOptions } from '../k6.config.ts';
+import { flowContext } from '../lib/flows/context.ts';
+import { setupWallet } from '../lib/flows/setup.ts';
+import { fetchStatusListUris, fetchStatusLists } from '../lib/flows/status-list.ts';
 
-// ---------------------------------------------------------------------------
-// Configuration
-// ---------------------------------------------------------------------------
+export { handleSummary } from '../lib/summary.ts';
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
-const TENANT_ID = __ENV.TENANT_ID || 'demo';
-const MAX_LISTS = parseInt(__ENV.MAX_LISTS || '5', 10);
+const ctx = flowContext();
 
-const AGGREGATION_ENDPOINT =
-    `${BASE_URL}/issuers/${TENANT_ID}/status-management/status-list-aggregation`;
-
-// ---------------------------------------------------------------------------
-// k6 options
-// ---------------------------------------------------------------------------
-
-export const options: Options = {
-    ...profileOptions(),
+export const options = scenarioOptions({
+    name: 'status_list',
+    // Relying-party status checks per second under the `load` profile.
+    baseRate: 200,
+    requestSeconds: 0.05,
     thresholds: {
         // Status lists are cached JWT documents — should be very fast.
-        'http_req_duration{stage:aggregation}': ['p(95)<300'],
-        'http_req_duration{stage:status_list}': ['p(95)<500'],
-        http_req_failed: ['rate<0.01'],
+        'http_req_duration{stage:aggregation}': ['p(95)<50'],
+        'http_req_duration{stage:status_list}': ['p(95)<50', 'p(99)<150'],
+        status_list_fetched: ['count>0'],
     },
-};
-
-// ---------------------------------------------------------------------------
-// Custom metrics
-// ---------------------------------------------------------------------------
+});
 
 const aggregationFetched = new Counter('status_list_aggregation_fetched');
 const statusListFetched = new Counter('status_list_fetched');
 const statusListDuration = new Trend('status_list_fetch_duration', true);
 
-// ---------------------------------------------------------------------------
-// Default VU function
-// ---------------------------------------------------------------------------
+export async function setup(): Promise<void> {
+    const setupCtx = { ...ctx, inSetup: true };
+    if (fetchStatusListUris(setupCtx).length === 0) {
+        // No status list yet: issue one status-managed credential. This
+        // scenario does not seed sessions (SEED_SESSIONS is ignored).
+        await setupWallet(setupCtx, 1);
+    }
+}
 
 export default function (): void {
-    // -----------------------------------------------------------------------
-    // Step 1: Fetch status list aggregation
-    // -----------------------------------------------------------------------
-    let statusListUris: string[] = [];
+    const uris = fetchStatusListUris(ctx);
+    aggregationFetched.add(1);
 
-    group('status_list_aggregation', () => {
-        const res = http.get(AGGREGATION_ENDPOINT, {
-            headers: { Accept: 'application/json' },
-            tags: { stage: 'aggregation' },
-        });
-
-        assertStatus(res, 200, 'status list aggregation');
-        aggregationFetched.add(1);
-
-        let body: unknown;
-        try {
-            body = res.json();
-        } catch {
-            // Non-JSON body — treat as empty list
-            return;
-        }
-
-        // The aggregation endpoint returns { status_lists: string[] }
-        // (StatusListAggregationDto).  Guard against alternative shapes just in case.
-        const b = body as Record<string, unknown>;
-        if (Array.isArray(b.status_lists)) {
-            statusListUris = (b.status_lists as string[]).slice(0, MAX_LISTS);
-        } else if (Array.isArray(body)) {
-            statusListUris = (body as string[]).slice(0, MAX_LISTS);
-        } else if (Array.isArray(b.statusLists)) {
-            statusListUris = (b.statusLists as string[]).slice(0, MAX_LISTS);
-        } else if (Array.isArray(b.uris)) {
-            statusListUris = (b.uris as string[]).slice(0, MAX_LISTS);
-        }
-    });
-
-    if (statusListUris.length === 0) {
-        // No status lists exist yet — issue at least one credential first.
+    if (uris.length === 0) {
         check(null, {
             'WARN: no status lists found (issue a credential first)': () => false,
         });
         return;
     }
 
-    // -----------------------------------------------------------------------
-    // Step 2: Fetch each status list JWT
-    // -----------------------------------------------------------------------
-    group('fetch_status_lists', () => {
-        for (const uri of statusListUris) {
-            const start = Date.now();
-
-            const res = http.get(uri, {
-                headers: { Accept: 'application/statuslist+jwt, application/jwt' },
-                tags: { stage: 'status_list' },
-            });
-
-            statusListDuration.add(Date.now() - start);
-
-            const ok = check(res, {
-                'status list: status 200': (r) => r.status === 200,
-                'status list: JWT content-type': (r) => {
-                    const ct = r.headers['Content-Type'] || '';
-                    return (
-                        ct.includes('statuslist+jwt') ||
-                        ct.includes('application/jwt')
-                    );
-                },
-                'status list: non-empty body': (r) => !!r.body && r.body.length > 0,
-            });
-
-            if (ok) {
-                statusListFetched.add(1);
-            }
-        }
-    });
+    const start = Date.now();
+    statusListFetched.add(fetchStatusLists(ctx, uris));
+    statusListDuration.add((Date.now() - start) / uris.length);
 }

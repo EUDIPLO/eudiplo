@@ -4,95 +4,44 @@
  * Exercises: POST /api/oauth2/token
  *
  * This is the simplest scenario and establishes a latency / throughput
- * baseline for the authentication layer before running the more complex
- * protocol flows.
+ * baseline for the authentication layer. Like the token flow of `mixed`, it
+ * requests a token on every iteration; the other flows cache the operator
+ * token.
  *
  * Environment variables:
  *   BASE_URL      - Backend base URL (default: http://localhost:3000)
  *   CLIENT_ID     - OAuth2 client ID (default: test-client)
  *   CLIENT_SECRET - OAuth2 client secret (default: test-client-secret)
- *   K6_PROFILE    - Load profile: smoke | load | stress | spike (default: smoke)
+ *   K6_PROFILE    - Load profile: once | smoke | load | stress | spike (default: smoke)
  */
 
-import http from 'k6/http';
-import { check, group } from 'k6';
 import { Counter, Trend } from 'k6/metrics';
-import type { Options } from 'k6/options';
-import { profileOptions } from '../k6.config.ts';
+import { scenarioOptions } from '../k6.config.ts';
+import { requestToken } from '../lib/flows/auth.ts';
+import { flowContext } from '../lib/flows/context.ts';
 
-// ---------------------------------------------------------------------------
-// Configuration
-// ---------------------------------------------------------------------------
+export { handleSummary } from '../lib/summary.ts';
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';
-const CLIENT_ID = __ENV.CLIENT_ID || 'test-client';
-const CLIENT_SECRET = __ENV.CLIENT_SECRET || 'test-client-secret';
+const ctx = flowContext();
 
-const TOKEN_ENDPOINT = `${BASE_URL}/api/oauth2/token`;
-
-// ---------------------------------------------------------------------------
-// k6 options
-// ---------------------------------------------------------------------------
-
-export const options: Options = {
-    ...profileOptions(),
+export const options = scenarioOptions({
+    name: 'api_auth',
+    // Token requests per second under the `load` profile.
+    baseRate: 30,
+    requestSeconds: 0.1,
     thresholds: {
-        // Token endpoint should be fast — tighten to 500 ms p(95).
-        'http_req_duration{endpoint:token}': ['p(95)<500'],
-        http_req_failed: ['rate<0.01'],
+        'http_req_duration{stage:token}': ['p(95)<200', 'p(99)<400'],
     },
-};
-
-// ---------------------------------------------------------------------------
-// Custom metrics
-// ---------------------------------------------------------------------------
+});
 
 const tokenSuccess = new Counter('auth_token_success');
 const tokenDuration = new Trend('auth_token_duration', true);
 
-// ---------------------------------------------------------------------------
-// Default VU function
-// ---------------------------------------------------------------------------
-
 export default function (): void {
-    group('client_credentials_flow', () => {
-        const start = Date.now();
-
-        const res = http.post(
-            TOKEN_ENDPOINT,
-            JSON.stringify({
-                grant_type: 'client_credentials',
-                client_id: CLIENT_ID,
-                client_secret: CLIENT_SECRET,
-            }),
-            {
-                headers: { 'Content-Type': 'application/json' },
-                tags: { endpoint: 'token' },
-            },
-        );
-
-        tokenDuration.add(Date.now() - start);
-
-        const ok = check(res, {
-            'status is 201': (r) => r.status === 201,
-            'access_token present': (r) => {
-                try {
-                    return !!r.json('access_token');
-                } catch {
-                    return false;
-                }
-            },
-            'token_type is Bearer': (r) => {
-                try {
-                    return r.json('token_type') === 'Bearer';
-                } catch {
-                    return false;
-                }
-            },
-        });
-
-        if (ok) {
-            tokenSuccess.add(1);
-        }
-    });
+    const start = Date.now();
+    const ok = requestToken(ctx);
+    tokenDuration.add(Date.now() - start);
+    if (ok) {
+        tokenSuccess.add(1);
+    }
 }
