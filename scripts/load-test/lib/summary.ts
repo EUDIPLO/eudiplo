@@ -113,6 +113,17 @@ function thresholdStatus(m: SummaryMetric | undefined): string {
     return failed.length === 0 ? `ok (${entries.map(([e]) => e).join(', ')})` : `FAILED ${failed.join(', ')}`;
 }
 
+/**
+ * The measured value a threshold expression was evaluated against, as
+ * " (observed p(95)=73.4)", or "" when the summary does not carry it.
+ */
+export function observed(metric: SummaryMetric, expr: string): string {
+    const stat = /^\s*([a-z]+(?:\(\d+(?:\.\d+)?\))?)/.exec(expr)?.[1];
+    const value = stat === undefined ? undefined : metric.values?.[stat];
+    if (typeof value !== 'number' || Number.isNaN(value)) return '';
+    return ` (observed ${stat}=${fmtNum(value, value < 1 ? 4 : 1)})`;
+}
+
 export interface SummaryHeadline {
     scenario: string;
     profile: string;
@@ -133,7 +144,7 @@ export function headline(data: SummaryData): SummaryHeadline {
     const thresholdsFailed: string[] = [];
     for (const [name, metric] of Object.entries(m)) {
         for (const [expr, t] of Object.entries(metric.thresholds ?? {})) {
-            if (!t.ok) thresholdsFailed.push(`${name}: ${expr}`);
+            if (!t.ok) thresholdsFailed.push(`${name}: ${expr}${observed(metric, expr)}`);
         }
     }
     const checks = allChecks(data.root_group);

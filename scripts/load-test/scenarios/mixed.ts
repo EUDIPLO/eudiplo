@@ -42,7 +42,10 @@ export const options = multiScenarioOptions([
         pauses: 1,
         thresholds: {
             'http_req_duration{stage:offer}': ['p(95)<100'],
-            'http_req_duration{stage:token_exchange}': ['p(95)<50'],
+            // Twice the single-flow limit: here the token exchange shares the
+            // database with concurrent issuance, revocation and status-list
+            // writes on the same CPU-limited backend.
+            'http_req_duration{stage:token_exchange}': ['p(95)<100'],
             'http_req_duration{stage:credential}': ['p(95)<250', 'p(99)<500'],
             'http_req_duration{stage:revoke}': ['p(95)<250'],
             issuance_success: ['count>0'],

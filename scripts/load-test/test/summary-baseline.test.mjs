@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { compareSummaries, stageP95, updateBaseline } from '../lib/baseline.mjs';
-import { handleSummary } from '../lib/summary.ts';
+import { handleSummary, observed } from '../lib/summary.ts';
 
 afterEach(() => {
     globalThis.__ENV = {};
@@ -84,7 +84,7 @@ describe('handleSummary', () => {
         };
         const json = JSON.parse(handleSummary(data)['/out.json']);
         assert.deepEqual(json.failures, [
-            '✗ http_req_duration{stage:credential}: p(95)<250',
+            '✗ http_req_duration{stage:credential}: p(95)<250 (observed p(95)=400)',
             '✗ check ::a::status 200: 2 failed',
             '✗ check ::a::b::body: 1 failed',
         ]);
@@ -163,5 +163,25 @@ describe('updateBaseline', () => {
         assert.deepEqual(after.profiles.smoke.other.p95, { x: 2 });
         assert.deepEqual(after.profiles.load.flow.p95, { offer: 1 });
         assert.deepEqual(before.profiles.smoke.flow, undefined, 'input is not mutated');
+    });
+});
+
+describe('observed', () => {
+    test('names the measured value of the threshold statistic', () => {
+        const metric = { type: 'trend', contains: 'time', values: { 'p(95)': 73.44, 'p(99)': 120 } };
+        assert.equal(observed(metric, 'p(95)<50'), ' (observed p(95)=73.4)');
+        assert.equal(observed(metric, 'p(99)<100'), ' (observed p(99)=120)');
+        assert.equal(observed({ values: { 'p(99.9)': 812.3 } }, 'p(99.9)<500'), ' (observed p(99.9)=812.3)');
+        assert.equal(observed({ values: { rate: 0.0312 } }, 'rate<0.01'), ' (observed rate=0.0312)');
+        assert.equal(observed({ values: { count: 0 } }, 'count>0'), ' (observed count=0)');
+    });
+
+    test('adds nothing when the statistic is missing or not a number', () => {
+        assert.equal(observed({ values: {} }, 'p(95)<50'), '');
+        assert.equal(observed({ values: { 'p(95)': NaN } }, 'p(95)<50'), '');
+    });
+
+    test('adds nothing when the expression names no statistic', () => {
+        assert.equal(observed({ values: { 'p(95)': 1 } }, '<50'), '');
     });
 });
