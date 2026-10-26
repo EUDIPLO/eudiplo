@@ -9,6 +9,12 @@ import http from 'k6/http';
 import { envBool, envNumber } from '../lib/helpers.ts';
 import { seedSessions } from '../lib/flows/seed.ts';
 import { peakUsage, resourceTableMarkdown, toMiB } from '../lib/resource-stats.mjs';
+import {
+    buildAnnotation,
+    escapeCommandMessage,
+    escapeCommandProperty,
+    topErrors,
+} from '../lib/failure-annotation.mjs';
 
 const CLI = fileURLToPath(new URL('../compare-baseline.mjs', import.meta.url));
 
@@ -164,5 +170,77 @@ describe('resource stats', () => {
         const md = resourceTableMarkdown(peak);
         assert.match(md, /\| eudiplo \| 150 % \| 700 MiB \| 2GiB \|/);
         assert.equal(resourceTableMarkdown({}), '');
+    });
+});
+
+describe('failure annotation', () => {
+    const ANNOTATE = fileURLToPath(new URL('../lib/failure-annotation.mjs', import.meta.url));
+    // The shape k6 v2 logs for an uncaught fail() inside an iteration.
+    const k6Error = (msg) =>
+        `time="2026-10-26T07:00:00Z" level=error msg="Uncaught (in promise) GoError: ${msg}\\n\\tat go.k6.io/k6/v2/internal/js/modules/k6.(*K6).Fail-fm (native)\\n\\tat default (file:///s.ts:1:1)" executor=ramping-arrival-rate scenario=flow source=stacktrace`;
+
+    test('groups errors by message without the response body, most frequent first', () => {
+        const log = [
+            k6Error('credential: unexpected status 500. Body: {\\"id\\":\\"a\\"}'),
+            k6Error('credential: unexpected status 500. Body: {\\"id\\":\\"b\\"}'),
+            k6Error('revoke: unexpected status 404. Body: {}'),
+            `time="2026-10-26T07:00:03Z" level=error msg="thresholds on metrics 'checks' have been crossed"`,
+            `time="2026-10-26T07:00:04Z" level=info msg="Seeded 10 sessions" source=console`,
+        ].join('\n');
+        assert.deepEqual(topErrors(log), [
+            '2× Uncaught (in promise) GoError: credential: unexpected status 500. Body: {\\"id\\":\\"a\\"}',
+            '1× Uncaught (in promise) GoError: revoke: unexpected status 404. Body: {}',
+        ]);
+    });
+
+    test('keeps at most `limit` groups and cuts long messages', () => {
+        const log = Array.from({ length: 7 }, (_v, i) => k6Error(`error ${i} ${'x'.repeat(1000)}`)).join('\n');
+        const errors = topErrors(log);
+        assert.equal(errors.length, 5);
+        for (const e of errors) assert.ok(e.replace(/^\d+× /, '').length <= 400);
+    });
+
+    test('escapes % before line breaks, and : and , in the title', () => {
+        assert.equal(escapeCommandMessage('50% done\nnext\r'), '50%25 done%0Anext%0D');
+        assert.equal(escapeCommandProperty('a:b,c%\n'), 'a%3Ab%2Cc%25%0A');
+    });
+
+    test('uses the failures recorded in the summary, capped at 20', () => {
+        const failures = Array.from({ length: 25 }, (_v, i) => `✗ check ::c${i}: 1 failed`);
+        const line = buildAnnotation({ scenario: 'mixed', profile: 'smoke', summary: { failures }, logText: '', logName: 'x.log' });
+        assert.match(line, /^::error title=k6 mixed \(smoke\) failed::✗ check ::c0: 1 failed%0A/);
+        assert.equal(line.split('%0A').length, 20);
+        assert.equal(line.split('\n').length, 1);
+    });
+
+    function cli(args) {
+        return spawnSync(process.execPath, [ANNOTATE, ...args], { encoding: 'utf8' });
+    }
+
+    test('CLI: missing summary and log give the fallback message', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'k6-annot-'));
+        const r = cli(['mixed', 'smoke', join(dir, 'missing.json'), join(dir, 'k6.log')]);
+        assert.equal(r.status, 0);
+        assert.match(r.stdout.trim(), /^::error title=k6 mixed \(smoke\) failed::k6 exited with an error; see k6\.log in the artifact\.$/);
+    });
+
+    test('CLI: an unreadable summary is named, the log errors still appear', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'k6-annot-'));
+        const summaryPath = join(dir, 's.json');
+        const logPath = join(dir, 'k6.log');
+        writeFileSync(summaryPath, '{not json');
+        writeFileSync(logPath, k6Error('nonce endpoint: unexpected status 503. Body: down'));
+        const r = cli(['flow', 'load', summaryPath, logPath]);
+        assert.equal(r.status, 0);
+        assert.match(r.stdout, /1× Uncaught \(in promise\) GoError: nonce endpoint: unexpected status 503/);
+        assert.match(r.stdout, /Summary s\.json is unreadable/);
+    });
+
+    test('CLI: a valid summary without a log prints its failures', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'k6-annot-'));
+        const summaryPath = join(dir, 's.json');
+        writeFileSync(summaryPath, JSON.stringify({ failures: ['✗ checks: rate>0.99'] }));
+        const r = cli(['flow', 'load', summaryPath, join(dir, 'none.log')]);
+        assert.equal(r.stdout.trim(), '::error title=k6 flow (load) failed::✗ checks: rate>0.99');
     });
 });

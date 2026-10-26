@@ -205,10 +205,7 @@ export function textSummary(data: SummaryData): string {
             `  ${r.metric.padEnd(width)}  ${r.med.padStart(7)} ${r.p95.padStart(7)} ${r.p99.padStart(7)} ${r.max.padStart(7)}  ${r.status}`,
         );
     }
-    for (const t of h.thresholdsFailed) out.push(`  ✗ ${t}`);
-    for (const c of allChecks(data.root_group).filter((c) => c.fails > 0)) {
-        out.push(`  ✗ check ${c.path}: ${c.fails} failed`);
-    }
+    for (const line of failureLines(data)) out.push(`  ${line}`);
     out.push('');
     return out.join('\n');
 }
@@ -217,12 +214,26 @@ export function textSummary(data: SummaryData): string {
  * The `handleSummary` export every scenario re-exports. Strips `setup_data`
  * so no key material ends up in the results directory or a CI artifact.
  */
+/**
+ * What failed in a run, one line each: breached thresholds, then checks
+ * with failures. Written into the JSON summary as `failures` for
+ * lib/failure-annotation.mjs, and printed by the text summary.
+ */
+export function failureLines(data: SummaryData): string[] {
+    return [
+        ...headline(data).thresholdsFailed.map((t) => `✗ ${t}`),
+        ...allChecks(data.root_group)
+            .filter((c) => c.fails > 0)
+            .map((c) => `✗ check ${c.path}: ${c.fails} failed`),
+    ];
+}
+
 export function handleSummary(data: SummaryData): Record<string, string> {
     const { setup_data: _setup, ...rest } = data;
     const out: Record<string, string> = { stdout: textSummary(data) };
     if (__ENV.SUMMARY_FILE) {
         out[__ENV.SUMMARY_FILE] = JSON.stringify(
-            { ...rest, scenario: scenarioName(), profile: currentProfile() },
+            { ...rest, scenario: scenarioName(), profile: currentProfile(), failures: failureLines(data) },
             null,
             2,
         );

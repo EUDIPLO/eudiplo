@@ -62,11 +62,41 @@ describe('handleSummary', () => {
         assert.match(out.stdout, /✗ check ::credential::status 200: 1 failed/);
     });
 
+    test('records what failed in the JSON summary, for array and record groups', () => {
+        globalThis.__ENV = { SUMMARY_FILE: '/out.json', SCENARIO_NAME: 'flow', K6_PROFILE: 'smoke' };
+        const data = summary({ stages: { credential: 400 } });
+        data.metrics['http_req_duration{stage:credential}'].thresholds = {
+            'p(95)<250': { ok: false },
+            'p(99)<500': { ok: true },
+        };
+        data.root_group = {
+            name: '',
+            path: '',
+            checks: [{ name: 'ok', path: '::ok', passes: 3, fails: 0 }],
+            groups: [
+                {
+                    name: 'a',
+                    path: '::a',
+                    checks: [{ name: 's', path: '::a::status 200', passes: 1, fails: 2 }],
+                    groups: { b: { name: 'b', path: '::a::b', checks: { c: { name: 'c', path: '::a::b::body', passes: 0, fails: 1 } }, groups: {} } },
+                },
+            ],
+        };
+        const json = JSON.parse(handleSummary(data)['/out.json']);
+        assert.deepEqual(json.failures, [
+            '✗ http_req_duration{stage:credential}: p(95)<250',
+            '✗ check ::a::status 200: 2 failed',
+            '✗ check ::a::b::body: 1 failed',
+        ]);
+    });
+
     test('reports breached thresholds in the Markdown summary', () => {
         globalThis.__ENV = { SUMMARY_MD: '/out.md', SCENARIO_NAME: 'flow', K6_PROFILE: 'smoke' };
         const data = summary({ stages: { credential: 400 } });
         data.metrics['http_req_duration{stage:credential}'].thresholds = { 'p(95)<250': { ok: false } };
-        const md = handleSummary(data)['/out.md'];
+        const out = handleSummary(data);
+        const md = out['/out.md'];
+        assert.match(out.stdout, /✗ http_req_duration\{stage:credential\}: p\(95\)<250/);
         assert.match(md, /thresholds breached/);
         assert.match(md, /http_req_duration\{stage:credential\}: p\(95\)<250/);
     });

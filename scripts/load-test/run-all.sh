@@ -320,6 +320,17 @@ summarise_resource_stats() {
     node "${SCRIPT_DIR}/lib/resource-stats.mjs" "${stats_file}"
 }
 
+# On GitHub Actions, report why a scenario failed as an error annotation, so
+# the reason is visible on the PR checks without downloading the artifact
+# (see lib/failure-annotation.mjs).
+annotate_failure() {
+    local scenario="$1" summary_file="$2" log_file="$3"
+    [[ -n "${GITHUB_ACTIONS:-}" ]] || return 0
+    command -v node &>/dev/null || return 0
+    node "${SCRIPT_DIR}/lib/failure-annotation.mjs" \
+        "${scenario}" "${K6_PROFILE}" "${summary_file}" "${log_file}" || true
+}
+
 # Count backend ERROR/WARN log lines since a timestamp (pino-pretty output).
 backend_log_counts() {
     local since="$1"
@@ -447,6 +458,7 @@ run_scenario() {
     else
         echo "FAIL: ${scenario} (k6 exit ${k6_exit}: thresholds breached or error)"
         echo "  Full output: ${log_file}"
+        annotate_failure "${scenario}" "${summary_file}" "${log_file}"
         return 1
     fi
 }
