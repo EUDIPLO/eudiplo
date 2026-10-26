@@ -96,6 +96,14 @@ class HostComponent {
   submitted = 0;
 }
 
+@Component({
+  imports: [ConfigOwnershipDirective, MatButtonModule],
+  template: `<button mat-button appConfigManaged managedKind="Tenant" managedResourceId="tenant">
+    Use as default
+  </button>`,
+})
+class TenantHostComponent {}
+
 interface Lookup {
   id: string;
   resolve: (ownership: ConfigResourceOwnership | undefined) => void;
@@ -428,5 +436,29 @@ describe('ConfigOwnershipDirective', () => {
     expect(remove.getAttribute('aria-disabled')).toBeNull();
     remove.click();
     expect(fixture.componentInstance.clicked).toBe(1);
+  });
+
+  it('names the tenant resource to detach for a locked tenant setting', async () => {
+    TestBed.configureTestingModule({
+      imports: [TenantHostComponent],
+      providers: [
+        {
+          provide: ConfigOwnershipService,
+          useValue: {
+            get: vi.fn(async () => ({ ...fileManaged, kind: 'Tenant', resourceId: 'tenant' })),
+          },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(TenantHostComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('button')?.getAttribute('title')
+    ).toBe(
+      'Managed by folder:/config/demo, read-only. To change it, detach Tenant/tenant under Settings > Config Portability'
+    );
   });
 });

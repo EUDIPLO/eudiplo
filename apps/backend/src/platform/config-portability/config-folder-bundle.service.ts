@@ -53,6 +53,13 @@ const FOLDER_RESOURCES: FolderResource[] = [
     { kind: "StatusList", directory: "issuance/status-lists" },
 ];
 
+/**
+ * The tenant settings. The startup import applies `info.json` before the
+ * other files (see TenantService.setupTenant), so only a reattach reads it
+ * here.
+ */
+const TENANT_RESOURCE: FolderResource = { kind: "Tenant", file: "info.json" };
+
 const MIME_TYPES: Record<string, string> = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
@@ -197,7 +204,11 @@ export class ConfigFolderBundleService {
             );
         }
         const tenantRoot = join(resolve(configFolder), tenantId);
-        const full = this.buildBundle(tenantId, tenantRoot);
+        const full = this.collectBundle(
+            tenantId,
+            tenantRoot,
+            kind === "Tenant" ? [TENANT_RESOURCE] : FOLDER_RESOURCES,
+        );
         const index = full.documents.findIndex(
             (document) =>
                 normalizeDocument(document).kind === kind &&
@@ -239,10 +250,18 @@ export class ConfigFolderBundleService {
     }
 
     buildBundle(tenantId: string, tenantRoot: string): ConfigBundle {
+        return this.collectBundle(tenantId, tenantRoot, FOLDER_RESOURCES);
+    }
+
+    private collectBundle(
+        tenantId: string,
+        tenantRoot: string,
+        folderResources: FolderResource[],
+    ): ConfigBundle {
         const documents: ConfigDocument[] = [];
         const warnings: ConfigMigrationIssue[] = [];
 
-        for (const resource of FOLDER_RESOURCES) {
+        for (const resource of folderResources) {
             for (const filePath of this.resourceFiles(tenantRoot, resource)) {
                 try {
                     const { document, issues } = this.loadResourceDocument(
@@ -378,7 +397,7 @@ export class ConfigFolderBundleService {
     }
 
     private documentPath(tenantRoot: string, document: ConfigDocument): string {
-        const definition = FOLDER_RESOURCES.find(
+        const definition = [TENANT_RESOURCE, ...FOLDER_RESOURCES].find(
             (candidate) => candidate.kind === document.kind,
         )!;
         if ("file" in definition) {

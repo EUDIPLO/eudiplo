@@ -78,7 +78,11 @@ export class ConfigOwnershipDirective implements OnInit, OnChanges, OnDestroy {
   }
 
   private get lockReason(): string {
-    return `Managed by ${this.source || 'a configuration bundle'}, read-only`;
+    const reason = `Managed by ${this.source || 'a configuration bundle'}, read-only`;
+    // Screens such as the key list change a tenant setting without naming the tenant resource.
+    return this.managedKind === 'Tenant'
+      ? `${reason}. To change it, detach Tenant/tenant under Settings > Config Portability`
+      : reason;
   }
 
   private request = 0;

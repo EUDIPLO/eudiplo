@@ -21,7 +21,10 @@ import { KeyChainService } from "../../crypto/key/key-chain.service.js";
 import { ConfigImportModeService } from "../../platform/config-import/config-import-mode.service.js";
 import { ConfigImportOrchestratorService } from "../../platform/config-import/config-import-orchestrator.service.js";
 import { ConfigMigrationService } from "../../platform/config-portability/config-migration.service.js";
-import { ConfigOwnershipService } from "../../platform/config-portability/config-ownership.service.js";
+import {
+    ConfigOwnershipService,
+    sourceInScope,
+} from "../../platform/config-portability/config-ownership.service.js";
 import { RegistrarService } from "../../registrar/registrar.service.js";
 import { FilesService } from "../../storage/files.service.js";
 import {
@@ -120,63 +123,7 @@ export class TenantService implements OnApplicationBootstrap {
         if (existing) {
             const file = `${configPath}/${tenantId}/info.json`;
             if (existsSync(file)) {
-                const configFile = readFileSync(file, "utf-8");
-                const upgraded = this.upgradeTenantConfig(configFile);
-                const validationResult = ImportTenantSchema.safeParse(
-                    upgraded.spec,
-                );
-                if (validationResult.success) {
-                    const mode = this.configImportModeService.resolve();
-                    if (mode !== "create" && mode !== "disabled") {
-                        const stored = await this.configOwnershipService.get(
-                            tenantId,
-                            "Tenant",
-                            "tenant",
-                        );
-                        const generation =
-                            upgraded.document.metadata.generation ?? 1;
-                        if (generation < stored.generation) {
-                            throw new Error(
-                                `Tenant configuration generation ${generation} is older than stored generation ${stored.generation}`,
-                            );
-                        }
-                        // An info.json without them removes the defaults, and
-                        // one that names stored key chains sets them, before
-                        // the other files are imported, so they may delete a
-                        // former default. Key chains the files create first
-                        // are set afterwards.
-                        const defaultKeyChains = defaultKeyChainsOrNull(
-                            validationResult.data.defaultKeyChains,
-                        );
-                        const applyNow =
-                            !defaultKeyChains ||
-                            (await this.namesStoredKeyChains(
-                                tenantId,
-                                defaultKeyChains,
-                            ));
-                        await this.tenantRepository.update(tenantId, {
-                            ...withoutDefaultKeyChains(validationResult.data),
-                            ...(applyNow ? { defaultKeyChains } : {}),
-                        });
-                        if (defaultKeyChains && !applyNow) {
-                            this.pendingDefaultKeyChains.set(
-                                tenantId,
-                                defaultKeyChains,
-                            );
-                        }
-                        await this.configOwnershipService.markApplied({
-                            tenantId,
-                            kind: "Tenant",
-                            resourceId: "tenant",
-                            ownership: "file-managed",
-                            generation,
-                            source: `folder:${resolve(configPath, tenantId)}`,
-                            sourceHash: createHash("sha256")
-                                .update(configFile)
-                                .digest("hex"),
-                        });
-                    }
-                }
+                await this.reapplyTenantFile(tenantId, configPath, file);
             }
             this.logger.debug(
                 `[${tenantId}] Tenant already exists, proceeding with imports`,
@@ -245,6 +192,90 @@ export class TenantService implements OnApplicationBootstrap {
             );
             return false;
         }
+    }
+
+    /**
+     * Applies `info.json` to a tenant that already exists and makes the
+     * tenant settings file-managed. Like the other files of the folder, it is
+     * skipped with a warning while the settings are detached from the folder
+     * or were changed after the file's generation, so changes made through
+     * the API or UI survive a restart.
+     */
+    private async reapplyTenantFile(
+        tenantId: string,
+        configPath: string,
+        file: string,
+    ): Promise<void> {
+        const configFile = readFileSync(file, "utf-8");
+        const upgraded = this.upgradeTenantConfig(configFile);
+        const mode = this.configImportModeService.resolve();
+        if (mode === "create" || mode === "disabled") return;
+        const validationResult = ImportTenantSchema.safeParse(upgraded.spec);
+        if (!validationResult.success) {
+            this.logger.warn(
+                {
+                    errors: validationResult.error.issues.map((issue) => ({
+                        path: issue.path.join("."),
+                        message: issue.message,
+                        code: issue.code,
+                    })),
+                },
+                `[${tenantId}] info.json is not applied: validation failed`,
+            );
+            return;
+        }
+
+        // The same codes and messages as the startup import of the other
+        // files (ConfigFolderBundleService), which does not plan info.json.
+        const source = `folder:${resolve(configPath, tenantId)}`;
+        const stored = await this.configOwnershipService.get(
+            tenantId,
+            "Tenant",
+            "tenant",
+        );
+        const generation = upgraded.document.metadata.generation ?? 1;
+        if (
+            stored.ownership === "detached" &&
+            sourceInScope(stored.source ?? undefined, source)
+        ) {
+            this.logger.warn(
+                `[${tenantId}] Skipped Tenant 'tenant' (RESOURCE_DETACHED): Resource was detached from this source and is skipped. Reattach it to apply the file version.`,
+            );
+            return;
+        }
+        if (generation < stored.generation) {
+            this.logger.warn(
+                `[${tenantId}] Skipped Tenant 'tenant' (STALE_GENERATION): Generation ${generation} is older than stored generation ${stored.generation}. The resource was changed through the API or UI and is skipped. Reattach it to apply the file version, or raise metadata.generation in the file.`,
+            );
+            return;
+        }
+
+        // An info.json without them removes the defaults, and one that names
+        // stored key chains sets them, before the other files are imported,
+        // so they may delete a former default. Key chains the files create
+        // first are set afterwards.
+        const defaultKeyChains = defaultKeyChainsOrNull(
+            validationResult.data.defaultKeyChains,
+        );
+        const applyNow =
+            !defaultKeyChains ||
+            (await this.namesStoredKeyChains(tenantId, defaultKeyChains));
+        await this.tenantRepository.update(tenantId, {
+            ...withoutDefaultKeyChains(validationResult.data),
+            ...(applyNow ? { defaultKeyChains } : {}),
+        });
+        if (defaultKeyChains && !applyNow) {
+            this.pendingDefaultKeyChains.set(tenantId, defaultKeyChains);
+        }
+        await this.configOwnershipService.markApplied({
+            tenantId,
+            kind: "Tenant",
+            resourceId: "tenant",
+            ownership: "file-managed",
+            generation,
+            source,
+            sourceHash: createHash("sha256").update(configFile).digest("hex"),
+        });
     }
 
     /**

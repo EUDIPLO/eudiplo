@@ -36,6 +36,21 @@ export function offersApplyFromFile(
   );
 }
 
+/**
+ * A resource Config Portability offers "Reset to file" for, which applies its
+ * version from the config folder again. A resource from an uploaded bundle has
+ * no folder version. Most tenants change their settings through the API, so
+ * the tenant settings only offer it once detached from a folder.
+ */
+export function offersResetToFile(
+  kind: ConfigResourceKind,
+  metadata?: Pick<ConfigResourceOwnership, 'ownership' | 'source'>
+): boolean {
+  if (!metadata || metadata.ownership === 'file-managed') return false;
+  if (metadata.source?.startsWith('bundle:')) return false;
+  return kind !== 'Tenant' || metadata.ownership === 'detached';
+}
+
 @Injectable({ providedIn: 'root' })
 export class ConfigOwnershipService {
   /** Lookups still in flight, so the lock notice and buttons of one screen share a request. */

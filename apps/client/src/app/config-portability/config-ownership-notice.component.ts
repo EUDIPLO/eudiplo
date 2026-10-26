@@ -15,6 +15,7 @@ import {
   ConfigResourceKind,
   ConfigResourceOwnership,
   offersApplyFromFile,
+  offersResetToFile,
 } from './config-ownership.service';
 
 @Component({
@@ -62,6 +63,10 @@ import {
               <span>
                 Startup imports skip this resource. Reset it to the file version to make it
                 file-managed again.
+                @if (kind === 'Tenant') {
+                  The reset applies all tenant settings of info.json, such as the session, status
+                  list and default access key chain settings.
+                }
               </span>
             } @else {
               <span>
@@ -88,9 +93,8 @@ export class ConfigOwnershipNoticeComponent implements OnChanges {
   /** Detach, reset and imports happen under Config Portability, like the sidebar entry. */
   canManageOwnership = false;
 
-  /** Config Portability offers "Reset to file" for folder sources, and never for the tenant settings. */
   get canReset(): boolean {
-    return this.kind !== 'Tenant' && !this.metadata?.source?.startsWith('bundle:');
+    return offersResetToFile(this.kind, this.metadata);
   }
   get offersApplyFromFile(): boolean {
     return offersApplyFromFile(this.kind, this.metadata);

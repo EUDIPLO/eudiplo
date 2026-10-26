@@ -32,7 +32,7 @@ import {
   ConfigResourceMetadata,
 } from './config-portability.service';
 import { openErrorSnackBar } from '../utils/error-snackbar';
-import { offersApplyFromFile } from './config-ownership.service';
+import { offersApplyFromFile, offersResetToFile } from './config-ownership.service';
 import { isConfigDocument, singleDocumentBundle } from './config-document-bundle';
 
 /**
@@ -220,7 +220,11 @@ export class ConfigPortabilityComponent implements OnInit {
   async detach(resource: ConfigResourceMetadata): Promise<void> {
     if (
       !globalThis.confirm(
-        `Detach ${resource.kind}/${resource.resourceId}? It will become editable through the API and UI.`
+        `Detach ${resource.kind}/${resource.resourceId}? It will become editable through the API and UI, and imports from its source skip it${
+          offersResetToFile(resource.kind, { ...resource, ownership: 'detached' })
+            ? ' until you reset it to the file version'
+            : ''
+        }.`
       )
     ) {
       return;
@@ -283,6 +287,10 @@ export class ConfigPortabilityComponent implements OnInit {
 
   canApplyFromFile(resource: ConfigResourceMetadata): boolean {
     return offersApplyFromFile(resource.kind, resource);
+  }
+
+  canResetToFile(resource: ConfigResourceMetadata): boolean {
+    return offersResetToFile(resource.kind, resource);
   }
 
   /**
@@ -393,7 +401,7 @@ export class ConfigPortabilityComponent implements OnInit {
     if (!targets.length) return;
     if (
       !globalThis.confirm(
-        `Detach ${targets.length} resource(s)? They will become editable through the API and UI.`
+        `Detach ${targets.length} resource(s)? They will become editable through the API and UI, and imports from their source skip them.`
       )
     ) {
       return;
