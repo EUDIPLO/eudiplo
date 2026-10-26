@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Column, Entity, OneToMany, PrimaryColumn } from "typeorm";
 import { ClientEntity } from "../../client/entities/client.entity.js";
+import { DefaultKeyChains } from "./default-key-chains.js";
 import { SessionStorageConfig } from "./session-storage-config.js";
 import { StatusListConfig } from "./status-list-config.js";
 
@@ -68,17 +69,17 @@ export class TenantEntity {
     statusListConfig?: StatusListConfig | null;
 
     /**
-     * Access key chain used where no configuration names one. Without it,
-     * EUDIPLO picks one of the tenant's access key chains by rule.
+     * The tenant's key chain per usage type, used where no configuration
+     * names one.
      */
     @ApiPropertyOptional({
         description:
-            "Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.",
+            "The tenant's key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule.",
+        type: () => DefaultKeyChains,
         nullable: true,
-        type: String,
     })
-    @Column("varchar", { nullable: true })
-    defaultAccessKeyChainId?: string | null;
+    @Column("json", { nullable: true })
+    defaultKeyChains?: DefaultKeyChains | null;
 
     /**
      * The clients associated with the tenant.

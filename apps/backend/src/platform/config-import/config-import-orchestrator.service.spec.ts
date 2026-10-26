@@ -99,9 +99,7 @@ describe("tenant setup finish hook", () => {
         const service = orchestrator(
             async () => undefined,
             async () => {
-                throw new Error(
-                    "defaultAccessKeyChainId in info.json is not applied",
-                );
+                throw new Error("defaultKeyChains in info.json is not applied");
             },
         );
         const warn = vi

@@ -18,7 +18,7 @@ import {
     certificateNotBefore,
 } from "./cert/certificate-builder.service.js";
 import {
-    defaultAccessUsageRefusal,
+    defaultKeyChainUsageRefusal,
     pickDefaultAccessKeyChain,
 } from "./domain/default-access-key-chain.js";
 import { toPublicJwk } from "./domain/public-jwk.js";
@@ -512,7 +512,7 @@ export class KeyChainService {
 
     /**
      * The access key chain used where none is named: the tenant's
-     * `defaultAccessKeyChainId`, else the one chosen by
+     * `defaultKeyChains.access`, else the one chosen by
      * {@link pickDefaultAccessKeyChain}. A named key chain that is gone or
      * has another usage type fails instead of falling back, so all requests
      * keep the certificate the tenant chose.
@@ -527,7 +527,7 @@ export class KeyChainService {
         if (!keyChain) {
             // Wallets see this error, so only the log names the key chain.
             this.logger.warn(
-                `[${tenantId}] The default access key chain ${JSON.stringify(configured)} does not exist or has no usage type "access". Set defaultAccessKeyChainId to an access key chain or remove it.`,
+                `[${tenantId}] The default access key chain ${JSON.stringify(configured)} does not exist or has no usage type "access". Set defaultKeyChains.access to an access key chain or remove it.`,
             );
             throw new NotFoundException(
                 "The tenant's default access key chain is not available.",
@@ -553,9 +553,9 @@ export class KeyChainService {
     ): Promise<string | undefined> {
         const tenant = await this.tenantRepository.findOne({
             where: { id: tenantId },
-            select: { id: true, defaultAccessKeyChainId: true },
+            select: { id: true, defaultKeyChains: true },
         });
-        return tenant?.defaultAccessKeyChainId ?? undefined;
+        return tenant?.defaultKeyChains?.access ?? undefined;
     }
 
     /**
@@ -592,7 +592,11 @@ export class KeyChainService {
                 `Key chain ${JSON.stringify(id)} does not exist in this tenant.`,
             );
         }
-        const refusal = defaultAccessUsageRefusal(id, keyChain.usageType);
+        const refusal = defaultKeyChainUsageRefusal(
+            KeyUsageType.Access,
+            id,
+            keyChain.usageType,
+        );
         if (refusal) throw new BadRequestException(refusal);
     }
 

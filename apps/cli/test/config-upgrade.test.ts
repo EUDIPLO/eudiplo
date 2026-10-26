@@ -399,13 +399,13 @@ describe("config upgrade", () => {
     });
     it.each([
         ["a v1 tenant file", 1],
-        ["a bare tenant file with a default access key chain", undefined],
-    ])("upgrades %s to v2 with the spec unchanged", async (_name, version) => {
+        ["a bare tenant file with default key chains", undefined],
+    ])("upgrades %s to v3 with the spec unchanged", async (_name, version) => {
         const { cwd, context } = await setup();
         const source = join(cwd, "tenant-folder");
         await mkdir(source, { recursive: true });
         const spec: Record<string, unknown> = { name: "Example" };
-        if (version === undefined) spec.defaultAccessKeyChainId = "access";
+        if (version === undefined) spec.defaultKeyChains = { access: "access" };
         await writeFile(
             join(source, "info.json"),
             JSON.stringify(
@@ -424,9 +424,31 @@ describe("config upgrade", () => {
             await readFile(join(`${source}.upgraded`, "info.json"), "utf8"),
         );
         expect(result.$schema).toBe(
-            "https://eudiplo.dev/schemas/v2/TenantConfigFile.schema.json",
+            "https://eudiplo.dev/schemas/v3/TenantConfigFile.schema.json",
         );
         expect(result.spec).toEqual(spec);
+    });
+    it("upgrades a v2 tenant file to v3 with defaultKeyChains", async () => {
+        const { cwd, context } = await setup();
+        const source = join(cwd, "tenant-v2-folder");
+        await mkdir(source, { recursive: true });
+        await writeFile(
+            join(source, "info.json"),
+            JSON.stringify({
+                $schema: schemaUrl("Tenant", 2),
+                metadata: { generation: 1 },
+                spec: { name: "Example", defaultAccessKeyChainId: "access" },
+            }),
+        );
+
+        expect(await runCli(["config", "upgrade", source], context)).toBe(0);
+        const result = JSON.parse(
+            await readFile(join(`${source}.upgraded`, "info.json"), "utf8"),
+        );
+        expect(result.spec).toEqual({
+            name: "Example",
+            defaultKeyChains: { access: "access" },
+        });
     });
     it("validates the entire folder before writing any output", async () => {
         const { cwd, context } = await setup();

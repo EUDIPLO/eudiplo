@@ -1,7 +1,10 @@
 import { webcrypto } from "node:crypto";
 import * as x509 from "@peculiar/x509";
 import { beforeAll, describe, expect, it } from "vitest";
-import { pickDefaultAccessKeyChain } from "./default-access-key-chain.js";
+import {
+    defaultKeyChainUsageRefusal,
+    pickDefaultAccessKeyChain,
+} from "./default-access-key-chain.js";
 
 const algorithm = { name: "ECDSA", namedCurve: "P-256", hash: "SHA-256" };
 const crypto = webcrypto as Crypto;
@@ -150,5 +153,21 @@ describe("pickDefaultAccessKeyChain", () => {
             { id: "b", createdAt: at(1), activeCertificate: issuedPem },
         ]);
         expect(chosen?.id).toBe("b");
+    });
+});
+
+describe("defaultKeyChainUsageRefusal", () => {
+    it("accepts a key chain whose usage type matches the entry", () => {
+        expect(
+            defaultKeyChainUsageRefusal("access", "registrar", "access"),
+        ).toBeUndefined();
+    });
+
+    it("names the entry and the usage type it needs", () => {
+        expect(
+            defaultKeyChainUsageRefusal("access", "pid", "attestation"),
+        ).toBe(
+            'Key chain "pid" has usage type "attestation"; defaultKeyChains.access needs usage type "access".',
+        );
     });
 });

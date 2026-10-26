@@ -142,7 +142,7 @@ export function describeKeyChainReferences(
 ): string {
     const parts = [
         references.some((reference) => reference.kind === "Tenant")
-            ? "the tenant's default access key chain setting (defaultAccessKeyChainId)"
+            ? "the tenant's default key chains (defaultKeyChains)"
             : undefined,
         references.some((reference) => reference.kind === "IssuanceConfig")
             ? "the issuance configuration"

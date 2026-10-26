@@ -56,14 +56,14 @@ describe("describeKeyChainReferences", () => {
         );
     });
 
-    it("names the tenant's default access key chain setting first", () => {
+    it("names the tenant's default key chains first", () => {
         expect(
             describeKeyChainReferences([
                 { kind: "PresentationConfig", id: "age" },
                 { kind: "Tenant" },
             ]),
         ).toBe(
-            'the tenant\'s default access key chain setting (defaultAccessKeyChainId) and 1 presentation config ("age")',
+            'the tenant\'s default key chains (defaultKeyChains) and 1 presentation config ("age")',
         );
     });
 

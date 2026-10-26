@@ -296,10 +296,17 @@ export const ImportTenantDtoSchema = {
             },
             additionalProperties: false
         },
-        defaultAccessKeyChainId: {
-            type: 'string',
-            description: 'ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant\'s access key chains by rule.',
-            minLength: 1
+        defaultKeyChains: {
+            type: 'object',
+            properties: {
+                access: {
+                    description: 'ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant\'s access key chains by rule.',
+                    type: 'string',
+                    minLength: 1
+                }
+            },
+            additionalProperties: false,
+            description: 'The tenant\'s key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule.'
         }
     },
     description: 'Payload used when importing tenant metadata from config files.',
@@ -359,6 +366,16 @@ export const StatusListConfigSchema = {
         enableAggregation: {
             type: 'boolean',
             description: 'If true, include aggregation_uri in status list JWTs for pre-fetching support. If not set, uses global STATUS_ENABLE_AGGREGATION.'
+        }
+    }
+} as const;
+
+export const DefaultKeyChainsSchema = {
+    type: 'object',
+    properties: {
+        access: {
+            type: 'string',
+            description: 'Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant\'s access key chains by rule.'
         }
     }
 } as const;
@@ -485,12 +502,16 @@ export const TenantResponseDtoSchema = {
                 }
             ]
         },
-        defaultAccessKeyChainId: {
-            type: [
-                'string',
-                'null'
-            ],
-            description: 'Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant\'s access key chains by rule.'
+        defaultKeyChains: {
+            description: 'The tenant\'s key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule.',
+            anyOf: [
+                {
+                    $ref: '#/components/schemas/DefaultKeyChains'
+                },
+                {
+                    type: 'null'
+                }
+            ]
         },
         clients: {
             description: 'Managed clients attached to the tenant',
@@ -695,12 +716,16 @@ export const TenantCreateResponseDtoSchema = {
                 }
             ]
         },
-        defaultAccessKeyChainId: {
-            type: [
-                'string',
-                'null'
-            ],
-            description: 'Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant\'s access key chains by rule.'
+        defaultKeyChains: {
+            description: 'The tenant\'s key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule.',
+            anyOf: [
+                {
+                    $ref: '#/components/schemas/DefaultKeyChains'
+                },
+                {
+                    type: 'null'
+                }
+            ]
         },
         client: {
             description: 'One-time generated client credentials for admin access',
@@ -807,12 +832,20 @@ export const UpdateTenantDtoSchema = {
             },
             additionalProperties: false
         },
-        defaultAccessKeyChainId: {
-            description: 'ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant\'s access key chains by rule. Omit to keep the current value or set to null to remove it.',
+        defaultKeyChains: {
+            description: 'The tenant\'s key chain per usage type, used where no configuration names one. Replaces the stored entries; omit to keep them, or set to null to remove them.',
             anyOf: [
                 {
-                    type: 'string',
-                    minLength: 1
+                    type: 'object',
+                    properties: {
+                        access: {
+                            description: 'ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant\'s access key chains by rule.',
+                            type: 'string',
+                            minLength: 1
+                        }
+                    },
+                    additionalProperties: false,
+                    description: 'The tenant\'s key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule.'
                 },
                 {
                     type: 'null'
@@ -3640,7 +3673,7 @@ export const KeyChainReferenceDtoSchema = {
         },
         id: {
             type: 'string',
-            description: 'ID of the configuration. Absent for the tenant\'s default access key chain setting and the issuance configuration, of which a tenant has one each, and for configurations the caller may not read.'
+            description: 'ID of the configuration. Absent for the tenant\'s default key chains and the issuance configuration, of which a tenant has one each, and for configurations the caller may not read.'
         },
         description: {
             type: 'string',
@@ -3751,12 +3784,16 @@ export const TenantEntitySchema = {
                 }
             ]
         },
-        defaultAccessKeyChainId: {
-            type: [
-                'string',
-                'null'
-            ],
-            description: 'Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant\'s access key chains by rule.'
+        defaultKeyChains: {
+            description: 'The tenant\'s key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule.',
+            anyOf: [
+                {
+                    $ref: '#/components/schemas/DefaultKeyChains'
+                },
+                {
+                    type: 'null'
+                }
+            ]
         },
         clients: {
             description: 'Clients associated with the tenant',
@@ -9775,9 +9812,9 @@ export const CredentialStatusDtoSchema = {
             ]
         },
         statusUpdatedAt: {
-            format: 'date-time',
             type: 'string',
-            description: 'When the status value last changed, through POST /api/session/revoke or when activeCredentials revokes a previous credential (ISO 8601). Absent if it has not changed since issuance, or only changed before this field was recorded.'
+            description: 'When the status value last changed, through POST /api/session/revoke or when activeCredentials revokes a previous credential (ISO 8601). Absent if it has not changed since issuance, or only changed before this field was recorded.',
+            format: 'date-time'
         }
     },
     required: [
