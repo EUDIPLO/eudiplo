@@ -8,7 +8,7 @@ All TypeScript packages test with [Vitest](https://vitest.dev). Run the unit tes
 
 | Suite | Location | Command | CI job |
 | --- | --- | --- | --- |
-| Backend unit and architecture | `apps/backend/src/**/*.spec.ts`, `apps/backend/test/architecture/` | `pnpm --filter @eudiplo/backend test` | Test Coverage Report |
+| Backend unit and architecture | `apps/backend/src/**/*.spec.ts`, `apps/backend/test/architecture/` | `pnpm --filter @eudiplo/backend test` | Backend Unit Tests |
 | Backend E2E | `apps/backend/test/**/*.e2e-spec.ts` | `pnpm --filter @eudiplo/backend test:e2e:local` | E2E Tests (non-OIDF) |
 | OIDF conformance | `apps/backend/test/oidf/` | `pnpm --filter @eudiplo/backend test:oidf` | E2E Tests (OIDF) |
 | CLI | `apps/cli/test/**/*.test.ts`, `apps/cli/src/**/*.spec.ts` | `pnpm --filter @eudiplo/cli test` | Build CLI |
@@ -65,7 +65,7 @@ pnpm --filter @eudiplo/backend test:e2e         # with coverage, as in CI
 
 `test:e2e` does not build `@eudiplo/config-format` (CI builds it in a separate step); run `pnpm --filter @eudiplo/config-format build` first.
 
-The CI job also adds the `host.testcontainers.internal` hosts entry and starts `test-rp`; locally neither is required.
+CI splits the suites across four runners (**E2E Tests (non-OIDF, shard n/4)**), because they share port 3000 and cannot run in parallel on one machine. The **E2E Tests (non-OIDF)** job passes only when every shard passed. Each shard also writes a Vitest blob report, which the **Backend E2E Coverage** job merges with its coverage. The shard jobs also add the `host.testcontainers.internal` hosts entry and start `test-rp`; locally neither is required.
 
 ## OIDF conformance testing
 
@@ -119,4 +119,4 @@ Unit tests run with Vitest through the Angular builder. The Playwright browser t
 | Backend E2E | `pnpm --filter @eudiplo/backend test:e2e` | `apps/backend/coverage/e2e/` |
 | Client E2E | `E2E_USE_BUILD=true E2E_COVERAGE=true pnpm --filter @eudiplo/client e2e` (after building, see [Client development](./client.md#tests)) | `apps/client/coverage/e2e/` |
 
-The backend reports are text, LCOV (HTML under `lcov-report/`) and Cobertura; the client report is HTML (`index.html`), LCOV and Cobertura. The **Test Coverage Report** CI job runs the backend suites and uploads their Cobertura files to **GitHub Code Quality** (labels `backend-unit` and `backend-e2e`); the **E2E Tests (Client)** job does the same for the client (label `client-e2e`). Both upload for pushes and for pull requests from branches of the repository. Static analysis runs on [SonarCloud](https://sonarcloud.io/project/overview?id=EUDIPLO_eudiplo), configured in `.sonarcloud.properties` (backend and client sources; the client is excluded from coverage).
+The backend reports are text, LCOV (HTML under `lcov-report/`) and Cobertura; the client report is HTML (`index.html`), LCOV and Cobertura. The **Backend Unit Tests** and **Backend E2E Coverage** CI jobs write the backend Cobertura files, which **Upload Coverage to GitHub Code Quality** uploads (labels `backend-unit` and `backend-e2e`); the **E2E Tests (Client)** job does the same for the client (label `client-e2e`). Both upload for pushes and for pull requests from branches of the repository. Static analysis runs on [SonarCloud](https://sonarcloud.io/project/overview?id=EUDIPLO_eudiplo), configured in `.sonarcloud.properties` (backend and client sources; the client is excluded from coverage).
