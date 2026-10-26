@@ -401,7 +401,7 @@
                 <button mat-button (click)="detach(item)" [disabled]="busy || !canApply">
                   Detach
                 </button>
-              } @else if (item.kind !== 'Tenant') {
+              } @else if (canResetToFile(item)) {
                 <button
                   mat-button
                   (click)="planReattach(item)"

@@ -690,3 +690,65 @@ describe('ConfigPortabilityComponent template for Apply from file', () => {
     expect(element.textContent).not.toContain('New secret');
   });
 });
+
+describe('ConfigPortabilityComponent template for Reset to file', () => {
+  const row = (kind: string, resourceId: string, ownership: string, source?: string) => ({
+    kind,
+    resourceId,
+    ownership,
+    source,
+    generation: 2,
+  });
+  const resources = [
+    row('PresentationConfig', 'folder-detached', 'detached', 'folder:/app/config/demo'),
+    row('PresentationConfig', 'bundle-detached', 'detached', 'bundle:demo'),
+    row('PresentationConfig', 'api-changed', 'unmanaged'),
+    row('Tenant', 'tenant', 'detached', 'folder:/app/config/demo'),
+  ] as unknown as ConfigResourceMetadata[];
+
+  async function render(rows: ConfigResourceMetadata[]) {
+    TestBed.configureTestingModule({
+      imports: [ConfigPortabilityComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ConfigPortabilityService,
+          useValue: {
+            listResources: vi.fn(async () => rows),
+            listOperations: vi.fn(async () => []),
+          },
+        },
+        { provide: JwtService, useValue: { hasRole: () => true } },
+      ],
+    });
+    const fixture = TestBed.createComponent(ConfigPortabilityComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  const resetRows = (element: HTMLElement) =>
+    [...element.querySelectorAll('button')]
+      .filter((button) => button.textContent?.trim() === 'Reset to file')
+      .map((button) => button.closest('tr')?.textContent ?? '');
+
+  it('offers Reset to file for folder resources and detached tenant settings', async () => {
+    const element = (await render(resources)).nativeElement as HTMLElement;
+
+    const rows = resetRows(element);
+    expect(rows).toHaveLength(3);
+    expect(rows.some((text) => text.includes('folder-detached'))).toBe(true);
+    expect(rows.some((text) => text.includes('api-changed'))).toBe(true);
+    expect(rows.some((text) => text.includes('Tenant'))).toBe(true);
+    expect(rows.some((text) => text.includes('bundle-detached'))).toBe(false);
+  });
+
+  it('offers no Reset to file for tenant settings changed through the API', async () => {
+    const element = (
+      await render([row('Tenant', 'tenant', 'unmanaged')] as unknown as ConfigResourceMetadata[])
+    ).nativeElement as HTMLElement;
+
+    expect(resetRows(element)).toEqual([]);
+  });
+});

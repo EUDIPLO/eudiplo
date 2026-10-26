@@ -32,7 +32,10 @@ curl -X POST "$EUDIPLO_URL/api/config-bundles/resources/PresentationConfig/age-c
 
 A detached resource has the ownership `detached` and stays detached while you
 edit it. The startup import skips it with the warning `RESOURCE_DETACHED`, and
-the rest of the tenant is still imported.
+the rest of the tenant is still imported. This also holds for the tenant
+settings in `info.json` (resource `Tenant/tenant`), such as the default access
+key chain and the session and status list settings; the log names it as
+`Tenant 'tenant'`.
 
 To discard your edits and return to the file version, reattach the resource. Plan
 first, review the changes, then apply with the plan's fingerprint:

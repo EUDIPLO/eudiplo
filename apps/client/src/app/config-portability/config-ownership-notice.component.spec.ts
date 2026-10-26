@@ -83,12 +83,22 @@ describe('ConfigOwnershipNoticeComponent', () => {
     expect(link(element)).toBeNull();
   });
 
-  it('offers no reset where Config Portability has none', async () => {
+  it('tells a tenant admin that a reset applies all tenant settings', async () => {
     const tenant = await render(async () => resource('detached'), ['tenant:admin'], 'Tenant');
-    expect(tenant.textContent).toContain('Imports from this source skip this resource.');
-    expect(tenant.textContent).not.toContain('Reset');
+    expect(tenant.textContent).toContain('Reset it to the file version');
+    expect(tenant.textContent).toContain('applies all tenant settings of info.json');
+  });
 
-    TestBed.resetTestingModule();
+  it('tells other clients who can reset detached tenant settings', async () => {
+    const tenant = await render(
+      async () => resource('detached'),
+      ['presentation:manage'],
+      'Tenant'
+    );
+    expect(tenant.textContent).toContain('Someone with the tenant:admin role can reset it');
+  });
+
+  it('offers no reset where Config Portability has none', async () => {
     const bundle = await render(async () => resource('detached', 'bundle:acme'), ['tenant:admin']);
     expect(bundle.textContent).toContain('Imports from this source skip this resource.');
     expect(bundle.textContent).not.toContain('Reset');
