@@ -263,6 +263,81 @@ describe("WalletAttestationService status list signer without revocation certifi
         ).resolves.toBe(true);
     });
 
+    /**
+     * A provider whose attestation and revocation CAs share subject and key
+     * (two key chains imported with one private key): a leaf signed with
+     * that key verifies under both, so the path must end at the revocation
+     * CA the check expects, whatever the order in the trust store.
+     */
+    for (const order of [
+        "attestation CA first",
+        "revocation CA first",
+    ] as const) {
+        it(`accepts a status list under a revocation CA that shares subject and key with the attestation CA (${order})`, async () => {
+            const attestationCa = await ca("Provider Root CA");
+            const revocationCert =
+                await x509.X509CertificateGenerator.createSelfSigned({
+                    serialNumber: "03",
+                    name: "CN=Provider Root CA",
+                    notBefore: new Date(Date.now() - 60_000),
+                    notAfter: new Date(Date.now() + 3_600_000),
+                    keys: attestationCa.keys,
+                    signingAlgorithm: algorithm,
+                    extensions: [
+                        new x509.BasicConstraintsExtension(true, 0, true),
+                    ],
+                });
+            const revocationCa = {
+                cert: revocationCert,
+                keys: attestationCa.keys,
+            };
+            const thumb = async (cert: x509.X509Certificate) =>
+                Buffer.from(await cert.getThumbprint("SHA-256")).toString(
+                    "hex",
+                );
+            const matchedEntity: MatchedTrustedEntity = {
+                entity: { entityId: "provider", services: [] },
+                issuanceCert: attestationCa.cert,
+                issuanceThumbprint: await thumb(attestationCa.cert),
+                issuanceIsCa: true,
+                matchMode: "ca",
+                revocationCert: revocationCa.cert,
+                revocationThumbprint: await thumb(revocationCa.cert),
+            };
+            const services = [
+                { certValue: der(attestationCa.cert) },
+                { certValue: der(revocationCa.cert) },
+            ];
+            const service = Object.assign(
+                Object.create(WalletAttestationService.prototype),
+                {
+                    logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+                    cryptoImplementationService: {
+                        getCryptoFromJwk: () => ES256,
+                    },
+                    x509ValidationService: new X509ValidationService(),
+                },
+            );
+
+            await expect(
+                service.verifyStatusListSignature(
+                    await statusListUnder(revocationCa),
+                    matchedEntity,
+                    {
+                        entities: [
+                            {
+                                services:
+                                    order === "attestation CA first"
+                                        ? services
+                                        : [...services].reverse(),
+                            },
+                        ],
+                    },
+                ),
+            ).resolves.toBe(true);
+        });
+    }
+
     it("rejects a status list chained to another CA in the trust store", async () => {
         const providerCa = await ca("Provider CA");
         const otherCa = await ca("Foreign CA");
