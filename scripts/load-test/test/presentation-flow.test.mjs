@@ -53,7 +53,7 @@ describe('submitAuthorizationResponse', () => {
             try {
                 submitAuthorizationResponse(ctx, requestObject, 'jwe', diagnose);
             } catch (e) {
-                return `level=error msg="${e.message.replace(/"/g, '\\"')}"`;
+                return `level=error msg="${e.message.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
             }
             return assert.fail('expected a failure');
         });
