@@ -9,7 +9,8 @@
 #   ./run-all.sh [--once] [--external] [scenario...]
 #
 #   If no scenario is specified all scenarios are run in sequence.
-#   Available scenarios: api-auth, pre-auth-issuance, oid4vp-presentation, status-list
+#   Available scenarios: api-auth, pre-auth-issuance, oid4vp-presentation,
+#   status-list, mixed (all flows concurrently, the production-like workload)
 #   --once forces K6_PROFILE=once and PAUSE_BETWEEN=0 for fast feedback.
 #
 # Environment variables:
@@ -30,9 +31,23 @@
 #   PROMETHEUS_RW_URL   If set, metrics are pushed to this Prometheus remote-
 #                         write endpoint in addition to stdout.
 #                         Example: http://localhost:9090/api/v1/write
-#   SUMMARY_DIR         Directory for JSON summaries (default: ./results)
+#   SUMMARY_DIR         Directory for summaries and logs
+#                         (default: scripts/load-test/results)
 #   CLEAN_RESULTS       Delete SUMMARY_DIR before running (default: true)
 #   PAUSE_BETWEEN       Seconds to pause between scenarios (default: 5)
+#   LOADTEST_LIMITS     Apply compose.limits.yml (CPU/memory limits) when
+#                         starting the stack (default: true)
+#   RESOURCE_STATS      Sample `docker stats` and count backend log errors
+#                         during each scenario (default: true when the target
+#                         is the repository's compose stack, started by the
+#                         runner or already running)
+#   BASELINE_TOLERANCE  Allowed p95 increase over baseline.json (default: 0.2)
+#   BASELINE_MIN_MS     Ignore p95 increases of at most this many ms (default: 5)
+#   BASELINE_ENFORCE    Fail the run on a baseline regression (default: false)
+#
+# Scenario variables (THINK_TIME_MIN/MAX, REVOKE_RATIO, CREDENTIAL_POOL_SIZE,
+# SEED_SESSIONS, MIXED_*_RATE, ...) are read by k6 from the environment; see
+# the scenario files and apps/docs/docs/operate/load-testing.md.
 #
 # Examples:
 #   # Smoke test all scenarios
@@ -50,6 +65,9 @@
 #   # Stress test with Prometheus output
 #   K6_PROFILE=stress PROMETHEUS_RW_URL=http://localhost:9090/api/v1/write \
 #     ./run-all.sh pre-auth-issuance oid4vp-presentation
+#
+#   # Production-like load on a database with 20 000 existing sessions
+#   K6_PROFILE=load SEED_SESSIONS=20000 ./run-all.sh mixed
 #
 # =============================================================================
 set -euo pipefail
@@ -79,6 +97,9 @@ K6_PROFILE="${K6_PROFILE:-smoke}"
 SUMMARY_DIR="${SUMMARY_DIR:-${SCRIPT_DIR}/results}"
 CLEAN_RESULTS="${CLEAN_RESULTS:-true}"
 PAUSE_BETWEEN="${PAUSE_BETWEEN:-5}"
+LOADTEST_LIMITS="${LOADTEST_LIMITS:-true}"
+RESOURCE_STATS="${RESOURCE_STATS:-}"
+LIMITS_FILE="${SCRIPT_DIR}/compose.limits.yml"
 
 # The stack is started from COMPOSE_DIR, so resolve a relative env file against
 # the caller's directory first.
@@ -86,7 +107,7 @@ if [[ "${K6_ENV_FILE}" != /* ]]; then
     K6_ENV_FILE="${PWD}/${K6_ENV_FILE}"
 fi
 
-ALL_SCENARIOS=(api-auth pre-auth-issuance oid4vp-presentation status-list)
+ALL_SCENARIOS=(api-auth pre-auth-issuance oid4vp-presentation status-list mixed)
 
 # ---------------------------------------------------------------------------
 # Optional flags
@@ -107,7 +128,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --help|-h)
-            sed -n '1,60p' "$0"
+            sed -n '2,/^set -euo pipefail/p' "$0" | sed '$d'
             exit 0
             ;;
         *)
@@ -237,16 +258,91 @@ start_stack_if_requested() {
     fi
 
     echo "Starting compose stack (${COMPOSE_PROFILE}) using ${K6_ENV_FILE}"
+    if [[ "${LOADTEST_LIMITS}" == "true" ]]; then
+        echo "Applying resource limits from ${LIMITS_FILE}"
+    fi
     (
         cd "${COMPOSE_DIR}"
-        docker compose --env-file "${K6_ENV_FILE}" --profile "${COMPOSE_PROFILE}" up -d
+        docker compose "${COMPOSE_ARGS[@]}" up -d
     )
 
     wait_for_backend
 }
 
+# ---------------------------------------------------------------------------
+# Compose arguments: the repository stack, plus resource limits so that
+# results are comparable between runs (see compose.limits.yml).
+# ---------------------------------------------------------------------------
+COMPOSE_ARGS=(--env-file "${K6_ENV_FILE}" --profile "${COMPOSE_PROFILE}" -f "${COMPOSE_DIR}/docker-compose.yml")
+if [[ "${LOADTEST_LIMITS}" == "true" ]]; then
+    COMPOSE_ARGS+=(-f "${LIMITS_FILE}")
+fi
+
+# Whether a reused, already healthy stack is the repository's compose stack.
+compose_stack_running() {
+    command -v docker &>/dev/null || return 1
+    (cd "${COMPOSE_DIR}" && docker compose "${COMPOSE_ARGS[@]}" ps -q eudiplo 2>/dev/null) | grep -q .
+}
+
+# ---------------------------------------------------------------------------
+# Resource sampling: `docker stats` of the stack's containers while a
+# scenario runs, written as JSON lines and summarised as peak CPU / memory.
+# ---------------------------------------------------------------------------
+STATS_PID=""
+
+start_resource_stats() {
+    local out="$1"
+    [[ "${RESOURCE_STATS}" == "true" ]] || return 0
+    (
+        while true; do
+            docker stats --no-stream --format '{{json .}}' \
+                $(cd "${COMPOSE_DIR}" && docker compose "${COMPOSE_ARGS[@]}" ps -q 2>/dev/null) \
+                >> "${out}" 2>/dev/null || true
+            sleep 5
+        done
+    ) &
+    STATS_PID=$!
+}
+
+stop_resource_stats() {
+    if [[ -n "${STATS_PID}" ]]; then
+        kill "${STATS_PID}" 2>/dev/null || true
+        wait "${STATS_PID}" 2>/dev/null || true
+        STATS_PID=""
+    fi
+}
+
+# Markdown table of peak CPU and memory per container from a stats file.
+summarise_resource_stats() {
+    local stats_file="$1"
+    [[ -s "${stats_file}" ]] || return 0
+    command -v node &>/dev/null || return 0
+    node "${SCRIPT_DIR}/lib/resource-stats.mjs" "${stats_file}"
+}
+
+# Count backend ERROR/WARN log lines since a timestamp (pino-pretty output).
+backend_log_counts() {
+    local since="$1"
+    [[ "${RESOURCE_STATS}" == "true" ]] || return 0
+    local logs
+    logs="$(cd "${COMPOSE_DIR}" && docker compose "${COMPOSE_ARGS[@]}" logs --no-color --since "${since}" eudiplo 2>/dev/null \
+        | sed -E 's/\x1b\[[0-9;]*m//g')" || return 0
+    local errors warns
+    errors="$(grep -c -E '\b(ERROR|FATAL)\b' <<<"${logs}" || true)"
+    warns="$(grep -c -E '\bWARN\b' <<<"${logs}" || true)"
+    echo "Backend log lines during the run: ${errors} ERROR/FATAL, ${warns} WARN"
+}
+
 start_stack_if_requested
 ensure_backend_reachable_when_not_starting_stack
+
+if [[ -z "${RESOURCE_STATS}" ]]; then
+    if [[ "${EXTERNAL_TARGET}" != "true" ]] && compose_stack_running; then
+        RESOURCE_STATS=true
+    else
+        RESOURCE_STATS=false
+    fi
+fi
 
 # ---------------------------------------------------------------------------
 # Create results directory
@@ -265,8 +361,12 @@ TIMESTAMP="$(date +%Y%m%dT%H%M%S)"
 run_scenario() {
     local scenario="$1"
     local script="${SCENARIOS_DIR}/${scenario}.ts"
-    local summary_file="${SUMMARY_DIR}/${TIMESTAMP}-${scenario}.json"
-    local log_file="${SUMMARY_DIR}/${TIMESTAMP}-${scenario}.log"
+    local prefix="${SUMMARY_DIR}/${TIMESTAMP}-${K6_PROFILE}-${scenario}"
+    local summary_file="${prefix}.json"
+    local log_file="${prefix}.log"
+    local md_file="${prefix}.md"
+    local txt_file="${prefix}.txt"
+    local stats_file="${prefix}-docker-stats.jsonl"
 
     echo ""
     echo "============================================================"
@@ -283,34 +383,75 @@ run_scenario() {
         out_args+=(--out "experimental-prometheus-rw=${PROMETHEUS_RW_URL}")
     fi
 
-    # Export variables for k6 scripts (__ENV)
+    # Export variables for k6 scripts (__ENV). The summary files are written
+    # by handleSummary() in lib/summary.ts, which leaves out setup data (the
+    # generated holder key) that --summary-export used to include.
     local env_args=(
         -e "BASE_URL=${BASE_URL}"
         -e "TENANT_ID=${TENANT_ID}"
         -e "CLIENT_ID=${CLIENT_ID}"
         -e "CLIENT_SECRET=${CLIENT_SECRET}"
         -e "K6_PROFILE=${K6_PROFILE}"
+        -e "SCENARIO_NAME=${scenario}"
+        -e "SUMMARY_FILE=${summary_file}"
+        -e "SUMMARY_MD=${md_file}"
+        -e "SUMMARY_TXT=${txt_file}"
     )
 
+    local started_at
+    started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    start_resource_stats "${stats_file}"
+
+    local k6_exit=0
     k6 run \
         "${env_args[@]}" \
         ${out_args[@]+"${out_args[@]}"} \
-        --summary-export "${summary_file}" \
-        "${script}" > "${log_file}" 2>&1
-    local k6_exit=$?
+        "${script}" > "${log_file}" 2>&1 || k6_exit=$?
 
-    # Print the final summary block (last ~20 lines contain the k6 end-of-run table)
-    tail -20 "${log_file}"
+    stop_resource_stats
+
+    # The end-of-run table written by handleSummary; fall back to the log
+    # tail when k6 failed before it could write one.
+    if [[ -s "${txt_file}" ]]; then
+        cat "${txt_file}"
+    else
+        tail -20 "${log_file}"
+    fi
+
+    local resources log_counts
+    resources="$(summarise_resource_stats "${stats_file}")"
+    log_counts="$(backend_log_counts "${started_at}")"
+    [[ -n "${log_counts}" ]] && echo "  ${log_counts}"
+
+    if [[ -f "${md_file}" ]]; then
+        {
+            if [[ -n "${resources}" ]]; then
+                echo "**Resources (peak during the run)**"
+                echo ""
+                echo "${resources}"
+                echo ""
+            fi
+            if [[ -n "${log_counts}" ]]; then
+                echo "${log_counts}"
+                echo ""
+            fi
+        } >> "${md_file}"
+        if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+            cat "${md_file}" >> "${GITHUB_STEP_SUMMARY}"
+        fi
+    fi
 
     if [[ "${k6_exit}" -eq 0 ]]; then
         echo "PASS: ${scenario}"
         return 0
     else
-        echo "FAIL: ${scenario} (thresholds breached or error)"
+        echo "FAIL: ${scenario} (k6 exit ${k6_exit}: thresholds breached or error)"
         echo "  Full output: ${log_file}"
         return 1
     fi
 }
+
+trap stop_resource_stats EXIT
 
 for scenario in "${RUN_SCENARIOS[@]}"; do
     if ! run_scenario "${scenario}"; then
@@ -325,6 +466,43 @@ for scenario in "${RUN_SCENARIOS[@]}"; do
 done
 
 # ---------------------------------------------------------------------------
+# Baseline comparison: p95 per stage against baseline.json. Reports by
+# default; BASELINE_ENFORCE=true turns a regression into a failure. The
+# `once` profile has a single sample per stage and is not compared.
+# ---------------------------------------------------------------------------
+BASELINE_FAILED=false
+if [[ "${K6_PROFILE}" != "once" ]] && ! command -v node &>/dev/null; then
+    echo ""
+    echo "WARNING: node not found; baseline comparison skipped."
+    if [[ "${BASELINE_ENFORCE:-false}" == "true" ]]; then
+        echo "  BASELINE_ENFORCE=true needs node, failing the run."
+        BASELINE_FAILED=true
+    fi
+elif [[ "${K6_PROFILE}" != "once" ]]; then
+    summaries=()
+    for scenario in "${RUN_SCENARIOS[@]}"; do
+        f="${SUMMARY_DIR}/${TIMESTAMP}-${K6_PROFILE}-${scenario}.json"
+        [[ -s "${f}" ]] && summaries+=("${f}")
+    done
+    if [[ ${#summaries[@]} -gt 0 ]]; then
+        compare_args=(--markdown "${SUMMARY_DIR}/${TIMESTAMP}-${K6_PROFILE}-baseline.md")
+        echo ""
+        compare_exit=0
+        node "${SCRIPT_DIR}/compare-baseline.mjs" "${compare_args[@]}" "${summaries[@]}" || compare_exit=$?
+        case "${compare_exit}" in
+            0) ;;
+            1) BASELINE_FAILED=true ;;
+            # A broken summary or baseline file is reported but does not fail
+            # the load test: the thresholds already decided pass or fail.
+            *) echo "WARNING: baseline comparison failed (exit ${compare_exit}); see the output above." ;;
+        esac
+        if [[ -n "${GITHUB_STEP_SUMMARY:-}" && -f "${SUMMARY_DIR}/${TIMESTAMP}-${K6_PROFILE}-baseline.md" ]]; then
+            cat "${SUMMARY_DIR}/${TIMESTAMP}-${K6_PROFILE}-baseline.md" >> "${GITHUB_STEP_SUMMARY}"
+        fi
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # Final report
 # ---------------------------------------------------------------------------
 echo ""
@@ -334,10 +512,11 @@ echo "============================================================"
 echo "  Ran      : ${#RUN_SCENARIOS[@]} scenario(s)"
 echo "  Results  : ${SUMMARY_DIR}/"
 
-if [[ ${#FAILED_SCENARIOS[@]} -eq 0 ]]; then
+if [[ ${#FAILED_SCENARIOS[@]} -eq 0 && "${BASELINE_FAILED}" == "false" ]]; then
     echo "  Status   : ALL PASSED"
     exit 0
 else
-    echo "  FAILED   : ${FAILED_SCENARIOS[*]}"
+    [[ ${#FAILED_SCENARIOS[@]} -gt 0 ]] && echo "  FAILED   : ${FAILED_SCENARIOS[*]}"
+    [[ "${BASELINE_FAILED}" == "true" ]] && echo "  BASELINE : p95 regression beyond BASELINE_TOLERANCE"
     exit 1
 fi

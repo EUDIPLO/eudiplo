@@ -1,0 +1,19 @@
+# Resource limits for the load-test stack, applied by run-all.sh on top of
+# deployment/docker-compose/docker-compose.yml when it starts the stack.
+#
+# Without limits the backend, the database and k6 compete for the same CPUs
+# and a latency change cannot be attributed: was the backend slower, or did
+# k6's signing work starve it? With fixed limits, results are comparable
+# between runs and "capacity" refers to a known size.
+#
+# Defaults fit a 4-vCPU GitHub-hosted runner and leave one core to k6.
+# Override with LOADTEST_BACKEND_CPUS / LOADTEST_BACKEND_MEMORY and
+# LOADTEST_DB_CPUS / LOADTEST_DB_MEMORY; set LOADTEST_LIMITS=false in the
+# runner to start the stack without this file.
+services:
+  eudiplo:
+    cpus: ${LOADTEST_BACKEND_CPUS:-2}
+    mem_limit: ${LOADTEST_BACKEND_MEMORY:-2g}
+  postgres:
+    cpus: ${LOADTEST_DB_CPUS:-1}
+    mem_limit: ${LOADTEST_DB_MEMORY:-1g}

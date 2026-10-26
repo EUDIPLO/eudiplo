@@ -1,0 +1,4 @@
+{
+  "$comment": "p95 latency in ms per profile, scenario and stage, to be recorded from runs on a GitHub-hosted ubuntu-latest runner with compose.limits.yml. A profile/scenario without an entry is reported as 'no baseline'. Record with: node scripts/load-test/compare-baseline.mjs --update <summary.json>...",
+  "profiles": {}
+}
