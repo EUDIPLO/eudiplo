@@ -109,7 +109,12 @@ annotation keywords ([Constraints](../issuance/claims.md#constraints)). The v2
 to v3 step removes every other key, also inside subschemas, and subschema
 keywords whose value is not an object or boolean, each with the warning
 `CLAIM_CONSTRAINT_KEYWORD_REMOVED` at its path, for example
-`/spec/fields/0/constraints/widget`.
+`/spec/fields/0/constraints/widget`. v3 also matches claim patterns with RE2
+([Constraints](../issuance/claims.md#constraints)): a `pattern` or
+`patternProperties` key RE2 cannot run stops the migration with the required
+input `CLAIM_PATTERN_UNSUPPORTED` at its path, for example
+`/spec/fields/0/constraints/pattern`; the pattern is not rewritten, and nothing
+is written until you change it.
 
 **KeyChain v2** came with EUDIPLO 10.0. It adds the optional `type`
 (`standalone` or `internalChain`), which exports write. For a `private-jwk` key

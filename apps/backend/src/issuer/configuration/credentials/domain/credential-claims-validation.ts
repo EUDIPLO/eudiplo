@@ -1,7 +1,9 @@
+import { UnsupportedClaimPattern } from "@eudiplo/config-format/claim-patterns.js";
 import type { ErrorObject } from "ajv";
 import { Ajv2020 as Ajv } from "ajv/dist/2020.js";
 import { buildJsonSchema } from "../utils/derive.js";
 import type { ClaimFieldDefinition } from "../utils/types.js";
+import { claimPatternEngine } from "./claim-pattern-engine.js";
 
 /**
  * Resolved claims do not match the credential configuration. The message only
@@ -21,6 +23,7 @@ export class InvalidCredentialClaims extends Error {
  * unknown and invalid nested claims are rejected; schema defaults are applied
  * to `claims` in place.
  * @throws InvalidCredentialClaims
+ * @throws UnsupportedClaimPattern when a stored pattern cannot be compiled
  */
 export function assertClaimsMatchConfiguration(
     configuration: { id: string; fields?: unknown },
@@ -36,8 +39,24 @@ export function assertClaimsMatchConfiguration(
         strict: true,
         useDefaults: true,
         validateSchema: false,
+        code: { regExp: claimPatternEngine },
+        // The strict check for `properties` names matching `patternProperties`
+        // runs the patterns with the native RegExp engine, not `code.regExp`.
+        allowMatchingProperties: true,
     });
-    const validate = ajv.compile(schema as object);
+    let validate: ReturnType<typeof ajv.compile>;
+    try {
+        validate = ajv.compile(schema as object);
+    } catch (error) {
+        // Stored before patterns were checked on save. The reason can quote
+        // the pattern, so it stays out of the message.
+        if (error instanceof UnsupportedClaimPattern) {
+            throw new UnsupportedClaimPattern(
+                `Credential configuration with id ${configuration.id} has a claim pattern that cannot be used`,
+            );
+        }
+        throw error;
+    }
     if (!validate(claims)) {
         throw new InvalidCredentialClaims(
             `Claims do not conform to the schema for credential configuration with id ${configuration.id}: ${formatClaimErrors(validate.errors)}`,

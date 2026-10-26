@@ -6,6 +6,8 @@
 // strict AJV, which refuses unknown keywords. The SDK keeps a copy in
 // packages/eudiplo-sdk-core/src/config/constraints.ts.
 
+import { claimPatternMessage, claimPatternProblem } from "./claim-patterns.js";
+
 /** Keywords whose value is data, kept as-is. */
 export const CONSTRAINT_VALUE_KEYWORDS = [
     "type",
@@ -200,4 +202,80 @@ export function sanitizeClaimFields(
         return next;
     });
     return { fields: sanitized, removed };
+}
+
+function collectPatternProblems(
+    value: unknown,
+    path: string,
+    problems: { path: string; message: string }[],
+): void {
+    if (!isPlainObject(value)) return;
+    for (const [key, child] of Object.entries(value)) {
+        const childPath = pointer(path, key);
+        if (key === "pattern" && typeof child === "string") {
+            const problem = claimPatternProblem(child);
+            if (problem) {
+                problems.push({
+                    path: childPath,
+                    message: claimPatternMessage(child, problem),
+                });
+            }
+        } else if (SCHEMA_KEYWORDS.has(key)) {
+            collectPatternProblems(child, childPath, problems);
+        } else if (SCHEMA_LIST_KEYWORDS.has(key) && Array.isArray(child)) {
+            child.forEach((schema, index) =>
+                collectPatternProblems(
+                    schema,
+                    pointer(childPath, index),
+                    problems,
+                ),
+            );
+        } else if (SCHEMA_MAP_KEYWORDS.has(key) && isPlainObject(child)) {
+            for (const [name, schema] of Object.entries(child)) {
+                const namePath = pointer(childPath, name);
+                const problem =
+                    key === "patternProperties"
+                        ? claimPatternProblem(name)
+                        : undefined;
+                if (problem) {
+                    problems.push({
+                        path: namePath,
+                        message: claimPatternMessage(name, problem),
+                    });
+                }
+                collectPatternProblems(schema, namePath, problems);
+            }
+        }
+    }
+}
+
+/**
+ * Finds the `pattern` values and `patternProperties` keys in the `constraints`
+ * of claim field definitions, recursively through `children`, that cannot be
+ * matched with RE2 ({@link claimPatternProblem}). Paths are JSON pointers
+ * starting with `path` (the pointer of the `fields` array).
+ */
+export function findUnsupportedClaimPatterns(
+    fields: unknown[],
+    path = "",
+): { path: string; message: string }[] {
+    const problems: { path: string; message: string }[] = [];
+    fields.forEach((field, index) => {
+        if (!isPlainObject(field)) return;
+        const fieldPath = pointer(path, index);
+        collectPatternProblems(
+            field.constraints,
+            pointer(fieldPath, "constraints"),
+            problems,
+        );
+        if (Array.isArray(field.children)) {
+            problems.push(
+                ...findUnsupportedClaimPatterns(
+                    field.children,
+                    pointer(fieldPath, "children"),
+                ),
+            );
+        }
+    });
+    return problems;
 }

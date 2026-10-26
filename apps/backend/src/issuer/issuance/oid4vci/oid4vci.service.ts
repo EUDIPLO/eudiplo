@@ -1,3 +1,4 @@
+import { UnsupportedClaimPattern } from "@eudiplo/config-format/claim-patterns.js";
 import {
     BadRequestException,
     ConflictException,
@@ -207,11 +208,13 @@ export class Oid4vciService {
         if (error instanceof CredentialRequestException) {
             throw error;
         }
-        // Resolved claims that do not match the credential configuration;
-        // the message names claim paths only, never claim values.
+        // Resolved claims that do not match the credential configuration, or
+        // a stored claim pattern that cannot be used; the message names claim
+        // paths or the configuration only, never claim values or patterns.
         if (
             error instanceof InvalidClaimsException ||
-            error instanceof InvalidCredentialClaims
+            error instanceof InvalidCredentialClaims ||
+            error instanceof UnsupportedClaimPattern
         ) {
             throw new CredentialRequestException(
                 "credential_request_denied",

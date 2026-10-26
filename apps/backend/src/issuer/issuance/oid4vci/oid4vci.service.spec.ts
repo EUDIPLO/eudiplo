@@ -1,3 +1,4 @@
+import { UnsupportedClaimPattern } from "@eudiplo/config-format/claim-patterns.js";
 import {
     BadRequestException,
     ConflictException,
@@ -260,6 +261,21 @@ describe("Oid4vciService credential request error mapping", () => {
         expect(protocolError(error)).toEqual({
             error: "invalid_proof",
             error_description: "holder key rejected",
+        });
+    });
+
+    it("maps UnsupportedClaimPattern to credential_request_denied, whatever the configuration id", async () => {
+        const message =
+            "Credential configuration with id pid-sd-jwt has a claim pattern that cannot be used";
+        const error = await rejection(
+            setup({
+                issue: () =>
+                    Promise.reject(new UnsupportedClaimPattern(message)),
+            }).getCredential(request, "tenant"),
+        );
+        expect(protocolError(error)).toEqual({
+            error: "credential_request_denied",
+            error_description: message,
         });
     });
 

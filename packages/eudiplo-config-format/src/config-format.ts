@@ -1,6 +1,9 @@
 // Canonical portable-config identity and migration implementation.
 // The CLI bundles this module through assets:sync; do not maintain a second engine.
-import { sanitizeClaimFields } from "./claim-constraints.js";
+import {
+    findUnsupportedClaimPatterns,
+    sanitizeClaimFields,
+} from "./claim-constraints.js";
 
 export const CONFIG_FORMATS = {
     Tenant: { slug: "tenant", file: "TenantConfigFile", version: 4 },
@@ -312,6 +315,10 @@ const tenantConfigV3ToV4: ConfigMigration = {
  * before; they are dropped with a warning. The strict claims validation at
  * issuance refused them already, and form renderers such as the Web Client's
  * formly read their own keys (`widget`) from the schema.
+ *
+ * v3 also matches claim patterns with RE2 ({@link findUnsupportedClaimPatterns}).
+ * A pattern RE2 cannot run is reported, not rewritten: only the author knows
+ * what it should accept.
  */
 const credentialConfigV2ToV3: ConfigMigration = {
     id: "credential-config-v3-claim-constraint-keywords",
@@ -324,16 +331,27 @@ const credentialConfigV2ToV3: ConfigMigration = {
             spec.fields,
             "/spec/fields",
         );
-        if (removed.length === 0) return { spec };
-        return {
-            spec: { ...spec, fields },
-            issues: removed.map((path) => ({
-                severity: "warning",
+        const issues: ConfigMigrationIssue[] = [
+            ...removed.map((path) => ({
+                severity: "warning" as const,
                 code: "CLAIM_CONSTRAINT_KEYWORD_REMOVED",
                 path,
                 message:
                     "Removed: constraints accept only JSON Schema validation and annotation keywords.",
             })),
+            ...findUnsupportedClaimPatterns(fields, "/spec/fields").map(
+                ({ path, message }) => ({
+                    severity: "required-input" as const,
+                    code: "CLAIM_PATTERN_UNSUPPORTED",
+                    path,
+                    message,
+                }),
+            ),
+        ];
+        if (issues.length === 0) return { spec };
+        return {
+            spec: removed.length > 0 ? { ...spec, fields } : spec,
+            issues,
         };
     },
 };

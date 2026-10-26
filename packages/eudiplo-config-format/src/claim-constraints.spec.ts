@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { claimPatternProblem } from "./claim-patterns.js";
 import {
+    findUnsupportedClaimPatterns,
     sanitizeClaimConstraints,
     sanitizeClaimFields,
 } from "./claim-constraints.js";
@@ -107,5 +109,77 @@ describe("sanitizeClaimFields", () => {
 
         expect(result.removed).toEqual([]);
         expect(result.fields[0]).toBe(fields[0]);
+    });
+});
+
+describe("findUnsupportedClaimPatterns", () => {
+    it("reports patterns and patternProperties keys RE2 cannot run, with their path", () => {
+        const fields = [
+            {
+                path: ["name"],
+                type: "string",
+                constraints: { pattern: "^(?=a)a+$", const: { pattern: "(?=x)" } },
+            },
+            {
+                path: ["extras"],
+                type: "object",
+                constraints: {
+                    patternProperties: { "(a)\\1": { pattern: "^ok$" } },
+                    anyOf: [{ propertyNames: { pattern: "(?i)a" } }],
+                },
+                children: [
+                    {
+                        path: ["inner"],
+                        type: "string",
+                        constraints: { pattern: "[" },
+                    },
+                ],
+            },
+        ];
+
+        expect(
+            findUnsupportedClaimPatterns(fields, "/spec/fields").map(
+                ({ path }) => path,
+            ),
+        ).toEqual([
+            "/spec/fields/0/constraints/pattern",
+            "/spec/fields/1/constraints/patternProperties/(a)\\1",
+            "/spec/fields/1/constraints/anyOf/0/propertyNames/pattern",
+            "/spec/fields/1/children/0/constraints/pattern",
+        ]);
+    });
+
+    it("accepts patterns RE2 runs, including catastrophic ones", () => {
+        const fields = [
+            {
+                path: ["name"],
+                type: "string",
+                constraints: { pattern: "^(a+)+$", items: { pattern: "^\\p{L}+$" } },
+            },
+        ];
+
+        expect(findUnsupportedClaimPatterns(fields)).toEqual([]);
+    });
+});
+
+describe("claimPatternProblem", () => {
+    // RE2 expands counted repetitions when it compiles: this one would build
+    // about a million instructions before the program size could be checked.
+    it("refuses a huge program before compiling it", () => {
+        const started = performance.now();
+
+        expect(claimPatternProblem(`(?:${"a".repeat(990)}){1000}`)).toBe(
+            "the pattern is too complex, for example too many or too large repetitions",
+        );
+        expect(performance.now() - started).toBeLessThan(50);
+    });
+
+    it.each([
+        "^[a-z]{1,255}$",
+        "^\\u{1F600}{3}$",
+        "^\\p{L}{2,64}$",
+        "^(?:[A-Z]{2}-){0,10}\\d{4}$",
+    ])("accepts the ordinary repetition %s", (pattern) => {
+        expect(claimPatternProblem(pattern)).toBeUndefined();
     });
 });

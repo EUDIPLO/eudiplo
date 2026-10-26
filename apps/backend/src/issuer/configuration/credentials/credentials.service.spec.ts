@@ -1,3 +1,4 @@
+import { UnsupportedClaimPattern } from "@eudiplo/config-format/claim-patterns.js";
 import { NotFoundException } from "@nestjs/common";
 import { zCredentialIssuerMetadataSchema } from "@openid4vc/openid4vci";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +11,7 @@ import {
     CredentialProofType,
     type IssuerMetadataCredentialConfig,
 } from "./entities/credential.entity.js";
+import { InvalidClaimsException } from "./exceptions/invalid-claims.exception.js";
 
 const SIGNING_ALGS = ["ES256"];
 
@@ -288,5 +290,44 @@ describe("CredentialsService proof_types_supported generation", () => {
         expect(parsedProofTypes.attestation.key_attestations_required).toEqual({
             key_storage: ["iso_18045_high"],
         });
+    });
+});
+
+describe("CredentialsService.validateClaimsForCredential", () => {
+    const serviceWith = (constraints: Record<string, unknown>) =>
+        Object.assign(
+            Object.create(CredentialsService.prototype) as CredentialsService,
+            {
+                credentialConfigurationRepository: {
+                    getForTenant: vi.fn(async () => ({
+                        id: "patterned",
+                        fields: [
+                            { path: ["name"], type: "string", constraints },
+                        ],
+                    })),
+                },
+            },
+        );
+
+    it("answers 409 for a stored pattern RE2 cannot run, without quoting it", async () => {
+        const error = await serviceWith({ pattern: "^(?=secret)\\w+$" })
+            .validateClaimsForCredential("patterned", { name: "x" }, "tenant")
+            .catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(InvalidClaimsException);
+        expect(error).not.toBeInstanceOf(UnsupportedClaimPattern);
+        expect((error as Error).message).toBe(
+            "Credential configuration with id patterned has a claim pattern that cannot be used",
+        );
+    });
+
+    it("answers 409 for claims that do not match the pattern", async () => {
+        await expect(
+            serviceWith({ pattern: "^[A-Z]+$" }).validateClaimsForCredential(
+                "patterned",
+                { name: "abc" },
+                "tenant",
+            ),
+        ).rejects.toBeInstanceOf(InvalidClaimsException);
     });
 });
