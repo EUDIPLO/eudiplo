@@ -37,8 +37,8 @@
 #   PAUSE_BETWEEN       Seconds to pause between scenarios (default: 5)
 #   LOADTEST_LIMITS     Apply compose.limits.yml (CPU/memory limits) when
 #                         starting the stack (default: true)
-#   RESOURCE_STATS      Sample `docker stats` and count backend log errors
-#                         during each scenario (default: true when the target
+#   RESOURCE_STATS      Sample `docker stats`, capture the backend log and
+#                         count its errors during each scenario (default: true when the target
 #                         is the repository's compose stack, started by the
 #                         runner or already running)
 #   BASELINE_TOLERANCE  Allowed p95 increase over baseline.json (default: 0.2)
@@ -324,24 +324,30 @@ summarise_resource_stats() {
 # the reason is visible on the PR checks without downloading the artifact
 # (see lib/failure-annotation.mjs).
 annotate_failure() {
-    local scenario="$1" summary_file="$2" log_file="$3"
+    local scenario="$1" summary_file="$2" log_file="$3" backend_log="${4:-}"
     [[ -n "${GITHUB_ACTIONS:-}" ]] || return 0
     command -v node &>/dev/null || return 0
     node "${SCRIPT_DIR}/lib/failure-annotation.mjs" \
-        "${scenario}" "${K6_PROFILE}" "${summary_file}" "${log_file}" || true
+        "${scenario}" "${K6_PROFILE}" "${summary_file}" "${log_file}" "${backend_log}" || true
 }
 
 # Count backend ERROR/WARN log lines since a timestamp (pino-pretty output).
-backend_log_counts() {
-    local since="$1"
+# Write the backend's log lines since a timestamp, without colour codes, to
+# a file (for the error counts and the failure annotation).
+capture_backend_log() {
+    local since="$1" backend_log_file="$2"
     [[ "${RESOURCE_STATS}" == "true" ]] || return 0
-    local logs
-    logs="$(cd "${COMPOSE_DIR}" && docker compose "${COMPOSE_ARGS[@]}" logs --no-color --since "${since}" eudiplo 2>/dev/null \
-        | sed -E 's/\x1b\[[0-9;]*m//g')" || return 0
-    local errors warns
-    errors="$(grep -c -E '\b(ERROR|FATAL)\b' <<<"${logs}" || true)"
-    warns="$(grep -c -E '\bWARN\b' <<<"${logs}" || true)"
-    echo "Backend log lines during the run: ${errors} ERROR/FATAL, ${warns} WARN"
+    (cd "${COMPOSE_DIR}" && docker compose "${COMPOSE_ARGS[@]}" logs --no-color --since "${since}" eudiplo 2>/dev/null) \
+        | sed -E 's/\x1b\[[0-9;]*m//g' > "${backend_log_file}" || true
+}
+
+# "Backend log lines during the run: N ERROR/FATAL, M WARN", counted with the
+# same rule as the annotation (lib/failure-annotation.mjs).
+backend_log_counts() {
+    local backend_log_file="$1"
+    [[ -s "${backend_log_file}" ]] || return 0
+    command -v node &>/dev/null || return 0
+    node "${SCRIPT_DIR}/lib/failure-annotation.mjs" --count-backend "${backend_log_file}" || true
 }
 
 start_stack_if_requested
@@ -431,7 +437,9 @@ run_scenario() {
 
     local resources log_counts
     resources="$(summarise_resource_stats "${stats_file}")"
-    log_counts="$(backend_log_counts "${started_at}")"
+    local backend_log="${prefix}-backend.log"
+    capture_backend_log "${started_at}" "${backend_log}"
+    log_counts="$(backend_log_counts "${backend_log}")"
     [[ -n "${log_counts}" ]] && echo "  ${log_counts}"
 
     if [[ -f "${md_file}" ]]; then
@@ -458,7 +466,7 @@ run_scenario() {
     else
         echo "FAIL: ${scenario} (k6 exit ${k6_exit}: thresholds breached or error)"
         echo "  Full output: ${log_file}"
-        annotate_failure "${scenario}" "${summary_file}" "${log_file}"
+        annotate_failure "${scenario}" "${summary_file}" "${log_file}" "${backend_log}"
         return 1
     fi
 }

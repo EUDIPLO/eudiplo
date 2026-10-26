@@ -155,7 +155,7 @@ of the per-stage latencies.
 | `BASELINE_TOLERANCE` | `0.2`                   | Allowed p95 increase over the baseline                      |
 | `BASELINE_MIN_MS`   | `5`                      | Ignore p95 increases of at most this many milliseconds      |
 | `BASELINE_ENFORCE`  | `false`                  | Fail the run when a stage exceeds the tolerance             |
-| `RESOURCE_STATS`    | see [Results](#results)  | Sample `docker stats` and count backend log errors          |
+| `RESOURCE_STATS`    | see [Results](#results)  | Sample `docker stats`, capture the backend log and count its errors |
 
 ## Existing data
 
@@ -182,6 +182,7 @@ and profile in the file name:
 | `….md`, `….txt`          | Latency per stage (median, p95, p99, max) with thresholds  |
 | `….log`                  | k6 output                                                  |
 | `…-docker-stats.jsonl`   | `docker stats` samples of the stack, with `RESOURCE_STATS` (see below) |
+| `…-backend.log`          | The backend's log lines during the scenario, with `RESOURCE_STATS` |
 
 Once per run, except with `once`, the runner also writes `…-baseline.md` with the
 baseline comparison.
@@ -189,9 +190,13 @@ baseline comparison.
 When the target is the repository's Compose stack, whether the runner started
 it or found it running, the runner samples `docker stats` during each scenario.
 The Markdown report then lists the peak CPU and memory per container and the
-number of `ERROR` and `WARN` lines the backend logged during the run.
+number of `ERROR`/`FATAL` and `WARN` lines the backend logged during the run.
 `RESOURCE_STATS=true` or `false` overrides this. In GitHub Actions the reports
-are added to the job summary.
+are added to the job summary, and every failed scenario gets an error
+annotation on the checks with the breached thresholds, failed checks, the most
+frequent k6 errors (for a rejected presentation, with the verifier's reason) and,
+with `RESOURCE_STATS`, the most frequent backend `WARN`, `ERROR` and `FATAL`
+messages.
 
 After the scenarios, the runner compares the p95 of every stage with
 `scripts/load-test/baseline.json` for the same profile and reports stages that

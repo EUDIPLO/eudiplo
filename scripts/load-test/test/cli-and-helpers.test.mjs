@@ -12,7 +12,9 @@ import { peakUsage, resourceTableMarkdown, toMiB } from '../lib/resource-stats.m
 import {
     buildAnnotation,
     escapeCommandMessage,
+    countBackendLevels,
     escapeCommandProperty,
+    topBackendMessages,
     topErrors,
 } from '../lib/failure-annotation.mjs';
 
@@ -213,6 +215,55 @@ describe('failure annotation', () => {
         assert.equal(line.split('\n').length, 1);
     });
 
+    // The backend's pino-pretty format, as `docker compose logs` prints it.
+    const backendLine = (level, msg) => `eudiplo-1  | [2026-10-26 07:42:03] ${level}: ${msg}`;
+
+    test('groups backend messages that differ only in ids, most frequent first', () => {
+        const log = [
+            backendLine('ERROR', '[Oid4vpService] Presentation failed'),
+            backendLine('WARN', '[CredentialChainValidationService] Status list chain validation failed for TrustedEntity 11111111-2222-3333-4444-555555555555: no trusted entity matched'),
+            backendLine('WARN', '[CredentialChainValidationService] Status list chain validation failed for TrustedEntity 66666666-7777-8888-9999-000000000000: no trusted entity matched'),
+            'eudiplo-1  |     sessionId: "abc"',
+            'eudiplo-1  |     error: "ERROR: upstream refused"',
+            backendLine('INFO', '[Http] upstream said ERROR: nope'),
+            backendLine('INFO', '[Http] ERROR: nope'),
+            'eudiplo-1  |     message: "[x] WARN: y"',
+            backendLine('FATAL', '[Bootstrap] out of memory'),
+        ].join('\n');
+        assert.deepEqual(countBackendLevels(log), { errorOrFatal: 2, warn: 2 });
+        assert.deepEqual(topBackendMessages(log), [
+            'backend 2× WARN [CredentialChainValidationService] Status list chain validation failed for TrustedEntity 11111111-2222-3333-4444-555555555555: no trusted entity matched',
+            'backend 1× ERROR [Oid4vpService] Presentation failed',
+            'backend 1× FATAL [Bootstrap] out of memory',
+        ]);
+    });
+
+    test('also reads the header with a pid, and keeps at most `limit` groups', () => {
+        assert.deepEqual(topBackendMessages('[2026-10-26 07:42:03] WARN (17): [X] y'), ['backend 1× WARN [X] y']);
+        assert.deepEqual(topBackendMessages('[2026-10-26 07:42:03] WARN: [X] y'), ['backend 1× WARN [X] y']);
+        const many = Array.from({ length: 7 }, (_v, i) => backendLine('WARN', `[X] message ${i}`)).join('\n');
+        assert.equal(topBackendMessages(many).length, 5);
+    });
+
+    test('orders failures, then k6 errors, then backend messages, then an unreadable summary', () => {
+        const line = buildAnnotation({
+            scenario: 's',
+            profile: 'smoke',
+            summary: { failures: ['✗ checks: rate>0.99'] },
+            logText: k6Error('credential: unexpected status 500. Body: x'),
+            logName: 'k6.log',
+            backendLogText: backendLine('WARN', '[X] boom'),
+        });
+        const parts = line.split('::').pop().split('%0A');
+        assert.equal(parts.length, 3);
+        assert.equal(parts[0], '✗ checks: rate>0.99');
+        assert.match(parts[1], /^1× Uncaught \(in promise\) GoError: credential: unexpected status 500/);
+        assert.equal(parts[2], 'backend 1× WARN [X] boom');
+
+        const unreadable = buildAnnotation({ scenario: 's', profile: 'smoke', summary: 'Summary s.json is unreadable: x', logText: '', logName: 'k6.log', backendLogText: backendLine('ERROR', '[Y] z') });
+        assert.match(unreadable, /backend 1× ERROR \[Y\] z%0ASummary s\.json is unreadable: x$/);
+    });
+
     function cli(args) {
         return spawnSync(process.execPath, [ANNOTATE, ...args], { encoding: 'utf8' });
     }
@@ -234,6 +285,25 @@ describe('failure annotation', () => {
         assert.equal(r.status, 0);
         assert.match(r.stdout, /1× Uncaught \(in promise\) GoError: nonce endpoint: unexpected status 503/);
         assert.match(r.stdout, /Summary s\.json is unreadable/);
+    });
+
+    test('CLI: reads the backend log from the fifth argument and ignores a missing one', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'k6-annot-'));
+        const summaryPath = join(dir, 's.json');
+        const backendPath = join(dir, 'backend.log');
+        writeFileSync(summaryPath, JSON.stringify({ failures: ['✗ checks: rate>0.99'] }));
+        writeFileSync(backendPath, backendLine('ERROR', '[X] boom'));
+        const withBackend = cli(['flow', 'load', summaryPath, join(dir, 'none.log'), backendPath]);
+        assert.equal(withBackend.stdout.trim(), '::error title=k6 flow (load) failed::✗ checks: rate>0.99%0Abackend 1× ERROR [X] boom');
+        const missing = cli(['flow', 'load', summaryPath, join(dir, 'none.log'), join(dir, 'missing.log')]);
+        assert.equal(missing.stdout.trim(), '::error title=k6 flow (load) failed::✗ checks: rate>0.99');
+    });
+
+    test('CLI: --count-backend prints the level counts', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'k6-annot-'));
+        const backendPath = join(dir, 'backend.log');
+        writeFileSync(backendPath, [backendLine('ERROR', '[X] a'), backendLine('WARN', '[X] b'), backendLine('INFO', '[X] ERROR: c')].join('\n'));
+        assert.equal(cli(['--count-backend', backendPath]).stdout.trim(), 'Backend log lines during the run: 1 ERROR/FATAL, 1 WARN');
     });
 
     test('CLI: a valid summary without a log prints its failures', () => {
