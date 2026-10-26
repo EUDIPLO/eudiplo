@@ -44,7 +44,7 @@ rejects versions newer than its own.
 
 | Kind                 | `<File>`                      | Current version | Singleton |
 | -------------------- | ----------------------------- | --------------- | --------- |
-| `Tenant`             | `TenantConfigFile`            | 2               | yes       |
+| `Tenant`             | `TenantConfigFile`            | 3               | yes       |
 | `Client`             | `ClientConfigFile`            | 2               |           |
 | `KmsConfig`          | `KmsConfigFile`               | 2               | yes       |
 | `KeyChain`           | `KeyChainConfigFile`          | 3               |           |
@@ -113,18 +113,22 @@ reports `KEY_CHAIN_TYPE_MISMATCH`. A v1 document is migrated unchanged;
 9.x cannot read v2 files. A bare key chain file with `type`, as
 `GET /api/key-chain/{id}/export` writes it, is read as v2.
 
-**Tenant v2** came with EUDIPLO 10.0 as well. It adds the optional
-`defaultAccessKeyChainId`, the
-[default access key chain](../trust/keys-and-certificates.md#default-access-key-chain)
-of the tenant. Unlike the other fields of `info.json`, leaving it out of a
-document that is applied removes the stored value, so the tenant picks its
-access key chain by rule again. The plan of a bundle reports
-`MISSING_RESOURCE_REFERENCE` when the key chain is neither stored nor in the
-bundle, and `KEY_CHAIN_USAGE_MISMATCH` when its usage type is not `access`; a
-config folder checks it at startup instead
+**Tenant v3** came with EUDIPLO 10.0 as well. It adds the optional
+`defaultKeyChains`, the tenant's key chain per usage type, used where no
+configuration names one. So far it has one entry, `access`: the
+[default access key chain](../trust/keys-and-certificates.md#default-access-key-chain).
+Unlike the other fields of `info.json`, leaving `defaultKeyChains` out of a
+document that is applied removes the stored entries, so the tenant picks its
+key chains by rule again. The plan of a bundle reports
+`MISSING_RESOURCE_REFERENCE` when an entry names a key chain that is neither
+stored nor in the bundle, and `KEY_CHAIN_USAGE_MISMATCH` when the key chain's
+usage type is not the entry's; a config folder checks the entries at startup
+instead
 ([Default access key chain](../trust/keys-and-certificates.md#default-access-key-chain)). A bare
-`info.json` with the field is read as v2. A v1 document is migrated unchanged;
-9.x cannot read v2 files.
+`info.json` with `defaultKeyChains` is read as v3. A v1 document is migrated
+unchanged. Tenant v2, which development builds of 10.0 wrote, had the flat
+`defaultAccessKeyChainId`; the v2 to v3 step moves it to
+`defaultKeyChains.access`. 9.x cannot read v2 or v3 files.
 
 **Client v2** came with EUDIPLO 10.0 as well. It accepts the roles
 `audit:read`, `sessions:read`, `credentials:status` and `keys:manage`. A v1
@@ -262,7 +266,7 @@ placeholders are handled according to `CONFIG_VARIABLE_STRICT`:
 | `unchanged` | Already matches, or a key chain or `!generate` client document this source already applied (see below); only ownership metadata may be updated |
 | `skip`      | Exists and is left alone: in `create` mode (`RESOURCE_EXISTS`), in a startup import when the resource was detached from that folder (`RESOURCE_DETACHED`) or has a newer stored generation (`STALE_GENERATION`), or because it is the tenant's encryption key chain (`KEY_CHAIN_ID_RESERVED`) |
 | `delete`    | Will be removed (`replace` mode)                                                            |
-| `blocked`   | Cannot be applied, for example `STALE_GENERATION`, `MISSING_RESOURCE_REFERENCE`, `STATUS_LIST_LAYOUT_IMMUTABLE`, `REGISTRATION_CERTIFICATE_REFUSED` for an imported registration certificate that fails its checks, for example because it is expired or does not cover the DCQL query ([Validation and caching](../trust/registration-certificates.md#validation-and-caching)), a missing secret or key, `UNSUPPORTED_KEY_ALGORITHM` for a key chain whose key uses an algorithm its KMS provider does not offer ([Signing algorithms](../operate/kms.md#signing-algorithms)), `TRUST_LIST_IN_USE` on a trust list that `replace` would delete while a configuration still references it ([Delete a trust list](../trust/trust-lists.md#delete-a-trust-list)), `MISSING_RESOURCE_REFERENCE` on a presentation configuration that names, or the issuance configuration that adds, an OpenID Federation trust anchor neither the tenant nor the bundle registers, `FEDERATION_TRUST_ANCHOR_IN_USE` on a trust anchor that the import would delete or give another entity ID while a configuration still names it ([Delete a trust anchor](../trust/federation.md#delete-a-trust-anchor)), `KEY_CHAIN_IN_USE` on a key chain that `replace` would delete while a configuration still names it ([Delete a key chain](../trust/keys-and-certificates.md#delete-a-key-chain)), or `KEY_CHAIN_USAGE_MISMATCH` on a tenant whose `defaultAccessKeyChainId` names a key chain without usage type `access` ([Default access key chain](../trust/keys-and-certificates.md#default-access-key-chain)). One blocked item blocks the whole plan |
+| `blocked`   | Cannot be applied, for example `STALE_GENERATION`, `MISSING_RESOURCE_REFERENCE`, `STATUS_LIST_LAYOUT_IMMUTABLE`, `REGISTRATION_CERTIFICATE_REFUSED` for an imported registration certificate that fails its checks, for example because it is expired or does not cover the DCQL query ([Validation and caching](../trust/registration-certificates.md#validation-and-caching)), a missing secret or key, `UNSUPPORTED_KEY_ALGORITHM` for a key chain whose key uses an algorithm its KMS provider does not offer ([Signing algorithms](../operate/kms.md#signing-algorithms)), `TRUST_LIST_IN_USE` on a trust list that `replace` would delete while a configuration still references it ([Delete a trust list](../trust/trust-lists.md#delete-a-trust-list)), `MISSING_RESOURCE_REFERENCE` on a presentation configuration that names, or the issuance configuration that adds, an OpenID Federation trust anchor neither the tenant nor the bundle registers, `FEDERATION_TRUST_ANCHOR_IN_USE` on a trust anchor that the import would delete or give another entity ID while a configuration still names it ([Delete a trust anchor](../trust/federation.md#delete-a-trust-anchor)), `KEY_CHAIN_IN_USE` on a key chain that `replace` would delete while a configuration still names it ([Delete a key chain](../trust/keys-and-certificates.md#delete-a-key-chain)), or `KEY_CHAIN_USAGE_MISMATCH` on a tenant whose `defaultKeyChains` entry names a key chain of another usage type ([Default access key chain](../trust/keys-and-certificates.md#default-access-key-chain)). One blocked item blocks the whole plan |
 
 An `update` item lists its field changes in `changes`: the `path` in the document, the stored value as `before` and the value after the import as `after`. Without `before`, the import adds the field; without `after`, it removes the stored value. Entries with `redacted: true` hide the values: a secret reads `[redacted]`, and a value that changes between an object, a list and a plain value reads `[changed]` on both sides.
 

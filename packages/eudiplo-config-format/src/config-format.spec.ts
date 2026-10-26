@@ -60,7 +60,7 @@ describe("portable schema identity and migrations", () => {
         },
         { ...file, $schema: `${schemaUrl("Tenant")}?version=1` },
         { ...file, $schema: schemaUrl("Tenant", 99) },
-        { ...file, $schema: schemaUrl("Tenant", 3) },
+        { ...file, $schema: schemaUrl("Tenant", 4) },
         { ...file, metadata: { generation: 0 } },
         { ...file, metadata: { id: "tenant" } },
         { ...file, spec: [] },
@@ -340,6 +340,7 @@ describe("portable schema identity and migrations", () => {
             2,
         ],
         ["RegistrarConfig", { registrarUrl: "https://registrar.example" }, 1],
+        ["Tenant", { name: "Demo", defaultKeyChains: { access: "access" } }, 3],
         ["Tenant", { name: "Demo", defaultAccessKeyChainId: "access" }, 2],
         ["Tenant", { name: "Demo" }, 1],
     ] as const)("reads a bare %s file %o as v%i", (kind, spec, version) => {
@@ -427,7 +428,7 @@ describe("portable schema identity and migrations", () => {
         ).toEqual([]);
     });
 
-    it("upgrades a v1 tenant to v2 unchanged", () => {
+    it("upgrades a v1 tenant to v3 unchanged", () => {
         const v1 = {
             $schema: schemaUrl("Tenant", 1),
             metadata: { generation: 4 },
@@ -437,13 +438,58 @@ describe("portable schema identity and migrations", () => {
         expect(result.issues).toEqual([]);
         expect(result.migrations).toEqual([
             "tenant-v2-default-access-key-chain",
+            "tenant-v3-default-key-chains",
         ]);
-        expect(result.document.$schema).toBe(schemaUrl("Tenant", 2));
+        expect(result.document.$schema).toBe(schemaUrl("Tenant", 3));
         expect(result.document.spec).toEqual(v1.spec);
         expect(result.document.metadata).toEqual({ generation: 4 });
         expect(
             migrateDocument(result.document, validateConfigDocument).migrations,
         ).toEqual([]);
+    });
+
+    it("moves the v2 default access key chain into defaultKeyChains", () => {
+        const v2 = {
+            $schema: schemaUrl("Tenant", 2),
+            metadata: { generation: 2 },
+            spec: { name: "Demo Tenant", defaultAccessKeyChainId: "access" },
+        };
+        const result = migrateDocument(v2, validateConfigDocument);
+        expect(result.issues).toEqual([]);
+        expect(result.migrations).toEqual(["tenant-v3-default-key-chains"]);
+        expect(result.document.$schema).toBe(schemaUrl("Tenant", 3));
+        expect(result.document.spec).toEqual({
+            name: "Demo Tenant",
+            defaultKeyChains: { access: "access" },
+        });
+        expect(
+            migrateDocument(result.document, validateConfigDocument).migrations,
+        ).toEqual([]);
+    });
+
+    it("accepts defaultKeyChains only from tenant v3 on", () => {
+        const spec = {
+            name: "Demo Tenant",
+            defaultKeyChains: { access: "access" },
+        };
+        expect(
+            validateConfigDocument(
+                normalizeDocument({
+                    $schema: schemaUrl("Tenant", 3),
+                    metadata: { generation: 1 },
+                    spec,
+                }),
+            ),
+        ).toEqual([]);
+        expect(
+            validateConfigDocument(
+                normalizeDocument({
+                    $schema: schemaUrl("Tenant", 2),
+                    metadata: { generation: 1 },
+                    spec,
+                }),
+            ).length,
+        ).toBeGreaterThan(0);
     });
 
     it("accepts a default access key chain only from tenant v2 on", () => {

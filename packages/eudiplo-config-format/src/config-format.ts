@@ -1,7 +1,7 @@
 // Canonical portable-config identity and migration implementation.
 // The CLI bundles this module through assets:sync; do not maintain a second engine.
 export const CONFIG_FORMATS = {
-    Tenant: { slug: "tenant", file: "TenantConfigFile", version: 2 },
+    Tenant: { slug: "tenant", file: "TenantConfigFile", version: 3 },
     Client: { slug: "client", file: "ClientConfigFile", version: 2 },
     KmsConfig: { slug: "kms-config", file: "KmsConfigFile", version: 2 },
     KeyChain: { slug: "key-chain", file: "KeyChainConfigFile", version: 3 },
@@ -99,7 +99,8 @@ export function resourceId(input: ConfigFile<unknown>): string {
  * `algorithms` or `defaultAlgorithm`, which KmsConfig v2 added and which the
  * tenant `kms.json` is saved as, a registrar configuration with
  * `relyingPartyContact`, which RegistrarConfig v2 added, and a tenant
- * `info.json` with `defaultAccessKeyChainId`, which TenantConfig v2 added.
+ * `info.json` with `defaultAccessKeyChainId`, which TenantConfig v2 added, or
+ * with `defaultKeyChains`, which TenantConfig v3 replaced it with.
  */
 export function bareFileVersion(
     kind: ConfigResourceKind,
@@ -111,7 +112,10 @@ export function bareFileVersion(
     }
     if (kind === "RegistrarConfig")
         return "relyingPartyContact" in spec ? 2 : 1;
-    if (kind === "Tenant") return "defaultAccessKeyChainId" in spec ? 2 : 1;
+    if (kind === "Tenant") {
+        if ("defaultKeyChains" in spec) return 3;
+        return "defaultAccessKeyChainId" in spec ? 2 : 1;
+    }
     if (kind === "KmsConfig") {
         const providers = Array.isArray(spec.providers) ? spec.providers : [];
         return providers.some(
@@ -336,6 +340,28 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         // valid v2 spec, whose tenant keeps picking its access key chain by
         // rule.
         migrate: (spec) => ({ spec }),
+    },
+    {
+        id: "tenant-v3-default-key-chains",
+        kind: "Tenant",
+        from: 2,
+        to: 3,
+        // v3 keeps the tenant's default key chains in a map by usage type:
+        // defaultAccessKeyChainId becomes defaultKeyChains.access.
+        migrate: (spec) => {
+            const { defaultAccessKeyChainId, ...rest } = spec;
+            return {
+                spec:
+                    typeof defaultAccessKeyChainId === "string"
+                        ? {
+                              ...rest,
+                              defaultKeyChains: {
+                                  access: defaultAccessKeyChainId,
+                              },
+                          }
+                        : rest,
+            };
+        },
     },
     {
         id: "key-chain-v2-type",

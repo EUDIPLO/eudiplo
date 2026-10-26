@@ -36,7 +36,10 @@ const rootJwk = { ...privateJwk, kid: "key-root" };
 
 /** Tenant repository whose tenant names `id` as its default access key chain. */
 const tenantWithDefault = (id: string | null) => ({
-    findOne: vi.fn(async () => ({ id: "tenant", defaultAccessKeyChainId: id })),
+    findOne: vi.fn(async () => ({
+        id: "tenant",
+        defaultKeyChains: id ? { access: id } : null,
+    })),
 });
 
 function keyChain(overrides: Partial<KeyChainEntity>): KeyChainEntity {

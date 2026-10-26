@@ -49,7 +49,7 @@ function toTenantData(row: TenantEntity): TenantData {
         status: row.status,
         sessionConfig: row.sessionConfig,
         statusListConfig: row.statusListConfig,
-        defaultAccessKeyChainId: row.defaultAccessKeyChainId,
+        defaultKeyChains: row.defaultKeyChains,
         ...(row.clients
             ? {
                   clients: row.clients.map((client) => ({

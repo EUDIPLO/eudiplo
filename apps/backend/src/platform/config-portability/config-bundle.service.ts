@@ -22,9 +22,14 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { compare as compareSecret } from "bcrypt";
 import { Not, Repository } from "typeorm";
 import {
+    DEFAULT_KEY_CHAIN_ENTRIES,
+    defaultKeyChainsOrNull,
+} from "../../auth/tenant/domain/tenant-data.js";
+import {
     type KeyChainConfigurationChange,
     KeyChainReferences,
 } from "../../crypto/key/application/key-chain-references.js";
+import { defaultKeyChainUsageRefusal } from "../../crypto/key/domain/default-access-key-chain.js";
 import {
     describeKeyChainReferences,
     isKeyChainReferenceKind,
@@ -35,7 +40,6 @@ import {
     KeyUsage,
 } from "../../crypto/key/entities/key-chain.entity.js";
 import { KmsTenantConfigService } from "../../crypto/key/kms/kms-tenant-config.service.js";
-import { defaultAccessUsageRefusal } from "../../crypto/key/domain/default-access-key-chain.js";
 import { withoutRemovedChainedVp } from "../../issuer/configuration/issuance/domain/removed-authorization-servers.js";
 import {
     type ConfigurationChange,
@@ -1286,46 +1290,73 @@ export class ConfigBundleService {
     }
 
     /**
-     * The tenant's default access key chain must have usage type `access`,
-     * else every request that falls back to it fails after the import. A
-     * missing key chain is already a MISSING_RESOURCE_REFERENCE.
+     * Each entry of the tenant's `defaultKeyChains` must name a key chain of
+     * the tenant or the bundle with the entry's usage type, else every
+     * request that falls back to it fails after the import.
      */
-    private async checkDefaultAccessKeyChainUsage(
+    private async checkDefaultKeyChains(
         tenantId: string,
         documents: ConfigDocument[],
+        availableKeyChains: Set<string> | undefined,
     ): Promise<ConfigMigrationIssue[]> {
         const tenant = documents.find((document) => document.kind === "Tenant");
-        const keyChainId = (
-            tenant?.spec as { defaultAccessKeyChainId?: unknown }
-        )?.defaultAccessKeyChainId;
-        if (!tenant || typeof keyChainId !== "string") return [];
-        const bundled = documents.find(
-            (document) =>
-                document.kind === "KeyChain" &&
-                resourceId(document) === keyChainId,
-        );
-        const usageType = bundled
-            ? (bundled.spec as { usageType?: unknown }).usageType
-            : (
-                  await this.keyChains.findOne({
-                      where: { tenantId, id: keyChainId },
-                      select: { id: true, usageType: true },
-                  })
-              )?.usageType;
-        const refusal =
-            usageType === undefined
-                ? undefined
-                : defaultAccessUsageRefusal(keyChainId, usageType);
-        if (!refusal) return [];
-        return [
-            {
-                severity: "error",
-                code: "KEY_CHAIN_USAGE_MISMATCH",
-                path: "/spec/defaultAccessKeyChainId",
-                message: refusal,
-                resource: { kind: "Tenant", id: resourceId(tenant) },
-            },
-        ];
+        if (!tenant) return [];
+        const defaultKeyChains = (tenant.spec as { defaultKeyChains?: unknown })
+            .defaultKeyChains;
+        if (!defaultKeyChains || typeof defaultKeyChains !== "object")
+            return [];
+        const issues: ConfigMigrationIssue[] = [];
+        // Only the known entries: schema validation reports other keys, and
+        // each entry costs a lookup.
+        for (const entry of DEFAULT_KEY_CHAIN_ENTRIES) {
+            const keyChainId = (defaultKeyChains as Record<string, unknown>)[
+                entry
+            ];
+            if (typeof keyChainId !== "string") continue;
+            const path = `/spec/defaultKeyChains/${entry}`;
+            const resource = {
+                kind: "Tenant" as const,
+                id: resourceId(tenant),
+            };
+            if (!availableKeyChains?.has(keyChainId)) {
+                issues.push({
+                    severity: "error",
+                    code: "MISSING_RESOURCE_REFERENCE",
+                    path,
+                    message: `KeyChain '${keyChainId}' does not exist in the target instance or bundle.`,
+                    resource,
+                });
+                continue;
+            }
+            const bundled = documents.find(
+                (document) =>
+                    document.kind === "KeyChain" &&
+                    resourceId(document) === keyChainId,
+            );
+            const usageType = bundled
+                ? (bundled.spec as { usageType?: unknown }).usageType
+                : (
+                      await this.keyChains.findOne({
+                          where: { tenantId, id: keyChainId },
+                          select: { id: true, usageType: true },
+                      })
+                  )?.usageType;
+            const refusal = defaultKeyChainUsageRefusal(
+                entry,
+                keyChainId,
+                usageType,
+            );
+            if (refusal) {
+                issues.push({
+                    severity: "error",
+                    code: "KEY_CHAIN_USAGE_MISMATCH",
+                    path,
+                    message: refusal,
+                    resource,
+                });
+            }
+        }
+        return issues;
     }
 
     private async validateReferences(
@@ -1490,9 +1521,10 @@ export class ConfigBundleService {
         for (const document of documents)
             visit(document, document.spec, "/spec");
         issues.push(
-            ...(await this.checkDefaultAccessKeyChainUsage(
+            ...(await this.checkDefaultKeyChains(
                 tenantId,
                 documents,
+                available.get("KeyChain"),
             )),
         );
 
@@ -1693,8 +1725,7 @@ export class ConfigBundleService {
             description: tenant.description ?? undefined,
             sessionConfig: tenant.sessionConfig ?? undefined,
             statusListConfig: tenant.statusListConfig ?? undefined,
-            defaultAccessKeyChainId:
-                tenant.defaultAccessKeyChainId ?? undefined,
+            defaultKeyChains: tenant.defaultKeyChains ?? undefined,
         };
     }
 
@@ -2055,13 +2086,11 @@ export class ConfigBundleService {
             ])
                 if (desired[field] === null) delete desired[field];
         }
-        // A tenant document without a default access key chain removes it
+        // A tenant document without default key chains removes them
         // (tenantDocumentUpdate), unlike the other omitted tenant fields.
-        if (
-            document.kind === "Tenant" &&
-            !("defaultAccessKeyChainId" in desired)
-        )
-            desired.defaultAccessKeyChainId = undefined;
+        if (document.kind === "Tenant")
+            desired.defaultKeyChains =
+                defaultKeyChainsOrNull(desired.defaultKeyChains) ?? undefined;
         // Compare with the settings the importers store for the document.
         if (document.kind === "KeyChain") {
             desired.rotationPolicy = appliedRotationPolicy(desired);

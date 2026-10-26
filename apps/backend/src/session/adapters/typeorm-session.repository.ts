@@ -237,8 +237,7 @@ export class TypeOrmSessionRepository implements SessionRepository {
                                     status: tenant.status,
                                     sessionConfig: tenant.sessionConfig,
                                     statusListConfig: tenant.statusListConfig,
-                                    defaultAccessKeyChainId:
-                                        tenant.defaultAccessKeyChainId,
+                                    defaultKeyChains: tenant.defaultKeyChains,
                                 },
                   }),
         };

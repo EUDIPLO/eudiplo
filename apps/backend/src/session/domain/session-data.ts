@@ -72,7 +72,7 @@ interface SessionTenant {
         immediateUpdate?: boolean;
         enableAggregation?: boolean;
     } | null;
-    defaultAccessKeyChainId?: string | null;
+    defaultKeyChains?: { access?: string } | null;
 }
 
 /** Session data shared by issuance and verification, independent of persistence/DTOs. */

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
+import { DEFAULT_KEY_CHAIN_ENTRIES } from "../domain/tenant-data.js";
 import {
     CreateTenantSchema,
+    DefaultKeyChainsSchema,
     UpdateTenantSchema,
 } from "./create-tenant.schema.js";
 
@@ -66,5 +68,24 @@ describe("tenant request schemas", () => {
         expect(UpdateTenantSchema.safeParse({ id: "tenant" }).success).toBe(
             false,
         );
+    });
+
+    test("accepts only known usage types as default key chains", () => {
+        expect(
+            UpdateTenantSchema.safeParse({
+                defaultKeyChains: { access: "registrar" },
+            }).success,
+        ).toBe(true);
+        expect(
+            UpdateTenantSchema.safeParse({
+                defaultKeyChains: { attestation: "pid" },
+            }).success,
+        ).toBe(false);
+    });
+
+    test("lists the same usage types as the checks of the default key chains", () => {
+        expect(Object.keys(DefaultKeyChainsSchema.shape)).toEqual([
+            ...DEFAULT_KEY_CHAIN_ENTRIES,
+        ]);
     });
 });

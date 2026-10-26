@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
+import { schemaUrl } from "@eudiplo/config-format/config-format.js";
 import { DataSource } from "typeorm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { TenantEntity } from "../../src/auth/tenant/entities/tenant.entity.js";
@@ -36,14 +37,33 @@ describe("default access key chain in a startup folder import", () => {
         const configRoot = join(runtimeFolder, "config");
         mkdirSync(configRoot);
 
-        // A bare info.json with the field is read as Tenant v2.
+        // A bare info.json with the field is read as Tenant v3.
         const named = join(configRoot, "default-named");
         cpSync(fixtures, named, { recursive: true });
         writeFileSync(
             join(named, "info.json"),
             JSON.stringify({
                 name: "Default named",
-                defaultAccessKeyChainId: accessKeyChain,
+                defaultKeyChains: { access: accessKeyChain },
+            }),
+        );
+
+        // A Tenant v2 file of a development build of 10.0.
+        const v2 = join(configRoot, "default-v2");
+        mkdirSync(join(v2, "key-chains"), { recursive: true });
+        cpSync(
+            join(fixtures, "key-chains/access.json"),
+            join(v2, "key-chains/access.json"),
+        );
+        writeFileSync(
+            join(v2, "info.json"),
+            JSON.stringify({
+                $schema: schemaUrl("Tenant", 2),
+                metadata: { generation: 1 },
+                spec: {
+                    name: "Default v2",
+                    defaultAccessKeyChainId: accessKeyChain,
+                },
             }),
         );
 
@@ -57,7 +77,7 @@ describe("default access key chain in a startup folder import", () => {
             join(wrongUsage, "info.json"),
             JSON.stringify({
                 name: "Default with wrong usage",
-                defaultAccessKeyChainId: attestationKeyChain,
+                defaultKeyChains: { access: attestationKeyChain },
             }),
         );
 
@@ -85,9 +105,15 @@ describe("default access key chain in a startup folder import", () => {
     });
 
     it("sets the default once the key chain of the folder is imported", async () => {
-        expect((await tenant("default-named"))?.defaultAccessKeyChainId).toBe(
-            accessKeyChain,
-        );
+        expect((await tenant("default-named"))?.defaultKeyChains).toEqual({
+            access: accessKeyChain,
+        });
+    });
+
+    it("moves the default of a Tenant v2 file into defaultKeyChains", async () => {
+        expect((await tenant("default-v2"))?.defaultKeyChains).toEqual({
+            access: accessKeyChain,
+        });
     });
 
     it("stores no default that names a key chain of another usage type", async () => {
@@ -95,6 +121,6 @@ describe("default access key chain in a startup folder import", () => {
 
         // The tenant and its key chain are imported; only the default is refused.
         expect(stored?.name).toBe("Default with wrong usage");
-        expect(stored?.defaultAccessKeyChainId ?? null).toBeNull();
+        expect(stored?.defaultKeyChains ?? null).toBeNull();
     });
 });

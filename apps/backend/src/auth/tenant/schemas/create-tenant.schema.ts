@@ -9,8 +9,15 @@ const RoleSchema = z.enum(
 
 const NonBlankStringSchema = z.string().trim().min(1);
 
-const DEFAULT_ACCESS_KEY_CHAIN_DESCRIPTION =
-    "ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.";
+export const DefaultKeyChainsSchema = z
+    .strictObject({
+        access: NonBlankStringSchema.optional().describe(
+            "ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.",
+        ),
+    })
+    .describe(
+        "The tenant's key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule.",
+    );
 
 export const CreateTenantSchema = z
     .strictObject({
@@ -43,10 +50,8 @@ export const ImportTenantSchema = CreateTenantSchema.pick({
     statusListConfig: true,
 })
     .extend({
-        // Key chains are imported after the tenant, so only a file names one.
-        defaultAccessKeyChainId: NonBlankStringSchema.optional().describe(
-            DEFAULT_ACCESS_KEY_CHAIN_DESCRIPTION,
-        ),
+        // Key chains are imported after the tenant, so only a file names them.
+        defaultKeyChains: DefaultKeyChainsSchema.optional(),
     })
     .describe("Payload used when importing tenant metadata from config files.");
 
@@ -60,7 +65,7 @@ const TenantConfigMetadataSchema = z
 export const TenantConfigFileSchema = z.union([
     z.strictObject({
         $schema: z.literal(
-            "https://eudiplo.dev/schemas/v2/TenantConfigFile.schema.json",
+            "https://eudiplo.dev/schemas/v3/TenantConfigFile.schema.json",
         ),
         metadata: TenantConfigMetadataSchema,
         spec: ImportTenantSchema,
@@ -84,10 +89,10 @@ export const UpdateTenantSchema = z
         statusListConfig: StatusListConfigSchema.optional().describe(
             "Optional tenant-specific status list defaults.",
         ),
-        defaultAccessKeyChainId: NonBlankStringSchema.nullable()
+        defaultKeyChains: DefaultKeyChainsSchema.nullable()
             .optional()
             .describe(
-                `${DEFAULT_ACCESS_KEY_CHAIN_DESCRIPTION} Omit to keep the current value or set to null to remove it.`,
+                "The tenant's key chain per usage type, used where no configuration names one. Replaces the stored entries; omit to keep them, or set to null to remove them.",
             ),
     })
     .describe("Payload for partially updating tenant metadata.");

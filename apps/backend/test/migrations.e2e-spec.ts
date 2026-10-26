@@ -23,6 +23,7 @@ import { BackfillIssuanceWalletNonce1785300000000 } from "../src/database/migrat
 import { SeparatePresentationWalletReferences1785400000000 } from "../src/database/migrations/1785400000000-SeparatePresentationWalletReferences.js";
 import { AddFederationTrustAnchor1785500000000 } from "../src/database/migrations/1785500000000-AddFederationTrustAnchor.js";
 import { AddDefaultAccessKeyChainIdToTenant1785600000000 } from "../src/database/migrations/1785600000000-AddDefaultAccessKeyChainIdToTenant.js";
+import { MoveDefaultAccessKeyChainIntoDefaultKeyChains1785800000000 } from "../src/database/migrations/1785800000000-MoveDefaultAccessKeyChainIntoDefaultKeyChains.js";
 import { AddStatusUpdatedAtToStatusMapping1785700000000 } from "../src/database/migrations/1785700000000-AddStatusUpdatedAtToStatusMapping.js";
 import { describeWithContainers } from "./container-runtime.js";
 import {
@@ -2153,12 +2154,15 @@ describe("Migration tests", () => {
             }).initialize(),
         );
     });
-    describe("AddDefaultAccessKeyChainIdToTenant1785600000000", () => {
-        const migration = new AddDefaultAccessKeyChainIdToTenant1785600000000();
+    describe("AddDefaultAccessKeyChainIdToTenant1785600000000 and MoveDefaultAccessKeyChainIntoDefaultKeyChains1785800000000", () => {
+        const add = new AddDefaultAccessKeyChainIdToTenant1785600000000();
+        const move =
+            new MoveDefaultAccessKeyChainIntoDefaultKeyChains1785800000000();
         const table = "tenant_entity";
-        const column = "defaultAccessKeyChainId";
+        const legacy = "defaultAccessKeyChainId";
+        const map = "defaultKeyChains";
 
-        /** Tenant schema from the entities, then the column removed again. */
+        /** Tenant schema from the entities, then both migrations undone. */
         async function tenantSchemaBefore(
             options:
                 | { type: "better-sqlite3"; database: string }
@@ -2193,10 +2197,11 @@ describe("Migration tests", () => {
             const driftAfterSynchronize = await drift(dataSource);
 
             const queryRunner = dataSource.createQueryRunner();
-            await migration.down(queryRunner);
+            await move.down(queryRunner);
+            await add.down(queryRunner);
             await queryRunner.release();
             await dataSource.query(
-                `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't')`,
+                `INSERT INTO "${table}" ("id", "name") VALUES ('t', 't'), ('u', 'u')`,
             );
             return { dataSource, driftAfterSynchronize };
         }
@@ -2206,37 +2211,63 @@ describe("Migration tests", () => {
                 .map((query) => query.query)
                 .sort();
 
-        async function expectAddedAndReversible(
+        const parse = (value: unknown) =>
+            typeof value === "string" ? JSON.parse(value) : value;
+
+        async function expectMovedAndReversible(
             dataSource: DataSource,
             driftAfterSynchronize: string[],
         ) {
             const queryRunner = dataSource.createQueryRunner();
-            expect(
-                (await queryRunner.getTable(table))?.findColumnByName(column),
-            ).toBeUndefined();
+            const column = async (name: string) =>
+                (await queryRunner.getTable(table))?.findColumnByName(name);
+            expect(await column(legacy)).toBeUndefined();
+            expect(await column(map)).toBeUndefined();
 
-            await migration.up(queryRunner);
-            await migration.up(queryRunner);
-
-            const added = (await queryRunner.getTable(table))?.findColumnByName(
-                column,
+            await add.up(queryRunner);
+            await add.up(queryRunner);
+            expect((await column(legacy))?.isNullable).toBe(true);
+            await dataSource.query(
+                `UPDATE "${table}" SET "${legacy}" = 'access-1' WHERE "id" = 't'`,
             );
-            expect(added?.isNullable).toBe(true);
-            await expect(
-                dataSource.query(
-                    `SELECT "${column}" FROM "${table}" WHERE "id" = 't'`,
-                ),
-            ).resolves.toEqual([{ [column]: null }]);
+
+            await move.up(queryRunner);
+            await move.up(queryRunner);
+            expect(await column(legacy)).toBeUndefined();
+            expect((await column(map))?.isNullable).toBe(true);
+            const rows: Array<{ id: string; map: unknown }> =
+                await dataSource.query(
+                    `SELECT "id", "${map}" AS "map" FROM "${table}" ORDER BY "id"`,
+                );
+            expect(rows.map((row) => [row.id, parse(row.map)])).toEqual([
+                ["t", { access: "access-1" }],
+                ["u", null],
+            ]);
             // SQLite always rebuilds the table here; only the column order
             // differs, so the drift check is for PostgreSQL.
             if (dataSource.options.type === "postgres") {
                 expect(await drift(dataSource)).toEqual(driftAfterSynchronize);
             }
 
-            await migration.down(queryRunner);
-            expect(
-                (await queryRunner.getTable(table))?.findColumnByName(column),
-            ).toBeUndefined();
+            // A map without an access entry leaves the column empty.
+            await dataSource.query(
+                `UPDATE "${table}" SET "${map}" = '{}' WHERE "id" = 'u'`,
+            );
+            await move.down(queryRunner);
+            await move.down(queryRunner);
+            expect(await column(map)).toBeUndefined();
+            await expect(
+                dataSource.query(
+                    `SELECT "${legacy}" AS "legacy" FROM "${table}" WHERE "id" = 'u'`,
+                ),
+            ).resolves.toEqual([{ legacy: null }]);
+            await expect(
+                dataSource.query(
+                    `SELECT "${legacy}" AS "legacy" FROM "${table}" WHERE "id" = 't'`,
+                ),
+            ).resolves.toEqual([{ legacy: "access-1" }]);
+            await add.down(queryRunner);
+            expect(await column(legacy)).toBeUndefined();
             await queryRunner.release();
         }
 
@@ -2259,8 +2290,8 @@ describe("Migration tests", () => {
                 if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
             });
 
-            test("adds a nullable column, keeps the rows, is idempotent and reversible", async () => {
-                await expectAddedAndReversible(
+            test("adds the column, moves its value into the map, is idempotent and reversible", async () => {
+                await expectMovedAndReversible(
                     dataSource,
                     driftAfterSynchronize,
                 );
@@ -2288,8 +2319,8 @@ describe("Migration tests", () => {
                 await postgresContainer?.stop();
             });
 
-            test("adds a nullable column, keeps the rows, is idempotent and reversible", async () => {
-                await expectAddedAndReversible(
+            test("adds the column, moves its value into the map, is idempotent and reversible", async () => {
+                await expectMovedAndReversible(
                     dataSource,
                     driftAfterSynchronize,
                 );

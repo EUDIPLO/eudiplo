@@ -2,6 +2,24 @@ import type { SessionCleanupMode } from "../../../session/domain/session-retenti
 import { NotFoundError } from "../../../shared/domain/not-found-error.js";
 import type { ClientData } from "../../client/domain/client-data.js";
 
+/**
+ * The tenant's key chain per usage type, used where no configuration names
+ * one. Only `access` exists so far.
+ */
+export interface DefaultKeyChains {
+    access?: string;
+}
+
+/** The usage types `defaultKeyChains` has an entry for. */
+export const DEFAULT_KEY_CHAIN_ENTRIES = ["access"] as const;
+
+/** The map, or null when it names no key chain. */
+export function defaultKeyChainsOrNull(
+    value: DefaultKeyChains | null | undefined,
+): DefaultKeyChains | null {
+    return value && Object.keys(value).length > 0 ? value : null;
+}
+
 export interface TenantData {
     id: string;
     name: string;
@@ -18,7 +36,7 @@ export interface TenantData {
         immediateUpdate?: boolean;
         enableAggregation?: boolean;
     } | null;
-    defaultAccessKeyChainId?: string | null;
+    defaultKeyChains?: DefaultKeyChains | null;
     clients?: ClientData[];
 }
 export type TenantUpdate = Partial<Omit<TenantData, "id" | "clients">>;
@@ -31,14 +49,14 @@ export class TenantNotFound extends NotFoundError {
 
 /**
  * The tenant fields a configuration document writes. A document without
- * `defaultAccessKeyChainId` removes it, so the tenant picks its access key
- * chain by rule again; the other omitted fields keep their stored value.
+ * `defaultKeyChains` removes them, so the tenant picks its key chains by rule
+ * again; the other omitted fields keep their stored value.
  */
 export function tenantDocumentUpdate<
-    T extends { defaultAccessKeyChainId?: string | null },
->(spec: T): T & { defaultAccessKeyChainId: string | null } {
+    T extends { defaultKeyChains?: DefaultKeyChains | null },
+>(spec: T): T & { defaultKeyChains: DefaultKeyChains | null } {
     return {
         ...spec,
-        defaultAccessKeyChainId: spec.defaultAccessKeyChainId ?? null,
+        defaultKeyChains: defaultKeyChainsOrNull(spec.defaultKeyChains),
     };
 }

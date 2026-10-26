@@ -182,7 +182,7 @@ describe("default access key chain of a tenant", () => {
             references: [{ kind: "Tenant" }],
         });
         expect(refused.body.message).toContain(
-            "the tenant's default access key chain setting (defaultAccessKeyChainId)",
+            "the tenant's default key chains (defaultKeyChains)",
         );
     });
 
@@ -192,8 +192,8 @@ describe("default access key chain of a tenant", () => {
             .set("Authorization", auth)
             .expect(200);
 
-        expect(response.body.$schema).toBe(schemaUrl("Tenant", 2));
-        expect(response.body.spec.defaultAccessKeyChainId).toBe(chosen);
+        expect(response.body.$schema).toBe(schemaUrl("Tenant", 3));
+        expect(response.body.spec.defaultKeyChains).toEqual({ access: chosen });
     });
 
     test("goes back to the rule with null", async () => {
@@ -214,14 +214,14 @@ describe("default access key chain of a tenant", () => {
         await api()
             .patch(`/tenant/${tenant}`)
             .set("Authorization", root)
-            .send({ defaultAccessKeyChainId: attestation })
+            .send({ defaultKeyChains: { access: attestation } })
             .expect(400);
         const patched = await api()
             .patch(`/tenant/${tenant}`)
             .set("Authorization", root)
-            .send({ defaultAccessKeyChainId: chosen })
+            .send({ defaultKeyChains: { access: chosen } })
             .expect(200);
-        expect(patched.body.defaultAccessKeyChainId).toBe(chosen);
+        expect(patched.body.defaultKeyChains).toEqual({ access: chosen });
     });
 });
 
@@ -281,9 +281,9 @@ describe("default access key chain in configuration imports", () => {
         return response.body;
     }
 
-    const tenantSpec = (defaultAccessKeyChainId?: string) => ({
+    const tenantSpec = (access?: string) => ({
         name: tenant,
-        ...(defaultAccessKeyChainId ? { defaultAccessKeyChainId } : {}),
+        ...(access ? { defaultKeyChains: { access } } : {}),
     });
 
     beforeAll(async () => {
@@ -314,7 +314,7 @@ describe("default access key chain in configuration imports", () => {
         expect(missing.issues).toContainEqual(
             expect.objectContaining({
                 code: "MISSING_RESOURCE_REFERENCE",
-                path: "/spec/defaultAccessKeyChainId",
+                path: "/spec/defaultKeyChains/access",
             }),
         );
 
@@ -325,7 +325,7 @@ describe("default access key chain in configuration imports", () => {
         expect(wrongUsage.issues).toContainEqual(
             expect.objectContaining({
                 code: "KEY_CHAIN_USAGE_MISMATCH",
-                path: "/spec/defaultAccessKeyChainId",
+                path: "/spec/defaultKeyChains/access",
             }),
         );
     });
@@ -362,6 +362,19 @@ describe("default access key chain in configuration imports", () => {
             .set("Authorization", auth)
             .expect(200);
         expect(removed.body).not.toHaveProperty("defaultAccessKeyChainId");
+
+        // An empty map is the same as none.
+        const empty = await plan(
+            bundleOf([
+                {
+                    kind: "Tenant",
+                    spec: { ...tenantSpec(), defaultKeyChains: {} },
+                },
+            ]),
+        );
+        expect(empty.items.find((item) => item.kind === "Tenant")?.action).toBe(
+            "unchanged",
+        );
     });
 });
 
@@ -449,7 +462,7 @@ describe("default access key chain in replace imports", () => {
                     kind: "Tenant",
                     spec: {
                         name: tenant,
-                        defaultAccessKeyChainId: attestationKeyChain.id,
+                        defaultKeyChains: { access: attestationKeyChain.id },
                     },
                 },
             ]),
@@ -468,7 +481,7 @@ describe("default access key chain in replace imports", () => {
                 kind: "Tenant",
                 spec: {
                     name: tenant,
-                    defaultAccessKeyChainId: accessKeyChain.id,
+                    defaultKeyChains: { access: accessKeyChain.id },
                 },
             },
         ]);
@@ -493,7 +506,7 @@ describe("default access key chain in replace imports", () => {
             expect.objectContaining({
                 code: "KEY_CHAIN_IN_USE",
                 message: expect.stringContaining(
-                    "the tenant's default access key chain setting",
+                    "the tenant's default key chains",
                 ),
             }),
         );

@@ -163,9 +163,14 @@ export type ImportTenantDto = {
         enableAggregation?: boolean;
     };
     /**
-     * ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.
+     * The tenant's key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule.
      */
-    defaultAccessKeyChainId?: string;
+    defaultKeyChains?: {
+        /**
+         * ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.
+         */
+        access?: string;
+    };
 };
 
 export type SessionStorageConfig = {
@@ -200,6 +205,13 @@ export type StatusListConfig = {
      * If true, include aggregation_uri in status list JWTs for pre-fetching support. If not set, uses global STATUS_ENABLE_AGGREGATION.
      */
     enableAggregation?: boolean;
+};
+
+export type DefaultKeyChains = {
+    /**
+     * Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.
+     */
+    access?: string;
 };
 
 export type ClientEntity = {
@@ -255,9 +267,9 @@ export type TenantResponseDto = {
      */
     statusListConfig?: StatusListConfig | null;
     /**
-     * Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.
+     * The tenant's key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule.
      */
-    defaultAccessKeyChainId?: string | null;
+    defaultKeyChains?: DefaultKeyChains | null;
     /**
      * Managed clients attached to the tenant
      */
@@ -361,9 +373,9 @@ export type TenantCreateResponseDto = {
      */
     statusListConfig?: StatusListConfig | null;
     /**
-     * Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.
+     * The tenant's key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule.
      */
-    defaultAccessKeyChainId?: string | null;
+    defaultKeyChains?: DefaultKeyChains | null;
     /**
      * One-time generated client credentials for admin access
      */
@@ -421,9 +433,14 @@ export type UpdateTenantDto = {
         enableAggregation?: boolean;
     };
     /**
-     * ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule. Omit to keep the current value or set to null to remove it.
+     * The tenant's key chain per usage type, used where no configuration names one. Replaces the stored entries; omit to keep them, or set to null to remove them.
      */
-    defaultAccessKeyChainId?: string | null;
+    defaultKeyChains?: {
+        /**
+         * ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.
+         */
+        access?: string;
+    } | null;
 };
 
 export type DefaultAccessKeyChainDto = {
@@ -1581,7 +1598,7 @@ export type KeyChainReferenceDto = {
      */
     kind: 'Tenant' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'StatusList' | 'TrustList';
     /**
-     * ID of the configuration. Absent for the tenant's default access key chain setting and the issuance configuration, of which a tenant has one each, and for configurations the caller may not read.
+     * ID of the configuration. Absent for the tenant's default key chains and the issuance configuration, of which a tenant has one each, and for configurations the caller may not read.
      */
     id?: string;
     /**
@@ -1640,9 +1657,9 @@ export type TenantEntity = {
      */
     statusListConfig?: StatusListConfig | null;
     /**
-     * Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.
+     * The tenant's key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule.
      */
-    defaultAccessKeyChainId?: string | null;
+    defaultKeyChains?: DefaultKeyChains | null;
     /**
      * Clients associated with the tenant
      */

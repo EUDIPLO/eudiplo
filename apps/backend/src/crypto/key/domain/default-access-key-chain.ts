@@ -11,17 +11,18 @@ export interface AccessKeyChainCandidate {
 }
 
 /**
- * Why a key chain of `usageType` cannot be the tenant's default access key
- * chain, or undefined when it can. Only an access key chain signs presentation
- * requests and the issuer metadata.
+ * Why a key chain of `usageType` cannot be the tenant's default key chain of
+ * the usage type `entry` (a key of `defaultKeyChains`), or undefined when it
+ * can.
  */
-export function defaultAccessUsageRefusal(
+export function defaultKeyChainUsageRefusal(
+    entry: string,
     keyChainId: string,
     usageType: unknown,
 ): string | undefined {
-    return usageType === "access"
+    return usageType === entry
         ? undefined
-        : `Key chain ${JSON.stringify(keyChainId)} has usage type ${JSON.stringify(usageType)}; the default access key chain needs usage type "access".`;
+        : `Key chain ${JSON.stringify(keyChainId)} has usage type ${JSON.stringify(usageType)}; defaultKeyChains.${entry} needs usage type ${JSON.stringify(entry)}.`;
 }
 
 /**
