@@ -372,9 +372,9 @@ describe("default access key chain in configuration imports", () => {
                 },
             ]),
         );
-        expect(
-            empty.items.find((item) => item.kind === "Tenant")?.action,
-        ).toBe("unchanged");
+        expect(empty.items.find((item) => item.kind === "Tenant")?.action).toBe(
+            "unchanged",
+        );
     });
 });
 
