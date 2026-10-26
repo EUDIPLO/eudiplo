@@ -47,11 +47,11 @@ import { TrustListCreateSchema } from "./schemas/trust-list.schema.js";
 import { trustListConfig } from "./trust-list-config.js";
 
 enum ServiceTypeIdentifier {
-    WalletIssuance = "http://uri.etsi.org/19602/SvcType/WalletSolution/Issuance",
-    WalletRevocation = "http://uri.etsi.org/19602/SvcType/WalletSolution/Revocation",
-    PIDIssuance = "http://uri.etsi.org/19602/SvcType/PID/Issuance",
-    EaaIssuance = "http://uri.etsi.org/19602/SvcType/EAA/Issuance",
-    EaaRevocation = "http://uri.etsi.org/19602/SvcType/EAA/Revocation",
+    WalletIssuance = "http://uri.etsi.org/19602/SvcType/WalletSolution/Issuance", // NOSONAR: ETSI identifier URI, not fetched
+    WalletRevocation = "http://uri.etsi.org/19602/SvcType/WalletSolution/Revocation", // NOSONAR: ETSI identifier URI, not fetched
+    PIDIssuance = "http://uri.etsi.org/19602/SvcType/PID/Issuance", // NOSONAR: ETSI identifier URI, not fetched
+    EaaIssuance = "http://uri.etsi.org/19602/SvcType/EAA/Issuance", // NOSONAR: ETSI identifier URI, not fetched
+    EaaRevocation = "http://uri.etsi.org/19602/SvcType/EAA/Revocation", // NOSONAR: ETSI identifier URI, not fetched
 }
 
 /** Default language for trust list entries */
@@ -721,17 +721,17 @@ export class TrustListService {
                     },
                 ],
                 LoTEType: walletProviders
-                    ? "http://uri.etsi.org/19602/LoTEType/EUWalletProvidersList"
-                    : "http://uri.etsi.org/19602/LoTEType/EUEAAProvidersList",
+                    ? "http://uri.etsi.org/19602/LoTEType/EUWalletProvidersList" // NOSONAR: ETSI identifier URI, not fetched
+                    : "http://uri.etsi.org/19602/LoTEType/EUEAAProvidersList", // NOSONAR: ETSI identifier URI, not fetched
                 StatusDeterminationApproach: walletProviders
-                    ? "http://uri.etsi.org/19602/WalletProvidersList/StatusDetn/EU"
-                    : "http://uri.etsi.org/19602/EUEAAProvidersList/StatusDetn/EU",
+                    ? "http://uri.etsi.org/19602/WalletProvidersList/StatusDetn/EU" // NOSONAR: ETSI identifier URI, not fetched
+                    : "http://uri.etsi.org/19602/EUEAAProvidersList/StatusDetn/EU", // NOSONAR: ETSI identifier URI, not fetched
                 SchemeTypeCommunityRules: [
                     {
                         lang: DEFAULT_LANG,
                         uriValue: walletProviders
-                            ? "http://uri.etsi.org/19602/WalletProvidersList/schemerules/EU"
-                            : "http://uri.etsi.org/19602/EUEAAProviders/schemerules/EU",
+                            ? "http://uri.etsi.org/19602/WalletProvidersList/schemerules/EU" // NOSONAR: ETSI identifier URI, not fetched
+                            : "http://uri.etsi.org/19602/EUEAAProviders/schemerules/EU", // NOSONAR: ETSI identifier URI, not fetched
                     },
                 ],
                 SchemeTerritory: "EU",

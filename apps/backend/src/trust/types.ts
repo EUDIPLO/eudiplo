@@ -86,14 +86,14 @@ export function serviceTypeMatches(
  * fetched; they must stay `http://` to match trust list entries exactly.
  */
 export const ServiceTypeIdentifiers = {
-    EaaIssuance: "http://uri.etsi.org/19602/SvcType/EAA/Issuance",
-    EaaRevocation: "http://uri.etsi.org/19602/SvcType/EAA/Revocation",
+    EaaIssuance: "http://uri.etsi.org/19602/SvcType/EAA/Issuance", // NOSONAR: ETSI identifier URI, not fetched
+    EaaRevocation: "http://uri.etsi.org/19602/SvcType/EAA/Revocation", // NOSONAR: ETSI identifier URI, not fetched
     PIDIssuance: "http://uri.etsi.org/19602/SvcType/PID/Issuance", // NOSONAR: ETSI identifier URI, not fetched
-    WalletSolution: "http://uri.etsi.org/19602/SvcType/WalletSolution",
+    WalletSolution: "http://uri.etsi.org/19602/SvcType/WalletSolution", // NOSONAR: ETSI identifier URI, not fetched
     WalletSolutionIssuance:
-        "http://uri.etsi.org/19602/SvcType/WalletSolution/Issuance",
+        "http://uri.etsi.org/19602/SvcType/WalletSolution/Issuance", // NOSONAR: ETSI identifier URI, not fetched
     WalletSolutionRevocation:
-        "http://uri.etsi.org/19602/SvcType/WalletSolution/Revocation",
+        "http://uri.etsi.org/19602/SvcType/WalletSolution/Revocation", // NOSONAR: ETSI identifier URI, not fetched
 } as const;
 
 export const walletSolutionServiceTypes = [

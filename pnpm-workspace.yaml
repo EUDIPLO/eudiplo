@@ -82,6 +82,7 @@ overrides:
   dompurify@<=3.4.11: ^3.4.12
   dompurify@<=3.4.12: ^3.4.13
   dompurify@<=3.4.15: ^3.4.16
+  dompurify@<=3.4.16: ^3.4.17
   multer@<2.3.0: ^2.3.0
   qs@>=2.2.5 <6.16.0: ^6.16.0
   qs@>=6.14.2 <=6.15.3: ^6.15.4
@@ -96,4 +97,10 @@ overrides:
   tinypool@<2.1.2: ^2.1.2
   katex@>=0.11.0 <0.18.2: ^0.18.2
   postcss-selector-parser@<7.1.6: ^7.1.6
+  # @angular/build pins vite 8.3.0; stay on its minor line.
+  vite@>=8.3.0 <8.3.3: ~8.3.3
+  launch-editor@<=2.14.1: ^2.14.2
+  markdown-it@<14.3.3: ^14.3.3
+  yaml@>=2.0.0 <2.8.3: ^2.8.3
+  minimatch@>=9.0.0 <9.0.7: ^9.0.7
 
