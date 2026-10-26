@@ -1,5 +1,7 @@
+import type { ClaimFieldDefinitionDto } from '@eudiplo/sdk-core';
 import { test, expect } from './support/test';
-import { hasAuthCredentials } from './support/e2e-config';
+import { hasAuthCredentials, resolvedE2EConfig } from './support/e2e-config';
+import { tenantToken, writeConfig } from './support/clients';
 
 test('create credential config', async ({ page }) => {
   test.skip(
@@ -60,4 +62,70 @@ test('a failed load says why and loads again on Retry', async ({ page }) => {
   await expect(
     page.getByRole('heading', { name: 'Credential Configurations', level: 2 })
   ).toBeFocused();
+});
+
+test('saves edited claim constraints and keeps untouched ones', async ({ page, request }) => {
+  test.skip(
+    !hasAuthCredentials,
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+  );
+  const id = `e2e-constraints-${Date.now()}`;
+  const url = `${resolvedE2EConfig.apiBaseUrl}/api/issuer/credentials`;
+  const headers = { Authorization: `Bearer ${await tenantToken(request)}` };
+  await writeConfig(
+    () =>
+      request.post(url, {
+        headers,
+        data: {
+          id,
+          description: 'Claim constraints',
+          vct: `urn:${id}`,
+          config: {
+            format: 'dc+sd-jwt',
+            display: [{ name: 'Constraints', description: 'Constraints', locale: 'en-US' }],
+          },
+          fields: [
+            { path: ['birthdate'], type: 'string', constraints: { pattern: '^\\d{4}$' } },
+            { path: ['nationalities'], type: 'array', constraints: { items: { type: 'string' } } },
+          ],
+        },
+      }),
+    `create ${id}`
+  );
+
+  try {
+    await page.goto(`/credential-config/${id}/edit`);
+    await page.getByRole('tab', { name: /Claims/ }).click();
+    await page.getByRole('button', { name: /^birthdate string/ }).click();
+    const constraints = page
+      .getByRole('region', { name: /^birthdate string/ })
+      .getByRole('textbox', { name: 'Constraints' });
+    await expect(constraints).toHaveValue(/"pattern"/);
+
+    await constraints.fill('{ "pattern": ');
+    await constraints.blur();
+    await expect(page.getByText('Enter valid JSON: ')).toBeVisible();
+
+    // Issuance compiles constraints strictly, so Save refuses a misspelled keyword.
+    await constraints.fill('{ "patern": "^\\\\d{4}$" }');
+    await page.getByRole('button', { name: 'Save Configuration' }).click();
+    await expect(page.getByText('unknown keyword: "patern"')).toBeVisible();
+    await page.getByRole('button', { name: 'Close' }).click();
+
+    await constraints.fill('{ "pattern": "^\\\\d{4}-\\\\d{2}-\\\\d{2}$" }');
+    await page.getByRole('button', { name: 'Save Configuration' }).click();
+    await expect(page).toHaveURL(new RegExp(`/credential-config/${id}$`));
+
+    const response = await request.get(`${url}/${id}`, { headers });
+    expect(response.ok(), `GET ${id}`).toBe(true);
+    const fields = ((await response.json()) as { fields: ClaimFieldDefinitionDto[] }).fields;
+    expect(fields.find((field) => field.path[0] === 'birthdate')?.constraints).toEqual({
+      pattern: '^\\d{4}-\\d{2}-\\d{2}$',
+    });
+    expect(fields.find((field) => field.path[0] === 'nationalities')?.constraints).toEqual({
+      items: { type: 'string' },
+    });
+  } finally {
+    await writeConfig(() => request.delete(`${url}/${id}`, { headers }), `delete ${id}`);
+  }
 });
