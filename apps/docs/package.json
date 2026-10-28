@@ -22,10 +22,10 @@
     "test": "pnpm run check:sidebar && tsx --tsconfig ../../tsconfig.scripts.json --test scripts/schema-docs/*.test.ts scripts/roles-docs/*.test.ts"
   },
   "dependencies": {
-    "@docsearch/core": "^5.1.1",
-    "@docsearch/css": "^5.1.1",
-    "@docsearch/modal": "^5.1.1",
-    "@docsearch/sidepanel": "^5.1.1",
+    "@docsearch/core": "^5.1.2",
+    "@docsearch/css": "^5.1.2",
+    "@docsearch/modal": "^5.1.2",
+    "@docsearch/sidepanel": "^5.1.2",
     "@docusaurus/core": "3.10.2",
     "@docusaurus/faster": "3.10.2",
     "@docusaurus/plugin-client-redirects": "3.10.2",
@@ -33,10 +33,10 @@
     "@docusaurus/theme-mermaid": "3.10.2",
     "@mdx-js/react": "^3.1.1",
     "docusaurus-plugin-llms": "^0.6.1",
-    "dotenv": "^18.0.5",
+    "dotenv": "^18.0.9",
     "prism-react-renderer": "^2.4.1",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "3.10.2",
@@ -44,7 +44,7 @@
     "@docusaurus/tsconfig": "3.10.2",
     "@docusaurus/types": "3.10.2",
     "@types/react": "^19.3.0",
-    "markdownlint-cli": "^0.49.1",
+    "markdownlint-cli": "^0.50.0",
     "typescript": "~6.0.2"
   },
   "browserslist": {

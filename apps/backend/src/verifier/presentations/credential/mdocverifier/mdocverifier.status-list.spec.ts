@@ -113,6 +113,19 @@ describe("MdocverifierService status list fetch", () => {
             contentType: "application/statuslist+cwt",
             token: await signStatusListCwt(`${loopbackIp}/status/1`),
         });
+        published.set("/status/revoked", {
+            contentType: "application/statuslist+cwt",
+            token: await signStatusListCwt(`${loopbackIp}/status/revoked`, {
+                statuses: [0, 1, 0, 0, 0, 0, 0, 0],
+            }),
+        });
+        published.set("/status/unprotected-x5chain", {
+            contentType: "application/statuslist+cwt",
+            token: await signStatusListCwt(
+                `${loopbackIp}/status/unprotected-x5chain`,
+                { unprotectedX5Chain: true },
+            ),
+        });
         published.set(identifierListPath, {
             contentType: "application/identifierlist+cwt",
             token: await signIdentifierListCwt(
@@ -129,21 +142,35 @@ describe("MdocverifierService status list fetch", () => {
         requests = [];
     });
 
-    /** Status list token for `uri`, signed with the issuer's key. */
-    async function signStatusListCwt(uri: string): Promise<Uint8Array> {
+    /**
+     * Status list token for `uri`, signed with the issuer's key. `statuses`
+     * defaults to all valid; `unprotectedX5Chain` moves the certificate out of
+     * the protected header.
+     */
+    async function signStatusListCwt(
+        uri: string,
+        {
+            statuses = [0, 0, 0, 0, 0, 0, 0, 0],
+            unprotectedX5Chain = false,
+        }: { statuses?: number[]; unprotectedX5Chain?: boolean } = {},
+    ): Promise<Uint8Array> {
         const now = Math.floor(Date.now() / 1000);
+        const x5chain: [number, unknown] = [33, [issuerCertificate]];
         const cwt = new StatusListCwt({
             payload: {
                 subject: uri,
                 issuedAt: new Date((now - 60) * 1000),
                 expirationTime: new Date((now + 3600) * 1000),
                 timeToLive: 300,
-                statusList: new StatusList([0, 0, 0, 0, 0, 0, 0, 0], 1),
+                statusList: new StatusList(statuses, 1),
             },
             protectedHeaders: new Map<number, unknown>([
                 [1, SignatureAlgorithm.ES256],
-                [33, [issuerCertificate]],
+                ...(unprotectedX5Chain ? [] : [x5chain]),
             ]),
+            ...(unprotectedX5Chain && {
+                unprotectedHeaders: new Map<number, unknown>([x5chain]),
+            }),
         });
         return cwt.signAndEncode(
             {
@@ -354,6 +381,28 @@ describe("MdocverifierService status list fetch", () => {
             verify(service, statusListAt(`${loopbackIp}/status/1`)),
         ).resolves.toMatchObject({ verified: true });
         expect(requests).toEqual(["/status/1"]);
+    });
+
+    it("rejects a credential its status list revokes", async () => {
+        const service = verifier(policy(), loopbackIp);
+        const uri = `${loopbackIp}/status/revoked`;
+
+        for (const failClosed of [true, false]) {
+            const result = await verify(service, statusListAt(uri), failClosed);
+            expect(result.verified).toBe(false);
+            expect(result.failureReason).toContain("is not Valid");
+        }
+    });
+
+    it("rejects a status list whose x5chain is only in the unprotected header", async () => {
+        const result = await verify(
+            verifier(policy(), loopbackIp),
+            statusListAt(`${loopbackIp}/status/unprotected-x5chain`),
+        );
+
+        expect(result.verified).toBe(false);
+        expect(result.failureReason).toContain("unprotected header");
+        expect(requests).toEqual(["/status/unprotected-x5chain"]);
     });
 
     describe("identifier lists", () => {

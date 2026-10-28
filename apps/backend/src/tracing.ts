@@ -47,10 +47,12 @@ const otelSDK = new NodeSDK({
         [ATTR_SERVICE_VERSION]: process.env.VERSION || "unknown",
     }),
     traceExporter: new OTLPTraceExporter(),
-    metricReader: new PeriodicExportingMetricReader({
-        exporter: new OTLPMetricExporter(),
-        exportIntervalMillis: 30_000,
-    }),
+    metricReaders: [
+        new PeriodicExportingMetricReader({
+            exporter: new OTLPMetricExporter(),
+            exportIntervalMillis: 30_000,
+        }),
+    ],
     logRecordProcessors: [
         new BatchLogRecordProcessor({
             exporter: new OTLPLogExporter(),
