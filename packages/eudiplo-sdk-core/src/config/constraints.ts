@@ -68,38 +68,74 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function sanitizeSchema(value: unknown): JsonSchema | boolean | undefined {
+/** What `buildJsonSchema` drops from a field's `constraints`, and why. */
+export interface UnsupportedConstraint {
+  /** JSON pointer relative to `constraints`. */
+  pointer: string;
+  /**
+   * `unknown-keyword`: not on the allow-list. `not-a-schema`: a subschema that
+   * is no object or boolean. `not-a-list` / `not-a-map`: a list or map keyword
+   * (such as `anyOf` or `properties`) whose value is no array or object.
+   */
+  reason: "unknown-keyword" | "not-a-schema" | "not-a-list" | "not-a-map";
+}
+
+function pointer(path: string, segment: string | number): string {
+  return `${path}/${String(segment).replaceAll("~", "~0").replaceAll("/", "~1")}`;
+}
+
+function sanitizeSchema(
+  value: unknown,
+  path: string,
+  removed: UnsupportedConstraint[],
+): JsonSchema | boolean | undefined {
   if (typeof value === "boolean") {
     return value;
   }
   if (!isPlainObject(value)) {
+    removed.push({ pointer: path, reason: "not-a-schema" });
     return undefined;
   }
 
   // Object.fromEntries defines own properties, so a "__proto__" key stays data
   const entries: [string, unknown][] = [];
   for (const [key, child] of Object.entries(value)) {
+    const childPath = pointer(path, key);
     if (VALUE_KEYWORDS.has(key)) {
       entries.push([key, child]);
     } else if (SCHEMA_KEYWORDS.has(key)) {
-      const schema = sanitizeSchema(child);
+      const schema = sanitizeSchema(child, childPath, removed);
       if (schema !== undefined) {
         entries.push([key, schema]);
       }
     } else if (SCHEMA_LIST_KEYWORDS.has(key) && Array.isArray(child)) {
       entries.push([
         key,
-        child.map(sanitizeSchema).filter((schema) => schema !== undefined),
+        child
+          .map((schema, index) => sanitizeSchema(schema, pointer(childPath, index), removed))
+          .filter((schema) => schema !== undefined),
       ]);
     } else if (SCHEMA_MAP_KEYWORDS.has(key) && isPlainObject(child)) {
       entries.push([
         key,
         Object.fromEntries(
           Object.entries(child)
-            .map(([name, schema]) => [name, sanitizeSchema(schema)] as const)
+            .map(
+              ([name, schema]) =>
+                [name, sanitizeSchema(schema, pointer(childPath, name), removed)] as const,
+            )
             .filter(([, schema]) => schema !== undefined),
         ),
       ]);
+    } else {
+      removed.push({
+        pointer: childPath,
+        reason: SCHEMA_LIST_KEYWORDS.has(key)
+          ? "not-a-list"
+          : SCHEMA_MAP_KEYWORDS.has(key)
+            ? "not-a-map"
+            : "unknown-keyword",
+      });
     }
   }
   return Object.fromEntries(entries) as JsonSchema;
@@ -110,6 +146,17 @@ function sanitizeSchema(value: unknown): JsonSchema | boolean | undefined {
  * `constraints`, recursively for subschemas. Unknown keywords are dropped.
  */
 export function sanitizeConstraints(constraints: unknown): JsonSchema {
-  const schema = sanitizeSchema(constraints);
+  const schema = sanitizeSchema(constraints, "", []);
   return isPlainObject(schema) ? schema : {};
+}
+
+/**
+ * What `buildJsonSchema` would drop from a field's `constraints`: keywords
+ * outside the allow-list and values of the wrong kind under subschema
+ * keywords. The backend refuses them on save.
+ */
+export function unsupportedConstraints(constraints: unknown): UnsupportedConstraint[] {
+  const removed: UnsupportedConstraint[] = [];
+  sanitizeSchema(constraints, "", removed);
+  return removed;
 }
