@@ -1,10 +1,15 @@
 // Canonical portable-config identity and migration implementation.
 // The CLI bundles this module through assets:sync; do not maintain a second engine.
 export const CONFIG_FORMATS = {
-    Tenant: { slug: "tenant", file: "TenantConfigFile", version: 3 },
+    Tenant: { slug: "tenant", file: "TenantConfigFile", version: 4 },
     Client: { slug: "client", file: "ClientConfigFile", version: 2 },
     KmsConfig: { slug: "kms-config", file: "KmsConfigFile", version: 2 },
     KeyChain: { slug: "key-chain", file: "KeyChainConfigFile", version: 3 },
+    KeyChainDefaults: {
+        slug: "key-chain-defaults",
+        file: "KeyChainDefaultsConfigFile",
+        version: 1,
+    },
     RegistrarConfig: {
         slug: "registrar-config",
         file: "RegistrarConfigFile",
@@ -78,6 +83,7 @@ export const CONFIG_SINGLETON_IDS: Partial<Record<ConfigResourceKind, string>> =
         KmsConfig: "kms",
         RegistrarConfig: "registrar",
         IssuanceConfig: "issuance",
+        KeyChainDefaults: "defaults",
     };
 /** Resolve identity without copying it into metadata. Singletons have no data ID. */
 export function resourceId(input: ConfigFile<unknown>): string {
@@ -100,7 +106,8 @@ export function resourceId(input: ConfigFile<unknown>): string {
  * tenant `kms.json` is saved as, a registrar configuration with
  * `relyingPartyContact`, which RegistrarConfig v2 added, and a tenant
  * `info.json` with `defaultAccessKeyChainId`, which TenantConfig v2 added, or
- * with `defaultKeyChains`, which TenantConfig v3 replaced it with.
+ * with `defaultKeyChains`, which TenantConfig v3 replaced it with (TenantConfig
+ * v4 moved it to `key-chain-defaults.json`).
  */
 export function bareFileVersion(
     kind: ConfigResourceKind,
@@ -270,6 +277,32 @@ const presentationConfigV1ToV2: ConfigMigration = {
     },
 };
 
+const tenantConfigV3ToV4: ConfigMigration = {
+    id: "tenant-v4-key-chain-defaults",
+    kind: "Tenant",
+    from: 3,
+    to: 4,
+    // v4 moves the tenant's default key chains to their own resource,
+    // KeyChainDefaults (key-chain-defaults.json). Only development builds of
+    // 10.0 wrote defaultKeyChains, so the step drops it with a warning instead
+    // of creating that document.
+    migrate(spec) {
+        if (!("defaultKeyChains" in spec)) return { spec };
+        const { defaultKeyChains: _, ...rest } = spec;
+        return {
+            spec: rest,
+            issues: [
+                {
+                    severity: "warning",
+                    code: "DEFAULT_KEY_CHAINS_MOVED",
+                    path: "/spec/defaultKeyChains",
+                    message:
+                        "defaultKeyChains is no longer part of the tenant settings and was removed. Set the default key chains in key-chain-defaults.json (KeyChainDefaults), for example { \"access\": \"<key chain ID>\" }.",
+                },
+            ],
+        };
+    },
+};
 
 // The first published format is v1. Register one step per later version.
 const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
@@ -363,6 +396,7 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
             };
         },
     },
+    tenantConfigV3ToV4,
     {
         id: "key-chain-v2-type",
         kind: "KeyChain",

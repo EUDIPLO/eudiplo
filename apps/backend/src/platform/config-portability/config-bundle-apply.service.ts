@@ -18,7 +18,7 @@ import {
 import { ClientAccessService } from "../../auth/client/client-access.service.js";
 import { isRole } from "../../auth/roles/role.enum.js";
 import { assertMayGrantRoles } from "../../auth/roles/role-grants.js";
-import { tenantDocumentUpdate } from "../../auth/tenant/domain/tenant-data.js";
+import { defaultKeyChainsOrNull } from "../../auth/tenant/domain/tenant-data.js";
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
 import { KeyChainType } from "../../crypto/key/dto/key-chain-create.dto.js";
 import { KeyUsage } from "../../crypto/key/entities/key-chain.entity.js";
@@ -340,7 +340,7 @@ export class ConfigBundleApplyService {
                                 await manager.update(
                                     TenantEntity,
                                     { id: tenantId },
-                                    tenantDocumentUpdate(document.spec),
+                                    document.spec,
                                 );
                                 await this.ownershipService.markApplied(
                                     ownership,
@@ -479,6 +479,12 @@ export class ConfigBundleApplyService {
             case "KmsConfig":
                 this.kmsTenantConfigService.deleteTenantConfig(tenantId);
                 return;
+            case "KeyChainDefaults":
+                await this.tenants.update(
+                    { id: tenantId },
+                    { defaultKeyChains: null },
+                );
+                return;
             case "KeyChain":
                 // Unlike DELETE /key-chain/{id}, without the reference check:
                 // the plan blocks deleting a key chain that a surviving
@@ -546,9 +552,14 @@ export class ConfigBundleApplyService {
         const spec = structuredClone(document.spec) as Record<string, any>;
         switch (document.kind) {
             case "Tenant":
+                await this.tenants.update({ id: tenantId }, spec);
+                return;
+            case "KeyChainDefaults":
+                // The document replaces the map: an entry it leaves out goes
+                // back to the key chain picked by rule.
                 await this.tenants.update(
                     { id: tenantId },
-                    tenantDocumentUpdate(spec),
+                    { defaultKeyChains: defaultKeyChainsOrNull(spec) },
                 );
                 return;
             case "Client": {

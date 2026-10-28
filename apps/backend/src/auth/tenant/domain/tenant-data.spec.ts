@@ -1,26 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { tenantDocumentUpdate } from "./tenant-data.js";
+import { defaultKeyChainsOrNull } from "./tenant-data.js";
 
-describe("tenantDocumentUpdate", () => {
-    it("removes the default key chains when a document leaves them out", () => {
-        expect(tenantDocumentUpdate({ name: "Acme" })).toEqual({
-            name: "Acme",
-            defaultKeyChains: null,
-        });
-    });
-
-    it("stores an empty map as no default key chains", () => {
-        expect(
-            tenantDocumentUpdate({ name: "Acme", defaultKeyChains: {} }),
-        ).toEqual({ name: "Acme", defaultKeyChains: null });
+describe("defaultKeyChainsOrNull", () => {
+    it("stores a missing or empty map as no default key chains", () => {
+        expect(defaultKeyChainsOrNull(undefined)).toBeNull();
+        expect(defaultKeyChainsOrNull(null)).toBeNull();
+        expect(defaultKeyChainsOrNull({})).toBeNull();
     });
 
     it("keeps the named default key chains", () => {
-        expect(
-            tenantDocumentUpdate({
-                name: "Acme",
-                defaultKeyChains: { access: "registrar" },
-            }).defaultKeyChains,
-        ).toEqual({ access: "registrar" });
+        expect(defaultKeyChainsOrNull({ access: "registrar" })).toEqual({
+            access: "registrar",
+        });
     });
 });

@@ -360,6 +360,7 @@ export class ConfigPortabilityComponent implements OnInit {
       IssuanceConfig: '/issuance-config',
       RegistrarConfig: '/registrar',
       KmsConfig: '/kms',
+      KeyChainDefaults: '/keys',
     };
     const singleton = singletonRoutesByKind[resource.kind];
     return singleton ? [singleton] : null;

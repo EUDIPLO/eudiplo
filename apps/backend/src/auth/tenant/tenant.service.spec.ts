@@ -9,7 +9,10 @@ describe("TenantService updates", () => {
         update: ReturnType<typeof vi.fn>;
     };
     let service: TenantService;
-    let keyChains: { assertAccessKeyChain: ReturnType<typeof vi.fn> };
+    let keyChains: {
+        assertAccessKeyChain: ReturnType<typeof vi.fn>;
+        getDefaultAccessKeyChain: ReturnType<typeof vi.fn>;
+    };
     let auditLog: { record: ReturnType<typeof vi.fn> };
 
     beforeEach(() => {
@@ -28,7 +31,10 @@ describe("TenantService updates", () => {
             }),
         };
 
-        keyChains = { assertAccessKeyChain: vi.fn(async () => undefined) };
+        keyChains = {
+            assertAccessKeyChain: vi.fn(async () => undefined),
+            getDefaultAccessKeyChain: vi.fn(async () => ({})),
+        };
         auditLog = { record: vi.fn(async () => undefined) };
         service = new TenantService(
             {} as never,
@@ -79,118 +85,72 @@ describe("TenantService updates", () => {
         });
     });
 
-    test("checks a new default access key chain before saving it", async () => {
-        await service.updateTenant("tenant", {
-            defaultKeyChains: { access: "access" },
-        });
+    describe("setDefaultAccessKeyChain", () => {
+        const actor = { client: { clientId: "admin" } } as never;
+        const meta = {} as never;
 
-        expect(keyChains.assertAccessKeyChain).toHaveBeenCalledWith(
-            "tenant",
-            "access",
-        );
-        expect(storedTenant.defaultKeyChains).toEqual({ access: "access" });
-    });
-
-    test("saves nothing when the default access key chain is refused", async () => {
-        keyChains.assertAccessKeyChain.mockRejectedValueOnce(
-            new Error("not an access key chain"),
-        );
-
-        await expect(
-            service.updateTenant("tenant", {
-                defaultKeyChains: { access: "attestation" },
-            }),
-        ).rejects.toThrow("not an access key chain");
-        expect(repository.update).not.toHaveBeenCalled();
-    });
-
-    test("removes the default access key chain with null without a check", async () => {
-        storedTenant.defaultKeyChains = { access: "access" };
-
-        await service.updateTenant("tenant", {
-            defaultKeyChains: null,
-        });
-
-        expect(keyChains.assertAccessKeyChain).not.toHaveBeenCalled();
-        expect(storedTenant.defaultKeyChains).toBeNull();
-    });
-
-    test("stores an empty map of default key chains as none", async () => {
-        storedTenant.defaultKeyChains = { access: "access" };
-
-        await service.updateTenant("tenant", { defaultKeyChains: {} });
-
-        expect(keyChains.assertAccessKeyChain).not.toHaveBeenCalled();
-        expect(storedTenant.defaultKeyChains).toBeNull();
-    });
-
-    test("records a changed default access key chain in the audit log", async () => {
-        storedTenant.defaultKeyChains = null;
-
-        await service.updateTenant(
-            "tenant",
-            { defaultKeyChains: { access: "access" } },
-            { client: { clientId: "admin" } } as never,
-        );
-
-        expect(auditLog.record).toHaveBeenCalledWith(
-            expect.objectContaining({
-                actionType: "tenant_updated",
-                changedFields: ["defaultKeyChains"],
-                before: expect.objectContaining({
-                    defaultKeyChains: null,
-                }),
-                after: expect.objectContaining({
-                    defaultKeyChains: { access: "access" },
-                }),
-            }),
-        );
-    });
-
-    describe("default access key chain of info.json", () => {
-        const pending = () =>
-            (
-                service as unknown as {
-                    pendingDefaultKeyChains: Map<string, { access?: string }>;
-                }
-            ).pendingDefaultKeyChains;
-
-        test("does nothing without a pending default", async () => {
-            await service.finishTenantSetup("tenant");
-
-            expect(keyChains.assertAccessKeyChain).not.toHaveBeenCalled();
-            expect(repository.update).not.toHaveBeenCalled();
-        });
-
-        test("applies a pending default once its key chain is imported", async () => {
-            pending().set("tenant", { access: "access" });
-
-            await service.finishTenantSetup("tenant");
+        test("checks a new default access key chain before saving it", async () => {
+            await service.setDefaultAccessKeyChain(
+                "tenant",
+                "access",
+                actor,
+                meta,
+            );
 
             expect(keyChains.assertAccessKeyChain).toHaveBeenCalledWith(
                 "tenant",
                 "access",
             );
             expect(storedTenant.defaultKeyChains).toEqual({ access: "access" });
-            expect(pending().has("tenant")).toBe(false);
         });
 
-        test("refuses a pending default that names no access key chain and keeps the stored one", async () => {
-            storedTenant.defaultKeyChains = { access: "previous" };
-            pending().set("tenant", { access: "attestation" });
+        test("saves nothing when the default access key chain is refused", async () => {
             keyChains.assertAccessKeyChain.mockRejectedValueOnce(
-                new Error(
-                    'Key chain "attestation" has usage type "attestation"',
-                ),
+                new Error("not an access key chain"),
             );
 
-            await expect(service.finishTenantSetup("tenant")).rejects.toThrow(
-                /^defaultKeyChains in info.json is not applied: Key chain "attestation"/,
-            );
+            await expect(
+                service.setDefaultAccessKeyChain(
+                    "tenant",
+                    "attestation",
+                    actor,
+                    meta,
+                ),
+            ).rejects.toThrow("not an access key chain");
             expect(repository.update).not.toHaveBeenCalled();
-            expect(storedTenant.defaultKeyChains).toEqual({
-                access: "previous",
-            });
+        });
+
+        test("removes the default access key chain with null without a check", async () => {
+            storedTenant.defaultKeyChains = { access: "access" };
+
+            await service.setDefaultAccessKeyChain("tenant", null, actor, meta);
+
+            expect(keyChains.assertAccessKeyChain).not.toHaveBeenCalled();
+            expect(storedTenant.defaultKeyChains).toBeNull();
+        });
+
+        test("records a changed default access key chain in the audit log", async () => {
+            storedTenant.defaultKeyChains = null;
+
+            await service.setDefaultAccessKeyChain(
+                "tenant",
+                "access",
+                actor,
+                meta,
+            );
+
+            expect(auditLog.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    actionType: "tenant_updated",
+                    changedFields: ["defaultKeyChains"],
+                    before: expect.objectContaining({
+                        defaultKeyChains: null,
+                    }),
+                    after: expect.objectContaining({
+                        defaultKeyChains: { access: "access" },
+                    }),
+                }),
+            );
         });
     });
 });

@@ -65,8 +65,8 @@
         [attr.aria-busy]="updatingDefault"
         disabledInteractive
         appConfigManaged
-        managedKind="Tenant"
-        managedResourceId="tenant"
+        managedKind="KeyChainDefaults"
+        managedResourceId="defaults"
       >
         Remove default
       </button>
@@ -199,8 +199,8 @@
                   [matTooltip]="defaultToggleTooltip(item)"
                   [attr.aria-label]="defaultToggleLabel(item)"
                   appConfigManaged
-                  managedKind="Tenant"
-                  managedResourceId="tenant"
+                  managedKind="KeyChainDefaults"
+                  managedResourceId="defaults"
                 >
                   <mat-icon>{{ isDefault(item) ? 'star' : 'star_outline' }}</mat-icon>
                 </button>

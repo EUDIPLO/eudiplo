@@ -9,8 +9,8 @@ import type { ConfigFolderBundleService } from "./config-folder-bundle.service.j
 import type { ConfigImportJournalService } from "./config-import-journal.service.js";
 import type { ConfigMigrationService } from "./config-migration.service.js";
 import type { ConfigOwnershipService } from "./config-ownership.service.js";
-import type { ConfigBundle } from "./config-resource.types.js";
 import { ConfigPortabilityController } from "./config-portability.controller.js";
+import type { ConfigBundle } from "./config-resource.types.js";
 
 const fingerprint = "a".repeat(64);
 const token = {

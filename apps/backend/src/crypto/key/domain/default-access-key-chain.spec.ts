@@ -167,7 +167,7 @@ describe("defaultKeyChainUsageRefusal", () => {
         expect(
             defaultKeyChainUsageRefusal("access", "pid", "attestation"),
         ).toBe(
-            'Key chain "pid" has usage type "attestation"; defaultKeyChains.access needs usage type "access".',
+            'Key chain "pid" has usage type "attestation"; the default access key chain needs usage type "access".',
         );
     });
 });

@@ -415,7 +415,7 @@ export const keyChainControllerCreate = <ThrowOnError extends boolean = true>(op
 /**
  * Delete a key chain
  *
- * Refused while the issuance configuration, a credential config, a presentation config, a status list or a trust list of the tenant names the key chain. A configuration that names no key chain and uses the tenant's default one does not count; a trust list stores the key chain that signs it, also one picked by default.
+ * Refused while the tenant's key chain defaults, the issuance configuration, a credential config, a presentation config, a status list or a trust list of the tenant names the key chain. A configuration that names no key chain and uses the tenant's default one does not count; a trust list stores the key chain that signs it, also one picked by default.
  */
 export const keyChainControllerDelete = <ThrowOnError extends boolean = true>(options: Options<KeyChainControllerDeleteData, ThrowOnError>): RequestResult<KeyChainControllerDeleteResponses, KeyChainControllerDeleteErrors, ThrowOnError> => (options.client ?? client).delete<KeyChainControllerDeleteResponses, KeyChainControllerDeleteErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -1519,7 +1519,7 @@ export const configPortabilityControllerResourcesOfKind = <ThrowOnError extends 
 /**
  * Export one resource as a configuration document
  *
- * Returns the resource as a `$schema` and `spec` document in the current format version, the format of the files in the config folder and of the documents in a configuration bundle. Secrets are `${PLACEHOLDER}` references, as in the bundle export, and image references name the file. A key chain held in the database keeps its private keys, for a CA chain also the signing key, which `GET /key-chain/{id}/export` leaves out, so a `KeyChain` document needs `tenant:admin` or `tenants:manage`. Other kinds accept the roles that change them through the management API, for example `issuance:manage` for `CredentialConfig`; `keys:manage`, which only changes the default access key chain of the tenant, does not export the `Tenant` document. Singleton kinds use their fixed ID: `tenant`, `kms`, `registrar` and `issuance`.
+ * Returns the resource as a `$schema` and `spec` document in the current format version, the format of the files in the config folder and of the documents in a configuration bundle. Secrets are `${PLACEHOLDER}` references, as in the bundle export, and image references name the file. A key chain held in the database keeps its private keys, for a CA chain also the signing key, which `GET /key-chain/{id}/export` leaves out, so a `KeyChain` document needs `tenant:admin` or `tenants:manage`. Other kinds accept the roles that change them through the management API, for example `issuance:manage` for `CredentialConfig` and `keys:manage` for `KeyChainDefaults`. Singleton kinds use their fixed ID: `tenant`, `kms`, `registrar`, `issuance` and `defaults`.
  */
 export const configPortabilityControllerExportDocument = <ThrowOnError extends boolean = true>(options: Options<ConfigPortabilityControllerExportDocumentData, ThrowOnError>): RequestResult<ConfigPortabilityControllerExportDocumentResponses, ConfigPortabilityControllerExportDocumentErrors, ThrowOnError> => (options.client ?? client).get<ConfigPortabilityControllerExportDocumentResponses, ConfigPortabilityControllerExportDocumentErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],

@@ -8,7 +8,7 @@ Configuration files name their format in `$schema`, for example `https://eudiplo
 
 ## Format versions
 
-Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eudiplo-config-format/src/config-format.ts`); it is independent of the application version. EUDIPLO 9.0 introduced the first bumps; `IssuanceConfig` v3 followed in 9.1, `CredentialConfig` v2, `KeyChain` v2, `Client` v2, `KmsConfig` v2, `RegistrarConfig` v2, `Tenant` v2 and v3, `IssuanceConfig` v4 and v5 and `KeyChain` v3 in 10.0:
+Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eudiplo-config-format/src/config-format.ts`); it is independent of the application version. EUDIPLO 9.0 introduced the first bumps; `IssuanceConfig` v3 followed in 9.1, `CredentialConfig` v2, `KeyChain` v2, `Client` v2, `KmsConfig` v2, `RegistrarConfig` v2, `Tenant` v2 to v4, `IssuanceConfig` v4 and v5 and `KeyChain` v3 in 10.0:
 
 | Resource | Version | Change |
 | --- | --- | --- |
@@ -23,7 +23,8 @@ Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eud
 | `KmsConfig` | v2 | Optional `algorithms` and `defaultAlgorithm` on providers. A v1 file is a valid v2 file; a bare `kms.json` with either field on a provider is read as v2 (`bareFileVersion`). |
 | `RegistrarConfig` | v2 | Optional `relyingPartyContact`. A v1 file is a valid v2 file; a bare `registrar.json` with the field is read as v2 (`bareFileVersion`). |
 | `Tenant` | v2 | Optional `defaultAccessKeyChainId`. A v1 file is a valid v2 file; a bare `info.json` with the field is read as v2 (`bareFileVersion`). Only in development builds of 10.0. |
-| `Tenant` | v3 | `defaultKeyChains` map by usage type replaces `defaultAccessKeyChainId`; the v2 → v3 step moves it to `defaultKeyChains.access`. A bare `info.json` with `defaultKeyChains` is read as v3. |
+| `Tenant` | v3 | `defaultKeyChains` map by usage type replaces `defaultAccessKeyChainId`; the v2 → v3 step moves it to `defaultKeyChains.access`. A bare `info.json` with `defaultKeyChains` is read as v3. Only in development builds of 10.0. |
+| `Tenant` | v4 | `defaultKeyChains` moves to the new resource `KeyChainDefaults` (`key-chain-defaults.json`, v1); the v3 → v4 step drops it with the warning `DEFAULT_KEY_CHAINS_MOVED`. |
 | `PresentationConfig` | v2 | `registration_cert.body.provided_attestations` is replaced by the registrar's `provides_attestations` (string array). The v1 → v2 step drops the old field with a warning. |
 | `PresentationConfig` | v3 | DCQL claim `values` accept integers and booleans besides strings and must be non-empty. A v2 file is a valid v3 file unless it has an empty `values` array. |
 | All other resources | v1 | |

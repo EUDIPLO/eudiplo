@@ -174,15 +174,18 @@ describe("mayExportConfigDocument", () => {
         expect(mayExportConfigDocument([Role.Tenants], "KeyChain")).toBe(true);
     });
 
-    it("keeps keys:manage, which only changes the default access key chain, out of the tenant document", () => {
-        expect(mayReadConfigOwnership([Role.Keys], "Tenant")).toBe(true);
+    it("lets keys:manage export the key chain defaults but not the tenant settings", () => {
+        expect(mayExportConfigDocument([Role.Keys], "KeyChainDefaults")).toBe(
+            true,
+        );
+        expect(mayReadConfigOwnership([Role.Keys], "Tenant")).toBe(false);
         expect(mayExportConfigDocument([Role.Keys], "Tenant")).toBe(false);
         expect(mayExportConfigDocument([Role.Issuances], "Tenant")).toBe(true);
     });
 
     it("follows the ownership rule for every other kind", () => {
         for (const kind of CONFIG_RESOURCE_KINDS.filter(
-            (kind) => kind !== "KeyChain" && kind !== "Tenant",
+            (kind) => kind !== "KeyChain",
         )) {
             for (const role of allRoles) {
                 expect(mayExportConfigDocument([role], kind)).toBe(

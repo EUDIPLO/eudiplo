@@ -27,11 +27,13 @@ Every portable resource is one JSON document:
 | `metadata.ownership`  | no       | `unmanaged` or `file-managed`. Reported on export, where a detached resource is reported as `unmanaged`; ignored on import, which always records `file-managed`. |
 | `spec`                | yes      | The desired configuration, without runtime state. The ID is `spec.id`, for clients `spec.clientId`, which is unique across tenants: a client ID another tenant uses blocks the plan (`CLIENT_ID_TAKEN`). |
 
-Tenant, KMS, registrar and issuance settings exist once per tenant and have no ID.
+Tenant, KMS, registrar and issuance settings and the key chain defaults exist
+once per tenant and have no ID.
 In tenant config folders, the importer also accepts *bare* files (only the
 `spec` content) at the known paths and wraps them; a document with an unknown
 `$schema` or a newer version than the backend supports is rejected. A bare file
-names no version, so it is read as version 1, except key chain and KMS files
+names no version, so it is read as version 1, except key chain, KMS, registrar
+and tenant files
 ([format versions](#resource-types-and-versions)): prefer documents, which
 `GET /api/config-bundles/resources/:kind/:id/document` and the Web Client's
 download buttons write ([single resources](#single-resources)).
@@ -44,10 +46,11 @@ rejects versions newer than its own.
 
 | Kind                 | `<File>`                      | Current version | Singleton |
 | -------------------- | ----------------------------- | --------------- | --------- |
-| `Tenant`             | `TenantConfigFile`            | 3               | yes       |
+| `Tenant`             | `TenantConfigFile`            | 4               | yes       |
 | `Client`             | `ClientConfigFile`            | 2               |           |
 | `KmsConfig`          | `KmsConfigFile`               | 2               | yes       |
 | `KeyChain`           | `KeyChainConfigFile`          | 3               |           |
+| `KeyChainDefaults`   | `KeyChainDefaultsConfigFile`  | 1               | yes       |
 | `RegistrarConfig`    | `RegistrarConfigFile`         | 2               | yes       |
 | `IssuanceConfig`     | `IssuanceConfigFile`          | 5               | yes       |
 | `CredentialConfig`   | `CredentialConfigFile`        | 2               |           |
@@ -113,22 +116,26 @@ reports `KEY_CHAIN_TYPE_MISMATCH`. A v1 document is migrated unchanged;
 9.x cannot read v2 files. A bare key chain file with `type`, as
 `GET /api/key-chain/{id}/export` writes it, is read as v2.
 
-**Tenant v3** came with EUDIPLO 10.0 as well. It adds the optional
-`defaultKeyChains`, the tenant's key chain per usage type, used where no
-configuration names one. So far it has one entry, `access`: the
+**KeyChainDefaults v1** came with EUDIPLO 10.0. The singleton
+`KeyChainDefaults/defaults` (`key-chain-defaults.json`) holds the tenant's key
+chain per usage type, used where no configuration names one. So far it has one
+entry, `access`: the
 [default access key chain](../trust/keys-and-certificates.md#default-access-key-chain).
-Unlike the other fields of `info.json`, leaving `defaultKeyChains` out of a
-document that is applied removes the stored entries, so the tenant picks its
-key chains by rule again. The plan of a bundle reports
-`MISSING_RESOURCE_REFERENCE` when an entry names a key chain that is neither
-stored nor in the bundle, and `KEY_CHAIN_USAGE_MISMATCH` when the key chain's
-usage type is not the entry's; a config folder checks the entries at startup
-instead
-([Default access key chain](../trust/keys-and-certificates.md#default-access-key-chain)). A bare
-`info.json` with `defaultKeyChains` is read as v3. A v1 document is migrated
-unchanged. Tenant v2, which development builds of 10.0 wrote, had the flat
-`defaultAccessKeyChainId`; the v2 to v3 step moves it to
-`defaultKeyChains.access`. 9.x cannot read v2 or v3 files.
+The document replaces all entries, so leaving `access` out of a document that is
+applied removes it, and the tenant picks its access key chain by rule again. The
+plan reports `MISSING_RESOURCE_REFERENCE` when an entry names a key chain that is
+neither stored nor in the bundle, and `KEY_CHAIN_USAGE_MISMATCH` when the key
+chain's usage type is not the entry's. An export writes the document only while
+an entry is set.
+
+**Tenant v4** came with EUDIPLO 10.0 as well. Tenant v2 and v3, which only
+development builds of 10.0 wrote, kept the default key chains in `info.json`
+(`defaultAccessKeyChainId`, then `defaultKeyChains`); v4 moves them to
+`KeyChainDefaults`. The upgrade to v4 drops the field with the warning
+`DEFAULT_KEY_CHAINS_MOVED` and does not apply it; move the value to
+`key-chain-defaults.json`. A v1 document is migrated unchanged. A bare
+`info.json` with `defaultKeyChains` is read as v3, one with
+`defaultAccessKeyChainId` as v2. 9.x cannot read v2 to v4 files.
 
 **Client v2** came with EUDIPLO 10.0 as well. It accepts the roles
 `audit:read`, `sessions:read`, `credentials:status` and `keys:manage`. A v1
@@ -157,8 +164,9 @@ does not exist yet is created only if its folder contains `info.json`.
 <CONFIG_FOLDER>/
 ├── kms.json                    global KMS providers
 └── <tenant-id>/
-    ├── info.json               Tenant (name, description, session and status-list defaults, default access key chain)
+    ├── info.json               Tenant (name, description, session and status-list defaults)
     ├── kms.json                tenant KMS providers, merged over the global file
+    ├── key-chain-defaults.json KeyChainDefaults (default access key chain)
     ├── registrar.json
     ├── clients/<id>.json
     ├── key-chains/<id>.json
@@ -266,11 +274,11 @@ placeholders are handled according to `CONFIG_VARIABLE_STRICT`:
 | `unchanged` | Already matches, or a key chain or `!generate` client document this source already applied (see below); only ownership metadata may be updated |
 | `skip`      | Exists and is left alone: in `create` mode (`RESOURCE_EXISTS`), in a startup import when the resource was detached from that folder (`RESOURCE_DETACHED`) or has a newer stored generation (`STALE_GENERATION`), or because it is the tenant's encryption key chain (`KEY_CHAIN_ID_RESERVED`) |
 | `delete`    | Will be removed (`replace` mode)                                                            |
-| `blocked`   | Cannot be applied, for example `STALE_GENERATION`, `MISSING_RESOURCE_REFERENCE`, `STATUS_LIST_LAYOUT_IMMUTABLE`, `REGISTRATION_CERTIFICATE_REFUSED` for an imported registration certificate that fails its checks, for example because it is expired or does not cover the DCQL query ([Validation and caching](../trust/registration-certificates.md#validation-and-caching)), a missing secret or key, `UNSUPPORTED_KEY_ALGORITHM` for a key chain whose key uses an algorithm its KMS provider does not offer ([Signing algorithms](../operate/kms.md#signing-algorithms)), `TRUST_LIST_IN_USE` on a trust list that `replace` would delete while a configuration still references it ([Delete a trust list](../trust/trust-lists.md#delete-a-trust-list)), `MISSING_RESOURCE_REFERENCE` on a presentation configuration that names, or the issuance configuration that adds, an OpenID Federation trust anchor neither the tenant nor the bundle registers, `FEDERATION_TRUST_ANCHOR_IN_USE` on a trust anchor that the import would delete or give another entity ID while a configuration still names it ([Delete a trust anchor](../trust/federation.md#delete-a-trust-anchor)), `KEY_CHAIN_IN_USE` on a key chain that `replace` would delete while a configuration still names it ([Delete a key chain](../trust/keys-and-certificates.md#delete-a-key-chain)), or `KEY_CHAIN_USAGE_MISMATCH` on a tenant whose `defaultKeyChains` entry names a key chain of another usage type ([Default access key chain](../trust/keys-and-certificates.md#default-access-key-chain)). One blocked item blocks the whole plan |
+| `blocked`   | Cannot be applied, for example `STALE_GENERATION`, `MISSING_RESOURCE_REFERENCE`, `STATUS_LIST_LAYOUT_IMMUTABLE`, `REGISTRATION_CERTIFICATE_REFUSED` for an imported registration certificate that fails its checks, for example because it is expired or does not cover the DCQL query ([Validation and caching](../trust/registration-certificates.md#validation-and-caching)), a missing secret or key, `UNSUPPORTED_KEY_ALGORITHM` for a key chain whose key uses an algorithm its KMS provider does not offer ([Signing algorithms](../operate/kms.md#signing-algorithms)), `TRUST_LIST_IN_USE` on a trust list that `replace` would delete while a configuration still references it ([Delete a trust list](../trust/trust-lists.md#delete-a-trust-list)), `MISSING_RESOURCE_REFERENCE` on a presentation configuration that names, or the issuance configuration that adds, an OpenID Federation trust anchor neither the tenant nor the bundle registers, `FEDERATION_TRUST_ANCHOR_IN_USE` on a trust anchor that the import would delete or give another entity ID while a configuration still names it ([Delete a trust anchor](../trust/federation.md#delete-a-trust-anchor)), `KEY_CHAIN_IN_USE` on a key chain that `replace` would delete while a configuration still names it ([Delete a key chain](../trust/keys-and-certificates.md#delete-a-key-chain)), or `KEY_CHAIN_USAGE_MISMATCH` on the key chain defaults (`KeyChainDefaults`) when an entry names a key chain of another usage type ([Default access key chain](../trust/keys-and-certificates.md#default-access-key-chain)). One blocked item blocks the whole plan |
 
 An `update` item lists its field changes in `changes`: the `path` in the document, the stored value as `before` and the value after the import as `after`. Without `before`, the import adds the field; without `after`, it removes the stored value. Entries with `redacted: true` hide the values: a secret reads `[redacted]`, and a value that changes between an object, a list and a plain value reads `[changed]` on both sides.
 
-A `KmsConfig` or `RegistrarConfig` document replaces the stored resource: fields it leaves out are removed, and the plan lists their removal. A `KeyChain` document replaces the stored key material, and also the type, description and rotation policy:
+A `KmsConfig`, `RegistrarConfig` or `KeyChainDefaults` document replaces the stored resource: fields it leaves out are removed, and the plan lists their removal. A `KeyChain` document replaces the stored key material, and also the type, description and rotation policy:
 
 - The plan lists `type` as the import creates it, also for a document without `type` ([KeyChain v2](#resource-types-and-versions)).
 - A `description` it leaves out is removed.
@@ -322,8 +330,8 @@ resources of that kind, so screens can lock file-managed resources for them:
 
 | Kind                                                                    | Also readable with                                      |
 | ----------------------------------------------------------------------- | ------------------------------------------------------- |
-| `Tenant` (session and status list settings, default access key chain)   | `issuance:manage`, `presentation:manage`, `keys:manage` |
-| `KeyChain`                                                              | `issuance:manage`, `presentation:manage`, `keys:manage` |
+| `Tenant` (session and status list settings)                            | `issuance:manage`, `presentation:manage`                |
+| `KeyChain`, `KeyChainDefaults` (default access key chain)               | `issuance:manage`, `presentation:manage`, `keys:manage` |
 | `WebhookEndpoint`, `TrustList`, `FederationTrustAnchor`                 | `issuance:manage`, `presentation:manage`                |
 | `IssuanceConfig`, `CredentialConfig`, `AttributeProvider`, `StatusList` | `issuance:manage`                                       |
 | `PresentationConfig`                                                    | `presentation:manage`                                   |
@@ -337,9 +345,9 @@ resources of that kind, so screens can lock file-managed resources for them:
 a document in the current format version: the content of its file in a
 [tenant folder](#tenant-folder-layout) or a bundle. Save it as
 `<directory>/<id>.json` (for the singletons `info.json`, `kms.json`,
-`registrar.json` and `issuance/issuance.json`) and, once its `${…}`
-placeholders are set, the next import plans it as `unchanged`. The singletons use their fixed IDs `tenant`, `kms`, `registrar`
-and `issuance`; the tenant's encryption key chain is not configuration and
+`key-chain-defaults.json`, `registrar.json` and `issuance/issuance.json`) and, once its `${…}`
+placeholders are set, the next import plans it as `unchanged`. The singletons use their fixed IDs `tenant`, `kms`, `defaults`,
+`registrar` and `issuance`; the tenant's encryption key chain is not configuration and
 answers `404`. The **Download configuration** buttons of the Web Client save
 this document as `<id>.json`, and the import of **Settings > Config
 Portability** accepts it in place of a bundle.
@@ -354,6 +362,4 @@ target instance. Unlike a bundle, a `KeyChain` document of a key held in the
 database keeps its private keys as `keySource: { "type": "private-jwk" }`,
 for an internal chain with the signing key in `activeJwk`, so its import
 restores the same keys. A `KeyChain` document therefore needs `tenant:admin` or
-`tenants:manage`; the other kinds also accept the roles in the table above,
-except `keys:manage` for the `Tenant` document, which also holds the session
-and status list settings.
+`tenants:manage`; the other kinds also accept the roles in the table above.

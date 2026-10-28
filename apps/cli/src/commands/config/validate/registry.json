@@ -13,6 +13,17 @@
     },
     {
         "kind": "file",
+        "file": "key-chain-defaults.json",
+        "resourceType": "key chain defaults",
+        "schemaFile": "KeyChainDefaultsConfigFile.schema.json",
+        "required": false,
+        "fileMatch": [
+            "/assets/config/*/key-chain-defaults.json",
+            "/apps/backend/test/fixtures/*/key-chain-defaults.json"
+        ]
+    },
+    {
+        "kind": "file",
         "file": "registrar.json",
         "resourceType": "registrar config",
         "schemaFile": "RegistrarConfigFile.schema.json",
