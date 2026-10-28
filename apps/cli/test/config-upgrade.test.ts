@@ -438,7 +438,9 @@ describe("config upgrade", () => {
             await mkdir(source, { recursive: true });
             await writeFile(
                 join(source, "info.json"),
-                JSON.stringify("spec" in file ? file : { name: "Example", ...file }),
+                JSON.stringify(
+                    "spec" in file ? file : { name: "Example", ...file },
+                ),
             );
 
             expect(await runCli(["config", "upgrade", source], context)).toBe(

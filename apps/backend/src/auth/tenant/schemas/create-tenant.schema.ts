@@ -38,8 +38,7 @@ export const ImportTenantSchema = CreateTenantSchema.pick({
     description: true,
     sessionConfig: true,
     statusListConfig: true,
-})
-    .describe("Payload used when importing tenant metadata from config files.");
+}).describe("Payload used when importing tenant metadata from config files.");
 
 const TenantConfigMetadataSchema = z
     .object({
