@@ -116,6 +116,16 @@ test('saves edited claim constraints and keeps untouched ones', async ({ page, r
     await page.getByRole('button', { name: 'Save Configuration' }).click();
     await expect(page).toHaveURL(new RegExp(`/credential-config/${id}$`));
 
+    // The show page lists each field's constraints, edited and untouched alike.
+    await page.getByRole('tab', { name: /Claims & Disclosure/ }).click();
+    const matrix = page.locator('.claims-matrix');
+    await expect(matrix.locator('.claims-matrix-row', { hasText: 'birthdate' })).toContainText(
+      '"pattern": "^\\\\d{4}-\\\\d{2}-\\\\d{2}$"'
+    );
+    await expect(matrix.locator('.claims-matrix-row', { hasText: 'nationalities' })).toContainText(
+      '"items"'
+    );
+
     const response = await request.get(`${url}/${id}`, { headers });
     expect(response.ok(), `GET ${id}`).toBe(true);
     const fields = ((await response.json()) as { fields: ClaimFieldDefinitionDto[] }).fields;

@@ -13,7 +13,12 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
-import { CredentialConfig, deriveRuntimeArtifacts } from '@eudiplo/sdk-core';
+import {
+  type ClaimFieldDefinition,
+  CredentialConfig,
+  deriveRuntimeArtifacts,
+  flattenFields,
+} from '@eudiplo/sdk-core';
 import { CredentialConfigService } from '../credential-config.service';
 import { StatusListManagementService } from '../../../status-list-management/status-list-management.service';
 import { ConfigDocumentService } from '../../../config-portability/config-document.service';
@@ -32,6 +37,8 @@ interface ClaimFieldRow {
   mandatory: boolean | null;
   typeLabel: string | null;
   displayLabels: string[];
+  /** JSON Schema keywords the field adds on top of its type; only fields define them. */
+  constraints?: Record<string, unknown>;
 }
 
 interface SchemaPathInfo {
@@ -132,6 +139,17 @@ export class CredentialConfigShowComponent implements OnInit {
     return Array.isArray(value) ? (value as Record<string, unknown>[]) : [];
   }
 
+  /**
+   * Every field, nested children included, with child paths resolved to full
+   * claim paths. Unlike the derived claims metadata, each entry keeps the
+   * field's type, default value and constraints.
+   */
+  private get flattenedFields(): ClaimFieldDefinition[] {
+    return flattenFields(this.fields as unknown as ClaimFieldDefinition[]).filter(
+      (field) => Array.isArray(field.path) && field.path.length > 0
+    );
+  }
+
   get runtimeArtifacts(): {
     claims: Record<string, unknown>;
     disclosureFrame?: Record<string, unknown>;
@@ -142,9 +160,14 @@ export class CredentialConfigShowComponent implements OnInit {
     return deriveRuntimeArtifacts(this.fields as any) as any;
   }
 
+  /**
+   * Entries of the Claims Metadata card: the flattened field definitions when
+   * the configuration has `fields` (so type, default value and constraints
+   * show), otherwise the configured `claimsMetadata`.
+   */
   get claimsMetadataEntries(): Record<string, unknown>[] {
     if (this.fields.length > 0) {
-      return this.runtimeArtifacts.claimsMetadata;
+      return this.flattenedFields as unknown as Record<string, unknown>[];
     }
 
     const value = (this.config?.config as any)?.claimsMetadata;
@@ -302,6 +325,14 @@ export class CredentialConfigShowComponent implements OnInit {
     }
   }
 
+  /** The claim's JSON Schema constraints, or null when it defines none. */
+  constraintsOf(claim: object): Record<string, unknown> | null {
+    const value = (claim as Record<string, unknown>)['constraints'];
+    return value && typeof value === 'object' && Object.keys(value).length > 0
+      ? (value as Record<string, unknown>)
+      : null;
+  }
+
   getObjectKeys(obj: any): string[] {
     return obj ? Object.keys(obj) : [];
   }
@@ -322,39 +353,24 @@ export class CredentialConfigShowComponent implements OnInit {
     }
 
     if (this.fields.length > 0) {
-      return this.fields
-        .filter((field) => Array.isArray(field['path']) && field['path'].length > 0)
+      return this.flattenedFields
         .map((field) => {
-          const path = field['path'] as (string | number | null)[];
-          const key = this.pathToKey(path);
           const hasDefaultValue = Object.prototype.hasOwnProperty.call(field, 'defaultValue');
-          const display = Array.isArray(field['display'])
-            ? (field['display'] as Record<string, unknown>[])
-            : [];
-
           return {
-            key,
+            key: this.pathToKey(field.path),
             hasDefaultValue,
-            defaultValue: hasDefaultValue ? field['defaultValue'] : undefined,
+            defaultValue: hasDefaultValue ? field.defaultValue : undefined,
             disclosableLabel: this.isMdocFormat
               ? 'N/A'
-              : field['disclosable'] === true
+              : field.disclosable === true
                 ? 'Yes'
-                : field['disclosable'] === false
+                : field.disclosable === false
                   ? 'No'
                   : 'Not configured',
-            mandatory:
-              typeof field['mandatory'] === 'boolean' ? (field['mandatory'] as boolean) : null,
-            typeLabel: typeof field['type'] === 'string' ? (field['type'] as string) : null,
-            displayLabels: display
-              .map((entry) => {
-                const lang =
-                  typeof entry['lang'] === 'string' ? (entry['lang'] as string) : 'default';
-                const label =
-                  typeof entry['label'] === 'string' ? (entry['label'] as string) : null;
-                return label ? `${lang}: ${label}` : null;
-              })
-              .filter((value): value is string => value !== null),
+            mandatory: typeof field.mandatory === 'boolean' ? field.mandatory : null,
+            typeLabel: typeof field.type === 'string' ? field.type : null,
+            displayLabels: this.getDisplayLabels(field.display),
+            constraints: this.constraintsOf(field) ?? undefined,
           } as ClaimFieldRow;
         })
         .sort((a, b) => a.key.localeCompare(b.key));
@@ -726,10 +742,15 @@ export class CredentialConfigShowComponent implements OnInit {
     return [{ path, value }];
   }
 
-  private pathToKey(path: (string | number | null)[]): string {
+  /** A claim path as the card heading shows it, with `*` for array items like the matrix. */
+  claimPathLabel(path: unknown): string {
+    return Array.isArray(path) ? this.pathToKey(path, ' > ') : '';
+  }
+
+  private pathToKey(path: (string | number | null)[], separator = '.'): string {
     return path
       .map((segment) => (segment === null || typeof segment === 'number' ? '*' : String(segment)))
-      .join('.');
+      .join(separator);
   }
 
   private isRowComplete(row: ClaimFieldRow): boolean {
