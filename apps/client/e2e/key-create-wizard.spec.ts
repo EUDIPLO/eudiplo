@@ -107,6 +107,22 @@ test.describe('key creation wizard imports', () => {
     expect(stored.rotationPolicy.enabled).toBe(false);
   });
 
+  test('imports a status list External CA Chain with rotation', async ({ page, request }) => {
+    const description = `E2E status list CA ${suffix}`;
+    await configure(page, ['Status List Signing', 'External CA Chain'], description);
+    await fillKeyAndCertificate(page, caKey, caCertificate);
+    await expect(page.getByRole('switch', { name: 'Enable automatic key rotation' })).toBeChecked();
+
+    const { body, id } = await submitImport(page, 'Import CA & Create Chain');
+    expect(body).toMatchObject({ usageType: 'statusList', type: 'internalChain' });
+    expect(body.rotationPolicy).toMatchObject({ enabled: true });
+    await expect(page.getByRole('heading', { name: `Key Chain: ${description}` })).toBeVisible();
+
+    const stored = await keyChain(request, id);
+    expect(stored).toMatchObject({ usageType: 'statusList', type: 'internalChain' });
+    expect(stored.rotationPolicy.enabled).toBe(true);
+  });
+
   test('refuses an External CA Chain whose certificate is not a CA', async ({ page }) => {
     await configure(
       page,
@@ -181,5 +197,44 @@ test.describe('key creation wizard signing algorithm', () => {
     const stored = await keyChain(request, id);
     expect(stored.alg).toBe('ES384');
     expect(stored.activePublicKey.crv).toBe('P-384');
+  });
+});
+
+test.describe('key creation wizard status list keys', () => {
+  const created: string[] = [];
+
+  test.beforeEach(() => {
+    test.skip(
+      !hasAuthCredentials,
+      'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+    );
+  });
+
+  test.afterAll(async ({ request }) => {
+    for (const id of created) await deleteKeyChain(request, id);
+  });
+
+  test('creates a rotating status list key chain', async ({ page, request }) => {
+    const description = `E2E status list ${randomBytes(4).toString('hex')}`;
+    await configure(page, ['Status List Signing', 'Create Key Chain (Recommended)'], description);
+
+    await expect(page.getByRole('switch', { name: 'Enable automatic key rotation' })).toBeChecked();
+    await page.getByRole('spinbutton', { name: 'Rotation Interval (days)' }).fill('20');
+    await expect(page.locator('.summary-card')).toContainText(/Rotation Interval:\s*20 days/);
+
+    const answered = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/key-chain') && response.request().method() === 'POST'
+    );
+    await page.getByRole('button', { name: 'Create Key Chain' }).click();
+    const response = await answered;
+    expect(response.ok(), `POST /api/key-chain: ${await response.text()}`).toBe(true);
+    const { id } = (await response.json()) as { id: string };
+    created.push(id);
+
+    await expect(page.getByRole('heading', { name: `Key Chain: ${description}` })).toBeVisible();
+    const stored = await keyChain(request, id);
+    expect(stored).toMatchObject({ usageType: 'statusList', type: 'internalChain' });
+    expect(stored.rotationPolicy).toMatchObject({ enabled: true, intervalDays: 20 });
   });
 });
