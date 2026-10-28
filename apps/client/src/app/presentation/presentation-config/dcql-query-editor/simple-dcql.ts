@@ -25,6 +25,7 @@ export interface SimpleCredentialQuery {
   id: string;
   format: 'dc+sd-jwt' | 'mso_mdoc';
   type: string;
+  /** Empty means `claims` is omitted: only the credential itself is requested (OID4VP 1.0 §6.1). */
   claims: ClaimQuery[];
   trustedAuthorities?: TrustedAuthority[];
 }
@@ -105,7 +106,9 @@ export function readSimpleDcql(value: unknown): SimpleDcql | null {
       !onlyKeys(credential, ['id', 'format', 'meta', 'claims', 'trusted_authorities']) ||
       typeof credential['id'] !== 'string' ||
       !record(credential['meta']) ||
-      !Array.isArray(credential['claims'])
+      // An empty array stays in JSON, where dcqlReferenceError flags it.
+      (credential['claims'] !== undefined &&
+        (!Array.isArray(credential['claims']) || !credential['claims'].length))
     )
       return null;
     const format = credential['format'];
@@ -125,8 +128,9 @@ export function readSimpleDcql(value: unknown): SimpleDcql | null {
         return null;
       type = meta['doctype_value'];
     } else return null;
+    const claims: any[] = credential['claims'] ?? [];
     if (
-      !credential['claims'].every(
+      !claims.every(
         (claim) =>
           record(claim) &&
           onlyKeys(
@@ -159,7 +163,7 @@ export function readSimpleDcql(value: unknown): SimpleDcql | null {
       id: credential['id'],
       format,
       type,
-      claims: structuredClone(credential['claims']),
+      claims: structuredClone(claims),
       ...(credential['trusted_authorities'] !== undefined
         ? { trustedAuthorities: structuredClone(credential['trusted_authorities']) }
         : {}),
@@ -182,7 +186,8 @@ export function buildSimpleDcql(query: SimpleDcql): object {
         credential.format === 'dc+sd-jwt'
           ? { vct_values: [credential.type] }
           : { doctype_value: credential.type },
-      claims: structuredClone(credential.claims),
+      // DCQL requires a non-empty `claims` array when present.
+      ...(credential.claims.length ? { claims: structuredClone(credential.claims) } : {}),
       ...(credential.trustedAuthorities !== undefined
         ? { trusted_authorities: structuredClone(credential.trustedAuthorities) }
         : {}),
@@ -193,10 +198,38 @@ export function buildSimpleDcql(query: SimpleDcql): object {
   };
 }
 
-/** Check references in both visual and JSON modes, independently of mounted controls. */
+/** The ID of the first credential with `claims: []`, which OID4VP 1.0 §6.1 forbids. */
+function emptyClaimsCredentialId(value: unknown): string | undefined {
+  const query = parseDcql(value);
+  if (!record(query) || !Array.isArray(query['credentials'])) return undefined;
+  return query['credentials'].find(
+    (credential) => Array.isArray(credential?.claims) && !credential.claims.length
+  )?.id;
+}
+
+/** Whether `claims: []` is the only reason the visual builder cannot open the query. */
+export function onlyEmptyClaimsUnsupported(value: unknown): boolean {
+  const query = parseDcql(value);
+  if (emptyClaimsCredentialId(query) === undefined || !record(query)) return false;
+  return (
+    readSimpleDcql({
+      ...query,
+      credentials: query['credentials'].map((credential: unknown) => {
+        if (!record(credential) || !Array.isArray(credential['claims'])) return credential;
+        if (credential['claims'].length) return credential;
+        return Object.fromEntries(Object.entries(credential).filter(([key]) => key !== 'claims'));
+      }),
+    }) !== null
+  );
+}
+
+/** Check references and empty claim lists in both visual and JSON modes, independently of mounted controls. */
 export function dcqlReferenceError(value: unknown): string | null {
   const query = parseDcql(value);
   if (!record(query) || !Array.isArray(query['credentials'])) return null;
+  const emptyClaims = emptyClaimsCredentialId(query);
+  if (emptyClaims !== undefined)
+    return `Credential "${emptyClaims}" has an empty claims list. Remove "claims" to request no claims.`;
   const ids = query['credentials'].map((credential) => credential?.id);
   if (new Set(ids).size !== ids.length) return 'Each credential needs a unique query ID.';
   if (!Array.isArray(query['credential_sets'])) return null;
@@ -270,7 +303,6 @@ export function simpleDcqlError(query: SimpleDcql): string | null {
     if (!identifier.test(credential.id))
       return 'Use letters, numbers, underscores or hyphens for the query ID.';
     if (!credential.type.trim()) return 'Enter the credential type.';
-    if (!credential.claims.length) return 'Add at least one claim.';
     const seenClaims = new Set<string>();
     for (const claim of credential.claims) {
       const error = claimError(claim, credential.format);

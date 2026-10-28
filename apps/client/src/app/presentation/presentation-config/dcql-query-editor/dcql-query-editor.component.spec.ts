@@ -69,6 +69,19 @@ describe('DCQL editor shared form state', () => {
     component.ngOnDestroy();
   });
 
+  it('accepts a credential query without claims and omits the claims array', () => {
+    const component = editor(query);
+    component.removeClaim(component.credentials[0], 0);
+    expect(component.control.valid).toBe(true);
+    expect(component.control.value.credentials[0]).not.toHaveProperty('claims');
+    const { id, format, meta } = query.credentials[0];
+    component.control.setValue({ credentials: [{ id, format, meta }] });
+    expect(component.jsonMode).toBe(false);
+    expect(component.credentials[0].claims).toEqual([]);
+    expect(component.control.valid).toBe(true);
+    component.ngOnDestroy();
+  });
+
   it('keeps schema validation when the visual editor is destroyed', () => {
     const component = editor(query);
     component.ngOnDestroy();

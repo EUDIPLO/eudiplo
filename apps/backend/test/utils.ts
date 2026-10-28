@@ -85,6 +85,13 @@ export async function prepareMdocPresentation(
             uri: string;
         };
     },
+    /** Elements the wallet discloses; `[]` presents the credential only. */
+    disclosedElements = [
+        "given_name",
+        "family_name",
+        "first_name",
+        "last_name",
+    ],
 ) {
     // Use the EU PID docType and namespace to match the pid-de fixture
     const docType = "eu.europa.ec.eudi.pid.1";
@@ -129,14 +136,13 @@ export async function prepareMdocPresentation(
             DocRequest.create({
                 itemsRequest: ItemsRequest.create({
                     docType: docType,
-                    namespaces: {
-                        [namespace]: {
-                            given_name: true,
-                            family_name: true,
-                            first_name: true,
-                            last_name: true,
-                        },
-                    },
+                    namespaces: disclosedElements.length
+                        ? {
+                              [namespace]: Object.fromEntries(
+                                  disclosedElements.map((name) => [name, true]),
+                              ),
+                          }
+                        : {},
                 }),
             }),
         ],

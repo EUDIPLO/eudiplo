@@ -443,22 +443,28 @@ export class PresentationCreateComponent implements OnInit {
           : typeof credential.meta?.doctype_value === 'string'
             ? credential.meta.doctype_value
             : '',
-        claims: Array.isArray(credential.claims)
-          ? credential.claims.map((claim: any) =>
-              Array.isArray(claim?.path)
-                ? claim.path
-                    .map((part: unknown) => (typeof part === 'number' ? `[${part}]` : String(part)))
-                    .join(' › ') +
-                  (Array.isArray(claim.values)
-                    ? ` — allowed values: ${claim.values.map((value: unknown) => JSON.stringify(value)).join(', ')}`
-                    : '') +
-                  (typeof claim.intent_to_retain === 'boolean'
-                    ? ` — retain: ${claim.intent_to_retain ? 'yes' : 'no'}`
-                    : '')
-                : 'Invalid claim path'
-            )
-          : [],
+        claims: this.claimsSummary(credential.claims),
       }));
+  }
+
+  /** Omitted claims summarise as none requested; `[]` and non-arrays are invalid. */
+  private claimsSummary(claims: unknown): string[] {
+    if (claims === undefined) return [];
+    if (!Array.isArray(claims)) return ['Invalid claims list'];
+    if (!claims.length) return ['Empty claims list: remove "claims" to request no claims'];
+    return claims.map((claim: any) =>
+      Array.isArray(claim?.path)
+        ? claim.path
+            .map((part: unknown) => (typeof part === 'number' ? `[${part}]` : String(part)))
+            .join(' › ') +
+          (Array.isArray(claim.values)
+            ? ` — allowed values: ${claim.values.map((value: unknown) => JSON.stringify(value)).join(', ')}`
+            : '') +
+          (typeof claim.intent_to_retain === 'boolean'
+            ? ` — retain: ${claim.intent_to_retain ? 'yes' : 'no'}`
+            : '')
+        : 'Invalid claim path'
+    );
   }
 
   get credentialRequirements(): { required: boolean; options: string[] }[] | null {

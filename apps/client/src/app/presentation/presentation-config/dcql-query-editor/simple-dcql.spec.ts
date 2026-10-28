@@ -5,6 +5,7 @@ import {
   simpleDcqlError,
   dcqlReferenceError,
   trustError,
+  onlyEmptyClaimsUnsupported,
 } from './simple-dcql';
 
 const credential = {
@@ -38,6 +39,14 @@ describe('visual DCQL round trips', () => {
           ...credential,
           claims: [{ id: 'name', path: ['given_name'], values: ['', ' Erika ', 'Erika'] }],
         },
+      ],
+    },
+    'omitted claims (credential only)': {
+      credentials: [{ id: 'pid', format: credential.format, meta: credential.meta }],
+    },
+    'omitted mDOC claims': {
+      credentials: [
+        { id: 'mdl', format: 'mso_mdoc', meta: { doctype_value: 'org.iso.18013.5.1.mDL' } },
       ],
     },
     'mDOC namespaces and retention false': {
@@ -102,7 +111,7 @@ describe('visual DCQL round trips', () => {
       expect(buildSimpleDcql(draft)).toEqual(query);
       draft.credentials[0].type = 'urn:changed';
       expect((buildSimpleDcql(draft) as any).credentials[0].claims).toEqual(
-        query.credentials[0].claims
+        (query.credentials[0] as { claims?: unknown }).claims
       );
       expect(JSON.stringify(query)).toBe(original);
     });
@@ -111,9 +120,7 @@ describe('visual DCQL round trips', () => {
     'multiple matches': { credentials: [{ ...credential, multiple: true }] },
     'claim alternatives': { credentials: [{ ...credential, claim_sets: [['name']] }] },
     'multiple types': { credentials: [{ ...credential, meta: { vct_values: ['one', 'two'] } }] },
-    'omitted claims': {
-      credentials: [{ id: 'pid', format: credential.format, meta: credential.meta }],
-    },
+    'claims that are not an array': { credentials: [{ ...credential, claims: {} }] },
     'unsupported authority': {
       credentials: [{ ...credential, trusted_authorities: [{ type: 'aki', values: ['id'] }] }],
     },
@@ -134,12 +141,26 @@ describe('visual DCQL round trips', () => {
     for (const value of ['{', 'null', '[]', '{}', { credentials: [null] }])
       expect(readSimpleDcql(value)).toBeNull();
   });
-  it('flags duplicate IDs, empty claims, empty alternatives and dangling references', () => {
+  it('omits claims instead of sending an empty array', () => {
+    const draft = readSimpleDcql({ credentials: [credential] })!;
+    draft.credentials[0].claims = [];
+    expect(simpleDcqlError(draft)).toBeNull();
+    expect((buildSimpleDcql(draft) as any).credentials[0]).not.toHaveProperty('claims');
+  });
+  it('keeps an empty claims list in JSON and flags it', () => {
+    const query = { credentials: [{ ...credential, claims: [] }] };
+    expect(readSimpleDcql(query)).toBeNull();
+    expect(dcqlReferenceError(query)).toContain('Remove "claims" to request no claims');
+    expect(dcqlReferenceError({ credentials: [credential] })).toBeNull();
+    expect(onlyEmptyClaimsUnsupported(query)).toBe(true);
+    expect(
+      onlyEmptyClaimsUnsupported({ credentials: [{ ...credential, claims: [], multiple: true }] })
+    ).toBe(false);
+    expect(onlyEmptyClaimsUnsupported({ credentials: [credential] })).toBe(false);
+  });
+  it('flags duplicate IDs, empty alternatives and dangling references', () => {
     const draft = readSimpleDcql({ credentials: [credential] })!;
     expect(simpleDcqlError(draft)).toBeNull();
-    expect(simpleDcqlError({ credentials: [{ ...draft.credentials[0], claims: [] }] })).toContain(
-      'at least one claim'
-    );
     expect(
       simpleDcqlError({ credentials: [...draft.credentials, ...draft.credentials] })
     ).toContain('unique query ID');

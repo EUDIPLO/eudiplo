@@ -226,7 +226,12 @@
                               }
                             </div>
                           }
-                          @if (cred.claims) {
+                          @if (cred.claims?.length === 0) {
+                            <p>
+                              Empty claims list. Edit the configuration and remove "claims" to
+                              request no claims.
+                            </p>
+                          } @else if (cred.claims) {
                             <mat-expansion-panel class="claims-panel">
                               <mat-expansion-panel-header>
                                 <mat-panel-title>
@@ -236,6 +241,8 @@
                               </mat-expansion-panel-header>
                               <pre class="config-value">{{ formatJsonValue(cred.claims) }}</pre>
                             </mat-expansion-panel>
+                          } @else {
+                            <p>No claims requested: only proves a valid credential of this type.</p>
                           }
                           @if (cred.trusted_authorities && cred.trusted_authorities.length > 0) {
                             <div class="trusted-authorities">
