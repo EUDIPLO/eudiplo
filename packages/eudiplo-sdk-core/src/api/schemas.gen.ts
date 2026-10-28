@@ -295,18 +295,6 @@ export const ImportTenantDtoSchema = {
                 }
             },
             additionalProperties: false
-        },
-        defaultKeyChains: {
-            type: 'object',
-            properties: {
-                access: {
-                    description: 'ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant\'s access key chains by rule.',
-                    type: 'string',
-                    minLength: 1
-                }
-            },
-            additionalProperties: false,
-            description: 'The tenant\'s key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule.'
         }
     },
     description: 'Payload used when importing tenant metadata from config files.',
@@ -831,26 +819,6 @@ export const UpdateTenantDtoSchema = {
                 }
             },
             additionalProperties: false
-        },
-        defaultKeyChains: {
-            description: 'The tenant\'s key chain per usage type, used where no configuration names one. Replaces the stored entries; omit to keep them, or set to null to remove them.',
-            anyOf: [
-                {
-                    type: 'object',
-                    properties: {
-                        access: {
-                            description: 'ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant\'s access key chains by rule.',
-                            type: 'string',
-                            minLength: 1
-                        }
-                    },
-                    additionalProperties: false,
-                    description: 'The tenant\'s key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule.'
-                },
-                {
-                    type: 'null'
-                }
-            ]
         }
     },
     description: 'Payload for partially updating tenant metadata.',
@@ -3661,7 +3629,7 @@ export const KeyChainReferenceDtoSchema = {
     properties: {
         kind: {
             enum: [
-                'Tenant',
+                'KeyChainDefaults',
                 'IssuanceConfig',
                 'CredentialConfig',
                 'PresentationConfig',
@@ -3673,7 +3641,7 @@ export const KeyChainReferenceDtoSchema = {
         },
         id: {
             type: 'string',
-            description: 'ID of the configuration. Absent for the tenant\'s default key chains and the issuance configuration, of which a tenant has one each, and for configurations the caller may not read.'
+            description: 'ID of the configuration. Absent for the key chain defaults and the issuance configuration, of which a tenant has one each, and for configurations the caller may not read.'
         },
         description: {
             type: 'string',
@@ -13631,6 +13599,7 @@ export const ConfigResourceMetadataEntitySchema = {
                 'Client',
                 'KmsConfig',
                 'KeyChain',
+                'KeyChainDefaults',
                 'RegistrarConfig',
                 'IssuanceConfig',
                 'CredentialConfig',
@@ -13696,6 +13665,7 @@ export const ConfigResourceOwnershipDtoSchema = {
                 'Client',
                 'KmsConfig',
                 'KeyChain',
+                'KeyChainDefaults',
                 'RegistrarConfig',
                 'IssuanceConfig',
                 'CredentialConfig',

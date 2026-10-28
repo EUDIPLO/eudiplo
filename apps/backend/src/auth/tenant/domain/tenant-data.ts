@@ -46,17 +46,3 @@ export class TenantNotFound extends NotFoundError {
         this.name = "TenantNotFound";
     }
 }
-
-/**
- * The tenant fields a configuration document writes. A document without
- * `defaultKeyChains` removes them, so the tenant picks its key chains by rule
- * again; the other omitted fields keep their stored value.
- */
-export function tenantDocumentUpdate<
-    T extends { defaultKeyChains?: DefaultKeyChains | null },
->(spec: T): T & { defaultKeyChains: DefaultKeyChains | null } {
-    return {
-        ...spec,
-        defaultKeyChains: defaultKeyChainsOrNull(spec.defaultKeyChains),
-    };
-}

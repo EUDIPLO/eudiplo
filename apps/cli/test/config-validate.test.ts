@@ -149,6 +149,33 @@ describe("eudiplo config validate tenant(s)", () => {
         expect(output.stdout).toContain("registrar.json");
     });
 
+    it.each([
+        [{ access: "registrar-access" }, 0],
+        [{ access: "" }, 1],
+        [{ signing: "sign" }, 1],
+    ])(
+        "validates the optional key chain defaults file %j",
+        async (spec, expected) => {
+            const { context, output, cwd } = await createContext();
+            const tenantDir = join(cwd, "root");
+            await writeTenantInfo(tenantDir, { name: "Root Tenant" });
+            await writeFile(
+                join(tenantDir, "key-chain-defaults.json"),
+                JSON.stringify(spec),
+                "utf8",
+            );
+
+            const code = await runCli(
+                ["config", "validate", "tenant", tenantDir],
+                context,
+            );
+
+            expect(code).toBe(expected);
+            if (expected)
+                expect(output.stdout).toContain("key-chain-defaults.json");
+        },
+    );
+
     it("ignores unknown directories that the backend does not import", async () => {
         const { context, output, cwd } = await createContext();
         const tenantDir = join(cwd, "root");

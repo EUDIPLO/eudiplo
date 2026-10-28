@@ -54,6 +54,24 @@ export const webhookSchema = new SchemaValidation(webhookSchemaObj);
 export const credentialConfigSchema = new SchemaValidation(credentialConfigSchemaObj);
 export const issuanceConfigSchema = new SchemaValidation(issuanceConfigSchemaObj);
 
+/**
+ * The `constraints` of one claim field, cut out of the credential configuration schema so the
+ * form accepts the keys the published schema accepts. The shared `$defs` resolve its references.
+ */
+const credentialConfigDefs: Record<string, any> = (credentialConfigSchemaObj as any).$defs ?? {};
+const claimFieldSchema = Object.values(credentialConfigDefs).find(
+  (definition) => definition?.properties?.constraints
+);
+if (!claimFieldSchema) {
+  throw new Error('CredentialConfigCreate.schema.json has no claim field with constraints');
+}
+export const claimConstraintsSchema = new SchemaValidation({
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  $id: 'https://raw.githubusercontent.com/EUDIPLO/eudiplo/refs/heads/main/schemas/ClaimConstraints.schema.json',
+  ...claimFieldSchema.properties.constraints,
+  $defs: credentialConfigDefs,
+});
+
 export const presentationConfigSchema = new SchemaValidation(presnetationConfigCreateSchemaObj);
 
 export const DCQLSchema = new SchemaValidation(DCQLObj);

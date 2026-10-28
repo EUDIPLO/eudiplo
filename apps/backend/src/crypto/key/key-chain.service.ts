@@ -511,8 +511,8 @@ export class KeyChainService {
     }
 
     /**
-     * The access key chain used where none is named: the tenant's
-     * `defaultKeyChains.access`, else the one chosen by
+     * The access key chain used where none is named: `access` of the
+     * tenant's key chain defaults, else the one chosen by
      * {@link pickDefaultAccessKeyChain}. A named key chain that is gone or
      * has another usage type fails instead of falling back, so all requests
      * keep the certificate the tenant chose.
@@ -527,7 +527,7 @@ export class KeyChainService {
         if (!keyChain) {
             // Wallets see this error, so only the log names the key chain.
             this.logger.warn(
-                `[${tenantId}] The default access key chain ${JSON.stringify(configured)} does not exist or has no usage type "access". Set defaultKeyChains.access to an access key chain or remove it.`,
+                `[${tenantId}] The default access key chain ${JSON.stringify(configured)} does not exist or has no usage type "access". Set the default access key chain (PUT /api/key-chain/access/default or key-chain-defaults.json) to an access key chain or remove it.`,
             );
             throw new NotFoundException(
                 "The tenant's default access key chain is not available.",

@@ -12,8 +12,8 @@ export interface AccessKeyChainCandidate {
 
 /**
  * Why a key chain of `usageType` cannot be the tenant's default key chain of
- * the usage type `entry` (a key of `defaultKeyChains`), or undefined when it
- * can.
+ * the usage type `entry` (a key of the key chain defaults), or undefined when
+ * it can.
  */
 export function defaultKeyChainUsageRefusal(
     entry: string,
@@ -22,7 +22,7 @@ export function defaultKeyChainUsageRefusal(
 ): string | undefined {
     return usageType === entry
         ? undefined
-        : `Key chain ${JSON.stringify(keyChainId)} has usage type ${JSON.stringify(usageType)}; defaultKeyChains.${entry} needs usage type ${JSON.stringify(entry)}.`;
+        : `Key chain ${JSON.stringify(keyChainId)} has usage type ${JSON.stringify(usageType)}; the default ${entry} key chain needs usage type ${JSON.stringify(entry)}.`;
 }
 
 /**

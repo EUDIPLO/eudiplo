@@ -23,6 +23,12 @@ const CONFIG_DOCUMENT_ROLES: Record<ConfigResourceKind, Role[]> = {
   Client: [...TENANT_ADMIN_ROLES, 'clients:manage'],
   KmsConfig: TENANT_ADMIN_ROLES,
   KeyChain: TENANT_ADMIN_ROLES,
+  KeyChainDefaults: [
+    ...TENANT_ADMIN_ROLES,
+    'issuance:manage',
+    'presentation:manage',
+    'keys:manage',
+  ],
   RegistrarConfig: [...TENANT_ADMIN_ROLES, 'registrar:manage'],
   IssuanceConfig: [...TENANT_ADMIN_ROLES, 'issuance:manage'],
   CredentialConfig: [...TENANT_ADMIN_ROLES, 'issuance:manage'],

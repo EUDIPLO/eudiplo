@@ -22,19 +22,20 @@ function namesKeyChain(
     );
 }
 
-/** The tenant, when one of its `defaultKeyChains` is the key chain. */
+/**
+ * The key chain defaults, stored on the tenant, when one of their entries is
+ * the key chain.
+ */
 export class TypeOrmTenantKeyChainReferences
     implements KeyChainReferenceSource
 {
-    readonly kind = "Tenant";
+    readonly kind = "KeyChainDefaults";
 
     constructor(private readonly repository: Repository<TenantEntity>) {}
 
+    /** `config` is the spec of a KeyChainDefaults document: the map itself. */
     namesKeyChain(config: unknown, keyChain: ReferencedKeyChain): boolean {
-        return namesKeyChain(
-            (config as Partial<TenantEntity> | null)?.defaultKeyChains,
-            keyChain,
-        );
+        return namesKeyChain(config as DefaultKeyChains | null, keyChain);
     }
 
     async findReferences(
@@ -45,7 +46,7 @@ export class TypeOrmTenantKeyChainReferences
             select: { id: true, defaultKeyChains: true },
         });
         return namesKeyChain(tenant?.defaultKeyChains, keyChain)
-            ? [{ kind: "Tenant" }]
+            ? [{ kind: "KeyChainDefaults" }]
             : [];
     }
 }

@@ -4,6 +4,7 @@ import { ConfigService } from "@nestjs/config";
 import type { z } from "zod";
 import { CreateClientSchema } from "../../auth/client/schemas/client.schema.js";
 import { UpdateTenantSchema } from "../../auth/tenant/schemas/create-tenant.schema.js";
+import { DefaultKeyChainsSchema } from "../../auth/tenant/schemas/key-chain-defaults.schema.js";
 import { KEY_CHAIN_TYPES } from "../../crypto/key/domain/key-chain-import-type.js";
 import { KeyChainImportSchema } from "../../crypto/key/schemas/key-chain.schema.js";
 import { KmsConfigSchema } from "../../crypto/key/schemas/kms-config.schema.js";
@@ -294,6 +295,8 @@ export class ConfigDocumentValidationService {
                     ? KeyChainImportSchema
                     : undefined;
             }
+            case "KeyChainDefaults":
+                return DefaultKeyChainsSchema;
             case "RegistrarConfig":
                 return CreateRegistrarConfigSchema;
             case "IssuanceConfig":

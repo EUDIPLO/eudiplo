@@ -744,11 +744,24 @@ describe('ConfigPortabilityComponent template for Reset to file', () => {
     expect(rows.some((text) => text.includes('bundle-detached'))).toBe(false);
   });
 
-  it('offers no Reset to file for tenant settings changed through the API', async () => {
+  it('offers no Reset to file for tenant settings or key chain defaults changed through the API', async () => {
     const element = (
-      await render([row('Tenant', 'tenant', 'unmanaged')] as unknown as ConfigResourceMetadata[])
+      await render([
+        row('Tenant', 'tenant', 'unmanaged'),
+        row('KeyChainDefaults', 'defaults', 'unmanaged'),
+      ] as unknown as ConfigResourceMetadata[])
     ).nativeElement as HTMLElement;
 
     expect(resetRows(element)).toEqual([]);
+  });
+
+  it('offers Reset to file for detached key chain defaults', async () => {
+    const element = (
+      await render([
+        row('KeyChainDefaults', 'defaults', 'detached', 'folder:/app/config/demo'),
+      ] as unknown as ConfigResourceMetadata[])
+    ).nativeElement as HTMLElement;
+
+    expect(resetRows(element)).toHaveLength(1);
   });
 });

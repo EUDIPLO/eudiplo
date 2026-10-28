@@ -20,7 +20,6 @@ import { ConfigBundleService } from "./config-bundle.service.js";
 import { ConfigBundleApplyService } from "./config-bundle-apply.service.js";
 import { ConfigMigrationService } from "./config-migration.service.js";
 import { ConfigResourceRegistry } from "./config-resource.registry.js";
-import { generatedSecretsOf } from "./generated-secrets.js";
 import type {
     ConfigBundle,
     ConfigBundleAsset,
@@ -30,6 +29,7 @@ import type {
     ConfigMigrationIssue,
     ConfigResourceKind,
 } from "./config-resource.types.js";
+import { generatedSecretsOf } from "./generated-secrets.js";
 
 type FolderResource =
     | { kind: ConfigResourceKind; file: string }
@@ -39,6 +39,7 @@ const FOLDER_RESOURCES: FolderResource[] = [
     { kind: "KmsConfig", file: "kms.json" },
     { kind: "Client", directory: "clients" },
     { kind: "KeyChain", directory: "key-chains" },
+    { kind: "KeyChainDefaults", file: "key-chain-defaults.json" },
     { kind: "RegistrarConfig", file: "registrar.json" },
     { kind: "AttributeProvider", directory: "attribute-providers" },
     { kind: "WebhookEndpoint", directory: "webhook-endpoints" },

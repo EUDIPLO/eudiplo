@@ -1,9 +1,9 @@
 import { createPrivateKey, type KeyObject, X509Certificate } from "node:crypto";
-import type { KeyChainEntity } from "../../crypto/key/entities/key-chain.entity.js";
 import {
     type ImportedKeyChainType,
     importedKeyChainType,
 } from "../../crypto/key/domain/key-chain-import-type.js";
+import type { KeyChainEntity } from "../../crypto/key/entities/key-chain.entity.js";
 import { importedRotationIntervals } from "../../crypto/key/key-chain-import-rotation.js";
 
 type Spec = Record<string, any>;

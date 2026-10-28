@@ -9,16 +9,6 @@ const RoleSchema = z.enum(
 
 const NonBlankStringSchema = z.string().trim().min(1);
 
-export const DefaultKeyChainsSchema = z
-    .strictObject({
-        access: NonBlankStringSchema.optional().describe(
-            "ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.",
-        ),
-    })
-    .describe(
-        "The tenant's key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule.",
-    );
-
 export const CreateTenantSchema = z
     .strictObject({
         id: NonBlankStringSchema.describe("Unique tenant identifier."),
@@ -48,12 +38,7 @@ export const ImportTenantSchema = CreateTenantSchema.pick({
     description: true,
     sessionConfig: true,
     statusListConfig: true,
-})
-    .extend({
-        // Key chains are imported after the tenant, so only a file names them.
-        defaultKeyChains: DefaultKeyChainsSchema.optional(),
-    })
-    .describe("Payload used when importing tenant metadata from config files.");
+}).describe("Payload used when importing tenant metadata from config files.");
 
 const TenantConfigMetadataSchema = z
     .object({
@@ -65,7 +50,7 @@ const TenantConfigMetadataSchema = z
 export const TenantConfigFileSchema = z.union([
     z.strictObject({
         $schema: z.literal(
-            "https://eudiplo.dev/schemas/v3/TenantConfigFile.schema.json",
+            "https://eudiplo.dev/schemas/v4/TenantConfigFile.schema.json",
         ),
         metadata: TenantConfigMetadataSchema,
         spec: ImportTenantSchema,
@@ -89,11 +74,6 @@ export const UpdateTenantSchema = z
         statusListConfig: StatusListConfigSchema.optional().describe(
             "Optional tenant-specific status list defaults.",
         ),
-        defaultKeyChains: DefaultKeyChainsSchema.nullable()
-            .optional()
-            .describe(
-                "The tenant's key chain per usage type, used where no configuration names one. Replaces the stored entries; omit to keep them, or set to null to remove them.",
-            ),
     })
     .describe("Payload for partially updating tenant metadata.");
 

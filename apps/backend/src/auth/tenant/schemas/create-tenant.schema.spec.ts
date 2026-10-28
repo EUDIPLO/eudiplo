@@ -2,9 +2,9 @@ import { describe, expect, test } from "vitest";
 import { DEFAULT_KEY_CHAIN_ENTRIES } from "../domain/tenant-data.js";
 import {
     CreateTenantSchema,
-    DefaultKeyChainsSchema,
     UpdateTenantSchema,
 } from "./create-tenant.schema.js";
+import { DefaultKeyChainsSchema } from "./key-chain-defaults.schema.js";
 
 describe("tenant request schemas", () => {
     test("allows create without a description", () => {
@@ -72,13 +72,17 @@ describe("tenant request schemas", () => {
 
     test("accepts only known usage types as default key chains", () => {
         expect(
-            UpdateTenantSchema.safeParse({
-                defaultKeyChains: { access: "registrar" },
-            }).success,
+            DefaultKeyChainsSchema.safeParse({ access: "registrar" }).success,
         ).toBe(true);
         expect(
+            DefaultKeyChainsSchema.safeParse({ attestation: "pid" }).success,
+        ).toBe(false);
+    });
+
+    test("leaves the default key chains out of the tenant settings", () => {
+        expect(
             UpdateTenantSchema.safeParse({
-                defaultKeyChains: { attestation: "pid" },
+                defaultKeyChains: { access: "registrar" },
             }).success,
         ).toBe(false);
     });

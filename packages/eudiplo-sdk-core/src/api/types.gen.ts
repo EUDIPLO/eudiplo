@@ -162,15 +162,6 @@ export type ImportTenantDto = {
          */
         enableAggregation?: boolean;
     };
-    /**
-     * The tenant's key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule.
-     */
-    defaultKeyChains?: {
-        /**
-         * ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.
-         */
-        access?: string;
-    };
 };
 
 export type SessionStorageConfig = {
@@ -432,15 +423,6 @@ export type UpdateTenantDto = {
          */
         enableAggregation?: boolean;
     };
-    /**
-     * The tenant's key chain per usage type, used where no configuration names one. Replaces the stored entries; omit to keep them, or set to null to remove them.
-     */
-    defaultKeyChains?: {
-        /**
-         * ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.
-         */
-        access?: string;
-    } | null;
 };
 
 export type DefaultAccessKeyChainDto = {
@@ -1596,9 +1578,9 @@ export type KeyChainReferenceDto = {
     /**
      * Kind of configuration that names the key chain.
      */
-    kind: 'Tenant' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'StatusList' | 'TrustList';
+    kind: 'KeyChainDefaults' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'StatusList' | 'TrustList';
     /**
-     * ID of the configuration. Absent for the tenant's default key chains and the issuance configuration, of which a tenant has one each, and for configurations the caller may not read.
+     * ID of the configuration. Absent for the key chain defaults and the issuance configuration, of which a tenant has one each, and for configurations the caller may not read.
      */
     id?: string;
     /**
@@ -6443,7 +6425,7 @@ export type ConfigImportRunEntity = {
 
 export type ConfigResourceMetadataEntity = {
     tenantId: string;
-    kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
+    kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
     resourceId: string;
     ownership: 'unmanaged' | 'file-managed' | 'detached';
     generation: number;
@@ -6458,7 +6440,7 @@ export type ConfigResourceOwnershipDto = {
     /**
      * Resource kind, as in the config bundle format
      */
-    kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
+    kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
     /**
      * Resource ID, or the singleton ID such as `issuance`
      */
@@ -9460,7 +9442,7 @@ export type ConfigPortabilityControllerResourcesResponse = ConfigPortabilityCont
 export type ConfigPortabilityControllerResourcesOfKindData = {
     body?: never;
     path: {
-        kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
+        kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
     };
     query?: never;
     url: '/api/config-bundles/resources/{kind}';
@@ -9486,7 +9468,7 @@ export type ConfigPortabilityControllerResourcesOfKindResponse = ConfigPortabili
 export type ConfigPortabilityControllerExportDocumentData = {
     body?: never;
     path: {
-        kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
+        kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
         /**
          * Resource ID
          */

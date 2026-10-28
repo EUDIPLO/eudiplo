@@ -27,6 +27,7 @@ import {
     bareFileVersion,
     CONFIG_FORMATS,
     CONFIG_RESOURCE_KINDS,
+    CONFIG_SINGLETON_IDS,
     type ConfigResourceKind,
     isConfigDocument,
     normalizeDocument,
@@ -134,12 +135,7 @@ function inferredKind(path: string): ConfigResourceKind | undefined {
 function wrapBare(kind: ConfigResourceKind, input: any, path: string): unknown {
     if (!input || typeof input !== "object" || Array.isArray(input))
         throw new Error(`${path}: configuration must be an object`);
-    const singleton: Partial<Record<ConfigResourceKind, string>> = {
-        Tenant: "tenant",
-        KmsConfig: "kms",
-        RegistrarConfig: "registrar",
-        IssuanceConfig: "issuance",
-    };
+    const singleton = CONFIG_SINGLETON_IDS;
     const spec = structuredClone(input);
     if (kind === "KeyChain" && spec.key && !spec.keySource) {
         spec.keySource = { type: "private-jwk", jwk: spec.key };
