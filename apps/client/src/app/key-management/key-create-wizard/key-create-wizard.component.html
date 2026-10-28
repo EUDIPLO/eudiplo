@@ -78,7 +78,7 @@
       </form>
     </mat-step>
 
-    <!-- Step 2: Key Chain Type Selection (only for attestation) -->
+    <!-- Step 2: Key Chain Type Selection (only for attestation and status lists) -->
     @if (showKeyChainTypeStep) {
       <mat-step [stepControl]="caSourceForm" label="Key Chain Type" [editable]="!isSubmitting">
         <form [formGroup]="caSourceForm" fxLayout="column" fxLayoutGap="24px">
@@ -292,7 +292,7 @@
               <p class="hint">
                 This will import your externally issued certificate and matching key.
               </p>
-            } @else if (selectedUsage === 'attestation' && !isInternalChain) {
+            } @else if (showKeyChainTypeStep && !isInternalChain) {
               <p class="hint">This will create a standalone self-signed key.</p>
             } @else {
               <p class="hint">Add a description and select where to store the key.</p>
@@ -544,7 +544,7 @@
                   </span>
                 </div>
               }
-              @if (selectedUsage === 'attestation' && !isInternalChain && !isExternalCertificate) {
+              @if (showKeyChainTypeStep && !isInternalChain && !isExternalCertificate) {
                 <div class="next-steps-hint">
                   <mat-icon>info</mat-icon>
                   <span>

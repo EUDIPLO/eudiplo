@@ -165,14 +165,14 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
     },
   ];
 
-  // CA source options (shown for attestation keys only)
+  // Key chain type options (shown for attestation and status list keys)
   keyChainTypeOptions = [
     {
       value: 'internalChain' as KeyChainTypeSelection,
       label: 'Create Key Chain (Recommended)',
       icon: 'account_tree',
       description: 'Create a key chain with embedded root CA and a signing key under it.',
-      hint: 'Recommended for production. Each credential type gets its own isolated trust chain.',
+      hint: 'Recommended for production. Verifiers trust its root CA, which stays the same when the signing key rotates.',
       features: [
         'Optional rotation (on by default)',
         'Embedded root CA',
@@ -240,7 +240,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       usage: ['', Validators.required],
     });
 
-    // Step 2a: Key chain type selection (internal chain vs standalone, for attestation)
+    // Step 2a: Key chain type selection (internal chain vs standalone, for attestation and status lists)
     this.caSourceForm = this.fb.group({
       keyChainType: ['internalChain', Validators.required],
     });
@@ -421,8 +421,8 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   }
 
   get showKeyChainTypeStep(): boolean {
-    // Only attestation keys need to choose key chain type
-    return this.selectedUsage === 'attestation';
+    // Attestation and status list keys choose their key chain type, and with it rotation
+    return this.selectedUsage === 'attestation' || this.selectedUsage === 'statusList';
   }
 
   get showAccessSourceStep(): boolean {
@@ -439,14 +439,14 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
 
   get isInternalChain(): boolean {
     return (
-      this.selectedUsage === 'attestation' &&
+      this.showKeyChainTypeStep &&
       (this.selectedKeyChainType === 'internalChain' ||
         this.selectedKeyChainType === 'externalCaChain')
     );
   }
 
   get isExternalCaChain(): boolean {
-    return this.selectedUsage === 'attestation' && this.selectedKeyChainType === 'externalCaChain';
+    return this.showKeyChainTypeStep && this.selectedKeyChainType === 'externalCaChain';
   }
 
   get rotationEnabled(): boolean {
@@ -736,7 +736,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
           )
           .onAction()
           .subscribe(() => {
-            this.router.navigate(['/keys/create']);
+            this.router.navigate(['/keys/create'], { queryParams: { usage: 'statusList' } });
           });
       } else {
         this.snackBar.open(
