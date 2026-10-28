@@ -10,7 +10,7 @@
     >{{ jsonMode ? 'Use visual builder' : 'Edit DCQL JSON' }}
   </button>
 </div>
-@if (!supported) {
+@if (!supported && !onlyEmptyClaims) {
   <p class="query-notice" role="status">
     This query uses options outside the visual builder. Continue editing JSON; all query settings
     are preserved.
@@ -247,7 +247,10 @@
           </details>
         </div>
       } @empty {
-        <p>No claims added yet.</p>
+        <p class="field-hint">
+          No claims requested. The wallet presents only what the credential always discloses, which
+          proves the user holds a valid credential of this type.
+        </p>
       }
       <div class="query-actions">
         <button mat-stroked-button type="button" (click)="addClaim(credential)">

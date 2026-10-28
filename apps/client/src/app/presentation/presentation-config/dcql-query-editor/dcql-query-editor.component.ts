@@ -19,6 +19,7 @@ import {
   TrustedAuthority,
   CredentialSetQuery,
   simpleDcqlError,
+  onlyEmptyClaimsUnsupported,
   claimError,
   trustError,
   trustSummary,
@@ -53,6 +54,8 @@ export class DcqlQueryEditorComponent implements OnInit, OnDestroy {
   query: SimpleDcql = { credentials: [] };
   jsonMode = false;
   supported = true;
+  /** Only `claims: []` keeps the query out of the builder; the form error explains it. */
+  onlyEmptyClaims = false;
   trustLists: TrustList[] = [];
   loadingTrustLists = false;
   trustListsError = '';
@@ -92,6 +95,7 @@ export class DcqlQueryEditorComponent implements OnInit, OnDestroy {
   private readValue(): void {
     const query = readSimpleDcql(this.control.value);
     this.supported = query !== null;
+    this.onlyEmptyClaims = !this.supported && onlyEmptyClaimsUnsupported(this.control.value);
     this.query = query ?? { credentials: [] };
     this.pastedClaims.clear();
     this.pasteErrors.clear();

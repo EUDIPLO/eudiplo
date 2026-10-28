@@ -601,7 +601,7 @@
                   @for (claim of credential.claims; track $index) {
                     <li>{{ claim }}</li>
                   } @empty {
-                    <li>No claim selection specified. Review the query before saving.</li>
+                    <li>No claims requested: only proves a valid credential of this type.</li>
                   }
                 </ul>
               </div>

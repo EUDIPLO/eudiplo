@@ -279,6 +279,51 @@ describe("Presentation - SD-JWT Credential", () => {
         expect(submitRes.response.status).toBe(200);
     });
 
+    test("present sd jwt credential without requesting claims", async () => {
+        await request(app.getHttpServer())
+            .post("/verifier/config")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                id: "pid-credential-only",
+                description: "Valid PID, no claims requested",
+                dcql_query: {
+                    credentials: [
+                        {
+                            id: "pid",
+                            format: "dc+sd-jwt",
+                            meta: {
+                                vct_values: [
+                                    "<TENANT_URL>/credentials-metadata/vct/pid",
+                                ],
+                            },
+                            trusted_authorities: FIXTURE_TRUSTED_AUTHORITIES,
+                        },
+                    ],
+                },
+            })
+            .expect(201);
+
+        const { res, submitRes, resolved } = await submitPresentation({
+            requestId: "pid-credential-only",
+            credentialId: "pid",
+            privateKey: privateIssuerKey,
+            x5c: issuerCertChain,
+        });
+
+        const dcqlQuery = resolved.authorizationRequestPayload
+            .dcql_query as any;
+        expect(dcqlQuery.credentials[0]).not.toHaveProperty("claims");
+        expect(submitRes.response.status).toBe(200);
+
+        const session = await request(app.getHttpServer())
+            .get(`/session/${res.body.session}`)
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        expect(session.body.status).toBe("completed");
+    });
+
     test("present sd jwt credential with A256GCM encryption", async () => {
         const requestBody: PresentationRequest = {
             response_type: ResponseType.URI,

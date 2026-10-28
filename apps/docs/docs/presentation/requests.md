@@ -154,6 +154,7 @@ Differences from the OpenID4VP flows:
 
 - Only the first `mso_mdoc` credential of the DCQL query is requested; its `meta.doctype_value` is required. Other credentials, `credential_sets` and `claim_sets` are ignored.
 - Every element is requested with intent to retain `false`, whatever `intent_to_retain` says.
+- Request at least one claim. Without `claims`, EUDIPLO still sends the request with an empty element list, which ISO 18013-5 does not allow, so wallets may reject it.
 - `redirectUri`, `transaction_data` and `clientIdScheme` from the request are ignored; the configuration's `redirectUri` still applies after a successful presentation.
 - `expected_origin` must equal the origin of the page that calls the DC API, because the session transcript is bound to it.
 - Elements the wallet does not return are not rejected separately, and `values` constraints are not checked; check the claims in the result.

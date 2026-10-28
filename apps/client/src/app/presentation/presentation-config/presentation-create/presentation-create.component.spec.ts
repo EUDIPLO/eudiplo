@@ -185,6 +185,20 @@ describe('Presentation configuration flow', () => {
     expect(component.showSettingsErrors).toBe(true);
   });
 
+  it('summarises omitted, empty and malformed claims differently', () => {
+    const { id, format, meta } = query.credentials[0];
+    const credentialOnly = { id, format, meta };
+    const summaryClaims = (claims: unknown) => {
+      component.queryControl.setValue({
+        credentials: [claims === undefined ? credentialOnly : { ...credentialOnly, claims }],
+      });
+      return component.querySummary[0].claims;
+    };
+    expect(summaryClaims(undefined)).toEqual([]);
+    expect(summaryClaims([])[0]).toContain('Empty claims list');
+    expect(summaryClaims({})).toEqual(['Invalid claims list']);
+  });
+
   it('preserves explicit clearing of an access key override', () => {
     fill();
     component.form.patchValue({ accessKeyChainId: null, redirectUri: '' });

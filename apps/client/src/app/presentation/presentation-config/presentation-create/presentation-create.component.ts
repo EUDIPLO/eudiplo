@@ -444,20 +444,26 @@ export class PresentationCreateComponent implements OnInit {
             ? credential.meta.doctype_value
             : '',
         claims: Array.isArray(credential.claims)
-          ? credential.claims.map((claim: any) =>
-              Array.isArray(claim?.path)
-                ? claim.path
-                    .map((part: unknown) => (typeof part === 'number' ? `[${part}]` : String(part)))
-                    .join(' › ') +
-                  (Array.isArray(claim.values)
-                    ? ` — allowed values: ${claim.values.map((value: unknown) => JSON.stringify(value)).join(', ')}`
-                    : '') +
-                  (typeof claim.intent_to_retain === 'boolean'
-                    ? ` — retain: ${claim.intent_to_retain ? 'yes' : 'no'}`
-                    : '')
-                : 'Invalid claim path'
-            )
-          : [],
+          ? !credential.claims.length
+            ? ['Empty claims list: remove "claims" to request no claims']
+            : credential.claims.map((claim: any) =>
+                Array.isArray(claim?.path)
+                  ? claim.path
+                      .map((part: unknown) =>
+                        typeof part === 'number' ? `[${part}]` : String(part)
+                      )
+                      .join(' › ') +
+                    (Array.isArray(claim.values)
+                      ? ` — allowed values: ${claim.values.map((value: unknown) => JSON.stringify(value)).join(', ')}`
+                      : '') +
+                    (typeof claim.intent_to_retain === 'boolean'
+                      ? ` — retain: ${claim.intent_to_retain ? 'yes' : 'no'}`
+                      : '')
+                  : 'Invalid claim path'
+              )
+          : credential.claims === undefined
+            ? []
+            : ['Invalid claims list'],
       }));
   }
 

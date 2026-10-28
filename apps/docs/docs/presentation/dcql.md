@@ -44,6 +44,26 @@ For mDOC, `meta.doctype_value` names the document type and each claim path is `[
 - SD-JWT VC paths are property names, with numbers as array indexes (`["address", "locality"]`, `["nationalities", 0]`).
 - Without `claim_sets`, the presented credential must disclose every listed claim; otherwise the presentation fails.
 
+## Check a credential without requesting claims
+
+Leave out `claims` to only check that the user holds a valid credential of a type, for example a valid membership, without asking for any of its data:
+
+```json
+{
+    "credentials": [
+        {
+            "id": "membership",
+            "format": "dc+sd-jwt",
+            "meta": { "vct_values": ["urn:example:membership:1"] }
+        }
+    ]
+}
+```
+
+The wallet then presents only what the credential always discloses: for SD-JWT VC the issuer-signed JWT with its claims that are not selectively disclosable, for mDOC no data elements. EUDIPLO checks signature, issuer trust, status and holder binding as usual. OpenID4VP does not allow an empty `claims` array, so leave the field out instead, and leave out `claim_sets` as well. In the Web Client, remove all claims of the credential ([visual query builder](configure-verification.md#visual-query-builder-and-json)).
+
+This works for OpenID4VP requests; for [ISO 18013-7 requests](requests.md#iso-18013-7-annex-c) request at least one mDOC claim.
+
 ## Accept specific values
 
 `values` lists the accepted values of a claim: strings, integers or booleans. It is sent to the wallet, which only offers matching credentials:

@@ -84,6 +84,7 @@ describe("Presentation - mDOC Credential", () => {
         webhookUrl?: string;
         privateKey: CryptoKey;
         issuerCert: string;
+        disclosedElements?: string[];
     }) {
         const requestBody: PresentationRequest = {
             response_type: ResponseType.URI,
@@ -122,6 +123,8 @@ describe("Presentation - mDOC Credential", () => {
             computeJwkThumbprint(
                 resolved.authorizationRequestPayload.client_metadata?.jwks,
             ),
+            undefined,
+            values.disclosedElements,
         );
 
         const jwt = await encryptVpToken(
@@ -146,7 +149,7 @@ describe("Presentation - mDOC Credential", () => {
                 resolved.authorizationRequestPayload as Openid4vpAuthorizationRequest,
         });
 
-        return { res, submitRes };
+        return { res, submitRes, resolved };
     }
 
     beforeAll(async () => {
@@ -180,6 +183,50 @@ describe("Presentation - mDOC Credential", () => {
 
         expect(submitRes).toBeDefined();
         expect(submitRes.response.status).toBe(200);
+    });
+
+    test("present mso mdoc credential without requesting claims", async () => {
+        await request(app.getHttpServer())
+            .post("/verifier/config")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                id: "pid-mdoc-credential-only",
+                description: "Valid mDOC PID, no claims requested",
+                dcql_query: {
+                    credentials: [
+                        {
+                            id: "pid-mso-mdoc",
+                            format: "mso_mdoc",
+                            meta: {
+                                doctype_value: "eu.europa.ec.eudi.pid.1",
+                            },
+                            trusted_authorities: FIXTURE_TRUSTED_AUTHORITIES,
+                        },
+                    ],
+                },
+            })
+            .expect(201);
+
+        const { res, submitRes, resolved } = await submitMdocPresentation({
+            requestId: "pid-mdoc-credential-only",
+            privateKey: privateIssuerKey,
+            issuerCert,
+            credentialId: "pid-mso-mdoc",
+            disclosedElements: [],
+        });
+
+        const dcqlQuery = resolved.authorizationRequestPayload
+            .dcql_query as any;
+        expect(dcqlQuery.credentials[0]).not.toHaveProperty("claims");
+        expect(submitRes.response.status).toBe(200);
+
+        const session = await request(app.getHttpServer())
+            .get(`/session/${res.body.session}`)
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        expect(session.body.status).toBe("completed");
     });
 
     test("present mso mdoc credential with status list", async () => {
