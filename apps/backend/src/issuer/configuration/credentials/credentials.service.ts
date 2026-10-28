@@ -27,6 +27,7 @@ import {
     InvalidCredentialClaims,
 } from "./domain/credential-claims-validation.js";
 import type { CredentialConfiguration as CredentialConfig } from "./domain/credential-configuration.js";
+import { hostedVctUrl } from "./domain/hosted-vct.js";
 import {
     CredentialFormat,
     CredentialProofType,
@@ -382,8 +383,7 @@ export class CredentialsService {
         // Resolve VCT - can be a string URI, an object (hosted by EUDIPLO), or null
         let vct: string;
         if (entity.vct && typeof entity.vct === "object") {
-            // Generate URL for object-based vct hosted by EUDIPLO
-            vct = `${this.settings.publicUrl}/issuers/${tenantId}/credentials-metadata/vct/${entity.id}`;
+            vct = hostedVctUrl(this.settings.publicUrl, tenantId, entity.id);
         } else if (typeof entity.vct === "string") {
             // Use the string URI directly
             vct = entity.vct;
@@ -502,8 +502,11 @@ export class CredentialsService {
                 `VCT for credential configuration with id ${credentialId} is a URI, not hosted by this server`,
             );
         }
-        const host = this.settings.publicUrl;
-        credentialConfig.vct.vct = `${host}/issuers/${tenantId}/credentials-metadata/vct/${credentialConfig.id}`;
+        credentialConfig.vct.vct = hostedVctUrl(
+            this.settings.publicUrl,
+            tenantId,
+            credentialConfig.id,
+        );
         return credentialConfig.vct;
     }
 }

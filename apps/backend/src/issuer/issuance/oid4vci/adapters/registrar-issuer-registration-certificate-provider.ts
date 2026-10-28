@@ -8,6 +8,8 @@ import {
     deriveRegistrationCertificateMaterial,
     type IssuerRegistrationCertificateSettings,
     isJwtActive,
+    NO_CREDENTIAL_TYPES_MESSAGE,
+    registrationCertificateCreationBody,
     registrationCertificateFingerprint,
 } from "../domain/issuer-registration-certificate.js";
 import type { IssuerRegistrationCertificateProvider } from "../ports/issuer-registration-certificate-provider.js";
@@ -29,6 +31,7 @@ export class RegistrarIssuerRegistrationCertificateProvider
         private readonly registrar: RegistrarService,
         private readonly credentials: CredentialsService,
         private readonly issuance: IssuanceService,
+        private readonly publicUrl: string,
     ) {}
 
     async resolve(
@@ -72,10 +75,12 @@ export class RegistrarIssuerRegistrationCertificateProvider
     ): Promise<string | undefined> {
         const material = deriveRegistrationCertificateMaterial(
             await this.credentials.getCredentialConfigsForTenant(tenantId),
+            this.publicUrl,
+            tenantId,
         );
-        if (material.providedAttestations.length === 0) {
+        if (material.providesAttestations.length === 0) {
             this.logger.warn(
-                `[${tenantId}] registrationCertificate generate mode requires credential configs with schema metadata`,
+                `[${tenantId}] registrationCertificate generate mode: ${NO_CREDENTIAL_TYPES_MESSAGE}`,
             );
             return undefined;
         }
@@ -94,21 +99,8 @@ export class RegistrarIssuerRegistrationCertificateProvider
             return cache.jwt;
         }
 
-        const { schemaMetadataIds } = material;
-        const body: Partial<RegistrationCertificateCreation> = {
-            ...(schemaMetadataIds.length > 0
-                ? {
-                      provides_attestations:
-                          schemaMetadataIds as RegistrationCertificateCreation["provides_attestations"],
-                  }
-                : {}),
-            ...(settings.privacyPolicy
-                ? { privacy_policy: settings.privacyPolicy }
-                : {}),
-            ...(settings.supportUri
-                ? { support_uri: settings.supportUri }
-                : {}),
-        };
+        const body: Partial<RegistrationCertificateCreation> =
+            registrationCertificateCreationBody(settings, material);
         const resolved = await this.registrar.resolveRegistrationCertificate(
             { body },
             {},

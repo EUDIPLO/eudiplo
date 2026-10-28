@@ -9,14 +9,6 @@ export const IssuerRegistrationCertificateMode = {
 export type IssuerRegistrationCertificateMode =
     (typeof IssuerRegistrationCertificateMode)[keyof typeof IssuerRegistrationCertificateMode];
 
-const IssuerProvidedAttestationSchema = z
-    .object({
-        credentialConfigId: z.string().optional(),
-        format: z.string().optional(),
-        meta: z.record(z.string(), z.unknown()).optional(),
-    })
-    .strict();
-
 const IssuerRegistrationCertificateConfigSchema = z
     .object({
         enabled: z.boolean().optional(),
@@ -35,32 +27,6 @@ const IssuerRegistrationCertificateCacheSchema = z
         expiresAt: z.number().optional(),
     })
     .strict();
-
-export class IssuerProvidedAttestation extends createZodDto(
-    IssuerProvidedAttestationSchema,
-) {
-    @ApiPropertyOptional({
-        description:
-            "Credential configuration ID backing this attestation entry (for payload traceability/UI mapping).",
-        example: "pid-no-key",
-    })
-    credentialConfigId?: string;
-
-    @ApiPropertyOptional({
-        description:
-            "Attestation format as expected by the registrar (for example dc+sd-jwt, mso_mdoc).",
-        example: "dc+sd-jwt",
-    })
-    format?: string;
-
-    @ApiPropertyOptional({
-        description:
-            "Arbitrary attestation metadata forwarded to the registrar.",
-        type: "object",
-        additionalProperties: true,
-    })
-    meta?: Record<string, unknown>;
-}
 
 export class IssuerRegistrationCertificateConfig extends createZodDto(
     IssuerRegistrationCertificateConfigSchema,

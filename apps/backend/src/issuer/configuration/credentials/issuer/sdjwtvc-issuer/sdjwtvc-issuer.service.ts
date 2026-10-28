@@ -13,6 +13,7 @@ import {
     type CredentialSettings,
 } from "../../credential-settings.js";
 import type { CredentialConfiguration } from "../../domain/credential-configuration.js";
+import { hostedVctUrl } from "../../domain/hosted-vct.js";
 import { SdJwtTrustFormat } from "../../entities/credential.entity.js";
 import { buildDisclosureFrame } from "../../utils/index.js";
 import { roundedCredentialValidity } from "../credential-time.util.js";
@@ -110,7 +111,11 @@ export class SdjwtvcIssuerService {
         const vct =
             typeof credentialConfiguration.vct === "string"
                 ? credentialConfiguration.vct
-                : `${host}/issuers/${session.tenantId}/credentials-metadata/vct/${credentialConfiguration.id}`;
+                : hostedVctUrl(
+                      host,
+                      session.tenantId,
+                      credentialConfiguration.id,
+                  );
 
         // Federation is opt-in only; default and legacy modes use x5c.
         const trustFormat =

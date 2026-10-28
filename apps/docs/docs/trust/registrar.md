@@ -96,7 +96,7 @@ If the registrar already issued a key and certificate to you, import them as an 
 With a registrar configuration, EUDIPLO creates registration certificates on demand:
 
 - **Verifier:** for each presentation configuration with `registration_cert`; the `purpose` comes from the configuration, privacy policy and support URI from the defaults above.
-- **Issuer:** in the issuance configuration (`registrationCertificate.mode: "generate"`), listing the schema metadata of your credential types.
+- **Issuer:** in the issuance configuration (`registrationCertificate.mode: "generate"`), listing the `vct` or `docType` of your credential types.
 
 Strategies, caching and the overasking check are described in [Registration Certificates](registration-certificates.md).
 
@@ -132,7 +132,7 @@ On the details of a version, **Catalog Metadata** changes its name, category and
 
 Via the API, `POST /api/schema-metadata/publish` and `POST /api/schema-metadata/publish-version` publish (roles `issuance:manage` and `registrar:manage`, both required); the other `/api/schema-metadata` endpoints list, read, update, deprecate (`PATCH /api/schema-metadata/{id}/versions/{version}/deprecation`) and delete entries (role `registrar:manage`); see [Publish via the API](#publish-via-the-api). All endpoints and their roles: [Roles](../reference/roles.md#endpoints).
 
-The `schemaMeta` of each credential configuration determines the `provides_attestations` of the [issuer registration certificate](registration-certificates.md#issuer-registration-certificate). Verifiers can start a presentation configuration from schema metadata with **Import from Schema** ([Configure Verification](../presentation/configure-verification.md)).
+Schema metadata does not go into the [issuer registration certificate](registration-certificates.md#issuer-registration-certificate): the certificate's `provides_attestations` lists the `vct` and `docType` values of your credential configurations. Verifiers can start a presentation configuration from schema metadata with **Import from Schema** ([Configure Verification](../presentation/configure-verification.md)).
 
 ### Publish via the API
 

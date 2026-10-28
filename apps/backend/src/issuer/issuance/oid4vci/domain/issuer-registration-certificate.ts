@@ -1,90 +1,99 @@
 import { createHash } from "node:crypto";
 import { decodeJwt } from "jose";
+import { hostedVctUrl } from "../../../configuration/credentials/domain/hosted-vct.js";
 import type { IssuanceConfiguration } from "../../../configuration/issuance/domain/issuance-configuration.js";
 
 export type IssuerRegistrationCertificateSettings = NonNullable<
     IssuanceConfiguration["registrationCertificate"]
 >;
 
-/** One attestation the issuer declares in its registration certificate. */
-interface ProvidedAttestation {
-    credentialConfigId: string;
-    format: "dc+sd-jwt" | "mso_mdoc";
-    meta: {
-        schema_metadata_id: string;
-        schema_metadata_version?: string;
-    };
-}
-
 /** Minimal view of a credential configuration needed for the derivation. */
-export interface CredentialConfigurationSchemaInfo {
+export interface CredentialConfigurationTypeInfo {
     id: string;
-    config?: { format?: string } | null;
-    schemaMeta?: { id?: string; version?: string } | null;
+    config?: { format?: string; docType?: string } | null;
+    vct?: string | object | null;
 }
 
 export interface RegistrationCertificateMaterial {
-    schemaMetadataIds: string[];
-    providedAttestations: ProvidedAttestation[];
+    /** Credential type identifiers: SD-JWT VC `vct` and mdoc `docType`. */
+    providesAttestations: string[];
 }
 
 /**
- * Derives the attestations an issuer provides from its credential
- * configurations. Only SD-JWT VC and mdoc configurations with schema metadata
- * are included; the result is sorted so the fingerprint is stable.
+ * Derives the credential types an issuer provides from its credential
+ * configurations: the `vct` of SD-JWT VC configurations (the hosted VCT URL
+ * when EUDIPLO hosts the type metadata) and the `docType` of mdoc
+ * configurations. The result is deduplicated and sorted so the fingerprint is
+ * stable.
  */
 export function deriveRegistrationCertificateMaterial(
-    credentialConfigs: CredentialConfigurationSchemaInfo[],
+    credentialConfigs: CredentialConfigurationTypeInfo[],
+    publicUrl: string,
+    tenantId: string,
 ): RegistrationCertificateMaterial {
-    const providedAttestations: ProvidedAttestation[] = [];
+    const types = new Set<string>();
 
     for (const credentialConfig of credentialConfigs) {
-        const schemaMetadataId = credentialConfig.schemaMeta?.id;
-        if (!schemaMetadataId || schemaMetadataId.trim().length === 0) {
-            continue;
+        const type = credentialType(credentialConfig, publicUrl, tenantId);
+        if (type) {
+            types.add(type);
         }
-
-        const format = credentialConfig.config?.format;
-        if (format !== "dc+sd-jwt" && format !== "mso_mdoc") {
-            continue;
-        }
-
-        const version = credentialConfig.schemaMeta?.version;
-        const schemaMetadataVersion =
-            typeof version === "string" && version.trim().length > 0
-                ? version.trim()
-                : undefined;
-
-        providedAttestations.push({
-            credentialConfigId: credentialConfig.id,
-            format,
-            meta: {
-                schema_metadata_id: schemaMetadataId.trim(),
-                ...(schemaMetadataVersion
-                    ? { schema_metadata_version: schemaMetadataVersion }
-                    : {}),
-            },
-        });
     }
 
-    providedAttestations.sort((left, right) => {
-        const leftId = left.meta.schema_metadata_id;
-        const rightId = right.meta.schema_metadata_id;
-        if (leftId !== rightId) {
-            return leftId.localeCompare(rightId);
-        }
-        return left.format.localeCompare(right.format);
-    });
-
-    const schemaMetadataIds = Array.from(
-        new Set(
-            providedAttestations.map(
-                (attestation) => attestation.meta.schema_metadata_id,
-            ),
+    return {
+        providesAttestations: [...types].sort((left, right) =>
+            left.localeCompare(right),
         ),
-    ).sort((left, right) => left.localeCompare(right));
+    };
+}
 
-    return { schemaMetadataIds, providedAttestations };
+function credentialType(
+    credentialConfig: CredentialConfigurationTypeInfo,
+    publicUrl: string,
+    tenantId: string,
+): string | undefined {
+    switch (credentialConfig.config?.format) {
+        case "dc+sd-jwt": {
+            const { vct } = credentialConfig;
+            if (vct && typeof vct === "object") {
+                return hostedVctUrl(publicUrl, tenantId, credentialConfig.id);
+            }
+            return nonEmpty(vct);
+        }
+        case "mso_mdoc":
+            return nonEmpty(credentialConfig.config?.docType);
+        default:
+            return undefined;
+    }
+}
+
+/** Skips blank values; others stay as stored so they match the metadata. */
+function nonEmpty(value: unknown): string | undefined {
+    return typeof value === "string" && value.trim().length > 0
+        ? value
+        : undefined;
+}
+
+/** Why a generated certificate cannot be requested without credential types. */
+export const NO_CREDENTIAL_TYPES_MESSAGE =
+    "Create an SD-JWT VC credential configuration with a vct or an mDOC credential configuration with a docType before generating an issuer registration certificate";
+
+/** Registrar request body for a generated issuer registration certificate. */
+export function registrationCertificateCreationBody(
+    settings: IssuerRegistrationCertificateSettings,
+    material: RegistrationCertificateMaterial,
+): {
+    provides_attestations: string[];
+    privacy_policy?: string;
+    support_uri?: string;
+} {
+    return {
+        provides_attestations: material.providesAttestations,
+        ...(settings.privacyPolicy
+            ? { privacy_policy: settings.privacyPolicy }
+            : {}),
+        ...(settings.supportUri ? { support_uri: settings.supportUri } : {}),
+    };
 }
 
 /**
@@ -99,10 +108,9 @@ export function registrationCertificateFingerprint(
         .update(
             JSON.stringify({
                 mode: settings.mode,
-                schemaMetadataIds: material.schemaMetadataIds,
+                providesAttestations: material.providesAttestations,
                 privacyPolicy: settings.privacyPolicy,
                 supportUri: settings.supportUri,
-                providedAttestations: material.providedAttestations,
             }),
         )
         .digest("hex");

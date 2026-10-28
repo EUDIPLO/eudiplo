@@ -230,16 +230,23 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
         },
         {
             provide: ISSUER_REGISTRATION_CERTIFICATE_PROVIDER,
-            inject: [RegistrarService, CredentialsService, IssuanceService],
+            inject: [
+                RegistrarService,
+                CredentialsService,
+                IssuanceService,
+                ConfigService,
+            ],
             useFactory: (
                 registrar: RegistrarService,
                 credentials: CredentialsService,
                 issuance: IssuanceService,
+                config: ConfigService,
             ) =>
                 new RegistrarIssuerRegistrationCertificateProvider(
                     registrar,
                     credentials,
                     issuance,
+                    config.getOrThrow<string>("PUBLIC_URL"),
                 ),
         },
         {
