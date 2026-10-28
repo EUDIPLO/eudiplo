@@ -124,7 +124,7 @@ describe("eudiplo config editor setup", () => {
             associations.filter((entry) =>
                 entry.url.startsWith("./.vscode/eudiplo-schemas/"),
             ),
-        ).toHaveLength(13);
+        ).toHaveLength(14);
         expect(associations).toContainEqual({
             fileMatch: ["/tenant-config/*/presentation/*.json"],
             url: "./.vscode/eudiplo-schemas/PresentationConfigFile.schema.json",

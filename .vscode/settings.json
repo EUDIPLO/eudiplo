@@ -41,6 +41,13 @@
     },
     {
       "fileMatch": [
+        "/assets/config/*/key-chain-defaults.json",
+        "/apps/backend/test/fixtures/*/key-chain-defaults.json"
+      ],
+      "url": "./schemas/KeyChainDefaultsConfigFile.schema.json"
+    },
+    {
+      "fileMatch": [
         "/assets/config/*/registrar*.json",
         "/apps/backend/test/fixtures/*/registrar*.json"
       ],

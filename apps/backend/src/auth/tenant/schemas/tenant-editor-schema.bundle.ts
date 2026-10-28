@@ -8,6 +8,7 @@ import {
     TenantConfigFileSchema,
     UpdateTenantSchema,
 } from "./create-tenant.schema.js";
+import { KeyChainDefaultsConfigFileSchema } from "./key-chain-defaults.schema.js";
 import { SessionStorageConfigSchema } from "./session-storage-config.schema.js";
 import { StatusListConfigSchema } from "./status-list-config.schema.js";
 
@@ -29,6 +30,10 @@ export const tenantEditorSchemaBundle = defineEditorSchemaBundle({
         defineEditorSchema({
             name: "UpdateTenantDto",
             schema: UpdateTenantSchema,
+        }),
+        defineEditorSchema({
+            name: "KeyChainDefaultsConfigFile",
+            schema: KeyChainDefaultsConfigFileSchema,
         }),
         defineEditorSchema({
             name: "SessionStorageConfig",

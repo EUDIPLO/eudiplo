@@ -12,12 +12,12 @@ const CONFIG_RESOURCE_MANAGE_ROLES: Record<
     ConfigResourceKind,
     readonly Role[]
 > = {
-    // Session and status list settings and the default access key chain are
-    // stored on the tenant.
-    Tenant: [Role.Issuances, Role.Presentations, Role.Keys],
+    // Session and status list settings are stored on the tenant.
+    Tenant: [Role.Issuances, Role.Presentations],
     Client: [Role.Clients],
     KmsConfig: [],
     KeyChain: [Role.Issuances, Role.Presentations, Role.Keys],
+    KeyChainDefaults: [Role.Issuances, Role.Presentations, Role.Keys],
     RegistrarConfig: [Role.Registrar],
     IssuanceConfig: [Role.Issuances],
     CredentialConfig: [Role.Issuances],
@@ -48,10 +48,8 @@ export function mayReadConfigOwnership(
 /**
  * Whether a token may export one resource of a kind as a configuration
  * document. A key chain document carries the private keys of keys held in
- * the database, so it needs the roles of the key export. A tenant document
- * also carries the session and status list settings, which `keys:manage`
- * cannot read, so that role only reads its ownership. The other kinds follow
- * {@link mayReadConfigOwnership}.
+ * the database, so it needs the roles of the key export. The other kinds
+ * follow {@link mayReadConfigOwnership}.
  */
 export function mayExportConfigDocument(
     roles: readonly Role[] | undefined,
@@ -59,12 +57,6 @@ export function mayExportConfigDocument(
 ): boolean {
     if (kind === "KeyChain") {
         return (roles ?? []).some((role) => CONFIG_ADMIN_ROLES.includes(role));
-    }
-    if (kind === "Tenant") {
-        return mayReadConfigOwnership(
-            roles?.filter((role) => role !== Role.Keys),
-            kind,
-        );
     }
     return mayReadConfigOwnership(roles, kind);
 }

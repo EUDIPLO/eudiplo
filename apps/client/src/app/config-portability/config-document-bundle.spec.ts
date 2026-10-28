@@ -54,7 +54,15 @@ describe('singleDocumentBundle', () => {
 
     expect(client.manifest.resources).toMatchObject([{ kind: 'Client', id: 'shop' }]);
     expect(issuance.manifest.resources).toMatchObject([{ kind: 'IssuanceConfig', id: 'issuance' }]);
+    const defaults = await singleDocumentBundle(
+      { $schema: schema('KeyChainDefaultsConfigFile', 1), spec: { access: 'access' } },
+      'acme'
+    );
+
     expect(kms.manifest.resources).toMatchObject([{ kind: 'KmsConfig', id: 'kms' }]);
+    expect(defaults.manifest.resources).toMatchObject([
+      { kind: 'KeyChainDefaults', id: 'defaults' },
+    ]);
   });
 
   it('refuses an unknown schema and a document without ID', async () => {

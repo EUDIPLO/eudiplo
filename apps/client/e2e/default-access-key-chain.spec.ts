@@ -5,8 +5,8 @@ import { createTenant } from './support/tenants';
 import { createKeyChain } from './support/key-chains';
 
 // The default access key chain signs presentation requests of configurations without an access
-// key chain and the signed issuer metadata. The demo tenant's info.json is file-managed, so the
-// test gets its own tenant, whose settings the Web Client may change.
+// key chain and the signed issuer metadata. The demo tenant's key chains are file-managed, so
+// the test gets its own tenant, whose key chain defaults the Web Client may change.
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -36,9 +36,12 @@ test('sets the default access key chain, keeps it from being deleted and removes
   await page.goto('/keys');
 
   const row = page.getByRole('row', { name: /Chosen access key/ });
-  await row
-    .getByRole('button', { name: 'Use key chain Chosen access key as default access key chain' })
-    .click();
+  const useAsDefault = row.getByRole('button', {
+    name: 'Use key chain Chosen access key as default access key chain',
+  });
+  // The star swallows clicks while the ownership lookup of the key chain defaults runs.
+  await expect(useAsDefault).not.toHaveAttribute('aria-busy', 'true');
+  await useAsDefault.click();
   await expect(page.getByText('Default access key chain set')).toBeVisible();
   // The chip reads "Default", followed by its explanation for screen readers.
   await expect(row.locator('.default-chip')).toHaveText(/^Default:/);
@@ -60,11 +63,11 @@ test('sets the default access key chain, keeps it from being deleted and removes
   expect(asked).toBe(false);
 
   await page.goto(`/keys/${chosen}`);
-  await page
-    .getByRole('button', {
-      name: 'Stop using key chain Chosen access key as default access key chain',
-    })
-    .click();
+  const stopUsing = page.getByRole('button', {
+    name: 'Stop using key chain Chosen access key as default access key chain',
+  });
+  await expect(stopUsing).not.toHaveAttribute('aria-busy', 'true');
+  await stopUsing.click();
   await expect(
     page.getByText('Default access key chain removed; EUDIPLO picks one by rule')
   ).toBeVisible();

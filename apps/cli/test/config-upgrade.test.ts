@@ -397,47 +397,17 @@ describe("config upgrade", () => {
         );
         expect(result.spec).toEqual(spec);
     });
-    it.each([
-        ["a v1 tenant file", 1],
-        ["a bare tenant file with default key chains", undefined],
-    ])("upgrades %s to v3 with the spec unchanged", async (_name, version) => {
+    it("upgrades a v1 tenant file to v4 with the spec unchanged", async () => {
         const { cwd, context } = await setup();
         const source = join(cwd, "tenant-folder");
         await mkdir(source, { recursive: true });
-        const spec: Record<string, unknown> = { name: "Example" };
-        if (version === undefined) spec.defaultKeyChains = { access: "access" };
-        await writeFile(
-            join(source, "info.json"),
-            JSON.stringify(
-                version === undefined
-                    ? spec
-                    : {
-                          $schema: schemaUrl("Tenant", version),
-                          metadata: { generation: 1 },
-                          spec,
-                      },
-            ),
-        );
-
-        expect(await runCli(["config", "upgrade", source], context)).toBe(0);
-        const result = JSON.parse(
-            await readFile(join(`${source}.upgraded`, "info.json"), "utf8"),
-        );
-        expect(result.$schema).toBe(
-            "https://eudiplo.dev/schemas/v3/TenantConfigFile.schema.json",
-        );
-        expect(result.spec).toEqual(spec);
-    });
-    it("upgrades a v2 tenant file to v3 with defaultKeyChains", async () => {
-        const { cwd, context } = await setup();
-        const source = join(cwd, "tenant-v2-folder");
-        await mkdir(source, { recursive: true });
+        const spec = { name: "Example" };
         await writeFile(
             join(source, "info.json"),
             JSON.stringify({
-                $schema: schemaUrl("Tenant", 2),
+                $schema: schemaUrl("Tenant", 1),
                 metadata: { generation: 1 },
-                spec: { name: "Example", defaultAccessKeyChainId: "access" },
+                spec,
             }),
         );
 
@@ -445,9 +415,68 @@ describe("config upgrade", () => {
         const result = JSON.parse(
             await readFile(join(`${source}.upgraded`, "info.json"), "utf8"),
         );
-        expect(result.spec).toEqual({
-            name: "Example",
-            defaultKeyChains: { access: "access" },
+        expect(result.$schema).toBe(
+            "https://eudiplo.dev/schemas/v4/TenantConfigFile.schema.json",
+        );
+        expect(result.spec).toEqual(spec);
+    });
+    it.each([
+        ["a bare tenant file", { defaultKeyChains: { access: "access" } }],
+        [
+            "a v2 tenant file",
+            {
+                $schema: schemaUrl("Tenant", 2),
+                metadata: { generation: 1 },
+                spec: { name: "Example", defaultAccessKeyChainId: "access" },
+            },
+        ],
+    ])(
+        "drops the default key chains of %s with a warning",
+        async (_name, file) => {
+            const { cwd, context, output } = await setup();
+            const source = join(cwd, "tenant-folder");
+            await mkdir(source, { recursive: true });
+            await writeFile(
+                join(source, "info.json"),
+                JSON.stringify("spec" in file ? file : { name: "Example", ...file }),
+            );
+
+            expect(await runCli(["config", "upgrade", source], context)).toBe(
+                0,
+            );
+            const result = JSON.parse(
+                await readFile(join(`${source}.upgraded`, "info.json"), "utf8"),
+            );
+            expect(result.$schema).toBe(
+                "https://eudiplo.dev/schemas/v4/TenantConfigFile.schema.json",
+            );
+            expect(result.spec).toEqual({ name: "Example" });
+            expect(output.stderr).toContain(
+                "/spec/defaultKeyChains: warning DEFAULT_KEY_CHAINS_MOVED",
+            );
+        },
+    );
+    it("upgrades a bare key chain defaults file", async () => {
+        const { cwd, context } = await setup();
+        const source = join(cwd, "tenant-folder");
+        await mkdir(source, { recursive: true });
+        await writeFile(
+            join(source, "key-chain-defaults.json"),
+            JSON.stringify({ access: "access" }),
+        );
+
+        expect(await runCli(["config", "upgrade", source], context)).toBe(0);
+        const result = JSON.parse(
+            await readFile(
+                join(`${source}.upgraded`, "key-chain-defaults.json"),
+                "utf8",
+            ),
+        );
+        expect(result).toEqual({
+            $schema:
+                "https://eudiplo.dev/schemas/v1/KeyChainDefaultsConfigFile.schema.json",
+            metadata: { generation: 1 },
+            spec: { access: "access" },
         });
     });
     it("validates the entire folder before writing any output", async () => {

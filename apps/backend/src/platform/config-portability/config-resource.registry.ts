@@ -53,6 +53,15 @@ const DEFINITIONS: Omit<ConfigResourceDefinition, "slug" | "currentVersion">[] =
             sensitivePaths: ["keySource.jwk"],
         },
         {
+            kind: "KeyChainDefaults",
+            importPhase: 25,
+            dependsOn: ["Tenant", "KeyChain"],
+            legacyFolders: ["key-chain-defaults.json"],
+            bundlePath: "key-chain-defaults.json",
+            singletonId: "defaults",
+            sensitivePaths: [],
+        },
+        {
             kind: "RegistrarConfig",
             importPhase: 40,
             dependsOn: ["Tenant", "KeyChain"],

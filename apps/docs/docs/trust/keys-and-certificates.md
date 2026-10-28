@@ -89,7 +89,7 @@ There is no certificate signing request (CSR) export. To use certificates from y
 
 `DELETE /api/key-chain/{id}` answers `204` and, where the KMS provider supports it, also deletes the key in the KMS. It answers `409` while a configuration of the tenant names the key chain, because that configuration could no longer sign or publish the key chain's certificate. These fields count:
 
-- an entry of the tenant's `defaultKeyChains`, such as `access` ([Default access key chain](#default-access-key-chain)),
+- an entry of the tenant's key chain defaults, such as `access` ([Default access key chain](#default-access-key-chain)),
 - `signingKeyId` of the issuance configuration, and `token.signingKeyId` of each of its authorization servers,
 - `keyChainId` of a credential configuration,
 - `accessKeyChainId` of a presentation configuration,
@@ -98,7 +98,7 @@ There is no certificate signing request (CSR) export. To use certificates from y
 
 A configuration that leaves the field out uses the tenant's default key chain of the usage type and does not count, so a default key chain picked by rule can be deleted; such configurations then use another key chain of that usage type, or fail until one exists. Trust lists are the exception: a trust list created without `keyChainId` stores the trust list key chain picked at creation, so that key chain counts until the trust list is deleted, also when a bundle rewrites the trust list without `keyChainId`.
 
-The response names the configurations in `message` and lists them in `references`. The tenant's default access key chain is a reference of kind `Tenant`, without ID. Configurations the caller's roles cannot read are only counted, without ID and description: the issuance configuration, credential configs and status lists need `issuance:manage`, presentation configs `presentation:manage` or `presentation:request`, and trust lists `issuance:manage` or `presentation:manage`.
+The response names the configurations in `message` and lists them in `references`. The tenant's default access key chain is a reference of kind `KeyChainDefaults`, without ID. Configurations the caller's roles cannot read are only counted, without ID and description: the issuance configuration, credential configs and status lists need `issuance:manage`, presentation configs `presentation:manage` or `presentation:request`, and trust lists `issuance:manage` or `presentation:manage`.
 
 ```json
 {
@@ -135,11 +135,11 @@ A presentation configuration uses the access key chain in `accessKeyChainId`, or
 
 Presentation requests (OID4VP and ISO 18013-7) of a configuration without `accessKeyChainId`, signed issuer metadata and the link of a registration certificate to its access certificate use the tenant's default access key chain. A presentation configuration's `accessKeyChainId` always takes precedence; the issuer metadata has no such field, so all issuance of a tenant uses the default.
 
-To choose the default, set `defaultKeyChains.access` on the tenant:
+To choose the default, set `access` of the tenant's key chain defaults:
 
 - In the Web Client, select the star (**Use as default access key chain**) on an access key chain in the key list or on its page. The list marks the default with **Default**, or with **Default by rule** while none is set. Select the star again to remove the setting.
-- Through the API, `PUT /api/key-chain/access/default` with `{"defaultAccessKeyChainId": "<id>"}`, or `null` to remove it; `GET` returns the setting and the key chain in use (`keyChainId`). Both need `issuance:manage`, `presentation:manage` or `keys:manage`. `PATCH /api/tenant/{id}` (`tenants:manage`) takes it as `defaultKeyChains`, which replaces all entries.
-- In a [config folder or bundle](../operate/configuration-as-code.md), as `defaultKeyChains.access` in `info.json` ([Tenant v3](../reference/config-bundle-format.md#resource-types-and-versions)), for example `"defaultKeyChains": { "access": "registrar-access" }`. An `info.json` without `defaultKeyChains` removes the setting. At startup, a setting that names a stored key chain applies before the tenant's other files are imported, and one that names a key chain of the folder after them; if it names no access key chain of the tenant, the import of that tenant fails, the log names the key chain, and the stored setting stays. While the tenant's `info.json` is file-managed, the API and the Web Client cannot change the setting: [detach](../operate/configuration-as-code.md#configuration-model) the `Tenant` resource first. Startup imports then skip `info.json` until you reset the tenant to the file version.
+- Through the API, `PUT /api/key-chain/access/default` with `{"defaultAccessKeyChainId": "<id>"}`, or `null` to remove it; `GET` returns the setting and the key chain in use (`keyChainId`). Both need `issuance:manage`, `presentation:manage` or `keys:manage`.
+- In a [config folder or bundle](../operate/configuration-as-code.md), as `access` in `key-chain-defaults.json` next to `info.json` (resource `KeyChainDefaults/defaults`, [format](../reference/config-bundle-format.md#resource-types-and-versions)), for example `{ "access": "registrar-access" }`. The file may name a key chain of the same folder. A file without `access` removes the setting, and a `replace` import without the file deletes defaults it applied before. If it names no access key chain of the tenant, the plan is blocked with `MISSING_RESOURCE_REFERENCE` or `KEY_CHAIN_USAGE_MISMATCH`: a bundle import is refused, and at startup the import of that tenant's folder fails while the log names the key chain; the stored setting stays. While the file is file-managed, the API and the Web Client cannot change the setting: [detach](../operate/configuration-as-code.md#configuration-model) `KeyChainDefaults/defaults` first. Startup imports then skip the file until you reset it to the file version. The tenant settings in `info.json` stay file-managed.
 
 The key chain must belong to the tenant and have usage type `access`, else the request answers `400`. While it is the default, deleting it is refused with `KEY_CHAIN_IN_USE` ([Delete a key chain](#delete-a-key-chain)). If it is gone anyway, requests that need the default fail instead of falling back to another certificate; the backend log names the key chain, `GET /api/key-chain/access/default` returns the setting without `keyChainId`, and the Web Client's key list shows a warning with **Remove default**.
 
@@ -149,7 +149,7 @@ Without the setting, EUDIPLO picks one of the tenant's access key chains in this
 2. The kind of the active certificate: one issued by another CA, such as a registrar certificate or that of an imported key, before an internal chain (an External CA chain included), before a self-signed certificate.
 3. The key chain created first.
 
-A new access key chain therefore only becomes the default when its certificate is of a better kind, or when the certificate of the current default is no longer valid. To use a particular key chain, set `defaultKeyChains.access`, or `accessKeyChainId` for one presentation configuration.
+A new access key chain therefore only becomes the default when its certificate is of a better kind, or when the certificate of the current default is no longer valid. To use a particular key chain, set the default access key chain, or `accessKeyChainId` for one presentation configuration.
 
 An OpenID4VP request keeps the access key chain chosen when it was created: the request object a wallet fetches later is signed with the key chain its `client_id` was derived from, even when the default or the configuration's `accessKeyChainId` has changed in between. Its registration certificate is resolved for that key chain as well; see [Registration Certificates](registration-certificates.md#validation-and-caching). If that key chain is deleted or rotated before the wallet fetches the request, the wallet cannot use the request; create a new one.
 

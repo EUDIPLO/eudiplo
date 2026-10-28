@@ -98,8 +98,21 @@ class HostComponent {
 
 @Component({
   imports: [ConfigOwnershipDirective, MatButtonModule],
-  template: `<button mat-button appConfigManaged managedKind="Tenant" managedResourceId="tenant">
+  template: `<button
+    mat-button
+    appConfigManaged
+    managedKind="KeyChainDefaults"
+    managedResourceId="defaults"
+  >
     Use as default
+  </button>`,
+})
+class KeyChainDefaultsHostComponent {}
+
+@Component({
+  imports: [ConfigOwnershipDirective, MatButtonModule],
+  template: `<button mat-button appConfigManaged managedKind="Tenant" managedResourceId="tenant">
+    Save
   </button>`,
 })
 class TenantHostComponent {}
@@ -436,6 +449,34 @@ describe('ConfigOwnershipDirective', () => {
     expect(remove.getAttribute('aria-disabled')).toBeNull();
     remove.click();
     expect(fixture.componentInstance.clicked).toBe(1);
+  });
+
+  it('names the resource to detach for a setting changed on another screen', async () => {
+    TestBed.configureTestingModule({
+      imports: [KeyChainDefaultsHostComponent],
+      providers: [
+        {
+          provide: ConfigOwnershipService,
+          useValue: {
+            get: vi.fn(async () => ({
+              ...fileManaged,
+              kind: 'KeyChainDefaults',
+              resourceId: 'defaults',
+            })),
+          },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(KeyChainDefaultsHostComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('button')?.getAttribute('title')
+    ).toBe(
+      'Managed by folder:/config/demo, read-only. To change it, detach KeyChainDefaults/defaults under Settings > Config Portability'
+    );
   });
 
   it('names the tenant resource to detach for a locked tenant setting', async () => {

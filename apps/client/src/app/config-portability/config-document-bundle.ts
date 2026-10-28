@@ -6,6 +6,7 @@ const KIND_BY_SCHEMA_FILE: Record<string, string> = {
   ClientConfigFile: 'Client',
   KmsConfigFile: 'KmsConfig',
   KeyChainConfigFile: 'KeyChain',
+  KeyChainDefaultsConfigFile: 'KeyChainDefaults',
   RegistrarConfigFile: 'RegistrarConfig',
   IssuanceConfigFile: 'IssuanceConfig',
   CredentialConfigFile: 'CredentialConfig',
@@ -22,6 +23,7 @@ const SINGLETON_IDS: Record<string, string> = {
   KmsConfig: 'kms',
   RegistrarConfig: 'registrar',
   IssuanceConfig: 'issuance',
+  KeyChainDefaults: 'defaults',
 };
 
 interface ConfigDocumentFile {

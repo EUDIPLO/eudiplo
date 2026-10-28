@@ -26,8 +26,10 @@ describe("keyChainIdNamesKeyChain", () => {
 });
 
 describe("keyChainReferenceId", () => {
-    it("carries no ID for the tenant settings and the issuance configuration", () => {
-        expect(keyChainReferenceId("Tenant", "tenant")).toBeUndefined();
+    it("carries no ID for the key chain defaults and the issuance configuration", () => {
+        expect(
+            keyChainReferenceId("KeyChainDefaults", "defaults"),
+        ).toBeUndefined();
         expect(keyChainReferenceId("IssuanceConfig", "acme")).toBeUndefined();
         expect(keyChainReferenceId("StatusList", "list")).toBe("list");
     });
@@ -56,14 +58,14 @@ describe("describeKeyChainReferences", () => {
         );
     });
 
-    it("names the tenant's default key chains first", () => {
+    it("names the tenant's key chain defaults first", () => {
         expect(
             describeKeyChainReferences([
                 { kind: "PresentationConfig", id: "age" },
-                { kind: "Tenant" },
+                { kind: "KeyChainDefaults" },
             ]),
         ).toBe(
-            'the tenant\'s default key chains (defaultKeyChains) and 1 presentation config ("age")',
+            'the tenant\'s key chain defaults and 1 presentation config ("age")',
         );
     });
 

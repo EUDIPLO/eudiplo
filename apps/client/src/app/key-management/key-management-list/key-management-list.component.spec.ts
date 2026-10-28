@@ -1,7 +1,9 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { keyChainDeleteQuestion } from '../key-chain-delete-question';
 import { KeyChainService } from '../key-chain.service';
 import { KeyManagementListComponent } from './key-management-list.component';
@@ -118,6 +120,39 @@ describe('KeyManagementListComponent default access key chain', () => {
     fixture.detectChanges();
     return fixture;
   }
+
+  it('locks the default actions on the key chain defaults, not the tenant settings', async () => {
+    const fixture = await render({
+      getAll: vi.fn().mockResolvedValue([access('a', 'Registrar')]),
+      getDefaultAccess: vi
+        .fn()
+        .mockResolvedValue({ defaultAccessKeyChainId: 'a', keyChainId: 'a' }),
+      setDefaultAccess: vi.fn(),
+    });
+
+    const locks = fixture.debugElement
+      .queryAll(By.directive(ConfigOwnershipDirective))
+      .map((element) => element.injector.get(ConfigOwnershipDirective))
+      .map(({ managedKind, managedResourceId }) => `${managedKind}/${managedResourceId}`);
+    // The star of the key chain; the other locks are the key chain's own.
+    expect(locks.filter((lock) => lock === 'KeyChainDefaults/defaults')).toHaveLength(1);
+    expect(locks.filter((lock) => lock.startsWith('Tenant/'))).toEqual([]);
+  });
+
+  it('locks Remove default of a missing default on the key chain defaults', async () => {
+    const fixture = await render({
+      getAll: vi.fn().mockResolvedValue([access('a', 'Registrar')]),
+      getDefaultAccess: vi.fn().mockResolvedValue({ defaultAccessKeyChainId: 'gone' }),
+      setDefaultAccess: vi.fn(),
+    });
+
+    const remove = fixture.debugElement
+      .queryAll(By.directive(ConfigOwnershipDirective))
+      .find((element) => element.nativeElement.textContent?.includes('Remove default'));
+    expect(remove).toBeDefined();
+    const { managedKind, managedResourceId } = remove!.injector.get(ConfigOwnershipDirective);
+    expect(`${managedKind}/${managedResourceId}`).toBe('KeyChainDefaults/defaults');
+  });
 
   it('marks the key chain picked by rule and offers to make another one the default', async () => {
     const setDefaultAccess = vi

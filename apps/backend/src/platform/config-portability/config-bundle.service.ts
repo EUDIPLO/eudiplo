@@ -23,6 +23,7 @@ import { compare as compareSecret } from "bcrypt";
 import { Not, Repository } from "typeorm";
 import {
     DEFAULT_KEY_CHAIN_ENTRIES,
+    type DefaultKeyChains,
     defaultKeyChainsOrNull,
 } from "../../auth/tenant/domain/tenant-data.js";
 import {
@@ -310,6 +311,20 @@ export class ConfigBundleService {
                 keyChain.id,
                 spec,
                 false,
+            );
+        }
+
+        const defaultKeyChains = defaultKeyChainsOrNull(
+            tenant.defaultKeyChains,
+        );
+        if (defaultKeyChains) {
+            await this.addDocument(
+                documents,
+                requirements,
+                tenantId,
+                "KeyChainDefaults",
+                "defaults",
+                { ...defaultKeyChains },
             );
         }
 
@@ -1290,19 +1305,20 @@ export class ConfigBundleService {
     }
 
     /**
-     * Each entry of the tenant's `defaultKeyChains` must name a key chain of
-     * the tenant or the bundle with the entry's usage type, else every
-     * request that falls back to it fails after the import.
+     * Each entry of the key chain defaults must name a key chain of the
+     * tenant or the bundle with the entry's usage type, else every request
+     * that falls back to it fails after the import.
      */
     private async checkDefaultKeyChains(
         tenantId: string,
         documents: ConfigDocument[],
         availableKeyChains: Set<string> | undefined,
     ): Promise<ConfigMigrationIssue[]> {
-        const tenant = documents.find((document) => document.kind === "Tenant");
-        if (!tenant) return [];
-        const defaultKeyChains = (tenant.spec as { defaultKeyChains?: unknown })
-            .defaultKeyChains;
+        const defaults = documents.find(
+            (document) => document.kind === "KeyChainDefaults",
+        );
+        if (!defaults) return [];
+        const defaultKeyChains = defaults.spec as unknown;
         if (!defaultKeyChains || typeof defaultKeyChains !== "object")
             return [];
         const issues: ConfigMigrationIssue[] = [];
@@ -1313,10 +1329,10 @@ export class ConfigBundleService {
                 entry
             ];
             if (typeof keyChainId !== "string") continue;
-            const path = `/spec/defaultKeyChains/${entry}`;
+            const path = `/spec/${entry}`;
             const resource = {
-                kind: "Tenant" as const,
-                id: resourceId(tenant),
+                kind: "KeyChainDefaults" as const,
+                id: resourceId(defaults),
             };
             if (!availableKeyChains?.has(keyChainId)) {
                 issues.push({
@@ -1725,7 +1741,6 @@ export class ConfigBundleService {
             description: tenant.description ?? undefined,
             sessionConfig: tenant.sessionConfig ?? undefined,
             statusListConfig: tenant.statusListConfig ?? undefined,
-            defaultKeyChains: tenant.defaultKeyChains ?? undefined,
         };
     }
 
@@ -2086,11 +2101,6 @@ export class ConfigBundleService {
             ])
                 if (desired[field] === null) delete desired[field];
         }
-        // A tenant document without default key chains removes them
-        // (tenantDocumentUpdate), unlike the other omitted tenant fields.
-        if (document.kind === "Tenant")
-            desired.defaultKeyChains =
-                defaultKeyChainsOrNull(desired.defaultKeyChains) ?? undefined;
         // Compare with the settings the importers store for the document.
         if (document.kind === "KeyChain") {
             desired.rotationPolicy = appliedRotationPolicy(desired);
@@ -2117,6 +2127,7 @@ export class ConfigBundleService {
         const replacesSpec =
             document.kind === "KmsConfig" ||
             document.kind === "KeyChain" ||
+            document.kind === "KeyChainDefaults" ||
             document.kind === "RegistrarConfig";
         const after = this.documentValidationService.normalizeForComparison({
             ...document,
@@ -2202,6 +2213,11 @@ export class ConfigBundleService {
                 entity = await this.keyChains.findOneBy({ tenantId, id });
                 return entity ? this.keyChainSpec(entity, true) : undefined;
             }
+            case "KeyChainDefaults": {
+                // Without entries, all key chains are picked by rule.
+                const defaults = await this.tenantDefaultKeyChains(tenantId);
+                return defaults === undefined ? undefined : { ...defaults };
+            }
             case "RegistrarConfig":
                 entity = await this.registrarConfigs.findOneBy({ tenantId });
                 break;
@@ -2252,6 +2268,22 @@ export class ConfigBundleService {
         return entity ? this.canonicalEntitySpec(kind, entity) : undefined;
     }
 
+    /**
+     * The tenant's default key chains: null when they name none, undefined
+     * when the tenant does not exist.
+     */
+    private async tenantDefaultKeyChains(
+        tenantId: string,
+    ): Promise<DefaultKeyChains | null | undefined> {
+        const tenant = await this.tenants.findOne({
+            where: { id: tenantId },
+            select: { id: true, defaultKeyChains: true },
+        });
+        return tenant
+            ? defaultKeyChainsOrNull(tenant.defaultKeyChains)
+            : undefined;
+    }
+
     private async exists(
         tenantId: string,
         kind: ConfigResourceKind,
@@ -2271,6 +2303,21 @@ export class ConfigBundleService {
                 );
             case "KeyChain":
                 return (await this.keyChains.countBy({ tenantId, id })) > 0;
+            case "KeyChainDefaults": {
+                // Defaults without entries exist once they were applied or
+                // changed through the API, so create mode and the detached
+                // and stale checks see a removed default as a change.
+                const defaults = await this.tenantDefaultKeyChains(tenantId);
+                if (defaults === undefined) return false;
+                return (
+                    defaults !== null ||
+                    !!(await this.ownershipService.findStored(
+                        tenantId,
+                        kind,
+                        id,
+                    ))
+                );
+            }
             case "RegistrarConfig":
                 return (await this.registrarConfigs.countBy({ tenantId })) > 0;
             case "IssuanceConfig":

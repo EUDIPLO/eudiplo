@@ -51,6 +51,14 @@ function tenantToken(app: INestApplication, tenant: string, roles: Role[]) {
     );
 }
 
+/** IDs and bundle paths of the singleton kinds these tests import. */
+const SINGLETONS: Partial<
+    Record<ConfigResourceKind, { id: string; path: string }>
+> = {
+    Tenant: { id: "tenant", path: "info.json" },
+    KeyChainDefaults: { id: "defaults", path: "key-chain-defaults.json" },
+};
+
 /** Base64 DER of a PEM certificate, as an x5c entry carries it. */
 function derOf(pem: string): string {
     return pem
@@ -179,21 +187,41 @@ describe("default access key chain of a tenant", () => {
             .expect(409);
         expect(refused.body).toMatchObject({
             code: "KEY_CHAIN_IN_USE",
-            references: [{ kind: "Tenant" }],
+            references: [{ kind: "KeyChainDefaults" }],
         });
         expect(refused.body.message).toContain(
-            "the tenant's default key chains (defaultKeyChains)",
+            "the tenant's key chain defaults",
         );
     });
 
-    test("exports the default access key chain in info.json", async () => {
+    test("exports the default access key chain as the key chain defaults, not in info.json", async () => {
         const response = await api()
+            .get("/config-bundles/resources/KeyChainDefaults/defaults/document")
+            .set("Authorization", auth)
+            .expect(200);
+        expect(response.body).toEqual({
+            $schema: schemaUrl("KeyChainDefaults"),
+            metadata: expect.any(Object),
+            spec: { access: chosen },
+        });
+        // Changed through the API, so not managed by a file.
+        const ownership = await api()
+            .get("/config-bundles/resources/KeyChainDefaults")
+            .set("Authorization", auth)
+            .expect(200);
+        expect(ownership.body).toEqual([
+            expect.objectContaining({
+                resourceId: "defaults",
+                ownership: "unmanaged",
+            }),
+        ]);
+
+        const tenantDocument = await api()
             .get("/config-bundles/resources/Tenant/tenant/document")
             .set("Authorization", auth)
             .expect(200);
-
-        expect(response.body.$schema).toBe(schemaUrl("Tenant", 3));
-        expect(response.body.spec.defaultKeyChains).toEqual({ access: chosen });
+        expect(tenantDocument.body.$schema).toBe(schemaUrl("Tenant"));
+        expect(tenantDocument.body.spec).not.toHaveProperty("defaultKeyChains");
     });
 
     test("goes back to the rule with null", async () => {
@@ -208,20 +236,14 @@ describe("default access key chain of a tenant", () => {
     });
 
     // Last: the new token revokes the one of the other tests.
-    test("accepts the same setting through PATCH /tenant/{id}", async () => {
+    test("refuses the setting through PATCH /tenant/{id}", async () => {
         const root = `Bearer ${await tenantToken(app, tenant, [Role.Tenants])}`;
 
         await api()
             .patch(`/tenant/${tenant}`)
             .set("Authorization", root)
-            .send({ defaultKeyChains: { access: attestation } })
-            .expect(400);
-        const patched = await api()
-            .patch(`/tenant/${tenant}`)
-            .set("Authorization", root)
             .send({ defaultKeyChains: { access: chosen } })
-            .expect(200);
-        expect(patched.body.defaultKeyChains).toEqual({ access: chosen });
+            .expect(400);
     });
 });
 
@@ -251,12 +273,9 @@ describe("default access key chain in configuration imports", () => {
                 tenant,
                 resources: entries.map(({ kind, spec }, index) => ({
                     kind,
-                    id: kind === "Tenant" ? "tenant" : spec.id,
+                    id: SINGLETONS[kind]?.id ?? spec.id,
                     $schema: documents[index].$schema,
-                    path:
-                        kind === "Tenant"
-                            ? "info.json"
-                            : `${kind}/${spec.id}.json`,
+                    path: SINGLETONS[kind]?.path ?? `${kind}/${spec.id}.json`,
                     sha256: createHash("sha256")
                         .update(JSON.stringify(documents[index]))
                         .digest("hex"),
@@ -281,10 +300,30 @@ describe("default access key chain in configuration imports", () => {
         return response.body;
     }
 
-    const tenantSpec = (access?: string) => ({
-        name: tenant,
-        ...(access ? { defaultKeyChains: { access } } : {}),
+    const defaults = (access?: string) => ({
+        kind: "KeyChainDefaults" as const,
+        spec: access ? { access } : {},
     });
+
+    async function importBundle(bundle: ConfigBundle): Promise<void> {
+        const result = await plan(bundle);
+        expect(result.applicable, JSON.stringify(result)).toBe(true);
+        await api()
+            .post(
+                `/config-bundles/import?mode=upsert&planFingerprint=${result.planFingerprint}`,
+            )
+            .set("Authorization", auth)
+            .send(bundle)
+            .expect(201);
+    }
+
+    async function storedDefault(): Promise<string | undefined> {
+        const response = await api()
+            .get("/key-chain/access/default")
+            .set("Authorization", auth)
+            .expect(200);
+        return response.body.defaultAccessKeyChainId;
+    }
 
     beforeAll(async () => {
         app = await createApp();
@@ -306,75 +345,130 @@ describe("default access key chain in configuration imports", () => {
         await app?.close();
     });
 
+    test("exports an empty key chain defaults document while none is set, and leaves it out of bundles", async () => {
+        const document = await api()
+            .get("/config-bundles/resources/KeyChainDefaults/defaults/document")
+            .set("Authorization", auth)
+            .expect(200);
+        expect(document.body.spec).toEqual({});
+
+        const exported = await api()
+            .get("/config-bundles/export")
+            .set("Authorization", auth)
+            .expect(200);
+        expect(
+            (exported.body as ConfigBundle).manifest.resources.map(
+                (resource) => resource.kind,
+            ),
+        ).not.toContain("KeyChainDefaults");
+    });
+
     test("blocks a default access key chain that does not exist or has another usage type", async () => {
-        const missing = await plan(
-            bundleOf([{ kind: "Tenant", spec: tenantSpec("missing") }]),
-        );
+        const missing = await plan(bundleOf([defaults("missing")]));
         expect(missing.applicable).toBe(false);
         expect(missing.issues).toContainEqual(
             expect.objectContaining({
                 code: "MISSING_RESOURCE_REFERENCE",
-                path: "/spec/defaultKeyChains/access",
+                path: "/spec/access",
+                resource: { kind: "KeyChainDefaults", id: "defaults" },
             }),
         );
 
-        const wrongUsage = await plan(
-            bundleOf([{ kind: "Tenant", spec: tenantSpec(attestation) }]),
-        );
+        for (const spec of [{ signing: access }, { access: "" }]) {
+            const malformed = await plan(
+                bundleOf([{ kind: "KeyChainDefaults", spec }]),
+            );
+            expect(malformed.applicable, JSON.stringify(spec)).toBe(false);
+        }
+
+        const wrongUsage = await plan(bundleOf([defaults(attestation)]));
         expect(wrongUsage.applicable).toBe(false);
         expect(wrongUsage.issues).toContainEqual(
             expect.objectContaining({
                 code: "KEY_CHAIN_USAGE_MISMATCH",
-                path: "/spec/defaultKeyChains/access",
+                path: "/spec/access",
             }),
         );
     });
 
-    test("sets the default from info.json and removes it when the file leaves it out", async () => {
-        const named = bundleOf([{ kind: "Tenant", spec: tenantSpec(access) }]);
-        const namedPlan = await plan(named);
-        expect(namedPlan.applicable, JSON.stringify(namedPlan)).toBe(true);
-        await api()
-            .post(
-                `/config-bundles/import?mode=upsert&planFingerprint=${namedPlan.planFingerprint}`,
-            )
-            .set("Authorization", auth)
-            .send(named)
-            .expect(201);
-        const set = await api()
-            .get("/key-chain/access/default")
+    test("sets the default from key-chain-defaults.json and removes it with an empty one", async () => {
+        await importBundle(bundleOf([defaults(access)]));
+        expect(await storedDefault()).toBe(access);
+
+        // A tenant document leaves the default alone.
+        await importBundle(
+            bundleOf([{ kind: "Tenant", spec: { name: tenant } }]),
+        );
+        expect(await storedDefault()).toBe(access);
+
+        await importBundle(bundleOf([defaults()]));
+        expect(await storedDefault()).toBeUndefined();
+
+        // Without entries, an empty document is the stored state.
+        const empty = await plan(bundleOf([defaults()]));
+        expect(
+            empty.items.find((item) => item.kind === "KeyChainDefaults")
+                ?.action,
+        ).toBe("unchanged");
+    });
+
+    test("exports the default in the bundle and imports it again", async () => {
+        await importBundle(bundleOf([defaults(access)]));
+
+        const exported = await api()
+            .get("/config-bundles/export")
             .set("Authorization", auth)
             .expect(200);
-        expect(set.body.defaultAccessKeyChainId).toBe(access);
+        const bundle: ConfigBundle = exported.body;
+        expect(bundle.manifest.resources).toContainEqual(
+            expect.objectContaining({
+                kind: "KeyChainDefaults",
+                id: "defaults",
+            }),
+        );
+        expect(bundle.documents).toContainEqual(
+            expect.objectContaining({
+                $schema: schemaUrl("KeyChainDefaults"),
+                spec: { access },
+            }),
+        );
 
-        const omitted = bundleOf([{ kind: "Tenant", spec: tenantSpec() }]);
-        const omittedPlan = await plan(omitted);
-        expect(omittedPlan.applicable, JSON.stringify(omittedPlan)).toBe(true);
-        await api()
-            .post(
-                `/config-bundles/import?mode=upsert&planFingerprint=${omittedPlan.planFingerprint}`,
-            )
-            .set("Authorization", auth)
-            .send(omitted)
-            .expect(201);
-        const removed = await api()
-            .get("/key-chain/access/default")
-            .set("Authorization", auth)
-            .expect(200);
-        expect(removed.body).not.toHaveProperty("defaultAccessKeyChainId");
+        const roundTrip = await plan(bundle);
+        expect(
+            roundTrip.items.find((item) => item.kind === "KeyChainDefaults")
+                ?.action,
+        ).toBe("unchanged");
+    });
 
-        // An empty map is the same as none.
-        const empty = await plan(
+    test("refuses API changes while the key chain defaults are file-managed, not while only info.json is", async () => {
+        await importBundle(
             bundleOf([
-                {
-                    kind: "Tenant",
-                    spec: { ...tenantSpec(), defaultKeyChains: {} },
-                },
+                { kind: "Tenant", spec: { name: tenant } },
+                defaults(access),
             ]),
         );
-        expect(empty.items.find((item) => item.kind === "Tenant")?.action).toBe(
-            "unchanged",
-        );
+        await api()
+            .put("/key-chain/access/default")
+            .set("Authorization", auth)
+            .send({ defaultAccessKeyChainId: null })
+            .expect(409);
+
+        await api()
+            .post("/config-bundles/resources/KeyChainDefaults/defaults/detach")
+            .set("Authorization", auth)
+            .expect(201);
+        await api()
+            .put("/key-chain/access/default")
+            .set("Authorization", auth)
+            .send({ defaultAccessKeyChainId: null })
+            .expect(200);
+        const tenantOwnership = await api()
+            .get("/config-bundles/resources/Tenant")
+            .set("Authorization", auth)
+            .expect(200);
+        expect(tenantOwnership.body).toEqual([
+            expect.objectContaining({ ownership: "file-managed" }),
+        ]);
     });
 });
 
@@ -404,12 +498,9 @@ describe("default access key chain in replace imports", () => {
                 tenant,
                 resources: entries.map(({ kind, spec }, index) => ({
                     kind,
-                    id: kind === "Tenant" ? "tenant" : spec.id,
+                    id: SINGLETONS[kind]?.id ?? spec.id,
                     $schema: documents[index].$schema,
-                    path:
-                        kind === "Tenant"
-                            ? "info.json"
-                            : `${kind}/${spec.id}.json`,
+                    path: SINGLETONS[kind]?.path ?? `${kind}/${spec.id}.json`,
                     sha256: createHash("sha256")
                         .update(JSON.stringify(documents[index]))
                         .digest("hex"),
@@ -459,11 +550,8 @@ describe("default access key chain in replace imports", () => {
             bundleOf([
                 { kind: "KeyChain", spec: attestationKeyChain },
                 {
-                    kind: "Tenant",
-                    spec: {
-                        name: tenant,
-                        defaultKeyChains: { access: attestationKeyChain.id },
-                    },
+                    kind: "KeyChainDefaults",
+                    spec: { access: attestationKeyChain.id },
                 },
             ]),
             "upsert",
@@ -478,11 +566,8 @@ describe("default access key chain in replace imports", () => {
         const named = bundleOf([
             { kind: "KeyChain", spec: accessKeyChain },
             {
-                kind: "Tenant",
-                spec: {
-                    name: tenant,
-                    defaultKeyChains: { access: accessKeyChain.id },
-                },
+                kind: "KeyChainDefaults",
+                spec: { access: accessKeyChain.id },
             },
         ]);
         const namedPlan = await plan(named, "upsert");
@@ -495,9 +580,15 @@ describe("default access key chain in replace imports", () => {
             .send(named)
             .expect(201);
 
-        // The stored tenant still names the key chain the bundle leaves out.
+        // The stored defaults still name the key chain the bundle leaves out.
         const blocked = await plan(
-            bundleOf([{ kind: "KeyChain", spec: attestationKeyChain }]),
+            bundleOf([
+                { kind: "KeyChain", spec: attestationKeyChain },
+                {
+                    kind: "KeyChainDefaults",
+                    spec: { access: accessKeyChain.id },
+                },
+            ]),
             "replace",
         );
         expect(blocked.applicable).toBe(false);
@@ -506,21 +597,47 @@ describe("default access key chain in replace imports", () => {
             expect.objectContaining({
                 code: "KEY_CHAIN_IN_USE",
                 message: expect.stringContaining(
-                    "the tenant's default key chains",
+                    "the tenant's key chain defaults",
                 ),
             }),
         );
 
-        // The same import with an info.json without the setting removes it first.
+        // The same import without key-chain-defaults.json deletes the
+        // defaults first.
         const dropped = await plan(
-            bundleOf([
-                { kind: "KeyChain", spec: attestationKeyChain },
-                { kind: "Tenant", spec: { name: tenant } },
-            ]),
+            bundleOf([{ kind: "KeyChain", spec: attestationKeyChain }]),
             "replace",
         );
         expect(dropped.applicable, JSON.stringify(dropped)).toBe(true);
         expect(keyChainItem(dropped)).toMatchObject({ action: "delete" });
+        expect(dropped.items).toContainEqual(
+            expect.objectContaining({
+                kind: "KeyChainDefaults",
+                action: "delete",
+            }),
+        );
+        await api()
+            .post(
+                `/config-bundles/import?mode=replace&confirmReplace=true&planFingerprint=${dropped.planFingerprint}`,
+            )
+            .set("Authorization", auth)
+            .send(bundleOf([{ kind: "KeyChain", spec: attestationKeyChain }]))
+            .expect(201);
+
+        const defaults = await api()
+            .get("/key-chain/access/default")
+            .set("Authorization", auth)
+            .expect(200);
+        expect(defaults.body).not.toHaveProperty("defaultAccessKeyChainId");
+        const ownership = await api()
+            .get("/config-bundles/resources/KeyChainDefaults")
+            .set("Authorization", auth)
+            .expect(200);
+        expect(ownership.body).toEqual([]);
+        await api()
+            .get(`/key-chain/${accessKeyChain.id}`)
+            .set("Authorization", auth)
+            .expect(404);
     });
 });
 

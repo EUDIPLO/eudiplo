@@ -44,7 +44,7 @@ import { KeyUsageType } from "./types/key-usage-type.js";
 
 /** Roles that read each kind of configuration that can name a key chain. */
 const readRoles: Record<KeyChainReferenceKind, Role[]> = {
-    Tenant: [Role.Issuances, Role.Presentations, Role.Keys],
+    KeyChainDefaults: [Role.Issuances, Role.Presentations, Role.Keys],
     IssuanceConfig: [Role.Issuances],
     CredentialConfig: [Role.Issuances],
     PresentationConfig: [Role.Presentations, Role.PresentationRequest],
@@ -328,7 +328,7 @@ export class KeyChainController {
     @ApiOperation({
         summary: "Delete a key chain",
         description:
-            "Refused while the issuance configuration, a credential config, a presentation config, a status list or a trust list of the tenant names the key chain. A configuration that names no key chain and uses the tenant's default one does not count; a trust list stores the key chain that signs it, also one picked by default.",
+            "Refused while the tenant's key chain defaults, the issuance configuration, a credential config, a presentation config, a status list or a trust list of the tenant names the key chain. A configuration that names no key chain and uses the tenant's default one does not count; a trust list stores the key chain that signs it, also one picked by default.",
     })
     @ApiResponse({ status: 204, description: "Key chain deleted successfully" })
     @ApiResponse({ status: 404, description: "Key chain not found" })

@@ -6,7 +6,7 @@ export interface ReferencedKeyChain {
 
 /** Kinds of configuration that can name a key chain, in message order. */
 export const KEY_CHAIN_REFERENCE_KINDS = [
-    "Tenant",
+    "KeyChainDefaults",
     "IssuanceConfig",
     "CredentialConfig",
     "PresentationConfig",
@@ -26,7 +26,7 @@ export function isKeyChainReferenceKind(
 export interface KeyChainReference {
     kind: KeyChainReferenceKind;
     /**
-     * Configuration ID; absent for the tenant settings and the issuance
+     * Configuration ID; absent for the key chain defaults and the issuance
      * configuration, which a tenant has once.
      */
     id?: string;
@@ -34,15 +34,15 @@ export interface KeyChainReference {
 }
 
 /** Kinds a tenant has once, whose references carry no ID. */
-type SingletonKind = "Tenant" | "IssuanceConfig";
+type SingletonKind = "KeyChainDefaults" | "IssuanceConfig";
 
 function isSingletonKind(kind: KeyChainReferenceKind): kind is SingletonKind {
-    return kind === "Tenant" || kind === "IssuanceConfig";
+    return kind === "KeyChainDefaults" || kind === "IssuanceConfig";
 }
 
 /**
- * The ID a reference to the configuration carries: none for the tenant
- * settings and the issuance configuration, which a tenant has once.
+ * The ID a reference to the configuration carries: none for the key chain
+ * defaults and the issuance configuration, which a tenant has once.
  */
 export function keyChainReferenceId(
     kind: KeyChainReferenceKind,
@@ -141,8 +141,8 @@ export function describeKeyChainReferences(
     readRoles?: KeyChainReferenceReadRoles,
 ): string {
     const parts = [
-        references.some((reference) => reference.kind === "Tenant")
-            ? "the tenant's default key chains (defaultKeyChains)"
+        references.some((reference) => reference.kind === "KeyChainDefaults")
+            ? "the tenant's key chain defaults"
             : undefined,
         references.some((reference) => reference.kind === "IssuanceConfig")
             ? "the issuance configuration"

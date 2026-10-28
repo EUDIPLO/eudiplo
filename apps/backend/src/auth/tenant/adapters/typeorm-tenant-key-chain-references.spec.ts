@@ -4,7 +4,7 @@ import { TypeOrmTenantKeyChainReferences } from "./typeorm-tenant-key-chain-refe
 const keyChain = { tenantId: "acme", id: "access" };
 
 describe("TypeOrmTenantKeyChainReferences", () => {
-    it("returns the tenant when one of its default key chains is the key chain", async () => {
+    it("returns the key chain defaults when one of their entries is the key chain", async () => {
         const repository = {
             findOne: vi.fn().mockResolvedValue({
                 id: "acme",
@@ -14,7 +14,7 @@ describe("TypeOrmTenantKeyChainReferences", () => {
         const source = new TypeOrmTenantKeyChainReferences(repository as any);
 
         await expect(source.findReferences(keyChain)).resolves.toEqual([
-            { kind: "Tenant" },
+            { kind: "KeyChainDefaults" },
         ]);
         expect(repository.findOne).toHaveBeenCalledWith(
             expect.objectContaining({ where: { id: "acme" } }),
@@ -36,15 +36,11 @@ describe("TypeOrmTenantKeyChainReferences", () => {
         }
     });
 
-    it("checks the spec of a tenant document that is not stored", () => {
+    it("checks the spec of a key chain defaults document that is not stored", () => {
         const source = new TypeOrmTenantKeyChainReferences({} as any);
 
-        expect(
-            source.namesKeyChain(
-                { name: "Acme", defaultKeyChains: { access: "access" } },
-                keyChain,
-            ),
-        ).toBe(true);
-        expect(source.namesKeyChain({ name: "Acme" }, keyChain)).toBe(false);
+        expect(source.namesKeyChain({ access: "access" }, keyChain)).toBe(true);
+        expect(source.namesKeyChain({ access: "other" }, keyChain)).toBe(false);
+        expect(source.namesKeyChain({}, keyChain)).toBe(false);
     });
 });

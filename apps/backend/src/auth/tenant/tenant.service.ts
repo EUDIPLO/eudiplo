@@ -38,6 +38,7 @@ import {
     type DefaultKeyChains,
     defaultKeyChainsOrNull,
     type TenantData,
+    type TenantUpdate,
 } from "./domain/tenant-data.js";
 import {
     TENANT_REPOSITORY,
@@ -49,30 +50,10 @@ import type {
 } from "./schemas/create-tenant.schema.js";
 import { ImportTenantSchema } from "./schemas/create-tenant.schema.js";
 
-/**
- * The tenant fields of `info.json` that are written before the other files
- * are imported. The default key chains name key chains those files may
- * create, so {@link TenantService.finishTenantSetup} applies them.
- */
-function withoutDefaultKeyChains<
-    T extends { defaultKeyChains?: DefaultKeyChains | null },
->(spec: T): Omit<T, "defaultKeyChains"> {
-    const { defaultKeyChains: _applied, ...fields } = spec;
-    return fields;
-}
-
 @Injectable()
 export class TenantService implements OnApplicationBootstrap {
     private readonly logger = new Logger(TenantService.name);
     private readonly tenantTotal: UpDownCounter;
-    /**
-     * Default key chains named in `info.json`, applied once the other files
-     * of the tenant are imported, since they may create the key chains.
-     */
-    private readonly pendingDefaultKeyChains = new Map<
-        string,
-        DefaultKeyChains
-    >();
 
     constructor(
         @Inject(CLIENTS_PROVIDER) private readonly clients: ClientsProvider,
@@ -98,7 +79,6 @@ export class TenantService implements OnApplicationBootstrap {
         this.configImportOrchestrator.registerTenantSetup(
             "tenants",
             (tenantId) => this.setupTenant(tenantId),
-            (tenantId) => this.finishTenantSetup(tenantId),
         );
     }
 
@@ -115,7 +95,6 @@ export class TenantService implements OnApplicationBootstrap {
      */
     async setupTenant(tenantId: string): Promise<boolean> {
         const configPath = this.configService.getOrThrow("CONFIG_FOLDER");
-        this.pendingDefaultKeyChains.delete(tenantId);
 
         // Check if tenant already exists
         const existing = await this.tenantRepository.findActive(tenantId);
@@ -143,7 +122,7 @@ export class TenantService implements OnApplicationBootstrap {
 
         try {
             const configFile = readFileSync(file, "utf-8");
-            const upgraded = this.upgradeTenantConfig(configFile);
+            const upgraded = this.upgradeTenantConfig(tenantId, configFile);
 
             const validationResult = ImportTenantSchema.safeParse(
                 upgraded.spec,
@@ -165,15 +144,9 @@ export class TenantService implements OnApplicationBootstrap {
 
             // ID is always derived from folder name, not from config file
             await this.createTenant({
-                ...withoutDefaultKeyChains(validationResult.data),
+                ...validationResult.data,
                 id: tenantId,
             } as CreateTenant);
-            const defaultKeyChains = defaultKeyChainsOrNull(
-                validationResult.data.defaultKeyChains,
-            );
-            if (defaultKeyChains) {
-                this.pendingDefaultKeyChains.set(tenantId, defaultKeyChains);
-            }
             await this.configOwnershipService.markApplied({
                 tenantId,
                 kind: "Tenant",
@@ -207,7 +180,7 @@ export class TenantService implements OnApplicationBootstrap {
         file: string,
     ): Promise<void> {
         const configFile = readFileSync(file, "utf-8");
-        const upgraded = this.upgradeTenantConfig(configFile);
+        const upgraded = this.upgradeTenantConfig(tenantId, configFile);
         const mode = this.configImportModeService.resolve();
         if (mode === "create" || mode === "disabled") return;
         const validationResult = ImportTenantSchema.safeParse(upgraded.spec);
@@ -250,23 +223,7 @@ export class TenantService implements OnApplicationBootstrap {
             return;
         }
 
-        // An info.json without them removes the defaults, and one that names
-        // stored key chains sets them, before the other files are imported,
-        // so they may delete a former default. Key chains the files create
-        // first are set afterwards.
-        const defaultKeyChains = defaultKeyChainsOrNull(
-            validationResult.data.defaultKeyChains,
-        );
-        const applyNow =
-            !defaultKeyChains ||
-            (await this.namesStoredKeyChains(tenantId, defaultKeyChains));
-        await this.tenantRepository.update(tenantId, {
-            ...withoutDefaultKeyChains(validationResult.data),
-            ...(applyNow ? { defaultKeyChains } : {}),
-        });
-        if (defaultKeyChains && !applyNow) {
-            this.pendingDefaultKeyChains.set(tenantId, defaultKeyChains);
-        }
+        await this.tenantRepository.update(tenantId, validationResult.data);
         await this.configOwnershipService.markApplied({
             tenantId,
             kind: "Tenant",
@@ -278,56 +235,10 @@ export class TenantService implements OnApplicationBootstrap {
         });
     }
 
-    /**
-     * Refuses default key chains that name no key chain of the tenant, or one
-     * of another usage type than their entry.
-     */
-    private async assertDefaultKeyChains(
+    private upgradeTenantConfig(
         tenantId: string,
-        defaultKeyChains: DefaultKeyChains,
-    ): Promise<void> {
-        if (defaultKeyChains.access) {
-            await this.keyChainService.assertAccessKeyChain(
-                tenantId,
-                defaultKeyChains.access,
-            );
-        }
-    }
-
-    private async namesStoredKeyChains(
-        tenantId: string,
-        defaultKeyChains: DefaultKeyChains,
-    ): Promise<boolean> {
-        try {
-            await this.assertDefaultKeyChains(tenantId, defaultKeyChains);
-            return true;
-        } catch {
-            return false;
-        }
-    }
-
-    /**
-     * Applies the default key chains that `info.json` names, once the other
-     * files of the tenant are imported. The folder import does not plan
-     * `info.json`, so the key chains are checked here; one that is missing or
-     * has another usage type fails the tenant's import and leaves the stored
-     * defaults unchanged.
-     */
-    async finishTenantSetup(tenantId: string): Promise<void> {
-        const defaultKeyChains = this.pendingDefaultKeyChains.get(tenantId);
-        if (!defaultKeyChains) return;
-        this.pendingDefaultKeyChains.delete(tenantId);
-        try {
-            await this.assertDefaultKeyChains(tenantId, defaultKeyChains);
-        } catch (error) {
-            throw new Error(
-                `defaultKeyChains in info.json is not applied: ${(error as Error).message}`,
-            );
-        }
-        await this.tenantRepository.update(tenantId, { defaultKeyChains });
-    }
-
-    private upgradeTenantConfig(raw: string): {
+        raw: string,
+    ): {
         spec: Record<string, unknown>;
         document: import("../../platform/config-portability/config-resource.types.js").ConfigDocument;
     } {
@@ -347,6 +258,13 @@ export class TenantService implements OnApplicationBootstrap {
         );
         if (blocking.length) {
             throw new Error(blocking.map((issue) => issue.message).join("; "));
+        }
+        // Such as the default key chains of a 10.0 development build, which
+        // the upgrade drops.
+        for (const issue of result.issues) {
+            this.logger.warn(
+                `[${tenantId}] info.json${issue.path}: ${issue.code}: ${issue.message}`,
+            );
         }
         return {
             spec: this.configMigrationService.unwrapForLegacyImporter(
@@ -450,27 +368,24 @@ export class TenantService implements OnApplicationBootstrap {
      * @param data The updated tenant data
      * @returns The updated tenant entity
      */
-    async updateTenant(
+    updateTenant(
         id: string,
         data: UpdateTenant,
         actorToken?: TokenPayload,
         requestMeta?: AuditLogRequestMeta,
     ): Promise<TenantData> {
+        return this.recordedUpdate(id, data, actorToken, requestMeta);
+    }
+
+    /** Writes tenant fields and records the change in the audit log. */
+    private async recordedUpdate(
+        id: string,
+        data: TenantUpdate,
+        actorToken?: TokenPayload,
+        requestMeta?: AuditLogRequestMeta,
+    ): Promise<TenantData> {
         const existing = await this.getTenant(id);
-        if (data.defaultKeyChains) {
-            await this.assertDefaultKeyChains(id, data.defaultKeyChains);
-        }
-        await this.tenantRepository.update(
-            id,
-            data.defaultKeyChains === undefined
-                ? data
-                : {
-                      ...data,
-                      defaultKeyChains: defaultKeyChainsOrNull(
-                          data.defaultKeyChains,
-                      ),
-                  },
-        );
+        await this.tenantRepository.update(id, data);
         const updated = await this.getTenant(id);
 
         if (actorToken) {
@@ -502,13 +417,19 @@ export class TenantService implements OnApplicationBootstrap {
         // The other entries of the map stay.
         const { defaultKeyChains } = await this.getTenant(tenantId);
         const { access: _previous, ...others } = defaultKeyChains ?? {};
-        await this.updateTenant(
+        const next: DefaultKeyChains = defaultAccessKeyChainId
+            ? { ...others, access: defaultAccessKeyChainId }
+            : others;
+        // Refuses a key chain of another tenant or usage type.
+        if (defaultAccessKeyChainId) {
+            await this.keyChainService.assertAccessKeyChain(
+                tenantId,
+                defaultAccessKeyChainId,
+            );
+        }
+        await this.recordedUpdate(
             tenantId,
-            {
-                defaultKeyChains: defaultAccessKeyChainId
-                    ? { ...others, access: defaultAccessKeyChainId }
-                    : others,
-            },
+            { defaultKeyChains: defaultKeyChainsOrNull(next) },
             actorToken,
             requestMeta,
         );

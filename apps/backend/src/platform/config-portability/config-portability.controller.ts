@@ -357,11 +357,12 @@ export class ConfigPortabilityController {
         Role.Presentations,
         Role.Clients,
         Role.Registrar,
+        Role.Keys,
     ])
     @ApiOperation({
         summary: "Export one resource as a configuration document",
         description:
-            "Returns the resource as a `$schema` and `spec` document in the current format version, the format of the files in the config folder and of the documents in a configuration bundle. Secrets are `${PLACEHOLDER}` references, as in the bundle export, and image references name the file. A key chain held in the database keeps its private keys, for a CA chain also the signing key, which `GET /key-chain/{id}/export` leaves out, so a `KeyChain` document needs `tenant:admin` or `tenants:manage`. Other kinds accept the roles that change them through the management API, for example `issuance:manage` for `CredentialConfig`; `keys:manage`, which only changes the default access key chain of the tenant, does not export the `Tenant` document. Singleton kinds use their fixed ID: `tenant`, `kms`, `registrar` and `issuance`.",
+            "Returns the resource as a `$schema` and `spec` document in the current format version, the format of the files in the config folder and of the documents in a configuration bundle. Secrets are `${PLACEHOLDER}` references, as in the bundle export, and image references name the file. A key chain held in the database keeps its private keys, for a CA chain also the signing key, which `GET /key-chain/{id}/export` leaves out, so a `KeyChain` document needs `tenant:admin` or `tenants:manage`. Other kinds accept the roles that change them through the management API, for example `issuance:manage` for `CredentialConfig` and `keys:manage` for `KeyChainDefaults`. Singleton kinds use their fixed ID: `tenant`, `kms`, `registrar`, `issuance` and `defaults`.",
     })
     @ApiParam({ name: "kind", enum: CONFIG_RESOURCE_KINDS })
     @ApiParam({ name: "id", description: "Resource ID" })

@@ -87,26 +87,6 @@
         }
       },
       "additionalProperties": false
-    },
-    "defaultKeyChains": {
-      "description": "The tenant's key chain per usage type, used where no configuration names one. Replaces the stored entries; omit to keep them, or set to null to remove them.",
-      "anyOf": [
-        {
-          "type": "object",
-          "properties": {
-            "access": {
-              "description": "ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.",
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          "additionalProperties": false,
-          "description": "The tenant's key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule."
-        },
-        {
-          "type": "null"
-        }
-      ]
     }
   },
   "additionalProperties": false,

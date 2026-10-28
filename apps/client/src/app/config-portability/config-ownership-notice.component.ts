@@ -64,8 +64,8 @@ import {
                 Startup imports skip this resource. Reset it to the file version to make it
                 file-managed again.
                 @if (kind === 'Tenant') {
-                  The reset applies all tenant settings of info.json, such as the session, status
-                  list and default access key chain settings.
+                  The reset applies all tenant settings of info.json, such as the session and status
+                  list settings.
                 }
               </span>
             } @else {

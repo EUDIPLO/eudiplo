@@ -39,8 +39,8 @@ export function offersApplyFromFile(
 /**
  * A resource Config Portability offers "Reset to file" for, which applies its
  * version from the config folder again. A resource from an uploaded bundle has
- * no folder version. Most tenants change their settings through the API, so
- * the tenant settings only offer it once detached from a folder.
+ * no folder version. Most tenants change their settings and default key chains
+ * through the API, so these only offer it once detached from a folder.
  */
 export function offersResetToFile(
   kind: ConfigResourceKind,
@@ -48,7 +48,7 @@ export function offersResetToFile(
 ): boolean {
   if (!metadata || metadata.ownership === 'file-managed') return false;
   if (metadata.source?.startsWith('bundle:')) return false;
-  return kind !== 'Tenant' || metadata.ownership === 'detached';
+  return (kind !== 'Tenant' && kind !== 'KeyChainDefaults') || metadata.ownership === 'detached';
 }
 
 @Injectable({ providedIn: 'root' })
