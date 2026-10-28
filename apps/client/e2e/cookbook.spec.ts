@@ -221,7 +221,11 @@ test('issue and verify cookbook', async ({ page }) => {
 
   await test.step('chapter 3, step 1: create the keys for the trust list', async () => {
     await createKeyChain(page, ['Trust List Signing'], 'Membership trust list signing');
-    await createKeyChain(page, ['Status List Signing'], 'Membership status list signing');
+    await createKeyChain(
+      page,
+      ['Status List Signing', 'Create Key Chain (Recommended)'],
+      'Membership status list signing'
+    );
     await openNav(page, 'Keys');
     await expect(page.getByText('Membership trust list signing')).toBeVisible();
     await expect(page.getByText('Membership status list signing')).toBeVisible();

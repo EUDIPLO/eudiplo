@@ -547,6 +547,21 @@ describe('KeyCreateWizardComponent imports', () => {
     expect(component.configForm.valid).toBe(false);
   });
 
+  it('imports a status list External CA Chain as an internal chain with rotation', async () => {
+    const component = externalCaChain();
+    component.usageForm.patchValue({ usage: 'statusList' });
+
+    await component.createKey();
+
+    expect(keyChainService.import).toHaveBeenCalledWith(
+      expect.objectContaining({
+        usageType: 'statusList',
+        type: 'internalChain',
+        rotationPolicy: { enabled: true, intervalDays: 45, certValidityDays: 200 },
+      })
+    );
+  });
+
   it('imports an External Certificate as a standalone key chain', async () => {
     const component = create();
     component.usageForm.patchValue({ usage: 'access' });
@@ -563,6 +578,7 @@ describe('KeyCreateWizardComponent imports', () => {
   it('imports an externally issued status list certificate as a standalone key chain', async () => {
     const component = create();
     component.usageForm.patchValue({ usage: 'statusList' });
+    component.caSourceForm.patchValue({ keyChainType: 'standalone' });
     component.configForm.patchValue({ useExternalCertificate: true });
 
     await component.createKey();
@@ -725,6 +741,92 @@ describe('KeyCreateWizardComponent internal chains', () => {
       expect.objectContaining({
         type: 'internalChain',
         rotationPolicy: { enabled: false, intervalDays: undefined, certValidityDays: 365 },
+      })
+    );
+  });
+
+  it('offers to create the status list key next, with its usage preselected', async () => {
+    const router = { navigate: vi.fn() };
+    snackBar.open.mockReturnValue({ onAction: () => of(undefined) });
+    const component = new KeyCreateWizardComponent(
+      new FormBuilder(),
+      keyChainService as never,
+      {} as never,
+      {} as never,
+      router as never,
+      snackBar as never,
+      { hasRole: () => false } as never
+    );
+    component.usageForm.patchValue({ usage: 'attestation' });
+
+    await component.createKey();
+
+    expect(router.navigate).toHaveBeenCalledWith(['/keys/create'], {
+      queryParams: { usage: 'statusList' },
+    });
+  });
+
+  it('offers the key chain type only for attestation and status list keys', () => {
+    const component = create();
+    const offered = (
+      ['attestation', 'statusList', 'access', 'trustList', 'federation'] as const
+    ).filter((usage) => {
+      component.usageForm.patchValue({ usage });
+      return component.showKeyChainTypeStep;
+    });
+
+    expect(offered).toEqual(['attestation', 'statusList']);
+  });
+
+  it('starts a status list key on Create Key Chain with rotation', () => {
+    const component = new KeyCreateWizardComponent(
+      new FormBuilder(),
+      keyChainService as never,
+      {} as never,
+      {} as never,
+      { navigate: vi.fn() } as never,
+      snackBar as never,
+      { hasRole: () => false } as never
+    );
+    component.usageForm.patchValue({ usage: 'statusList' });
+
+    expect(component.selectedKeyChainType).toBe('internalChain');
+    expect(component.rotationEnabled).toBe(true);
+  });
+
+  it('creates a status list key as an internal chain with rotation by default', async () => {
+    const component = create();
+    component.usageForm.patchValue({ usage: 'statusList' });
+    component.configForm.patchValue({ rotationIntervalDays: 20 });
+
+    await component.createKey();
+
+    expect(keyChainService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        usageType: 'statusList',
+        type: 'internalChain',
+        description: 'Status List Signing Key',
+        rotationPolicy: { enabled: true, intervalDays: 20, certValidityDays: 365 },
+      })
+    );
+    expect(component.getSummary()).toContainEqual({
+      label: 'Rotation Interval',
+      value: '20 days',
+    });
+  });
+
+  it('creates a standalone status list key without rotation', async () => {
+    const component = create();
+    component.usageForm.patchValue({ usage: 'statusList' });
+    component.caSourceForm.patchValue({ keyChainType: 'standalone' });
+
+    await component.createKey();
+
+    expect(keyChainService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        usageType: 'statusList',
+        type: 'standalone',
+        rotationPolicy: expect.objectContaining({ enabled: false }),
       })
     );
   });
