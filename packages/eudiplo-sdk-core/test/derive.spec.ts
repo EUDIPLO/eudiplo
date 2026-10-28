@@ -345,7 +345,7 @@ describe("prototype pollution", () => {
           fn(fields);
         }
         expect(changedBuiltIns(before)).toEqual([]);
-        expect(({} as Record<string, unknown>).required).toBe(undefined);
+        expect(({} as Record<string, unknown>).required).toBeUndefined();
       });
     }
   }
