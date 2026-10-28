@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ClaimFieldDefinitionDto } from '@eudiplo/sdk-core';
 import { CredentialConfigCreateComponent } from './credential-config-create.component';
+import { configs } from './pre-config';
+import { claimSchemaError } from '../../../utils/claim-schema-check';
 
 describe('CredentialConfigCreateComponent', () => {
   let component: CredentialConfigCreateComponent;
@@ -276,6 +279,97 @@ describe('CredentialConfigCreateComponent', () => {
     expect((component as any).buildFieldsPayload([field.value])[0]).not.toHaveProperty(
       'defaultValue'
     );
+  });
+
+  it('keeps the constraints of the PID template through the form', () => {
+    const pid = configs.find((template) => template.name.startsWith('PID'))!;
+    component.loadPredefinedConfig(pid);
+    const fields: ClaimFieldDefinitionDto[] = (component as any).buildConfigurationPayload().fields;
+    const byPath = (path: string) => fields.find((field) => field.path.join('.') === path);
+
+    expect(byPath('birthdate')?.constraints).toEqual({ pattern: String.raw`^\d{4}-\d{2}-\d{2}$` });
+    expect(byPath('nationalities')?.constraints).toEqual({
+      items: { type: 'string', title: 'Nationality' },
+    });
+    expect(byPath('family_name')).not.toHaveProperty('constraints');
+  });
+
+  it('saves edited constraints, omits cleared ones and refuses ones that are not an object', () => {
+    const field = component.createFieldGroup({
+      path: ['code'],
+      type: 'string',
+      constraints: { pattern: '^[A-Z]+$' },
+    });
+    expect(component.hasConstraints(field)).toBe(true);
+    const constraints = field.get('constraints')!;
+
+    constraints.setValue('{ "pattern": "^[A-Z]{2}$", "maxLength": 2 }');
+    expect(field.valid).toBe(true);
+    expect((component as any).buildFieldsPayload([field.value])[0].constraints).toEqual({
+      pattern: '^[A-Z]{2}$',
+      maxLength: 2,
+    });
+
+    constraints.setValue('{ "pattern": ');
+    expect(constraints.getError('constraints')).toContain('Enter valid JSON: ');
+    constraints.setValue('["pattern"]');
+    expect(constraints.getError('constraints')).toContain('Enter a JSON object');
+
+    constraints.setValue('  ');
+    expect(field.valid).toBe(true);
+    expect(component.hasConstraints(field)).toBe(false);
+    expect((component as any).buildFieldsPayload([field.value])[0]).not.toHaveProperty(
+      'constraints'
+    );
+  });
+
+  it('every template loads with valid claim fields that issuance can compile', () => {
+    for (const template of configs) {
+      component.loadPredefinedConfig(template);
+      expect(component.fields.valid, template.name).toBe(true);
+      const { fields } = (component as any).buildConfigurationPayload();
+      expect(claimSchemaError(fields), template.name).toBeUndefined();
+    }
+  });
+
+  it('does not save constraints that issuance could not compile', () => {
+    const snackBar = (component as any).snackBar;
+    basics();
+    component.displayConfigs.at(0).patchValue({ name: 'Membership', description: 'Member card' });
+    component.fields.push(
+      component.createFieldGroup({
+        path: ['code'],
+        type: 'string',
+        constraints: { patern: '^[A-Z]+$' },
+      })
+    );
+    component.toggleGuidedMode();
+
+    component.submitCredential();
+    expect(save).not.toHaveBeenCalled();
+    expect(component.activeStep).toBe(1);
+    expect(snackBar.open).toHaveBeenCalledWith(
+      expect.stringContaining('unknown keyword: "patern"'),
+      'Close',
+      expect.anything()
+    );
+    expect(component.loading).toBe(false);
+  });
+
+  it('opens the claim whose constraints do not parse instead of the JSON view', () => {
+    const open = vi.fn();
+    (component as any).dialog = { open };
+    basics();
+    component.submitCredential();
+    const field = component.createFieldGroup({ path: ['code'], type: 'string' });
+    component.fields.push(field);
+    field.get('constraints')!.setValue('{ "pattern": ');
+
+    expect(() => component.viewAsJson()).not.toThrow();
+    expect(open).not.toHaveBeenCalled();
+    expect(component.activeStep).toBe(1);
+    expect(component.expandedFields.has(field)).toBe(true);
+    expect(field.get('constraints')!.touched).toBe(true);
   });
 
   it('should create', () => {

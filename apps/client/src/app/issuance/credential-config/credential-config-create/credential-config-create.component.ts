@@ -5,6 +5,7 @@ import {
   FormControl,
   FormGroup,
   ReactiveFormsModule,
+  ValidationErrors,
   Validators,
 } from '@angular/forms';
 import { CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
@@ -48,6 +49,7 @@ import { JsonViewDialogComponent } from './json-view-dialog/json-view-dialog.com
 import { configs } from './pre-config';
 import { MonacoEditorModule } from 'ngx-monaco-editor-v2';
 import {
+  claimConstraintsSchema,
   credentialConfigSchema,
   embeddedDisclosurePolicySchema,
   vctSchema,
@@ -55,6 +57,7 @@ import {
 import { EditorComponent, extractSchema } from '../../../utils/editor/editor.component';
 import { ImageFieldComponent } from '../../../utils/image-field/image-field.component';
 import { schemaFormValidator } from '../../../utils/schema-form-validator';
+import { claimSchemaError } from '../../../utils/claim-schema-check';
 import { LabelledFailure, getApiErrorMessage } from '../../../utils/error-message';
 import { hostedVctUrl } from '../../../utils/public-url';
 import { FrontendConfigService } from '../../../services/frontend-config.service';
@@ -241,6 +244,28 @@ export class CredentialConfigCreateComponent implements OnInit {
   ];
 
   private readonly validateVct = schemaFormValidator(vctSchema);
+  private readonly validateConstraintsSchema = schemaFormValidator(claimConstraintsSchema);
+
+  /**
+   * Blank constraints mean none, as on save. Others must be a JSON object that the credential
+   * configuration schema accepts; whether issuance can compile them is checked on save, against
+   * the schema of all fields.
+   */
+  private readonly validateConstraints = (control: AbstractControl): ValidationErrors | null => {
+    const text = control.value?.trim();
+    if (!text) return null;
+    let constraints: unknown;
+    try {
+      constraints = JSON.parse(text);
+    } catch (error) {
+      return { constraints: `Enter valid JSON: ${(error as Error).message}` };
+    }
+    if (!constraints || typeof constraints !== 'object' || Array.isArray(constraints)) {
+      return { constraints: 'Enter a JSON object, e.g. { "pattern": "^[A-Z]{2}$" }.' };
+    }
+    const refused = this.validateConstraintsSchema(control)?.['invalidSchema'];
+    return refused ? { constraints: refused } : null;
+  };
   vctSchema = vctSchema;
   embeddedDisclosurePolicySchema = embeddedDisclosurePolicySchema;
 
@@ -471,6 +496,16 @@ export class CredentialConfigCreateComponent implements OnInit {
 
     try {
       const formValue = this.buildConfigurationPayload();
+      const unusable = claimSchemaError(formValue.fields);
+      if (unusable) {
+        this.activeStep = 1;
+        openErrorSnackBar(
+          this.snackBar,
+          `Issuance could not use the claim constraints: ${unusable}`
+        );
+        this.loading = false;
+        return;
+      }
       const configId = this.route.snapshot.params['id'];
 
       const savePromise = this.create
@@ -906,6 +941,10 @@ export class CredentialConfigCreateComponent implements OnInit {
       ),
       mandatory: new FormControl(!!field?.mandatory),
       disclosable: new FormControl(field?.disclosable ?? true),
+      constraints: new FormControl(
+        field?.constraints ? JSON.stringify(field.constraints, null, 2) : '',
+        this.validateConstraints
+      ),
       display,
     });
     group.controls.defaultValue.addValidators((control) => {
@@ -921,6 +960,11 @@ export class CredentialConfigCreateComponent implements OnInit {
     );
     group.controls.defaultValue.updateValueAndValidity();
     return group;
+  }
+
+  /** Whether the claim field has constraints, for its collapsed panel header. */
+  hasConstraints(field: AbstractControl): boolean {
+    return !!field.get('constraints')?.value?.trim();
   }
 
   claimDefaultHint(type: string): string {
@@ -1086,7 +1130,18 @@ export class CredentialConfigCreateComponent implements OnInit {
    * Open JSON view dialog to show/edit the complete configuration
    */
   viewAsJson(): void {
-    const currentConfig = this.buildConfigurationPayload();
+    let currentConfig: any;
+    try {
+      currentConfig = this.buildConfigurationPayload();
+    } catch (error) {
+      // A JSON field or claim default that does not parse; show the first step holding one.
+      console.error('Error building the configuration JSON:', error);
+      for (let step = 0; step < 4; step++) if (!this.validateStep(step)) break;
+      this.snackBar.open('Fix the invalid fields before opening the JSON view', 'Close', {
+        duration: 5000,
+      });
+      return;
+    }
 
     const dialogRef = this.dialog.open(JsonViewDialogComponent, {
       data: {
@@ -1291,6 +1346,11 @@ export class CredentialConfigCreateComponent implements OnInit {
 
         if (defaultValue !== undefined) {
           field.defaultValue = defaultValue;
+        }
+
+        const constraints = rawField['constraints']?.trim();
+        if (constraints) {
+          field.constraints = JSON.parse(constraints);
         }
 
         const display = (rawField['display'] || [])
