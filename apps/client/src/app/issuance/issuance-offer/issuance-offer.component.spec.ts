@@ -469,4 +469,27 @@ describe('IssuanceOfferComponent', () => {
       });
     });
   });
+
+  it('passes formly the same fields array on every check', async () => {
+    const config = { ...buildMdocConfig(), description: null } as any;
+    component.credentialConfigs = [config];
+    vi.mocked(TestBed.inject(CredentialConfigService).loadConfigurations).mockResolvedValue([
+      config,
+    ]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    component.credentialStepForm.patchValue({ credentialConfigurationIds: ['pid'] });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const formly = fixture.debugElement.query(By.css('formly-form')).componentInstance;
+    const fields = formly.fields;
+    fixture.detectChanges();
+
+    // A new array on every check made formly 11 rebuild the form and schedule
+    // another check, so the offer page hung once a config was selected
+    expect(formly.fields).toBe(fields);
+    expect(fixture.nativeElement.querySelectorAll('formly-form input').length).toBe(2);
+  });
 });

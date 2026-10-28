@@ -633,10 +633,6 @@ export class IssuanceOfferComponent implements OnInit {
     return this.configStepForm.get(`claims.${id}`) as UntypedFormGroup;
   }
 
-  getFields(arg0: FormlyFieldConfig<FormlyFieldProps & Record<string, any>>) {
-    return [arg0];
-  }
-
   private formatGroupLabel(field: FormlyFieldConfig): string {
     const props = (field.props ?? {}) as Record<string, any>;
     const explicit = props['label'] || props['title'];

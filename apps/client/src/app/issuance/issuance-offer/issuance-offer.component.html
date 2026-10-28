@@ -321,7 +321,7 @@
                           <div class="form-input">
                             <formly-form
                               [form]="getForm(element.id)"
-                              [fields]="getFields(fields[i])"
+                              [fields]="[fields[i]]"
                               [model]="model"
                             ></formly-form>
                             @if (element.defaultClaims) {
