@@ -248,3 +248,124 @@ describe("CredentialConfigCreateSchema claim constraints", () => {
         ).toBe(false);
     });
 });
+
+describe("CredentialConfigCreateSchema claim patterns", () => {
+    const withConstraints = (constraints: Record<string, unknown>) => ({
+        ...credentialConfig,
+        fields: [{ path: ["name"], type: "string", constraints }],
+    });
+
+    test.each([
+        ["a lookahead", { pattern: "^(?=a)a+$" }],
+        ["a backreference", { pattern: "^(a)\\1$" }],
+        [
+            "a two-digit backreference RE2 reads as octal",
+            { pattern: "^(a)\\12$" },
+        ],
+        ["an RE2-only escape", { pattern: "^a\\z" }],
+        ["an RE2 literal quote", { pattern: "\\Qa\\E" }],
+        ["a long Unicode property name", { pattern: "\\p{Letter}" }],
+        ["a pattern inside anyOf", { anyOf: [{ pattern: "(?=a)" }] }],
+        ["an invalid pattern", { pattern: "[" }],
+        [
+            "a nested patternProperties key",
+            {
+                properties: {
+                    inner: { patternProperties: { "(?!x)": {} } },
+                },
+            },
+        ],
+        ["a propertyNames pattern", { propertyNames: { pattern: "(?<=a)b" } }],
+        ["a named backreference", { pattern: "^(?<a>x)\\k<a>$" }],
+        ["an unknown escape", { pattern: "^\\e$" }],
+        ["inline flags", { pattern: "(?i)abc" }],
+        ["\\S inside a character class", { pattern: "[\\S]" }],
+        [
+            "a property named default",
+            { properties: { default: { type: "string", pattern: "(?=x)" } } },
+        ],
+        ["an empty character class", { pattern: "^[]a$" }],
+        ["a negated empty character class", { pattern: "^[^][a]$" }],
+        ["an overlong pattern", { pattern: "a".repeat(1001) }],
+        ["a pattern with a large program", { pattern: ".{1000}".repeat(20) }],
+    ])("refuses %s", (_case, constraints) => {
+        const result = CredentialConfigCreateSchema.safeParse(
+            withConstraints(constraints),
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0]?.message).toContain(
+            "Claim patterns are matched with RE2",
+        );
+    });
+
+    test.each([
+        ["an RE2 pattern", { pattern: "^[A-Z]{2}\\d{3}$" }],
+        [
+            "a catastrophic pattern RE2 runs in linear time",
+            { pattern: "^(a+)+$" },
+        ],
+        ["a short Unicode property name", { pattern: "^\\p{L}+$" }],
+        ["a pattern key inside const", { const: { pattern: "(?=a)" } }],
+    ])("accepts %s", (_case, constraints) => {
+        const result = CredentialConfigCreateSchema.safeParse(
+            withConstraints(constraints),
+        );
+
+        expect(result.success).toBe(true);
+    });
+
+    test.each([
+        [
+            "an array field's items",
+            {
+                path: ["values"],
+                type: "array",
+                constraints: { items: { pattern: "(?=a)" } },
+            },
+        ],
+        [
+            "a child field",
+            {
+                path: ["a"],
+                type: "object",
+                children: [
+                    {
+                        path: ["b"],
+                        type: "string",
+                        constraints: { pattern: "(?=x)" },
+                    },
+                ],
+            },
+        ],
+    ])("refuses a pattern in %s", (_case, field) => {
+        const result = CredentialConfigCreateSchema.safeParse({
+            ...credentialConfig,
+            fields: [field],
+        });
+
+        expect(result.success).toBe(false);
+        expect(JSON.stringify(result.error?.issues)).toContain(
+            "Claim patterns are matched with RE2",
+        );
+    });
+
+    test.each([
+        [{ pattern: "(?=a)" }, ["pattern"]],
+        [
+            { properties: { inner: { patternProperties: { "(?!x)": {} } } } },
+            ["properties", "inner", "patternProperties", "(?!x)"],
+        ],
+    ])("names the pattern's path in %j", (constraints, path) => {
+        const result = CredentialConfigCreateSchema.safeParse(
+            withConstraints(constraints),
+        );
+
+        expect(result.error?.issues[0]?.path).toEqual([
+            "fields",
+            0,
+            "constraints",
+            ...path,
+        ]);
+    });
+});

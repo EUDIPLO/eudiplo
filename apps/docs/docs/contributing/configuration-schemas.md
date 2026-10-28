@@ -17,7 +17,7 @@ Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eud
 | `IssuanceConfig` | v4 | Optional `walletAttestationStatusCheckMode` on the issuance configuration and its authorization servers. A v3 file is a valid v4 file. |
 | `IssuanceConfig` | v5 | Optional entity configuration fields in `federation` (`entityTypes`, `authorityHints`, `entityKeyChainId`, `entityConfigurationLifetimeSeconds`, `trustMarks`, `entityMetadata`, `includeTrustChain`). A v4 file is a valid v5 file. |
 | `CredentialConfig` | v2 | `x509` as `frameworkType` of `schemaMeta.trustedAuthorities` entries. A v1 file is a valid v2 file. |
-| `CredentialConfig` | v3 | `fields[].constraints` accept only JSON Schema validation and annotation keywords. The v2 → v3 step drops other keys with a warning. |
+| `CredentialConfig` | v3 | `fields[].constraints` accept only JSON Schema validation and annotation keywords. The v2 → v3 step drops other keys with a warning and stops on claim patterns RE2 cannot run (`CLAIM_PATTERN_UNSUPPORTED`). |
 | `KeyChain` | v2 | Optional `type` (`standalone`, `internalChain`). A v1 file is a valid v2 file; a bare key chain file with `type` is read as v2 (`bareFileVersion`). |
 | `KeyChain` | v3 | Usage type `federation`. A v2 file is a valid v3 file; a bare key chain file with usage type `federation` is read as v3. |
 | `Client` | v2 | The roles `audit:read`, `sessions:read`, `credentials:status` and `keys:manage`. A v1 file is a valid v2 file. |

@@ -337,6 +337,34 @@ describe("config upgrade", () => {
         ).toBe(0);
     });
 
+    it("blocks the upgrade of a credential configuration with a claim pattern RE2 cannot run", async () => {
+        const { cwd, context, output } = await setup();
+        const source = join(cwd, "pid.json");
+        await writeFile(
+            source,
+            JSON.stringify({
+                $schema: schemaUrl("CredentialConfig", 2),
+                spec: {
+                    id: "pid",
+                    config: { format: "dc+sd-jwt", display: [] },
+                    fields: [
+                        {
+                            path: ["name"],
+                            type: "string",
+                            constraints: { pattern: "^(?=a)\\w+$" },
+                        },
+                    ],
+                },
+            }),
+        );
+
+        expect(await runCli(["config", "upgrade", source], context)).toBe(1);
+        expect(output.stderr).toContain(
+            "/spec/fields/0/constraints/pattern: required-input CLAIM_PATTERN_UNSUPPORTED",
+        );
+        await expect(access(`${source}.upgraded.json`)).rejects.toThrow();
+    });
+
     it("upgrades a v1 KMS configuration file to v2 with the spec unchanged", async () => {
         const { cwd, context } = await setup();
         const source = join(cwd, "kms-folder");

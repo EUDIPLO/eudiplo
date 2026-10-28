@@ -488,6 +488,45 @@ describe("portable schema identity and migrations", () => {
             expect(result.document.spec).toEqual(spec);
         });
 
+        it("stops at a claim pattern RE2 cannot run and leaves it to the author", () => {
+            const spec = {
+                ...v2.spec,
+                fields: [
+                    {
+                        path: ["name"],
+                        type: "string",
+                        constraints: { pattern: "^(?=a)\\w+$", widget: {} },
+                    },
+                ],
+            };
+            const result = migrateDocument(
+                { ...v2, spec },
+                validateConfigDocument,
+            );
+
+            expect(
+                result.issues.map(({ severity, code, path }) => ({
+                    severity,
+                    code,
+                    path,
+                })),
+            ).toEqual([
+                {
+                    severity: "warning",
+                    code: "CLAIM_CONSTRAINT_KEYWORD_REMOVED",
+                    path: "/spec/fields/0/constraints/widget",
+                },
+                {
+                    severity: "required-input",
+                    code: "CLAIM_PATTERN_UNSUPPORTED",
+                    path: "/spec/fields/0/constraints/pattern",
+                },
+            ]);
+            expect(result.document.$schema).toBe(
+                schemaUrl("CredentialConfig", 2),
+            );
+        });
+
         it("validates constraint keywords only from v3 on", () => {
             const withVersion = (version: number) =>
                 validateConfigDocument(

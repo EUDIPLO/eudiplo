@@ -1,3 +1,4 @@
+import { UnsupportedClaimPattern } from "@eudiplo/config-format/claim-patterns.js";
 import {
     ConflictException,
     Inject,
@@ -427,7 +428,7 @@ export class CredentialsService {
 
     /**
      * Validates claims against the schema derived from the credential configuration fields.
-     * @throws InvalidClaimsException (409) naming claim paths, never claim values
+     * @throws InvalidClaimsException (409) naming claim paths, never claim values, or a stored claim pattern that cannot be used
      */
     async validateClaimsForCredential(
         credentialConfigurationId: string,
@@ -507,9 +508,10 @@ export class CredentialsService {
     }
 }
 
-/** Maps the domain error to the HTTP-facing exception; other errors pass through. */
+/** Maps the domain errors to the HTTP-facing exception; other errors pass through. */
 function toInvalidClaimsException(error: unknown): unknown {
-    return error instanceof InvalidCredentialClaims
+    return error instanceof InvalidCredentialClaims ||
+        error instanceof UnsupportedClaimPattern
         ? new InvalidClaimsException(error.message)
         : error;
 }
