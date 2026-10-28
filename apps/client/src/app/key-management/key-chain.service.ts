@@ -9,6 +9,7 @@ import {
   type KeyChainResponseDto,
   type KeyChainUpdateDto,
   keyChainControllerCreate,
+  keyChainControllerCreateCsr,
   keyChainControllerDelete,
   keyChainControllerDeleteTenantKmsConfig,
   keyChainControllerGetAll,
@@ -138,6 +139,18 @@ export class KeyChainService {
    */
   async update(id: string, data: KeyChainUpdateDto): Promise<void> {
     await keyChainControllerUpdate({ path: { id }, body: data });
+  }
+
+  /**
+   * A certificate signing request for the active key of the key chain, for a
+   * CA outside EUDIPLO. Without a subject, the backend uses `CN=<id>`.
+   */
+  async createCsr(id: string, subject?: string): Promise<string> {
+    const response = await keyChainControllerCreateCsr({
+      path: { id },
+      query: subject ? { subject } : undefined,
+    });
+    return response.data!.csr;
   }
 
   /**

@@ -1342,6 +1342,13 @@ export type KeyChainExportDto = {
     rotationPolicy?: ExportRotationPolicyDto;
 };
 
+export type KeyChainCsrResponseDto = {
+    /**
+     * PKCS#10 certificate signing request for the active key, PEM encoded and signed by that key.
+     */
+    csr: string;
+};
+
 export type RotationPolicyCreateDto = {
     /**
      * Whether automatic key rotation is enabled.
@@ -1569,7 +1576,7 @@ export type KeyChainUpdateDto = {
         certValidityDays?: number;
     };
     /**
-     * Active certificate chain in PEM format. Used for external certificate updates.
+     * Active certificate chain in PEM format, leaf first, for example the certificate an external CA issued for a CSR from `GET /api/key-chain/{id}/csr`. The leaf must hold the public key of the active key, and each further certificate must have issued the one before it.
      */
     activeCertificate?: string;
 };
@@ -7541,7 +7548,7 @@ export type KeyChainControllerUpdateData = {
 
 export type KeyChainControllerUpdateErrors = {
     /**
-     * Invalid request, for example rotation enabled while neither the request nor the key chain has intervalDays
+     * Invalid request, for example rotation enabled while neither the request nor the key chain has intervalDays, or an activeCertificate whose first certificate is not issued for the active key
      */
     400: unknown;
     /**
@@ -7587,6 +7594,40 @@ export type KeyChainControllerExportResponses = {
 };
 
 export type KeyChainControllerExportResponse = KeyChainControllerExportResponses[keyof KeyChainControllerExportResponses];
+
+export type KeyChainControllerCreateCsrData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        /**
+         * Subject distinguished name of the request, at most 1024 characters. Attributes are encoded in the order written, so write them in certificate order, country first. Defaults to `CN=<key chain id>`.
+         */
+        subject?: string;
+    };
+    url: '/api/key-chain/{id}/csr';
+};
+
+export type KeyChainControllerCreateCsrErrors = {
+    /**
+     * The subject is not a distinguished name
+     */
+    400: unknown;
+    /**
+     * Key chain not found
+     */
+    404: unknown;
+};
+
+export type KeyChainControllerCreateCsrResponses = {
+    /**
+     * The certificate signing request
+     */
+    200: KeyChainCsrResponseDto;
+};
+
+export type KeyChainControllerCreateCsrResponse = KeyChainControllerCreateCsrResponses[keyof KeyChainControllerCreateCsrResponses];
 
 export type KeyChainControllerImportData = {
     body: KeyChainImportDto;

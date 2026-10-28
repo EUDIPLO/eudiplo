@@ -1,0 +1,172 @@
+<mat-card>
+  <mat-card-header>
+    <mat-card-title>
+      <mat-icon class="title-icon">assignment</mat-icon>
+      Certificate from an External CA
+    </mat-card-title>
+    <mat-card-subtitle>
+      Let a CA outside EUDIPLO issue the certificate for this key. The private key stays in EUDIPLO.
+    </mat-card-subtitle>
+  </mat-card-header>
+  @if (!expanded()) {
+    <mat-card-actions>
+      <button mat-stroked-button type="button" (click)="expand()">
+        <mat-icon>assignment</mat-icon>
+        Request Certificate from External CA
+      </button>
+    </mat-card-actions>
+  } @else {
+    <mat-card-content class="steps">
+      @if (rotates) {
+        <p class="rotation-warning" role="note">
+          <mat-icon>warning</mat-icon>
+          <span>
+            This key rotates automatically. Each rotation creates a new key with a self-signed
+            certificate, so the certificate of your CA is replaced, and a CSR from before the
+            rotation no longer fits. Turn rotation off to keep the certificate.
+            <a [routerLink]="['/keys', keyChain.id, 'edit']">Edit rotation</a>
+          </span>
+        </p>
+      }
+
+      <section aria-labelledby="csr-step-title">
+        <h3 id="csr-step-title">1. Create a certificate signing request (CSR)</h3>
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Subject</mat-label>
+          <input
+            matInput
+            #subjectInput
+            [formControl]="subject"
+            [placeholder]="defaultSubject"
+            maxlength="1024"
+            (keydown.enter)="$event.preventDefault(); createCsr()"
+          />
+          <mat-hint>
+            Distinguished name your CA should certify, written in certificate order (country first),
+            for example C=DE, O=Example Org, CN=Example Verifier, at most 1024 characters. Empty
+            uses {{ defaultSubject }}.
+          </mat-hint>
+        </mat-form-field>
+        <div class="actions">
+          <button
+            mat-stroked-button
+            type="button"
+            [disabled]="creatingCsr()"
+            disabledInteractive
+            (click)="createCsr()"
+          >
+            <mat-icon>note_add</mat-icon>
+            {{ creatingCsr() ? 'Creating CSR...' : csr() ? 'Create New CSR' : 'Create CSR' }}
+          </button>
+        </div>
+        @if (csrError()) {
+          <p class="error" role="alert">
+            <mat-icon>error</mat-icon>
+            <span>{{ csrError() }}</span>
+          </p>
+        }
+        @if (csr()) {
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>CSR (PEM)</mat-label>
+            <textarea
+              #csrText
+              matInput
+              readonly
+              rows="8"
+              class="pem"
+              [value]="csr()"
+              aria-describedby="csr-next-step"
+            ></textarea>
+          </mat-form-field>
+          <p id="csr-next-step" class="hint">
+            Send this CSR to your CA. It is signed by the key of this key chain.
+          </p>
+          <div class="actions">
+            <button mat-stroked-button type="button" (click)="copyCsr()">
+              <mat-icon>content_copy</mat-icon>
+              Copy CSR
+            </button>
+            <button mat-stroked-button type="button" (click)="downloadCsr()">
+              <mat-icon>download</mat-icon>
+              Download CSR
+            </button>
+          </div>
+        }
+      </section>
+
+      <section aria-labelledby="certificate-step-title">
+        <h3 id="certificate-step-title">2. Store the issued certificate</h3>
+        @if (managedBy(); as source) {
+          <p class="managed-note" role="note">
+            <mat-icon>lock</mat-icon>
+            <span>
+              This key chain is managed by {{ source }}. Add the issued certificate chain to its
+              <code>crt</code> there and apply it again, or detach the key chain first.
+            </span>
+          </p>
+        }
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Certificate Chain (PEM)</mat-label>
+          <textarea
+            matInput
+            rows="8"
+            class="pem"
+            [formControl]="certificate"
+            placeholder="-----BEGIN CERTIFICATE-----"
+          ></textarea>
+          <mat-hint>
+            The certificate your CA issued for this key first, followed by any issuing certificates.
+            Or load certificate files.
+          </mat-hint>
+          <input
+            #certificateFiles
+            type="file"
+            accept=".pem,.crt,.cer,.der,application/x-pem-file,application/pkix-cert"
+            multiple
+            hidden
+            aria-label="Upload issued certificate files"
+            (change)="onCertificateFilesSelected($event)"
+          />
+        </mat-form-field>
+        @if (saveError()) {
+          <p class="error" role="alert">
+            <mat-icon>error</mat-icon>
+            <span>{{ saveError() }}</span>
+          </p>
+        }
+        <div class="actions">
+          <button
+            mat-button
+            type="button"
+            [disabled]="!!managedBy()"
+            disabledInteractive
+            (click)="managedBy() || certificateFiles.click()"
+            appConfigManaged
+            managedKind="KeyChain"
+            [managedResourceId]="keyChain.id"
+          >
+            <mat-icon>upload_file</mat-icon>
+            Load Certificate Files
+          </button>
+          <button
+            mat-flat-button
+            color="primary"
+            type="button"
+            [disabled]="saving() || !certificate.value.trim()"
+            disabledInteractive
+            [matTooltip]="
+              certificate.value.trim() ? '' : 'Paste or load the certificate chain first'
+            "
+            (click)="saveCertificate()"
+            appConfigManaged
+            managedKind="KeyChain"
+            [managedResourceId]="keyChain.id"
+          >
+            <mat-icon>save</mat-icon>
+            {{ saving() ? 'Storing...' : 'Store Certificate' }}
+          </button>
+        </div>
+      </section>
+    </mat-card-content>
+  }
+</mat-card>

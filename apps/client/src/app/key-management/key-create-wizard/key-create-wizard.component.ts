@@ -26,6 +26,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { merge } from 'rxjs';
+import { readCertificateFiles } from '../certificate-files';
 import { KeyChainService } from '../key-chain.service';
 import {
   accessKeyEnrollmentFailure,
@@ -50,6 +51,9 @@ const SIGNING_ALGORITHM_LABELS: Record<SigningAlgorithm, string> = {
   ES384: 'ES384 (ECDSA P-384)',
   ES512: 'ES512 (ECDSA P-521)',
 };
+
+/** Whether the external certificate comes with its key, or is requested for a key EUDIPLO creates. */
+export type ExternalCertificateSource = 'import' | 'csr';
 
 /** Why a registrar enrollment was refused, shown next to Create & Enroll. */
 export interface EnrollmentError {
@@ -222,7 +226,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       label: 'External Certificate',
       icon: 'upload_file',
       description: 'Use a certificate issued by an external CA or PKI.',
-      hint: 'Provide the JWK or PEM private key and certificate chain in the next step.',
+      hint: 'Import a key with its certificate chain, or create the key here and request its certificate from your CA with a CSR.',
     },
   ];
 
@@ -265,6 +269,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       externalPrivateKey: [''],
       externalCertificate: [''],
       useExternalCertificate: [false],
+      externalCertificateSource: ['import' as ExternalCertificateSource],
     });
 
     // Fields of the hidden Rotation Policy card must not block the form.
@@ -485,7 +490,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
    */
   get showAlgorithm(): boolean {
     return (
-      !this.isExternalCertificate &&
+      !this.importsExternalKey &&
       !(this.selectedUsage === 'access' && this.selectedAccessSource === 'registrar')
     );
   }
@@ -503,9 +508,27 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
     );
   }
 
+  /**
+   * The key is created in EUDIPLO and its certificate requested with a CSR
+   * on the key's page, instead of importing a key with its certificate.
+   * An External CA Chain always imports the CA key.
+   */
+  get requestsCertificate(): boolean {
+    return (
+      this.isExternalCertificate &&
+      !this.isExternalCaChain &&
+      this.configForm.value.externalCertificateSource === 'csr'
+    );
+  }
+
+  /** The key and certificate chain are pasted or loaded into the form. */
+  get importsExternalKey(): boolean {
+    return this.isExternalCertificate && !this.requestsCertificate;
+  }
+
   get externalCertificateFormValid(): boolean {
     return (
-      !this.isExternalCertificate ||
+      !this.importsExternalKey ||
       (!!this.configForm.value.externalPrivateKey?.trim() &&
         !!this.configForm.value.externalCertificate?.trim())
     );
@@ -574,7 +597,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       const description = this.configForm.value.description?.trim();
       const isRegistrarEnrollment = usage === 'access' && this.selectedAccessSource === 'registrar';
 
-      if (this.isExternalCertificate) {
+      if (this.importsExternalKey) {
         await this.importExternalKey(usage, description);
         return;
       }
@@ -597,11 +620,22 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       const result = await this.keyChainService.create(createDto);
 
       // Show success message with next steps
-      this.showSuccessMessage(usage);
-      this.router.navigate(['/keys', result.id]);
+      if (this.requestsCertificate) {
+        this.snackBar.open(
+          'Key created. Create its CSR on this page and store the certificate your CA issues.',
+          'Close',
+          { duration: 8000 }
+        );
+      } else {
+        this.showSuccessMessage(usage);
+      }
+      this.router.navigate(
+        ['/keys', result.id],
+        this.requestsCertificate ? { queryParams: { certificate: 'request' } } : undefined
+      );
     } catch (error) {
       console.error('Error creating key chain:', error);
-      const fallback = this.isExternalCertificate
+      const fallback = this.importsExternalKey
         ? 'Failed to import key chain'
         : 'Failed to create key chain';
       openErrorSnackBar(this.snackBar, getApiErrorMessage(error, fallback));
@@ -877,6 +911,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
 
   private getKeyTypeLabel(): string {
     if (this.selectedUsage === 'federation') return 'Standalone key (published as JWK)';
+    if (this.requestsCertificate) return 'Standalone (Certificate requested with a CSR)';
     return this.isExternalCertificate
       ? 'Standalone (External Certificate)'
       : 'Standalone (Self-signed)';
@@ -918,25 +953,8 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   }
 
   async onCertificateFilesSelected(event: Event): Promise<void> {
-    const files = Array.from((event.target as HTMLInputElement).files || []);
-    if (files.length === 0) return;
-
-    const certificates = await Promise.all(files.map((file) => this.readCertificateFile(file)));
-    this.configForm.patchValue({ externalCertificate: certificates.join('\n') });
-  }
-
-  private async readCertificateFile(file: File): Promise<string> {
-    const content = await file.arrayBuffer();
-    const text = new TextDecoder().decode(content).trim();
-    if (text.includes('-----BEGIN CERTIFICATE-----')) return text;
-
-    const bytes = new Uint8Array(content);
-    let binary = '';
-    for (const byte of bytes) binary += String.fromCodePoint(byte);
-    const base64 =
-      btoa(binary)
-        .match(/.{1,64}/g)
-        ?.join('\n') || '';
-    return `-----BEGIN CERTIFICATE-----\n${base64}\n-----END CERTIFICATE-----`;
+    const files = (event.target as HTMLInputElement).files;
+    if (!files?.length) return;
+    this.configForm.patchValue({ externalCertificate: await readCertificateFiles(files) });
   }
 }

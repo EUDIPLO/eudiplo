@@ -1,4 +1,5 @@
 import {
+    BadRequestException,
     Body,
     ConflictException,
     Controller,
@@ -17,10 +18,15 @@ import {
     ApiResponse,
     ApiTags,
 } from "@nestjs/swagger";
+import type * as x509 from "@peculiar/x509";
 import { Role } from "../../auth/roles/role.enum.js";
 import { Secured } from "../../auth/secure.decorator.js";
 import { requireTenantContext } from "../../auth/tenant-context.util.js";
 import { Token, TokenPayload } from "../../auth/token.decorator.js";
+import {
+    InvalidSubjectError,
+    parseSubject,
+} from "./domain/certificate-subject.js";
 import {
     KeyChainInUseError,
     type KeyChainReferenceKind,
@@ -28,6 +34,7 @@ import {
     keyChainReferencesVisibleTo,
 } from "./domain/key-chain-reference.js";
 import { KeyChainCreateDto } from "./dto/key-chain-create.dto.js";
+import { KeyChainCsrResponseDto } from "./dto/key-chain-csr-response.dto.js";
 import { KeyChainExportDto } from "./dto/key-chain-export.dto.js";
 import { KeyChainIdResponseDto } from "./dto/key-chain-id-response.dto.js";
 import { KeyChainImportDto } from "./dto/key-chain-import.dto.js";
@@ -252,6 +259,56 @@ export class KeyChainController {
     }
 
     /**
+     * Create a certificate signing request for the active key, so a CA
+     * outside EUDIPLO can issue its certificate while the key stays in
+     * EUDIPLO. Signing a request changes nothing, so it is a GET.
+     */
+    @Get(":id/csr")
+    @ApiOperation({
+        summary: "Create a certificate signing request for the active key",
+        description:
+            "Returns a PKCS#10 certificate signing request (CSR) for the active key of the key chain, signed by that key in its KMS. Hand it to an external CA and store the issued certificate with `PUT /api/key-chain/{id}` in `activeCertificate`. The key does not leave EUDIPLO. Each call signs a new request; a rotation replaces the key, and a CSR from before it no longer fits.",
+    })
+    @ApiQuery({
+        name: "subject",
+        required: false,
+        description:
+            "Subject distinguished name of the request, at most 1024 characters. Attributes are encoded in the order written, so write them in certificate order, country first. Defaults to `CN=<key chain id>`.",
+        example: "C=DE, O=Example Org, CN=Example Verifier",
+    })
+    @ApiResponse({
+        status: 200,
+        description: "The certificate signing request",
+        type: KeyChainCsrResponseDto,
+    })
+    @ApiResponse({
+        status: 400,
+        description: "The subject is not a distinguished name",
+    })
+    @ApiResponse({ status: 404, description: "Key chain not found" })
+    async createCsr(
+        @Token() token: TokenPayload,
+        @Param("id") id: string,
+        @Query("subject") subject?: string,
+    ): Promise<KeyChainCsrResponseDto> {
+        let name: x509.Name | undefined;
+        try {
+            name = parseSubject(subject);
+        } catch (error) {
+            if (error instanceof InvalidSubjectError) {
+                throw new BadRequestException(error.message);
+            }
+            throw error;
+        }
+        const csr = await this.keyChainService.createCertificateSigningRequest(
+            token.entity!.id,
+            id,
+            name,
+        );
+        return { csr };
+    }
+
+    /**
      * Create a new key chain.
      */
     @Post()
@@ -309,7 +366,7 @@ export class KeyChainController {
     @ApiResponse({
         status: 400,
         description:
-            "Invalid request, for example rotation enabled while neither the request nor the key chain has intervalDays",
+            "Invalid request, for example rotation enabled while neither the request nor the key chain has intervalDays, or an activeCertificate whose first certificate is not issued for the active key",
     })
     @ApiResponse({ status: 404, description: "Key chain not found" })
     @HttpCode(204)

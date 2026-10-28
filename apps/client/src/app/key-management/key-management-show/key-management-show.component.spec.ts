@@ -780,3 +780,56 @@ describe('KeyManagementShowComponent default access key chain', () => {
     expect(component.defaultAccess).toBeUndefined();
   });
 });
+
+describe('KeyManagementShowComponent certificate request', () => {
+  function create(keyChain: Partial<KeyChainResponseDto>): KeyManagementShowComponent {
+    const component = new KeyManagementShowComponent(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { hasRole: () => false } as never,
+      {} as never,
+      {} as never
+    );
+    component.keyChain = keyChain as KeyChainResponseDto;
+    return component;
+  }
+
+  it('offers an external CA certificate for a standalone signing key', () => {
+    expect(create({ type: 'standalone', usageType: 'access' }).offersCertificateRequest).toBe(true);
+  });
+
+  it.each([
+    { type: 'internalChain', usageType: 'attestation' },
+    { type: 'standalone', usageType: 'encrypt' },
+    { type: 'standalone', usageType: 'federation' },
+  ] as Partial<KeyChainResponseDto>[])('does not offer it for %o', (keyChain) => {
+    expect(create(keyChain).offersCertificateRequest).toBe(false);
+  });
+
+  it('drops ?certificate=request once the certificate is stored', () => {
+    const navigate = vi.fn().mockResolvedValue(true);
+    const route = { snapshot: { queryParamMap: convertToParamMap({ certificate: 'request' }) } };
+    const component = new KeyManagementShowComponent(
+      {} as never,
+      route as never,
+      {} as never,
+      { navigate } as never,
+      {} as never,
+      { hasRole: () => false } as never,
+      {} as never,
+      {} as never
+    );
+
+    component.onCertificateSaved();
+
+    expect(navigate).toHaveBeenCalledWith([], {
+      relativeTo: route,
+      queryParams: { certificate: null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true,
+    });
+  });
+});

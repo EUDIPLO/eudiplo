@@ -376,6 +376,15 @@
       </mat-card>
     }
 
+    <!-- Certificate from an external CA, for a key that stays in EUDIPLO -->
+    @if (offersCertificateRequest) {
+      <app-key-certificate-request
+        [keyChain]="keyChain"
+        [startExpanded]="requestsCertificate"
+        (certificateSaved)="onCertificateSaved()"
+      />
+    }
+
     <!-- Previous Certificate (if in grace period) -->
     @if (!isFederationKey && hasPreviousKey() && keyChain.previousCertificate) {
       <mat-card>

@@ -191,6 +191,35 @@ describe("Access key chain enrolled at the registrar (e2e)", () => {
         enrolledIds.push(res.body.certId);
     });
 
+    test("refuses and revokes a certificate the registrar issued for another key", async () => {
+        const before = await accessKeyChains();
+        const otherKey = (await crypto.subtle.generateKey(algorithm, true, [
+            "sign",
+            "verify",
+        ])) as CryptoKeyPair;
+        const otherCsr = await x509.Pkcs10CertificateRequestGenerator.create(
+            {
+                name: "CN=Other",
+                keys: otherKey,
+                signingAlgorithm: algorithm,
+            },
+            crypto,
+        );
+        const crt = await issueFor(otherCsr.toString("pem"));
+        nock(registrar)
+            .post("/access-certificates")
+            .reply(201, { id: "ac-foreign", crt });
+        const revoked = nock(registrar)
+            .delete("/access-certificates/ac-foreign")
+            .reply(204);
+
+        const res = await createAccessKeyChain().expect(400);
+
+        expect(res.body.message).toContain("not issued for the active key");
+        expect(revoked.isDone()).toBe(true);
+        expect(await accessKeyChains()).toEqual(before);
+    });
+
     test("stores the certificate the registrar lists for the key when its response is lost", async () => {
         let crt = "";
         nock(registrar)

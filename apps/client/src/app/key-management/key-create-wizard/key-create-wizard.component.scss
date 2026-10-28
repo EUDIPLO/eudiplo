@@ -293,3 +293,13 @@ mat-card-header {
 .registrar-retry {
   padding: 0 16px 16px;
 }
+
+.certificate-source {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.certificate-source-label {
+  font-weight: 500;
+}

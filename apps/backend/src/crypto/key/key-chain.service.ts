@@ -1,3 +1,4 @@
+import { X509Certificate } from "node:crypto";
 import {
     BadRequestException,
     Injectable,
@@ -28,6 +29,7 @@ import {
     signingAlgForCurve,
     signingAlgForJwk,
 } from "./domain/signing-algs.js";
+import { certificateHoldsKey } from "./domain/public-jwk-match.js";
 import { KeyChainCreateDto, KeyChainType } from "./dto/key-chain-create.dto.js";
 import { KeyChainExportDto } from "./dto/key-chain-export.dto.js";
 import { KeyChainImportDto } from "./dto/key-chain-import.dto.js";
@@ -660,11 +662,71 @@ export class KeyChainService {
         }
 
         if (dto.activeCertificate !== undefined) {
-            updates.activeCertificate = dto.activeCertificate;
+            updates.activeCertificate = this.checkedActiveCertificate(
+                keyChain,
+                dto.activeCertificate,
+            );
         }
 
         await this.keyChainRepository.update({ tenantId, id }, updates);
         this.logger.log(`Updated key chain ${id}`);
+    }
+
+    /**
+     * The certificate chain for the active key, leaf first, as stored, with
+     * only its certificate blocks. Every entry must be a PEM certificate and the leaf must hold the public key of
+     * the active key, which signs with it: a certificate issued for another
+     * key, for example for a CSR of an earlier key, is refused with a 400.
+     * Each further certificate must have issued the one before it, as wallets
+     * validate `x5c` in that order (RFC 7515, section 4.1.6).
+     */
+    private checkedActiveCertificate(
+        keyChain: KeyChainEntity,
+        pemChain: string,
+    ): string {
+        // Only the certificate blocks are kept: text before them, such as
+        // openssl bag attributes or a pasted private key, is not stored.
+        const certificates = this.certBuilder
+            .splitPemChain(pemChain)
+            .map((pem) =>
+                pem.slice(pem.indexOf("-----BEGIN CERTIFICATE-----")),
+            );
+        if (certificates.length === 0) {
+            throw new BadRequestException(
+                "activeCertificate must contain at least one PEM certificate (-----BEGIN CERTIFICATE-----).",
+            );
+        }
+        const parsed = certificates.map((pem, index) => {
+            try {
+                return new X509Certificate(pem);
+            } catch (error) {
+                throw new BadRequestException(
+                    `activeCertificate: certificate ${index + 1} is not a valid certificate: ${String(error)}`,
+                );
+            }
+        });
+        if (
+            !certificateHoldsKey(
+                parsed[0],
+                this.getPublicJwk(keyChain.activeJwk),
+            )
+        ) {
+            throw new BadRequestException(
+                "activeCertificate: the first certificate is not issued for the active key of this key chain. Put the certificate for this key first, followed by any issuing certificates.",
+            );
+        }
+        for (let index = 0; index + 1 < parsed.length; index++) {
+            const issuer = parsed[index + 1];
+            if (
+                !parsed[index].checkIssued(issuer) ||
+                !parsed[index].verify(issuer.publicKey)
+            ) {
+                throw new BadRequestException(
+                    `activeCertificate: certificate ${index + 2} did not issue certificate ${index + 1}. Put the certificate for this key first, each certificate followed by the one that issued it.`,
+                );
+            }
+        }
+        return certificates.join("\n");
     }
 
     /**
@@ -883,10 +945,12 @@ export class KeyChainService {
     async createCertificateSigningRequest(
         tenantId: string,
         keyId: string,
+        subject?: x509.Name,
     ): Promise<string> {
         return this.signingService.createCertificateSigningRequest(
             tenantId,
             keyId,
+            subject,
         );
     }
 
