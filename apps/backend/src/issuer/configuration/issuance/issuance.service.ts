@@ -1,11 +1,10 @@
-import { createHash } from "node:crypto";
 import {
     BadRequestException,
     Inject,
     Injectable,
     Logger,
 } from "@nestjs/common";
-import { decodeJwt } from "jose";
+import { ConfigService } from "@nestjs/config";
 import { v4 } from "uuid";
 import type { AuditLogRequestMeta } from "../../../audit-log/audit-log.service.js";
 import { AuditLogService } from "../../../audit-log/audit-log.service.js";
@@ -27,6 +26,13 @@ import { FederationTrustAnchorService } from "../../../trust/federation-trust-an
 import { normalizeTrustListRefs } from "../../../trust/types.js";
 import type { TrustListRef } from "../../../verifier/presentations/entities/presentation-config.entity.js";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
+import {
+    deriveRegistrationCertificateMaterial,
+    isJwtActive,
+    NO_CREDENTIAL_TYPES_MESSAGE,
+    registrationCertificateCreationBody,
+    registrationCertificateFingerprint,
+} from "../../issuance/oid4vci/domain/issuer-registration-certificate.js";
 import { CredentialConfigService } from "../credentials/credential-config/credential-config.service.js";
 import type { IssuanceConfiguration as IssuanceConfig } from "./domain/issuance-configuration.js";
 import { federationEntityIdProblem } from "./domain/own-federation-entity.js";
@@ -36,7 +42,6 @@ import {
 } from "./domain/removed-authorization-servers.js";
 import { DisplayInfo } from "./dto/display.dto.js";
 import { IssuanceDto } from "./dto/issuance.dto.js";
-import { IssuerProvidedAttestation } from "./dto/issuer-registration-certificate.dto.js";
 import {
     ISSUANCE_CONFIG_REPOSITORY,
     type IssuanceConfigRepository,
@@ -69,6 +74,7 @@ export class IssuanceService {
         private readonly tenantActionLogService: AuditLogService,
         private readonly federationTrustAnchors: FederationTrustAnchorService,
         private readonly outboundUrlPolicy: OutboundUrlPolicyService,
+        private readonly configService: ConfigService,
     ) {
         this.configImportOrchestrator.register(
             "issuance",
@@ -202,33 +208,20 @@ export class IssuanceService {
         }
 
         const previousJwt = issuanceConfig.registrationCertificateCache?.jwt;
-        const { schemaMetadataIds, providedAttestations } =
-            await this.deriveRegistrationCertificateMaterialFromCredentialConfigs(
-                tenantId,
-            );
+        const material = deriveRegistrationCertificateMaterial(
+            await this.credentialConfigService.get(tenantId),
+            this.configService.getOrThrow<string>("PUBLIC_URL"),
+            tenantId,
+        );
 
-        if (providedAttestations.length === 0) {
-            throw new BadRequestException(
-                "No credential configs with supported schema metadata found for registration certificate generation",
-            );
+        if (material.providesAttestations.length === 0) {
+            throw new BadRequestException(NO_CREDENTIAL_TYPES_MESSAGE);
         }
 
-        const creationBody = {
-            ...(schemaMetadataIds.length > 0
-                ? {
-                      provides_attestations: schemaMetadataIds,
-                  }
-                : {}),
-            ...(registrationCertificateConfig.privacyPolicy
-                ? {
-                      privacy_policy:
-                          registrationCertificateConfig.privacyPolicy,
-                  }
-                : {}),
-            ...(registrationCertificateConfig.supportUri
-                ? { support_uri: registrationCertificateConfig.supportUri }
-                : {}),
-        };
+        const creationBody = registrationCertificateCreationBody(
+            registrationCertificateConfig,
+            material,
+        );
 
         const resolved =
             await this.registrarService.resolveRegistrationCertificate(
@@ -241,7 +234,7 @@ export class IssuanceService {
         if (
             previousJwt &&
             previousJwt !== resolved.jwt &&
-            this.isJwtActive(previousJwt)
+            isJwtActive(previousJwt)
         ) {
             try {
                 await this.registrarService.revokeRegistrationCertificateByJwt(
@@ -255,10 +248,9 @@ export class IssuanceService {
             }
         }
 
-        const fingerprint = this.computeRegistrationCertificateFingerprint(
+        const fingerprint = registrationCertificateFingerprint(
             registrationCertificateConfig,
-            schemaMetadataIds,
-            providedAttestations,
+            material,
         );
 
         await this.updateRegistrationCertificateCache(tenantId, {
@@ -562,137 +554,5 @@ export class IssuanceService {
             txCodeMaxAttempts: config.txCodeMaxAttempts,
             offerLifetimeSeconds: config.offerLifetimeSeconds,
         };
-    }
-
-    private normalizeSchemaMetadataIds(
-        ids: Array<string | null | undefined>,
-    ): string[] {
-        return Array.from(
-            new Set(
-                ids
-                    .filter(
-                        (id): id is string =>
-                            typeof id === "string" && id.trim().length > 0,
-                    )
-                    .map((id) => id.trim()),
-            ),
-        ).sort((left, right) => left.localeCompare(right));
-    }
-
-    private async deriveRegistrationCertificateMaterialFromCredentialConfigs(
-        tenantId: string,
-    ): Promise<{
-        schemaMetadataIds: string[];
-        providedAttestations: IssuerProvidedAttestation[];
-    }> {
-        const credentialConfigs =
-            await this.credentialConfigService.get(tenantId);
-        const providedAttestations: IssuerProvidedAttestation[] = [];
-
-        for (const credentialConfig of credentialConfigs) {
-            const schemaMetadataId = credentialConfig.schemaMeta?.id;
-            if (!schemaMetadataId || schemaMetadataId.trim().length === 0) {
-                continue;
-            }
-
-            const format = credentialConfig.config?.format;
-            if (format !== "dc+sd-jwt" && format !== "mso_mdoc") {
-                continue;
-            }
-
-            const schemaMetadataVersion =
-                typeof credentialConfig.schemaMeta?.version === "string" &&
-                credentialConfig.schemaMeta.version.trim().length > 0
-                    ? credentialConfig.schemaMeta.version.trim()
-                    : undefined;
-
-            providedAttestations.push({
-                credentialConfigId: credentialConfig.id,
-                format,
-                meta: {
-                    schema_metadata_id: schemaMetadataId.trim(),
-                    ...(schemaMetadataVersion
-                        ? {
-                              schema_metadata_version: schemaMetadataVersion,
-                          }
-                        : {}),
-                },
-            });
-        }
-
-        providedAttestations.sort((left, right) => {
-            const leftId =
-                typeof left.meta?.["schema_metadata_id"] === "string"
-                    ? left.meta["schema_metadata_id"]
-                    : "";
-            const rightId =
-                typeof right.meta?.["schema_metadata_id"] === "string"
-                    ? right.meta["schema_metadata_id"]
-                    : "";
-
-            if (leftId !== rightId) {
-                return leftId.localeCompare(rightId);
-            }
-
-            return (left.format ?? "").localeCompare(right.format ?? "");
-        });
-
-        const schemaMetadataIds = this.normalizeSchemaMetadataIds(
-            providedAttestations.map((attestation) => {
-                const value = attestation.meta?.["schema_metadata_id"];
-                return typeof value === "string" ? value : undefined;
-            }),
-        );
-
-        return {
-            schemaMetadataIds,
-            providedAttestations,
-        };
-    }
-
-    private computeRegistrationCertificateFingerprint(
-        registrationCertificateConfig: NonNullable<
-            IssuanceConfig["registrationCertificate"]
-        >,
-        resolvedSchemaMetadataIds: string[],
-        derivedProvidedAttestations: IssuerProvidedAttestation[],
-    ): string {
-        const material = {
-            mode: registrationCertificateConfig.mode,
-            schemaMetadataIds: resolvedSchemaMetadataIds,
-            privacyPolicy: registrationCertificateConfig.privacyPolicy,
-            supportUri: registrationCertificateConfig.supportUri,
-            providedAttestations: derivedProvidedAttestations,
-        };
-
-        return createHash("sha256")
-            .update(JSON.stringify(material))
-            .digest("hex");
-    }
-
-    private isJwtActive(jwt: string): boolean {
-        try {
-            const payload = decodeJwt(jwt);
-            const now = Math.floor(Date.now() / 1000);
-            const skewSeconds = 30;
-
-            if (
-                typeof payload.nbf === "number" &&
-                now + skewSeconds < payload.nbf
-            ) {
-                return false;
-            }
-
-            if (
-                typeof payload.exp === "number" &&
-                now - skewSeconds >= payload.exp
-            ) {
-                return false;
-            }
-
-            return true;
-        } catch {
-            return false;
-        }
     }
 }

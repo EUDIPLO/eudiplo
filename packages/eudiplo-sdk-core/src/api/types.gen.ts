@@ -8935,7 +8935,7 @@ export type IssuanceConfigControllerReissueRegistrationCertificateData = {
 
 export type IssuanceConfigControllerReissueRegistrationCertificateErrors = {
     /**
-     * Registration certificate is not enabled/generate mode or registrar is unavailable
+     * Registration certificate is not enabled/generate mode, registrar is unavailable, or no SD-JWT VC credential configuration has a vct and no mDOC credential configuration a docType
      */
     400: unknown;
 };

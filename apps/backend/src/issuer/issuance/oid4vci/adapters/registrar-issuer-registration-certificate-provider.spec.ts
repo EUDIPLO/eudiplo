@@ -16,55 +16,78 @@ const jwt = (payload: Record<string, unknown>) =>
 const active = jwt({ exp: now() + 3600, id: "active" });
 const expired = jwt({ exp: now() - 3600 });
 
+const publicUrl = "https://issuer.example";
 const configs = [
-    { id: "mdl", config: { format: "mso_mdoc" }, schemaMeta: { id: " b " } },
+    {
+        id: "mdl",
+        config: { format: "mso_mdoc", docType: "org.iso.18013.5.1.mDL" },
+    },
     {
         id: "pid",
         config: { format: "dc+sd-jwt" },
-        schemaMeta: { id: "a", version: "1.0" },
+        vct: "urn:eudi:pid:de:1",
+        schemaMeta: { id: "https://schemas.example/pid", version: "1.0" },
     },
-    { id: "other", config: { format: "jwt_vc" }, schemaMeta: { id: "c" } },
-    { id: "none", config: { format: "dc+sd-jwt" }, schemaMeta: null },
+    {
+        id: "pid-copy",
+        config: { format: "dc+sd-jwt" },
+        vct: "urn:eudi:pid:de:1",
+    },
+    {
+        id: "hosted",
+        config: { format: "dc+sd-jwt" },
+        vct: { name: "Hosted" },
+    },
+    { id: "other", config: { format: "jwt_vc" }, vct: "urn:other" },
+    { id: "none", config: { format: "dc+sd-jwt" }, vct: null },
+    { id: "blank-vct", config: { format: "dc+sd-jwt" }, vct: " " },
+    { id: "blank", config: { format: "mso_mdoc", docType: " " } },
+    { id: "padded", config: { format: "dc+sd-jwt" }, vct: " urn:padded " },
+];
+const types = [
+    " urn:padded ",
+    "https://issuer.example/issuers/t/credentials-metadata/vct/hosted",
+    "org.iso.18013.5.1.mDL",
+    "urn:eudi:pid:de:1",
 ];
 
 describe("issuer registration certificate material", () => {
-    it("derives sorted attestations for SD-JWT VC and mdoc configurations", () => {
-        expect(deriveRegistrationCertificateMaterial(configs)).toEqual({
-            schemaMetadataIds: ["a", "b"],
-            providedAttestations: [
-                {
-                    credentialConfigId: "pid",
-                    format: "dc+sd-jwt",
-                    meta: {
-                        schema_metadata_id: "a",
-                        schema_metadata_version: "1.0",
-                    },
-                },
-                {
-                    credentialConfigId: "mdl",
-                    format: "mso_mdoc",
-                    meta: { schema_metadata_id: "b" },
-                },
-            ],
-        });
+    it("derives the sorted vct and docType values as stored, not schema metadata", () => {
+        expect(
+            deriveRegistrationCertificateMaterial(configs, publicUrl, "t"),
+        ).toEqual({ providesAttestations: types });
     });
 
-    it("keeps the fingerprint format used by cached certificates", () => {
-        const material = deriveRegistrationCertificateMaterial(configs);
-        // Persisted caches compare against this exact serialization.
-        const historical = JSON.stringify({
+    it("finds nothing without a vct or docType", () => {
+        expect(
+            deriveRegistrationCertificateMaterial(
+                configs.filter((config) =>
+                    ["other", "none", "blank-vct", "blank"].includes(config.id),
+                ),
+                publicUrl,
+                "t",
+            ),
+        ).toEqual({ providesAttestations: [] });
+    });
+
+    it("fingerprints the provided attestations and settings", () => {
+        const material = deriveRegistrationCertificateMaterial(
+            configs,
+            publicUrl,
+            "t",
+        );
+        const expected = JSON.stringify({
             mode: "generate",
-            schemaMetadataIds: material.schemaMetadataIds,
+            providesAttestations: types,
             privacyPolicy: "https://p",
             supportUri: undefined,
-            providedAttestations: material.providedAttestations,
         });
         expect(
             registrationCertificateFingerprint(
                 { mode: "generate", privacyPolicy: "https://p" },
                 material,
             ),
-        ).toBe(createHash("sha256").update(historical).digest("hex"));
+        ).toBe(createHash("sha256").update(expected).digest("hex"));
     });
 
     it("checks the validity window with clock skew", () => {
@@ -76,7 +99,10 @@ describe("issuer registration certificate material", () => {
 });
 
 describe("RegistrarIssuerRegistrationCertificateProvider", () => {
-    function setup(cache?: { jwt: string; fingerprint: string } | null) {
+    function setup(
+        cache?: { jwt: string; fingerprint: string } | null,
+        credentialConfigs: unknown[] = configs,
+    ) {
         const registrar = {
             resolveRegistrationCertificate: vi.fn(async () => ({
                 jwt: active,
@@ -93,9 +119,10 @@ describe("RegistrarIssuerRegistrationCertificateProvider", () => {
         const provider = new RegistrarIssuerRegistrationCertificateProvider(
             registrar as unknown as RegistrarService,
             {
-                getCredentialConfigsForTenant: async () => configs,
+                getCredentialConfigsForTenant: async () => credentialConfigs,
             } as unknown as CredentialsService,
             issuance as unknown as IssuanceService,
+            publicUrl,
         );
         return { provider, registrar, issuance };
     }
@@ -117,7 +144,7 @@ describe("RegistrarIssuerRegistrationCertificateProvider", () => {
         const settings = { mode: "generate" as const };
         const fingerprint = registrationCertificateFingerprint(
             settings,
-            deriveRegistrationCertificateMaterial(configs),
+            deriveRegistrationCertificateMaterial(configs, publicUrl, "t"),
         );
         const cached = jwt({ exp: now() + 60, id: "cached" });
         const { provider, registrar } = setup({ jwt: cached, fingerprint });
@@ -143,7 +170,7 @@ describe("RegistrarIssuerRegistrationCertificateProvider", () => {
         expect(registrar.resolveRegistrationCertificate).toHaveBeenCalledWith(
             {
                 body: {
-                    provides_attestations: ["a", "b"],
+                    provides_attestations: types,
                     privacy_policy: "https://privacy",
                 },
             },
@@ -160,6 +187,16 @@ describe("RegistrarIssuerRegistrationCertificateProvider", () => {
             "t",
             expect.objectContaining({ jwt: active, issuedAt: 1, expiresAt: 2 }),
         );
+    });
+
+    it("requests nothing without a vct or docType", async () => {
+        const { provider, registrar } = setup(undefined, [
+            { id: "none", config: { format: "dc+sd-jwt" }, vct: null },
+        ]);
+        await expect(
+            provider.resolve("t", { mode: "generate" }),
+        ).resolves.toBeUndefined();
+        expect(registrar.resolveRegistrationCertificate).not.toHaveBeenCalled();
     });
 
     it("never fails metadata generation", async () => {

@@ -1,5 +1,9 @@
 import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
+import type { RegistrarService } from "../../../registrar/registrar.service.js";
+import { RegistrarIssuerRegistrationCertificateProvider } from "../../issuance/oid4vci/adapters/registrar-issuer-registration-certificate-provider.js";
+import { NO_CREDENTIAL_TYPES_MESSAGE } from "../../issuance/oid4vci/domain/issuer-registration-certificate.js";
+import type { CredentialsService } from "../credentials/credentials.service.js";
 import { IssuanceService } from "./issuance.service.js";
 
 describe("IssuanceService.storeIssuanceConfiguration", () => {
@@ -292,5 +296,146 @@ describe("IssuanceService audit log", () => {
             upstream("[REDACTED]"),
         );
         expect(JSON.stringify(entry)).not.toMatch(/old-secret|new-secret/);
+    });
+});
+
+describe("IssuanceService.reissueRegistrationCertificate", () => {
+    const previousJwt = `e30.${Buffer.from(
+        JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 }),
+    ).toString("base64url")}.sig`;
+    const service = (credentialConfigs: any[]) => {
+        const resolveRegistrationCertificate = vi.fn(async () => ({
+            jwt: "e30.e30.sig",
+            payload: {},
+        }));
+        const revokeRegistrationCertificateByJwt = vi.fn(async () => true);
+        const updateRegistrationCertificateCache = vi.fn();
+        const issuance = Object.assign(
+            Object.create(IssuanceService.prototype),
+            {
+                issuanceConfigRepo: {
+                    getForTenant: vi.fn().mockResolvedValue({
+                        tenantId: "tenant-1",
+                        registrationCertificate: {
+                            enabled: true,
+                            mode: "generate",
+                        },
+                        registrationCertificateCache: {
+                            jwt: previousJwt,
+                            fingerprint: "previous",
+                        },
+                    }),
+                    updateRegistrationCertificateCache,
+                },
+                registrarService: {
+                    isEnabledForTenant: vi.fn().mockResolvedValue(true),
+                    resolveRegistrationCertificate,
+                    revokeRegistrationCertificateByJwt,
+                },
+                credentialConfigService: {
+                    get: vi.fn().mockResolvedValue(credentialConfigs),
+                },
+                configService: {
+                    getOrThrow: (key: string) => {
+                        if (key !== "PUBLIC_URL") throw new Error(key);
+                        return "https://issuer.example";
+                    },
+                },
+            },
+        ) as IssuanceService;
+        return {
+            issuance,
+            resolveRegistrationCertificate,
+            revokeRegistrationCertificateByJwt,
+            updateRegistrationCertificateCache,
+        };
+    };
+
+    it("requests the certificate for the vct and docType values", async () => {
+        const configs = [
+            {
+                id: "pid",
+                config: { format: "dc+sd-jwt" },
+                vct: "urn:eudi:pid:de:1",
+            },
+            {
+                id: "hosted",
+                config: { format: "dc+sd-jwt" },
+                vct: { name: "x" },
+            },
+            {
+                id: "mdl",
+                config: {
+                    format: "mso_mdoc",
+                    docType: "eu.europa.ec.eudi.mdl.1",
+                },
+            },
+        ];
+        const {
+            issuance,
+            resolveRegistrationCertificate,
+            revokeRegistrationCertificateByJwt,
+            updateRegistrationCertificateCache,
+        } = service(configs);
+
+        await issuance.reissueRegistrationCertificate("tenant-1");
+
+        expect(resolveRegistrationCertificate).toHaveBeenCalledWith(
+            {
+                body: {
+                    provides_attestations: [
+                        "eu.europa.ec.eudi.mdl.1",
+                        "https://issuer.example/issuers/tenant-1/credentials-metadata/vct/hosted",
+                        "urn:eudi:pid:de:1",
+                    ],
+                },
+            },
+            {},
+            expect.any(String),
+            "tenant-1",
+        );
+        expect(revokeRegistrationCertificateByJwt).toHaveBeenCalledWith(
+            "tenant-1",
+            previousJwt,
+        );
+
+        // Metadata generation must reuse the certificate that reissue cached
+        // instead of replacing and revoking it again.
+        const [, cache] = updateRegistrationCertificateCache.mock.calls[0];
+        const metadataRegistrar = {
+            resolveRegistrationCertificate: vi.fn(),
+        };
+        const provider = new RegistrarIssuerRegistrationCertificateProvider(
+            metadataRegistrar as unknown as RegistrarService,
+            {
+                getCredentialConfigsForTenant: async () => configs,
+            } as unknown as CredentialsService,
+            {
+                getIssuanceConfiguration: async () => ({
+                    registrationCertificateCache: {
+                        ...cache,
+                        jwt: previousJwt,
+                    },
+                }),
+            } as unknown as IssuanceService,
+            "https://issuer.example",
+        );
+        await expect(
+            provider.resolve("tenant-1", { enabled: true, mode: "generate" }),
+        ).resolves.toBe(previousJwt);
+        expect(
+            metadataRegistrar.resolveRegistrationCertificate,
+        ).not.toHaveBeenCalled();
+    });
+
+    it("refuses when no credential config has a vct or docType", async () => {
+        const { issuance, resolveRegistrationCertificate } = service([
+            { id: "pid", config: { format: "dc+sd-jwt" }, vct: null },
+        ]);
+
+        await expect(
+            issuance.reissueRegistrationCertificate("tenant-1"),
+        ).rejects.toThrow(new BadRequestException(NO_CREDENTIAL_TYPES_MESSAGE));
+        expect(resolveRegistrationCertificate).not.toHaveBeenCalled();
     });
 });

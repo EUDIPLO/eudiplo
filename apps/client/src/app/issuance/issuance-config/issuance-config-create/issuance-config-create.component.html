@@ -1210,8 +1210,9 @@
 
                         @if (registrationCertificateMode === 'generate') {
                           <mat-hint>
-                            Provides attestations are derived automatically from credential configs
-                            with schema.
+                            Provided attestations are derived automatically from the vct of your
+                            SD-JWT VC credential configs (the hosted VCT URL for a VCT that EUDIPLO
+                            hosts) and the docType of your mDOC credential configs.
                           </mat-hint>
 
                           <div>
