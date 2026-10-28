@@ -332,6 +332,29 @@ describe('CredentialConfigCreateComponent', () => {
     }
   });
 
+  it('refuses a constraint keyword outside the allow-list at the field', () => {
+    basics();
+    component.displayConfigs.at(0).patchValue({ name: 'Membership', description: 'Member card' });
+    const field = component.createFieldGroup({
+      path: ['code'],
+      type: 'string',
+      constraints: JSON.parse('{ "patern": "^[A-Z]+$" }'),
+    });
+    component.fields.push(field);
+    component.toggleGuidedMode();
+
+    component.submitCredential();
+    expect(save).not.toHaveBeenCalled();
+    expect(component.activeStep).toBe(1);
+    expect(field.get('constraints')?.getError('constraints')).toContain(
+      'Not a supported JSON Schema keyword: patern.'
+    );
+    field.get('constraints')?.setValue('{ "items": { "type": "string", "widget": {} } }');
+    expect(field.get('constraints')?.getError('constraints')).toContain(
+      'Not a supported JSON Schema keyword: items › widget.'
+    );
+  });
+
   it('does not save constraints that issuance could not compile', () => {
     const snackBar = (component as any).snackBar;
     basics();
@@ -340,7 +363,7 @@ describe('CredentialConfigCreateComponent', () => {
       component.createFieldGroup({
         path: ['code'],
         type: 'string',
-        constraints: { patern: '^[A-Z]+$' },
+        constraints: { pattern: '^[' },
       })
     );
     component.toggleGuidedMode();
@@ -349,7 +372,9 @@ describe('CredentialConfigCreateComponent', () => {
     expect(save).not.toHaveBeenCalled();
     expect(component.activeStep).toBe(1);
     expect(snackBar.open).toHaveBeenCalledWith(
-      expect.stringContaining('unknown keyword: "patern"'),
+      expect.stringMatching(
+        /^Issuance could not use the claim constraints: Invalid regular expression/
+      ),
       'Close',
       expect.anything()
     );

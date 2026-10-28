@@ -53,7 +53,7 @@ rejects versions newer than its own.
 | `KeyChainDefaults`   | `KeyChainDefaultsConfigFile`  | 1               | yes       |
 | `RegistrarConfig`    | `RegistrarConfigFile`         | 2               | yes       |
 | `IssuanceConfig`     | `IssuanceConfigFile`          | 5               | yes       |
-| `CredentialConfig`   | `CredentialConfigFile`        | 2               |           |
+| `CredentialConfig`   | `CredentialConfigFile`        | 3               |           |
 | `PresentationConfig` | `PresentationConfigFile`      | 3               |           |
 | `AttributeProvider`  | `AttributeProviderConfigFile` | 1               |           |
 | `WebhookEndpoint`    | `WebhookEndpointConfigFile`   | 1               |           |
@@ -102,6 +102,14 @@ rewritten, and nothing is written until you set it.
 `frameworkType` of `schemaMeta.trustedAuthorities` entries, with the root
 certificate in `value`. A v1 document is migrated unchanged; 9.x cannot read v2
 files.
+
+**CredentialConfig v3** came with EUDIPLO 10.0 as well. Claim field
+`constraints`, also those of `children`, accept only JSON Schema validation and
+annotation keywords ([Constraints](../issuance/claims.md#constraints)). The v2
+to v3 step removes every other key, also inside subschemas, and subschema
+keywords whose value is not an object or boolean, each with the warning
+`CLAIM_CONSTRAINT_KEYWORD_REMOVED` at its path, for example
+`/spec/fields/0/constraints/widget`.
 
 **KeyChain v2** came with EUDIPLO 10.0. It adds the optional `type`
 (`standalone` or `internalChain`), which exports write. For a `private-jwk` key

@@ -106,11 +106,21 @@ test('saves edited claim constraints and keeps untouched ones', async ({ page, r
     await constraints.blur();
     await expect(page.getByText('Enter valid JSON: ')).toBeVisible();
 
-    // Issuance compiles constraints strictly, so Save refuses a misspelled keyword.
+    // Constraints accept only JSON Schema keywords, so Save refuses a misspelled one
+    // without sending it.
+    const saves: string[] = [];
+    const recordSave = (sent: { method(): string; url(): string }) => {
+      if (sent.method() !== 'GET' && sent.url().includes(`/issuer/credentials/${id}`)) {
+        saves.push(sent.method());
+      }
+    };
+    page.on('request', recordSave);
     await constraints.fill('{ "patern": "^\\\\d{4}$" }');
     await page.getByRole('button', { name: 'Save Configuration' }).click();
-    await expect(page.getByText('unknown keyword: "patern"')).toBeVisible();
-    await page.getByRole('button', { name: 'Close' }).click();
+    await expect(page.getByText('Not a supported JSON Schema keyword: patern.')).toBeVisible();
+    await expect(page.getByText(/Check the highlighted fields in Claims/)).toBeVisible();
+    page.off('request', recordSave);
+    expect(saves).toEqual([]);
 
     await constraints.fill('{ "pattern": "^\\\\d{4}-\\\\d{2}-\\\\d{2}$" }');
     await page.getByRole('button', { name: 'Save Configuration' }).click();

@@ -8,6 +8,7 @@ import {
     SchemaMetaBindingType,
     SchemaMetaFrameworkType,
 } from "../dto/schema-meta-config.schema.js";
+import { ClaimConstraintsSchema } from "./claim-constraints.schema.js";
 
 const FieldDisplaySchema = z
     .object({
@@ -57,12 +58,9 @@ const ClaimFieldDefinitionSchema: z.ZodTypeAny = z.lazy(() =>
                 .array(FieldDisplaySchema)
                 .optional()
                 .describe("Localized display metadata for this field."),
-            constraints: z
-                .record(z.string(), z.unknown())
-                .optional()
-                .describe(
-                    "Optional validation constraints for the claim value.",
-                ),
+            constraints: ClaimConstraintsSchema.optional().describe(
+                "Optional JSON Schema 2020-12 validation keywords for the claim value. Only the JSON Schema keywords listed under Constraints in the claims documentation are accepted (validation keywords such as pattern, minLength or enum, subschemas such as items or properties, and annotations); other keys, such as format or $ref, are refused.",
+            ),
             children: z
                 .array(ClaimFieldDefinitionSchema)
                 .optional()

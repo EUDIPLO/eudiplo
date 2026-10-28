@@ -17,3 +17,5 @@ export {
   deriveRuntimeArtifacts,
   flattenFields,
 } from "./derive";
+
+export { type UnsupportedConstraint, unsupportedConstraints } from "./constraints";

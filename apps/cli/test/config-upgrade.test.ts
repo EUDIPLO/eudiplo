@@ -299,6 +299,44 @@ describe("config upgrade", () => {
         expect(result.spec).toEqual(valid);
     });
 
+    it("upgrades a v2 credential configuration to v3 without unsupported constraint keywords", async () => {
+        const { cwd, context, output } = await setup();
+        const source = join(cwd, "pid.json");
+        const spec = (constraints: Record<string, unknown>) => ({
+            id: "pid",
+            config: { format: "dc+sd-jwt", display: [] },
+            fields: [{ path: ["birth_date"], type: "string", constraints }],
+        });
+        await writeFile(
+            source,
+            JSON.stringify({
+                $schema: schemaUrl("CredentialConfig", 2),
+                spec: spec({
+                    pattern: "^\\d{4}$",
+                    widget: { formlyConfig: { template: "<b>x</b>" } },
+                    items: { type: "string", widget: {} },
+                }),
+            }),
+        );
+
+        expect(await runCli(["config", "upgrade", source], context)).toBe(0);
+        expect(output.stderr).toContain(
+            "/spec/fields/0/constraints/widget: warning CLAIM_CONSTRAINT_KEYWORD_REMOVED",
+        );
+        expect(output.stderr).toContain(
+            "/spec/fields/0/constraints/items/widget: warning CLAIM_CONSTRAINT_KEYWORD_REMOVED",
+        );
+        const upgraded = `${source}.upgraded.json`;
+        const result = JSON.parse(await readFile(upgraded, "utf8"));
+        expect(result.$schema).toBe(schemaUrl("CredentialConfig", 3));
+        expect(result.spec).toEqual(
+            spec({ pattern: "^\\d{4}$", items: { type: "string" } }),
+        );
+        expect(
+            await runCli(["config", "upgrade", upgraded, "--check"], context),
+        ).toBe(0);
+    });
+
     it("upgrades a v1 KMS configuration file to v2 with the spec unchanged", async () => {
         const { cwd, context } = await setup();
         const source = join(cwd, "kms-folder");
