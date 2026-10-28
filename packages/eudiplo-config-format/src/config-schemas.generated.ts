@@ -8960,6 +8960,1032 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
   },
   {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://eudiplo.dev/schemas/v3/CredentialConfigFile.schema.json",
+    "title": "CredentialConfigFile",
+    "type": "object",
+    "properties": {
+      "$schema": {
+        "type": "string",
+        "const": "https://eudiplo.dev/schemas/v3/CredentialConfigFile.schema.json"
+      },
+      "metadata": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Monotonically increasing configuration generation."
+          },
+          "ownership": {
+            "type": "string",
+            "enum": [
+              "unmanaged",
+              "file-managed"
+            ],
+            "description": "Requested ownership recorded when the document is applied."
+          }
+        },
+        "additionalProperties": false
+      },
+      "spec": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/CredentialConfigCreate"
+          },
+          {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    "required": [
+      "$schema",
+      "spec"
+    ],
+    "additionalProperties": false,
+    "$defs": {
+      "CredentialConfigCreate": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Credential configuration identifier."
+          },
+          "description": {
+            "description": "Optional description for operators and tooling.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "config": {
+            "type": "object",
+            "properties": {
+              "format": {
+                "type": "string",
+                "enum": [
+                  "mso_mdoc",
+                  "dc+sd-jwt"
+                ],
+                "description": "Credential format emitted by this configuration."
+              },
+              "display": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "locale": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Locale tag for the display entry."
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Human-readable field name."
+                    },
+                    "description": {
+                      "description": "Optional field description for this locale.",
+                      "type": "string"
+                    },
+                    "background_color": {
+                      "description": "Optional background color for card-style rendering.",
+                      "type": "string"
+                    },
+                    "text_color": {
+                      "description": "Optional text color for card-style rendering.",
+                      "type": "string"
+                    },
+                    "background_image": {
+                      "description": "Optional background image.",
+                      "type": "object",
+                      "properties": {
+                        "uri": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Image URI."
+                        }
+                      },
+                      "required": [
+                        "uri"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "logo": {
+                      "description": "Optional logo image.",
+                      "type": "object",
+                      "properties": {
+                        "uri": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Image URI."
+                        }
+                      },
+                      "required": [
+                        "uri"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "locale",
+                    "name"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Display metadata shown by wallets."
+              },
+              "scope": {
+                "description": "Optional OAuth scope associated with this credential type.",
+                "type": "string"
+              },
+              "docType": {
+                "description": "Optional mDoc document type.",
+                "type": "string"
+              },
+              "keyAttestationsRequired": {
+                "description": "Optional key attestation requirements.",
+                "type": "object",
+                "properties": {
+                  "key_storage": {
+                    "description": "Required key storage attestations.",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "user_authentication": {
+                    "description": "Required user authentication attestations.",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
+              "proofTypesSupported": {
+                "description": "Supported proof types for issuance requests.",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "jwt",
+                    "attestation"
+                  ]
+                }
+              },
+              "credentialReusePolicy": {
+                "description": "Optional PID/EAA reuse policy published in credential metadata.",
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "options": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "details": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "once_only",
+                              "limited_time",
+                              "limited-time",
+                              "rotating-batch",
+                              "per-relying-party"
+                            ]
+                          }
+                        },
+                        "batch_size": {
+                          "type": "integer",
+                          "minimum": 2,
+                          "maximum": 9007199254740991
+                        },
+                        "reissue_trigger_unused": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "reissue_trigger_lifetime_left": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "details"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "format",
+              "display"
+            ],
+            "additionalProperties": false,
+            "description": "Issuer metadata-facing credential configuration."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CredentialConfigCreate/$defs/__schema0"
+            },
+            "description": "Claim field definitions for credential issuance."
+          },
+          "attributeProviderId": {
+            "description": "Optional attribute provider id used to resolve claim values.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "webhookEndpointId": {
+            "description": "Not used for notifications: they go to the webhook endpoint of the offer.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vct": {
+            "description": "Optional VCT value or structured VCT metadata.",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "vct": {
+                    "description": "VCT identifier.",
+                    "type": "string"
+                  },
+                  "name": {
+                    "description": "Human-readable VCT name.",
+                    "type": "string"
+                  },
+                  "description": {
+                    "description": "Optional VCT description.",
+                    "type": "string"
+                  },
+                  "extends": {
+                    "description": "Optional base VCT reference.",
+                    "type": "string"
+                  },
+                  "extends#integrity": {
+                    "description": "Integrity hash for the extends reference.",
+                    "type": "string"
+                  },
+                  "schema_uri": {
+                    "description": "Optional schema URI for the VCT.",
+                    "type": "string"
+                  },
+                  "schema_uri#integrity": {
+                    "description": "Integrity hash for schema_uri.",
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "keyBinding": {
+            "description": "Enable key binding requirements.",
+            "type": "boolean"
+          },
+          "keyChainId": {
+            "description": "Optional key chain id used for credential signing.",
+            "type": "string",
+            "minLength": 1
+          },
+          "statusManagement": {
+            "description": "Enable status management for issued credentials.",
+            "type": "boolean"
+          },
+          "activeCredentials": {
+            "description": "Optional issuer-side policy limiting simultaneously active credentials per subject. Requires statusManagement.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "Ensure a subject has at most one active credential of this configuration."
+                  },
+                  "tracking": {
+                    "description": "How the subject's active credential set is tracked. Only 'internal' (pseudonymous, issuer-side) is currently supported.",
+                    "type": "string",
+                    "enum": [
+                      "internal"
+                    ]
+                  }
+                },
+                "required": [
+                  "enabled"
+                ],
+                "additionalProperties": false,
+                "description": "Issuer-side policy limiting the number of simultaneously active credentials per subject."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "iaeActions": {
+            "description": "Interactive authorization steps (a presentation or a web flow) that the wallet completes, in order, before the credential is issued.",
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "openid4vp_presentation",
+                          "description": "Trigger an OpenID4VP presentation action."
+                        },
+                        "label": {
+                          "description": "Optional UI label for the action.",
+                          "type": "string"
+                        },
+                        "presentationConfigId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Presentation configuration id to execute."
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "presentationConfigId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "redirect_to_web",
+                          "description": "Trigger a redirect-to-web action."
+                        },
+                        "label": {
+                          "description": "Optional UI label for the action.",
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string",
+                          "format": "uri",
+                          "description": "Destination URL for the redirect action."
+                        },
+                        "callbackUrl": {
+                          "description": "Optional callback URL after redirect completion.",
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "description": {
+                          "description": "Optional action description.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "url"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ],
+                  "description": "In-app experience action definitions."
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sdJwtTrustFormat": {
+            "description": "Trust format used for SD-JWT verification metadata.",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "x5c",
+                  "federation"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lifeTime": {
+            "description": "Credential lifetime in seconds.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "schemaMeta": {
+            "description": "Optional schema metadata and trust bindings.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "description": "Optional schema metadata identifier.",
+                    "type": "string"
+                  },
+                  "name": {
+                    "description": "Optional schema metadata name.",
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string",
+                    "description": "Schema metadata version."
+                  },
+                  "rulebookURI": {
+                    "description": "Optional rulebook URI reference.",
+                    "type": "string"
+                  },
+                  "attestationLoS": {
+                    "type": "string",
+                    "enum": [
+                      "iso_18045_high",
+                      "iso_18045_moderate",
+                      "iso_18045_enhanced-basic",
+                      "iso_18045_basic"
+                    ],
+                    "description": "Assurance level for attestation requirements."
+                  },
+                  "bindingType": {
+                    "type": "string",
+                    "enum": [
+                      "claim",
+                      "key",
+                      "biometric",
+                      "none"
+                    ],
+                    "description": "Subject binding type."
+                  },
+                  "schemaURIs": {
+                    "description": "Optional schema URI entries.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "credentialConfigId": {
+                          "description": "Optional credential configuration id this schema URI applies to.",
+                          "type": "string"
+                        },
+                        "format": {
+                          "description": "Optional credential format for this schema URI.",
+                          "type": "string"
+                        },
+                        "uri": {
+                          "description": "Schema URI reference.",
+                          "type": "string"
+                        },
+                        "meta": {
+                          "description": "Optional metadata attached to the schema URI.",
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "trustedAuthorities": {
+                    "description": "Optional trusted authority entries.",
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "trustListId": {
+                          "description": "Optional trust list id.",
+                          "type": "string"
+                        },
+                        "frameworkType": {
+                          "description": "Trust framework type. `x509` takes a root certificate in `value` and no `verificationMethod`.",
+                          "type": "string",
+                          "enum": [
+                            "aki",
+                            "etsi_tl",
+                            "openid_federation",
+                            "x509"
+                          ]
+                        },
+                        "value": {
+                          "description": "Framework-specific authority value, for example the trust list URL for `etsi_tl` or the root certificate (base64 DER or PEM) for `x509`.",
+                          "type": "string"
+                        },
+                        "verificationMethod": {
+                          "description": "Verification method descriptor.",
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "propertyNames": {
+                                "type": "string"
+                              },
+                              "additionalProperties": {}
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "version",
+                  "attestationLoS",
+                  "bindingType"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "embeddedDisclosurePolicy": {
+            "description": "Optional embedded disclosure policy.",
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "policy": {
+                        "type": "string",
+                        "const": "attestationBased",
+                        "description": "Attestation-based policy discriminator."
+                      },
+                      "values": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "claims": {
+                              "description": "Claims constraints considered by policy evaluation.",
+                              "type": "array",
+                              "items": {}
+                            },
+                            "credentials": {
+                              "type": "array",
+                              "items": {},
+                              "description": "Credential constraints considered by policy evaluation."
+                            },
+                            "credential_sets": {
+                              "description": "Optional credential set constraints.",
+                              "type": "array",
+                              "items": {}
+                            }
+                          },
+                          "required": [
+                            "credentials"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "description": "Attestation requirements used for policy enforcement."
+                      }
+                    },
+                    "required": [
+                      "policy",
+                      "values"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "policy": {
+                        "type": "string",
+                        "const": "none",
+                        "description": "No disclosure policy enforcement."
+                      }
+                    },
+                    "required": [
+                      "policy"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "policy": {
+                        "type": "string",
+                        "const": "allowList",
+                        "description": "Allow-list based policy discriminator."
+                      },
+                      "values": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Allowed values for policy checks."
+                      }
+                    },
+                    "required": [
+                      "policy",
+                      "values"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "policy": {
+                        "type": "string",
+                        "const": "rootOfTrust",
+                        "description": "Root-of-trust policy discriminator."
+                      },
+                      "values": {
+                        "type": "string",
+                        "description": "Root-of-trust identifier or reference."
+                      }
+                    },
+                    "required": [
+                      "policy",
+                      "values"
+                    ],
+                    "additionalProperties": false
+                  }
+                ],
+                "description": "Embedded disclosure policy configuration."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "config",
+          "fields"
+        ],
+        "additionalProperties": false,
+        "description": "Payload for creating credential issuance configuration.",
+        "$defs": {
+          "__schema0": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "array",
+                "items": {
+                  "type": [
+                    "string",
+                    "number",
+                    "null"
+                  ]
+                },
+                "description": "Path to this claim inside the credential payload."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "string",
+                  "number",
+                  "integer",
+                  "boolean",
+                  "object",
+                  "array"
+                ],
+                "description": "Data type of the claim value."
+              },
+              "defaultValue": {
+                "description": "Optional default value for this field."
+              },
+              "mandatory": {
+                "description": "Whether the field is required at issuance time.",
+                "type": "boolean"
+              },
+              "disclosable": {
+                "description": "Whether the claim is selectively disclosable.",
+                "type": "boolean"
+              },
+              "namespace": {
+                "description": "Optional namespace for claim grouping.",
+                "type": "string"
+              },
+              "display": {
+                "description": "Localized display metadata for this field.",
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "locale": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Locale tag for the display entry."
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Human-readable field name."
+                    },
+                    "description": {
+                      "description": "Optional field description for this locale.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "locale",
+                    "name"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "constraints": {
+                "description": "Optional JSON Schema 2020-12 validation keywords for the claim value. Only the JSON Schema keywords listed under Constraints in the claims documentation are accepted (validation keywords such as pattern, minLength or enum, subschemas such as items or properties, and annotations); other keys, such as format or $ref, are refused.",
+                "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+              },
+              "children": {
+                "description": "Nested child claim definitions for object or array fields.",
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/CredentialConfigCreate/$defs/__schema0"
+                }
+              }
+            },
+            "required": [
+              "path",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          "ClaimConstraints": {
+            "type": "object",
+            "properties": {
+              "type": {},
+              "enum": {},
+              "const": {},
+              "multipleOf": {},
+              "maximum": {},
+              "exclusiveMaximum": {},
+              "minimum": {},
+              "exclusiveMinimum": {},
+              "maxLength": {},
+              "minLength": {},
+              "pattern": {},
+              "maxItems": {},
+              "minItems": {},
+              "uniqueItems": {},
+              "maxContains": {},
+              "minContains": {},
+              "maxProperties": {},
+              "minProperties": {},
+              "required": {},
+              "dependentRequired": {},
+              "title": {},
+              "description": {},
+              "default": {},
+              "examples": {},
+              "deprecated": {},
+              "readOnly": {},
+              "writeOnly": {},
+              "$comment": {},
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                  }
+                ]
+              },
+              "contains": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                  }
+                ]
+              },
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                  }
+                ]
+              },
+              "propertyNames": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                  }
+                ]
+              },
+              "not": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                  }
+                ]
+              },
+              "if": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                  }
+                ]
+              },
+              "then": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                  }
+                ]
+              },
+              "else": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                  }
+                ]
+              },
+              "unevaluatedItems": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                  }
+                ]
+              },
+              "unevaluatedProperties": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                  }
+                ]
+              },
+              "prefixItems": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                    }
+                  ]
+                }
+              },
+              "allOf": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                    }
+                  ]
+                }
+              },
+              "anyOf": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                    }
+                  ]
+                }
+              },
+              "oneOf": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                    }
+                  ]
+                }
+              },
+              "properties": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                    }
+                  ]
+                }
+              },
+              "patternProperties": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                    }
+                  ]
+                }
+              },
+              "dependentSchemas": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "$ref": "#/$defs/CredentialConfigCreate/$defs/ClaimConstraints"
+                    }
+                  ]
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "title": "CredentialConfigCreate"
+      }
+    }
+  },
+  {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://eudiplo.dev/schemas/v3/IssuanceConfigFile.schema.json",
     "title": "IssuanceConfigFile",
     "type": "object",

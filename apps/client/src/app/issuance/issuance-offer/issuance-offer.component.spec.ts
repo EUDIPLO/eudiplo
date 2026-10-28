@@ -470,6 +470,48 @@ describe('IssuanceOfferComponent', () => {
     });
   });
 
+  it('does not render a formly template injected through claim constraints', async () => {
+    const config = {
+      id: 'pid',
+      description: null,
+      config: { format: 'dc+sd-jwt' },
+      fields: [
+        {
+          path: ['birth_date'],
+          type: 'string',
+          display: [{ locale: 'en-US', name: 'Date of Birth' }],
+          constraints: {
+            pattern: String.raw`^\d{4}-\d{2}-\d{2}$`,
+            widget: {
+              formlyConfig: {
+                template: '<img id="injected" src="x" onerror="window.__injected = true">',
+                props: { safeHtml: true },
+              },
+            },
+          },
+        },
+      ],
+    } as any;
+    component.credentialConfigs = [config];
+    vi.mocked(TestBed.inject(CredentialConfigService).loadConfigurations).mockResolvedValue([
+      config,
+    ]);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+    component.credentialStepForm.patchValue({ credentialConfigurationIds: ['pid'] });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const element: HTMLElement = fixture.nativeElement;
+    const input = element.querySelector('formly-form input') as HTMLInputElement | null;
+    expect(input).not.toBeNull();
+    expect(input?.closest('mat-form-field')?.textContent).toContain('Date of Birth');
+    expect(element.querySelector('formly-template')).toBeNull();
+    expect(element.querySelector('#injected')).toBeNull();
+  });
+
   it('passes formly the same fields array on every check', async () => {
     const config = { ...buildMdocConfig(), description: null } as any;
     component.credentialConfigs = [config];

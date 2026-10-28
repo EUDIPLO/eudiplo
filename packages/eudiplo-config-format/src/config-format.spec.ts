@@ -347,7 +347,7 @@ describe("portable schema identity and migrations", () => {
         expect(bareFileVersion(kind, spec)).toBe(version);
     });
 
-    it("upgrades a v1 credential configuration to v2 unchanged", () => {
+    it("upgrades a v1 credential configuration to v3 unchanged", () => {
         const v1 = {
             $schema: schemaUrl("CredentialConfig", 1),
             metadata: { generation: 2 },
@@ -361,14 +361,145 @@ describe("portable schema identity and migrations", () => {
         expect(result.issues).toEqual([]);
         expect(result.migrations).toEqual([
             "credential-config-v2-x509-trusted-authority",
+            "credential-config-v3-claim-constraint-keywords",
         ]);
-        expect(result.document.$schema).toBe(schemaUrl("CredentialConfig", 2));
+        expect(result.document.$schema).toBe(schemaUrl("CredentialConfig", 3));
         expect(result.document.spec).toEqual(v1.spec);
         expect(result.document.metadata).toEqual({ generation: 2 });
         // Repeating the upgrade on the result is a no-op.
         expect(
             migrateDocument(result.document, validateConfigDocument).migrations,
         ).toEqual([]);
+    });
+
+    describe("CredentialConfig v3 claim constraints", () => {
+        const fields = [
+            {
+                path: ["birth_date"],
+                type: "string",
+                constraints: {
+                    pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+                    widget: {
+                        formlyConfig: {
+                            template: "<img src=x onerror=alert(1)>",
+                            props: { safeHtml: true },
+                        },
+                    },
+                },
+            },
+            {
+                path: ["nationalities"],
+                type: "array",
+                constraints: {
+                    items: { type: "string", "x-ui/hint": "Code" },
+                },
+                children: [
+                    {
+                        path: [null],
+                        type: "string",
+                        constraints: { minLength: 2, format: "iso-3166" },
+                    },
+                ],
+            },
+        ];
+        const v2 = {
+            $schema: schemaUrl("CredentialConfig", 2),
+            spec: {
+                id: "pid",
+                config: { format: "dc+sd-jwt", display: [] },
+                fields,
+            },
+        };
+
+        it("drops keywords outside the allow-list with a warning each", () => {
+            const result = migrateDocument(v2, validateConfigDocument);
+
+            expect(result.migrations).toEqual([
+                "credential-config-v3-claim-constraint-keywords",
+            ]);
+            expect(result.document.$schema).toBe(
+                schemaUrl("CredentialConfig", 3),
+            );
+            expect(result.document.spec.fields).toEqual([
+                {
+                    path: ["birth_date"],
+                    type: "string",
+                    constraints: { pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+                },
+                {
+                    path: ["nationalities"],
+                    type: "array",
+                    constraints: { items: { type: "string" } },
+                    children: [
+                        {
+                            path: [null],
+                            type: "string",
+                            constraints: { minLength: 2 },
+                        },
+                    ],
+                },
+            ]);
+            expect(
+                result.issues.map(({ severity, code, path }) => ({
+                    severity,
+                    code,
+                    path,
+                })),
+            ).toEqual(
+                [
+                    "/spec/fields/0/constraints/widget",
+                    "/spec/fields/1/constraints/items/x-ui~1hint",
+                    "/spec/fields/1/children/0/constraints/format",
+                ].map((path) => ({
+                    severity: "warning",
+                    code: "CLAIM_CONSTRAINT_KEYWORD_REMOVED",
+                    path,
+                })),
+            );
+            expect(validateConfigDocument(result.document)).toEqual([]);
+            // Repeating the upgrade on the result is a no-op.
+            expect(
+                migrateDocument(result.document, validateConfigDocument)
+                    .migrations,
+            ).toEqual([]);
+        });
+
+        it("upgrades allow-listed constraints unchanged", () => {
+            const spec = {
+                ...v2.spec,
+                fields: [
+                    {
+                        path: ["extras"],
+                        type: "object",
+                        constraints: {
+                            additionalProperties: true,
+                            propertyNames: { pattern: "^[a-z]+$" },
+                            anyOf: [{ minProperties: 1 }, false],
+                        },
+                    },
+                ],
+            };
+            const result = migrateDocument(
+                { ...v2, spec },
+                validateConfigDocument,
+            );
+
+            expect(result.issues).toEqual([]);
+            expect(result.document.spec).toEqual(spec);
+        });
+
+        it("validates constraint keywords only from v3 on", () => {
+            const withVersion = (version: number) =>
+                validateConfigDocument(
+                    normalizeDocument({
+                        $schema: schemaUrl("CredentialConfig", version),
+                        spec: v2.spec,
+                    }),
+                ).map((issue) => issue.path);
+
+            expect(withVersion(2)).toEqual([]);
+            expect(withVersion(3)).toContain("/spec/fields/0/constraints");
+        });
     });
 
     it("upgrades a v1 client to v2 unchanged", () => {

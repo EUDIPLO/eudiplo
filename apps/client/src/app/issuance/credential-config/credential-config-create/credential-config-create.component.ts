@@ -57,7 +57,7 @@ import {
 import { EditorComponent, extractSchema } from '../../../utils/editor/editor.component';
 import { ImageFieldComponent } from '../../../utils/image-field/image-field.component';
 import { schemaFormValidator } from '../../../utils/schema-form-validator';
-import { claimSchemaError } from '../../../utils/claim-schema-check';
+import { claimSchemaError, unsupportedConstraintsError } from '../../../utils/claim-schema-check';
 import { LabelledFailure, getApiErrorMessage } from '../../../utils/error-message';
 import { hostedVctUrl } from '../../../utils/public-url';
 import { FrontendConfigService } from '../../../services/frontend-config.service';
@@ -260,9 +260,10 @@ export class CredentialConfigCreateComponent implements OnInit {
     } catch (error) {
       return { constraints: `Enter valid JSON: ${(error as Error).message}` };
     }
-    if (!constraints || typeof constraints !== 'object' || Array.isArray(constraints)) {
-      return { constraints: 'Enter a JSON object, e.g. { "pattern": "^[A-Z]{2}$" }.' };
-    }
+    // Named in the user's terms before the schema check, which would only say that the
+    // ClaimConstraints schema allows no additional properties.
+    const unsupported = unsupportedConstraintsError(constraints);
+    if (unsupported) return { constraints: unsupported };
     const refused = this.validateConstraintsSchema(control)?.['invalidSchema'];
     return refused ? { constraints: refused } : null;
   };
