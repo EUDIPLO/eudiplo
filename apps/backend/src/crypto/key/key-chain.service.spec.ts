@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Role } from "../../auth/roles/role.enum.js";
 import { RolesGuard } from "../../auth/roles/roles.guard.js";
 import type { TokenPayload } from "../../auth/token.decorator.js";
+import { CertificateBuilderService } from "./cert/certificate-builder.service.js";
 import { KeyChainReferences } from "./application/key-chain-references.js";
 import {
     KeyChainInUseError,
@@ -246,6 +247,9 @@ describe("KeyChainService.getById public keys", () => {
 describe("KeyChainService.update rotation policy", () => {
     function updateServiceFor(entity: KeyChainEntity) {
         const service = serviceFor(entity, "db") as any;
+        service.certBuilder = {
+            splitPemChain: CertificateBuilderService.prototype.splitPemChain,
+        };
         service.keyChainRepository.update = vi.fn();
         service.logger = { log: vi.fn() };
         return service as KeyChainService & {
@@ -330,15 +334,241 @@ describe("KeyChainService.update rotation policy", () => {
         );
     });
 
+    /** A certificate for the public key, issued by an external CA. */
+    async function certificateFor(publicKey: CryptoKey): Promise<string> {
+        const algorithm = { name: "ECDSA", namedCurve: "P-256" };
+        const ca = (await webcrypto.subtle.generateKey(algorithm, true, [
+            "sign",
+            "verify",
+        ])) as CryptoKeyPair;
+        const certificate = await x509.X509CertificateGenerator.create(
+            {
+                serialNumber: "01",
+                subject: "CN=Verifier",
+                issuer: "CN=External CA",
+                notBefore: new Date(Date.now() - 60_000),
+                notAfter: new Date(Date.now() + 3_600_000),
+                signingAlgorithm: { ...algorithm, hash: "SHA-256" },
+                publicKey,
+                signingKey: ca.privateKey,
+            },
+            webcrypto as Crypto,
+        );
+        return certificate.toString("pem");
+    }
+
+    const { d: _d, ...activePublicJwk } = privateJwk;
+    const activePublicKey = () =>
+        webcrypto.subtle.importKey(
+            "jwk",
+            activePublicJwk,
+            { name: "ECDSA", namedCurve: "P-256" },
+            true,
+            ["verify"],
+        );
+
     it("keeps the description when only the certificate changes", async () => {
         const service = updateServiceFor(keyChain({}));
+        const pem = await certificateFor(await activePublicKey());
 
-        await service.update("tenant", "key", { activeCertificate: "PEM" });
+        await service.update("tenant", "key", { activeCertificate: pem });
 
         expect(service.keyChainRepository.update).toHaveBeenCalledWith(
             { tenantId: "tenant", id: "key" },
-            { activeCertificate: "PEM" },
+            { activeCertificate: pem.trim() },
         );
+    });
+
+    it("refuses a certificate issued for another key", async () => {
+        const service = updateServiceFor(keyChain({}));
+        const other = (await webcrypto.subtle.generateKey(
+            { name: "ECDSA", namedCurve: "P-256" },
+            true,
+            ["sign", "verify"],
+        )) as CryptoKeyPair;
+
+        await expect(
+            service.update("tenant", "key", {
+                activeCertificate: await certificateFor(other.publicKey),
+            }),
+        ).rejects.toThrow(BadRequestException);
+        expect(service.keyChainRepository.update).not.toHaveBeenCalled();
+    });
+
+    it("refuses a leaf that is not first in the chain", async () => {
+        const service = updateServiceFor(keyChain({}));
+        const other = (await webcrypto.subtle.generateKey(
+            { name: "ECDSA", namedCurve: "P-256" },
+            true,
+            ["sign", "verify"],
+        )) as CryptoKeyPair;
+        const chain = `${await certificateFor(other.publicKey)}\n${await certificateFor(await activePublicKey())}`;
+
+        await expect(
+            service.update("tenant", "key", { activeCertificate: chain }),
+        ).rejects.toThrow(/first certificate is not issued for the active key/);
+        expect(service.keyChainRepository.update).not.toHaveBeenCalled();
+    });
+
+    const ecdsa = { name: "ECDSA", namedCurve: "P-256" };
+    const validity = {
+        notBefore: new Date(Date.now() - 60_000),
+        notAfter: new Date(Date.now() + 3_600_000),
+    };
+    const newKeys = async () =>
+        (await webcrypto.subtle.generateKey(ecdsa, true, [
+            "sign",
+            "verify",
+        ])) as CryptoKeyPair;
+
+    /** A self-signed CA certificate. */
+    async function rootCa(name = "CN=Root CA") {
+        const keys = await newKeys();
+        const cert = await x509.X509CertificateGenerator.createSelfSigned(
+            {
+                serialNumber: "01",
+                name,
+                ...validity,
+                signingAlgorithm: { ...ecdsa, hash: "SHA-256" },
+                keys,
+            },
+            webcrypto as Crypto,
+        );
+        return { keys, cert };
+    }
+
+    /** A certificate for the public key, issued by the given CA. */
+    async function issue(
+        subject: string,
+        publicKey: CryptoKey,
+        ca: { keys: CryptoKeyPair; cert: x509.X509Certificate },
+    ): Promise<x509.X509Certificate> {
+        return x509.X509CertificateGenerator.create(
+            {
+                serialNumber: "02",
+                subject,
+                issuer: ca.cert.subject,
+                ...validity,
+                signingAlgorithm: { ...ecdsa, hash: "SHA-256" },
+                publicKey,
+                signingKey: ca.keys.privateKey,
+            },
+            webcrypto as Crypto,
+        );
+    }
+
+    const pem = (...certs: x509.X509Certificate[]) =>
+        certs.map((cert) => cert.toString("pem")).join("\n");
+
+    it("stores a chain in which each certificate issued the one before it", async () => {
+        const service = updateServiceFor(keyChain({}));
+        const root = await rootCa();
+        const intermediateKeys = await newKeys();
+        const intermediate = {
+            keys: intermediateKeys,
+            cert: await issue(
+                "CN=Intermediate CA",
+                intermediateKeys.publicKey,
+                root,
+            ),
+        };
+        const leaf = await issue(
+            "CN=Verifier",
+            await activePublicKey(),
+            intermediate,
+        );
+
+        await service.update("tenant", "key", {
+            activeCertificate: pem(leaf, intermediate.cert, root.cert),
+        });
+
+        expect(service.keyChainRepository.update).toHaveBeenCalledWith(
+            { tenantId: "tenant", id: "key" },
+            { activeCertificate: pem(leaf, intermediate.cert, root.cert) },
+        );
+    });
+
+    it("refuses a chain whose CA did not sign the certificate before it", async () => {
+        const service = updateServiceFor(keyChain({}));
+        const root = await rootCa();
+        const intermediateKeys = await newKeys();
+        const intermediate = {
+            keys: intermediateKeys,
+            cert: await issue(
+                "CN=Intermediate CA",
+                intermediateKeys.publicKey,
+                root,
+            ),
+        };
+        const leaf = await issue(
+            "CN=Verifier",
+            await activePublicKey(),
+            intermediate,
+        );
+        // Same name as the root, other key.
+        const impostor = await rootCa();
+
+        await expect(
+            service.update("tenant", "key", {
+                activeCertificate: pem(leaf, intermediate.cert, impostor.cert),
+            }),
+        ).rejects.toThrow(/certificate 3 did not issue certificate 2/);
+        expect(service.keyChainRepository.update).not.toHaveBeenCalled();
+    });
+
+    it("refuses a chain whose second certificate names another subject than the leaf's issuer", async () => {
+        const service = updateServiceFor(keyChain({}));
+        const ca = await rootCa("CN=External CA");
+        const leaf = await issue("CN=Verifier", await activePublicKey(), ca);
+        // The CA's key under another name: the signature checks out, the names do not.
+        const other = {
+            cert: await x509.X509CertificateGenerator.createSelfSigned(
+                {
+                    serialNumber: "03",
+                    name: "CN=Other CA",
+                    ...validity,
+                    signingAlgorithm: { ...ecdsa, hash: "SHA-256" },
+                    keys: ca.keys,
+                },
+                webcrypto as Crypto,
+            ),
+        };
+
+        await expect(
+            service.update("tenant", "key", {
+                activeCertificate: pem(leaf, other.cert),
+            }),
+        ).rejects.toThrow(/certificate 2 did not issue certificate 1/);
+        expect(service.keyChainRepository.update).not.toHaveBeenCalled();
+    });
+
+    it("stores only the certificate blocks of the chain", async () => {
+        const service = updateServiceFor(keyChain({}));
+        const ca = await rootCa();
+        const leaf = await issue("CN=Verifier", await activePublicKey(), ca);
+        const pasted = `Bag Attributes\n    friendlyName: verifier\n-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n${pem(leaf)}\nsubject=CN=Root CA\n${pem(ca.cert)}`;
+
+        await service.update("tenant", "key", { activeCertificate: pasted });
+
+        expect(service.keyChainRepository.update).toHaveBeenCalledWith(
+            { tenantId: "tenant", id: "key" },
+            { activeCertificate: pem(leaf, ca.cert) },
+        );
+    });
+
+    it.each([
+        ["PEM", /at least one PEM certificate/],
+        [
+            "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----",
+            /certificate 1 is not a valid certificate/,
+        ],
+    ])("refuses %j as a certificate", async (activeCertificate, reason) => {
+        const service = updateServiceFor(keyChain({}));
+
+        await expect(
+            service.update("tenant", "key", { activeCertificate }),
+        ).rejects.toThrow(reason);
+        expect(service.keyChainRepository.update).not.toHaveBeenCalled();
     });
 });
 
@@ -673,6 +903,7 @@ describe("KeyChainController authorization", () => {
 
     it.each([
         KeyChainController.prototype.getById,
+        KeyChainController.prototype.createCsr,
         KeyChainController.prototype.getProviders,
         KeyChainController.prototype.getProvidersHealth,
     ])("keeps the management roles for %o", (handler) => {

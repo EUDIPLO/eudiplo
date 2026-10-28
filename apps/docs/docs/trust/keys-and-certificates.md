@@ -16,7 +16,7 @@ A key chain is a signing key together with its certificate chain. Each tenant ne
 | `trustList`   | [Trust lists](trust-lists.md) you publish                                                      | Trust List Signing                |
 | `federation`  | The [OpenID Federation entity configuration](federation.md#publish-your-entity-configuration) of the tenant | OpenID Federation Entity Key      |
 
-`encrypt` is reserved for the tenant's encryption key, which EUDIPLO creates and manages itself. It is not listed with the other key chains, and the key chain endpoints do not change it: updating, rotating, deleting or exporting its ID answers `404`, and an import with its ID answers `409`. Configuration bundles leave it out and skip a document with its ID ([Config Bundle Format](../reference/config-bundle-format.md#import-modes-and-plan-actions)).
+`encrypt` is reserved for the tenant's encryption key, which EUDIPLO creates and manages itself. It is not listed with the other key chains, and the key chain endpoints do not change it: updating, rotating, deleting, exporting or creating a CSR for its ID answers `404`, and an import with its ID answers `409`. Configuration bundles leave it out and skip a document with its ID ([Config Bundle Format](../reference/config-bundle-format.md#import-modes-and-plan-actions)).
 
 ## Key chain types
 
@@ -27,7 +27,7 @@ A key chain is a signing key together with its certificate chain. Each tenant ne
 | Imported key      | `POST /api/key-chain/import` with `"type": "standalone"`             | Your chain from `crt` (leaf first), or a self-signed certificate valid 365 days if `crt` is omitted                           | New key with a self-signed certificate (see warning below) |
 | External CA chain | `POST /api/key-chain/import` with `"type": "internalChain"`          | `key` is your CA key and the last `crt` entry its CA certificate, or a self-signed CA certificate EUDIPLO creates if `crt` is omitted; EUDIPLO generates leaf keys signed by it | New leaf key signed by your CA                 |
 
-In the Web Client, attestation keys offer **Create Key Chain** (internal chain), **Standalone Key** and **External CA Chain** (external CA chain; the last certificate must be the CA certificate); access keys offer **Self-Signed Certificate**, **Registrar Enrollment** ([Registrar](registrar.md)) and **External Certificate** (imported key). Standalone Key and the other usage types except OpenID Federation Entity Key, which is always created, import a key with **Use an externally issued certificate and matching private key**. Create Key Chain and External CA Chain rotate the signing key by default; with **Enable automatic key rotation** off, the signing certificate expires after **Certificate Validity** and is renewed only once you turn rotation on by editing the key chain. The other options create key chains without rotation. When EUDIPLO creates the key, **Signing Algorithm** offers the algorithms of the selected KMS provider, starting with its default; imported keys keep the algorithm of their curve, and Registrar Enrollment uses the provider default. The wizard accepts pasted PEM values and PEM, CRT, CER or DER files; EUDIPLO checks that key and certificate match.
+In the Web Client, attestation keys offer **Create Key Chain** (internal chain), **Standalone Key** and **External CA Chain** (external CA chain; the last certificate must be the CA certificate); access keys offer **Self-Signed Certificate**, **Registrar Enrollment** ([Registrar](registrar.md)) and **External Certificate**. Standalone Key and the other usage types except OpenID Federation Entity Key, which is always created, offer an external certificate with **Use a certificate from an external CA**. For an external certificate, choose **Import a key and the certificate chain issued for it**, or **Create the key in EUDIPLO and request its certificate with a CSR** ([details](#request-a-certificate-with-a-csr)). Create Key Chain and External CA Chain rotate the signing key by default; with **Enable automatic key rotation** off, the signing certificate expires after **Certificate Validity** and is renewed only once you turn rotation on by editing the key chain. The other options create key chains without rotation. When EUDIPLO creates the key, **Signing Algorithm** offers the algorithms of the selected KMS provider, starting with its default; imported keys keep the algorithm of their curve, and Registrar Enrollment uses the provider default. The wizard accepts pasted PEM values and PEM, CRT, CER or DER files; EUDIPLO checks that key and certificate match.
 
 Use an internal or external CA chain for attestation keys: trust lists publish the CA certificate, so entries stay valid when the leaf key rotates.
 
@@ -71,6 +71,34 @@ Without `type`, as in files written before 10.0, the import decides from `rotati
 
 To provision key chains as files, put the same JSON into `config/<tenant>/key-chains/`; see [Configuration as Code](../operate/configuration-as-code.md). `GET /api/key-chain/{id}/export` returns a key chain in this format, with its `type`, and needs `tenant:admin` or `tenants:manage`. For an internal or external CA chain it contains the CA key and certificate but not the signing key, so its import keeps the CA and creates a new signing key, as a rotation does. For the `db` provider the export contains the private key; for an external KMS only the public key, because the private key never leaves the KMS, so that file cannot be imported again. **Download configuration** on a key's page in the Web Client saves `GET /api/config-bundles/resources/KeyChain/{id}/document` instead: a document that also contains the signing key of a CA chain, so its import keeps both keys ([single resources](../reference/config-bundle-format.md#single-resources)). For 9.x exports, see the [10.0 upgrade guide](../upgrade/9.x-to-10.0.md#configuration-files). A startup import does not apply an unchanged file again and so renews no certificate ([details](../reference/config-bundle-format.md#import-modes-and-plan-actions)).
 
+## Request a certificate with a CSR
+
+To keep the private key in EUDIPLO, in its KMS, and still get the certificate from your own CA or an ecosystem operator, create a standalone key chain and send your CA a certificate signing request (CSR) for it:
+
+1. Create a standalone key chain without rotation, as above with `"type": "standalone"`. Until step 3 it has a self-signed certificate.
+2. Create the CSR. `subject` is the distinguished name your CA should certify; without it, the subject is `CN=<key chain id>`. EUDIPLO encodes the attributes in the order you write them, so write them in certificate order, country first.
+
+    ```bash
+    curl -G "$EUDIPLO_URL/api/key-chain/$KEY_ID/csr" \
+      -H "Authorization: Bearer $TOKEN" \
+      --data-urlencode "subject=C=DE, O=Example Org, CN=Example Verifier"
+    ```
+
+    The response is `{ "csr": "-----BEGIN CERTIFICATE REQUEST-----\n..." }`, a PKCS#10 request signed by the active key. A subject that is not a distinguished name or is longer than 1024 characters is refused with `400`.
+
+3. Store the certificate your CA issued, leaf first, followed by any issuing certificates:
+
+    ```bash
+    curl -X PUT "$EUDIPLO_URL/api/key-chain/$KEY_ID" \
+      -H "Authorization: Bearer $TOKEN" \
+      -H "Content-Type: application/json" \
+      --data '{ "activeCertificate": "-----BEGIN CERTIFICATE-----\n<leaf>\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\n<intermediate>\n-----END CERTIFICATE-----" }'
+    ```
+
+    EUDIPLO refuses with `400` a value without a PEM certificate, a first certificate that does not hold the public key of the active key, such as one issued for a CSR from before a rotation, and a chain in which a certificate did not issue the one before it. Wallets validate the chain in that order.
+
+In the Web Client, the page of a standalone or imported key chain, except an OpenID Federation entity key, has the card **Certificate from an External CA** for steps 2 and 3: **Request Certificate from External CA**, **Create CSR**, then **Copy CSR** or **Download CSR**, and **Store Certificate** for the issued chain. For a key chain managed by a configuration file, add the issued chain to `crt` in that file instead. To renew the certificate, create a new CSR for the same key and store the new certificate; do not rotate the key chain.
+
 ## Rotate keys
 
 - **Automatic:** once a day, every key chain with `rotationPolicy.enabled` and an `intervalDays` that has passed since creation or the last rotation is rotated.
@@ -80,10 +108,8 @@ To provision key chains as files, put the same JSON into `config/<tenant>/key-ch
 Rotation creates a new key and certificate as listed in the table above. Credentials issued before keep their certificate chain in `x5c`; with an internal or external CA chain, old and new credentials chain to the same CA, so trust lists need no update.
 
 :::warning[Rotating imported keys]
-Rotating a standalone or imported key chain replaces its certificate with a self-signed one. Do not rotate key chains whose certificate comes from a registrar or an external PKI; import the renewed key and certificate instead, or use an external CA chain.
+Rotating a standalone or imported key chain replaces its certificate with a self-signed one. Do not rotate key chains whose certificate comes from a registrar or an external PKI; import the renewed key and certificate, [request a renewed certificate with a CSR](#request-a-certificate-with-a-csr), or use an external CA chain.
 :::
-
-There is no certificate signing request (CSR) export. To use certificates from your own CA, import the key with its certificate, or import the CA key as an external CA chain.
 
 ## Delete a key chain
 
@@ -157,4 +183,4 @@ An OpenID4VP request keeps the access key chain chosen when it was created: the 
 
 Before a key chain signs, EUDIPLO checks that its leaf certificate is within its validity period and, if the certificate names a CRL distribution point, that the CRL does not list it. A key chain whose certificate is expired or revoked does not sign, and the requests that need it fail.
 
-CRLs are usually served over plain HTTP, so a CRL only counts if it names the leaf's issuer and is signed by the issuing CA certificate. EUDIPLO looks for that certificate in the key chain: the certificates after the leaf in `crt`, or the root CA certificate of an internal or external CA chain. If the issuing CA certificate is not there, or no CRL can be fetched or passes these checks, EUDIPLO logs a warning and keeps signing. Self-signed certificates are not checked against a CRL, because no CA can revoke them. Certificates that EUDIPLO creates name no CRL distribution point.
+CRLs are usually served over plain HTTP, so a CRL only counts if it names the leaf's issuer and is signed by the issuing CA certificate. EUDIPLO looks for that certificate in the key chain: the certificates after the leaf in `crt` of an import or in `activeCertificate` of `PUT /api/key-chain/{id}`, or the root CA certificate of an internal or external CA chain. If the issuing CA certificate is not there, or no CRL can be fetched or passes these checks, EUDIPLO logs a warning and keeps signing. Self-signed certificates are not checked against a CRL, because no CA can revoke them. Certificates that EUDIPLO creates name no CRL distribution point.

@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import type { APIRequestContext, Page, Request } from '@playwright/test';
@@ -181,5 +183,101 @@ test.describe('key creation wizard signing algorithm', () => {
     const stored = await keyChain(request, id);
     expect(stored.alg).toBe('ES384');
     expect(stored.activePublicKey.crv).toBe('P-384');
+  });
+});
+
+/** The certificate the test CA issues for the CSR, as an external CA would. */
+function issueWithTestCa(csr: string): string {
+  const dir = mkdtempSync(join(tmpdir(), 'eudiplo-csr-'));
+  try {
+    writeFileSync(join(dir, 'request.csr'), csr);
+    writeFileSync(join(dir, 'ca.pem'), caCertificate);
+    writeFileSync(join(dir, 'ca.key'), caKey);
+    return execFileSync(
+      'openssl',
+      [
+        'x509',
+        '-req',
+        '-in',
+        join(dir, 'request.csr'),
+        '-CA',
+        join(dir, 'ca.pem'),
+        '-CAkey',
+        join(dir, 'ca.key'),
+        '-set_serial',
+        '1',
+        '-days',
+        '30',
+        '-sha256',
+      ],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+    ).trim();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test.describe('key creation wizard certificate requests', () => {
+  const suffix = randomBytes(4).toString('hex');
+  const created: string[] = [];
+
+  test.beforeEach(() => {
+    test.skip(
+      !hasAuthCredentials,
+      'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+    );
+  });
+
+  test.afterAll(async ({ request }) => {
+    for (const id of created) await deleteKeyChain(request, id);
+  });
+
+  test('creates an access key, requests its certificate with a CSR and stores it', async ({
+    page,
+    request,
+  }) => {
+    const description = `E2E CSR access ${suffix}`;
+    await configure(page, ['Access Certificate', 'External Certificate'], description);
+    await page
+      .getByRole('radio', {
+        name: 'Create the key in EUDIPLO and request its certificate with a CSR',
+      })
+      .check();
+    await expect(page.getByRole('textbox', { name: 'External private key' })).toHaveCount(0);
+
+    const answered = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/key-chain') && response.request().method() === 'POST'
+    );
+    await page.getByRole('button', { name: 'Create Key Chain' }).click();
+    const response = await answered;
+    expect(response.ok(), `POST /api/key-chain: ${await response.text()}`).toBe(true);
+    const { id } = (await response.json()) as { id: string };
+    created.push(id);
+    await expect(page.getByRole('heading', { name: `Key Chain: ${description}` })).toBeVisible();
+
+    // The key was created for this, so the steps are open.
+    const subject = `C=DE, O=EUDIPLO E2E, CN=E2E Verifier ${suffix}`;
+    await page.getByRole('textbox', { name: 'Subject' }).fill(subject);
+    await page.getByRole('button', { name: 'Create CSR' }).click();
+    const csrField = page.getByRole('textbox', { name: 'CSR (PEM)' });
+    await expect(csrField).toHaveValue(/-----BEGIN CERTIFICATE REQUEST-----/);
+
+    const certificateField = page.getByRole('textbox', { name: 'Certificate Chain (PEM)' });
+    // A certificate for another key is refused, and the reason is shown.
+    await certificateField.fill(leafCertificate);
+    await page.getByRole('button', { name: 'Store Certificate' }).click();
+    await expect(page.getByRole('alert')).toContainText('not issued for the active key');
+
+    await certificateField.fill(
+      `${issueWithTestCa(await csrField.inputValue())}\n${caCertificate}`
+    );
+    await page.getByRole('button', { name: 'Store Certificate' }).click();
+    await expect(page.getByText('Certificate stored for this key')).toBeVisible();
+
+    const stored = await keyChain(request, id);
+    expect(stored.activeCertificate?.subject).toBe(subject);
+    expect(stored.activeCertificate?.issuer).not.toBe(subject);
+    await expect(page.getByText(stored.activeCertificate!.issuer).first()).toBeVisible();
   });
 });

@@ -3246,6 +3246,20 @@ export const KeyChainExportDtoSchema = {
     ]
 } as const;
 
+export const KeyChainCsrResponseDtoSchema = {
+    type: 'object',
+    properties: {
+        csr: {
+            type: 'string',
+            description: 'PKCS#10 certificate signing request for the active key, PEM encoded and signed by that key.',
+            example: '-----BEGIN CERTIFICATE REQUEST-----\nMIIB...\n-----END CERTIFICATE REQUEST-----'
+        }
+    },
+    required: [
+        'csr'
+    ]
+} as const;
+
 export const RotationPolicyCreateDtoSchema = {
     type: 'object',
     properties: {
@@ -3617,7 +3631,7 @@ export const KeyChainUpdateDtoSchema = {
             ]
         },
         activeCertificate: {
-            description: 'Active certificate chain in PEM format. Used for external certificate updates.',
+            description: 'Active certificate chain in PEM format, leaf first, for example the certificate an external CA issued for a CSR from `GET /api/key-chain/{id}/csr`. The leaf must hold the public key of the active key, and each further certificate must have issued the one before it.',
             type: 'string'
         }
     },

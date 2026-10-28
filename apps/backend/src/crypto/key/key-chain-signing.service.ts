@@ -118,9 +118,16 @@ export class KeyChainSigningService {
         return adapter.sign(ref, data, alg);
     }
 
+    /**
+     * A PKCS#10 certificate signing request for the active key of a signing
+     * key chain, signed by that key. The subject defaults to `CN=<key chain
+     * id>`; a CA that needs another one gets it as a distinguished name such
+     * as `C=DE, O=Example, CN=Example Verifier`.
+     */
     async createCertificateSigningRequest(
         tenantId: string,
         keyId: string,
+        subject?: x509.Name,
     ): Promise<string> {
         const keyChain = await this.getKeyChain(tenantId, keyId);
         const adapter = this.kmsRegistry.resolve(
@@ -132,7 +139,7 @@ export class KeyChainSigningService {
         const signingKey = makeKmsSigningKey(adapter, ref, ref.alg);
 
         const csr = await x509.Pkcs10CertificateRequestGenerator.create({
-            name: `CN=${keyChain.id}`,
+            name: subject ?? `CN=${keyChain.id}`,
             keys: { publicKey, privateKey: signingKey },
             signingAlgorithm: {
                 name: "ECDSA",

@@ -573,6 +573,88 @@ describe('KeyCreateWizardComponent imports', () => {
   });
 });
 
+describe('KeyCreateWizardComponent certificate from a CSR', () => {
+  let keyChainService: { create: ReturnType<typeof vi.fn>; import: ReturnType<typeof vi.fn> };
+  let router: { navigate: ReturnType<typeof vi.fn> };
+  let snackBar: { open: ReturnType<typeof vi.fn> };
+
+  function create(): KeyCreateWizardComponent {
+    return new KeyCreateWizardComponent(
+      new FormBuilder(),
+      keyChainService as never,
+      {} as never,
+      {} as never,
+      router as never,
+      snackBar as never,
+      { hasRole: () => false } as never
+    );
+  }
+
+  beforeEach(() => {
+    keyChainService = {
+      create: vi.fn().mockResolvedValue({ id: 'created' }),
+      import: vi.fn(),
+    };
+    router = { navigate: vi.fn() };
+    snackBar = { open: vi.fn() };
+  });
+
+  it('creates an access key without key material and opens its page for the CSR', async () => {
+    const component = create();
+    component.usageForm.patchValue({ usage: 'access' });
+    component.accessSourceForm.patchValue({ accessSource: 'external' });
+    component.configForm.patchValue({ externalCertificateSource: 'csr' });
+
+    expect(component.importsExternalKey).toBe(false);
+    expect(component.externalCertificateFormValid).toBe(true);
+    await component.createKey();
+
+    expect(keyChainService.import).not.toHaveBeenCalled();
+    expect(keyChainService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        usageType: 'access',
+        type: 'standalone',
+        rotationPolicy: expect.objectContaining({ enabled: false }),
+      })
+    );
+    expect(router.navigate).toHaveBeenCalledWith(['/keys', 'created'], {
+      queryParams: { certificate: 'request' },
+    });
+    expect(snackBar.open.mock.lastCall?.[0]).toContain('Create its CSR on this page');
+    expect(component.getSummary()).toContainEqual({
+      label: 'Type',
+      value: 'Standalone (Certificate requested with a CSR)',
+    });
+  });
+
+  it('creates an attestation key for a CSR when the external certificate option is checked', async () => {
+    const component = create();
+    component.usageForm.patchValue({ usage: 'attestation' });
+    component.caSourceForm.patchValue({ keyChainType: 'standalone' });
+    component.configForm.patchValue({
+      useExternalCertificate: true,
+      externalCertificateSource: 'csr',
+    });
+
+    await component.createKey();
+
+    expect(keyChainService.create).toHaveBeenCalledWith(
+      expect.objectContaining({ usageType: 'attestation', type: 'standalone' })
+    );
+  });
+
+  it('always imports the CA key of an External CA Chain', () => {
+    const component = create();
+    component.usageForm.patchValue({ usage: 'attestation' });
+    component.caSourceForm.patchValue({ keyChainType: 'externalCaChain' });
+    component.configForm.patchValue({ externalCertificateSource: 'csr' });
+
+    expect(component.requestsCertificate).toBe(false);
+    expect(component.importsExternalKey).toBe(true);
+    expect(component.externalCertificateFormValid).toBe(false);
+  });
+});
+
 describe('KeyCreateWizardComponent internal chains', () => {
   let keyChainService: { create: ReturnType<typeof vi.fn> };
   let snackBar: { open: ReturnType<typeof vi.fn> };
@@ -773,6 +855,16 @@ describe('KeyCreateWizardComponent signing algorithm', () => {
     component.caSourceForm.patchValue({ keyChainType: 'externalCaChain' });
 
     expect(component.showAlgorithm).toBe(false);
+  });
+
+  it('asks for an algorithm when EUDIPLO creates the key for a CSR', async () => {
+    const component = await create();
+    component.usageForm.patchValue({ usage: 'access' });
+    component.accessSourceForm.patchValue({ accessSource: 'external' });
+
+    expect(component.showAlgorithm).toBe(false);
+    component.configForm.patchValue({ externalCertificateSource: 'csr' });
+    expect(component.showAlgorithm).toBe(true);
   });
 });
 

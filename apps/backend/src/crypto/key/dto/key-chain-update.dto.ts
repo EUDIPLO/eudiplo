@@ -52,7 +52,7 @@ export class KeyChainUpdateDto extends createZodDto(KeyChainUpdateSchema) {
 
     @ApiPropertyOptional({
         description:
-            "Active certificate chain in PEM format. Used for external certificate updates.",
+            "Active certificate chain in PEM format, leaf first, for example the certificate an external CA issued for a CSR from `GET /api/key-chain/{id}/csr`. The leaf must hold the public key of the active key, and each further certificate must have issued the one before it.",
     })
     activeCertificate?: string;
 }

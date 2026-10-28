@@ -32,6 +32,7 @@ import { ConfigDocumentService } from '../../config-portability/config-document.
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-ownership-notice.component';
 import { LoadErrorComponent } from '../../common/load-error.component';
+import { KeyCertificateRequestComponent } from '../key-certificate-request/key-certificate-request.component';
 import { JwtService } from '../../services/jwt.service';
 import { RegistrarService, accessCertificateRefusal } from '../../registrar/registrar.service';
 import { getApiErrorMessage, getHttpErrorMessage } from '../../utils/error-message';
@@ -52,6 +53,7 @@ import { openErrorSnackBar } from '../../utils/error-snackbar';
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
+    KeyCertificateRequestComponent,
   ],
   templateUrl: './key-management-show.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -183,6 +185,39 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
       console.error('Reload error:', error);
       openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to reload key chain'));
     }
+  }
+
+  /**
+   * A standalone signing key can get its certificate from an external CA.
+   * The tenant's encryption key chain is listed as standalone but signs
+   * nothing, an internal chain's root CA issues its certificates, and a
+   * federation key is published as a JWK without its certificate.
+   */
+  get offersCertificateRequest(): boolean {
+    return (
+      this.keyChain?.type === 'standalone' &&
+      this.keyChain.usageType !== 'encrypt' &&
+      !this.isFederationKey
+    );
+  }
+
+  /** The key was created to request its certificate, so the steps are shown open. */
+  get requestsCertificate(): boolean {
+    return this.route.snapshot?.queryParamMap?.get('certificate') === 'request';
+  }
+
+  /** Shows the certificate an external CA issued, once it is stored. */
+  onCertificateSaved(): void {
+    if (this.requestsCertificate) {
+      // The steps were opened for this certificate; a reload should not open them again.
+      void this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { certificate: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      });
+    }
+    if (this.keyChain) void this.refreshKey(this.keyChain.id);
   }
 
   retryLoad(): void {

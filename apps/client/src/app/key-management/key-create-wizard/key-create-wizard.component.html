@@ -280,6 +280,11 @@
                 This will create a key and enroll it with the registrar to obtain a trusted
                 certificate.
               </p>
+            } @else if (requestsCertificate) {
+              <p class="hint">
+                This will create a key in EUDIPLO. On the key's page, you then create a certificate
+                signing request (CSR) for it and store the certificate your CA issues.
+              </p>
             } @else if (selectedUsage === 'access' && isExternalCertificate) {
               <p class="hint">
                 This will import your externally issued access certificate and matching key.
@@ -362,11 +367,32 @@
                 !isInternalChain && selectedUsage !== 'access' && selectedUsage !== 'federation'
               ) {
                 <mat-checkbox formControlName="useExternalCertificate">
-                  Use an externally issued certificate and matching private key
+                  Use a certificate from an external CA
                 </mat-checkbox>
               }
 
-              @if (isExternalCertificate) {
+              @if (isExternalCertificate && !isExternalCaChain) {
+                <div class="certificate-source">
+                  <span id="external-certificate-source-label" class="certificate-source-label">
+                    Where does the key come from?
+                  </span>
+                  <mat-radio-group
+                    formControlName="externalCertificateSource"
+                    aria-labelledby="external-certificate-source-label"
+                    fxLayout="column"
+                    fxLayoutGap="8px"
+                  >
+                    <mat-radio-button value="import">
+                      Import a key and the certificate chain issued for it
+                    </mat-radio-button>
+                    <mat-radio-button value="csr">
+                      Create the key in EUDIPLO and request its certificate with a CSR
+                    </mat-radio-button>
+                  </mat-radio-group>
+                </div>
+              }
+
+              @if (importsExternalKey) {
                 <mat-form-field appearance="outline">
                   <mat-label for="external-private-key">
                     {{
@@ -549,7 +575,18 @@
                   <mat-icon>info</mat-icon>
                   <span>
                     This key gets a self-signed certificate. To use a certificate signed by your CA,
-                    check the external certificate option above and import the key with it.
+                    check the external CA option above: import the key with its certificate, or
+                    request the certificate with a CSR.
+                  </span>
+                </div>
+              }
+              @if (requestsCertificate) {
+                <div class="next-steps-hint">
+                  <mat-icon>info</mat-icon>
+                  <span>
+                    <strong>Next step:</strong> On the key's page, create a CSR, send it to your CA
+                    and store the certificate it issues. Until then, the key has a self-signed
+                    certificate.
                   </span>
                 </div>
               }
@@ -619,7 +656,7 @@
                 <mat-icon class="spinning">sync</mat-icon>
                 @if (selectedUsage === 'access' && selectedAccessSource === 'registrar') {
                   <ng-container>Enrolling...</ng-container>
-                } @else if (isExternalCertificate) {
+                } @else if (importsExternalKey) {
                   <ng-container>Importing...</ng-container>
                 } @else {
                   <ng-container>Creating...</ng-container>
@@ -636,7 +673,7 @@
                 <mat-icon>vpn_key</mat-icon>
                 @if (selectedUsage === 'access' && selectedAccessSource === 'registrar') {
                   <ng-container>Create & Enroll</ng-container>
-                } @else if (isExternalCertificate) {
+                } @else if (importsExternalKey) {
                   <ng-container>
                     {{
                       isExternalCaChain ? 'Import CA & Create Chain' : 'Import Key & Certificate'

@@ -22,6 +22,7 @@ import {
     certificateNotBefore,
 } from "./cert/certificate-builder.service.js";
 import { importedKeyChainType } from "./domain/key-chain-import-type.js";
+import { certificateHoldsKey } from "./domain/public-jwk-match.js";
 import { providerAlgRefusal, signingAlgForJwk } from "./domain/signing-algs.js";
 import { KeyChainImportDto } from "./dto/key-chain-import.dto.js";
 import { KeyChainEntity, KeyUsage } from "./entities/key-chain.entity.js";
@@ -436,16 +437,7 @@ export class KeyChainImportService {
             );
         }
 
-        const certificatePublicJwk = certificate.publicKey.export({
-            format: "jwk",
-        }) as JWK;
-
-        if (
-            !this.arePublicJwksEquivalent(
-                certificatePublicJwk,
-                expectedPublicJwk,
-            )
-        ) {
+        if (!certificateHoldsKey(certificate, expectedPublicJwk)) {
             throw new BadRequestException(
                 "Invalid root CA certificate: certificate public key does not match the provided private key",
             );
@@ -465,42 +457,10 @@ export class KeyChainImportService {
             );
         }
 
-        const certificatePublicJwk = certificate.publicKey.export({
-            format: "jwk",
-        }) as JWK;
-
-        if (
-            !this.arePublicJwksEquivalent(
-                certificatePublicJwk,
-                expectedPublicJwk,
-            )
-        ) {
+        if (!certificateHoldsKey(certificate, expectedPublicJwk)) {
             throw new BadRequestException(
                 "Invalid leaf certificate: certificate public key does not match the provided private key",
             );
         }
-    }
-
-    private arePublicJwksEquivalent(left: JWK, right: JWK): boolean {
-        const a = left as Record<string, unknown>;
-        const b = right as Record<string, unknown>;
-
-        if (a.kty !== b.kty) {
-            return false;
-        }
-
-        if (a.kty === "EC") {
-            return a.crv === b.crv && a.x === b.x && a.y === b.y;
-        }
-
-        if (a.kty === "RSA") {
-            return a.n === b.n && a.e === b.e;
-        }
-
-        if (a.kty === "OKP") {
-            return a.crv === b.crv && a.x === b.x;
-        }
-
-        return false;
     }
 }
