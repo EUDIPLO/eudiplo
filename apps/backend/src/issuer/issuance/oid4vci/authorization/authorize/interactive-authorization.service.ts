@@ -413,7 +413,10 @@ export class InteractiveAuthorizationService {
 
         // Check if we should use redirect_to_web
         if (supportedTypes.includes(InteractionType.REDIRECT_TO_WEB)) {
-            return this.createRedirectToWebResponse(authSession, tenantId);
+            return await this.createRedirectToWebResponse(
+                authSession,
+                tenantId,
+            );
         }
 
         // No supported interaction type found
@@ -462,7 +465,7 @@ export class InteractiveAuthorizationService {
                             "Wallet does not support redirect_to_web interaction type",
                     };
                 }
-                return this.createRedirectToWebResponseForUrl(
+                return await this.createRedirectToWebResponseForUrl(
                     authSession,
                     tenantId,
                     action.url,
@@ -1021,28 +1024,38 @@ export class InteractiveAuthorizationService {
     private createRedirectToWebResponse(
         authSession: string,
         tenantId: string,
-    ): InteractiveAuthorizationResponse {
+    ): Promise<InteractiveAuthorizationResponse> {
         return this.createRedirectToWebResponseForUrl(authSession, tenantId);
     }
 
     /**
      * Create a redirect_to_web interaction response for a specific URL.
      */
-    private createRedirectToWebResponseForUrl(
+    private async createRedirectToWebResponseForUrl(
         authSession: string,
         tenantId: string,
         url?: string,
         description?: string,
-    ): InteractiveAuthorizationResponse {
+    ): Promise<InteractiveAuthorizationResponse> {
         // Create a request_uri for PAR-based web authorization
         const requestUri = `urn:ietf:params:oauth:request_uri:${randomUUID()}`;
         const expiresIn = 600; // 10 minutes
 
-        // Store PAR data in the auth session (async)
-        this.authSessionRepository.updateForTenant(tenantId, authSession, {
-            requestUri,
-            parExpiresAt: new Date(Date.now() + expiresIn * 1000),
-        });
+        // Await the write: a failure must fail the request, not go unhandled
+        const stored = await this.authSessionRepository.updateForTenant(
+            tenantId,
+            authSession,
+            {
+                requestUri,
+                parExpiresAt: new Date(Date.now() + expiresIn * 1000),
+            },
+        );
+        if (!stored) {
+            return {
+                error: Oauth2ErrorCodes.InvalidRequest,
+                error_description: "Invalid or expired auth_session",
+            };
+        }
 
         return {
             status: "require_interaction",

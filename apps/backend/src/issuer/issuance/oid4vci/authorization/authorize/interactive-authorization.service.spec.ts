@@ -15,6 +15,7 @@ function interactiveAuthorization(
         oid4vpService?: Record<string, unknown>;
         createSession?: Record<string, unknown>;
         presentationConfigService?: Record<string, unknown>;
+        credentialsService?: Record<string, unknown>;
     } = {},
 ) {
     const authSessionRepository = {
@@ -45,7 +46,7 @@ function interactiveAuthorization(
         (ports.createSession ?? {}) as any,
         sessionStore as any,
         {} as any,
-        {} as any,
+        (ports.credentialsService ?? {}) as any,
         (ports.oid4vpService ?? {}) as any,
         (ports.presentationConfigService ?? {}) as any,
         authSessionRepository,
@@ -523,6 +524,93 @@ describe("InteractiveAuthorizationService openid4vp_presentation step", () => {
             handle(presentationResponse('{"response":"jwe"}')),
         ).resolves.toMatchObject({ status: "ok" });
         expect(getResponse).not.toHaveBeenCalled();
+    });
+});
+
+describe("InteractiveAuthorizationService redirect_to_web step", () => {
+    const pkceRequest = {
+        ...initialRequest,
+        code_challenge: CODE_CHALLENGE,
+        code_challenge_method: "S256",
+    } as InteractiveAuthorizationRequestDto;
+
+    it("stores the request_uri before returning it", async () => {
+        const { handle, authSessionRepository } = interactiveAuthorization();
+        let storeRequestUri!: () => void;
+        authSessionRepository.updateForTenant.mockReturnValue(
+            new Promise((resolve) => {
+                storeRequestUri = () => resolve(true);
+            }),
+        );
+
+        let returned = false;
+        const pending = handle(pkceRequest).then((response) => {
+            returned = true;
+            return response;
+        });
+        await vi.waitFor(() =>
+            expect(authSessionRepository.updateForTenant).toHaveBeenCalled(),
+        );
+        expect(returned).toBe(false);
+
+        storeRequestUri();
+        const response = await pending;
+        const [, , update] =
+            authSessionRepository.updateForTenant.mock.calls[0];
+        expect(response).toMatchObject({ request_uri: update.requestUri });
+    });
+
+    it("returns a server_error instead of a request_uri that was not stored", async () => {
+        const { handle, authSessionRepository } = interactiveAuthorization();
+        authSessionRepository.updateForTenant.mockRejectedValue(
+            new Error("database unavailable"),
+        );
+
+        const response = await handle(pkceRequest);
+
+        expect(response).toMatchObject({ error: "server_error" });
+        expect(response).not.toHaveProperty("request_uri");
+    });
+
+    it("fails a configured redirect_to_web action whose request_uri cannot be stored", async () => {
+        const getCredentialConfig = vi.fn().mockResolvedValue({
+            iaeActions: [
+                { type: "redirect_to_web", url: "https://login.example" },
+            ],
+        });
+        const { handle, authSessionRepository } = interactiveAuthorization(
+            undefined,
+            { credentialsService: { getCredentialConfig } },
+        );
+        authSessionRepository.updateForTenant.mockRejectedValue(
+            new Error("database unavailable"),
+        );
+
+        const response = await handle({
+            ...pkceRequest,
+            authorization_details: [
+                {
+                    type: "openid_credential",
+                    credential_configuration_id: "pid",
+                },
+            ],
+        } as InteractiveAuthorizationRequestDto);
+
+        expect(getCredentialConfig).toHaveBeenCalledWith("pid", "tenant-1");
+        expect(response).toMatchObject({ error: "server_error" });
+        expect(response).not.toHaveProperty("request_uri");
+    });
+
+    it("returns no request_uri when the auth session is gone", async () => {
+        const { handle, authSessionRepository } = interactiveAuthorization();
+        authSessionRepository.updateForTenant.mockResolvedValue(false);
+
+        const response = await handle(pkceRequest);
+
+        expect(response).toEqual({
+            error: "invalid_request",
+            error_description: "Invalid or expired auth_session",
+        });
     });
 });
 
