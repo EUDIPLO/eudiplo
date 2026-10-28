@@ -32,6 +32,7 @@ import {
   ConfigResourceMetadata,
 } from './config-portability.service';
 import { openErrorSnackBar } from '../utils/error-snackbar';
+import { copyToClipboard } from '../utils/copy-to-clipboard';
 import { offersApplyFromFile, offersResetToFile } from './config-ownership.service';
 import { isConfigDocument, singleDocumentBundle } from './config-document-bundle';
 
@@ -457,12 +458,12 @@ export class ConfigPortabilityComponent implements OnInit {
   }
 
   async copySecret(secret: { id: string; value: string }): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(secret.value);
-      this.snackBar.open(`Secret of ${secret.id} copied to clipboard`, 'Close', { duration: 2000 });
-    } catch {
-      openErrorSnackBar(this.snackBar, 'Could not copy the secret. Select it and copy it by hand.');
-    }
+    await copyToClipboard(
+      this.snackBar,
+      secret.value,
+      `Secret of ${secret.id} copied to clipboard`,
+      'Could not copy the secret. Select it and copy it by hand.'
+    );
   }
 
   dismissGeneratedSecrets(): void {

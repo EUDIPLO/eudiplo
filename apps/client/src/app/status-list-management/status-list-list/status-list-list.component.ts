@@ -23,6 +23,7 @@ import { ConfigOwnershipDirective } from '../../config-portability/config-owners
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { copyToClipboard } from '../../utils/copy-to-clipboard';
 
 @Component({
   selector: 'app-status-list-list',
@@ -141,10 +142,13 @@ export class StatusListListComponent implements OnInit, AfterViewInit {
     }
   }
 
-  copyUri(uri: string): void {
-    navigator.clipboard.writeText(uri).then(() => {
-      this.snackBar.open('URI copied to clipboard', 'Close', { duration: 2000 });
-    });
+  async copyUri(uri: string): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      uri,
+      'URI copied to clipboard',
+      'Could not copy the URI. Open the status list and copy it from its URI field.'
+    );
   }
 
   getExpirationStatus(list: StatusListResponseDto): 'valid' | 'expiring' | 'expired' | 'none' {

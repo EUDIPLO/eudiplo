@@ -225,7 +225,8 @@ export class ClientCreateComponent implements OnInit {
 
         //in case user updated its own client, refresh the token
         if (this.apiService.getClientId() === this.id) {
-          this.apiService.refreshAccessToken();
+          // A failed refresh retries or ends the session on its own
+          void this.apiService.refreshAccessToken().catch(() => undefined);
         }
       } else {
         const payload = this.buildCreateClientPayload();

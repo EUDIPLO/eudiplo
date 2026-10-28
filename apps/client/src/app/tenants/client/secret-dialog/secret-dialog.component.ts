@@ -7,6 +7,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { Router } from '@angular/router';
 import { ApiService } from '../../../core';
+import { copyToClipboard } from '../../../utils/copy-to-clipboard';
 
 export interface SecretDialogData {
   clientId: string;
@@ -31,17 +32,23 @@ export class SecretDialogComponent {
     private apiService: ApiService
   ) {}
 
-  copySecret(): void {
-    navigator.clipboard.writeText(this.data.secret).then(() => {
-      this.snackBar.open('Secret copied to clipboard', 'Close', { duration: 2000 });
-    });
+  async copySecret(): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      this.data.secret,
+      'Secret copied to clipboard',
+      'Could not copy the secret. Select it and copy it by hand.'
+    );
   }
 
-  copyAll(): void {
+  async copyAll(): Promise<void> {
     const text = `Client ID: ${this.data.clientId}\nClient Secret: ${this.data.secret}`;
-    navigator.clipboard.writeText(text).then(() => {
-      this.snackBar.open('Credentials copied to clipboard', 'Close', { duration: 2000 });
-    });
+    await copyToClipboard(
+      this.snackBar,
+      text,
+      'Credentials copied to clipboard',
+      'Could not copy the secret. Select it and copy it by hand.'
+    );
   }
 
   loginAsClient(): void {

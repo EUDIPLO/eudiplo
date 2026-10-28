@@ -23,6 +23,7 @@ import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-
 import { LabelledFailure, getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { SourceLoadState, loadSource, reportSourceFailures } from '../../common/load-source';
+import { copyToClipboard } from '../../utils/copy-to-clipboard';
 
 /** The sources of the options of the form's selects. */
 type StatusListEditSource = 'credentialConfigs' | 'keyChains';
@@ -211,11 +212,14 @@ export class StatusListEditComponent implements OnInit {
     }
   }
 
-  copyUri(): void {
+  async copyUri(): Promise<void> {
     if (!this.statusList?.uri) return;
-    navigator.clipboard.writeText(this.statusList.uri).then(() => {
-      this.snackBar.open('URI copied to clipboard', 'Close', { duration: 2000 });
-    });
+    await copyToClipboard(
+      this.snackBar,
+      this.statusList.uri,
+      'URI copied to clipboard',
+      'Could not copy the URI. Select it in the URI field and copy it by hand.'
+    );
   }
 
   async onSubmit(): Promise<void> {
