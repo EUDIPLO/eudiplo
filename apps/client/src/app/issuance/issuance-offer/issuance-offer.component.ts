@@ -113,7 +113,6 @@ export class IssuanceOfferComponent implements OnInit {
 
   formValues = new FormGroup({});
   fields: FormlyFieldConfig<FormlyFieldProps & Record<string, any>>[] = [];
-  private readonly wrappedFields = new WeakMap<FormlyFieldConfig, FormlyFieldConfig[]>();
   model: any = {};
 
   elements: {
@@ -632,20 +631,6 @@ export class IssuanceOfferComponent implements OnInit {
 
   getForm(id: string) {
     return this.configStepForm.get(`claims.${id}`) as UntypedFormGroup;
-  }
-
-  /**
-   * formly-form rebuilds the form whenever its fields input changes, which
-   * schedules another change detection, so the template must get the same
-   * array for the same field config every time.
-   */
-  getFields(field: FormlyFieldConfig<FormlyFieldProps & Record<string, any>>): FormlyFieldConfig[] {
-    let wrapped = this.wrappedFields.get(field);
-    if (!wrapped) {
-      wrapped = [field];
-      this.wrappedFields.set(field, wrapped);
-    }
-    return wrapped;
   }
 
   private formatGroupLabel(field: FormlyFieldConfig): string {

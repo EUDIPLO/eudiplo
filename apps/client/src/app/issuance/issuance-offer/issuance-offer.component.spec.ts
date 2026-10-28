@@ -88,16 +88,6 @@ describe('IssuanceOfferComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('hands formly-form the same fields array for the same field config', async () => {
-    component.credentialConfigs = [buildMdocConfig() as any];
-    await component.setClaimFormFields(['pid']);
-
-    const first = component.getFields(component.fields[0]);
-
-    expect(component.getFields(component.fields[0])).toBe(first);
-    expect(first).toEqual([component.fields[0]]);
-  });
-
   it('renders mdoc fields without the namespace wrapper and wraps them on submit', async () => {
     const config = buildMdocConfig() as any;
     component.credentialConfigs = [config];
@@ -520,5 +510,28 @@ describe('IssuanceOfferComponent', () => {
     expect(input?.closest('mat-form-field')?.textContent).toContain('Date of Birth');
     expect(element.querySelector('formly-template')).toBeNull();
     expect(element.querySelector('#injected')).toBeNull();
+  });
+
+  it('passes formly the same fields array on every check', async () => {
+    const config = { ...buildMdocConfig(), description: null } as any;
+    component.credentialConfigs = [config];
+    vi.mocked(TestBed.inject(CredentialConfigService).loadConfigurations).mockResolvedValue([
+      config,
+    ]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    component.credentialStepForm.patchValue({ credentialConfigurationIds: ['pid'] });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const formly = fixture.debugElement.query(By.css('formly-form')).componentInstance;
+    const fields = formly.fields;
+    fixture.detectChanges();
+
+    // A new array on every check made formly 11 rebuild the form and schedule
+    // another check, so the offer page hung once a config was selected
+    expect(formly.fields).toBe(fields);
+    expect(fixture.nativeElement.querySelectorAll('formly-form input').length).toBe(2);
   });
 });
