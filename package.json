@@ -35,18 +35,18 @@
     "@semantic-release/git": "^11.0.1",
     "@semantic-release/github": "^12.0.10",
     "@semantic-release/npm": "^13.2.0",
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "@types/unzipper": "^0.10.11",
     "cross-fetch": "^4.1.0",
     "husky": "^9.1.7",
-    "joi": "^18.2.9",
-    "knip": "^6.39.0",
+    "joi": "^18.3.1",
+    "knip": "^6.43.0",
     "reflect-metadata": "^0.2.2",
     "semantic-release": "^25.0.9",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "unzipper": "^0.12.5",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "packageManager": "pnpm@11.20.0+sha512.9a6f330a95b66446ea088faf1521405a8a01f07fde7124cc9958dfed52d4bb436737e65b08f85f37b46fcba375092558ac51262b816844b22f63406ed166bfee"
 }

@@ -10,9 +10,6 @@ publicHoistPattern:
 # native port, which exposes no compiler API) and the CLI reports the plugin as
 # incompatible. Pin it to the TypeScript 6 the backend and @nestjs/cli use.
 packageExtensions:
-  '@ngx-formly/material@7.1.0':
-    peerDependencies:
-      rxjs: '~7.8.2'
   '@nestjs/swagger':
     peerDependencies:
       typescript: '^6.0.0'
