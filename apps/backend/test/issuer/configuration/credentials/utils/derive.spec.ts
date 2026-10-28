@@ -1,10 +1,15 @@
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
+import { assertClaimsMatchConfiguration } from "../../../../../src/issuer/configuration/credentials/domain/credential-claims-validation.js";
 import {
+    buildClaims,
     buildClaimsByNamespace,
+    buildClaimsMetadata,
+    buildDisclosureFrame,
     buildJsonSchema,
 } from "../../../../../src/issuer/configuration/credentials/utils/derive.js";
 import type { ClaimFieldDefinition } from "../../../../../src/issuer/configuration/credentials/utils/types.js";
+import { builtInShape, changedBuiltIns } from "../../../../shared/built-ins.js";
 
 function compile(fields: ClaimFieldDefinition[]) {
     const ajv = new Ajv2020({
@@ -227,5 +232,117 @@ describe("buildJsonSchema", () => {
         ]);
 
         expect(validate({ nationalities: [{ country: "DE" }] })).toBe(true);
+    });
+});
+
+describe("prototype pollution", () => {
+    const unsafeKeys = [
+        "__proto__",
+        "constructor",
+        "prototype",
+        "toString",
+        "hasOwnProperty",
+    ];
+    const derive: Record<string, (fields: ClaimFieldDefinition[]) => unknown> =
+        {
+            buildClaims,
+            buildDisclosureFrame,
+            buildClaimsMetadata,
+            buildJsonSchema,
+            buildClaimsByNamespace,
+            assertClaimsMatchConfiguration: (fields) => {
+                try {
+                    assertClaimsMatchConfiguration(
+                        { id: "pollution", fields },
+                        {},
+                    );
+                } catch {
+                    // Only the effect on the built-ins matters here
+                }
+            },
+        };
+
+    function fieldsFor(key: string): ClaimFieldDefinition[][] {
+        const field = {
+            type: "string",
+            mandatory: true,
+            disclosable: true,
+            defaultValue: "polluted",
+        } as const;
+        return [
+            [{ ...field, path: [key, "x"] }],
+            [{ ...field, path: [key] }],
+            [{ ...field, path: ["a", key, "x"] }],
+            [{ ...field, path: [key, key, "x"] }],
+            [{ ...field, path: ["constructor", "prototype", "x"] }],
+            [{ ...field, path: [key, "toString"] }],
+            [{ ...field, path: [key, null, "x"] }],
+            [{ ...field, path: [key, 0, "x"] }],
+            [{ ...field, path: ["x"], namespace: key }],
+            [{ ...field, path: [key, "x"], namespace: key }],
+            [
+                {
+                    path: [key],
+                    type: "object",
+                    mandatory: true,
+                    children: [{ ...field, path: ["x"] }],
+                },
+            ],
+        ];
+    }
+
+    for (const [name, fn] of Object.entries(derive)) {
+        for (const key of unsafeKeys) {
+            it(`${name} leaves the built-ins untouched for "${key}"`, () => {
+                const before = builtInShape();
+                for (const fields of fieldsFor(key)) {
+                    fn(fields);
+                }
+                expect(changedBuiltIns(before)).toEqual([]);
+                expect(({} as Record<string, unknown>).required).toBe(
+                    undefined,
+                );
+            });
+        }
+    }
+
+    it("keeps __proto__ segments as own keys of the derived objects", () => {
+        const fields: ClaimFieldDefinition[] = [
+            {
+                path: ["__proto__", "x"],
+                type: "string",
+                mandatory: true,
+                disclosable: true,
+                defaultValue: "value",
+            },
+        ];
+
+        const claims = buildClaims(fields);
+        expect(Object.getPrototypeOf(claims)).toBe(Object.prototype);
+        expect(Object.hasOwn(claims, "__proto__")).toBe(true);
+        expect(JSON.parse(JSON.stringify(claims))).toEqual(
+            JSON.parse('{"__proto__":{"x":"value"}}'),
+        );
+
+        const schema = buildJsonSchema(fields);
+        expect(Object.hasOwn(schema.properties ?? {}, "__proto__")).toBe(true);
+        expect(schema.properties?.["__proto__"]?.required).toEqual(["x"]);
+
+        const frame = buildDisclosureFrame(fields) ?? {};
+        expect(Object.hasOwn(frame, "__proto__")).toBe(true);
+    });
+
+    it("keeps a __proto__ namespace as an own key", () => {
+        const byNamespace = buildClaimsByNamespace([
+            {
+                path: ["x"],
+                namespace: "__proto__",
+                type: "string",
+                defaultValue: "value",
+            },
+        ]);
+
+        expect(Object.hasOwn(byNamespace, "__proto__")).toBe(true);
+        expect(Object.getPrototypeOf(byNamespace)).toBe(Object.prototype);
     });
 });

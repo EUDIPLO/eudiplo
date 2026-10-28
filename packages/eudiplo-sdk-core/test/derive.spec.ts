@@ -258,3 +258,135 @@ describe("config derive helpers", () => {
     expect(buildClaims(relative)).toEqual(buildClaims(absolute));
   });
 });
+
+// Own members of the built-ins a walk into an inherited member reaches, by
+// identity, so added and overwritten members both show up
+function builtInShape(): Map<string, unknown> {
+  const targets = [
+    Object.prototype,
+    Object,
+    Function.prototype,
+    Array.prototype,
+    Object.prototype.toString,
+    Object.prototype.hasOwnProperty,
+  ];
+  const shape = new Map<string, unknown>();
+  targets.forEach((target, index) => {
+    for (const key of Reflect.ownKeys(target)) {
+      const descriptor = Object.getOwnPropertyDescriptor(target, key);
+      shape.set(
+        `${index}:${String(key)}`,
+        descriptor?.value ?? descriptor?.get,
+      );
+    }
+  });
+  return shape;
+}
+
+function changedBuiltIns(before: Map<string, unknown>): string[] {
+  const after = builtInShape();
+  return [...new Set([...before.keys(), ...after.keys()])].filter(
+    (key) =>
+      before.has(key) !== after.has(key) ||
+      !Object.is(before.get(key), after.get(key)),
+  );
+}
+
+describe("prototype pollution", () => {
+  const unsafeKeys = [
+    "__proto__",
+    "constructor",
+    "prototype",
+    "toString",
+    "hasOwnProperty",
+  ];
+  const derive: Record<string, (fields: ClaimFieldDefinition[]) => unknown> = {
+    buildClaims,
+    buildDisclosureFrame,
+    buildClaimsMetadata,
+    buildJsonSchema,
+    buildClaimsByNamespace,
+  };
+
+  function fieldsFor(key: string): ClaimFieldDefinition[][] {
+    const field = {
+      type: "string",
+      mandatory: true,
+      disclosable: true,
+      defaultValue: "polluted",
+    } as const;
+    return [
+      [{ ...field, path: [key, "x"] }],
+      [{ ...field, path: [key] }],
+      [{ ...field, path: ["a", key, "x"] }],
+      [{ ...field, path: [key, key, "x"] }],
+      [{ ...field, path: ["constructor", "prototype", "x"] }],
+      [{ ...field, path: [key, "toString"] }],
+      [{ ...field, path: [key, null, "x"] }],
+      [{ ...field, path: [key, 0, "x"] }],
+      [{ ...field, path: ["x"], namespace: key }],
+      [{ ...field, path: [key, "x"], namespace: key }],
+      [
+        {
+          path: [key],
+          type: "object",
+          mandatory: true,
+          children: [{ ...field, path: ["x"] }],
+        },
+      ],
+    ];
+  }
+
+  for (const [name, fn] of Object.entries(derive)) {
+    for (const key of unsafeKeys) {
+      it(`${name} leaves the built-ins untouched for "${key}"`, () => {
+        const before = builtInShape();
+        for (const fields of fieldsFor(key)) {
+          fn(fields);
+        }
+        expect(changedBuiltIns(before)).toEqual([]);
+        expect(({} as Record<string, unknown>).required).toBe(undefined);
+      });
+    }
+  }
+
+  it("keeps __proto__ segments as own keys of the derived objects", () => {
+    const fields: ClaimFieldDefinition[] = [
+      {
+        path: ["__proto__", "x"],
+        type: "string",
+        mandatory: true,
+        disclosable: true,
+        defaultValue: "value",
+      },
+    ];
+
+    const claims = buildClaims(fields);
+    expect(Object.getPrototypeOf(claims)).toBe(Object.prototype);
+    expect(Object.hasOwn(claims, "__proto__")).toBe(true);
+    expect(JSON.parse(JSON.stringify(claims))).toEqual(
+      JSON.parse('{"__proto__":{"x":"value"}}'),
+    );
+
+    const schema = buildJsonSchema(fields);
+    expect(Object.hasOwn(schema.properties ?? {}, "__proto__")).toBe(true);
+    expect(schema.properties?.["__proto__"]?.required).toEqual(["x"]);
+
+    const frame = buildDisclosureFrame(fields) ?? {};
+    expect(Object.hasOwn(frame, "__proto__")).toBe(true);
+  });
+
+  it("keeps a __proto__ namespace as an own key", () => {
+    const byNamespace = buildClaimsByNamespace([
+      {
+        path: ["x"],
+        namespace: "__proto__",
+        type: "string",
+        defaultValue: "value",
+      },
+    ]);
+
+    expect(Object.hasOwn(byNamespace, "__proto__")).toBe(true);
+    expect(Object.getPrototypeOf(byNamespace)).toBe(Object.prototype);
+  });
+});
