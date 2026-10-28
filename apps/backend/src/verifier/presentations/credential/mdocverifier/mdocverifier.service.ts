@@ -247,10 +247,10 @@ export class MdocverifierService {
 
             // Status lists and identifier lists named in the presented MSO are
             // fetched under the outbound URL policy, not with the global
-            // `fetch`. @owf/mdoc reports a failed status check only by its
-            // message, which for a revoked identifier list contains the list's
-            // URI, so an unavailable list is recorded here instead of being
-            // recognised by the message.
+            // `fetch`. The message of a failed status check can contain the
+            // list's URI (for a revoked identifier list, for example), so an
+            // unavailable list is recorded here instead of being recognised by
+            // the message.
             let revocationListUnavailable = false;
             const verificationContext = withFetch(async (input, init) => {
                 try {

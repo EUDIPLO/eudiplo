@@ -88,6 +88,16 @@ describe('IssuanceOfferComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('hands formly-form the same fields array for the same field config', async () => {
+    component.credentialConfigs = [buildMdocConfig() as any];
+    await component.setClaimFormFields(['pid']);
+
+    const first = component.getFields(component.fields[0]);
+
+    expect(component.getFields(component.fields[0])).toBe(first);
+    expect(first).toEqual([component.fields[0]]);
+  });
+
   it('renders mdoc fields without the namespace wrapper and wraps them on submit', async () => {
     const config = buildMdocConfig() as any;
     component.credentialConfigs = [config];
