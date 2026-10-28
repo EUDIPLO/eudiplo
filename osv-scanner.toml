@@ -4,3 +4,12 @@
 [[IgnoredVulns]]
 id = "GHSA-vfj7-8cjw-p6xm"
 reason = "braces <= 3.0.3 has no patched release. It is only reached through build and dev tooling (chokidar, micromatch, karma) with patterns from the repository itself, never from user input."
+
+[[IgnoredVulns]]
+id = "GHSA-xcx6-jx8p-x3h5"
+ignoreUntil = 2027-01-31
+reason = "@azure/msal-node is fixed in 7.1.0, but @azure/identity 4.14.0 still requires ^6. The backend only uses DefaultAzureCredential for Azure Key Vault and never runs the affected authorization code flow. Drop this entry once @azure/identity accepts msal-node 7."
+
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+reason = "deepmerge <= 4.3.1 has no patched release. At runtime it is only reached through nestjs-zod, which merges Zod schemas and OpenAPI documents defined in the code, never request data. The other paths are build tooling (Docusaurus SVGR, Nest CLI type checker)."
