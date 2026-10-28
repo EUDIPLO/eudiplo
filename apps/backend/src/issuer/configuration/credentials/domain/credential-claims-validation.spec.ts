@@ -73,4 +73,24 @@ describe("assertClaimsMatchConfiguration", () => {
             ),
         ).not.toThrow();
     });
+
+    it("rejects a __proto__ claim of a stored configuration without polluting Object.prototype", () => {
+        const stored = {
+            id: "stored",
+            fields: [
+                { path: ["__proto__", "x"], type: "string", mandatory: true },
+            ],
+        };
+
+        // Ajv ignores `__proto__` property schemas, so the claim fails closed
+        const call = () =>
+            assertClaimsMatchConfiguration(
+                stored,
+                JSON.parse('{"__proto__":{"x":"v"}}'),
+            );
+        expect(call).toThrow(InvalidCredentialClaims);
+        expect(call).toThrow("/__proto__: unexpected claim");
+        expect(Object.hasOwn(Object.prototype, "x")).toBe(false);
+        expect(({} as Record<string, unknown>).required).toBeUndefined();
+    });
 });

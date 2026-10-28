@@ -72,12 +72,31 @@ function segmentToKey(segment: Segment): string {
   return String(segment);
 }
 
+// Keys come from stored path segments and namespaces, so `__proto__`,
+// `constructor` or `toString` must neither read inherited members nor write
+// to Object.prototype: only own properties are read, and keys are defined as
+// own data properties.
+function getOwn<T = unknown>(target: object, key: string): T | undefined {
+  return Object.hasOwn(target, key)
+    ? (target as Record<string, T>)[key]
+    : undefined;
+}
+
+function setOwn(target: object, key: string, value: unknown): void {
+  Object.defineProperty(target, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+}
+
 function getOrCreateChild(
   target: Record<string, unknown>,
   key: string,
   nextIsArray: boolean,
 ): Record<string, unknown> | unknown[] {
-  const current = target[key];
+  const current = getOwn(target, key);
   if (current !== undefined) {
     if (Array.isArray(current)) {
       return current;
@@ -88,7 +107,7 @@ function getOrCreateChild(
   }
 
   const created: Record<string, unknown> | unknown[] = nextIsArray ? [] : {};
-  target[key] = created;
+  setOwn(target, key, created);
   return created;
 }
 
@@ -131,7 +150,7 @@ function setValueAtPath(
 
     const key = segmentToKey(segment);
     if (isLast) {
-      cursor[key] = value;
+      setOwn(cursor, key, value);
       return;
     }
 
@@ -198,14 +217,16 @@ function ensureSchemaNode(root: JsonSchema, path: Segment[]): JsonSchema {
     const key = segmentToKey(segment);
     cursor.properties ??= {};
 
-    if (!cursor.properties[key]) {
-      cursor.properties[key] = {
+    let child = getOwn<JsonSchema>(cursor.properties, key);
+    if (!child) {
+      child = {
         type: "object",
         properties: {},
       };
+      setOwn(cursor.properties, key, child);
     }
 
-    cursor = cursor.properties[key];
+    cursor = child;
   }
 
   return cursor;
@@ -219,12 +240,13 @@ function ensureFrameNode(
 
   for (const segment of path) {
     const key = segmentToKey(segment);
-    const current = cursor[key];
+    let current = getOwn(cursor, key);
     if (!current || typeof current !== "object" || Array.isArray(current)) {
-      cursor[key] = {};
+      current = {};
+      setOwn(cursor, key, current);
     }
 
-    cursor = cursor[key] as Record<string, unknown>;
+    cursor = current as Record<string, unknown>;
   }
 
   return cursor;
@@ -355,11 +377,14 @@ export function buildJsonSchema(fields: ClaimFieldDefinition[]): JsonSchema {
     // If a child field already registered this key as an intermediate node
     // (via ensureSchemaNode), merge to preserve the nested properties instead
     // of overwriting them with a bare { type: "object" }.
-    const existing = parent.properties[leafKey];
-    parent.properties[leafKey] =
+    const existing = getOwn<JsonSchema>(parent.properties, leafKey);
+    setOwn(
+      parent.properties,
+      leafKey,
       existing && typeof existing === "object" && !Array.isArray(existing)
         ? mergeLeafSchema(existing, leafSchema)
-        : leafSchema;
+        : leafSchema,
+    );
 
     if (field.mandatory) {
       addRequired(parent, leafKey);
@@ -379,11 +404,15 @@ export function buildClaimsByNamespace(
       continue;
     }
 
-    if (!byNamespace[field.namespace]) {
-      byNamespace[field.namespace] = {};
+    let namespaceTarget = getOwn<Record<string, unknown>>(
+      byNamespace,
+      field.namespace,
+    );
+    if (!namespaceTarget) {
+      namespaceTarget = {};
+      setOwn(byNamespace, field.namespace, namespaceTarget);
     }
 
-    const namespaceTarget = byNamespace[field.namespace];
     const normalizedPath =
       field.path.length > 0 && segmentToKey(field.path[0] ?? "") === field.namespace
         ? field.path.slice(1)

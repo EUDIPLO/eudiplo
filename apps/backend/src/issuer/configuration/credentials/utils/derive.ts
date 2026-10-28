@@ -71,12 +71,31 @@ function segmentToKey(segment: Segment): string {
     return String(segment);
 }
 
+// Keys come from stored path segments and namespaces, so `__proto__`,
+// `constructor` or `toString` must neither read inherited members nor write
+// to Object.prototype: only own properties are read, and keys are defined as
+// own data properties.
+function getOwn<T = unknown>(target: object, key: string): T | undefined {
+    return Object.hasOwn(target, key)
+        ? (target as Record<string, T>)[key]
+        : undefined;
+}
+
+function setOwn(target: object, key: string, value: unknown): void {
+    Object.defineProperty(target, key, {
+        value,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+    });
+}
+
 function getOrCreateChild(
     target: Record<string, unknown>,
     key: string,
     nextIsArray: boolean,
 ): PathCursor {
-    const current = target[key];
+    const current = getOwn(target, key);
     if (current !== undefined) {
         if (Array.isArray(current)) {
             return current;
@@ -87,7 +106,7 @@ function getOrCreateChild(
     }
 
     const created: PathCursor = nextIsArray ? [] : {};
-    target[key] = created;
+    setOwn(target, key, created);
     return created;
 }
 
@@ -134,7 +153,7 @@ function setObjectPathValue(
     const key = segmentToKey(segment);
 
     if (isLast) {
-        cursor[key] = value;
+        setOwn(cursor, key, value);
         return undefined;
     }
 
@@ -272,15 +291,17 @@ function ensureSchemaNode(
         const key = segmentToKey(segment);
         cursor.properties ??= {};
 
-        if (!cursor.properties[key]) {
-            cursor.properties[key] = {
+        let child = getOwn<JsonSchema>(cursor.properties, key);
+        if (!child) {
+            child = {
                 type: "object",
                 properties: {},
                 additionalProperties: false,
             };
+            setOwn(cursor.properties, key, child);
         }
 
-        cursor = markObjectStrict(cursor.properties[key]);
+        cursor = markObjectStrict(child);
     }
 
     return cursor;
@@ -305,12 +326,13 @@ function ensureFrameNode(
 
     for (const segment of path) {
         const key = segmentToKey(segment);
-        const current = cursor[key];
+        let current = getOwn(cursor, key);
         if (!current || typeof current !== "object" || Array.isArray(current)) {
-            cursor[key] = {};
+            current = {};
+            setOwn(cursor, key, current);
         }
 
-        cursor = cursor[key] as Record<string, unknown>;
+        cursor = current as Record<string, unknown>;
     }
 
     return cursor;
@@ -362,11 +384,14 @@ function mergeObjectLeafSchema(
     const leafKey = segmentToKey(leafSegment ?? "");
     parent.properties ??= {};
 
-    const existing = parent.properties[leafKey];
-    parent.properties[leafKey] =
+    const existing = getOwn<JsonSchema>(parent.properties, leafKey);
+    setOwn(
+        parent.properties,
+        leafKey,
         existing && typeof existing === "object" && !Array.isArray(existing)
             ? mergeLeafSchema(existing, leafSchema)
-            : leafSchema;
+            : leafSchema,
+    );
 
     if (mandatory) {
         addRequired(parent, leafKey);
@@ -485,11 +510,15 @@ export function buildClaimsByNamespace(
             continue;
         }
 
-        if (!byNamespace[namespace]) {
-            byNamespace[namespace] = {};
+        let namespaceTarget = getOwn<Record<string, unknown>>(
+            byNamespace,
+            namespace,
+        );
+        if (!namespaceTarget) {
+            namespaceTarget = {};
+            setOwn(byNamespace, namespace, namespaceTarget);
         }
 
-        const namespaceTarget = byNamespace[namespace];
         const normalizedPath =
             field.path.length > 0 &&
             segmentToKey(field.path[0] ?? "") === namespace
