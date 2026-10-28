@@ -136,3 +136,115 @@ describe("CredentialConfigCreateSchema schemaMeta", () => {
         }
     });
 });
+
+describe("CredentialConfigCreateSchema claim constraints", () => {
+    const withConstraints = (constraints: unknown) => ({
+        ...credentialConfig,
+        fields: [
+            {
+                path: ["nationalities"],
+                type: "array",
+                constraints,
+                children: [
+                    {
+                        path: [null],
+                        type: "string",
+                        constraints: { pattern: "^[A-Z]{2}$" },
+                    },
+                ],
+            },
+        ],
+    });
+
+    test("accepts JSON Schema validation and annotation keywords", () => {
+        const result = CredentialConfigCreateSchema.safeParse(
+            withConstraints({
+                minItems: 1,
+                uniqueItems: true,
+                description: "Nationalities",
+                items: { type: "string", title: "Nationality" },
+                contains: true,
+                anyOf: [{ maxItems: 3 }, false],
+            }),
+        );
+
+        expect(result.error?.issues).toBeUndefined();
+    });
+
+    test("accepts object keywords with subschemas", () => {
+        const result = CredentialConfigCreateSchema.safeParse({
+            ...credentialConfig,
+            fields: [
+                {
+                    path: ["extras"],
+                    type: "object",
+                    constraints: {
+                        additionalProperties: { type: "string" },
+                        propertyNames: { pattern: "^[a-z]+$" },
+                        properties: { note: { type: "string", maxLength: 80 } },
+                    },
+                },
+            ],
+        });
+
+        expect(result.error?.issues).toBeUndefined();
+    });
+
+    test("refuses a formly widget, naming the keyword and path", () => {
+        const result = CredentialConfigCreateSchema.safeParse(
+            withConstraints({
+                widget: {
+                    formlyConfig: {
+                        template: "<img src=x onerror=alert(1)>",
+                        props: { safeHtml: true },
+                    },
+                },
+            }),
+        );
+
+        expect(result.error?.issues).toEqual([
+            expect.objectContaining({
+                code: "unrecognized_keys",
+                path: ["fields", 0, "constraints"],
+                message:
+                    "Unsupported JSON Schema keyword(s) in constraints: widget",
+            }),
+        ]);
+    });
+
+    test.each([
+        ["in items", { items: { type: "string", widget: {} } }],
+        ["in a list", { anyOf: [{ widget: {} }] }],
+        ["in a map", { properties: { note: { "x-ui": {} } } }],
+        ["of another kind", { format: "date" }],
+    ])("refuses unknown keywords %s", (_, constraints) => {
+        expect(
+            CredentialConfigCreateSchema.safeParse(withConstraints(constraints))
+                .success,
+        ).toBe(false);
+    });
+
+    test("refuses unknown keywords in child fields", () => {
+        const config = withConstraints({ minItems: 1 });
+        config.fields[0].children[0].constraints = {
+            pattern: "^[A-Z]{2}$",
+            widget: {},
+        } as never;
+
+        expect(
+            CredentialConfigCreateSchema.safeParse(config).error?.issues,
+        ).toEqual([
+            expect.objectContaining({
+                path: ["fields", 0, "children", 0, "constraints"],
+            }),
+        ]);
+    });
+
+    test("refuses a subschema that is not an object or boolean", () => {
+        expect(
+            CredentialConfigCreateSchema.safeParse(
+                withConstraints({ items: "string" }),
+            ).success,
+        ).toBe(false);
+    });
+});

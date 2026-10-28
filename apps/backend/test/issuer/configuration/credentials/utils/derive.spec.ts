@@ -160,6 +160,55 @@ describe("buildJsonSchema", () => {
         }
     });
 
+    it("drops constraint keywords outside the JSON Schema allow-list", () => {
+        // Stored before the write check: strict AJV refused the unknown keywords
+        const fields: ClaimFieldDefinition[] = [
+            {
+                path: ["birth_date"],
+                type: "string",
+                constraints: {
+                    pattern: String.raw`^\d{4}-\d{2}-\d{2}$`,
+                    widget: {
+                        formlyConfig: {
+                            template: "<img src=x onerror=alert(1)>",
+                            props: { safeHtml: true },
+                        },
+                    },
+                    "x-ui": true,
+                    format: "date",
+                },
+            },
+            {
+                path: ["nationalities"],
+                type: "array",
+                constraints: {
+                    items: { type: "string", widget: {} },
+                    anyOf: [{ minItems: 1, widget: {} }, "not a schema"],
+                },
+            },
+        ];
+
+        expect(buildJsonSchema(fields).properties).toEqual({
+            birth_date: {
+                type: "string",
+                pattern: String.raw`^\d{4}-\d{2}-\d{2}$`,
+            },
+            nationalities: {
+                type: "array",
+                items: { type: "string" },
+                anyOf: [{ minItems: 1 }],
+            },
+        });
+
+        const validate = compile(fields);
+        expect(
+            validate({ birth_date: "1964-08-12", nationalities: ["DE"] }),
+        ).toBe(true);
+        expect(validate({ birth_date: "12.08.1964", nationalities: [] })).toBe(
+            false,
+        );
+    });
+
     it("treats object claims without declared children as free-form", () => {
         const validate = compile([{ path: ["extra"], type: "object" }]);
 

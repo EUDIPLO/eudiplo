@@ -67,3 +67,16 @@ To allow additional properties inside an object, set `additionalProperties` in i
 ```
 
 Configurations without `fields` are not validated.
+
+### Constraints
+
+`constraints` adds JSON Schema 2020-12 rules to a field, for example a `pattern` for a date or `minItems` for an array. It accepts only these keywords, also inside subschemas such as `items` or `properties`:
+
+- validation: `type`, `enum`, `const`, `multipleOf`, `maximum`, `exclusiveMaximum`, `minimum`, `exclusiveMinimum`, `maxLength`, `minLength`, `pattern`, `maxItems`, `minItems`, `uniqueItems`, `maxContains`, `minContains`, `maxProperties`, `minProperties`, `required`, `dependentRequired`;
+- subschemas, each an object with these keywords or `true`/`false`: `items`, `contains`, `additionalProperties`, `propertyNames`, `not`, `if`, `then`, `else`, `unevaluatedItems`, `unevaluatedProperties`; a list of them in `prefixItems`, `allOf`, `anyOf`, `oneOf`; a map of them in `properties`, `patternProperties`, `dependentSchemas`;
+- annotations: `title`, `description`, `examples`, `deprecated`, `readOnly`, `writeOnly`, `$comment`;
+- `default`: fills in the claim at issuance when the claim source leaves it out.
+
+At the top level of `constraints`, the field's own `type` and its display name, as `title`, win over these keywords; inside subschemas they apply as written.
+
+Other keys, such as `format`, `$ref` or `x-` extensions, are refused with HTTP `400`; the error names the field and the keyword. This also keeps form hints like formly's `widget` out of the offer form in the Web Client. Configurations stored before 10.0 may still carry such keys: EUDIPLO ignores them when it validates claims, builds the offer form and exports the configuration, and sending its `fields` again answers `400` until you remove them.

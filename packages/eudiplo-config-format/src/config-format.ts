@@ -1,5 +1,7 @@
 // Canonical portable-config identity and migration implementation.
 // The CLI bundles this module through assets:sync; do not maintain a second engine.
+import { sanitizeClaimFields } from "./claim-constraints.js";
+
 export const CONFIG_FORMATS = {
     Tenant: { slug: "tenant", file: "TenantConfigFile", version: 3 },
     Client: { slug: "client", file: "ClientConfigFile", version: 2 },
@@ -18,7 +20,7 @@ export const CONFIG_FORMATS = {
     CredentialConfig: {
         slug: "credential-config",
         file: "CredentialConfigFile",
-        version: 2,
+        version: 3,
     },
     PresentationConfig: {
         slug: "presentation-config",
@@ -271,6 +273,38 @@ const presentationConfigV1ToV2: ConfigMigration = {
 };
 
 
+/**
+ * CredentialConfig v3 accepts only JSON Schema validation and annotation
+ * keywords in claim field `constraints`. Other keys were stored unchecked
+ * before; they are dropped with a warning. The strict claims validation at
+ * issuance refused them already, and form renderers such as the Web Client's
+ * formly read their own keys (`widget`) from the schema.
+ */
+const credentialConfigV2ToV3: ConfigMigration = {
+    id: "credential-config-v3-claim-constraint-keywords",
+    kind: "CredentialConfig",
+    from: 2,
+    to: 3,
+    migrate(spec) {
+        if (!Array.isArray(spec.fields)) return { spec };
+        const { fields, removed } = sanitizeClaimFields(
+            spec.fields,
+            "/spec/fields",
+        );
+        if (removed.length === 0) return { spec };
+        return {
+            spec: { ...spec, fields },
+            issues: removed.map((path) => ({
+                severity: "warning",
+                code: "CLAIM_CONSTRAINT_KEYWORD_REMOVED",
+                path,
+                message:
+                    "Removed: constraints accept only JSON Schema validation and annotation keywords.",
+            })),
+        };
+    },
+};
+
 // The first published format is v1. Register one step per later version.
 const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
     {
@@ -391,6 +425,7 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         // spec is a valid v2 spec.
         migrate: (spec) => ({ spec }),
     },
+    credentialConfigV2ToV3,
     presentationConfigV1ToV2,
     {
         id: "presentation-config-v3-typed-claim-values",

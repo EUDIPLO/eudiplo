@@ -257,4 +257,81 @@ describe("config derive helpers", () => {
     expect(buildJsonSchema(relative)).toEqual(buildJsonSchema(absolute));
     expect(buildClaims(relative)).toEqual(buildClaims(absolute));
   });
+
+  it("keeps only JSON Schema keywords from constraints", () => {
+    const fields: ClaimFieldDefinition[] = [
+      {
+        path: ["birth_date"],
+        type: "string",
+        constraints: {
+          pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+          minLength: 10,
+          widget: {
+            formlyConfig: {
+              template: "<img src=x onerror=alert(1)>",
+              props: { safeHtml: true },
+            },
+          },
+          "x-ui": { hidden: true },
+          $ref: "#/$defs/other",
+        },
+      },
+      {
+        path: ["nationalities"],
+        type: "array",
+        constraints: {
+          items: {
+            type: "string",
+            title: "Nationality",
+            widget: { formlyConfig: { template: "<b>x</b>" } },
+          },
+          anyOf: [{ minItems: 1, widget: {} }, "not a schema"],
+        },
+      },
+      {
+        path: ["extras"],
+        type: "object",
+        constraints: {
+          additionalProperties: true,
+          properties: { note: { type: "string", widget: {} } },
+          propertyNames: { pattern: "^[a-z]+$", widget: {} },
+        },
+      },
+    ];
+
+    expect(buildJsonSchema(fields).properties).toEqual({
+      birth_date: {
+        type: "string",
+        pattern: "^\\d{4}-\\d{2}-\\d{2}$",
+        minLength: 10,
+      },
+      nationalities: {
+        type: "array",
+        items: { type: "string", title: "Nationality" },
+        anyOf: [{ minItems: 1 }],
+      },
+      extras: {
+        type: "object",
+        additionalProperties: true,
+        properties: { note: { type: "string" } },
+        propertyNames: { pattern: "^[a-z]+$" },
+      },
+    });
+  });
+
+  it("keeps a __proto__ property name as data", () => {
+    const constraints = JSON.parse(
+      '{"properties":{"__proto__":{"type":"string","widget":{}}}}',
+    );
+    const schema = buildJsonSchema([
+      { path: ["extras"], type: "object", constraints },
+    ]);
+    const extras = schema.properties?.extras as Record<string, unknown>;
+    const properties = extras.properties as Record<string, unknown>;
+
+    expect(Object.getPrototypeOf(properties)).toBe(Object.prototype);
+    expect(Object.getOwnPropertyDescriptor(properties, "__proto__")?.value).toEqual({
+      type: "string",
+    });
+  });
 });

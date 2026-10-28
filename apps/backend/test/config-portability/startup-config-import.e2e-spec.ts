@@ -30,6 +30,7 @@ import { TenantEntity } from "../../src/auth/tenant/entities/tenant.entity.js";
 import { KeyChainEntity } from "../../src/crypto/key/entities/key-chain.entity.js";
 import { KeyChainService } from "../../src/crypto/key/key-chain.service.js";
 import { KmsTenantConfigService } from "../../src/crypto/key/kms/kms-tenant-config.service.js";
+import { CredentialConfig } from "../../src/issuer/configuration/credentials/entities/credential.entity.js";
 import { IssuanceConfig } from "../../src/issuer/configuration/issuance/entities/issuance-config.entity.js";
 import { StatusListEntity } from "../../src/issuer/status-list/entities/status-list.entity.js";
 import { ConfigBundleService } from "../../src/platform/config-portability/config-bundle.service.js";
@@ -563,7 +564,7 @@ describe("startup configuration reconciliation", () => {
             (document) =>
                 normalizeDocument(document).kind === "CredentialConfig",
         );
-        expect(exported?.$schema).toBe(schemaUrl("CredentialConfig", 2));
+        expect(exported?.$schema).toBe(schemaUrl("CredentialConfig"));
         expect(exported?.spec.schemaMeta).toMatchObject(schemaMeta);
         const plan = await service.plan(tenantId, bundle, "upsert");
         expect(
@@ -571,6 +572,104 @@ describe("startup configuration reconciliation", () => {
                 (issue) => issue.resource?.kind === "CredentialConfig",
             ),
         ).toEqual([]);
+    });
+
+    it("refuses unsupported constraint keywords and leaves stored ones out of exports", async () => {
+        const appConfig = app.get(ConfigService);
+        const tenantId = "claim-constraints";
+        const bootstrap = await request(app.getHttpServer())
+            .post("/api/oauth2/token")
+            .send({
+                grant_type: "client_credentials",
+                client_id: appConfig.getOrThrow<string>("AUTH_CLIENT_ID"),
+                client_secret:
+                    appConfig.getOrThrow<string>("AUTH_CLIENT_SECRET"),
+            })
+            .expect(201);
+        const tenant = await request(app.getHttpServer())
+            .post("/tenant")
+            .set("Authorization", `Bearer ${bootstrap.body.access_token}`)
+            .send({
+                id: tenantId,
+                name: "Claim constraints tenant",
+                roles: ["issuance:manage"],
+            })
+            .expect(201);
+        const token = await request(app.getHttpServer())
+            .post("/api/oauth2/token")
+            .send({
+                grant_type: "client_credentials",
+                client_id: tenant.body.client.clientId,
+                client_secret: tenant.body.client.clientSecret,
+            })
+            .expect(201)
+            .then((response) => response.body.access_token);
+        const widget = {
+            formlyConfig: {
+                template: "<img src=x onerror=alert(1)>",
+                props: { safeHtml: true },
+            },
+        };
+        const field = (constraints: Record<string, unknown>) => ({
+            path: ["birth_date"],
+            type: "string",
+            constraints,
+        });
+        const config = (constraints: Record<string, unknown>) => ({
+            id: "pid",
+            config: { format: "dc+sd-jwt", display: [] },
+            fields: [field(constraints)],
+        });
+
+        const refused = await request(app.getHttpServer())
+            .post("/issuer/credentials")
+            .set("Authorization", `Bearer ${token}`)
+            .send(config({ pattern: "^\\d{4}$", widget }))
+            .expect(400);
+        expect(refused.body.errors).toEqual([
+            expect.objectContaining({
+                path: ["fields", 0, "constraints"],
+                message:
+                    "Unsupported JSON Schema keyword(s) in constraints: widget",
+            }),
+        ]);
+        await request(app.getHttpServer())
+            .post("/issuer/credentials")
+            .set("Authorization", `Bearer ${token}`)
+            .send(config({ pattern: "^\\d{4}$" }))
+            .expect(201);
+        await request(app.getHttpServer())
+            .patch("/issuer/credentials/pid")
+            .set("Authorization", `Bearer ${token}`)
+            .send({ fields: [field({ items: { widget } })] })
+            .expect(400);
+
+        // A configuration stored before CredentialConfig v3 refused the key
+        await app
+            .get(DataSource)
+            .getRepository(CredentialConfig)
+            .update(
+                { tenantId, id: "pid" },
+                { fields: [field({ pattern: "^\\d{4}$", widget })] as never },
+            );
+        const service = app.get(ConfigBundleService);
+        const bundle = await service.exportBundle(tenantId);
+        const exported = bundle.documents.find(
+            (document) =>
+                normalizeDocument(document).kind === "CredentialConfig",
+        );
+        expect(exported?.spec.fields).toEqual([field({ pattern: "^\\d{4}$" })]);
+        const plan = await service.plan(tenantId, bundle, "upsert");
+        expect(
+            plan.issues.filter(
+                (issue) => issue.resource?.kind === "CredentialConfig",
+            ),
+        ).toEqual([]);
+        // The stored key is ignored like the export ignores it, so the export
+        // re-imports as unchanged and the row keeps it
+        expect(
+            plan.items.find((item) => item.kind === "CredentialConfig"),
+        ).toMatchObject({ action: "unchanged" });
     });
 
     it("plans resources with unchanged image references as unchanged", async () => {

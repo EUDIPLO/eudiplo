@@ -4791,6 +4791,241 @@ export const FieldDisplayDtoSchema = {
     additionalProperties: false
 } as const;
 
+export const ClaimConstraintsSchema = {
+    type: 'object',
+    properties: {
+        type: {},
+        enum: {},
+        const: {},
+        multipleOf: {},
+        maximum: {},
+        exclusiveMaximum: {},
+        minimum: {},
+        exclusiveMinimum: {},
+        maxLength: {},
+        minLength: {},
+        pattern: {},
+        maxItems: {},
+        minItems: {},
+        uniqueItems: {},
+        maxContains: {},
+        minContains: {},
+        maxProperties: {},
+        minProperties: {},
+        required: {},
+        dependentRequired: {},
+        title: {},
+        description: {},
+        default: {},
+        examples: {},
+        deprecated: {},
+        readOnly: {},
+        writeOnly: {},
+        $comment: {},
+        items: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    $ref: '#/components/schemas/ClaimConstraints'
+                }
+            ]
+        },
+        contains: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    $ref: '#/components/schemas/ClaimConstraints'
+                }
+            ]
+        },
+        additionalProperties: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    $ref: '#/components/schemas/ClaimConstraints'
+                }
+            ]
+        },
+        propertyNames: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    $ref: '#/components/schemas/ClaimConstraints'
+                }
+            ]
+        },
+        not: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    $ref: '#/components/schemas/ClaimConstraints'
+                }
+            ]
+        },
+        if: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    $ref: '#/components/schemas/ClaimConstraints'
+                }
+            ]
+        },
+        then: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    $ref: '#/components/schemas/ClaimConstraints'
+                }
+            ]
+        },
+        else: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    $ref: '#/components/schemas/ClaimConstraints'
+                }
+            ]
+        },
+        unevaluatedItems: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    $ref: '#/components/schemas/ClaimConstraints'
+                }
+            ]
+        },
+        unevaluatedProperties: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    $ref: '#/components/schemas/ClaimConstraints'
+                }
+            ]
+        },
+        prefixItems: {
+            type: 'array',
+            items: {
+                anyOf: [
+                    {
+                        type: 'boolean'
+                    },
+                    {
+                        $ref: '#/components/schemas/ClaimConstraints'
+                    }
+                ]
+            }
+        },
+        allOf: {
+            type: 'array',
+            items: {
+                anyOf: [
+                    {
+                        type: 'boolean'
+                    },
+                    {
+                        $ref: '#/components/schemas/ClaimConstraints'
+                    }
+                ]
+            }
+        },
+        anyOf: {
+            type: 'array',
+            items: {
+                anyOf: [
+                    {
+                        type: 'boolean'
+                    },
+                    {
+                        $ref: '#/components/schemas/ClaimConstraints'
+                    }
+                ]
+            }
+        },
+        oneOf: {
+            type: 'array',
+            items: {
+                anyOf: [
+                    {
+                        type: 'boolean'
+                    },
+                    {
+                        $ref: '#/components/schemas/ClaimConstraints'
+                    }
+                ]
+            }
+        },
+        properties: {
+            type: 'object',
+            propertyNames: {
+                type: 'string'
+            },
+            additionalProperties: {
+                anyOf: [
+                    {
+                        type: 'boolean'
+                    },
+                    {
+                        $ref: '#/components/schemas/ClaimConstraints'
+                    }
+                ]
+            }
+        },
+        patternProperties: {
+            type: 'object',
+            propertyNames: {
+                type: 'string'
+            },
+            additionalProperties: {
+                anyOf: [
+                    {
+                        type: 'boolean'
+                    },
+                    {
+                        $ref: '#/components/schemas/ClaimConstraints'
+                    }
+                ]
+            }
+        },
+        dependentSchemas: {
+            type: 'object',
+            propertyNames: {
+                type: 'string'
+            },
+            additionalProperties: {
+                anyOf: [
+                    {
+                        type: 'boolean'
+                    },
+                    {
+                        $ref: '#/components/schemas/ClaimConstraints'
+                    }
+                ]
+            }
+        }
+    },
+    additionalProperties: false
+} as const;
+
 export const ClaimFieldDefinitionDtoSchema = {
     type: 'object',
     properties: {
@@ -4888,12 +5123,10 @@ export const ClaimFieldDefinitionDtoSchema = {
             type: 'array'
         },
         constraints: {
+            $ref: '#/components/schemas/ClaimConstraints',
             type: 'object',
-            propertyNames: {
-                type: 'string'
-            },
             additionalProperties: true,
-            description: 'Additional JSON schema constraints for this field'
+            description: 'JSON Schema 2020-12 validation keywords for this field. Only the JSON Schema keywords listed under Constraints in the claims documentation are accepted (validation keywords such as pattern, minLength or enum, subschemas such as items or properties, and annotations); other keys, such as format or $ref, are refused.'
         },
         children: {
             items: {
@@ -13536,7 +13769,7 @@ export const ConfigDocumentDtoSchema = {
         $schema: {
             type: 'string',
             description: 'Canonical schema URL; names the kind and the format version',
-            example: 'https://eudiplo.dev/schemas/v2/CredentialConfigFile.schema.json'
+            example: 'https://eudiplo.dev/schemas/v3/CredentialConfigFile.schema.json'
         },
         metadata: {
             $ref: '#/components/schemas/ConfigDocumentMetadataDto'

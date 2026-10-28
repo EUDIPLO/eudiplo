@@ -1,3 +1,4 @@
+import { sanitizeClaimConstraints } from "@eudiplo/config-format/claim-constraints.js";
 import type {
     ClaimDisplayInfo,
     ClaimFieldDefinition,
@@ -213,7 +214,9 @@ function stripNonObjectKeywords(schema: JsonSchema): void {
 
 function buildLeafSchema(field: ClaimFieldDefinition): JsonSchema {
     const leafSchema: JsonSchema = {
-        ...field.constraints,
+        // Stored before CredentialConfig v3 refused them, constraints may
+        // still carry keywords outside the allow-list
+        ...sanitizeClaimConstraints(field.constraints).constraints,
         type: field.type,
     };
 

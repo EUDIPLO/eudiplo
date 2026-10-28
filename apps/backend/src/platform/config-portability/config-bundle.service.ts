@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { sanitizeClaimFields } from "@eudiplo/config-format/claim-constraints.js";
 import { assertConfigBundle } from "@eudiplo/config-format/config-bundle.js";
 import {
     CONFIG_SINGLETON_IDS,
@@ -1667,7 +1668,9 @@ export class ConfigBundleService {
                     id: entity.id,
                     description: entity.description,
                     config: entity.config,
-                    fields: entity.fields,
+                    // Stored before CredentialConfig v3, constraints may carry
+                    // keys that v3 refuses; the export leaves them out
+                    fields: sanitizeClaimFields(entity.fields ?? []).fields,
                     attributeProviderId: entity.attributeProviderId,
                     webhookEndpointId: entity.webhookEndpointId,
                     vct: entity.vct,

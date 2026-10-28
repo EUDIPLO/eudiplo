@@ -2078,6 +2078,60 @@ export type FieldDisplayDto = {
     locale: string;
 };
 
+export type ClaimConstraints = {
+    type?: unknown;
+    enum?: unknown;
+    const?: unknown;
+    multipleOf?: unknown;
+    maximum?: unknown;
+    exclusiveMaximum?: unknown;
+    minimum?: unknown;
+    exclusiveMinimum?: unknown;
+    maxLength?: unknown;
+    minLength?: unknown;
+    pattern?: unknown;
+    maxItems?: unknown;
+    minItems?: unknown;
+    uniqueItems?: unknown;
+    maxContains?: unknown;
+    minContains?: unknown;
+    maxProperties?: unknown;
+    minProperties?: unknown;
+    required?: unknown;
+    dependentRequired?: unknown;
+    title?: unknown;
+    description?: unknown;
+    default?: unknown;
+    examples?: unknown;
+    deprecated?: unknown;
+    readOnly?: unknown;
+    writeOnly?: unknown;
+    $comment?: unknown;
+    items?: boolean | ClaimConstraints;
+    contains?: boolean | ClaimConstraints;
+    additionalProperties?: boolean | ClaimConstraints;
+    propertyNames?: boolean | ClaimConstraints;
+    not?: boolean | ClaimConstraints;
+    if?: boolean | ClaimConstraints;
+    then?: boolean | ClaimConstraints;
+    else?: boolean | ClaimConstraints;
+    unevaluatedItems?: boolean | ClaimConstraints;
+    unevaluatedProperties?: boolean | ClaimConstraints;
+    prefixItems?: Array<boolean | ClaimConstraints>;
+    allOf?: Array<boolean | ClaimConstraints>;
+    anyOf?: Array<boolean | ClaimConstraints>;
+    oneOf?: Array<boolean | ClaimConstraints>;
+    properties?: {
+        [key: string]: boolean | ClaimConstraints;
+    };
+    patternProperties?: {
+        [key: string]: boolean | ClaimConstraints;
+    };
+    dependentSchemas?: {
+        [key: string]: boolean | ClaimConstraints;
+    };
+};
+
 export type ClaimFieldDefinitionDto = {
     /**
      * Path to claim value. For nested child fields this can be relative to the parent path.
@@ -2111,11 +2165,9 @@ export type ClaimFieldDefinitionDto = {
         description?: string;
     }>;
     /**
-     * Additional JSON schema constraints for this field
+     * JSON Schema 2020-12 validation keywords for this field. Only the JSON Schema keywords listed under Constraints in the claims documentation are accepted (validation keywords such as pattern, minLength or enum, subschemas such as items or properties, and annotations); other keys, such as format or $ref, are refused.
      */
-    constraints?: {
-        [key: string]: unknown;
-    };
+    constraints?: ClaimConstraints;
     /**
      * Optional nested child fields. Child paths may be specified relative to the parent field path.
      */

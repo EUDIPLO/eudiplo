@@ -1,3 +1,4 @@
+import { sanitizeConstraints } from "./constraints";
 import type {
   ClaimFieldDefinition,
   ClaimMetadata,
@@ -295,7 +296,7 @@ export function buildClaimsMetadata(fields: ClaimFieldDefinition[]): ClaimMetada
 
 function buildLeafSchema(field: ClaimFieldDefinition): JsonSchema {
   const schema: JsonSchema = {
-    ...field.constraints,
+    ...sanitizeConstraints(field.constraints),
     type: field.type
   };
   

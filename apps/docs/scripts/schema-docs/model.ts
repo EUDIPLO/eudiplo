@@ -110,12 +110,33 @@ function fieldFromJsonSchema(input: JsonSchema, required: boolean): SchemaField 
     };
 }
 
+/**
+ * Replaces each local `$ref` (recursive or `.meta({ id })` schemas, which Zod
+ * keeps in `$defs` even with `reused: "inline"`) by the type of its target.
+ * The target is not expanded, so a recursive schema ends there.
+ */
+function withRefTypes(node: unknown, defs: Record<string, JsonSchema>): unknown {
+    if (Array.isArray(node)) return node.map((item) => withRefTypes(item, defs));
+    if (!node || typeof node !== "object") return node;
+    const { $ref, ...rest } = node as JsonSchema & { $ref?: string };
+    if (typeof $ref === "string" && $ref.startsWith("#/$defs/")) {
+        const target = defs[$ref.slice("#/$defs/".length)];
+        return {
+            ...(target?.type ? { type: target.type } : {}),
+            ...(rest.description ?? target?.description
+                ? { description: rest.description ?? target?.description }
+                : {}),
+        };
+    }
+    return Object.fromEntries(Object.entries(rest).map(([key, value]) => [key, withRefTypes(value, defs)]));
+}
+
 /** Convert a Zod schema (the same one the backend validates with) into a serializable docs tree. */
 export function buildSchemaModel(schema: z.ZodType): SchemaField {
-    return fieldFromJsonSchema(
-        z.toJSONSchema(schema, { unrepresentable: "any", reused: "inline" }) as JsonSchema,
-        true,
-    );
+    const { $defs, ...json } = z.toJSONSchema(schema, { unrepresentable: "any", reused: "inline" }) as JsonSchema & {
+        $defs?: Record<string, JsonSchema>;
+    };
+    return fieldFromJsonSchema(withRefTypes(json, $defs ?? {}) as JsonSchema, true);
 }
 
 /**

@@ -20,7 +20,7 @@ export class ConfigDocumentDto {
         description:
             "Canonical schema URL; names the kind and the format version",
         example:
-            "https://eudiplo.dev/schemas/v2/CredentialConfigFile.schema.json",
+            "https://eudiplo.dev/schemas/v3/CredentialConfigFile.schema.json",
     })
     $schema!: string;
 

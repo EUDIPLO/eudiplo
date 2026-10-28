@@ -113,3 +113,21 @@ test("description overrides change a field in every variant that has it", () => 
         ["Shared.", "Shared."],
     );
 });
+
+test("fields that reference a recursive or named schema show its type", () => {
+    const node: z.ZodType = z.lazy(() => z.object({ children: z.array(node).optional() }));
+    const named = z.object({ min: z.number().optional() }).meta({ id: "DocsNamedConstraints" });
+    const model = buildSchemaModel(
+        z.object({ tree: node, constraints: named.optional().describe("Rules.") }),
+    );
+    assert.equal(model.properties?.tree.type, "object");
+    assert.equal(model.properties?.constraints.type, "object");
+    assert.equal(model.properties?.constraints.description, "Rules.");
+});
+
+test("a referenced schema without its own description keeps the one of its definition", () => {
+    const named = z.object({ min: z.number().optional() }).describe("Defined rules.").meta({ id: "DocsDescribedConstraints" });
+    const model = buildSchemaModel(z.object({ constraints: named }));
+    assert.equal(model.properties?.constraints.type, "object");
+    assert.equal(model.properties?.constraints.description, "Defined rules.");
+});

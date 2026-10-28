@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { createZodDto } from "nestjs-zod";
 import { z } from "zod";
+import { ClaimConstraintsSchema } from "../schemas/claim-constraints.schema.js";
 
 const FieldDisplaySchema = z
     .object({
@@ -27,7 +28,7 @@ const ClaimFieldDefinitionSchema: z.ZodType<any> = z.lazy(() =>
             disclosable: z.boolean().optional(),
             namespace: z.string().optional(),
             display: z.array(FieldDisplaySchema).optional(),
-            constraints: z.record(z.string(), z.unknown()).optional(),
+            constraints: ClaimConstraintsSchema.optional(),
             children: z.array(ClaimFieldDefinitionSchema).optional(),
         })
         .strict(),
@@ -98,7 +99,8 @@ export class ClaimFieldDefinitionDto extends createZodDto(
     display?: FieldDisplayDto[];
 
     @ApiPropertyOptional({
-        description: "Additional JSON schema constraints for this field",
+        description:
+            "JSON Schema 2020-12 validation keywords for this field. Only the JSON Schema keywords listed under Constraints in the claims documentation are accepted (validation keywords such as pattern, minLength or enum, subschemas such as items or properties, and annotations); other keys, such as format or $ref, are refused.",
         type: Object,
     })
     constraints?: Record<string, unknown>;
