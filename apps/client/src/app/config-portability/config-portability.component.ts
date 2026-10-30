@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -35,6 +35,8 @@ import { openErrorSnackBar } from '../utils/error-snackbar';
 import { copyToClipboard } from '../utils/copy-to-clipboard';
 import { offersApplyFromFile, offersResetToFile } from './config-ownership.service';
 import { isConfigDocument, singleDocumentBundle } from './config-document-bundle';
+import { LoadErrorComponent } from '../common/load-error.component';
+import { focusIfFocusWasLost } from '../common/focus-if-lost.util';
 
 /**
  * How one side of a field change reads in the plan: a value, a word naming what is not shown,
@@ -60,6 +62,7 @@ const fieldCount = (count: number) => `${count} ${count === 1 ? 'field' : 'field
     CommonModule,
     FormsModule,
     RouterLink,
+    LoadErrorComponent,
     MatButtonModule,
     MatCardModule,
     MatCheckboxModule,
@@ -88,6 +91,10 @@ export class ConfigPortabilityComponent implements OnInit {
   /** Set while the shown plan resets one resource to its file version. */
   reattachTarget?: ConfigResourceMetadata;
   resources: ConfigResourceMetadata[] = [];
+  resourcesLoading = false;
+  /** Why the last load of the resource ownership failed, or empty after a successful load. */
+  resourcesLoadError = '';
+  private resourcesRequest = 0;
   operations: ConfigOperation[] = [];
   selected = new Set<string>();
   busy = false;
@@ -96,6 +103,10 @@ export class ConfigPortabilityComponent implements OnInit {
    * planning the next import or reset cannot discard a value shown only once.
    */
   generatedSecrets: NonNullable<ConfigImportPlan['generatedSecrets']> = [];
+
+  /** Takes the focus after a successful retry, which removed the focused Retry button. */
+  @ViewChild('resourcesTitle', { read: ElementRef })
+  private readonly resourcesTitle?: ElementRef<HTMLElement>;
 
   constructor(
     private readonly portability: ConfigPortabilityService,
@@ -497,18 +508,33 @@ export class ConfigPortabilityComponent implements OnInit {
     }
   }
 
+  async retryResources(): Promise<void> {
+    await this.refreshResources();
+    // The retry removed the error card with its focused Retry. The title is always rendered, so it
+    // can take the focus without waiting for the next render.
+    if (!this.resourcesLoadError) focusIfFocusWasLost(this.resourcesTitle?.nativeElement);
+  }
+
   private async refreshResources(): Promise<void> {
+    // A Retry can overlap the reload after an action; only the latest request shows its result.
+    const request = ++this.resourcesRequest;
+    this.resourcesLoading = true;
+    this.resourcesLoadError = '';
     try {
-      this.resources = await this.portability.listResources();
+      const resources = await this.portability.listResources();
+      if (request !== this.resourcesRequest) return;
+      this.resources = resources;
       const validKeys = new Set(this.resources.map((resource) => this.resourceKey(resource)));
       for (const key of this.selected) {
         if (!validKeys.has(key)) this.selected.delete(key);
       }
     } catch (error) {
-      openErrorSnackBar(
-        this.snackBar,
-        getApiErrorMessage(error, 'Could not load resource ownership')
-      );
+      if (request !== this.resourcesRequest) return;
+      // The rows of an earlier load may be out of date: the next load shows the spinner, not them.
+      this.resources = [];
+      this.resourcesLoadError = getApiErrorMessage(error, 'Could not load resource ownership');
+    } finally {
+      if (request === this.resourcesRequest) this.resourcesLoading = false;
     }
   }
 

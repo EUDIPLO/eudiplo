@@ -60,6 +60,12 @@ table {
   color: var(--mat-sys-on-surface-variant);
 }
 
+.loading-state {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+
 .key-file {
   margin-left: 0.75rem;
   color: var(--mat-sys-on-surface-variant);
