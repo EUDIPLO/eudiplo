@@ -1316,3 +1316,303 @@ describe('ConfigPortabilityComponent operation history load states', () => {
     expect(document.activeElement).toBe(refreshButton);
   });
 });
+
+describe('ConfigPortabilityComponent resource filters', () => {
+  const row = (kind: string, resourceId: string, ownership: string, source?: string) =>
+    ({ kind, resourceId, ownership, source, generation: 1 }) as unknown as ConfigResourceMetadata;
+  const resources = [
+    row('CredentialConfig', 'pid', 'file-managed', 'folder:/app/config/demo'),
+    row('CredentialConfig', 'mdl', 'unmanaged'),
+    row('Client', 'wallet-frontend', 'file-managed', 'bundle:staging'),
+    row('Client', 'admin', 'detached', 'folder:/app/config/demo'),
+    row('TrustList', 'eu-pid', 'file-managed', 'folder:/app/config/demo'),
+  ];
+
+  let component: ConfigPortabilityComponent;
+
+  const shown = () => component.shownResources.map((resource) => component.resourceKey(resource));
+
+  beforeEach(() => {
+    component = new ConfigPortabilityComponent(
+      {} as unknown as ConfigPortabilityService,
+      {} as unknown as MatSnackBar,
+      { hasRole: () => true } as unknown as JwtService
+    );
+    component.resources = resources;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('offers each listed kind once, sorted, with its number of resources', () => {
+    expect(component.kindOptions).toEqual([
+      { value: 'Client', count: 2 },
+      { value: 'CredentialConfig', count: 2 },
+      { value: 'TrustList', count: 1 },
+    ]);
+    expect(component.ownershipOptions).toEqual([
+      { value: 'file-managed', count: 3 },
+      { value: 'detached', count: 1 },
+      { value: 'unmanaged', count: 1 },
+    ]);
+  });
+
+  it('counts the rows each option shows with the other filters applied', () => {
+    component.ownershipFilter = ['file-managed'];
+    component.kindFilter = ['CredentialConfig'];
+    component.applyFilters();
+
+    expect(component.kindOptions).toEqual([
+      { value: 'Client', count: 1 },
+      { value: 'CredentialConfig', count: 1 },
+      { value: 'TrustList', count: 1 },
+    ]);
+    expect(component.ownershipOptions).toEqual([
+      { value: 'file-managed', count: 1 },
+      { value: 'detached', count: 0 },
+      { value: 'unmanaged', count: 1 },
+    ]);
+  });
+
+  it('shows all resources without filters', () => {
+    expect(component.shownResources).toEqual(resources);
+    expect(component.hasActiveFilters).toBe(false);
+  });
+
+  it('shows the resources of the chosen kinds and ownership states', () => {
+    component.kindFilter = ['CredentialConfig', 'Client'];
+    component.applyFilters();
+    expect(shown()).toEqual([
+      'CredentialConfig/pid',
+      'CredentialConfig/mdl',
+      'Client/wallet-frontend',
+      'Client/admin',
+    ]);
+
+    component.ownershipFilter = ['file-managed'];
+    component.applyFilters();
+    expect(shown()).toEqual(['CredentialConfig/pid', 'Client/wallet-frontend']);
+  });
+
+  it('searches the resource ID and the source, ignoring case', () => {
+    component.search = '  PID ';
+    component.applyFilters();
+    expect(shown()).toEqual(['CredentialConfig/pid', 'TrustList/eu-pid']);
+
+    component.search = 'staging';
+    component.applyFilters();
+    expect(shown()).toEqual(['Client/wallet-frontend']);
+  });
+
+  it('searches the Resource and Source columns as they read', () => {
+    component.search = 'client/admin';
+    component.applyFilters();
+    expect(shown()).toEqual(['Client/admin']);
+
+    component.search = 'API / UI';
+    component.applyFilters();
+    expect(shown()).toEqual(['CredentialConfig/mdl']);
+  });
+
+  it('clears all filters', () => {
+    component.kindFilter = ['TrustList'];
+    component.ownershipFilter = ['detached'];
+    component.search = 'x';
+    component.applyFilters();
+    expect(component.shownResources).toEqual([]);
+
+    component.clearFilters();
+
+    expect(component.shownResources).toEqual(resources);
+    expect(component.hasActiveFilters).toBe(false);
+  });
+
+  it('selects all only the file-managed resources in view', () => {
+    component.kindFilter = ['Client'];
+    component.applyFilters();
+
+    component.selectAll();
+
+    expect([...component.selected]).toEqual(['Client/wallet-frontend']);
+    expect(component.allSelected).toBe(true);
+  });
+
+  it('drops the selection of the rows a filter hides', () => {
+    component.selectAll();
+    expect(component.selected.size).toBe(3);
+
+    component.kindFilter = ['CredentialConfig'];
+    component.applyFilters();
+
+    expect([...component.selected]).toEqual(['CredentialConfig/pid']);
+  });
+
+  it('drops the selection of resources a refresh no longer lists', () => {
+    component.selectResource(resources[0]);
+    component.selectResource(resources[2]);
+
+    component.resources = resources.filter((resource) => resource.resourceId !== 'pid');
+
+    expect([...component.selected]).toEqual(['Client/wallet-frontend']);
+  });
+
+  it('names the resources in the question before detaching them', async () => {
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal('confirm', confirm);
+    component.kindFilter = ['Client'];
+    component.applyFilters();
+    component.selectAll();
+
+    await component.detachSelected();
+
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining('Detach 1 resource(s): Client/wallet-frontend?')
+    );
+  });
+
+  it('does not count a search of only spaces as a filter', () => {
+    component.search = '   ';
+    component.applyFilters();
+
+    expect(component.hasActiveFilters).toBe(false);
+    expect(component.resourceSummary).toBe('5 resources');
+    expect(component.shownResources).toEqual(resources);
+  });
+
+  it('says "1 resource" for a single resource', () => {
+    component.resources = [resources[0]];
+    expect(component.resourceSummary).toBe('1 resource');
+
+    component.kindFilter = ['Client'];
+    component.applyFilters();
+    expect(component.resourceSummary).toBe('Showing 0 of 1 resource');
+  });
+
+  it('keeps a chosen kind as an option after its last resource is gone', () => {
+    component.kindFilter = ['TrustList'];
+    component.applyFilters();
+
+    component.resources = resources.filter((resource) => resource.kind !== 'TrustList');
+
+    expect(component.kindOptions).toContainEqual({ value: 'TrustList', count: 0 });
+    expect(component.shownResources).toEqual([]);
+  });
+
+  it('says how many resources the filters show, and when none match', async () => {
+    TestBed.configureTestingModule({
+      imports: [ConfigPortabilityComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ConfigPortabilityService,
+          useValue: {
+            listResources: vi.fn(async () => resources),
+            listOperations: vi.fn(async () => []),
+          },
+        },
+        { provide: JwtService, useValue: { hasRole: () => true } },
+      ],
+    });
+    const fixture = TestBed.createComponent(ConfigPortabilityComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const status = () => element.querySelector('[role="status"]')?.textContent?.trim();
+    expect(status()).toBe('5 resources');
+
+    const input = element.querySelector<HTMLInputElement>(
+      'input[placeholder="Resource ID or source"]'
+    )!;
+    input.value = 'pid';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(status()).toBe('Showing 2 of 5 resources');
+    element.querySelector<HTMLButtonElement>('button[aria-label="Clear search"]')!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(status()).toBe('5 resources');
+    expect(input.value).toBe('');
+    expect(document.activeElement).toBe(input);
+
+    fixture.componentInstance.kindFilter = ['Client'];
+    fixture.componentInstance.applyFilters();
+    fixture.detectChanges();
+    expect(status()).toBe('Showing 2 of 5 resources');
+    expect(element.textContent).toContain('Clear Filters');
+
+    fixture.componentInstance.search = 'no such resource';
+    fixture.componentInstance.applyFilters();
+    fixture.detectChanges();
+    expect(status()).toBe('Showing 0 of 5 resources');
+    expect(element.textContent).toContain('No resources match the filters.');
+
+    const clearFilters = [...element.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Clear Filters')
+    )!;
+    clearFilters.click();
+    fixture.detectChanges();
+    expect(status()).toBe('5 resources');
+    expect(document.activeElement).toBe(input);
+  });
+});
+
+describe('ConfigPortabilityComponent select all without file-managed rows in view', () => {
+  it('keeps the checkbox focusable and does not select anything', async () => {
+    TestBed.configureTestingModule({
+      imports: [ConfigPortabilityComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ConfigPortabilityService,
+          useValue: {
+            listResources: vi.fn(async () => [
+              { kind: 'Client', resourceId: 'admin', ownership: 'unmanaged', generation: 1 },
+            ]),
+            listOperations: vi.fn(async () => []),
+          },
+        },
+        { provide: JwtService, useValue: { hasRole: () => true } },
+      ],
+    });
+    const fixture = TestBed.createComponent(ConfigPortabilityComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const input = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
+      'input[aria-label="Select all detachable resources in view"]'
+    )!;
+
+    expect(input.disabled).toBe(false);
+    expect(input.getAttribute('aria-disabled')).toBe('true');
+    input.click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance.selected.size).toBe(0);
+  });
+});
+
+describe('ConfigPortabilityComponent resource filters after a failed reload', () => {
+  it('shows no rows but keeps the selection', async () => {
+    const listResources = vi.fn();
+    const component = new ConfigPortabilityComponent(
+      {
+        listResources,
+        listOperations: vi.fn(async () => []),
+      } as unknown as ConfigPortabilityService,
+      { open: vi.fn() } as unknown as MatSnackBar,
+      { hasRole: () => false } as unknown as JwtService
+    );
+    component.resources = [
+      { kind: 'Client', resourceId: 'admin', ownership: 'file-managed', generation: 1 },
+    ] as unknown as ConfigResourceMetadata[];
+    component.selectAll();
+    listResources.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    await component.retryResources();
+
+    expect(component.shownResources).toEqual([]);
+    expect(component.kindOptions).toEqual([]);
+    expect([...component.selected]).toEqual(['Client/admin']);
+  });
+});

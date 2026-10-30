@@ -55,10 +55,12 @@ becomes the file's generation, so later startups apply the folder again.
 The web client lists ownership and offers **Detach** and **Reset to file**, and
 for clients from the config folder **Apply from file**, under
 **Settings > Config Portability** (shown to a tenant's clients and users with
-`tenant:admin` or `tenants:manage`). On the screens of a `file-managed` resource
-it shows a lock notice and disables editing and deleting, also for clients that
-only have the role managing that resource, such as `issuance:manage` for
-credential configs.
+`tenant:admin` or `tenants:manage`). Its resource table filters by kind and
+ownership and searches its Resource and Source columns; the select-all checkbox
+in the table header and **Detach selected** act only on the `file-managed` rows
+the filters show. On the screens of a `file-managed` resource it shows a lock
+notice and disables editing and deleting, also for clients that only have the
+role managing that resource, such as `issuance:manage` for credential configs.
 
 ## Provision tenants from a folder
 

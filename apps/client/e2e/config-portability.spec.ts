@@ -226,3 +226,75 @@ test('names the resources a replace import deletes before applying it', async ({
   expect(imports).toBe(1);
   expect((await tenant.plan(registrarBundle(tenant.id, fullSpec))).items[0].action).toBe('create');
 });
+
+test('filters the resource ownership table by kind and text', async ({ page }) => {
+  const tenant = await createTenant();
+  await tenant.importBundle(registrarBundle(tenant.id, fullSpec));
+  await openConfigPortability(page, tenant);
+  const ownership = page.locator('mat-card', { hasText: 'Resource ownership' });
+  const rows = ownership.locator('tbody tr');
+  await expect(ownership.getByRole('status')).toHaveText(/^\s*\d+ resources\s*$/);
+  // The tenant records more resources than the registrar, so the filter has rows to hide.
+  const total = await rows.count();
+  expect(total).toBeGreaterThan(1);
+
+  await ownership.getByRole('combobox', { name: 'Kind' }).click();
+  await page.getByRole('option', { name: /^RegistrarConfig \(1\)/ }).click();
+  await page.keyboard.press('Escape');
+
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('RegistrarConfig/registrar');
+  await expect(ownership.getByRole('status')).toHaveText(`Showing 1 of ${total} resources`);
+
+  await ownership.getByRole('combobox', { name: 'Ownership' }).click();
+  await page.getByRole('option', { name: /^unmanaged/ }).click();
+  await page.keyboard.press('Escape');
+  await expect(rows).toHaveText(['No resources match the filters.']);
+  // A click while the panel still closes would reopen it only to have the closing panel shut it.
+  await expect(page.getByRole('listbox')).toBeHidden();
+  await ownership.getByRole('combobox', { name: 'Ownership' }).click();
+  await page.getByRole('option', { name: /^unmanaged/ }).click();
+  await page.getByRole('option', { name: /^file-managed/ }).click();
+  await page.keyboard.press('Escape');
+  await expect(rows).toHaveCount(1);
+
+  await ownership.getByRole('textbox', { name: 'Search' }).fill('no-such-resource');
+  await expect(rows).toHaveText(['No resources match the filters.']);
+
+  await ownership.getByRole('button', { name: 'Clear Filters' }).click();
+  await expect(ownership.getByRole('status')).toHaveText(`${total} resources`);
+  await expect(rows).toHaveCount(total);
+  await expect(ownership.getByRole('textbox', { name: 'Search' })).toHaveValue('');
+});
+
+test('detaches only the file-managed resources the filters show', async ({ page }) => {
+  const tenant = await createTenant();
+  await tenant.importBundle(registrarBundle(tenant.id, fullSpec));
+  await openConfigPortability(page, tenant);
+  const ownership = page.locator('mat-card', { hasText: 'Resource ownership' });
+  const rows = ownership.locator('tbody tr');
+  await expect(ownership.getByRole('status')).toHaveText(/^\s*\d+ resources\s*$/);
+  const total = await rows.count();
+
+  await ownership.getByRole('combobox', { name: 'Kind' }).click();
+  await page.getByRole('option', { name: /^RegistrarConfig/ }).click();
+  await page.keyboard.press('Escape');
+  await ownership
+    .getByRole('checkbox', { name: 'Select all detachable resources in view' })
+    .check();
+  await expect(ownership.getByText('1 selected')).toBeVisible();
+
+  let question = '';
+  page.once('dialog', (dialog) => {
+    question = dialog.message();
+    void dialog.accept();
+  });
+  await ownership.getByRole('button', { name: 'Detach selected' }).click();
+
+  await expect(page.getByText('Detached 1 resource(s)')).toBeVisible();
+  expect(question).toContain('Detach 1 resource(s): RegistrarConfig/registrar?');
+  await expect(rows.first()).toContainText('detached');
+  await ownership.getByRole('button', { name: 'Clear Filters' }).click();
+  await expect(rows).toHaveCount(total);
+  await expect(rows.filter({ hasText: 'detached' })).toHaveCount(1);
+});
