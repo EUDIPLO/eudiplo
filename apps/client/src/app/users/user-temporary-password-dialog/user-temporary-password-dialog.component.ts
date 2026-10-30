@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
+import { copyToClipboard } from '../../utils/copy-to-clipboard';
 
 export interface UserTemporaryPasswordDialogData {
   username: string;
@@ -26,17 +27,23 @@ export class UserTemporaryPasswordDialogComponent {
     private snackBar: MatSnackBar
   ) {}
 
-  copyPassword(): void {
-    navigator.clipboard.writeText(this.data.temporaryPassword).then(() => {
-      this.snackBar.open('Temporary password copied to clipboard', 'Close', { duration: 2000 });
-    });
+  async copyPassword(): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      this.data.temporaryPassword,
+      'Temporary password copied to clipboard',
+      'Could not copy the password. Select it and copy it by hand.'
+    );
   }
 
-  copyAll(): void {
+  async copyAll(): Promise<void> {
     const text = `Username: ${this.data.username}\nTemporary Password: ${this.data.temporaryPassword}`;
-    navigator.clipboard.writeText(text).then(() => {
-      this.snackBar.open('Login details copied to clipboard', 'Close', { duration: 2000 });
-    });
+    await copyToClipboard(
+      this.snackBar,
+      text,
+      'Login details copied to clipboard',
+      'Could not copy the password. Select it and copy it by hand.'
+    );
   }
 
   close(): void {

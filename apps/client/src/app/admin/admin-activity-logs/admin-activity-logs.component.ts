@@ -12,6 +12,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { AuditLogResponseDto, auditLogControllerGetAuditLogs } from '@eudiplo/sdk-core';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { copyToClipboard } from '../../utils/copy-to-clipboard';
 
 @Component({
   selector: 'app-admin-activity-logs',
@@ -175,11 +176,9 @@ export class AdminActivityLogsComponent implements OnInit {
     return changedFields.join(', ');
   }
 
-  copyToClipboard(log: AuditLogResponseDto): void {
+  async copyLog(log: AuditLogResponseDto): Promise<void> {
     const text = JSON.stringify(log, null, 2);
-    navigator.clipboard.writeText(text).then(() => {
-      this.snackBar.open('Copied to clipboard', 'Close', { duration: 2000 });
-    });
+    await copyToClipboard(this.snackBar, text, 'Copied to clipboard');
   }
 
   refresh(): void {
