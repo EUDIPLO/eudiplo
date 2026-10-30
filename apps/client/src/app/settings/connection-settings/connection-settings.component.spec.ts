@@ -1,4 +1,5 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter } from '@angular/router';
 
 import { ApiService } from '../../core';
@@ -149,5 +150,45 @@ describe('ConnectionSettingsComponent', () => {
 
     expect(value(page, 'Backend version')).toBe('Unavailable');
     expect(value(page, 'Startup configuration import mode')).toBe('Unavailable');
+  });
+
+  describe('when the browser cannot copy', () => {
+    beforeEach(() => {
+      Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    });
+    afterEach(() => {
+      delete (navigator as { clipboard?: Clipboard }).clipboard;
+    });
+
+    it('says to copy a shown value by hand', async () => {
+      const page = await render();
+      const open = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open');
+
+      (page.querySelector('[aria-label="Copy Client ID to clipboard"]') as HTMLElement).click();
+
+      await vi.waitFor(() =>
+        expect(open).toHaveBeenCalledWith(
+          'Could not copy the Client ID. Select it in its field and copy it by hand.',
+          'Close',
+          expect.objectContaining({ duration: expect.any(Number) })
+        )
+      );
+    });
+
+    it('does not suggest copying the masked secret by hand', async () => {
+      secret = 'demo-secret';
+      const page = await render();
+      const open = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open');
+
+      (page.querySelector('[aria-label="Copy Client Secret to clipboard"]') as HTMLElement).click();
+
+      await vi.waitFor(() =>
+        expect(open).toHaveBeenCalledWith(
+          'Could not copy the Client Secret',
+          'Close',
+          expect.objectContaining({ duration: expect.any(Number) })
+        )
+      );
+    });
   });
 });

@@ -433,9 +433,7 @@
                   <strong>Certificate JWT</strong>
                   <button
                     mat-stroked-button
-                    (click)="
-                      copyToClipboard(registrationCertificateJwt!, 'Registration certificate JWT')
-                    "
+                    (click)="copyRegistrationCertificateJwt(registrationCertificateJwt!)"
                   >
                     <mat-icon>content_copy</mat-icon>
                     Copy

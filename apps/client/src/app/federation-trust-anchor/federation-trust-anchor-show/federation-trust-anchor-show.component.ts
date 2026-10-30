@@ -22,6 +22,7 @@ import { ConfigOwnershipDirective } from '../../config-portability/config-owners
 import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-ownership-notice.component';
 import { getApiErrorMessage, hasHttpStatus } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import {
   type FederationTrustAnchor,
   FederationTrustAnchorService,
@@ -153,10 +154,21 @@ export class FederationTrustAnchorShowComponent implements OnInit {
     }
   }
 
-  copyToClipboard(text: string, label: string): void {
-    navigator.clipboard.writeText(text).then(
-      () => this.snackBar.open(`${label} copied to clipboard`, 'Close', { duration: 2000 }),
-      () => this.snackBar.open('Failed to copy to clipboard', 'Close', { duration: 2000 })
+  async copyEntityId(entityId: string): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      entityId,
+      'Entity ID copied to clipboard',
+      'Could not copy the entity ID. Select it in the Entity ID row and copy it by hand.'
+    );
+  }
+
+  async copyJwks(): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      this.jwksJson,
+      'JWK set copied to clipboard',
+      'Could not copy the JWK set. Select it below the Copy button and copy it by hand.'
     );
   }
 

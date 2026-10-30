@@ -26,6 +26,7 @@ import type { KeyChainResponseDto } from '@eudiplo/sdk-core';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
 import { getApiErrorMessage } from '../../utils/error-message';
+import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import { readCertificateFiles } from '../certificate-files';
 import { KeyChainService } from '../key-chain.service';
 
@@ -176,11 +177,13 @@ export class KeyCertificateRequestComponent {
     }
   }
 
-  copyCsr(): void {
-    navigator.clipboard
-      .writeText(this.csr())
-      .then(() => this.snackBar.open('CSR copied to clipboard', 'Close', { duration: 2000 }))
-      .catch(() => this.snackBar.open('Failed to copy the CSR', 'Close', { duration: 2000 }));
+  async copyCsr(): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      this.csr(),
+      'CSR copied to clipboard',
+      'Could not copy the CSR. Select it in the CSR (PEM) field and copy it by hand, or download it.'
+    );
   }
 
   downloadCsr(): void {

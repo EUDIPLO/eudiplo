@@ -29,7 +29,12 @@
             <mat-icon>autorenew</mat-icon>
           </button>
         }
-        <button mat-icon-button (click)="viewAsJson()" matTooltip="View as JSON">
+        <button
+          mat-icon-button
+          (click)="viewAsJson()"
+          matTooltip="View as JSON"
+          aria-label="View as JSON"
+        >
           <mat-icon>code</mat-icon>
         </button>
         @if (canDownloadConfig) {
@@ -261,7 +266,7 @@
             </p>
           }
           <div class="cert-actions" fxLayout="row" fxLayoutGap="8px">
-            <button mat-stroked-button (click)="copyPublicKeyToClipboard(keyChain.activePublicKey)">
+            <button mat-stroked-button (click)="copyFederationPublicKey()">
               <mat-icon>content_copy</mat-icon>
               Copy Public Key (JWK)
             </button>

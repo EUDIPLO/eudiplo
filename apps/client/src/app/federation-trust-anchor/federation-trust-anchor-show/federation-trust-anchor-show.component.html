@@ -69,7 +69,7 @@
               mat-icon-button
               matTooltip="Copy entity ID"
               aria-label="Copy entity ID"
-              (click)="copyToClipboard(anchor.entityId, 'Entity ID')"
+              (click)="copyEntityId(anchor.entityId)"
             >
               <mat-icon>content_copy</mat-icon>
             </button>
@@ -117,12 +117,7 @@
         </table>
         <details class="jwks">
           <summary>JWK set</summary>
-          <button
-            mat-button
-            type="button"
-            (click)="copyToClipboard(jwksJson, 'JWK set')"
-            aria-label="Copy JWK set"
-          >
+          <button mat-button type="button" (click)="copyJwks()" aria-label="Copy JWK set">
             <mat-icon>content_copy</mat-icon>
             Copy
           </button>

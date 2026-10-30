@@ -15,7 +15,7 @@
             <button
               mat-icon-button
               matSuffix
-              (click)="copyToClipboard(currentBaseUrl, 'API Base URL')"
+              (click)="copyField(currentBaseUrl, 'API Base URL')"
               matTooltip="Copy to clipboard"
               aria-label="Copy API Base URL to clipboard"
             >
@@ -31,7 +31,7 @@
             <button
               mat-icon-button
               matSuffix
-              (click)="copyToClipboard(currentOidcUrl, 'OAuth URL')"
+              (click)="copyField(currentOidcUrl, 'OAuth URL')"
               matTooltip="Copy to clipboard"
               aria-label="Copy OAuth URL to clipboard"
             >
@@ -47,7 +47,7 @@
             <button
               mat-icon-button
               matSuffix
-              (click)="copyToClipboard(currentClientId, 'Client ID')"
+              (click)="copyField(currentClientId, 'Client ID')"
               matTooltip="Copy to clipboard"
               aria-label="Copy Client ID to clipboard"
             >
@@ -75,7 +75,7 @@
               <button
                 mat-icon-button
                 matSuffix
-                (click)="copyToClipboard(secret, 'Client Secret')"
+                (click)="copySecret(secret)"
                 matTooltip="Copy to clipboard"
                 aria-label="Copy Client Secret to clipboard"
               >

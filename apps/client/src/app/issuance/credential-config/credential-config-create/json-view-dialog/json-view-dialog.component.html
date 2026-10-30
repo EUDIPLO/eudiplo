@@ -1,6 +1,6 @@
 <div mat-dialog-title fxLayout="row" fxLayoutAlign="space-between center">
   <h2>{{ data.title }}</h2>
-  <button matIconButton (click)="copyToClipboard()">
+  <button matIconButton (click)="copyJson()" matTooltip="Copy JSON" aria-label="Copy JSON">
     <mat-icon>content_copy</mat-icon>
   </button>
 </div>
