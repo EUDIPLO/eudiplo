@@ -45,6 +45,17 @@ mat-card-content {
   overflow-x: auto;
 }
 
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 16px;
+
+  .search-field {
+    flex: 1 1 280px;
+  }
+}
+
 .bulk-actions {
   display: flex;
   align-items: center;

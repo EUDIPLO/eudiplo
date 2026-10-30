@@ -8,6 +8,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -33,7 +34,12 @@ import {
 } from './config-portability.service';
 import { openErrorSnackBar } from '../utils/error-snackbar';
 import { copyToClipboard } from '../utils/copy-to-clipboard';
-import { offersApplyFromFile, offersResetToFile } from './config-ownership.service';
+import {
+  ConfigResourceKind,
+  ConfigResourceOwnership,
+  offersApplyFromFile,
+  offersResetToFile,
+} from './config-ownership.service';
 import { isConfigDocument, singleDocumentBundle } from './config-document-bundle';
 import { LoadErrorComponent } from '../common/load-error.component';
 import { focusIfFocusWasLost } from '../common/focus-if-lost.util';
@@ -55,6 +61,18 @@ const removesValue = (change: ConfigPlanChange) => change.after === undefined;
 
 const fieldCount = (count: number) => `${count} ${count === 1 ? 'field' : 'fields'}`;
 
+type ConfigOwnership = ConfigResourceOwnership['ownership'];
+
+const OWNERSHIP_STATES: ConfigOwnership[] = ['file-managed', 'detached', 'unmanaged'];
+
+/** An option of a resource filter, with the number of rows choosing it shows. */
+export interface FilterOption<T> {
+  value: T;
+  count: number;
+}
+
+const resourceCount = (count: number) => `${count} ${count === 1 ? 'resource' : 'resources'}`;
+
 @Component({
   selector: 'app-config-portability',
   standalone: true,
@@ -69,6 +87,7 @@ const fieldCount = (count: number) => `${count} ${count === 1 ? 'field' : 'field
     MatChipsModule,
     MatFormFieldModule,
     MatIconModule,
+    MatInputModule,
     MatProgressSpinnerModule,
     MatSelectModule,
     MatSnackBarModule,
@@ -90,11 +109,22 @@ export class ConfigPortabilityComponent implements OnInit {
   plan?: ConfigImportPlan;
   /** Set while the shown plan resets one resource to its file version. */
   reattachTarget?: ConfigResourceMetadata;
-  resources: ConfigResourceMetadata[] = [];
   resourcesLoading = false;
   /** Why the last load of the resource ownership failed, or empty after a successful load. */
   resourcesLoadError = '';
   private resourcesRequest = 0;
+  /** Kinds the resource table shows; empty shows all kinds. */
+  kindFilter: ConfigResourceKind[] = [];
+  /** Ownership states the resource table shows; empty shows all. */
+  ownershipFilter: ConfigOwnership[] = [];
+  /** Text the resource ID or the source contains, ignoring case. */
+  search = '';
+  /** The rows of the resource table: the resources that pass the filters. */
+  shownResources: ConfigResourceMetadata[] = [];
+  kindOptions: FilterOption<ConfigResourceKind>[] = [];
+  ownershipOptions: FilterOption<ConfigOwnership>[] = [];
+  @ViewChild('searchInput') private searchInput?: ElementRef<HTMLInputElement>;
+  private allResources: ConfigResourceMetadata[] = [];
   operations: ConfigOperation[] = [];
   operationsLoading = false;
   /** Why the last load of the operation history failed, or empty after a successful load. */
@@ -128,6 +158,86 @@ export class ConfigPortabilityComponent implements OnInit {
 
   get canApply(): boolean {
     return this.jwt.hasRole(TENANT_ADMIN_ROLES);
+  }
+
+  get resources(): ConfigResourceMetadata[] {
+    return this.allResources;
+  }
+
+  set resources(resources: ConfigResourceMetadata[]) {
+    this.allResources = resources;
+    this.applyFilters();
+  }
+
+  get hasActiveFilters(): boolean {
+    return !!(this.kindFilter.length || this.ownershipFilter.length || this.search.trim());
+  }
+
+  /** "12 resources", or "Showing 3 of 12 resources" while a filter is active. */
+  get resourceSummary(): string {
+    const total = resourceCount(this.allResources.length);
+    return this.hasActiveFilters ? `Showing ${this.shownResources.length} of ${total}` : total;
+  }
+
+  applyFilters(): void {
+    this.filterRows();
+    // "Detach selected" acts only on rows in view: a filter drops the selection of the rows it
+    // hides, and a refresh drops the selection of resources that are gone.
+    const shown = new Set(this.shownResources.map((resource) => this.resourceKey(resource)));
+    for (const key of this.selected) {
+      if (!shown.has(key)) this.selected.delete(key);
+    }
+  }
+
+  private filterRows(): void {
+    const search = this.search.trim().toLowerCase();
+    const ofKind = (resource: ConfigResourceMetadata) =>
+      !this.kindFilter.length || this.kindFilter.includes(resource.kind);
+    const ofOwnership = (resource: ConfigResourceMetadata) =>
+      !this.ownershipFilter.length || this.ownershipFilter.includes(resource.ownership);
+    // The search matches the Resource and Source columns as they read.
+    const found = (resource: ConfigResourceMetadata) =>
+      !search ||
+      [this.resourceKey(resource), this.sourceLabel(resource)].some((text) =>
+        text.toLowerCase().includes(search)
+      );
+    this.shownResources = this.allResources.filter(
+      (resource) => ofKind(resource) && ofOwnership(resource) && found(resource)
+    );
+
+    // Each menu counts the rows an option shows with the other filters applied. A chosen kind
+    // stays an option after its last resource is gone, so it can be deselected.
+    const kinds = new Map<ConfigResourceKind, number>();
+    for (const kind of [...this.kindFilter, ...this.allResources.map(({ kind }) => kind)])
+      kinds.set(kind, 0);
+    const ownerships = new Map(OWNERSHIP_STATES.map((ownership) => [ownership, 0]));
+    for (const resource of this.allResources) {
+      if (!found(resource)) continue;
+      if (ofOwnership(resource)) kinds.set(resource.kind, kinds.get(resource.kind)! + 1);
+      if (ofKind(resource))
+        ownerships.set(resource.ownership, (ownerships.get(resource.ownership) ?? 0) + 1);
+    }
+    this.kindOptions = [...kinds]
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+    this.ownershipOptions = [...ownerships].map(([value, count]) => ({ value, count }));
+  }
+
+  /** The clear buttons leave the page, so focus moves to the search field. */
+  clearSearch(): void {
+    this.search = '';
+    this.applyFilters();
+    this.searchInput?.nativeElement.focus();
+  }
+
+  clearFilters(): void {
+    this.kindFilter = [];
+    this.ownershipFilter = [];
+    this.clearSearch();
+  }
+
+  sourceLabel(resource: ConfigResourceMetadata): string {
+    return resource.source || 'API / UI';
   }
 
   ngOnInit(): void {
@@ -397,8 +507,9 @@ export class ConfigPortabilityComponent implements OnInit {
     this.selected.delete(this.resourceKey(resource));
   }
 
+  /** The file-managed resources in view, which "Select all" selects. */
   get detachableResources(): ConfigResourceMetadata[] {
-    return this.resources.filter((resource) => resource.ownership === 'file-managed');
+    return this.shownResources.filter((resource) => resource.ownership === 'file-managed');
   }
 
   get allSelected(): boolean {
@@ -419,9 +530,11 @@ export class ConfigPortabilityComponent implements OnInit {
   async detachSelected(): Promise<void> {
     const targets = this.resources.filter((resource) => this.isSelected(resource));
     if (!targets.length) return;
+    // "Select all" picks every file-managed row in view, so the question names them.
+    const keys = targets.map((resource) => this.resourceKey(resource)).join(', ');
     if (
       !globalThis.confirm(
-        `Detach ${targets.length} resource(s)? They will become editable through the API and UI, and imports from their source skip them.`
+        `Detach ${targets.length} resource(s): ${keys}? They will become editable through the API and UI, and imports from their source skip them.`
       )
     ) {
       return;
@@ -546,14 +659,12 @@ export class ConfigPortabilityComponent implements OnInit {
       const resources = await this.portability.listResources();
       if (request !== this.resourcesRequest) return;
       this.resources = resources;
-      const validKeys = new Set(this.resources.map((resource) => this.resourceKey(resource)));
-      for (const key of this.selected) {
-        if (!validKeys.has(key)) this.selected.delete(key);
-      }
     } catch (error) {
       if (request !== this.resourcesRequest) return;
       // The rows of an earlier load may be out of date: the next load shows the spinner, not them.
-      this.resources = [];
+      // The selection stays, so the resources a failed detach left selected are still selected.
+      this.allResources = [];
+      this.filterRows();
       this.resourcesLoadError = getApiErrorMessage(error, 'Could not load resource ownership');
     } finally {
       if (request === this.resourcesRequest) this.resourcesLoading = false;

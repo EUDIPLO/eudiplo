@@ -322,6 +322,68 @@
       } @else if (!resources.length) {
         <p class="muted">No resource ownership metadata has been recorded yet.</p>
       } @else {
+        <div class="filters">
+          <mat-form-field appearance="outline" class="search-field">
+            <mat-label>Search</mat-label>
+            <mat-icon matPrefix>search</mat-icon>
+            <input
+              #searchInput
+              matInput
+              [(ngModel)]="search"
+              (ngModelChange)="applyFilters()"
+              placeholder="Resource ID or source"
+            />
+            @if (search) {
+              <button
+                matIconButton
+                matSuffix
+                type="button"
+                aria-label="Clear search"
+                matTooltip="Clear search"
+                (click)="clearSearch()"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            }
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Kind</mat-label>
+            <mat-select
+              [(ngModel)]="kindFilter"
+              (selectionChange)="applyFilters()"
+              multiple
+              placeholder="All kinds"
+            >
+              @for (option of kindOptions; track option.value) {
+                <mat-option [value]="option.value"
+                  >{{ option.value }} ({{ option.count }})</mat-option
+                >
+              }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Ownership</mat-label>
+            <mat-select
+              [(ngModel)]="ownershipFilter"
+              (selectionChange)="applyFilters()"
+              multiple
+              placeholder="All ownership states"
+            >
+              @for (option of ownershipOptions; track option.value) {
+                <mat-option [value]="option.value"
+                  >{{ option.value }} ({{ option.count }})</mat-option
+                >
+              }
+            </mat-select>
+          </mat-form-field>
+          @if (hasActiveFilters) {
+            <button mat-button type="button" (click)="clearFilters()">
+              <mat-icon>filter_alt_off</mat-icon>
+              Clear Filters
+            </button>
+          }
+        </div>
+        <p class="muted" role="status">{{ resourceSummary }}</p>
         @if (selected.size) {
           <div class="bulk-actions">
             <span class="muted">{{ selected.size }} selected</span>
@@ -331,13 +393,17 @@
             </button>
           </div>
         }
-        <table mat-table [dataSource]="resources">
+        <table mat-table [dataSource]="shownResources">
           <ng-container matColumnDef="select">
             <th mat-header-cell *matHeaderCellDef>
               <mat-checkbox
                 [checked]="allSelected"
                 [disabled]="busy || !canApply || !detachableResources.length"
-                aria-label="Select all detachable resources"
+                disabledInteractive
+                [matTooltip]="
+                  canApply && !detachableResources.length ? 'No file-managed resources in view' : ''
+                "
+                aria-label="Select all detachable resources in view"
                 (change)="$event.checked ? selectAll() : deselectAll()"
               ></mat-checkbox>
             </th>
@@ -378,7 +444,7 @@
           </ng-container>
           <ng-container matColumnDef="source">
             <th mat-header-cell *matHeaderCellDef>Source</th>
-            <td mat-cell *matCellDef="let item" class="source">{{ item.source || 'API / UI' }}</td>
+            <td mat-cell *matCellDef="let item" class="source">{{ sourceLabel(item) }}</td>
           </ng-container>
           <ng-container matColumnDef="actions">
             <th mat-header-cell *matHeaderCellDef></th>
@@ -421,6 +487,11 @@
           </ng-container>
           <tr mat-header-row *matHeaderRowDef="resourceColumns"></tr>
           <tr mat-row *matRowDef="let row; columns: resourceColumns"></tr>
+          <tr class="mat-mdc-row" *matNoDataRow>
+            <td class="mat-mdc-cell muted" [attr.colspan]="resourceColumns.length">
+              No resources match the filters.
+            </td>
+          </tr>
         </table>
       }
     </mat-card-content>
