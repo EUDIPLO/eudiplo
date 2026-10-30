@@ -1519,7 +1519,7 @@ describe('ConfigPortabilityComponent resource filters', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     const element = fixture.nativeElement as HTMLElement;
-    const status = () => element.querySelector('[role="status"]')?.textContent?.trim();
+    const status = () => element.querySelector('output')?.textContent?.trim();
     expect(status()).toBe('5 resources');
 
     const input = element.querySelector<HTMLInputElement>(

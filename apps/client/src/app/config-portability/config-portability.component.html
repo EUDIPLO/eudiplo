@@ -383,7 +383,9 @@
             </button>
           }
         </div>
-        <p class="muted" role="status">{{ resourceSummary }}</p>
+        <p class="muted">
+          <output>{{ resourceSummary }}</output>
+        </p>
         @if (selected.size) {
           <div class="bulk-actions">
             <span class="muted">{{ selected.size }} selected</span>
