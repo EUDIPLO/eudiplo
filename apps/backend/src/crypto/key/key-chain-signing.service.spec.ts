@@ -36,4 +36,43 @@ describe("KeyChainSigningService", () => {
         ).rejects.toThrow(NotFoundException);
         expect(adapter.sign).not.toHaveBeenCalled();
     });
+
+    it("puts the key chain ID into the header of a key without kid, as the JWKS does", async () => {
+        const { kid: _, ...withoutKid } = {
+            kty: "EC",
+            crv: "P-256",
+            x: "pmn8SKQKZ0t2zFlrUXzJaJwwQ0WnQxcSYoS_D6ZSGho",
+            y: "rMd9JTAovcOI_OvOXWCWZ1yVZieVYK2UgvB2IPuSk2o",
+            d: "rqv47L1jWkbFAGMCK8TORQ1FknBUYGY6OLU1dYHNDqU",
+            kid: "unused",
+        };
+        const keyChain = Object.assign(new KeyChainEntity(), {
+            id: "token-chain",
+            tenantId: "tenant",
+            usageType: KeyUsageType.AccessToken,
+            usage: KeyUsage.Sign,
+            kmsProvider: "db",
+            activeJwk: withoutKid,
+        });
+        const service = Object.create(KeyChainSigningService.prototype) as any;
+        service.keyChainRepository = { findOne: async () => keyChain };
+        service.kmsRegistry = {
+            resolve: () => ({
+                type: "db",
+                sign: async () => new Uint8Array(64),
+            }),
+        };
+
+        const jwt: string = await service.signJWT(
+            {},
+            { typ: "at+jwt" },
+            "tenant",
+            "token-chain",
+        );
+
+        const header = JSON.parse(
+            Buffer.from(jwt.split(".")[0], "base64url").toString(),
+        );
+        expect(header.kid).toBe("token-chain");
+    });
 });

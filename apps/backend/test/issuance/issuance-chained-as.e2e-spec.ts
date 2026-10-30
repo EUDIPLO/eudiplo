@@ -8,8 +8,11 @@ import { createDpopHeadersForRequest, type Jwk } from "@openid4vc/oauth2";
 import {
     calculateJwkThumbprint,
     decodeJwt,
+    decodeProtectedHeader,
     exportJWK,
     generateKeyPair,
+    importJWK,
+    jwtVerify,
     SignJWT,
 } from "jose";
 import nock from "nock";
@@ -852,6 +855,37 @@ describe("Issuance - Chained AS Flow", () => {
         // Verify the token contains issuer_state
         const tokenPayload = decodeJwt(tokenResponse.body.access_token);
         expect(tokenPayload.issuer_state).toBeDefined();
+
+        // Signed by the tenant's access token key chain, published in the
+        // chained AS JWKS.
+        const { kid, alg } = decodeProtectedHeader(
+            tokenResponse.body.access_token,
+        );
+        const jwks = await request(app.getHttpServer())
+            .get("/.well-known/jwks.json/issuers/haip/chained-as")
+            .expect(200);
+        const key = jwks.body.keys.find(
+            (candidate: { kid?: string }) => candidate.kid === kid,
+        );
+        expect(key).toBeDefined();
+        await expect(
+            jwtVerify(
+                tokenResponse.body.access_token,
+                await importJWK(key, alg),
+                { clockTolerance: 5 },
+            ),
+        ).resolves.toBeDefined();
+        const accessTokenKeyChains = await request(app.getHttpServer())
+            .get("/key-chain")
+            .query({ usageType: "accessToken" })
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        expect(
+            accessTokenKeyChains.body.map(
+                (keyChain: { activePublicKey: { kid?: string } }) =>
+                    keyChain.activePublicKey.kid,
+            ),
+        ).toContain(kid);
     });
 
     test("an offer's issuer_state links the token to the offer session, its session ID does not", async () => {

@@ -35,7 +35,7 @@ export enum KeyUsage {
 export class KeyChainEntity {
     /**
      * Unique identifier for the key chain.
-     * This is the ID referenced by other entities (e.g., issuance config's signingKeyId).
+     * This is the ID referenced by other entities (e.g., a credential configuration's keyChainId).
      */
     @Column("varchar", { primary: true })
     id!: string;

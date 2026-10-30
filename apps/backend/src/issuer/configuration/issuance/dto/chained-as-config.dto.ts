@@ -107,11 +107,12 @@ export class ChainedAsTokenConfig extends createZodDto(
     lifetimeSeconds?: number;
 
     /**
-     * The key ID to use for signing tokens.
-     * Must reference a key configured in the crypto service.
+     * The key chain that signs the access tokens. Must have usage type
+     * `accessToken`; without it, the tenant's access token key chain signs.
      */
     @ApiPropertyOptional({
-        description: "Key ID for token signing",
+        description:
+            'ID of a key chain with usage type "accessToken" that signs the issued access tokens. Without it, the tenant\'s access token key chain signs them.',
     })
     signingKeyId?: string;
 

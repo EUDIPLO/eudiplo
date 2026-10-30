@@ -2,7 +2,7 @@
 title: Keys and Certificates
 ---
 
-A key chain is a signing key together with its certificate chain. Each tenant needs one per purpose: an access key chain to sign presentation requests, an attestation key chain to sign credentials, and optionally status list and trust list key chains. Create them in the Web Client under **Cryptographic Assets → Keys → Create Key**, or with the API below; where the private keys live is set by the [KMS provider](../operate/kms.md).
+A key chain is a signing key together with its certificate chain. Each tenant needs one per purpose: an access key chain to sign presentation requests, an attestation key chain to sign credentials, and optionally status list and trust list key chains. The key chain that signs access tokens is created by EUDIPLO ([Access token key chain](#access-token-key-chain)). Create them in the Web Client under **Cryptographic Assets → Keys → Create Key**, or with the API below; where the private keys live is set by the [KMS provider](../operate/kms.md).
 
 **Prerequisites:** the `issuance:manage`, `presentation:manage` or `keys:manage` role.
 
@@ -11,6 +11,7 @@ A key chain is a signing key together with its certificate chain. Each tenant ne
 | `usageType`   | Signs                                                                                          | Web Client option                 |
 | ------------- | ---------------------------------------------------------------------------------------------- | --------------------------------- |
 | `access`      | Presentation requests (it determines the `client_id`), signed issuer metadata, ISO 18013-7 `readerAuth` | Access Certificate                |
+| `accessToken` | The access tokens of EUDIPLO's [authorization servers](../issuance/authorization-servers.md) ([details](#access-token-key-chain)) | Access Token Signing              |
 | `attestation` | Issued credentials (SD-JWT VC and mDOC)                                                        | Credential Signing (Attestation)  |
 | `statusList`  | Status lists for [revocation](../issuance/revocation.md)                                       | Status List Signing               |
 | `trustList`   | [Trust lists](trust-lists.md) you publish                                                      | Trust List Signing                |
@@ -27,7 +28,7 @@ A key chain is a signing key together with its certificate chain. Each tenant ne
 | Imported key      | `POST /api/key-chain/import` with `"type": "standalone"`             | Your chain from `crt` (leaf first), or a self-signed certificate valid 365 days if `crt` is omitted                           | New key with a self-signed certificate (see warning below) |
 | External CA chain | `POST /api/key-chain/import` with `"type": "internalChain"`          | `key` is your CA key and the last `crt` entry its CA certificate, or a self-signed CA certificate EUDIPLO creates if `crt` is omitted; EUDIPLO generates leaf keys signed by it | New leaf key signed by your CA                 |
 
-In the Web Client, attestation and status list keys offer **Create Key Chain** (internal chain), **Standalone Key** and **External CA Chain** (external CA chain; the last certificate must be the CA certificate); access keys offer **Self-Signed Certificate**, **Registrar Enrollment** ([Registrar](registrar.md)) and **External Certificate**. Standalone Key and the other usage types except OpenID Federation Entity Key, which is always created, offer an external certificate with **Use a certificate from an external CA**. For an external certificate, choose **Import a key and the certificate chain issued for it**, or **Create the key in EUDIPLO and request its certificate with a CSR** ([details](#request-a-certificate-with-a-csr)). Create Key Chain and External CA Chain rotate the signing key by default; with **Enable automatic key rotation** off, the signing certificate expires after **Certificate Validity** and is renewed only once you turn rotation on by editing the key chain. The other options create key chains without rotation. When EUDIPLO creates the key, **Signing Algorithm** offers the algorithms of the selected KMS provider, starting with its default; imported keys keep the algorithm of their curve, and Registrar Enrollment uses the provider default. The wizard accepts pasted PEM values and PEM, CRT, CER or DER files; EUDIPLO checks that key and certificate match.
+In the Web Client, attestation and status list keys offer **Create Key Chain** (internal chain), **Standalone Key** and **External CA Chain** (external CA chain; the last certificate must be the CA certificate); access keys offer **Self-Signed Certificate**, **Registrar Enrollment** ([Registrar](registrar.md)) and **External Certificate**. Standalone Key and the other usage types except OpenID Federation Entity Key and Access Token Signing, which are always created, offer an external certificate with **Use a certificate from an external CA**. For an external certificate, choose **Import a key and the certificate chain issued for it**, or **Create the key in EUDIPLO and request its certificate with a CSR** ([details](#request-a-certificate-with-a-csr)). Create Key Chain and External CA Chain rotate the signing key by default; with **Enable automatic key rotation** off, the signing certificate expires after **Certificate Validity** and is renewed only once you turn rotation on by editing the key chain. The other options create key chains without rotation. When EUDIPLO creates the key, **Signing Algorithm** offers the algorithms of the selected KMS provider, starting with its default; imported keys keep the algorithm of their curve, and Registrar Enrollment uses the provider default. The wizard accepts pasted PEM values and PEM, CRT, CER or DER files; EUDIPLO checks that key and certificate match.
 
 Use an internal or external CA chain for attestation and status list keys: trust lists publish the CA certificate, so entries stay valid when the leaf key rotates.
 
@@ -105,26 +106,47 @@ In the Web Client, the page of a standalone or imported key chain, except an Ope
 - **Manual:** `POST /api/key-chain/{id}/rotate` rotates immediately (`204`).
 - **Change the policy:** `PUT /api/key-chain/{id}` with `rotationPolicy` or `description`. Enabling rotation needs `intervalDays`, unless the key chain already has one.
 
-Rotation creates a new key and certificate as listed in the table above. Credentials issued before keep their certificate chain in `x5c`; with an internal or external CA chain, old and new credentials chain to the same CA, so trust lists need no update.
+Rotation creates a new key and certificate as listed in the table above. The JWKS of an authorization server keeps the previous key of its access token key chain for one access token lifetime after the rotation, so tokens signed just before stay valid. Credentials issued before keep their certificate chain in `x5c`; with an internal or external CA chain, old and new credentials chain to the same CA, so trust lists need no update.
 
 :::warning[Rotating imported keys]
 Rotating a standalone or imported key chain replaces its certificate with a self-signed one. Do not rotate key chains whose certificate comes from a registrar or an external PKI; import the renewed key and certificate, [request a renewed certificate with a CSR](#request-a-certificate-with-a-csr), or use an external CA chain.
 :::
 
+## Access token key chain
+
+The hosted [authorization servers](../issuance/authorization-servers.md) (built-in, chained and OID4VP) sign their access tokens only with a key chain of usage type `accessToken`, never with the access certificate or a credential signing key. Only EUDIPLO verifies these tokens, with the keys in the authorization server's JWKS (`/.well-known/jwks.json/issuers/{tenant}` for the built-in server), so the key chain needs no certificate from a CA.
+
+An authorization server uses, in this order:
+
+1. The key chain in `token.signingKeyId` of its entry. In the Web Client, choose it as **Access Token Signing Key** of the authorization server in the issuance configuration; the list offers only access token key chains.
+2. The `accessToken` entry of the tenant's key chain defaults. It is set only in a [config folder or bundle](../operate/configuration-as-code.md), as `accessToken` in `key-chain-defaults.json`, for example `{ "accessToken": "my-token-key" }`; the star in the Web Client and `PUT /api/key-chain/access/default` set only the `access` entry.
+3. The tenant's access token key chain created first (by creation time, then ID).
+4. Without any, EUDIPLO creates a standalone key chain with ID `access-token` on the first token request, with the tenant's default KMS provider. Its key in the KMS gets a random name, so tenants that share a KMS never share or delete each other's key. A JWKS requested before that is empty.
+
+A named key chain that does not exist or has another usage type is never replaced by another one:
+
+- Saving an issuance configuration whose `token.signingKeyId` names one answers `400`.
+- A configuration bundle or config folder reports `MISSING_RESOURCE_REFERENCE` for a missing key chain and `KEY_CHAIN_USAGE_MISMATCH` for another usage type, for `token.signingKeyId` and for the `accessToken` entry of the key chain defaults. A `token.signingKeyId` of another usage type that the stored issuance configuration already has gets only a warning, so an unchanged folder still imports; a missing key chain is still reported.
+- A configuration stored before 10.0, which can only name another usage type, fails the token requests of that authorization server with `500` while the backend log names the key chain. Remove the value or choose an access token key chain.
+
+If a key chain with ID `access-token` and another usage type exists, EUDIPLO cannot create its key chain; token requests then fail and the log says so until you create an access token key chain.
+
+The JWKS publishes the active key and, for one access token lifetime of that authorization server after a [rotation](#rotate-keys), the previous key. To replace the key, rotate the key chain with `POST /api/key-chain/{id}/rotate`, or create another access token key chain and choose it; tokens signed with the old key fail once it has left the JWKS.
+
 ## Delete a key chain
 
 `DELETE /api/key-chain/{id}` answers `204` and, where the KMS provider supports it, also deletes the key in the KMS. It answers `409` while a configuration of the tenant names the key chain, because that configuration could no longer sign or publish the key chain's certificate. These fields count:
 
-- an entry of the tenant's key chain defaults, such as `access` ([Default access key chain](#default-access-key-chain)),
-- `signingKeyId` of the issuance configuration, and `token.signingKeyId` of each of its authorization servers,
+- an entry of the tenant's key chain defaults, `access` ([Default access key chain](#default-access-key-chain)) or `accessToken` ([Access token key chain](#access-token-key-chain)),
+- `token.signingKeyId` of each authorization server of the issuance configuration,
 - `keyChainId` of a credential configuration,
 - `accessKeyChainId` of a presentation configuration,
 - `keyChainId` of a status list,
 - `keyChainId` of a [trust list](trust-lists.md), which the key chain signs, and `issuerKeyChainId` or `revocationKeyChainId` of its internal entities. Deleting the signing key chain would also delete the trust list.
 
-A configuration that leaves the field out uses the tenant's default key chain of the usage type and does not count, so a default key chain picked by rule can be deleted; such configurations then use another key chain of that usage type, or fail until one exists. Trust lists are the exception: a trust list created without `keyChainId` stores the trust list key chain picked at creation, so that key chain counts until the trust list is deleted, also when a bundle rewrites the trust list without `keyChainId`.
+A configuration that leaves the field out uses the tenant's default key chain of the usage type and does not count, so a default key chain picked by rule can be deleted; such configurations then use another key chain of that usage type, or fail until one exists. Authorization servers use another access token key chain, or a new `access-token` key chain if none is left ([Access token key chain](#access-token-key-chain)). Trust lists are the exception: a trust list created without `keyChainId` stores the trust list key chain picked at creation, so that key chain counts until the trust list is deleted, also when a bundle rewrites the trust list without `keyChainId`.
 
-The response names the configurations in `message` and lists them in `references`. The tenant's default access key chain is a reference of kind `KeyChainDefaults`, without ID. Configurations the caller's roles cannot read are only counted, without ID and description: the issuance configuration, credential configs and status lists need `issuance:manage`, presentation configs `presentation:manage` or `presentation:request`, and trust lists `issuance:manage` or `presentation:manage`.
+The response names the configurations in `message` and lists them in `references`. An entry of the key chain defaults is a reference of kind `KeyChainDefaults`, without ID. Configurations the caller's roles cannot read are only counted, without ID and description: the issuance configuration, credential configs and status lists need `issuance:manage`, presentation configs `presentation:manage` or `presentation:request`, and trust lists `issuance:manage` or `presentation:manage`.
 
 ```json
 {

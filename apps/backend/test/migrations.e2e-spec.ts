@@ -23,8 +23,9 @@ import { BackfillIssuanceWalletNonce1785300000000 } from "../src/database/migrat
 import { SeparatePresentationWalletReferences1785400000000 } from "../src/database/migrations/1785400000000-SeparatePresentationWalletReferences.js";
 import { AddFederationTrustAnchor1785500000000 } from "../src/database/migrations/1785500000000-AddFederationTrustAnchor.js";
 import { AddDefaultAccessKeyChainIdToTenant1785600000000 } from "../src/database/migrations/1785600000000-AddDefaultAccessKeyChainIdToTenant.js";
-import { MoveDefaultAccessKeyChainIntoDefaultKeyChains1785800000000 } from "../src/database/migrations/1785800000000-MoveDefaultAccessKeyChainIntoDefaultKeyChains.js";
 import { AddStatusUpdatedAtToStatusMapping1785700000000 } from "../src/database/migrations/1785700000000-AddStatusUpdatedAtToStatusMapping.js";
+import { MoveDefaultAccessKeyChainIntoDefaultKeyChains1785800000000 } from "../src/database/migrations/1785800000000-MoveDefaultAccessKeyChainIntoDefaultKeyChains.js";
+import { DropIssuanceSigningKeyId1785900000000 } from "../src/database/migrations/1785900000000-DropIssuanceSigningKeyId.js";
 import { describeWithContainers } from "./container-runtime.js";
 import {
     addTokensValidAfterContract,
@@ -1371,6 +1372,160 @@ describe("Migration tests", () => {
 
             test("adds a nullable column, keeps the rows, is idempotent and reversible", async () => {
                 await expectAddedAndReversible(
+                    dataSource,
+                    driftAfterSynchronize,
+                );
+            });
+        });
+    });
+
+    describe("DropIssuanceSigningKeyId1785900000000", () => {
+        const migration = new DropIssuanceSigningKeyId1785900000000();
+        const table = "issuance_config";
+        const column = "signingKeyId";
+        const servers = [{ type: "built-in", id: "issuer-built-in" }];
+
+        /** Issuance config schema from the entities, plus the 9.x column with a value. */
+        async function issuanceSchemaBefore(
+            options:
+                | { type: "better-sqlite3"; database: string }
+                | { type: "postgres"; url: string },
+        ): Promise<{
+            dataSource: DataSource;
+            driftAfterSynchronize: string[];
+        }> {
+            const [
+                { Session },
+                { SessionLogEntry },
+                { TenantEntity },
+                { ClientEntity },
+                { IssuanceConfig },
+            ] = await Promise.all([
+                import("../src/session/entities/session.entity.js"),
+                import("../src/session/entities/session-log-entry.entity.js"),
+                import("../src/auth/tenant/entities/tenant.entity.js"),
+                import("../src/auth/client/entities/client.entity.js"),
+                import(
+                    "../src/issuer/configuration/issuance/entities/issuance-config.entity.js"
+                ),
+            ]);
+            const dataSource = new DataSource({
+                ...options,
+                entities: [
+                    Session,
+                    SessionLogEntry,
+                    TenantEntity,
+                    ClientEntity,
+                    IssuanceConfig,
+                ],
+                synchronize: true,
+                logging: false,
+            });
+            await dataSource.initialize();
+            const driftAfterSynchronize = await drift(dataSource);
+
+            const queryRunner = dataSource.createQueryRunner();
+            await migration.down(queryRunner);
+            await queryRunner.release();
+            await dataSource.query(
+                `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't')`,
+            );
+            await dataSource.query(
+                `INSERT INTO "${table}" ("tenantId", "authorizationServers", "${column}") VALUES ('t', '${JSON.stringify(servers)}', 'credential-key')`,
+            );
+            return { dataSource, driftAfterSynchronize };
+        }
+
+        const drift = async (dataSource: DataSource) =>
+            (await dataSource.driver.createSchemaBuilder().log()).upQueries
+                .map((query) => query.query)
+                .sort();
+
+        async function expectDroppedAndReversible(
+            dataSource: DataSource,
+            driftAfterSynchronize: string[],
+        ) {
+            const queryRunner = dataSource.createQueryRunner();
+            expect(
+                (await queryRunner.getTable(table))?.findColumnByName(column),
+            ).toBeDefined();
+
+            await migration.up(queryRunner);
+            await migration.up(queryRunner);
+
+            expect(
+                (await queryRunner.getTable(table))?.findColumnByName(column),
+            ).toBeUndefined();
+            // SQLite rebuilds the table; the other columns keep their values.
+            const [row] = await dataSource.query(
+                `SELECT "authorizationServers" FROM "${table}" WHERE "tenantId" = 't'`,
+            );
+            const stored = row.authorizationServers;
+            expect(
+                typeof stored === "string" ? JSON.parse(stored) : stored,
+            ).toEqual(servers);
+            if (dataSource.options.type === "postgres") {
+                expect(await drift(dataSource)).toEqual(driftAfterSynchronize);
+            }
+
+            await migration.down(queryRunner);
+            expect(
+                (await queryRunner.getTable(table))?.findColumnByName(column)
+                    ?.isNullable,
+            ).toBe(true);
+            await queryRunner.release();
+        }
+
+        describe("SQLite", () => {
+            let dataSource: DataSource;
+            let driftAfterSynchronize: string[];
+            let tmpDir: string;
+
+            beforeAll(async () => {
+                tmpDir = mkdtempSync(join(tmpdir(), "eudiplo-migration-test-"));
+                ({ dataSource, driftAfterSynchronize } =
+                    await issuanceSchemaBefore({
+                        type: "better-sqlite3",
+                        database: join(tmpDir, "test.db"),
+                    }));
+            }, 30_000);
+
+            afterAll(async () => {
+                await dataSource?.destroy();
+                if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
+            });
+
+            test("drops the column, keeps the rows, is idempotent and reversible", async () => {
+                await expectDroppedAndReversible(
+                    dataSource,
+                    driftAfterSynchronize,
+                );
+            });
+        });
+
+        describeWithContainers("PostgreSQL", () => {
+            let dataSource: DataSource;
+            let driftAfterSynchronize: string[];
+            let postgresContainer: StartedPostgreSqlContainer;
+
+            beforeAll(async () => {
+                postgresContainer = await new PostgreSqlContainer(
+                    "postgres:alpine",
+                ).start();
+                ({ dataSource, driftAfterSynchronize } =
+                    await issuanceSchemaBefore({
+                        type: "postgres",
+                        url: postgresContainer.getConnectionUri(),
+                    }));
+            }, 60_000);
+
+            afterAll(async () => {
+                await dataSource?.destroy();
+                await postgresContainer?.stop();
+            });
+
+            test("drops the column, keeps the rows, is idempotent and reversible", async () => {
+                await expectDroppedAndReversible(
                     dataSource,
                     driftAfterSynchronize,
                 );

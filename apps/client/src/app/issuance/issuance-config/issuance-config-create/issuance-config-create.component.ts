@@ -437,6 +437,12 @@ export class IssuanceConfigCreateComponent implements OnInit {
   /** IDs of the tenant's key chains with usage type federation; null while unknown. */
   private federationKeyChainIds: string[] | null = null;
 
+  /** The tenant's key chains with usage type accessToken; null while unknown. */
+  accessTokenKeyChains: { id: string; description?: string }[] | null = null;
+
+  /** True when the last request for the key chains failed. */
+  accessTokenKeyChainsLoadFailed = false;
+
   /** True while loadFederationSetup runs. */
   checkingFederationKey = false;
 
@@ -560,15 +566,30 @@ export class IssuanceConfigCreateComponent implements OnInit {
     this.expectedEntityId = tenantId && publicUrl ? entityIdUrl(publicUrl, tenantId) : null;
     // A failed request keeps what is known; without any list, say nothing
     // rather than claim the key is missing.
+    this.accessTokenKeyChainsLoadFailed = !keyChains;
     if (keyChains) {
       this.federationKeyChainIds = keyChains
         .filter((keyChain) => keyChain.usageType === 'federation')
         .map((keyChain) => keyChain.id);
+      this.accessTokenKeyChains = keyChains
+        .filter((keyChain) => keyChain.usageType === 'accessToken')
+        .map(({ id, description }) => ({ id, description }));
     }
     return keyChainsError;
   }
 
   /** Reloads the key chains after the user created a federation key in another tab. */
+  /** Reloads the key chains after the user created an access token key in another tab. */
+  async checkAccessTokenKeysAgain(): Promise<void> {
+    const error = await this.loadFederationSetup();
+    if (error) {
+      openErrorSnackBar(
+        this.snackBar,
+        getApiErrorMessage(error, 'Could not load the access token keys')
+      );
+    }
+  }
+
   async checkFederationKeyAgain(): Promise<void> {
     this.federationKeyCheckMessage = '';
     const error = await this.loadFederationSetup();
@@ -1337,6 +1358,31 @@ export class IssuanceConfigCreateComponent implements OnInit {
     }
 
     this.authorizationServers.setControl(index, this.createAuthorizationServerGroup(nextValue));
+  }
+
+  /**
+   * True when `signingKeyId` names no access token key chain of the tenant, as a value stored
+   * before 10.0 does; the authorization server's token requests then fail. False while unknown.
+   */
+  signingKeyIdInvalid(signingKeyId: string | null | undefined): boolean {
+    return (
+      !!signingKeyId &&
+      !!this.accessTokenKeyChains &&
+      !this.accessTokenKeyChains.some((keyChain) => keyChain.id === signingKeyId)
+    );
+  }
+
+  /** True when `signingKeyId` is set but not among the listed access token key chains. */
+  signingKeyIdUnlisted(signingKeyId: string | null | undefined): boolean {
+    return (
+      !!signingKeyId &&
+      !(this.accessTokenKeyChains ?? []).some((keyChain) => keyChain.id === signingKeyId)
+    );
+  }
+
+  /** Description and ID, as the wizard gives every key the same default description. */
+  accessTokenKeyChainLabel(keyChain: { id: string; description?: string }): string {
+    return keyChain.description ? `${keyChain.description} (${keyChain.id})` : keyChain.id;
   }
 
   accessTokenLifetimeDefault(type: string | undefined): number {

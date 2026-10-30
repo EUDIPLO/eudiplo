@@ -203,6 +203,10 @@ export type DefaultKeyChains = {
      * Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.
      */
     access?: string;
+    /**
+     * Access token key chain (usage type accessToken) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant's oldest access token key chain and creates one with ID access-token when the tenant has none.
+     */
+    accessToken?: string;
 };
 
 export type ClientEntity = {
@@ -1206,7 +1210,7 @@ export type KeyChainResponseDto = {
     /**
      * Usage type of the key chain.
      */
-    usageType: 'access' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
+    usageType: 'access' | 'accessToken' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
     /**
      * Type of key chain (standalone or internalChain).
      */
@@ -1319,7 +1323,7 @@ export type KeyChainExportDto = {
     /**
      * Usage type for this key chain.
      */
-    usageType: 'access' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
+    usageType: 'access' | 'accessToken' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
     /**
      * Key chain type. For internalChain, key and crt are the root CA key and certificate; the import generates a new signing key.
      */
@@ -1368,7 +1372,7 @@ export type KeyChainCreateDto = {
     /**
      * Usage type determines the purpose of this key chain (access, attestation, etc.).
      */
-    usageType: 'access' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
+    usageType: 'access' | 'accessToken' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
     /**
      * Type of key chain to create.
      */
@@ -1506,7 +1510,7 @@ export type KeyChainImportDto = {
     /**
      * Usage type for this key chain.
      */
-    usageType: 'access' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
+    usageType: 'access' | 'accessToken' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
     /**
      * Key chain type. standalone: key is the signing key and crt its chain, leaf first. internalChain: key is a CA key and the last crt entry its CA certificate (created if crt is omitted); a new signing key is generated with a certificate issued by it. Without type, key is a CA key only if rotationPolicy.enabled is true and crt is not a single self-signed certificate that is not a CA. The export writes it.
      */
@@ -2166,7 +2170,7 @@ export type ClaimFieldDefinitionDto = {
 export type KeyChainEntity = {
     /**
      * Unique identifier for the key chain.
-     * This is the ID referenced by other entities (e.g., issuance config's signingKeyId).
+     * This is the ID referenced by other entities (e.g., a credential configuration's keyChainId).
      */
     id: string;
     /**
@@ -2184,7 +2188,7 @@ export type KeyChainEntity = {
     /**
      * The purpose/role of this key chain in the system.
      */
-    usageType: 'access' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
+    usageType: 'access' | 'accessToken' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
     /**
      * The usage type of the keys (sign or encrypt).
      */
@@ -5062,7 +5066,7 @@ export type ChainedAsTokenConfig = {
      */
     lifetimeSeconds?: number;
     /**
-     * Key ID for token signing
+     * ID of a key chain with usage type "accessToken" that signs the issued access tokens. Without it, the tenant's access token key chain signs them.
      */
     signingKeyId?: string;
     /**
@@ -5423,10 +5427,6 @@ export type IssuanceConfig = {
      */
     walletAttestationStatusCheckMode?: 'strict' | 'best_effort' | 'disabled' | null;
     /**
-     * Key ID for signing access tokens. If unset, the default signing key is used.
-     */
-    signingKeyId?: string;
-    /**
      * Dedicated managed authorization servers hosted by this issuer. At least one entry is required.
      */
     authorizationServers: Array<ExternalAuthorizationServerConfig | Oid4VpAuthorizationServerConfig | ChainedAuthorizationServerConfig | BuiltInAuthorizationServerConfig>;
@@ -5505,10 +5505,6 @@ export type UpdateIssuanceDto = {
      * Default status check mode for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled.
      */
     walletAttestationStatusCheckMode?: 'strict' | 'best_effort' | 'disabled' | null;
-    /**
-     * Key ID for signing access tokens. If unset, the default signing key is used.
-     */
-    signingKeyId?: string;
     /**
      * Dedicated managed authorization servers hosted by this issuer. At least one entry is required.
      */
@@ -6587,10 +6583,6 @@ export type IssuanceConfigWritable = {
      */
     walletAttestationStatusCheckMode?: 'strict' | 'best_effort' | 'disabled' | null;
     /**
-     * Key ID for signing access tokens. If unset, the default signing key is used.
-     */
-    signingKeyId?: string;
-    /**
      * Dedicated managed authorization servers hosted by this issuer. At least one entry is required.
      */
     authorizationServers: Array<ExternalAuthorizationServerConfig | Oid4VpAuthorizationServerConfig | ChainedAuthorizationServerConfig | BuiltInAuthorizationServerConfig>;
@@ -6665,10 +6657,6 @@ export type UpdateIssuanceDtoWritable = {
      * Default status check mode for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled.
      */
     walletAttestationStatusCheckMode?: 'strict' | 'best_effort' | 'disabled' | null;
-    /**
-     * Key ID for signing access tokens. If unset, the default signing key is used.
-     */
-    signingKeyId?: string;
     /**
      * Dedicated managed authorization servers hosted by this issuer. At least one entry is required.
      */
@@ -7451,7 +7439,7 @@ export type KeyChainControllerGetAllData = {
         /**
          * Optional usage type filter
          */
-        usageType?: 'access' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
+        usageType?: 'access' | 'accessToken' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
     };
     url: '/api/key-chain';
 };

@@ -73,6 +73,21 @@ describe('KeyManagementShowComponent', () => {
     expect(text).not.toContain('Copy PEM');
   });
 
+  it('shows an access token key as the public key of the authorization servers JWKS', () => {
+    const text = shownWith({
+      usageType: 'accessToken',
+      activePublicKey: { kty: 'EC', crv: 'P-256', kid: 'token-kid' },
+      previousPublicKey: { kty: 'EC', crv: 'P-256', kid: 'old-token-kid' },
+      activeCertificate: certificate,
+    } as Partial<KeyChainResponseDto>);
+    expect(text).toContain('token-kid');
+    expect(text).toContain('JWKS of the authorization servers');
+    expect(text).toContain('Access tokens do not use it');
+    expect(text).toContain('Published for one access token lifetime after the rotation');
+    expect(text).not.toContain('Active Certificate');
+    expect(text).not.toContain('Request Certificate from External CA');
+  });
+
   it('shows the previous public key of a rotated federation key without its certificate', () => {
     const text = shownWith({
       usageType: 'federation',
@@ -864,6 +879,7 @@ describe('KeyManagementShowComponent certificate request', () => {
     { type: 'internalChain', usageType: 'attestation' },
     { type: 'standalone', usageType: 'encrypt' },
     { type: 'standalone', usageType: 'federation' },
+    { type: 'standalone', usageType: 'accessToken' },
   ] as Partial<KeyChainResponseDto>[])('does not offer it for %o', (keyChain) => {
     expect(create(keyChain).offersCertificateRequest).toBe(false);
   });

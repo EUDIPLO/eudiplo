@@ -554,17 +554,108 @@
                                     seconds</mat-hint
                                   >
                                 </mat-form-field>
-                                <mat-form-field fxFlex>
-                                  <mat-label>Signing Key ID (optional)</mat-label>
-                                  <input
-                                    (keydown.enter)="onInputEnter($event)"
-                                    matInput
+                                <mat-form-field fxFlex subscriptSizing="dynamic">
+                                  <mat-label>Access Token Signing Key</mat-label>
+                                  <mat-select
                                     id="managed-auth-server-signing-key-{{ i }}"
                                     formControlName="signingKeyId"
-                                    placeholder="Leave empty for default"
-                                  />
+                                  >
+                                    <mat-option value="">The tenant's access token key</mat-option>
+                                    @for (
+                                      keyChain of accessTokenKeyChains ?? [];
+                                      track keyChain.id
+                                    ) {
+                                      <mat-option [value]="keyChain.id">
+                                        {{ accessTokenKeyChainLabel(keyChain) }}
+                                      </mat-option>
+                                    }
+                                    @if (
+                                      signingKeyIdUnlisted(server.get('token.signingKeyId')?.value)
+                                    ) {
+                                      <!-- A stored value stays visible while the list is unknown or lacks it. -->
+                                      <mat-option [value]="server.get('token.signingKeyId')?.value">
+                                        {{ server.get('token.signingKeyId')?.value }}
+                                        @if (
+                                          signingKeyIdInvalid(
+                                            server.get('token.signingKeyId')?.value
+                                          )
+                                        ) {
+                                          (not usable)
+                                        }
+                                      </mat-option>
+                                    }
+                                  </mat-select>
+                                  <mat-hint
+                                    >Signs this server's access tokens; only Access Token Signing
+                                    keys qualify.</mat-hint
+                                  >
                                 </mat-form-field>
                               </div>
+
+                              @if (
+                                signingKeyIdInvalid(server.get('token.signingKeyId')?.value) ||
+                                accessTokenKeyChainsLoadFailed ||
+                                accessTokenKeyChains?.length === 0
+                              ) {
+                                <div
+                                  class="access-token-key-notice"
+                                  fxLayout="column"
+                                  fxLayoutGap="8px"
+                                >
+                                  <p class="section-hint">
+                                    <mat-icon>{{
+                                      signingKeyIdInvalid(server.get('token.signingKeyId')?.value)
+                                        ? 'warning'
+                                        : 'info'
+                                    }}</mat-icon>
+                                    @if (
+                                      signingKeyIdInvalid(server.get('token.signingKeyId')?.value)
+                                    ) {
+                                      <span
+                                        >The chosen key chain does not exist or is not an Access
+                                        Token Signing key, so this server's token requests fail.
+                                        Choose another key, or
+                                        <a
+                                          routerLink="/keys/create"
+                                          [queryParams]="{ usage: 'accessToken' }"
+                                          target="_blank"
+                                          rel="noopener"
+                                          >create one (opens in a new tab)</a
+                                        >, then check again.</span
+                                      >
+                                    } @else if (accessTokenKeyChainsLoadFailed) {
+                                      <span
+                                        >The key chains could not be loaded, so the list may be
+                                        incomplete.</span
+                                      >
+                                    } @else {
+                                      <span
+                                        >No Access Token Signing key exists yet; EUDIPLO creates one
+                                        on the first token request. To use your own,
+                                        <a
+                                          routerLink="/keys/create"
+                                          [queryParams]="{ usage: 'accessToken' }"
+                                          target="_blank"
+                                          rel="noopener"
+                                          >create one (opens in a new tab)</a
+                                        >, then check again.</span
+                                      >
+                                    }
+                                  </p>
+                                  <div fxLayout="row" fxLayoutAlign="start center">
+                                    <button
+                                      mat-stroked-button
+                                      type="button"
+                                      (click)="checkAccessTokenKeysAgain()"
+                                      [disabled]="checkingFederationKey"
+                                      disabledInteractive
+                                    >
+                                      <mat-icon>refresh</mat-icon>
+                                      Check again
+                                    </button>
+                                  </div>
+                                </div>
+                              }
 
                               <div formGroupName="token" fxLayout="column" fxLayoutGap="16px">
                                 <mat-slide-toggle formControlName="refreshTokenEnabled">

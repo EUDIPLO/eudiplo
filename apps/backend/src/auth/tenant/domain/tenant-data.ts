@@ -4,14 +4,15 @@ import type { ClientData } from "../../client/domain/client-data.js";
 
 /**
  * The tenant's key chain per usage type, used where no configuration names
- * one. Only `access` exists so far.
+ * one.
  */
 export interface DefaultKeyChains {
     access?: string;
+    accessToken?: string;
 }
 
 /** The usage types `defaultKeyChains` has an entry for. */
-export const DEFAULT_KEY_CHAIN_ENTRIES = ["access"] as const;
+export const DEFAULT_KEY_CHAIN_ENTRIES = ["access", "accessToken"] as const;
 
 /** The map, or null when it names no key chain. */
 export function defaultKeyChainsOrNull(

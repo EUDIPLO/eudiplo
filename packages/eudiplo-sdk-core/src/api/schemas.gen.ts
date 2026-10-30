@@ -364,6 +364,10 @@ export const DefaultKeyChainsSchema = {
         access: {
             type: 'string',
             description: 'Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant\'s access key chains by rule.'
+        },
+        accessToken: {
+            type: 'string',
+            description: 'Access token key chain (usage type accessToken) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant\'s oldest access token key chain and creates one with ID access-token when the tenant has none.'
         }
     }
 } as const;
@@ -3004,6 +3008,7 @@ export const KeyChainResponseDtoSchema = {
         usageType: {
             enum: [
                 'access',
+                'accessToken',
                 'attestation',
                 'trustList',
                 'statusList',
@@ -3193,6 +3198,7 @@ export const KeyChainExportDtoSchema = {
         usageType: {
             enum: [
                 'access',
+                'accessToken',
                 'attestation',
                 'trustList',
                 'statusList',
@@ -3296,6 +3302,7 @@ export const KeyChainCreateDtoSchema = {
             type: 'string',
             enum: [
                 'access',
+                'accessToken',
                 'attestation',
                 'trustList',
                 'statusList',
@@ -3512,6 +3519,7 @@ export const KeyChainImportDtoSchema = {
             type: 'string',
             enum: [
                 'access',
+                'accessToken',
                 'attestation',
                 'trustList',
                 'statusList',
@@ -5130,7 +5138,7 @@ export const KeyChainEntitySchema = {
     properties: {
         id: {
             type: 'string',
-            description: 'Unique identifier for the key chain.\nThis is the ID referenced by other entities (e.g., issuance config\'s signingKeyId).'
+            description: 'Unique identifier for the key chain.\nThis is the ID referenced by other entities (e.g., a credential configuration\'s keyChainId).'
         },
         tenantId: {
             type: 'string',
@@ -5153,6 +5161,7 @@ export const KeyChainEntitySchema = {
             description: 'The purpose/role of this key chain in the system.',
             enum: [
                 'access',
+                'accessToken',
                 'attestation',
                 'trustList',
                 'statusList',
@@ -11011,7 +11020,7 @@ export const ChainedAsTokenConfigSchema = {
         },
         signingKeyId: {
             type: 'string',
-            description: 'Key ID for token signing'
+            description: 'ID of a key chain with usage type "accessToken" that signs the issued access tokens. Without it, the tenant\'s access token key chain signs them.'
         },
         refreshTokenEnabled: {
             type: 'boolean',
@@ -11763,10 +11772,6 @@ export const IssuanceConfigSchema = {
                 'null'
             ]
         },
-        signingKeyId: {
-            type: 'string',
-            description: 'Key ID for signing access tokens. If unset, the default signing key is used.'
-        },
         authorizationServers: {
             type: 'array',
             description: 'Dedicated managed authorization servers hosted by this issuer. At least one entry is required.',
@@ -11929,10 +11934,6 @@ export const UpdateIssuanceDtoSchema = {
                 'string',
                 'null'
             ]
-        },
-        signingKeyId: {
-            type: 'string',
-            description: 'Key ID for signing access tokens. If unset, the default signing key is used.'
         },
         authorizationServers: {
             type: 'array',
@@ -13918,10 +13919,6 @@ export const IssuanceConfigWritableSchema = {
                 'null'
             ]
         },
-        signingKeyId: {
-            type: 'string',
-            description: 'Key ID for signing access tokens. If unset, the default signing key is used.'
-        },
         authorizationServers: {
             type: 'array',
             description: 'Dedicated managed authorization servers hosted by this issuer. At least one entry is required.',
@@ -14072,10 +14069,6 @@ export const UpdateIssuanceDtoWritableSchema = {
                 'string',
                 'null'
             ]
-        },
-        signingKeyId: {
-            type: 'string',
-            description: 'Key ID for signing access tokens. If unset, the default signing key is used.'
         },
         authorizationServers: {
             type: 'array',

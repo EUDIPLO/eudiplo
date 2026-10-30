@@ -84,7 +84,9 @@ export class KeyChainSigningService {
         const jwtHeader = {
             ...compatibleHeader,
             alg: ref.alg,
-            kid: keyChain.activeJwk.kid,
+            // The key chain ID for a key without kid, as the access token
+            // JWKS publishes it.
+            kid: keyChain.activeJwk.kid ?? keyChain.id,
         };
 
         const headerB64 = base64url(JSON.stringify(jwtHeader));
@@ -190,11 +192,6 @@ export class KeyChainSigningService {
             ? await this.getKeyChain(tenantId, keyId)
             : await this.getFirstKeyChain(tenantId);
         return signingAlgForJwk(keyChain.activeJwk);
-    }
-
-    async getKid(tenantId: string): Promise<string> {
-        const keyChain = await this.getFirstKeyChain(tenantId);
-        return keyChain.id;
     }
 
     private async getKeyChain(

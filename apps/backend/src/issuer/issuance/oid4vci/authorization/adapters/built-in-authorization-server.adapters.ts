@@ -1,5 +1,6 @@
 import { type Jwk, Oauth2AuthorizationServer } from "@openid4vc/oauth2";
 import type { CryptoService } from "../../../../../crypto/crypto.service.js";
+import { toPublicJwk } from "../../../../../crypto/key/domain/public-jwk.js";
 import type { KeyChainService } from "../../../../../crypto/key/key-chain.service.js";
 import type { SessionConfigService } from "../../../../../session/session-config.service.js";
 import type {
@@ -86,15 +87,14 @@ export class WalletAttestationClientVerifier
 export class KeyChainAccessTokenSigningKeys implements AccessTokenSigningKeys {
     constructor(private readonly keyChain: KeyChainService) {}
 
-    defaultKeyId(tenantId: string) {
-        return this.keyChain.getKid(tenantId);
-    }
-
-    async publicJwk(tenantId: string, keyId: string) {
-        return (await this.keyChain.getPublicKey(
-            "jwk",
+    async resolve(tenantId: string, keyId?: string) {
+        const keyChain = await this.keyChain.resolveAccessTokenKeyChain(
             tenantId,
             keyId,
-        )) as Jwk;
+        );
+        return {
+            keyId: keyChain.id,
+            publicJwk: toPublicJwk(keyChain.activeJwk) as Jwk,
+        };
     }
 }

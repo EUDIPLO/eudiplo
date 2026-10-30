@@ -235,18 +235,25 @@
       </mat-card>
     }
 
-    @if (isFederationKey) {
-      <!-- Public Key: OpenID Federation publishes the JWK, not a certificate -->
+    @if (publishesJwk) {
+      <!-- Public Key: OpenID Federation and the authorization servers' JWKS publish the JWK, not a certificate -->
       <mat-card class="federation-public-key">
         <mat-card-header>
           <mat-card-title>
             <mat-icon class="title-icon">public</mat-icon>
             Public Key
           </mat-card-title>
-          <mat-card-subtitle
-            >Published in the jwks of your entity configuration. Your trust anchor or intermediate
-            lists it in the subordinate statement about your entity.</mat-card-subtitle
-          >
+          @if (isAccessTokenKey) {
+            <mat-card-subtitle
+              >Published in the JWKS of the authorization servers that sign access tokens with this
+              key.</mat-card-subtitle
+            >
+          } @else {
+            <mat-card-subtitle
+              >Published in the jwks of your entity configuration. Your trust anchor or intermediate
+              lists it in the subordinate statement about your entity.</mat-card-subtitle
+            >
+          }
         </mat-card-header>
         <mat-card-content>
           <mat-list class="config-list">
@@ -261,8 +268,8 @@
           </div>
           @if (keyChain.activeCertificate) {
             <p class="unused-certificate-note">
-              EUDIPLO also keeps a self-signed certificate for this key. OpenID Federation does not
-              use it.
+              EUDIPLO also keeps a self-signed certificate for this key.
+              {{ isAccessTokenKey ? 'Access tokens do not' : 'OpenID Federation does not' }} use it.
             </p>
           }
           <div class="cert-actions" fxLayout="row" fxLayoutGap="8px">
@@ -281,7 +288,11 @@
               <mat-icon class="title-icon">history</mat-icon>
               Previous Public Key (Grace Period)
             </mat-card-title>
-            @if (keyChain.previousKeyExpiry) {
+            @if (isAccessTokenKey) {
+              <mat-card-subtitle>
+                Published for one access token lifetime after the rotation.
+              </mat-card-subtitle>
+            } @else if (keyChain.previousKeyExpiry) {
               <mat-card-subtitle>
                 Expires: {{ formatDate(keyChain.previousKeyExpiry) }}
               </mat-card-subtitle>
@@ -391,7 +402,7 @@
     }
 
     <!-- Previous Certificate (if in grace period) -->
-    @if (!isFederationKey && hasPreviousKey() && keyChain.previousCertificate) {
+    @if (!publishesJwk && hasPreviousKey() && keyChain.previousCertificate) {
       <mat-card>
         <mat-card-header>
           <mat-card-title>

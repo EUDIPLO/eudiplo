@@ -18,7 +18,9 @@ const ChainedAsTokenConfigSchema = z
             .string()
             .min(1)
             .optional()
-            .describe("Optional key chain id used to sign issued tokens."),
+            .describe(
+                'ID of a key chain with usage type "accessToken" that signs the issued access tokens. Without it, the tenant\'s access token key chain signs them.',
+            ),
         refreshTokenEnabled: z
             .boolean()
             .optional()
@@ -518,11 +520,6 @@ export const IssuanceConfigSchema = z
             .describe(
                 "Default status check mode for wallet attestations at managed authorization servers: strict, best_effort (default) or disabled.",
             ),
-        signingKeyId: z
-            .string()
-            .min(1)
-            .optional()
-            .describe("Default signing key chain id for credential issuance."),
         authorizationServers: z
             .array(ManagedAuthorizationServerSchema)
             .min(1)

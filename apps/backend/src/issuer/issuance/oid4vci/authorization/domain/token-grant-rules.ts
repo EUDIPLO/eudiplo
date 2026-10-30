@@ -13,6 +13,17 @@ export const TX_CODE_LOCKED_DESCRIPTION =
 /** Default lifetime of access tokens of the built-in authorization server: five minutes. */
 const ACCESS_TOKEN_LIFETIME_SECONDS = 300;
 
+/**
+ * Access token lifetime of a chained or OID4VP authorization server:
+ * `token.lifetimeSeconds`, else one hour. Signing and the JWKS window for the
+ * previous key after a rotation both use it.
+ */
+export function hostedAccessTokenLifetimeSeconds(
+    token: AuthorizationServerTokenSettings | null | undefined,
+): number {
+    return token?.lifetimeSeconds || 3600;
+}
+
 /** Default lifetime of refresh tokens of every hosted authorization server: 30 days. */
 export const DEFAULT_REFRESH_TOKEN_LIFETIME_SECONDS = 2592000;
 
@@ -39,7 +50,6 @@ interface ConfiguredAuthorizationServer
 
 interface IssuanceAuthorizationSettings {
     authorizationServers?: ConfiguredAuthorizationServer[] | null;
-    signingKeyId?: string | null;
     dPopRequired?: boolean | null;
 }
 
@@ -126,7 +136,9 @@ export function findBuiltInAuthorizationServer(
 /** Access token settings of the built-in authorization server. */
 export interface BuiltInAccessTokenSettings {
     lifetimeSeconds: number;
-    /** Key chain id; `undefined` selects the tenant's default key. */
+    /**
+     * Key chain id; `undefined` selects the tenant's access token key chain.
+     */
     signingKeyId?: string;
     /** DPoP at the token endpoint: issuance `dPopRequired` or the entry's `requireDPoP`. */
     dpopRequired: boolean;
@@ -134,8 +146,8 @@ export interface BuiltInAccessTokenSettings {
 
 /**
  * Access token settings of the built-in authorization server. The signing key
- * is the entry's `token.signingKeyId`, then the issuance `signingKeyId`, then
- * the tenant default.
+ * is the entry's `token.signingKeyId`, else the tenant's access token key
+ * chain; the issuance `signingKeyId` signs credentials, never access tokens.
  */
 export function builtInAccessTokenSettings(
     issuanceConfig: IssuanceAuthorizationSettings,
@@ -144,10 +156,7 @@ export function builtInAccessTokenSettings(
     return {
         lifetimeSeconds:
             server?.token?.lifetimeSeconds ?? ACCESS_TOKEN_LIFETIME_SECONDS,
-        signingKeyId:
-            server?.token?.signingKeyId ||
-            issuanceConfig.signingKeyId ||
-            undefined,
+        signingKeyId: server?.token?.signingKeyId || undefined,
         dpopRequired: !!issuanceConfig.dPopRequired || !!server?.requireDPoP,
     };
 }

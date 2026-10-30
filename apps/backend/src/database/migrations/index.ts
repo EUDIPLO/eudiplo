@@ -70,3 +70,4 @@ export { AddFederationTrustAnchor1785500000000 } from "./1785500000000-AddFedera
 export { AddDefaultAccessKeyChainIdToTenant1785600000000 } from "./1785600000000-AddDefaultAccessKeyChainIdToTenant.js";
 export { AddStatusUpdatedAtToStatusMapping1785700000000 } from "./1785700000000-AddStatusUpdatedAtToStatusMapping.js";
 export { MoveDefaultAccessKeyChainIntoDefaultKeyChains1785800000000 } from "./1785800000000-MoveDefaultAccessKeyChainIntoDefaultKeyChains.js";
+export { DropIssuanceSigningKeyId1785900000000 } from "./1785900000000-DropIssuanceSigningKeyId.js";

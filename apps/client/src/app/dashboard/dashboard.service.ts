@@ -759,8 +759,10 @@ export class DashboardService {
         this.kmsProviders = data;
         break;
       case 'keyChains':
+        // EUDIPLO creates the encryption and access token key chains itself; they sign no
+        // credentials or presentations, so they do not complete the "create a key chain" step.
         this.totalKeyChains = data.keyChains.filter(
-          (kc: KeyChainResponseDto) => kc.usageType !== 'encrypt'
+          (kc: KeyChainResponseDto) => kc.usageType !== 'encrypt' && kc.usageType !== 'accessToken'
         ).length;
         this.applyAccessCertificateHealth(
           data.keyChains.filter((kc: KeyChainResponseDto) => kc.usageType === 'access'),

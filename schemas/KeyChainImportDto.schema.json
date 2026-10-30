@@ -61,6 +61,7 @@
       "type": "string",
       "enum": [
         "access",
+        "accessToken",
         "attestation",
         "trustList",
         "statusList",

@@ -622,7 +622,7 @@ export async function setupIssuanceTestApp({
         })
         .expect(201);
 
-    // Create access key chain for access tokens
+    // Create the access key chain (the access certificate)
     await request(app.getHttpServer())
         .post("/key-chain/import")
         .set("Authorization", `Bearer ${authToken}`)

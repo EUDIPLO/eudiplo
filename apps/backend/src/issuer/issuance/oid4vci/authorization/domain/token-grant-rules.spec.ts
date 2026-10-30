@@ -226,7 +226,7 @@ describe("resolveRefreshTokenPolicy", () => {
 });
 
 describe("builtInAccessTokenSettings", () => {
-    it("defaults to five minutes, the default key and no DPoP", () => {
+    it("defaults to five minutes, the access token key chain and no DPoP", () => {
         expect(builtInAccessTokenSettings({})).toEqual({
             lifetimeSeconds: 300,
             signingKeyId: undefined,
@@ -237,7 +237,6 @@ describe("builtInAccessTokenSettings", () => {
     it("uses the token settings and requireDPoP of the built-in server", () => {
         expect(
             builtInAccessTokenSettings({
-                signingKeyId: "issuance-key",
                 authorizationServers: [
                     {
                         type: "built-in",
@@ -256,10 +255,9 @@ describe("builtInAccessTokenSettings", () => {
         });
     });
 
-    it("falls back to the issuance signing key and dPopRequired", () => {
+    it("ignores the keys of other servers and falls back to dPopRequired", () => {
         expect(
             builtInAccessTokenSettings({
-                signingKeyId: "issuance-key",
                 dPopRequired: true,
                 authorizationServers: [
                     {
@@ -272,7 +270,7 @@ describe("builtInAccessTokenSettings", () => {
             }),
         ).toEqual({
             lifetimeSeconds: 300,
-            signingKeyId: "issuance-key",
+            signingKeyId: undefined,
             dpopRequired: true,
         });
     });

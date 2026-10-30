@@ -82,18 +82,16 @@ export class Oid4vciSdkFactory {
         const issuanceConfig = await this.issuanceService
             .getIssuanceConfiguration(tenantId)
             .catch(() => null);
-        const signingKeyId =
-            (issuanceConfig &&
-                builtInAccessTokenSettings(issuanceConfig).signingKeyId) ||
-            (await this.cryptoService.keyChainService.getKid(tenantId));
-        const publicJwk = await this.cryptoService.keyChainService.getPublicKey(
-            "jwk",
-            tenantId,
-            signingKeyId,
+        const { signingKeyId, lifetimeSeconds } = builtInAccessTokenSettings(
+            issuanceConfig ?? {},
         );
+        const keys =
+            await this.cryptoService.keyChainService.getAccessTokenVerificationKeys(
+                tenantId,
+                signingKeyId,
+                lifetimeSeconds,
+            );
 
-        return {
-            keys: [{ ...publicJwk, kid: publicJwk.kid ?? signingKeyId } as Jwk],
-        };
+        return { keys: keys as Jwk[] };
     }
 }

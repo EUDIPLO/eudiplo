@@ -43,7 +43,7 @@ Entries of the types `built-in`, `chained` and `oid4vp` accept:
 | Field | Default | Description |
 | --- | --- | --- |
 | `token.lifetimeSeconds` | `300` (built-in), `3600` (chained, OID4VP) | Access token lifetime, minimum 60. |
-| `token.signingKeyId` | Tenant default key | Key chain that signs access tokens. The built-in server falls back to the issuance configuration's `signingKeyId` first. |
+| `token.signingKeyId` | The tenant's [access token key chain](../trust/keys-and-certificates.md#access-token-key-chain) | Key chain with usage type `accessToken` that signs the entry's access tokens and is published in its JWKS. Saving a configuration that names a key chain of another usage type answers `400`. |
 | `token.refreshTokenEnabled` | `true` | See [Refresh tokens](#refresh-tokens). |
 | `token.refreshTokenExpiresInSeconds` | `2592000` (30 days) | Minimum 60. |
 | `requireDPoP` | `false` | See [DPoP](#dpop). |

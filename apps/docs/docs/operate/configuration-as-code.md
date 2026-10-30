@@ -34,9 +34,10 @@ A detached resource has the ownership `detached` and stays detached while you
 edit it. The startup import skips it with the warning `RESOURCE_DETACHED`, and
 the rest of the tenant is still imported. This also holds for the tenant
 settings in `info.json` (resource `Tenant/tenant`), such as the session and
-status list settings; the log names it as `Tenant 'tenant'`. The default access
-key chain is a resource of its own, `KeyChainDefaults/defaults` in
-`key-chain-defaults.json`, so it is detached and reattached apart from them.
+status list settings; the log names it as `Tenant 'tenant'`. The default key
+chains (`access` and `accessToken`) are a resource of their own,
+`KeyChainDefaults/defaults` in `key-chain-defaults.json`, so they are detached
+and reattached apart from them.
 
 To discard your edits and return to the file version, reattach the resource. Plan
 first, review the changes, then apply with the plan's fingerprint:

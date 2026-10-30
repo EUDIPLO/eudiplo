@@ -40,7 +40,7 @@ import { JwtService } from '../../services/jwt.service';
 import { focusIfFocusWasLost } from '../../common/focus-if-lost.util';
 
 export type KeyUsageSelection =
-  'attestation' | 'statusList' | 'access' | 'trustList' | 'federation';
+  'attestation' | 'statusList' | 'access' | 'accessToken' | 'trustList' | 'federation';
 export type KeyChainTypeSelection = 'internalChain' | 'externalCaChain' | 'standalone';
 export type AccessSourceSelection = 'selfSigned' | 'registrar' | 'external';
 export type SigningAlgorithm = NonNullable<KeyChainCreateDto['alg']>;
@@ -151,6 +151,14 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       icon: 'badge',
       description: 'Prove your identity as an issuer/verifier to EUDI wallets.',
       hint: 'Self-signed for development or obtained through registrar enrollment',
+    },
+    {
+      value: 'accessToken' as KeyUsageSelection,
+      label: 'Access Token Signing',
+      icon: 'key',
+      description:
+        'Create a key that signs the OAuth access tokens of your authorization servers. EUDIPLO creates one when the tenant has none.',
+      hint: 'Choose it as the signing key of an authorization server; no certificate is involved',
     },
     {
       value: 'trustList' as KeyUsageSelection,
@@ -501,8 +509,9 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       this.isExternalCaChain ||
       (!!this.selectedUsage &&
         this.selectedUsage !== 'access' &&
-        // A federation key is published as a JWK; it needs no certificate.
+        // Federation and access token keys are published as JWKs; they need no certificate.
         this.selectedUsage !== 'federation' &&
+        this.selectedUsage !== 'accessToken' &&
         !this.isInternalChain &&
         this.configForm.value.useExternalCertificate)
     );
@@ -802,6 +811,12 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
         .subscribe(() => {
           this.router.navigate(['/trust-list']);
         });
+    } else if (usage === 'accessToken') {
+      this.snackBar.open(
+        'Access token key created! Choose it as the signing key of an authorization server in the issuance configuration.',
+        'Close',
+        { duration: 5000 }
+      );
     } else if (usage === 'federation') {
       this.snackBar.open(
         'Federation key created! Your trust anchor needs its public key for the subordinate statement.',
@@ -822,6 +837,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
     if (usage === 'attestation') return 'Credential Signing Key';
     if (usage === 'access') return 'Access Certificate';
     if (usage === 'federation') return 'OpenID Federation Entity Key';
+    if (usage === 'accessToken') return 'Access Token Signing Key';
     return 'Key';
   }
 
@@ -910,7 +926,9 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   }
 
   private getKeyTypeLabel(): string {
-    if (this.selectedUsage === 'federation') return 'Standalone key (published as JWK)';
+    if (this.selectedUsage === 'federation' || this.selectedUsage === 'accessToken') {
+      return 'Standalone key (published as JWK)';
+    }
     if (this.requestsCertificate) return 'Standalone (Certificate requested with a CSR)';
     return this.isExternalCertificate
       ? 'Standalone (External Certificate)'

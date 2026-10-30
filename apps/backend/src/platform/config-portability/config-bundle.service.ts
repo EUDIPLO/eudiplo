@@ -31,6 +31,7 @@ import {
     type KeyChainConfigurationChange,
     KeyChainReferences,
 } from "../../crypto/key/application/key-chain-references.js";
+import { accessTokenKeyChainUsageRefusal } from "../../crypto/key/domain/access-token-keys.js";
 import { defaultKeyChainUsageRefusal } from "../../crypto/key/domain/default-access-key-chain.js";
 import {
     describeKeyChainReferences,
@@ -1345,23 +1346,10 @@ export class ConfigBundleService {
                 });
                 continue;
             }
-            const bundled = documents.find(
-                (document) =>
-                    document.kind === "KeyChain" &&
-                    resourceId(document) === keyChainId,
-            );
-            const usageType = bundled
-                ? (bundled.spec as { usageType?: unknown }).usageType
-                : (
-                      await this.keyChains.findOne({
-                          where: { tenantId, id: keyChainId },
-                          select: { id: true, usageType: true },
-                      })
-                  )?.usageType;
             const refusal = defaultKeyChainUsageRefusal(
                 entry,
                 keyChainId,
-                usageType,
+                await this.keyChainUsageType(tenantId, documents, keyChainId),
             );
             if (refusal) {
                 issues.push({
@@ -1374,6 +1362,97 @@ export class ConfigBundleService {
             }
         }
         return issues;
+    }
+
+    /**
+     * The `token.signingKeyId` of each authorization server must name a key
+     * chain with usage type `accessToken`, else its token requests fail
+     * after the import. A missing key chain is reported as a missing
+     * reference. Like the API, the plan does not refuse a value the stored
+     * configuration already has, so an unchanged folder from before the
+     * check does not block the tenant's import; it warns instead, as that
+     * authorization server's token requests fail.
+     */
+    private async checkAccessTokenSigningKeys(
+        tenantId: string,
+        documents: ConfigDocument[],
+        availableKeyChains: Set<string> | undefined,
+    ): Promise<ConfigMigrationIssue[]> {
+        const issues: ConfigMigrationIssue[] = [];
+        for (const document of documents) {
+            if (document.kind !== "IssuanceConfig") continue;
+            const servers = (document.spec as Record<string, unknown>)
+                ?.authorizationServers;
+            if (!Array.isArray(servers)) continue;
+            const stored = new Map(
+                (
+                    ((await this.issuanceConfigs.findOne({
+                        where: { tenantId },
+                        select: { tenantId: true, authorizationServers: true },
+                    })) ?? { authorizationServers: [] }) as {
+                        authorizationServers?: Array<{
+                            id?: string;
+                            token?: { signingKeyId?: string };
+                        }>;
+                    }
+                ).authorizationServers?.map((server) => [
+                    server?.id,
+                    server?.token?.signingKeyId,
+                ]) ?? [],
+            );
+            for (const [index, server] of servers.entries()) {
+                const keyChainId = server?.token?.signingKeyId;
+                if (
+                    typeof keyChainId !== "string" ||
+                    !availableKeyChains?.has(keyChainId)
+                )
+                    continue;
+                const refusal = accessTokenKeyChainUsageRefusal(
+                    keyChainId,
+                    await this.keyChainUsageType(
+                        tenantId,
+                        documents,
+                        keyChainId,
+                    ),
+                );
+                if (refusal) {
+                    // A stored value does not block the import, but its
+                    // token requests fail until it is changed.
+                    const unchanged = stored.get(server?.id) === keyChainId;
+                    issues.push({
+                        severity: unchanged ? "warning" : "error",
+                        code: "KEY_CHAIN_USAGE_MISMATCH",
+                        path: `/spec/authorizationServers/${index}/token/signingKeyId`,
+                        message: refusal,
+                        resource: {
+                            kind: document.kind,
+                            id: resourceId(document),
+                        },
+                    });
+                }
+            }
+        }
+        return issues;
+    }
+
+    /** Usage type of a key chain of the bundle, else of the tenant. */
+    private async keyChainUsageType(
+        tenantId: string,
+        documents: ConfigDocument[],
+        keyChainId: string,
+    ): Promise<unknown> {
+        const bundled = documents.find(
+            (document) =>
+                document.kind === "KeyChain" &&
+                resourceId(document) === keyChainId,
+        );
+        if (bundled) return (bundled.spec as { usageType?: unknown }).usageType;
+        return (
+            await this.keyChains.findOne({
+                where: { tenantId, id: keyChainId },
+                select: { id: true, usageType: true },
+            })
+        )?.usageType;
     }
 
     private async validateReferences(
@@ -1543,6 +1622,11 @@ export class ConfigBundleService {
                 documents,
                 available.get("KeyChain"),
             )),
+            ...(await this.checkAccessTokenSigningKeys(
+                tenantId,
+                documents,
+                available.get("KeyChain"),
+            )),
         );
 
         const includesKmsConfig = documents.some(
@@ -1656,7 +1740,6 @@ export class ConfigBundleService {
                     // The schema accepts null, and applying null clears it.
                     walletAttestationStatusCheckMode:
                         entity.walletAttestationStatusCheckMode,
-                    signingKeyId: entity.signingKeyId ?? undefined,
                     // Removed authorization server options are not exported.
                     authorizationServers: Array.isArray(
                         entity.authorizationServers,

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eudiplo.dev/schemas/v2/KeyChainDefaultsConfigFile.schema.json",
+  "title": "KeyChainDefaultsConfigFile",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "https://eudiplo.dev/schemas/v2/KeyChainDefaultsConfigFile.schema.json"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "ownership": {
+          "type": "string",
+          "enum": [
+            "unmanaged",
+            "file-managed"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "access": {
+          "description": "ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.",
+          "type": "string",
+          "minLength": 1
+        },
+        "accessToken": {
+          "description": "ID of the access token key chain (usage type accessToken) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant's oldest access token key chain and creates one with ID access-token when the tenant has none.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false,
+      "description": "The tenant's key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule."
+    }
+  },
+  "required": [
+    "$schema",
+    "metadata",
+    "spec"
+  ],
+  "additionalProperties": false
+}

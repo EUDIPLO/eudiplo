@@ -9,11 +9,11 @@ export const CONFIG_FORMATS = {
     Tenant: { slug: "tenant", file: "TenantConfigFile", version: 4 },
     Client: { slug: "client", file: "ClientConfigFile", version: 2 },
     KmsConfig: { slug: "kms-config", file: "KmsConfigFile", version: 2 },
-    KeyChain: { slug: "key-chain", file: "KeyChainConfigFile", version: 3 },
+    KeyChain: { slug: "key-chain", file: "KeyChainConfigFile", version: 4 },
     KeyChainDefaults: {
         slug: "key-chain-defaults",
         file: "KeyChainDefaultsConfigFile",
-        version: 1,
+        version: 2,
     },
     RegistrarConfig: {
         slug: "registrar-config",
@@ -23,7 +23,7 @@ export const CONFIG_FORMATS = {
     IssuanceConfig: {
         slug: "issuance-config",
         file: "IssuanceConfigFile",
-        version: 5,
+        version: 6,
     },
     CredentialConfig: {
         slug: "credential-config",
@@ -106,10 +106,11 @@ export function resourceId(input: ConfigFile<unknown>): string {
  * The format version a bare file (a spec without envelope) is read as: v1,
  * except a key chain with `type`, which KeyChain v2 added and which the bare
  * key chain export writes (v3 for usage type `federation`, which KeyChain v3
- * added), and a KMS configuration with a provider that sets
+ * added, v4 for `accessToken`, which KeyChain v4 added), and a KMS configuration with a provider that sets
  * `algorithms` or `defaultAlgorithm`, which KmsConfig v2 added and which the
  * tenant `kms.json` is saved as, a registrar configuration with
- * `relyingPartyContact`, which RegistrarConfig v2 added, and a tenant
+ * `relyingPartyContact`, which RegistrarConfig v2 added, key chain defaults
+ * with `accessToken`, which KeyChainDefaults v2 added, and a tenant
  * `info.json` with `defaultAccessKeyChainId`, which TenantConfig v2 added, or
  * with `defaultKeyChains`, which TenantConfig v3 replaced it with (TenantConfig
  * v4 moved it to `key-chain-defaults.json`).
@@ -119,11 +120,13 @@ export function bareFileVersion(
     spec: Record<string, unknown>,
 ): number {
     if (kind === "KeyChain") {
+        if (spec.usageType === "accessToken") return 4;
         if (spec.usageType === "federation") return 3;
         return "type" in spec ? 2 : 1;
     }
     if (kind === "RegistrarConfig")
         return "relyingPartyContact" in spec ? 2 : 1;
+    if (kind === "KeyChainDefaults") return "accessToken" in spec ? 2 : 1;
     if (kind === "Tenant") {
         if ("defaultKeyChains" in spec) return 3;
         return "defaultAccessKeyChainId" in spec ? 2 : 1;
@@ -282,6 +285,52 @@ const presentationConfigV1ToV2: ConfigMigration = {
     },
 };
 
+/**
+ * IssuanceConfig v6 removes the top-level `signingKeyId`. It only selected
+ * the key chain for the access tokens of the built-in authorization server,
+ * and from v6 on only a key chain with usage type `accessToken` signs them,
+ * which no key chain of an earlier version has. A set value is therefore
+ * dropped with a warning; the built-in authorization server then uses the
+ * tenant's access token key chain. A `token.signingKeyId` of an
+ * authorization server stays, with a warning: it must now name such a key
+ * chain, which only its author can create or choose.
+ */
+const issuanceConfigV5ToV6: ConfigMigration = {
+    id: "issuance-config-v6-access-token-signing-key",
+    kind: "IssuanceConfig",
+    from: 5,
+    to: 6,
+    migrate(spec) {
+        const issues: ConfigMigrationIssue[] = [];
+        const { signingKeyId, ...rest } = spec;
+        if (typeof signingKeyId === "string" && signingKeyId !== "") {
+            issues.push({
+                severity: "warning",
+                code: "ISSUANCE_SIGNING_KEY_ID_REMOVED",
+                path: "/spec/signingKeyId",
+                message: `signingKeyId ${JSON.stringify(signingKeyId)} was removed. The built-in authorization server now signs access tokens with the tenant's access token key chain (usage type "accessToken"); to choose one, set token.signingKeyId of its entry.`,
+            });
+        }
+        const servers = Array.isArray(rest.authorizationServers)
+            ? rest.authorizationServers
+            : [];
+        servers.forEach((server, index) => {
+            const keyChainId =
+                object(server) && object(server.token)
+                    ? server.token.signingKeyId
+                    : undefined;
+            if (typeof keyChainId !== "string" || keyChainId === "") return;
+            issues.push({
+                severity: "warning",
+                code: "ACCESS_TOKEN_KEY_CHAIN_REQUIRED",
+                path: `/spec/authorizationServers/${index}/token/signingKeyId`,
+                message: `token.signingKeyId ${JSON.stringify(keyChainId)} must name a key chain with usage type "accessToken" from now on, else the import is refused. Remove it to use the tenant's access token key chain, or point it to such a key chain.`,
+            });
+        });
+        return { spec: "signingKeyId" in spec ? rest : spec, issues };
+    },
+};
+
 const tenantConfigV3ToV4: ConfigMigration = {
     id: "tenant-v4-key-chain-defaults",
     kind: "Tenant",
@@ -387,6 +436,7 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         migrate: (spec) => ({ spec }),
     },
     issuanceConfigV4ToV5,
+    issuanceConfigV5ToV6,
     {
         id: "client-v2-read-and-status-roles",
         kind: "Client",
@@ -465,6 +515,25 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         to: 3,
         // v3 only adds the usage type `federation`: a v2 spec is a valid v3
         // spec.
+        migrate: (spec) => ({ spec }),
+    },
+    {
+        id: "key-chain-v4-access-token-usage",
+        kind: "KeyChain",
+        from: 3,
+        to: 4,
+        // v4 only adds the usage type `accessToken`: a v3 spec is a valid v4
+        // spec.
+        migrate: (spec) => ({ spec }),
+    },
+    {
+        id: "key-chain-defaults-v2-access-token",
+        kind: "KeyChainDefaults",
+        from: 1,
+        to: 2,
+        // v2 only adds the optional accessToken entry: a v1 spec is a valid
+        // v2 spec, whose tenant keeps using its oldest access token key
+        // chain.
         migrate: (spec) => ({ spec }),
     },
     {

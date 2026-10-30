@@ -2,51 +2,52 @@ import { describe, expect, it, vi } from "vitest";
 import { WellKnownService } from "./well-known.service.js";
 
 function wellKnown(issuanceConfig: object) {
-    return Object.assign(Object.create(WellKnownService.prototype), {
+    const keyChainService = {
+        getAccessTokenVerificationKeys: vi.fn(
+            async (_tenant, keyId: string | undefined) => [
+                { kty: "EC", kid: keyId ?? "access-token" },
+            ],
+        ),
+    };
+    const service = Object.assign(Object.create(WellKnownService.prototype), {
         issuanceService: {
             getIssuanceConfiguration: vi.fn().mockResolvedValue(issuanceConfig),
         },
-        keyChainService: {
-            getKid: vi.fn().mockResolvedValue("default-key"),
-            getPublicKey: vi.fn(async (_format, _tenant, keyId: string) => ({
-                kty: "EC",
-                x: keyId,
-            })),
-        },
+        keyChainService,
     }) as WellKnownService;
+    return { service, keyChainService };
 }
 
 describe("WellKnownService JWKS of the built-in authorization server", () => {
-    it("publishes the key the built-in server signs access tokens with", async () => {
-        await expect(
-            wellKnown({
-                signingKeyId: "issuance-key",
-                authorizationServers: [
-                    {
-                        type: "built-in",
-                        id: "built-in",
-                        token: { signingKeyId: "as-key" },
-                    },
-                ],
-            }).getJwks("tenant-1"),
-        ).resolves.toEqual({
-            keys: [{ kty: "EC", x: "as-key", kid: "as-key" }],
+    it("publishes the keys of the key chain the built-in server names", async () => {
+        const { service, keyChainService } = wellKnown({
+            authorizationServers: [
+                {
+                    type: "built-in",
+                    id: "built-in",
+                    token: { signingKeyId: "as-key", lifetimeSeconds: 900 },
+                },
+            ],
         });
+
+        await expect(service.getJwks("tenant-1")).resolves.toEqual({
+            keys: [{ kty: "EC", kid: "as-key" }],
+        });
+        expect(
+            keyChainService.getAccessTokenVerificationKeys,
+        ).toHaveBeenCalledWith("tenant-1", "as-key", 900);
     });
 
-    it("falls back to the issuance key, then the tenant default", async () => {
-        await expect(
-            wellKnown({
-                signingKeyId: "issuance-key",
-                authorizationServers: [{ type: "built-in", id: "built-in" }],
-            }).getJwks("tenant-1"),
-        ).resolves.toEqual({
-            keys: [{ kty: "EC", x: "issuance-key", kid: "issuance-key" }],
+    it("falls back to the tenant's access token key chain", async () => {
+        const { service, keyChainService } = wellKnown({
+            authorizationServers: [{ type: "built-in", id: "built-in" }],
         });
-        await expect(
-            wellKnown({ authorizationServers: [] }).getJwks("tenant-1"),
-        ).resolves.toEqual({
-            keys: [{ kty: "EC", x: "default-key", kid: "default-key" }],
+
+        await expect(service.getJwks("tenant-1")).resolves.toEqual({
+            keys: [{ kty: "EC", kid: "access-token" }],
         });
+        expect(
+            keyChainService.getAccessTokenVerificationKeys,
+        ).toHaveBeenCalledWith("tenant-1", undefined, 300);
     });
 });

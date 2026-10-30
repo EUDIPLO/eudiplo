@@ -38,6 +38,7 @@ import {
 import { verifyClientAttestation } from "../domain/client-attestation.js";
 import {
     hashAuthorizationCode,
+    hostedAccessTokenLifetimeSeconds,
     refreshTokenPolicy,
 } from "../domain/token-grant-rules.js";
 import {
@@ -51,7 +52,6 @@ import {
     buildAuthorizationCodeRedirect,
     buildAuthorizationErrorRedirect,
     buildAuthorizationServerMetadata,
-    buildJwksResponse,
     buildWalletAttestationMetadata,
     type ChainedAsDpopVerification,
     ChainedAsParRequestDto,
@@ -609,7 +609,7 @@ export class AuthorizationServersService {
             dpopJwt,
         );
 
-        const tokenLifetime = config.token?.lifetimeSeconds || 3600;
+        const tokenLifetime = hostedAccessTokenLifetimeSeconds(config.token);
         const jti = v4();
         const tokenPayload = buildAccessTokenPayload({
             issuer: this.getAuthorizationServerBaseUrl(
@@ -623,21 +623,18 @@ export class AuthorizationServersService {
             dpopJkt,
         });
 
-        const signingKeyId =
-            config.token?.signingKeyId ||
-            (await this.keyChainService.getKid(tenantId));
-        const publicKey = await this.keyChainService.getPublicKey(
-            "jwk",
+        // The named key chain, else the tenant's access token key chain.
+        const keyChain = await this.keyChainService.resolveAccessTokenKeyChain(
             tenantId,
-            signingKeyId,
+            config.token?.signingKeyId,
         );
-        const kid = (publicKey as { kid?: string }).kid || signingKeyId;
 
+        // signJWT sets the kid of the key chain's active key.
         const accessToken = await this.keyChainService.signJWT(
             tokenPayload as any,
-            { kid, typ: "at+jwt" },
+            { typ: "at+jwt" },
             tenantId,
-            signingKeyId,
+            keyChain.id,
         );
 
         session.status = ChainedAsSessionStatus.TOKEN_ISSUED;
@@ -713,18 +710,12 @@ export class AuthorizationServersService {
             tenantId,
             authorizationServerId,
         );
-        const signingKeyId =
-            config.token?.signingKeyId ||
-            (await this.keyChainService.getKid(tenantId));
-        const publicKey = await this.keyChainService.getPublicKey(
-            "jwk",
+        const keys = await this.keyChainService.getAccessTokenVerificationKeys(
             tenantId,
-            signingKeyId,
+            config.token?.signingKeyId,
+            hostedAccessTokenLifetimeSeconds(config.token),
         );
 
-        return buildJwksResponse(
-            publicKey as { kid?: string; [key: string]: unknown },
-            signingKeyId,
-        );
+        return { keys: keys as Record<string, unknown>[] };
     }
 }

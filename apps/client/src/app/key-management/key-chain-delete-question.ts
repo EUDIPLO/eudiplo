@@ -12,3 +12,17 @@ export function keyChainDeleteQuestion(id: string, description?: string): string
     ' chain of this usage type, or fail if there is none. This cannot be undone.'
   );
 }
+
+/**
+ * What deleting a key chain of the usage type breaks beyond the configurations that name it,
+ * appended to {@link keyChainDeleteQuestion}; empty for the other usage types.
+ */
+export function keyChainDeleteConsequence(usageType: string): string {
+  if (usageType === 'federation') {
+    return ' If this key signs your OpenID Federation entity configuration, the entity is no longer trusted until your trust anchor lists the public key of a replacement federation key (and federation.entityKeyChainId, if set, names it).';
+  }
+  if (usageType === 'accessToken') {
+    return ' If this key signs access tokens, tokens it issued are refused from now on, so issuances in progress fail. Without another access token key, EUDIPLO creates a new one with ID access-token on the next token request.';
+  }
+  return '';
+}

@@ -10,4 +10,10 @@ export class DefaultKeyChains {
             "Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.",
     })
     access?: string;
+
+    @ApiPropertyOptional({
+        description:
+            "Access token key chain (usage type accessToken) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant's oldest access token key chain and creates one with ID access-token when the tenant has none.",
+    })
+    accessToken?: string;
 }

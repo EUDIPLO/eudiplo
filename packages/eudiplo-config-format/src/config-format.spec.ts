@@ -97,7 +97,7 @@ describe("portable schema identity and migrations", () => {
         expect(result.migrations).toEqual(["rename-name"]);
     });
 
-    it("upgrades a v1 issuance configuration to v5 unchanged", () => {
+    it("upgrades a v1 issuance configuration to v6 unchanged", () => {
         const v1 = {
             $schema: schemaUrl("IssuanceConfig", 1),
             metadata: { generation: 2 },
@@ -113,8 +113,9 @@ describe("portable schema identity and migrations", () => {
             "issuance-config-v3-trust-list-verifier-pem",
             "issuance-config-v4-wallet-attestation-status-check-mode",
             "issuance-config-v5-federation-entity",
+            "issuance-config-v6-access-token-signing-key",
         ]);
-        expect(result.document.$schema).toBe(schemaUrl("IssuanceConfig", 5));
+        expect(result.document.$schema).toBe(schemaUrl("IssuanceConfig", 6));
         expect(result.document.spec).toEqual(v1.spec);
         expect(result.document.metadata).toEqual({ generation: 2 });
         // Repeating the upgrade on the result is a no-op.
@@ -175,7 +176,7 @@ describe("portable schema identity and migrations", () => {
         ).toContain("Unknown property: verifierKeyPem");
     });
 
-    it("upgrades a v1 key chain to v3 unchanged", () => {
+    it("upgrades a v1 key chain to v4 unchanged", () => {
         const v1 = {
             $schema: schemaUrl("KeyChain", 1),
             metadata: { generation: 2 },
@@ -190,8 +191,9 @@ describe("portable schema identity and migrations", () => {
         expect(result.migrations).toEqual([
             "key-chain-v2-type",
             "key-chain-v3-federation-usage",
+            "key-chain-v4-access-token-usage",
         ]);
-        expect(result.document.$schema).toBe(schemaUrl("KeyChain", 3));
+        expect(result.document.$schema).toBe(schemaUrl("KeyChain", 4));
         expect(result.document.spec).toEqual(v1.spec);
         expect(result.document.metadata).toEqual({ generation: 2 });
         expect(
@@ -216,6 +218,25 @@ describe("portable schema identity and migrations", () => {
         expect(issues(2).length).toBeGreaterThan(0);
         expect(issues(3)).toEqual([]);
         expect(bareFileVersion("KeyChain", spec)).toBe(3);
+    });
+
+    it("accepts the accessToken usage type only from v4 on", () => {
+        const spec = {
+            id: "access-token",
+            usageType: "accessToken",
+            keySource: { type: "regenerate" },
+        };
+        const issues = (version: number) =>
+            validateConfigDocument(
+                normalizeDocument({
+                    $schema: schemaUrl("KeyChain", version),
+                    metadata: { generation: 1 },
+                    spec,
+                }),
+            );
+        expect(issues(3).length).toBeGreaterThan(0);
+        expect(issues(4)).toEqual([]);
+        expect(bareFileVersion("KeyChain", spec)).toBe(4);
     });
 
     it("accepts the federation entity fields only from IssuanceConfig v5 on", () => {
@@ -723,6 +744,32 @@ describe("portable schema identity and migrations", () => {
             ).toBeGreaterThan(0);
     });
 
+    it("accepts the accessToken entry only from KeyChainDefaults v2 on", () => {
+        const spec = { access: "registrar", accessToken: "access-token" };
+        const issues = (version: number) =>
+            validateConfigDocument(
+                normalizeDocument({
+                    $schema: schemaUrl("KeyChainDefaults", version),
+                    metadata: { generation: 1 },
+                    spec,
+                }),
+            );
+        expect(issues(1).length).toBeGreaterThan(0);
+        expect(issues(2)).toEqual([]);
+        expect(bareFileVersion("KeyChainDefaults", spec)).toBe(2);
+        expect(bareFileVersion("KeyChainDefaults", { access: "a" })).toBe(1);
+        const result = migrateDocument(
+            {
+                $schema: schemaUrl("KeyChainDefaults", 1),
+                metadata: { generation: 1 },
+                spec: { access: "registrar" },
+            },
+            validateConfigDocument,
+        );
+        expect(result.migrations).toEqual(["key-chain-defaults-v2-access-token"]);
+        expect(result.document.spec).toEqual({ access: "registrar" });
+    });
+
     it("accepts a default access key chain only from tenant v2 on", () => {
         const spec = { name: "Demo Tenant", defaultAccessKeyChainId: "access" };
         expect(
@@ -910,6 +957,7 @@ describe("IssuanceConfig v4 to v5", () => {
 
         expect(result.migrations).toEqual([
             "issuance-config-v5-federation-entity",
+            "issuance-config-v6-access-token-signing-key",
         ]);
         expect(result.issues).toEqual([]);
         expect(result.document.spec).toEqual(v4(entityId).spec);
@@ -932,6 +980,78 @@ describe("IssuanceConfig v4 to v5", () => {
         expect(
             (result.document.spec.federation as { entityId: string }).entityId,
         ).toBe(entityId);
+    });
+});
+
+describe("IssuanceConfig v5 to v6", () => {
+    const v5 = (signingKeyId?: string) => ({
+        $schema: schemaUrl("IssuanceConfig", 5),
+        metadata: { generation: 1 },
+        spec: {
+            ...(signingKeyId === undefined ? {} : { signingKeyId }),
+            authorizationServers: [
+                {
+                    type: "built-in",
+                    id: "issuer",
+                    token: { lifetimeSeconds: 600 },
+                },
+            ],
+        },
+    });
+
+    it("drops a set signingKeyId with a warning and leaves the token settings alone", () => {
+        const result = migrateDocument(v5("attestation"), validateConfigDocument);
+
+        expect(result.migrations).toEqual([
+            "issuance-config-v6-access-token-signing-key",
+        ]);
+        expect(result.issues).toEqual([
+            expect.objectContaining({
+                severity: "warning",
+                code: "ISSUANCE_SIGNING_KEY_ID_REMOVED",
+                path: "/spec/signingKeyId",
+            }),
+        ]);
+        expect(result.document.$schema).toBe(schemaUrl("IssuanceConfig", 6));
+        expect(result.document.spec).toEqual(v5().spec);
+        expect(
+            migrateDocument(result.document, validateConfigDocument).migrations,
+        ).toEqual([]);
+    });
+
+    it("warns about a token.signingKeyId, which must now name an access token key chain", () => {
+        const document = v5();
+        (document.spec.authorizationServers[0].token as Record<string, unknown>).signingKeyId =
+            "credential-key";
+
+        const result = migrateDocument(document, validateConfigDocument);
+
+        expect(result.issues).toEqual([
+            expect.objectContaining({
+                severity: "warning",
+                code: "ACCESS_TOKEN_KEY_CHAIN_REQUIRED",
+                path: "/spec/authorizationServers/0/token/signingKeyId",
+            }),
+        ]);
+        expect(result.document.spec).toEqual(document.spec);
+    });
+
+    it("upgrades a configuration without signingKeyId unchanged", () => {
+        const result = migrateDocument(v5(), validateConfigDocument);
+
+        expect(result.issues).toEqual([]);
+        expect(result.document.spec).toEqual(v5().spec);
+    });
+
+    it("accepts the top-level signingKeyId only up to v5", () => {
+        const issues = (version: number) =>
+            validateConfigDocument(
+                normalizeDocument({ ...v5("key"), $schema: schemaUrl("IssuanceConfig", version) }),
+            );
+        expect(issues(5)).toEqual([]);
+        expect(issues(6).map((issue) => issue.message)).toContain(
+            "Unknown property: signingKeyId",
+        );
     });
 });
 
