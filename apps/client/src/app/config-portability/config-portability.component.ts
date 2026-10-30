@@ -123,7 +123,7 @@ export class ConfigPortabilityComponent implements OnInit {
   shownResources: ConfigResourceMetadata[] = [];
   kindOptions: FilterOption<ConfigResourceKind>[] = [];
   ownershipOptions: FilterOption<ConfigOwnership>[] = [];
-  @ViewChild('searchInput') private searchInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('searchInput') private readonly searchInput?: ElementRef<HTMLInputElement>;
   private allResources: ConfigResourceMetadata[] = [];
   operations: ConfigOperation[] = [];
   operationsLoading = false;
