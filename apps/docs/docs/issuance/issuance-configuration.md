@@ -44,7 +44,6 @@ curl -X POST "$EUDIPLO_URL/api/issuer/config" \
 | --- | --- | --- |
 | `display` | none | Issuer name and logo per locale, published as `display` in the credential issuer metadata. Logos use `uri`; to host them in EUDIPLO, see [Object storage](../operate/object-storage.md). |
 | `authorizationServers` | built-in server | Required, at least one entry. See [Authorization servers](authorization-servers.md). |
-| `signingKeyId` | Tenant default key | Key chain that signs the **access tokens** of the built-in authorization server, unless its entry sets `token.signingKeyId`. Credentials are signed with the `keyChainId` of each credential configuration. |
 | `batchSize` | `1` | Batch issuance: how many credentials (one per key proof) a wallet may request at once. Values above 1 are published as `batch_credential_issuance.batch_size`. A key attestation proof may carry up to `batchSize` keys. |
 | `dPopRequired` | `true` | Require DPoP-bound access tokens at the built-in token endpoint and the credential, deferred credential and notification endpoints. See [DPoP](authorization-servers.md#dpop). |
 | `credentialRequestEncryption` | `false` | Sets `encryption_required` of `credential_request_encryption`. |

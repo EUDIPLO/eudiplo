@@ -603,6 +603,20 @@ describe('DashboardService', () => {
     expect(service.isLoading).toBe(false);
   });
 
+  it('does not count the key chains EUDIPLO creates itself', async () => {
+    roles = ['issuance:manage'];
+    Object.assign(responses, issuanceSetUp, {
+      '/api/key-chain': [
+        { id: 'enc', usageType: 'encrypt' },
+        { id: 'access-token', usageType: 'accessToken' },
+      ],
+    });
+
+    await service.getCounters();
+
+    expect(service.totalKeyChains).toBe(0);
+  });
+
   it('treats a response of an unexpected shape as failed and still loads the rest', async () => {
     roles = ['issuance:manage'];
     Object.assign(responses, issuanceSetUp, { '/api/key-chain': { unexpected: true } });

@@ -57,6 +57,7 @@ const SINGLETONS: Partial<
 > = {
     Tenant: { id: "tenant", path: "info.json" },
     KeyChainDefaults: { id: "defaults", path: "key-chain-defaults.json" },
+    IssuanceConfig: { id: "issuance", path: "issuance/issuance.json" },
 };
 
 /** Base64 DER of a PEM certificate, as an x5c entry carries it. */
@@ -253,6 +254,7 @@ describe("default access key chain in configuration imports", () => {
     let auth: string;
     let access: string;
     let attestation: string;
+    let accessToken: string;
 
     const api = () => request(app.getHttpServer());
 
@@ -331,6 +333,7 @@ describe("default access key chain in configuration imports", () => {
         const token = await tenantToken(app, tenant, [
             Role.TenantAdmin,
             Role.Keys,
+            Role.Issuances,
         ]);
         auth = `Bearer ${token}`;
         access = await createKeyChain(app, token, {
@@ -338,6 +341,9 @@ describe("default access key chain in configuration imports", () => {
         });
         attestation = await createKeyChain(app, token, {
             usageType: KeyUsageType.Attestation,
+        });
+        accessToken = await createKeyChain(app, token, {
+            usageType: KeyUsageType.AccessToken,
         });
     });
 
@@ -389,6 +395,55 @@ describe("default access key chain in configuration imports", () => {
                 path: "/spec/access",
             }),
         );
+    });
+
+    test("accepts only an access token key chain as accessToken default and token.signingKeyId", async () => {
+        const accepted = await plan(
+            bundleOf([{ kind: "KeyChainDefaults", spec: { accessToken } }]),
+        );
+        expect(accepted.issues).toEqual([]);
+
+        const wrongDefault = await plan(
+            bundleOf([
+                { kind: "KeyChainDefaults", spec: { accessToken: access } },
+            ]),
+        );
+        expect(wrongDefault.issues).toContainEqual(
+            expect.objectContaining({
+                code: "KEY_CHAIN_USAGE_MISMATCH",
+                path: "/spec/accessToken",
+            }),
+        );
+
+        const issuance = (signingKeyId: string) =>
+            bundleOf([
+                {
+                    kind: "IssuanceConfig",
+                    spec: {
+                        authorizationServers: [
+                            {
+                                type: "built-in",
+                                id: "issuer-built-in",
+                                token: { signingKeyId },
+                            },
+                        ],
+                    },
+                },
+            ]);
+        const wrongToken = await plan(issuance(attestation));
+        expect(wrongToken.applicable).toBe(false);
+        expect(wrongToken.issues).toContainEqual(
+            expect.objectContaining({
+                code: "KEY_CHAIN_USAGE_MISMATCH",
+                path: "/spec/authorizationServers/0/token/signingKeyId",
+                resource: { kind: "IssuanceConfig", id: "issuance" },
+            }),
+        );
+        expect(
+            (await plan(issuance(accessToken))).issues.filter(
+                (issue) => issue.code === "KEY_CHAIN_USAGE_MISMATCH",
+            ),
+        ).toEqual([]);
     });
 
     test("sets the default from key-chain-defaults.json and removes it with an empty one", async () => {

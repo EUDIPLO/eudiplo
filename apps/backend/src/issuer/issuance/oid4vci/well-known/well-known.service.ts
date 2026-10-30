@@ -108,33 +108,26 @@ export class WellKnownService {
     }
 
     /**
-     * Returns the JSON Web Key Set (JWKS) for a given tenant.
-     * Resolves the access token signing key of the built-in authorization
-     * server (or the default) and includes the `kid` so that JWT
-     * verification can match keys.
+     * Returns the JSON Web Key Set (JWKS) for a given tenant: the keys of
+     * the built-in authorization server's access token key chain, the
+     * previous one only while tokens it signed can still be valid.
      * @returns
      */
     async getJwks(tenantId: string): Promise<JwksResponseDto> {
         try {
             const issuanceConfig =
                 await this.issuanceService.getIssuanceConfiguration(tenantId);
+            const { signingKeyId, lifetimeSeconds } =
+                builtInAccessTokenSettings(issuanceConfig);
 
-            const signingKeyId =
-                builtInAccessTokenSettings(issuanceConfig).signingKeyId ||
-                (await this.keyChainService.getKid(tenantId));
+            const keys =
+                await this.keyChainService.getAccessTokenVerificationKeys(
+                    tenantId,
+                    signingKeyId,
+                    lifetimeSeconds,
+                );
 
-            const publicKey = await this.keyChainService.getPublicKey(
-                "jwk",
-                tenantId,
-                signingKeyId,
-            );
-
-            const keyWithKid = {
-                ...publicKey,
-                kid: (publicKey as { kid?: string }).kid || signingKeyId,
-            };
-
-            return { keys: [keyWithKid as EC_Public] };
+            return { keys: keys as EC_Public[] };
         } catch (error) {
             if (error instanceof WellKnownException) {
                 throw error;

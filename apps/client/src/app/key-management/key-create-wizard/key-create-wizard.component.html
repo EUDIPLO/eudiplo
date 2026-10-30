@@ -364,7 +364,10 @@
               }
 
               @if (
-                !isInternalChain && selectedUsage !== 'access' && selectedUsage !== 'federation'
+                !isInternalChain &&
+                selectedUsage !== 'access' &&
+                selectedUsage !== 'federation' &&
+                selectedUsage !== 'accessToken'
               ) {
                 <mat-checkbox formControlName="useExternalCertificate">
                   Use a certificate from an external CA
@@ -612,6 +615,17 @@
                   <span>
                     <strong>Next step:</strong> Set the federation entity ID and trust anchors in
                     the issuance configuration, and give your trust anchor this key's public key.
+                  </span>
+                </div>
+              }
+              @if (selectedUsage === 'accessToken') {
+                <div class="next-steps-hint">
+                  <mat-icon>info</mat-icon>
+                  <span>
+                    <strong>Next step:</strong> Choose it as the Access Token Signing Key of an
+                    authorization server in the issuance configuration. Servers without a chosen key
+                    keep using the tenant's oldest access token key, which is this one only if the
+                    tenant had none.
                   </span>
                 </div>
               }

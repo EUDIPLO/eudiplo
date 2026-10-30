@@ -33,11 +33,11 @@ function factory(
     publicUrl = "https://issuer.example",
 ) {
     const keyChainService = {
-        getKid: vi.fn().mockResolvedValue("default-key"),
-        getPublicKey: vi.fn(async (_format, _tenant, keyId: string) => ({
-            kty: "EC",
-            kid: keyId,
-        })),
+        getAccessTokenVerificationKeys: vi.fn(
+            async (_tenant, keyId: string | undefined, lifetime: number) => [
+                { kty: "EC", kid: keyId ?? "access-token", lifetime },
+            ],
+        ),
     };
     const sdk = new Oid4vciSdkFactory(
         {
@@ -69,31 +69,33 @@ const LOCAL_JWKS =
 describe("Oid4vciSdkFactory local JWKS", () => {
     it("publishes the access token key of the built-in authorization server", async () => {
         const { resolveLocalJwks } = factory({
-            signingKeyId: "issuance-key",
             authorizationServers: [
                 {
                     type: "built-in",
                     id: "built-in",
-                    token: { signingKeyId: "as-key" },
+                    token: { signingKeyId: "as-key", lifetimeSeconds: 900 },
                 },
             ],
         });
 
         await expect(resolveLocalJwks(LOCAL_JWKS)).resolves.toEqual({
-            keys: [{ kty: "EC", kid: "as-key" }],
+            keys: [{ kty: "EC", kid: "as-key", lifetime: 900 }],
         });
     });
 
-    it("falls back to the issuance key and the tenant default", async () => {
+    it("falls back to the tenant's access token key chain", async () => {
         await expect(
             factory({
-                signingKeyId: "issuance-key",
                 authorizationServers: [{ type: "built-in", id: "built-in" }],
             }).resolveLocalJwks(LOCAL_JWKS),
-        ).resolves.toEqual({ keys: [{ kty: "EC", kid: "issuance-key" }] });
+        ).resolves.toEqual({
+            keys: [{ kty: "EC", kid: "access-token", lifetime: 300 }],
+        });
         await expect(
             factory(new Error("not configured")).resolveLocalJwks(LOCAL_JWKS),
-        ).resolves.toEqual({ keys: [{ kty: "EC", kid: "default-key" }] });
+        ).resolves.toEqual({
+            keys: [{ kty: "EC", kid: "access-token", lifetime: 300 }],
+        });
     });
 
     it("leaves foreign JWKS URIs to the library", async () => {

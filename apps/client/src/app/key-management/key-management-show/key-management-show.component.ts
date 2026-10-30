@@ -15,7 +15,7 @@ import {
   type DefaultAccessKeyChainDto,
 } from '@eudiplo/sdk-core';
 import { MatDialog } from '@angular/material/dialog';
-import { keyChainDeleteQuestion } from '../key-chain-delete-question';
+import { keyChainDeleteConsequence, keyChainDeleteQuestion } from '../key-chain-delete-question';
 import {
   changeDefaultAccess,
   defaultAccessChip,
@@ -191,14 +191,15 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
   /**
    * A standalone signing key can get its certificate from an external CA.
    * The tenant's encryption key chain is listed as standalone but signs
-   * nothing, an internal chain's root CA issues its certificates, and a
-   * federation key is published as a JWK without its certificate.
+   * nothing, an internal chain's root CA issues its certificates, and
+   * federation and access token keys are published as JWKs without their
+   * certificate.
    */
   get offersCertificateRequest(): boolean {
     return (
       this.keyChain?.type === 'standalone' &&
       this.keyChain.usageType !== 'encrypt' &&
-      !this.isFederationKey
+      !this.publishesJwk
     );
   }
 
@@ -242,6 +243,16 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     return this.usageType === 'federation';
   }
 
+  /** Access token keys are published in the JWKS of the authorization servers. */
+  get isAccessTokenKey(): boolean {
+    return this.usageType === 'accessToken';
+  }
+
+  /** Keys published as a JWK, whose certificate is not used. */
+  get publishesJwk(): boolean {
+    return this.isFederationKey || this.isAccessTokenKey;
+  }
+
   get activePublicKeyJson(): string {
     return JSON.stringify(this.keyChain?.activePublicKey ?? {}, null, 2);
   }
@@ -269,6 +280,9 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     }
     if (this.isFederationKey) {
       return 'This is a standalone key, published as a JWK in the OpenID Federation entity configuration.';
+    }
+    if (this.isAccessTokenKey) {
+      return 'This is a standalone key, published as a JWK in the JWKS of the authorization servers that sign access tokens with it.';
     }
     if (!this.keyChain.activeCertificate) return 'This is a standalone key.';
     return this.isSelfSigned()
@@ -299,7 +313,7 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     );
   }
 
-  /** The federation card prints the active JWK, so it can be copied by hand. */
+  /** The public key card prints the active JWK, so it can be copied by hand. */
   async copyFederationPublicKey(): Promise<void> {
     await copyToClipboard(
       this.snackBar,
@@ -336,10 +350,7 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
       openErrorSnackBar(this.snackBar, refusal);
       return;
     }
-    const consequence =
-      keyChain.usageType === 'federation'
-        ? ' If this key signs your OpenID Federation entity configuration, the entity is no longer trusted until your trust anchor lists the public key of a replacement federation key (and federation.entityKeyChainId, if set, names it).'
-        : '';
+    const consequence = keyChainDeleteConsequence(keyChain.usageType);
     if (!confirm(keyChainDeleteQuestion(keyChain.id, this.description) + consequence)) {
       return;
     }

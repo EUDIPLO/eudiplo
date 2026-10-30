@@ -13,6 +13,7 @@ import {
     resolveAuditActor,
 } from "../../../audit-log/audit-log-context.util.js";
 import { TokenPayload } from "../../../auth/token.decorator.js";
+import { KeyChainService } from "../../../crypto/key/key-chain.service.js";
 import { ConfigImportService } from "../../../platform/config-import/config-import.service.js";
 import {
     ConfigImportOrchestratorService,
@@ -75,6 +76,7 @@ export class IssuanceService {
         private readonly federationTrustAnchors: FederationTrustAnchorService,
         private readonly outboundUrlPolicy: OutboundUrlPolicyService,
         private readonly configService: ConfigService,
+        private readonly keyChainService: KeyChainService,
     ) {
         this.configImportOrchestrator.register(
             "issuance",
@@ -421,6 +423,12 @@ export class IssuanceService {
             server.id = normalizedId;
         }
 
+        await this.assertAccessTokenSigningKeys(
+            tenantId,
+            configuredAuthorizationServers,
+            existingConfig.authorizationServers,
+        );
+
         const before =
             "tenantId" in existingConfig
                 ? this.sanitizeIssuanceConfigForLog(
@@ -454,6 +462,38 @@ export class IssuanceService {
         }
 
         return saved;
+    }
+
+    /**
+     * Refuses a `token.signingKeyId` that names no key chain with usage type
+     * `accessToken`. Only values this change sets are checked, so a stored
+     * configuration from before the check can still be changed otherwise;
+     * its token requests fail until the value is fixed.
+     */
+    private async assertAccessTokenSigningKeys(
+        tenantId: string,
+        servers: Array<{ id?: string; token?: { signingKeyId?: string } }>,
+        storedServers: unknown,
+    ): Promise<void> {
+        const stored = new Map(
+            (Array.isArray(storedServers) ? storedServers : []).map(
+                (server) => [server?.id, server?.token?.signingKeyId],
+            ),
+        );
+        for (const server of servers) {
+            const keyChainId = server.token?.signingKeyId;
+            if (!keyChainId || stored.get(server.id) === keyChainId) continue;
+            const refusal =
+                await this.keyChainService.accessTokenKeyChainRefusal(
+                    tenantId,
+                    keyChainId,
+                );
+            if (refusal) {
+                throw new BadRequestException(
+                    `Authorization server '${server.id}': ${refusal}`,
+                );
+            }
+        }
     }
 
     private sanitizeIssuanceConfigForLog(
@@ -543,7 +583,6 @@ export class IssuanceService {
             walletProviderTrustLists,
             walletAttestationStatusCheckMode:
                 config.walletAttestationStatusCheckMode,
-            signingKeyId: config.signingKeyId,
             authorizationServers,
             federation: config.federation,
             registrationCertificate,

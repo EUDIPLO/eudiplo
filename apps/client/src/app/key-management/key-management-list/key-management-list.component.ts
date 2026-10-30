@@ -17,7 +17,7 @@ import { ConfigOwnershipDirective } from '../../config-portability/config-owners
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
-import { keyChainDeleteQuestion } from '../key-chain-delete-question';
+import { keyChainDeleteConsequence, keyChainDeleteQuestion } from '../key-chain-delete-question';
 import {
   changeDefaultAccess,
   defaultAccessChip,
@@ -29,7 +29,8 @@ import {
   missingDefaultAccessMessage,
 } from '../default-access-key-chain';
 
-type KeyUsageType = 'attestation' | 'statusList' | 'access' | 'trustList' | 'federation';
+type KeyUsageType =
+  'attestation' | 'statusList' | 'access' | 'accessToken' | 'trustList' | 'federation';
 
 /**
  * Display item for key chains.
@@ -111,6 +112,12 @@ export class KeyManagementListComponent implements OnInit {
       label: 'EUDI Wallet Access Certificate Keys',
       icon: 'vpn_key',
       description: 'Keys for EUDI Wallet Access Certificates to authenticate to the wallet.',
+    },
+    accessToken: {
+      label: 'Access Token Signing Keys',
+      icon: 'key',
+      description:
+        'Keys that sign the OAuth access tokens of the authorization servers. They never sign credentials or requests to wallets.',
     },
     statusList: {
       label: 'Status List Keys',
@@ -237,7 +244,12 @@ export class KeyManagementListComponent implements OnInit {
       return;
     }
 
-    if (!confirm(keyChainDeleteQuestion(item.id, item.description))) {
+    if (
+      !confirm(
+        keyChainDeleteQuestion(item.id, item.description) +
+          keyChainDeleteConsequence(item.usageType)
+      )
+    ) {
       return;
     }
 

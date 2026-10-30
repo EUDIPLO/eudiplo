@@ -49,10 +49,10 @@ rejects versions newer than its own.
 | `Tenant`             | `TenantConfigFile`            | 4               | yes       |
 | `Client`             | `ClientConfigFile`            | 2               |           |
 | `KmsConfig`          | `KmsConfigFile`               | 2               | yes       |
-| `KeyChain`           | `KeyChainConfigFile`          | 3               |           |
-| `KeyChainDefaults`   | `KeyChainDefaultsConfigFile`  | 1               | yes       |
+| `KeyChain`           | `KeyChainConfigFile`          | 4               |           |
+| `KeyChainDefaults`   | `KeyChainDefaultsConfigFile`  | 2               | yes       |
 | `RegistrarConfig`    | `RegistrarConfigFile`         | 2               | yes       |
-| `IssuanceConfig`     | `IssuanceConfigFile`          | 5               | yes       |
+| `IssuanceConfig`     | `IssuanceConfigFile`          | 6               | yes       |
 | `CredentialConfig`   | `CredentialConfigFile`        | 3               |           |
 | `PresentationConfig` | `PresentationConfigFile`      | 3               |           |
 | `AttributeProvider`  | `AttributeProviderConfigFile` | 1               |           |
@@ -98,6 +98,21 @@ value stops the migration with the required input
 `FEDERATION_ENTITY_ID_INVALID` at `/spec/federation/entityId`; the value is not
 rewritten, and nothing is written until you set it.
 
+**IssuanceConfig v6** came with EUDIPLO 10.0. It removes the top-level
+`signingKeyId`, which only chose the key chain for the access tokens of the
+built-in authorization server. Access tokens are now signed only by key chains
+with usage type `accessToken`, which no earlier key chain has
+([Access token key chain](../trust/keys-and-certificates.md#access-token-key-chain)).
+The v5 to v6 step therefore drops a set value with the warning
+`ISSUANCE_SIGNING_KEY_ID_REMOVED` instead of moving it; the built-in
+authorization server then uses the tenant's access token key chain. To choose
+one, set `token.signingKeyId` of its entry. A `token.signingKeyId` of an
+authorization server stays and gets the warning `ACCESS_TOKEN_KEY_CHAIN_REQUIRED`
+at its path: from v6 on it must name a key chain with usage type `accessToken`,
+else the plan reports `KEY_CHAIN_USAGE_MISMATCH`, as a warning when the stored
+configuration already has the value. A document without either field is migrated unchanged;
+9.x cannot read v6 files.
+
 **CredentialConfig v2** came with EUDIPLO 10.0. It accepts `x509` as
 `frameworkType` of `schemaMeta.trustedAuthorities` entries, with the root
 certificate in `value`. A v1 document is migrated unchanged; 9.x cannot read v2
@@ -129,10 +144,18 @@ reports `KEY_CHAIN_TYPE_MISMATCH`. A v1 document is migrated unchanged;
 9.x cannot read v2 files. A bare key chain file with `type`, as
 `GET /api/key-chain/{id}/export` writes it, is read as v2.
 
+**KeyChain v4** came with EUDIPLO 10.0. It adds the usage type `accessToken`
+for the key chains that sign access tokens
+([Access token key chain](../trust/keys-and-certificates.md#access-token-key-chain)).
+A v3 document is migrated unchanged; a bare key chain file with usage type
+`accessToken` is read as v4. Like every `KeyChain` version, the upgrade changes
+the hash stored for each applied key chain, so the next `upsert` or `replace`
+import applies every file-managed key chain once more.
+
 **KeyChainDefaults v1** came with EUDIPLO 10.0. The singleton
 `KeyChainDefaults/defaults` (`key-chain-defaults.json`) holds the tenant's key
-chain per usage type, used where no configuration names one. So far it has one
-entry, `access`: the
+chain per usage type, used where no configuration names one. v1 has one entry,
+`access`: the
 [default access key chain](../trust/keys-and-certificates.md#default-access-key-chain).
 The document replaces all entries, so leaving `access` out of a document that is
 applied removes it, and the tenant picks its access key chain by rule again. The
@@ -140,6 +163,13 @@ plan reports `MISSING_RESOURCE_REFERENCE` when an entry names a key chain that i
 neither stored nor in the bundle, and `KEY_CHAIN_USAGE_MISMATCH` when the key
 chain's usage type is not the entry's. An export writes the document only while
 an entry is set.
+
+**KeyChainDefaults v2** came with EUDIPLO 10.0 as well. It adds the optional
+entry `accessToken`: the key chain with usage type `accessToken` that signs the
+access tokens of authorization servers without `token.signingKeyId`
+([Access token key chain](../trust/keys-and-certificates.md#access-token-key-chain)).
+A v1 document is migrated unchanged; a bare `key-chain-defaults.json` with
+`accessToken` is read as v2.
 
 **Tenant v4** came with EUDIPLO 10.0 as well. Tenant v2 and v3, which only
 development builds of 10.0 wrote, kept the default key chains in `info.json`
@@ -179,7 +209,7 @@ does not exist yet is created only if its folder contains `info.json`.
 └── <tenant-id>/
     ├── info.json               Tenant (name, description, session and status-list defaults)
     ├── kms.json                tenant KMS providers, merged over the global file
-    ├── key-chain-defaults.json KeyChainDefaults (default access key chain)
+    ├── key-chain-defaults.json KeyChainDefaults (default key chains: access, accessToken)
     ├── registrar.json
     ├── clients/<id>.json
     ├── key-chains/<id>.json
@@ -287,7 +317,7 @@ placeholders are handled according to `CONFIG_VARIABLE_STRICT`:
 | `unchanged` | Already matches, or a key chain or `!generate` client document this source already applied (see below); only ownership metadata may be updated |
 | `skip`      | Exists and is left alone: in `create` mode (`RESOURCE_EXISTS`), in a startup import when the resource was detached from that folder (`RESOURCE_DETACHED`) or has a newer stored generation (`STALE_GENERATION`), or because it is the tenant's encryption key chain (`KEY_CHAIN_ID_RESERVED`) |
 | `delete`    | Will be removed (`replace` mode)                                                            |
-| `blocked`   | Cannot be applied, for example `STALE_GENERATION`, `MISSING_RESOURCE_REFERENCE`, `STATUS_LIST_LAYOUT_IMMUTABLE`, `REGISTRATION_CERTIFICATE_REFUSED` for an imported registration certificate that fails its checks, for example because it is expired or does not cover the DCQL query ([Validation and caching](../trust/registration-certificates.md#validation-and-caching)), a missing secret or key, `UNSUPPORTED_KEY_ALGORITHM` for a key chain whose key uses an algorithm its KMS provider does not offer ([Signing algorithms](../operate/kms.md#signing-algorithms)), `TRUST_LIST_IN_USE` on a trust list that `replace` would delete while a configuration still references it ([Delete a trust list](../trust/trust-lists.md#delete-a-trust-list)), `MISSING_RESOURCE_REFERENCE` on a presentation configuration that names, or the issuance configuration that adds, an OpenID Federation trust anchor neither the tenant nor the bundle registers, `FEDERATION_TRUST_ANCHOR_IN_USE` on a trust anchor that the import would delete or give another entity ID while a configuration still names it ([Delete a trust anchor](../trust/federation.md#delete-a-trust-anchor)), `KEY_CHAIN_IN_USE` on a key chain that `replace` would delete while a configuration still names it ([Delete a key chain](../trust/keys-and-certificates.md#delete-a-key-chain)), or `KEY_CHAIN_USAGE_MISMATCH` on the key chain defaults (`KeyChainDefaults`) when an entry names a key chain of another usage type ([Default access key chain](../trust/keys-and-certificates.md#default-access-key-chain)). One blocked item blocks the whole plan |
+| `blocked`   | Cannot be applied, for example `STALE_GENERATION`, `MISSING_RESOURCE_REFERENCE`, `STATUS_LIST_LAYOUT_IMMUTABLE`, `REGISTRATION_CERTIFICATE_REFUSED` for an imported registration certificate that fails its checks, for example because it is expired or does not cover the DCQL query ([Validation and caching](../trust/registration-certificates.md#validation-and-caching)), a missing secret or key, `UNSUPPORTED_KEY_ALGORITHM` for a key chain whose key uses an algorithm its KMS provider does not offer ([Signing algorithms](../operate/kms.md#signing-algorithms)), `TRUST_LIST_IN_USE` on a trust list that `replace` would delete while a configuration still references it ([Delete a trust list](../trust/trust-lists.md#delete-a-trust-list)), `MISSING_RESOURCE_REFERENCE` on a presentation configuration that names, or the issuance configuration that adds, an OpenID Federation trust anchor neither the tenant nor the bundle registers, `FEDERATION_TRUST_ANCHOR_IN_USE` on a trust anchor that the import would delete or give another entity ID while a configuration still names it ([Delete a trust anchor](../trust/federation.md#delete-a-trust-anchor)), `KEY_CHAIN_IN_USE` on a key chain that `replace` would delete while a configuration still names it ([Delete a key chain](../trust/keys-and-certificates.md#delete-a-key-chain)), or `KEY_CHAIN_USAGE_MISMATCH` on the key chain defaults (`KeyChainDefaults`) when an entry names a key chain of another usage type, or on the issuance configuration when a `token.signingKeyId` it sets names no `accessToken` key chain ([Access token key chain](../trust/keys-and-certificates.md#access-token-key-chain)) ([Default access key chain](../trust/keys-and-certificates.md#default-access-key-chain)). One blocked item blocks the whole plan |
 
 An `update` item lists its field changes in `changes`: the `path` in the document, the stored value as `before` and the value after the import as `after`. Without `before`, the import adds the field; without `after`, it removes the stored value. Entries with `redacted: true` hide the values: a secret reads `[redacted]`, and a value that changes between an object, a list and a plain value reads `[changed]` on both sides.
 
@@ -344,7 +374,7 @@ resources of that kind, so screens can lock file-managed resources for them:
 | Kind                                                                    | Also readable with                                      |
 | ----------------------------------------------------------------------- | ------------------------------------------------------- |
 | `Tenant` (session and status list settings)                            | `issuance:manage`, `presentation:manage`                |
-| `KeyChain`, `KeyChainDefaults` (default access key chain)               | `issuance:manage`, `presentation:manage`, `keys:manage` |
+| `KeyChain`, `KeyChainDefaults` (default key chains)                     | `issuance:manage`, `presentation:manage`, `keys:manage` |
 | `WebhookEndpoint`, `TrustList`, `FederationTrustAnchor`                 | `issuance:manage`, `presentation:manage`                |
 | `IssuanceConfig`, `CredentialConfig`, `AttributeProvider`, `StatusList` | `issuance:manage`                                       |
 | `PresentationConfig`                                                    | `presentation:manage`                                   |

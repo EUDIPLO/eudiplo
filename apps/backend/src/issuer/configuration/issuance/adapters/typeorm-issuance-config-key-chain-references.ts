@@ -8,8 +8,8 @@ import type { KeyChainReferenceSource } from "../../../../crypto/key/ports/key-c
 import type { IssuanceConfig } from "../entities/issuance-config.entity.js";
 
 /**
- * The tenant's issuance configuration, when its `signingKeyId` or the
- * `token.signingKeyId` of an authorization server names the key chain.
+ * The tenant's issuance configuration, when the `token.signingKeyId` of an
+ * authorization server names the key chain.
  */
 export class TypeOrmIssuanceConfigKeyChainReferences
     implements KeyChainReferenceSource
@@ -19,18 +19,14 @@ export class TypeOrmIssuanceConfigKeyChainReferences
     constructor(private readonly repository: Repository<IssuanceConfig>) {}
 
     namesKeyChain(config: unknown, keyChain: ReferencedKeyChain): boolean {
-        const { signingKeyId, authorizationServers } =
+        const { authorizationServers } =
             (config as Partial<IssuanceConfig> | null) ?? {};
         const servers: unknown = authorizationServers;
         return (
-            keyChainIdNamesKeyChain(signingKeyId, keyChain) ||
-            (Array.isArray(servers) &&
-                servers.some((server) =>
-                    keyChainIdNamesKeyChain(
-                        server?.token?.signingKeyId,
-                        keyChain,
-                    ),
-                ))
+            Array.isArray(servers) &&
+            servers.some((server) =>
+                keyChainIdNamesKeyChain(server?.token?.signingKeyId, keyChain),
+            )
         );
     }
 
@@ -41,7 +37,6 @@ export class TypeOrmIssuanceConfigKeyChainReferences
             where: { tenantId: keyChain.tenantId },
             select: {
                 tenantId: true,
-                signingKeyId: true,
                 authorizationServers: true,
             },
         });

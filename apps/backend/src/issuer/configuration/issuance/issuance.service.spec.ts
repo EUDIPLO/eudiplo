@@ -17,16 +17,72 @@ describe("IssuanceService.storeIssuanceConfiguration", () => {
         issuance: Object.assign(Object.create(IssuanceService.prototype), {
             federationTrustAnchors: { unregistered },
             outboundUrlPolicy: { allowHttp: () => allowHttp },
+            keyChainService: {
+                accessTokenKeyChainRefusal: vi.fn(
+                    async (_tenantId: string, id: string) =>
+                        id === "token-key" ? undefined : `${id} refused`,
+                ),
+            },
             issuanceConfigRepo: {
                 getForTenant: vi.fn().mockResolvedValue({
                     tenantId: "tenant-1",
                     authorizationServers: [
-                        { type: "built-in", id: "built-in" },
+                        {
+                            type: "built-in",
+                            id: "issuer-built-in",
+                            token: { signingKeyId: "stored-key" },
+                        },
                     ],
                 }),
                 save,
             },
         }) as IssuanceService,
+    });
+
+    it("refuses a token.signingKeyId that names no access token key chain", async () => {
+        const { issuance, save } = service();
+
+        await expect(
+            issuance.storeIssuanceConfiguration("tenant-1", {
+                authorizationServers: [
+                    {
+                        type: "chained",
+                        id: "chained",
+                        token: { signingKeyId: "credential-key" },
+                    },
+                ] as any,
+            }),
+        ).rejects.toThrow(
+            "Authorization server 'chained': credential-key refused",
+        );
+        expect(save).not.toHaveBeenCalled();
+
+        await issuance.storeIssuanceConfiguration("tenant-1", {
+            authorizationServers: [
+                {
+                    type: "chained",
+                    id: "chained",
+                    token: { signingKeyId: "token-key" },
+                },
+            ] as any,
+        });
+        expect(save).toHaveBeenCalled();
+    });
+
+    it("keeps accepting a stored token.signingKeyId from before the check", async () => {
+        const { issuance, save } = service();
+
+        await issuance.storeIssuanceConfiguration("tenant-1", {
+            authorizationServers: [
+                {
+                    type: "built-in",
+                    id: "issuer-built-in",
+                    token: { signingKeyId: "stored-key" },
+                },
+            ] as any,
+        });
+
+        expect(save).toHaveBeenCalled();
     });
 
     it("rejects the removed 'vp' option of chained authorization servers", async () => {

@@ -12,23 +12,8 @@ function sourceWith(config: unknown) {
 }
 
 describe("TypeOrmIssuanceConfigKeyChainReferences", () => {
-    it("finds the issuance configuration by its signingKeyId", async () => {
-        const { source, repository } = sourceWith({
-            tenantId: "acme",
-            signingKeyId: "signing",
-            authorizationServers: [],
-        });
-
-        await expect(source.findReferences(keyChain)).resolves.toEqual([
-            { kind: "IssuanceConfig" },
-        ]);
-        expect(repository.findOne).toHaveBeenCalledWith(
-            expect.objectContaining({ where: { tenantId: "acme" } }),
-        );
-    });
-
     it("finds the token signing key of an authorization server", async () => {
-        const { source } = sourceWith({
+        const { source, repository } = sourceWith({
             tenantId: "acme",
             authorizationServers: [
                 { type: "built-in", id: "a" },
@@ -43,12 +28,14 @@ describe("TypeOrmIssuanceConfigKeyChainReferences", () => {
         await expect(source.findReferences(keyChain)).resolves.toEqual([
             { kind: "IssuanceConfig" },
         ]);
+        expect(repository.findOne).toHaveBeenCalledWith(
+            expect.objectContaining({ where: { tenantId: "acme" } }),
+        );
     });
 
     it("does not count a configuration that uses the default key chain", async () => {
         const { source } = sourceWith({
             tenantId: "acme",
-            signingKeyId: null,
             authorizationServers: [{ type: "built-in", id: "a", token: {} }],
         });
 
@@ -71,9 +58,10 @@ describe("TypeOrmIssuanceConfigKeyChainReferences", () => {
                 keyChain,
             ),
         ).toBe(true);
-        expect(source.namesKeyChain({ signingKeyId: "other" }, keyChain)).toBe(
-            false,
-        );
+        // IssuanceConfig v6 removed the top-level signingKeyId.
+        expect(
+            source.namesKeyChain({ signingKeyId: "signing" }, keyChain),
+        ).toBe(false);
         expect(source.namesKeyChain(null, keyChain)).toBe(false);
     });
 });

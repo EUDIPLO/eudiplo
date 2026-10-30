@@ -119,7 +119,7 @@ describe("DELETE /key-chain/{id} while configurations name the key chain", () =>
             description: "shared",
         });
         tokenKey = await createKeyChain(app, token, {
-            usageType: KeyUsageType.Attestation,
+            usageType: KeyUsageType.AccessToken,
             description: "token",
         });
         accessKey = await createKeyChain(app, token, {
@@ -163,7 +163,6 @@ describe("DELETE /key-chain/{id} while configurations name the key chain", () =>
             .post("/issuer/config")
             .set("Authorization", auth)
             .send({
-                signingKeyId: sharedKey,
                 authorizationServers: [
                     {
                         id: "issuer-built-in",
@@ -204,12 +203,10 @@ describe("DELETE /key-chain/{id} while configurations name the key chain", () =>
 
         expect(response.body.code).toBe("KEY_CHAIN_IN_USE");
         expect(response.body.message).toBe(
-            `Key chain "${sharedKey}" is still used by the issuance configuration and 1 credential config ("signed-pid"). Remove these references before deleting the key chain.`,
+            `Key chain "${sharedKey}" is still used by 1 credential config ("signed-pid"). Remove these references before deleting the key chain.`,
         );
-        expect(response.body.references).toHaveLength(2);
         expect(response.body.references).toEqual(
             expect.arrayContaining([
-                { kind: "IssuanceConfig" },
                 {
                     kind: "CredentialConfig",
                     id: "signed-pid",
@@ -288,14 +285,11 @@ describe("DELETE /key-chain/{id} while configurations name the key chain", () =>
             .expect(409);
 
         expect(response.body.message).toBe(
-            `Key chain "${sharedKey}" is still used by the issuance configuration and 1 credential config (issuance:manage shows which). Remove these references before deleting the key chain.`,
+            `Key chain "${sharedKey}" is still used by 1 credential config (issuance:manage shows which). Remove these references before deleting the key chain.`,
         );
-        expect(response.body.references).toEqual(
-            expect.arrayContaining([
-                { kind: "IssuanceConfig" },
-                { kind: "CredentialConfig" },
-            ]),
-        );
+        expect(response.body.references).toEqual([
+            { kind: "CredentialConfig" },
+        ]);
 
         const access = await api()
             .delete(`/key-chain/${accessKey}`)

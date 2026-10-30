@@ -15,11 +15,6 @@ interface AuthorizationServerMetadataBuildOptions {
     additionalMetadata?: Record<string, unknown>;
 }
 
-interface JwkWithOptionalKid {
-    kid?: string;
-    [key: string]: unknown;
-}
-
 const DEFAULT_CODE_CHALLENGE_METHODS_SUPPORTED = ["S256"] as const;
 
 export const DEFAULT_DPOP_SIGNING_ALG_VALUES_SUPPORTED = [
@@ -96,18 +91,4 @@ export function buildAuthorizationServerMetadata(
     }
 
     return metadata;
-}
-
-export function buildJwksResponse(
-    publicKey: JwkWithOptionalKid,
-    fallbackKid: string,
-): { keys: Record<string, unknown>[] } {
-    return {
-        keys: [
-            {
-                ...publicKey,
-                kid: publicKey.kid || fallbackKid,
-            } as Record<string, unknown>,
-        ],
-    };
 }

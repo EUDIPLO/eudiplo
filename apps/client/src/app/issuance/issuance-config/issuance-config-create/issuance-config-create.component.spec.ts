@@ -392,6 +392,45 @@ describe('issuer settings guided setup', () => {
       expect(component.federationKeyMissing).toBe(false);
     });
 
+    it('flags a token signing key that is no access token key chain of the tenant', async () => {
+      keyChains.getAll.mockResolvedValue([
+        { id: 'attestation', usageType: 'attestation' },
+        { id: 'token', usageType: 'accessToken', description: 'Tokens' },
+      ]);
+      // Unknown until the key chains are loaded.
+      expect(component.signingKeyIdInvalid('attestation')).toBe(false);
+
+      await component.loadFederationSetup();
+
+      expect(component.accessTokenKeyChains).toEqual([{ id: 'token', description: 'Tokens' }]);
+      expect(component.signingKeyIdInvalid('attestation')).toBe(true);
+      expect(component.signingKeyIdInvalid('gone')).toBe(true);
+      expect(component.signingKeyIdInvalid('token')).toBe(false);
+      expect(component.signingKeyIdInvalid('')).toBe(false);
+    });
+
+    it('keeps a stored token signing key visible while the key chains are unknown', async () => {
+      expect(component.signingKeyIdUnlisted('stored')).toBe(true);
+      expect(component.signingKeyIdInvalid('stored')).toBe(false);
+
+      keyChains.getAll.mockRejectedValue(new Error('offline'));
+      await component.loadFederationSetup();
+      expect(component.accessTokenKeyChainsLoadFailed).toBe(true);
+      expect(component.signingKeyIdUnlisted('stored')).toBe(true);
+
+      keyChains.getAll.mockResolvedValue([{ id: 'stored', usageType: 'accessToken' }]);
+      await component.loadFederationSetup();
+      expect(component.accessTokenKeyChainsLoadFailed).toBe(false);
+      expect(component.signingKeyIdUnlisted('stored')).toBe(false);
+    });
+
+    it('labels access token keys by description and ID', () => {
+      expect(
+        component.accessTokenKeyChainLabel({ id: 'k1', description: 'Access Token Signing Key' })
+      ).toBe('Access Token Signing Key (k1)');
+      expect(component.accessTokenKeyChainLabel({ id: 'k2' })).toBe('k2');
+    });
+
     it('checks the key federation.entityKeyChainId pins', async () => {
       service.getConfig.mockResolvedValue({
         ...config,

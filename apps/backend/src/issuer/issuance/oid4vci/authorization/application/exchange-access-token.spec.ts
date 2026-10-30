@@ -92,12 +92,11 @@ function exchange(
         updateIfUnconsumed: vi.fn().mockResolvedValue(true),
     };
     const signingKeys = {
-        defaultKeyId: vi.fn().mockResolvedValue("default-key"),
-        publicJwk: vi
-            .fn()
-            .mockResolvedValue(
-                options.publicJwk ?? { kty: "EC", crv: "P-256" },
-            ),
+        resolve: vi.fn(async (_tenantId: string, keyId?: string) => ({
+            keyId: keyId ?? "access-token",
+            publicJwk:
+                options.publicJwk ?? ({ kty: "EC", crv: "P-256" } as Jwk),
+        })),
     };
     const useCase = new ExchangeAccessToken(
         {
@@ -144,7 +143,7 @@ describe("ExchangeAccessToken", () => {
         vi.useRealTimers();
     });
 
-    it("issues five minute access tokens with the default key and a 30 day refresh token", async () => {
+    it("issues five minute access tokens with the access token key chain and a 30 day refresh token", async () => {
         const { execute, server, sessions, signingKeys } = exchange(
             { authorizationServers: [{ type: "built-in", id: "built-in" }] },
             preAuthorizedCodeRequest,
@@ -157,15 +156,12 @@ describe("ExchangeAccessToken", () => {
             server.verifyPreAuthorizedCodeAccessTokenRequest.mock.calls[0][0]
                 .dpop.required,
         ).toBe(false);
-        expect(signingKeys.publicJwk).toHaveBeenCalledWith(
-            "tenant-1",
-            "default-key",
-        );
+        expect(signingKeys.resolve).toHaveBeenCalledWith("tenant-1", undefined);
         expect(server.createAccessTokenResponse).toHaveBeenCalledWith(
             expect.objectContaining({
                 expiresInSeconds: 300,
                 refreshToken: true,
-                signer: expect.objectContaining({ kid: "default-key" }),
+                signer: expect.objectContaining({ kid: "access-token" }),
             }),
         );
         expect(sessions.updateIfUnconsumed).toHaveBeenCalledWith(
@@ -181,7 +177,6 @@ describe("ExchangeAccessToken", () => {
     it("honors the token settings and requireDPoP of the built-in server", async () => {
         const { execute, server, signingKeys } = exchange(
             {
-                signingKeyId: "issuance-key",
                 authorizationServers: [
                     {
                         type: "built-in",
@@ -205,10 +200,7 @@ describe("ExchangeAccessToken", () => {
             server.verifyPreAuthorizedCodeAccessTokenRequest.mock.calls[0][0]
                 .dpop.required,
         ).toBe(true);
-        expect(signingKeys.publicJwk).toHaveBeenCalledWith(
-            "tenant-1",
-            "as-key",
-        );
+        expect(signingKeys.resolve).toHaveBeenCalledWith("tenant-1", "as-key");
         expect(server.createAccessTokenResponse).toHaveBeenCalledWith(
             expect.objectContaining({
                 expiresInSeconds: 900,
@@ -267,25 +259,6 @@ describe("ExchangeAccessToken", () => {
         await expect(
             jwtVerify(access_token, publicKey, { currentDate: NOW }),
         ).resolves.toBeDefined();
-    });
-
-    it("falls back to the issuance signing key", async () => {
-        const { execute, signingKeys } = exchange(
-            {
-                signingKeyId: "issuance-key",
-                authorizationServers: [{ type: "built-in", id: "built-in" }],
-            },
-            preAuthorizedCodeRequest,
-            issuanceSession(),
-        );
-
-        await execute();
-
-        expect(signingKeys.publicJwk).toHaveBeenCalledWith(
-            "tenant-1",
-            "issuance-key",
-        );
-        expect(signingKeys.defaultKeyId).not.toHaveBeenCalled();
     });
 
     it("rejects refresh grants when refresh tokens are disabled", async () => {

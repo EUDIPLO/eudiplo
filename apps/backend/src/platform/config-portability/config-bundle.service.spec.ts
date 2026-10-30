@@ -259,7 +259,6 @@ describe("ConfigBundleService issuance export", () => {
         const spec = canonicalEntitySpec.call(service, "IssuanceConfig", {
             authorizationServers: [{ type: "built-in", id: "built-in" }],
             walletProviderTrustLists: null,
-            signingKeyId: null,
             federation: null,
             registrationCertificate: null,
             display: null,
@@ -267,11 +266,7 @@ describe("ConfigBundleService issuance export", () => {
             walletAttestationStatusCheckMode: null,
         });
 
-        for (const field of [
-            "walletProviderTrustLists",
-            "signingKeyId",
-            "display",
-        ]) {
+        for (const field of ["walletProviderTrustLists", "display"]) {
             expect(spec[field], field).toBeUndefined();
         }
         // Their schema accepts null, and applying null clears them.

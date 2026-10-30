@@ -2,6 +2,7 @@ import { X509Certificate } from "node:crypto";
 import {
     BadRequestException,
     Injectable,
+    InternalServerErrorException,
     Logger,
     NotFoundException,
 } from "@nestjs/common";
@@ -12,6 +13,7 @@ import type { Signer } from "@sd-jwt/core";
 import type { JWK, JWSHeaderParameters, JWTPayload } from "jose";
 import { type FindOptionsSelect, Repository } from "typeorm";
 import { v4 } from "uuid";
+import type { DefaultKeyChains } from "../../auth/tenant/domain/tenant-data.js";
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
 import { KeyChainReferences } from "./application/key-chain-references.js";
 import {
@@ -19,17 +21,22 @@ import {
     certificateNotBefore,
 } from "./cert/certificate-builder.service.js";
 import {
+    accessTokenKeyChainUsageRefusal,
+    accessTokenVerificationKeys,
+    DEFAULT_ACCESS_TOKEN_KEY_CHAIN_ID,
+} from "./domain/access-token-keys.js";
+import {
     defaultKeyChainUsageRefusal,
     pickDefaultAccessKeyChain,
 } from "./domain/default-access-key-chain.js";
-import { toPublicJwk } from "./domain/public-jwk.js";
 import { KeyChainInUseError } from "./domain/key-chain-reference.js";
+import { toPublicJwk } from "./domain/public-jwk.js";
+import { certificateHoldsKey } from "./domain/public-jwk-match.js";
 import {
     providerAlgRefusal,
     signingAlgForCurve,
     signingAlgForJwk,
 } from "./domain/signing-algs.js";
-import { certificateHoldsKey } from "./domain/public-jwk-match.js";
 import { KeyChainCreateDto, KeyChainType } from "./dto/key-chain-create.dto.js";
 import { KeyChainExportDto } from "./dto/key-chain-export.dto.js";
 import { KeyChainImportDto } from "./dto/key-chain-import.dto.js";
@@ -145,11 +152,19 @@ export class KeyChainService {
         return id;
     }
 
+    /**
+     * With `insertOnly`, an existing key chain with the ID makes the insert
+     * fail instead of being overwritten. `keyName` replaces the ID in the
+     * names of the generated keys, which external KMS providers use as key
+     * names; a key chain ID that is not unique across tenants needs one.
+     */
     private async createWithId(
         tenantId: string,
         id: string,
         dto: KeyChainCreateDto,
+        options: { insertOnly?: boolean; keyName?: string } = {},
     ): Promise<string> {
+        const keyName = options.keyName ?? id;
         const tenant = await this.tenantRepository.findOneByOrFail({
             id: tenantId,
         });
@@ -169,7 +184,7 @@ export class KeyChainService {
 
         if (dto.type === KeyChainType.InternalChain) {
             keyChain = await this.createInternalChain(
-                id,
+                keyName,
                 adapter,
                 alg,
                 subjectCN,
@@ -179,7 +194,7 @@ export class KeyChainService {
             );
         } else {
             keyChain = await this.createStandaloneKey(
-                id,
+                keyName,
                 adapter,
                 alg,
                 subjectCN,
@@ -189,7 +204,7 @@ export class KeyChainService {
             );
         }
 
-        await this.keyChainRepository.save({
+        const entity = {
             ...keyChain,
             id,
             tenantId,
@@ -200,7 +215,17 @@ export class KeyChainService {
             rotationEnabled: dto.rotationPolicy?.enabled ?? false,
             rotationIntervalDays: dto.rotationPolicy?.intervalDays,
             certValidityDays: dto.rotationPolicy?.certValidityDays,
-        } as KeyChainEntity);
+        } as KeyChainEntity;
+        if (options.insertOnly) {
+            try {
+                await this.keyChainRepository.insert(entity);
+            } catch (error) {
+                await this.deleteExternalKeyMaterial(entity);
+                throw error;
+            }
+        } else {
+            await this.keyChainRepository.save(entity);
+        }
 
         this.logger.log(
             `Created key chain ${id} for tenant ${tenantId} (type: ${dto.type}, provider: ${adapter.providerId}, alg: ${alg})`,
@@ -550,14 +575,21 @@ export class KeyChainService {
         });
     }
 
-    private async configuredDefaultAccessKeyChainId(
+    private configuredDefaultAccessKeyChainId(
         tenantId: string,
+    ): Promise<string | undefined> {
+        return this.configuredDefaultKeyChainId(tenantId, "access");
+    }
+
+    private async configuredDefaultKeyChainId(
+        tenantId: string,
+        entry: keyof DefaultKeyChains,
     ): Promise<string | undefined> {
         const tenant = await this.tenantRepository.findOne({
             where: { id: tenantId },
             select: { id: true, defaultKeyChains: true },
         });
-        return tenant?.defaultKeyChains?.access ?? undefined;
+        return tenant?.defaultKeyChains?.[entry] ?? undefined;
     }
 
     /**
@@ -624,6 +656,173 @@ export class KeyChainService {
         return this.keyChainRepository.findOne({
             where: { tenantId, id: chosen.id },
         });
+    }
+
+    /**
+     * The key chain that signs an authorization server's access tokens:
+     * `keyId` when the authorization server names one, else the
+     * `accessToken` entry of the tenant's key chain defaults, else the
+     * tenant's oldest access token key chain. A tenant without any gets one
+     * with ID {@link DEFAULT_ACCESS_TOKEN_KEY_CHAIN_ID}. Only key chains of
+     * usage type `accessToken` qualify, so neither the access certificate
+     * nor a credential signing key ever signs an access token by accident.
+     */
+    async resolveAccessTokenKeyChain(
+        tenantId: string,
+        keyId?: string,
+    ): Promise<KeyChainEntity> {
+        return (
+            (await this.findAccessTokenKeyChain(tenantId, keyId)) ??
+            this.createDefaultAccessTokenKeyChain(tenantId)
+        );
+    }
+
+    /**
+     * Public keys of an authorization server's JWKS: those of
+     * {@link accessTokenVerificationKeys} for the key chain of
+     * {@link resolveAccessTokenKeyChain}. Before any token was issued, the
+     * tenant may have none; the JWKS is then empty, so the public endpoint
+     * never creates key material.
+     */
+    async getAccessTokenVerificationKeys(
+        tenantId: string,
+        keyId: string | undefined,
+        lifetimeSeconds: number,
+    ): Promise<JWK[]> {
+        const keyChain = await this.findAccessTokenKeyChain(tenantId, keyId);
+        return keyChain
+            ? accessTokenVerificationKeys(keyChain, lifetimeSeconds)
+            : [];
+    }
+
+    /**
+     * {@link resolveAccessTokenKeyChain} without creating a key chain: null
+     * when nothing names one and the tenant has none.
+     */
+    private async findAccessTokenKeyChain(
+        tenantId: string,
+        keyId?: string,
+    ): Promise<KeyChainEntity | null> {
+        if (keyId) return this.namedAccessTokenKeyChain(tenantId, keyId);
+        const configured = await this.configuredDefaultKeyChainId(
+            tenantId,
+            "accessToken",
+        );
+        if (configured) {
+            return this.namedAccessTokenKeyChain(tenantId, configured);
+        }
+        return this.oldestAccessTokenKeyChain(tenantId);
+    }
+
+    /**
+     * Why the key chain `id` cannot sign an authorization server's access
+     * tokens, or undefined when it is an access token key chain of the
+     * tenant.
+     */
+    async accessTokenKeyChainRefusal(
+        tenantId: string,
+        id: string,
+    ): Promise<string | undefined> {
+        const keyChain = await this.keyChainRepository.findOne({
+            where: { tenantId, id, usage: KeyUsage.Sign },
+            select: { id: true, usageType: true },
+        });
+        if (!keyChain) {
+            return `Key chain ${JSON.stringify(id)} does not exist in this tenant.`;
+        }
+        return accessTokenKeyChainUsageRefusal(id, keyChain.usageType);
+    }
+
+    private async namedAccessTokenKeyChain(
+        tenantId: string,
+        id: string,
+    ): Promise<KeyChainEntity> {
+        const keyChain = await this.keyChainRepository.findOne({
+            where: { tenantId, id, usage: KeyUsage.Sign },
+        });
+        if (keyChain?.usageType === KeyUsageType.AccessToken) return keyChain;
+        // Wallets see this error, so only the log names the key chain.
+        this.logger.warn(
+            keyChain
+                ? `[${tenantId}] Key chain ${JSON.stringify(id)} has usage type ${JSON.stringify(keyChain.usageType)} and cannot sign access tokens. Name a key chain with usage type "accessToken" in token.signingKeyId or the accessToken entry of key-chain-defaults.json, or remove the entry.`
+                : `[${tenantId}] The access token key chain ${JSON.stringify(id)} does not exist. Name a key chain with usage type "accessToken" in token.signingKeyId or the accessToken entry of key-chain-defaults.json, or remove the entry.`,
+        );
+        throw accessTokenKeyChainUnavailable();
+    }
+
+    /**
+     * The tenant's first access token key chain; the ID breaks ties, as
+     * SQLite stores the creation time in seconds.
+     */
+    private oldestAccessTokenKeyChain(
+        tenantId: string,
+    ): Promise<KeyChainEntity | null> {
+        return this.keyChainRepository.findOne({
+            where: {
+                tenantId,
+                usage: KeyUsage.Sign,
+                usageType: KeyUsageType.AccessToken,
+            },
+            order: { createdAt: "ASC", id: "ASC" },
+        });
+    }
+
+    /**
+     * Creates the tenant's access token key chain with the fixed ID. When a
+     * concurrent request created it first, the insert fails and that one is
+     * used.
+     */
+    private async createDefaultAccessTokenKeyChain(
+        tenantId: string,
+    ): Promise<KeyChainEntity> {
+        const id = DEFAULT_ACCESS_TOKEN_KEY_CHAIN_ID;
+        // A key chain of another usage type that holds the ID fails before
+        // any key is generated, so requests cannot create KMS keys in a loop.
+        const blocking = await this.keyChainRepository.findOne({
+            where: { tenantId, id },
+            select: { id: true, usageType: true },
+        });
+        // A concurrent request created it since the lookup.
+        if (blocking?.usageType === KeyUsageType.AccessToken) {
+            return this.keyChainRepository.findOneOrFail({
+                where: { tenantId, id },
+            });
+        }
+        if (!blocking) {
+            try {
+                await this.createWithId(
+                    tenantId,
+                    id,
+                    {
+                        type: KeyChainType.Standalone,
+                        usageType: KeyUsageType.AccessToken,
+                        description:
+                            "Access token signing key (created by EUDIPLO)",
+                    },
+                    // Every tenant has this ID, so the KMS key name must not
+                    // derive from it.
+                    { insertOnly: true, keyName: v4() },
+                );
+                this.logger.log(
+                    `[${tenantId}] Created access token key chain ${id}`,
+                );
+            } catch (error) {
+                // A concurrent request may have created it first.
+                const existing = await this.oldestAccessTokenKeyChain(tenantId);
+                if (existing) return existing;
+                this.logger.error(
+                    `[${tenantId}] Could not create the access token key chain ${JSON.stringify(id)}: ${error instanceof Error ? error.message : String(error)}`,
+                );
+                throw accessTokenKeyChainUnavailable();
+            }
+            return this.keyChainRepository.findOneOrFail({
+                where: { tenantId, id },
+            });
+        }
+        this.logger.error(
+            `[${tenantId}] Key chain ${JSON.stringify(id)} has usage type ${JSON.stringify(blocking.usageType)}, so EUDIPLO cannot create its access token key chain with this ID. Create a key chain with usage type "accessToken".`,
+        );
+        throw accessTokenKeyChainUnavailable();
     }
 
     async update(
@@ -822,7 +1021,9 @@ export class KeyChainService {
         );
         // Keep the curve: certificates, metadata and wallets expect it.
         const newMat = await adapter.generateKey({
-            kid: `${id}-${Date.now()}`,
+            // Random, so key chains with the same ID in other tenants never
+            // share an external key name.
+            kid: `${id}-${v4()}`,
             alg: signingAlgForJwk(keyChain.activeJwk),
         });
 
@@ -969,10 +1170,6 @@ export class KeyChainService {
             return this.signingService.getPublicKey("jwk", tenantId, keyId);
         }
         return this.signingService.getPublicKey("pem", tenantId, keyId);
-    }
-
-    async getKid(tenantId: string): Promise<string> {
-        return this.signingService.getKid(tenantId);
     }
 
     /** Signing algorithm of a key chain (ES256, ES384 or ES512). */
@@ -1179,4 +1376,14 @@ export class KeyChainService {
                 keyChain.rotationIntervalDays * 24 * 60 * 60 * 1000,
         );
     }
+}
+
+/**
+ * A configuration fault of the tenant, not of the request: wallets get a
+ * server error that names no key chain, the log names the cause.
+ */
+function accessTokenKeyChainUnavailable(): InternalServerErrorException {
+    return new InternalServerErrorException(
+        "The tenant's access token key chain is not available.",
+    );
 }

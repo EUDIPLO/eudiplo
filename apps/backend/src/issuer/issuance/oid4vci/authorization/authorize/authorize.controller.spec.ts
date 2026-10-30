@@ -170,10 +170,12 @@ function createHarness(issuanceConfig: Record<string, unknown> = {}) {
         verifyWalletAttestation: vi.fn().mockResolvedValue(undefined),
     };
     const keyChain = {
-        getKid: vi.fn().mockResolvedValue("kid-1"),
-        getPublicKey: vi
-            .fn()
-            .mockResolvedValue({ kty: "EC", crv: "P-256", kid: "kid-1" }),
+        resolveAccessTokenKeyChain: vi.fn(
+            async (_tenantId: string, keyId?: string) => ({
+                id: keyId ?? "chain-1",
+                activeJwk: { kty: "EC", crv: "P-256", kid: "kid-1", d: "x" },
+            }),
+        ),
     };
     const nonces = { save: vi.fn().mockResolvedValue(undefined) };
     const dpopProofs = { register: vi.fn().mockResolvedValue(true) };
@@ -1265,7 +1267,8 @@ describe("Built-in authorization server token endpoint", () => {
                     method: "jwk",
                     alg: "ES256",
                     publicJwk: { kty: "EC", crv: "P-256", kid: "kid-1" },
-                    kid: "kid-1",
+                    // The key chain ID: the signing callback looks the key up by it.
+                    kid: "chain-1",
                 },
                 subject: "session-1",
                 expiresInSeconds: 300,
@@ -1300,11 +1303,13 @@ describe("Built-in authorization server token endpoint", () => {
 
         it("derives authorization_details from the offer and honors the refresh config", async () => {
             h = createHarness({
-                signingKeyId: "pinned",
                 authorizationServers: [
                     {
                         type: "built-in",
-                        token: { refreshTokenEnabled: false },
+                        token: {
+                            refreshTokenEnabled: false,
+                            signingKeyId: "pinned",
+                        },
                     },
                 ],
             });
@@ -1324,9 +1329,7 @@ describe("Built-in authorization server token endpoint", () => {
                     "urn:ietf:params:oauth:grant-type:pre-authorized_code",
                 "pre-authorized_code": "code-1",
             });
-            expect(h.keyChain.getKid).not.toHaveBeenCalled();
-            expect(h.keyChain.getPublicKey).toHaveBeenCalledWith(
-                "jwk",
+            expect(h.keyChain.resolveAccessTokenKeyChain).toHaveBeenCalledWith(
                 TENANT,
                 "pinned",
             );

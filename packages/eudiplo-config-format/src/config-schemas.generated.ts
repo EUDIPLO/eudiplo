@@ -6770,6 +6770,59 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
   },
   {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://eudiplo.dev/schemas/v2/KeyChainDefaultsConfigFile.schema.json",
+    "title": "KeyChainDefaultsConfigFile",
+    "type": "object",
+    "properties": {
+      "$schema": {
+        "type": "string",
+        "const": "https://eudiplo.dev/schemas/v2/KeyChainDefaultsConfigFile.schema.json"
+      },
+      "metadata": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "ownership": {
+            "type": "string",
+            "enum": [
+              "unmanaged",
+              "file-managed"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "spec": {
+        "type": "object",
+        "properties": {
+          "access": {
+            "description": "ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.",
+            "type": "string",
+            "minLength": 1
+          },
+          "accessToken": {
+            "description": "ID of the access token key chain (usage type accessToken) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant's oldest access token key chain and creates one with ID access-token when the tenant has none.",
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false,
+        "description": "The tenant's key chain per usage type, used where no configuration names one. A usage type without an entry uses a key chain picked by rule."
+      }
+    },
+    "required": [
+      "$schema",
+      "metadata",
+      "spec"
+    ],
+    "additionalProperties": false
+  },
+  {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://eudiplo.dev/schemas/v2/KmsConfigFile.schema.json",
     "title": "KmsConfigFile",
     "type": "object",
@@ -12670,6 +12723,375 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
   },
   {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://eudiplo.dev/schemas/v4/KeyChainConfigFile.schema.json",
+    "title": "KeyChainConfigFile",
+    "type": "object",
+    "properties": {
+      "$schema": {
+        "type": "string",
+        "const": "https://eudiplo.dev/schemas/v4/KeyChainConfigFile.schema.json"
+      },
+      "metadata": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "ownership": {
+            "type": "string",
+            "enum": [
+              "unmanaged",
+              "file-managed"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "spec": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "usageType": {
+            "type": "string",
+            "enum": [
+              "access",
+              "accessToken",
+              "attestation",
+              "trustList",
+              "statusList",
+              "federation",
+              "encrypt"
+            ]
+          },
+          "type": {
+            "description": "Key chain type. For a `private-jwk` key source without `activeJwk`, `standalone` makes `jwk` the signing key and `crt` its chain, leaf first; `internalChain` makes `jwk` a CA key and the last `crt` entry its CA certificate (created if `crt` is omitted), and the import generates a new signing key with a certificate issued by it. Without `type`, `jwk` is a CA key only if `rotationPolicy.enabled` is true and `crt` is not a single self-signed certificate that is not a CA. For `regenerate`, it is the type of the new key chain and must equal `keySource.keyChainType` if both are set. For the other key sources, it must match the key chain they describe.",
+            "type": "string",
+            "enum": [
+              "standalone",
+              "internalChain"
+            ]
+          },
+          "keySource": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "private-jwk"
+                  },
+                  "jwk": {
+                    "type": "object",
+                    "properties": {
+                      "kty": {
+                        "type": "string",
+                        "description": "Key type (for example EC)."
+                      },
+                      "x": {
+                        "type": "string",
+                        "description": "Elliptic curve public x coordinate."
+                      },
+                      "y": {
+                        "type": "string",
+                        "description": "Elliptic curve public y coordinate."
+                      },
+                      "crv": {
+                        "type": "string",
+                        "description": "Elliptic curve name."
+                      },
+                      "d": {
+                        "type": "string",
+                        "description": "Private key value."
+                      },
+                      "alg": {
+                        "description": "Optional algorithm hint.",
+                        "type": "string"
+                      },
+                      "kid": {
+                        "description": "Optional key identifier.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kty",
+                      "x",
+                      "y",
+                      "crv",
+                      "d"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "activeJwk": {
+                    "type": "object",
+                    "properties": {
+                      "kty": {
+                        "type": "string",
+                        "description": "Key type (for example EC)."
+                      },
+                      "x": {
+                        "type": "string",
+                        "description": "Elliptic curve public x coordinate."
+                      },
+                      "y": {
+                        "type": "string",
+                        "description": "Elliptic curve public y coordinate."
+                      },
+                      "crv": {
+                        "type": "string",
+                        "description": "Elliptic curve name."
+                      },
+                      "d": {
+                        "type": "string",
+                        "description": "Private key value."
+                      },
+                      "alg": {
+                        "description": "Optional algorithm hint.",
+                        "type": "string"
+                      },
+                      "kid": {
+                        "description": "Optional key identifier.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kty",
+                      "x",
+                      "y",
+                      "crv",
+                      "d"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "type",
+                  "jwk"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "external-reference"
+                  },
+                  "provider": {
+                    "type": "string"
+                  },
+                  "externalKeyId": {
+                    "type": "string"
+                  },
+                  "publicJwk": {
+                    "type": "object",
+                    "properties": {
+                      "kty": {
+                        "type": "string"
+                      },
+                      "x": {
+                        "type": "string"
+                      },
+                      "y": {
+                        "type": "string"
+                      },
+                      "crv": {
+                        "type": "string"
+                      },
+                      "alg": {
+                        "type": "string"
+                      },
+                      "kid": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kty",
+                      "x",
+                      "y",
+                      "crv"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "activeExternalKeyId": {
+                    "type": "string"
+                  },
+                  "activePublicJwk": {
+                    "type": "object",
+                    "properties": {
+                      "kty": {
+                        "type": "string"
+                      },
+                      "x": {
+                        "type": "string"
+                      },
+                      "y": {
+                        "type": "string"
+                      },
+                      "crv": {
+                        "type": "string"
+                      },
+                      "alg": {
+                        "type": "string"
+                      },
+                      "kid": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kty",
+                      "x",
+                      "y",
+                      "crv"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "type",
+                  "provider",
+                  "externalKeyId",
+                  "publicJwk"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "required"
+                  },
+                  "publicJwk": {
+                    "type": "object",
+                    "properties": {
+                      "kty": {
+                        "type": "string"
+                      },
+                      "x": {
+                        "type": "string"
+                      },
+                      "y": {
+                        "type": "string"
+                      },
+                      "crv": {
+                        "type": "string"
+                      },
+                      "alg": {
+                        "type": "string"
+                      },
+                      "kid": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kty",
+                      "x",
+                      "y",
+                      "crv"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "regenerate"
+                  },
+                  "keyChainType": {
+                    "type": "string",
+                    "enum": [
+                      "standalone",
+                      "internalChain"
+                    ]
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "crt": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "activeCertificate": {
+            "description": "Active certificate for an internal key chain.",
+            "type": "string"
+          },
+          "kmsProvider": {
+            "type": "string"
+          },
+          "rotationPolicy": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "intervalDays": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 3650
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "certValidityDays": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 3650
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "enabled"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "usageType",
+          "keySource"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "$schema",
+      "metadata",
+      "spec"
+    ],
+    "additionalProperties": false
+  },
+  {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://eudiplo.dev/schemas/v4/TenantConfigFile.schema.json",
     "title": "TenantConfigFile",
     "type": "object",
@@ -13250,6 +13672,814 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
                         },
                         "signingKeyId": {
                           "description": "Optional key chain id used to sign issued tokens.",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "refreshTokenEnabled": {
+                          "description": "Enable issuing refresh tokens.",
+                          "type": "boolean"
+                        },
+                        "refreshTokenExpiresInSeconds": {
+                          "description": "Refresh token lifetime in seconds.",
+                          "type": "number",
+                          "minimum": 60
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "requireDPoP": {
+                      "description": "Require DPoP proofs for token/credential requests.",
+                      "type": "boolean"
+                    },
+                    "walletAttestationRequired": {
+                      "description": "Require wallet attestation for this authorization server.",
+                      "type": "boolean"
+                    },
+                    "walletProviderTrustLists": {
+                      "description": "Optional wallet provider trust list references for this authorization server.",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "trustListId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "url": {
+                            "description": "URL of the wallet provider trust list.",
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "verifierKey": {
+                            "description": "Optional verifier key material used for trust list verification.",
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "verifierKeyPem": {
+                            "description": "Optional verifier public key in SPKI PEM form (-----BEGIN PUBLIC KEY-----).",
+                            "type": "string",
+                            "pattern": "^\\s*-----BEGIN PUBLIC KEY-----[A-Za-z0-9+/=\\s]+-----END PUBLIC KEY-----\\s*$"
+                          },
+                          "verifierX509Der": {
+                            "description": "Optional verifier certificate in DER/base64 form.",
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "walletAttestationStatusCheckMode": {
+                      "description": "Status check mode for wallet attestations at this authorization server. Omit to inherit the issuance default.",
+                      "type": "string",
+                      "enum": [
+                        "strict",
+                        "best_effort",
+                        "disabled"
+                      ]
+                    },
+                    "label": {
+                      "description": "Optional display label for UI selection.",
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "description": "Whether this authorization server entry is enabled.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id"
+                  ],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "Supported authorization server configurations."
+            },
+            "description": "Configured authorization server entries."
+          },
+          "federation": {
+            "description": "Optional OpenID Federation settings.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "description": "Federation role for this issuer.",
+                    "type": "string",
+                    "enum": [
+                      "trust_anchor",
+                      "intermediate",
+                      "leaf"
+                    ]
+                  },
+                  "mode": {
+                    "description": "Federation operation mode.",
+                    "type": "string",
+                    "enum": [
+                      "federation-only",
+                      "hybrid"
+                    ]
+                  },
+                  "entityId": {
+                    "description": "Entity Identifier of the tenant's federation entity, usually {PUBLIC_URL}/issuers/{tenantId}: an https URL with a host and without query or fragment (OpenID Federation 1.0 Section 1.2). http is accepted only when OUTBOUND_URL_ALLOW_HTTP is true.",
+                    "type": "string",
+                    "pattern": "^(https?:\\/\\/[^\\s?#]+)?$"
+                  },
+                  "enforceSigningPolicy": {
+                    "description": "Enforce strict signing policy checks.",
+                    "type": "boolean"
+                  },
+                  "cacheTtlSeconds": {
+                    "description": "Cache time-to-live for federation metadata in seconds.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "trustAnchors": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "entityId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Federation trust anchor entity id."
+                        },
+                        "entityConfigurationUri": {
+                          "type": "string",
+                          "format": "uri",
+                          "description": "Entity configuration URI for the trust anchor."
+                        }
+                      },
+                      "required": [
+                        "entityId",
+                        "entityConfigurationUri"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "description": "Federation trust anchors."
+                  },
+                  "entityTypes": {
+                    "description": "Roles the entity configuration publishes metadata for. Defaults to openid_credential_issuer.",
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "openid_credential_issuer",
+                        "openid_credential_verifier"
+                      ]
+                    }
+                  },
+                  "authorityHints": {
+                    "description": "authority_hints of the entity configuration: the superiors that issue a subordinate statement about this entity. Defaults to the trust anchor entity ids.",
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "entityKeyChainId": {
+                    "description": "Key chain with usage type 'federation' that signs the entity configuration. Without it, a federation key chain of the tenant is used; set it when the tenant has several.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "entityConfigurationLifetimeSeconds": {
+                    "description": "Lifetime (exp - iat) of the entity configuration in seconds. Defaults to 86400.",
+                    "type": "integer",
+                    "minimum": 60,
+                    "maximum": 31536000
+                  },
+                  "trustMarks": {
+                    "description": "Trust mark JWTs issued to this entity, published in the entity configuration.",
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "entityMetadata": {
+                    "description": "Informational federation_entity metadata of the entity configuration.",
+                    "type": "object",
+                    "properties": {
+                      "organization_name": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "contacts": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "logo_uri": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "policy_uri": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "homepage_uri": {
+                        "type": "string",
+                        "format": "uri"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "includeTrustChain": {
+                    "description": "Add the trust chain of this entity as trust_chain header to federation SD-JWT VCs and OID4VP request objects.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "trustAnchors"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "registrationCertificate": {
+            "description": "Optional registration certificate settings.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "description": "Enable issuer registration certificate support.",
+                    "type": "boolean"
+                  },
+                  "mode": {
+                    "description": "How registration certificate data is provided.",
+                    "type": "string",
+                    "enum": [
+                      "import",
+                      "generate"
+                    ]
+                  },
+                  "jwt": {
+                    "description": "Optional registration certificate JWT when using import mode.",
+                    "type": "string"
+                  },
+                  "privacyPolicy": {
+                    "description": "Optional privacy policy URI.",
+                    "type": "string"
+                  },
+                  "supportUri": {
+                    "description": "Optional support URI.",
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "display": {
+            "description": "Localized issuer metadata shown to wallets.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "description": "Issuer display name.",
+                  "type": "string"
+                },
+                "locale": {
+                  "description": "Locale tag for this display entry.",
+                  "type": "string"
+                },
+                "logo": {
+                  "description": "Optional issuer logo metadata.",
+                  "type": "object",
+                  "properties": {
+                    "uri": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Logo URI."
+                    },
+                    "alt_text": {
+                      "description": "Optional localized alternative text.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "uri"
+                  ],
+                  "additionalProperties": {}
+                }
+              },
+              "additionalProperties": {}
+            }
+          },
+          "notificationEndpointEnabled": {
+            "description": "Whether the OID4VCI notification endpoint is exposed for this issuance configuration.",
+            "type": "boolean"
+          },
+          "credentialResponseEncryption": {
+            "description": "Enable encrypted credential responses.",
+            "type": "boolean"
+          },
+          "credentialRequestEncryption": {
+            "description": "Require encrypted credential requests.",
+            "type": "boolean"
+          },
+          "txCodeMaxAttempts": {
+            "description": "Maximum verification attempts for transaction codes. Null resets to defaults.",
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "offerLifetimeSeconds": {
+            "description": "Default lifetime of credential offers in seconds. Can be overridden per offer request. Null or unset: offers do not expire.",
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "authorizationServers"
+        ],
+        "additionalProperties": false,
+        "title": "IssuanceConfig"
+      }
+    }
+  },
+  {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://eudiplo.dev/schemas/v6/IssuanceConfigFile.schema.json",
+    "title": "IssuanceConfigFile",
+    "type": "object",
+    "properties": {
+      "$schema": {
+        "type": "string",
+        "const": "https://eudiplo.dev/schemas/v6/IssuanceConfigFile.schema.json"
+      },
+      "metadata": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Monotonically increasing configuration generation."
+          },
+          "ownership": {
+            "type": "string",
+            "enum": [
+              "unmanaged",
+              "file-managed"
+            ],
+            "description": "Requested ownership recorded when the document is applied."
+          }
+        },
+        "additionalProperties": false
+      },
+      "spec": {
+        "$ref": "#/$defs/IssuanceConfig"
+      }
+    },
+    "required": [
+      "$schema",
+      "spec"
+    ],
+    "additionalProperties": false,
+    "$defs": {
+      "IssuanceConfig": {
+        "type": "object",
+        "properties": {
+          "batchSize": {
+            "description": "Optional issuance batch size.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "dPopRequired": {
+            "description": "Require DPoP proofs for issuance endpoints.",
+            "type": "boolean"
+          },
+          "walletAttestationRequired": {
+            "description": "Default wallet attestation requirement for managed authorization servers.",
+            "type": "boolean"
+          },
+          "walletProviderTrustLists": {
+            "description": "Shared wallet provider trust lists for key attestations and default authorization server wallet authentication.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "trustListId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "url": {
+                  "description": "URL of the wallet provider trust list.",
+                  "type": "string",
+                  "format": "uri"
+                },
+                "verifierKey": {
+                  "description": "Optional verifier key material used for trust list verification.",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                "verifierKeyPem": {
+                  "description": "Optional verifier public key in SPKI PEM form (-----BEGIN PUBLIC KEY-----).",
+                  "type": "string",
+                  "pattern": "^\\s*-----BEGIN PUBLIC KEY-----[A-Za-z0-9+/=\\s]+-----END PUBLIC KEY-----\\s*$"
+                },
+                "verifierX509Der": {
+                  "description": "Optional verifier certificate in DER/base64 form.",
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "walletAttestationStatusCheckMode": {
+            "description": "Default status check mode for wallet attestations at managed authorization servers: strict, best_effort (default) or disabled.",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "strict",
+                  "best_effort",
+                  "disabled"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "authorizationServers": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "external",
+                      "description": "Use an externally managed authorization server."
+                    },
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Authorization server identifier."
+                    },
+                    "issuer": {
+                      "type": "string",
+                      "format": "uri",
+                      "description": "Issuer URL for the external authorization server."
+                    },
+                    "sessionBinding": {
+                      "description": "Explicit mapping from an external access-token claim to an existing issuance session.",
+                      "type": "object",
+                      "properties": {
+                        "method": {
+                          "type": "string",
+                          "const": "access_token_claim",
+                          "description": "Read the correlation value from a configured access-token claim."
+                        },
+                        "claim": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Claim name that contains the issuance-session correlation value."
+                        }
+                      },
+                      "required": [
+                        "method",
+                        "claim"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "label": {
+                      "description": "Optional display label for UI selection.",
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "description": "Whether this authorization server entry is enabled.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "issuer"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "oid4vp",
+                      "description": "Use OID4VP-based authorization server chaining."
+                    },
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Authorization server identifier."
+                    },
+                    "presentationConfigId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Presentation configuration id used during authorization."
+                    },
+                    "immediateWalletRedirect": {
+                      "description": "Redirect wallets immediately after authorization response creation.",
+                      "type": "boolean"
+                    },
+                    "token": {
+                      "description": "Optional token issuance settings.",
+                      "type": "object",
+                      "properties": {
+                        "lifetimeSeconds": {
+                          "description": "Access token lifetime in seconds.",
+                          "type": "number",
+                          "minimum": 60
+                        },
+                        "signingKeyId": {
+                          "description": "ID of a key chain with usage type \"accessToken\" that signs the issued access tokens. Without it, the tenant's access token key chain signs them.",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "refreshTokenEnabled": {
+                          "description": "Enable issuing refresh tokens.",
+                          "type": "boolean"
+                        },
+                        "refreshTokenExpiresInSeconds": {
+                          "description": "Refresh token lifetime in seconds.",
+                          "type": "number",
+                          "minimum": 60
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "requireDPoP": {
+                      "description": "Require DPoP proofs for token/credential requests.",
+                      "type": "boolean"
+                    },
+                    "walletAttestationRequired": {
+                      "description": "Require wallet attestation for this authorization server.",
+                      "type": "boolean"
+                    },
+                    "walletProviderTrustLists": {
+                      "description": "Optional wallet provider trust list references for this authorization server.",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "trustListId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "url": {
+                            "description": "URL of the wallet provider trust list.",
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "verifierKey": {
+                            "description": "Optional verifier key material used for trust list verification.",
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "verifierKeyPem": {
+                            "description": "Optional verifier public key in SPKI PEM form (-----BEGIN PUBLIC KEY-----).",
+                            "type": "string",
+                            "pattern": "^\\s*-----BEGIN PUBLIC KEY-----[A-Za-z0-9+/=\\s]+-----END PUBLIC KEY-----\\s*$"
+                          },
+                          "verifierX509Der": {
+                            "description": "Optional verifier certificate in DER/base64 form.",
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "walletAttestationStatusCheckMode": {
+                      "description": "Status check mode for wallet attestations at this authorization server. Omit to inherit the issuance default.",
+                      "type": "string",
+                      "enum": [
+                        "strict",
+                        "best_effort",
+                        "disabled"
+                      ]
+                    },
+                    "label": {
+                      "description": "Optional display label for UI selection.",
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "description": "Whether this authorization server entry is enabled.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "presentationConfigId"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "chained",
+                      "description": "Use upstream OIDC as authorization source."
+                    },
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Authorization server identifier."
+                    },
+                    "upstream": {
+                      "type": "object",
+                      "properties": {
+                        "issuer": {
+                          "type": "string",
+                          "format": "uri",
+                          "description": "Upstream OIDC issuer URL."
+                        },
+                        "clientId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Client id for upstream OIDC authentication."
+                        },
+                        "clientSecret": {
+                          "description": "Optional client secret for upstream OIDC authentication.",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "scopes": {
+                          "description": "Optional scopes requested from the upstream issuer.",
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        }
+                      },
+                      "required": [
+                        "issuer",
+                        "clientId"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Upstream OIDC connection settings."
+                    },
+                    "token": {
+                      "description": "Optional token issuance settings.",
+                      "type": "object",
+                      "properties": {
+                        "lifetimeSeconds": {
+                          "description": "Access token lifetime in seconds.",
+                          "type": "number",
+                          "minimum": 60
+                        },
+                        "signingKeyId": {
+                          "description": "ID of a key chain with usage type \"accessToken\" that signs the issued access tokens. Without it, the tenant's access token key chain signs them.",
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "refreshTokenEnabled": {
+                          "description": "Enable issuing refresh tokens.",
+                          "type": "boolean"
+                        },
+                        "refreshTokenExpiresInSeconds": {
+                          "description": "Refresh token lifetime in seconds.",
+                          "type": "number",
+                          "minimum": 60
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "requireDPoP": {
+                      "description": "Require DPoP proofs for token/credential requests.",
+                      "type": "boolean"
+                    },
+                    "walletAttestationRequired": {
+                      "description": "Require wallet attestation for this authorization server.",
+                      "type": "boolean"
+                    },
+                    "walletProviderTrustLists": {
+                      "description": "Optional wallet provider trust list references for this authorization server.",
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "trustListId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "url": {
+                            "description": "URL of the wallet provider trust list.",
+                            "type": "string",
+                            "format": "uri"
+                          },
+                          "verifierKey": {
+                            "description": "Optional verifier key material used for trust list verification.",
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "verifierKeyPem": {
+                            "description": "Optional verifier public key in SPKI PEM form (-----BEGIN PUBLIC KEY-----).",
+                            "type": "string",
+                            "pattern": "^\\s*-----BEGIN PUBLIC KEY-----[A-Za-z0-9+/=\\s]+-----END PUBLIC KEY-----\\s*$"
+                          },
+                          "verifierX509Der": {
+                            "description": "Optional verifier certificate in DER/base64 form.",
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "walletAttestationStatusCheckMode": {
+                      "description": "Status check mode for wallet attestations at this authorization server. Omit to inherit the issuance default.",
+                      "type": "string",
+                      "enum": [
+                        "strict",
+                        "best_effort",
+                        "disabled"
+                      ]
+                    },
+                    "label": {
+                      "description": "Optional display label for UI selection.",
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "description": "Whether this authorization server entry is enabled.",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "upstream"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "const": "built-in",
+                      "description": "Use EUDIPLO built-in authorization server."
+                    },
+                    "id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Authorization server identifier."
+                    },
+                    "token": {
+                      "description": "Optional token issuance settings.",
+                      "type": "object",
+                      "properties": {
+                        "lifetimeSeconds": {
+                          "description": "Access token lifetime in seconds.",
+                          "type": "number",
+                          "minimum": 60
+                        },
+                        "signingKeyId": {
+                          "description": "ID of a key chain with usage type \"accessToken\" that signs the issued access tokens. Without it, the tenant's access token key chain signs them.",
                           "type": "string",
                           "minLength": 1
                         },

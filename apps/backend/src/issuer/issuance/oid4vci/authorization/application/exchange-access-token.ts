@@ -378,14 +378,12 @@ export class ExchangeAccessToken {
                 }));
         }
 
-        // Key of the built-in entry, then the issuance key, then the default key.
-        const signingKeyId =
-            accessTokenSettings.signingKeyId ||
-            (await this.signingKeys.defaultKeyId(tenantId));
-        const publicJwk = await this.signingKeys.publicJwk(
-            tenantId,
-            signingKeyId,
-        );
+        // Key of the built-in entry, else the tenant's access token key chain.
+        const { keyId: signingKeyId, publicJwk } =
+            await this.signingKeys.resolve(
+                tenantId,
+                accessTokenSettings.signingKeyId,
+            );
 
         // The JWT (for the credential endpoint) and the token response (for
         // the wallet) carry the same authorization_details (OID4VCI Section 6).

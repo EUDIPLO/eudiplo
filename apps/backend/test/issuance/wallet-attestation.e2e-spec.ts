@@ -7,7 +7,6 @@ import {
 } from "@openid4vc/oauth2";
 import { Openid4vciClient } from "@openid4vc/openid4vci";
 import { BitsPerStatus, StatusList } from "@owf/token-status-list";
-import * as x509 from "@peculiar/x509";
 import { X509Certificate, X509CertificateGenerator } from "@peculiar/x509";
 import { exportJWK, generateKeyPair, importPKCS8, SignJWT } from "jose";
 import nock from "nock";
@@ -61,17 +60,19 @@ async function generateSelfSignedCertificate() {
         hash: "SHA-256",
     };
 
-    // Set up the x509 crypto provider
-    x509.cryptoProvider.set(globalThis.crypto);
-
-    const cert = await X509CertificateGenerator.createSelfSigned({
-        serialNumber: "01",
-        name: "CN=Test Wallet Provider",
-        notBefore: new Date(),
-        notAfter: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
-        signingAlgorithm: alg,
-        keys: keyPair,
-    });
+    // Pass webcrypto instead of setting the global provider, which the
+    // backend replaced with its KMS provider for key chain certificates.
+    const cert = await X509CertificateGenerator.createSelfSigned(
+        {
+            serialNumber: "01",
+            name: "CN=Test Wallet Provider",
+            notBefore: new Date(),
+            notAfter: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
+            signingAlgorithm: alg,
+            keys: keyPair,
+        },
+        globalThis.crypto,
+    );
 
     return {
         certificate: cert,

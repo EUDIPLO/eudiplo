@@ -97,7 +97,7 @@ Each signing key chain uses one ECDSA algorithm, fixed by its curve: ES256 (P-25
 
 | Operation                                                   | Key                                                                                         | Algorithm                       |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------- |
-| Access tokens of hosted authorization servers               | `token.signingKeyId`, then the issuance `signingKeyId`, else the tenant's first signing key chain | ES256, ES384 or ES512 (the key chain's) |
+| Access tokens of hosted authorization servers               | `accessToken` key chain (`token.signingKeyId` of the authorization server, otherwise the tenant's [access token key chain](../trust/keys-and-certificates.md#access-token-key-chain)); never an `access` or `attestation` key chain | ES256, ES384 or ES512 (the key chain's) |
 | SD-JWT VC credentials, mdoc MSO                             | `attestation` key chain (`keyChainId` of the credential configuration)                      | ES256, ES384 or ES512 (the key chain's) |
 | Status lists                                                | `statusList` key chain                                                                      | ES256, ES384 or ES512 (the key chain's) |
 | Trust lists hosted by EUDIPLO                               | `trustList` key chain                                                                       | ES256, ES384 or ES512 (the key chain's) |

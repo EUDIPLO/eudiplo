@@ -141,18 +141,6 @@ export class IssuanceConfig {
     walletAttestationStatusCheckMode?: RevocationCheckMode | null;
 
     /**
-     * Optional key ID to use for signing access tokens.
-     * Must reference an existing key managed by the key service.
-     * If not set, the first available signing key for the tenant is used.
-     */
-    @ApiPropertyOptional({
-        description:
-            "Key ID for signing access tokens. If unset, the default signing key is used.",
-    })
-    @Column({ type: "varchar", nullable: true })
-    signingKeyId?: string;
-
-    /**
      * Dedicated managed authorization servers hosted by this issuer.
      * Each entry creates a distinct AS endpoint and can be bound to a different
      * presentation configuration.

@@ -54,8 +54,14 @@ function service(
         }),
     };
     const keyChainService = {
-        getKid: vi.fn().mockResolvedValue("default-key"),
-        getPublicKey: vi.fn().mockResolvedValue({ kty: "EC" }),
+        resolveAccessTokenKeyChain: vi.fn(
+            async (_tenantId: string, keyId?: string) => ({
+                id: keyId ?? "access-token",
+            }),
+        ),
+        getAccessTokenVerificationKeys: vi
+            .fn()
+            .mockResolvedValue([{ kty: "EC", kid: "access-token-1" }]),
         signJWT: vi.fn().mockResolvedValue("access-token"),
     };
     const walletAttestationService = {
@@ -74,7 +80,7 @@ function service(
         { getCallbackContext: vi.fn().mockReturnValue({}) } as any,
         { register: vi.fn().mockResolvedValue(true) },
     );
-    return { authorizationServers, sessionRepository };
+    return { authorizationServers, sessionRepository, keyChainService };
 }
 
 const codeRequest = {
@@ -158,6 +164,67 @@ describe("AuthorizationServersService refresh tokens", () => {
         ).resolves.toMatchObject({
             grant_types_supported: ["authorization_code"],
         });
+    });
+});
+
+describe("AuthorizationServersService access token key", () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(NOW);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it("signs with the tenant's access token key chain without token.signingKeyId", async () => {
+        const { authorizationServers, keyChainService } = service(
+            undefined,
+            authorizedSession(),
+        );
+
+        await authorizationServers.handleToken(
+            "tenant-1",
+            "pid-auth",
+            codeRequest,
+        );
+
+        expect(keyChainService.resolveAccessTokenKeyChain).toHaveBeenCalledWith(
+            "tenant-1",
+            undefined,
+        );
+        expect(keyChainService.signJWT).toHaveBeenCalledWith(
+            expect.anything(),
+            { typ: "at+jwt" },
+            "tenant-1",
+            "access-token",
+        );
+    });
+
+    it("signs with the named key chain and publishes it for the token lifetime", async () => {
+        const { authorizationServers, keyChainService } = service(
+            { signingKeyId: "as-key", lifetimeSeconds: 900 },
+            authorizedSession(),
+        );
+
+        await authorizationServers.handleToken(
+            "tenant-1",
+            "pid-auth",
+            codeRequest,
+        );
+        await expect(
+            authorizationServers.getJwks("tenant-1", "pid-auth"),
+        ).resolves.toEqual({ keys: [{ kty: "EC", kid: "access-token-1" }] });
+
+        expect(keyChainService.signJWT).toHaveBeenCalledWith(
+            expect.anything(),
+            { typ: "at+jwt" },
+            "tenant-1",
+            "as-key",
+        );
+        expect(
+            keyChainService.getAccessTokenVerificationKeys,
+        ).toHaveBeenCalledWith("tenant-1", "as-key", 900);
     });
 });
 
