@@ -480,19 +480,24 @@ export class IssuanceService {
                 (server) => [server?.id, server?.token?.signingKeyId],
             ),
         );
-        for (const server of servers) {
-            const keyChainId = server.token?.signingKeyId;
-            if (!keyChainId || stored.get(server.id) === keyChainId) continue;
-            const refusal =
-                await this.keyChainService.accessTokenKeyChainRefusal(
+        const changed = servers.filter(
+            (server) =>
+                server.token?.signingKeyId &&
+                stored.get(server.id) !== server.token.signingKeyId,
+        );
+        const refusals = await Promise.all(
+            changed.map((server) =>
+                this.keyChainService.accessTokenKeyChainRefusal(
                     tenantId,
-                    keyChainId,
-                );
-            if (refusal) {
-                throw new BadRequestException(
-                    `Authorization server '${server.id}': ${refusal}`,
-                );
-            }
+                    server.token!.signingKeyId!,
+                ),
+            ),
+        );
+        const index = refusals.findIndex(Boolean);
+        if (index >= 0) {
+            throw new BadRequestException(
+                `Authorization server '${changed[index].id}': ${refusals[index]}`,
+            );
         }
     }
 

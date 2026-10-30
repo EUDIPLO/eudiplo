@@ -1323,45 +1323,58 @@ export class ConfigBundleService {
         const defaultKeyChains = defaults.spec as unknown;
         if (!defaultKeyChains || typeof defaultKeyChains !== "object")
             return [];
-        const issues: ConfigMigrationIssue[] = [];
+        const resource = {
+            kind: "KeyChainDefaults" as const,
+            id: resourceId(defaults),
+        };
         // Only the known entries: schema validation reports other keys, and
         // each entry costs a lookup.
-        for (const entry of DEFAULT_KEY_CHAIN_ENTRIES) {
+        const entries = DEFAULT_KEY_CHAIN_ENTRIES.flatMap((entry) => {
             const keyChainId = (defaultKeyChains as Record<string, unknown>)[
                 entry
             ];
-            if (typeof keyChainId !== "string") continue;
-            const path = `/spec/${entry}`;
-            const resource = {
-                kind: "KeyChainDefaults" as const,
-                id: resourceId(defaults),
-            };
-            if (!availableKeyChains?.has(keyChainId)) {
-                issues.push({
-                    severity: "error",
-                    code: "MISSING_RESOURCE_REFERENCE",
-                    path,
-                    message: `KeyChain '${keyChainId}' does not exist in the target instance or bundle.`,
-                    resource,
-                });
-                continue;
-            }
-            const refusal = defaultKeyChainUsageRefusal(
-                entry,
-                keyChainId,
-                await this.keyChainUsageType(tenantId, documents, keyChainId),
-            );
-            if (refusal) {
-                issues.push({
-                    severity: "error",
-                    code: "KEY_CHAIN_USAGE_MISMATCH",
-                    path,
-                    message: refusal,
-                    resource,
-                });
-            }
-        }
-        return issues;
+            return typeof keyChainId === "string"
+                ? [{ entry, keyChainId, path: `/spec/${entry}` }]
+                : [];
+        });
+        const usageTypes = await Promise.all(
+            entries.map(({ keyChainId }) =>
+                availableKeyChains?.has(keyChainId)
+                    ? this.keyChainUsageType(tenantId, documents, keyChainId)
+                    : undefined,
+            ),
+        );
+        return entries.flatMap(
+            ({ entry, keyChainId, path }, index): ConfigMigrationIssue[] => {
+                if (!availableKeyChains?.has(keyChainId)) {
+                    return [
+                        {
+                            severity: "error",
+                            code: "MISSING_RESOURCE_REFERENCE",
+                            path,
+                            message: `KeyChain '${keyChainId}' does not exist in the target instance or bundle.`,
+                            resource,
+                        },
+                    ];
+                }
+                const refusal = defaultKeyChainUsageRefusal(
+                    entry,
+                    keyChainId,
+                    usageTypes[index],
+                );
+                return refusal
+                    ? [
+                          {
+                              severity: "error",
+                              code: "KEY_CHAIN_USAGE_MISMATCH",
+                              path,
+                              message: refusal,
+                              resource,
+                          },
+                      ]
+                    : [];
+            },
+        );
     }
 
     /**
@@ -1378,48 +1391,52 @@ export class ConfigBundleService {
         documents: ConfigDocument[],
         availableKeyChains: Set<string> | undefined,
     ): Promise<ConfigMigrationIssue[]> {
-        const issues: ConfigMigrationIssue[] = [];
-        for (const document of documents) {
-            if (document.kind !== "IssuanceConfig") continue;
-            const servers = (document.spec as Record<string, unknown>)
-                ?.authorizationServers;
-            if (!Array.isArray(servers)) continue;
-            const stored = new Map(
-                (
-                    ((await this.issuanceConfigs.findOne({
-                        where: { tenantId },
-                        select: { tenantId: true, authorizationServers: true },
-                    })) ?? { authorizationServers: [] }) as {
-                        authorizationServers?: Array<{
-                            id?: string;
-                            token?: { signingKeyId?: string };
-                        }>;
-                    }
-                ).authorizationServers?.map((server) => [
-                    server?.id,
-                    server?.token?.signingKeyId,
-                ]) ?? [],
-            );
-            for (const [index, server] of servers.entries()) {
-                const keyChainId = server?.token?.signingKeyId;
-                if (
-                    typeof keyChainId !== "string" ||
-                    !availableKeyChains?.has(keyChainId)
-                )
-                    continue;
+        const named = documents
+            .filter((document) => document.kind === "IssuanceConfig")
+            .flatMap((document) =>
+                tokenSigningKeyIds(document.spec).map((server) => ({
+                    document,
+                    ...server,
+                })),
+            )
+            .filter(({ keyChainId }) => availableKeyChains?.has(keyChainId));
+        if (named.length === 0) return [];
+        const [stored, usageTypes] = await Promise.all([
+            this.issuanceConfigs
+                .findOne({
+                    where: { tenantId },
+                    select: { tenantId: true, authorizationServers: true },
+                })
+                .then(
+                    (config) =>
+                        new Map(
+                            tokenSigningKeyIds(config).map((server) => [
+                                server.serverId,
+                                server.keyChainId,
+                            ]),
+                        ),
+                ),
+            Promise.all(
+                named.map(({ keyChainId }) =>
+                    this.keyChainUsageType(tenantId, documents, keyChainId),
+                ),
+            ),
+        ]);
+        return named.flatMap(
+            (
+                { document, index, serverId, keyChainId },
+                position,
+            ): ConfigMigrationIssue[] => {
                 const refusal = accessTokenKeyChainUsageRefusal(
                     keyChainId,
-                    await this.keyChainUsageType(
-                        tenantId,
-                        documents,
-                        keyChainId,
-                    ),
+                    usageTypes[position],
                 );
-                if (refusal) {
-                    // A stored value does not block the import, but its
-                    // token requests fail until it is changed.
-                    const unchanged = stored.get(server?.id) === keyChainId;
-                    issues.push({
+                if (!refusal) return [];
+                // A stored value does not block the import, but its token
+                // requests fail until it is changed.
+                const unchanged = stored.get(serverId) === keyChainId;
+                return [
+                    {
                         severity: unchanged ? "warning" : "error",
                         code: "KEY_CHAIN_USAGE_MISMATCH",
                         path: `/spec/authorizationServers/${index}/token/signingKeyId`,
@@ -1428,11 +1445,10 @@ export class ConfigBundleService {
                             kind: document.kind,
                             id: resourceId(document),
                         },
-                    });
-                }
-            }
-        }
-        return issues;
+                    },
+                ];
+            },
+        );
     }
 
     /** Usage type of a key chain of the bundle, else of the tenant. */
@@ -2439,4 +2455,22 @@ export class ConfigBundleService {
                 return (await this.statusLists.countBy({ tenantId, id })) > 0;
         }
     }
+}
+
+/**
+ * The `token.signingKeyId` of each authorization server of an issuance
+ * configuration spec or entity, with the server's position and ID.
+ */
+function tokenSigningKeyIds(
+    spec: unknown,
+): { index: number; serverId: unknown; keyChainId: string }[] {
+    const servers = (spec as { authorizationServers?: unknown } | null)
+        ?.authorizationServers;
+    if (!Array.isArray(servers)) return [];
+    return servers.flatMap((server, index) => {
+        const keyChainId = server?.token?.signingKeyId;
+        return typeof keyChainId === "string"
+            ? [{ index, serverId: server?.id, keyChainId }]
+            : [];
+    });
 }
