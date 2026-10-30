@@ -96,6 +96,10 @@ export class ConfigPortabilityComponent implements OnInit {
   resourcesLoadError = '';
   private resourcesRequest = 0;
   operations: ConfigOperation[] = [];
+  operationsLoading = false;
+  /** Why the last load of the operation history failed, or empty after a successful load. */
+  operationsLoadError = '';
+  private operationsRequest = 0;
   selected = new Set<string>();
   busy = false;
   /**
@@ -107,6 +111,9 @@ export class ConfigPortabilityComponent implements OnInit {
   /** Takes the focus after a successful retry, which removed the focused Retry button. */
   @ViewChild('resourcesTitle', { read: ElementRef })
   private readonly resourcesTitle?: ElementRef<HTMLElement>;
+
+  @ViewChild('operationsTitle', { read: ElementRef })
+  private readonly operationsTitle?: ElementRef<HTMLElement>;
 
   constructor(
     private readonly portability: ConfigPortabilityService,
@@ -498,14 +505,29 @@ export class ConfigPortabilityComponent implements OnInit {
   }
 
   async refreshOperations(): Promise<void> {
+    // The reload after every action can overlap a Retry or Refresh history; only the latest
+    // request shows its result.
+    const request = ++this.operationsRequest;
+    this.operationsLoading = true;
+    this.operationsLoadError = '';
     try {
-      this.operations = await this.portability.listOperations();
+      const operations = await this.portability.listOperations();
+      if (request !== this.operationsRequest) return;
+      this.operations = operations;
     } catch (error) {
-      openErrorSnackBar(
-        this.snackBar,
-        getApiErrorMessage(error, 'Could not load operation history')
-      );
+      if (request !== this.operationsRequest) return;
+      // The entries of an earlier load may be out of date: the next load shows the spinner, not them.
+      this.operations = [];
+      this.operationsLoadError = getApiErrorMessage(error, 'Could not load operation history');
+    } finally {
+      if (request === this.operationsRequest) this.operationsLoading = false;
     }
+  }
+
+  async retryOperations(): Promise<void> {
+    await this.refreshOperations();
+    // The retry removed the error card with its focused Retry; the title is always rendered.
+    if (!this.operationsLoadError) focusIfFocusWasLost(this.operationsTitle?.nativeElement);
   }
 
   async retryResources(): Promise<void> {

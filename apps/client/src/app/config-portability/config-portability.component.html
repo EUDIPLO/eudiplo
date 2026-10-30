@@ -430,34 +430,44 @@
 @if (canApply) {
   <mat-card>
     <mat-card-header
-      ><mat-card-title>Recent configuration operations</mat-card-title></mat-card-header
+      ><mat-card-title #operationsTitle tabindex="-1"
+        >Recent configuration operations</mat-card-title
+      ></mat-card-header
     >
     <mat-card-content>
       <button mat-button (click)="refreshOperations()" [disabled]="busy">Refresh history</button>
-      @for (operation of operations; track operation.id) {
-        <details>
-          <summary>
-            {{ operation.createdAt | date: 'short' }} · {{ operation.mode }} ·
-            {{ operation.status }}
-          </summary>
-          <p>
-            Operation <code>{{ operation.id }}</code>
-          </p>
-          @for (step of operation.operations; track $index) {
+      @if (operationsLoading && !operations.length) {
+        <div class="loading-state">
+          <mat-spinner diameter="40" aria-label="Loading configuration operations"></mat-spinner>
+        </div>
+      } @else if (operationsLoadError) {
+        <app-load-error [message]="operationsLoadError" (retry)="retryOperations()" />
+      } @else {
+        @for (operation of operations; track operation.id) {
+          <details>
+            <summary>
+              {{ operation.createdAt | date: 'short' }} · {{ operation.mode }} ·
+              {{ operation.status }}
+            </summary>
             <p>
-              {{ step.path || (step.kind || '') + '/' + (step.id || '') }} · {{ step.stage }} ·
-              {{ step.status }}
+              Operation <code>{{ operation.id }}</code>
             </p>
-          }
-          @if (operation.status === 'running') {
-            <p>
-              This operation may still be running. If its worker crashed, stop that worker before
-              acknowledging the interruption with the CLI.
-            </p>
-          }
-        </details>
-      } @empty {
-        <p>No configuration operations recorded.</p>
+            @for (step of operation.operations; track $index) {
+              <p>
+                {{ step.path || (step.kind || '') + '/' + (step.id || '') }} · {{ step.stage }} ·
+                {{ step.status }}
+              </p>
+            }
+            @if (operation.status === 'running') {
+              <p>
+                This operation may still be running. If its worker crashed, stop that worker before
+                acknowledging the interruption with the CLI.
+              </p>
+            }
+          </details>
+        } @empty {
+          <p>No configuration operations recorded.</p>
+        }
       }
     </mat-card-content>
   </mat-card>
