@@ -85,6 +85,65 @@ describe('KeyManagementShowComponent', () => {
     expect(text).not.toContain('Previous Certificate');
   });
 
+  describe('when the browser cannot copy', () => {
+    let open: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+      open = vi.spyOn(component['snackBar'], 'open');
+    });
+    afterEach(() => {
+      delete (navigator as { clipboard?: Clipboard }).clipboard;
+    });
+
+    const clickButton = (label: string) =>
+      ([...fixture.nativeElement.querySelectorAll('button')] as HTMLButtonElement[])
+        .find((button) => button.textContent?.includes(label))!
+        .click();
+
+    it('says to copy the printed public key of a federation key by hand', async () => {
+      shownWith({ usageType: 'federation' } as Partial<KeyChainResponseDto>);
+
+      clickButton('Copy Public Key (JWK)');
+
+      await vi.waitFor(() =>
+        expect(open).toHaveBeenCalledWith(
+          'Could not copy the public key. Select it above and copy it by hand.',
+          'Close',
+          expect.objectContaining({ duration: expect.any(Number) })
+        )
+      );
+    });
+
+    it('offers no by-hand fallback for a certificate, which the page does not print', async () => {
+      shownWith({ activeCertificate: certificate } as Partial<KeyChainResponseDto>);
+
+      clickButton('Copy PEM');
+
+      await vi.waitFor(() =>
+        expect(open).toHaveBeenCalledWith(
+          'Could not copy the certificate',
+          'Close',
+          expect.objectContaining({ duration: expect.any(Number) })
+        )
+      );
+    });
+
+    it('points to View as JSON for a public key the card does not print', async () => {
+      shownWith({ activeCertificate: certificate } as Partial<KeyChainResponseDto>);
+
+      clickButton('Copy Public Key (JWK)');
+
+      await vi.waitFor(() =>
+        expect(open).toHaveBeenCalledWith(
+          'Could not copy the public key. Open View as JSON and copy it by hand.',
+          'Close',
+          expect.objectContaining({ duration: expect.any(Number) })
+        )
+      );
+    });
+  });
+
   it('keeps the certificate card for other keys', () => {
     const text = shownWith({ activeCertificate: certificate } as Partial<KeyChainResponseDto>);
     expect(text).toContain('Active Certificate');

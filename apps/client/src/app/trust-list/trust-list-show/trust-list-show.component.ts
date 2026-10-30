@@ -41,6 +41,7 @@ import { JwtService } from '../../services/jwt.service';
 import { trustListUrl } from '../../utils/public-url';
 import { getApiErrorMessage, hasHttpStatus } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import { ConfigDocumentService } from '../../config-portability/config-document.service';
 import {
   credentialConfigReferencesTrustList,
@@ -314,14 +315,12 @@ export class TrustListShowComponent implements OnInit {
     );
   }
 
-  copyToClipboard(text: string, label: string): void {
-    navigator.clipboard.writeText(text).then(
-      () => {
-        this.snackBar.open(`${label} copied to clipboard`, 'Close', { duration: 2000 });
-      },
-      () => {
-        this.snackBar.open('Failed to copy to clipboard', 'Close', { duration: 2000 });
-      }
+  async copyUrl(): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      this.publicUrl,
+      'Trust List URL copied to clipboard',
+      'Could not copy the URL. Select it in the Trust List URL field and copy it by hand.'
     );
   }
 

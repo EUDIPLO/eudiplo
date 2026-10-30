@@ -37,6 +37,7 @@ import { JwtService } from '../../services/jwt.service';
 import { RegistrarService, accessCertificateRefusal } from '../../registrar/registrar.service';
 import { getApiErrorMessage, getHttpErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { copyToClipboard } from '../../utils/copy-to-clipboard';
 
 @Component({
   selector: 'app-key-management-show',
@@ -289,26 +290,32 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     return !!this.keyChain?.previousCertificate;
   }
 
-  copyPublicKeyToClipboard(jwk: object): void {
-    navigator.clipboard
-      .writeText(JSON.stringify(jwk, null, 2))
-      .then(() => {
-        this.snackBar.open('Public key (JWK) copied to clipboard', 'Close', { duration: 2000 });
-      })
-      .catch(() => {
-        this.snackBar.open('Failed to copy public key', 'Close', { duration: 2000 });
-      });
+  async copyPublicKeyToClipboard(jwk: object): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      JSON.stringify(jwk, null, 2),
+      'Public key (JWK) copied to clipboard',
+      'Could not copy the public key. Open View as JSON and copy it by hand.'
+    );
   }
 
-  copyCertificateToClipboard(cert: CertificateInfoDto): void {
-    navigator.clipboard
-      .writeText(cert.pem)
-      .then(() => {
-        this.snackBar.open('Certificate copied to clipboard', 'Close', { duration: 2000 });
-      })
-      .catch(() => {
-        this.snackBar.open('Failed to copy certificate', 'Close', { duration: 2000 });
-      });
+  /** The federation card prints the active JWK, so it can be copied by hand. */
+  async copyFederationPublicKey(): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      this.activePublicKeyJson,
+      'Public key (JWK) copied to clipboard',
+      'Could not copy the public key. Select it above and copy it by hand.'
+    );
+  }
+
+  async copyCertificateToClipboard(cert: CertificateInfoDto): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      cert.pem,
+      'Certificate copied to clipboard',
+      'Could not copy the certificate'
+    );
   }
 
   formatDate(dateString: string): string {

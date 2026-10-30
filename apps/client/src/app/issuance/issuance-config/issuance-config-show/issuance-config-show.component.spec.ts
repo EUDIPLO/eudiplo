@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { IssuanceConfigShowComponent } from './issuance-config-show.component';
@@ -60,7 +60,6 @@ describe('IssuanceConfigShowComponent loading', () => {
         getConfig: vi.fn().mockRejectedValue({ statusCode: 403, message: 'Forbidden resource' }),
       } as never,
       { open: vi.fn() } as never,
-      {} as never,
       {} as never
     );
 
@@ -76,7 +75,6 @@ describe('IssuanceConfigShowComponent download', () => {
   it('downloads the configuration document', async () => {
     const downloadWithFeedback = vi.fn().mockResolvedValue(undefined);
     const component = new IssuanceConfigShowComponent(
-      {} as never,
       {} as never,
       {} as never,
       { downloadWithFeedback } as never
@@ -109,5 +107,43 @@ describe('IssuanceConfigShowComponent download', () => {
     expect(button).not.toBeNull();
     expect(button?.getAttribute('aria-disabled')).not.toBe('true');
     expect(button?.getAttribute('aria-busy')).toBe('false');
+  });
+});
+
+describe('IssuanceConfigShowComponent copy', () => {
+  afterEach(() => {
+    delete (navigator as { clipboard?: Clipboard }).clipboard;
+  });
+
+  const create = (open: ReturnType<typeof vi.fn>) =>
+    new IssuanceConfigShowComponent({} as never, { open } as never, {} as never);
+
+  it('confirms the copied registration certificate JWT', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const open = vi.fn();
+
+    await create(open).copyRegistrationCertificateJwt('ey.jwt');
+
+    expect(writeText).toHaveBeenCalledWith('ey.jwt');
+    expect(open).toHaveBeenCalledWith(
+      'Registration certificate JWT copied to clipboard',
+      'Close',
+      expect.anything()
+    );
+  });
+
+  it('says how to copy the JWT by hand when nothing was copied', async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    const open = vi.fn();
+
+    await create(open).copyRegistrationCertificateJwt('ey.jwt');
+
+    expect(open).toHaveBeenCalledOnce();
+    expect(open).toHaveBeenCalledWith(
+      'Could not copy the registration certificate JWT. Select it below and copy it by hand.',
+      'Close',
+      expect.objectContaining({ duration: expect.any(Number) })
+    );
   });
 });

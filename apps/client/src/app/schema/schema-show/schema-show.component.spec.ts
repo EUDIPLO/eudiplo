@@ -771,9 +771,29 @@ describe('SchemaShowComponent loading', () => {
     await component.copyJwt();
     await component.downloadExport();
 
-    expect(openSnackBar).toHaveBeenCalledWith(...errorSnackBar('Failed to copy JWT: Not Found'));
+    expect(openSnackBar).toHaveBeenCalledWith(
+      ...errorSnackBar('Failed to load the signed JWT: Not Found')
+    );
     expect(openSnackBar).toHaveBeenCalledWith(
       ...errorSnackBar('Failed to download JWT: Not Found')
+    );
+  });
+
+  it('says how to get the signed JWT when it loads but cannot be copied', async () => {
+    schemaService['getSignedJwt'] = vi.fn().mockResolvedValue('ey.signed.jwt');
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+    create();
+    await component.load();
+
+    try {
+      await component.copyJwt();
+    } finally {
+      delete (navigator as { clipboard?: Clipboard }).clipboard;
+    }
+
+    expect(openSnackBar).toHaveBeenCalledOnce();
+    expect(openSnackBar).toHaveBeenCalledWith(
+      ...errorSnackBar('Could not copy the signed JWT. Use Download export to save it instead.')
     );
   });
 

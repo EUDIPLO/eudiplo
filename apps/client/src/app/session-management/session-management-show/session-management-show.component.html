@@ -258,7 +258,7 @@
                   </span>
                   <button
                     matIconButton
-                    (click)="copyToClipboard(getOfferUri()!)"
+                    (click)="copyValue(getOfferUri()!)"
                     [matTooltip]="isIssuanceSession() ? 'Copy offer link' : 'Copy request link'"
                     [attr.aria-label]="
                       isIssuanceSession() ? 'Copy offer link' : 'Copy request link'
@@ -361,7 +361,7 @@
               <span class="mono">{{ session.id }}</span>
               <button
                 matIconButton
-                (click)="copyToClipboard(session.id)"
+                (click)="copyValue(session.id)"
                 matTooltip="Copy session ID"
                 aria-label="Copy session ID"
               >
@@ -381,7 +381,7 @@
                 <span>{{ id }}</span>
                 <button
                   matIconButton
-                  (click)="copyToClipboard(id)"
+                  (click)="copyValue(id)"
                   [matTooltip]="'Copy ' + id"
                   [attr.aria-label]="'Copy configuration ID ' + id"
                 >
@@ -427,7 +427,7 @@
                 <span class="mono">{{ session.authorization_code }}</span>
                 <button
                   matIconButton
-                  (click)="copyToClipboard(session.authorization_code)"
+                  (click)="copyValue(session.authorization_code)"
                   matTooltip="Copy authorization code"
                   aria-label="Copy authorization code"
                 >
@@ -444,7 +444,7 @@
                 <span class="mono">{{ session.request_uri }}</span>
                 <button
                   matIconButton
-                  (click)="copyToClipboard(session.request_uri)"
+                  (click)="copyValue(session.request_uri)"
                   matTooltip="Copy request URI"
                   aria-label="Copy request URI"
                 >
@@ -471,8 +471,9 @@
                   <div class="spacer"></div>
                   <button
                     matIconButton
-                    (click)="copyToClipboard(formatJson(credential))"
+                    (click)="copyValue(formatJson(credential))"
                     matTooltip="Copy credential"
+                    [attr.aria-label]="'Copy credential ' + ($index + 1)"
                   >
                     <mat-icon>content_copy</mat-icon>
                   </button>
@@ -496,8 +497,9 @@
                 <div class="spacer"></div>
                 <button
                   matIconButton
-                  (click)="copyToClipboard(formatJson(session.offer))"
+                  (click)="copyValue(formatJson(session.offer))"
                   matTooltip="Copy offer"
+                  aria-label="Copy offer"
                 >
                   <mat-icon>content_copy</mat-icon>
                 </button>
@@ -519,8 +521,9 @@
                 <div class="spacer"></div>
                 <button
                   matIconButton
-                  (click)="copyToClipboard(formatJson(session.requestObject))"
+                  (click)="copyRequestObject(session.requestObject)"
                   matTooltip="Copy presentation request"
+                  aria-label="Copy presentation request"
                 >
                   <mat-icon>content_copy</mat-icon>
                 </button>
@@ -543,8 +546,9 @@
                 <div class="spacer"></div>
                 <button
                   matIconButton
-                  (click)="copyToClipboard(formatJson(session.credentialPayload))"
+                  (click)="copyValue(formatJson(session.credentialPayload))"
                   matTooltip="Copy payload"
+                  aria-label="Copy payload"
                 >
                   <mat-icon>content_copy</mat-icon>
                 </button>
@@ -567,8 +571,9 @@
                 <div class="spacer"></div>
                 <button
                   matIconButton
-                  (click)="copyToClipboard(formatJson(session.auth_queries))"
+                  (click)="copyValue(formatJson(session.auth_queries))"
                   matTooltip="Copy auth queries"
+                  aria-label="Copy auth queries"
                 >
                   <mat-icon>content_copy</mat-icon>
                 </button>
@@ -592,8 +597,9 @@
                   <div class="spacer"></div>
                   <button
                     matIconButton
-                    (click)="copyToClipboard(formatJson(session.parsedWebhook))"
+                    (click)="copyValue(formatJson(session.parsedWebhook))"
                     matTooltip="Copy webhook config"
+                    aria-label="Copy webhook config"
                   >
                     <mat-icon>content_copy</mat-icon>
                   </button>
@@ -631,8 +637,9 @@
                   <div class="spacer"></div>
                   <button
                     matIconButton
-                    (click)="copyToClipboard(formatJson(notification))"
+                    (click)="copyValue(formatJson(notification))"
                     matTooltip="Copy notification"
+                    [attr.aria-label]="'Copy notification ' + ($index + 1)"
                   >
                     <mat-icon>content_copy</mat-icon>
                   </button>

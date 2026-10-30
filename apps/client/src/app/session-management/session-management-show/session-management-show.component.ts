@@ -44,6 +44,7 @@ import { firstValueFrom } from 'rxjs';
 import { decodeJwt } from 'jose';
 import { getApiErrorMessage, getHttpErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import {
   isFinishedSession,
   sessionResult,
@@ -400,19 +401,24 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
     this.router.navigate(['../'], { relativeTo: this.route });
   }
 
-  copyToClipboard(text: string): void {
-    navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        this.snackBar.open('Copied to clipboard', 'Close', {
-          duration: 2000,
-        });
-      })
-      .catch(() => {
-        this.snackBar.open('Failed to copy to clipboard', 'Close', {
-          duration: 3000,
-        });
-      });
+  /** Copies a value the page shows as it is, so it can be copied by hand. */
+  async copyValue(text: string): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      text,
+      'Copied to clipboard',
+      'Could not copy to the clipboard. Select the value on the page and copy it by hand.'
+    );
+  }
+
+  /** The tab shows the decoded request, not the request object this copies. */
+  async copyRequestObject(requestObject: unknown): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      this.formatJson(requestObject),
+      'Copied to clipboard',
+      'Could not copy the presentation request'
+    );
   }
 
   // QR Code functionality

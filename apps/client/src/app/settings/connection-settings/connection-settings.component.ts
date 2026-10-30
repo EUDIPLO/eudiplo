@@ -12,6 +12,7 @@ import { ApiService } from '../../core';
 import { OidcService } from '../../core/oidc.service';
 import { FrontendConfigService } from '../../services/frontend-config.service';
 import { formatBuild, VersionService } from '../../services/version.service';
+import { copyToClipboard } from '../../utils/copy-to-clipboard';
 
 @Component({
   selector: 'app-connection-settings',
@@ -95,19 +96,22 @@ export class ConnectionSettingsComponent implements OnInit {
     return this.apiService.canRefreshToken();
   }
 
-  async copyToClipboard(text: string, label: string): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(text);
-      this.snackBar.open(`${label} copied to clipboard!`, 'OK', {
-        duration: 2000,
-        panelClass: ['success-snackbar'],
-      });
-    } catch (err) {
-      console.error('Failed to copy text: ', err);
-      this.snackBar.open(`Failed to copy ${label}`, 'OK', {
-        duration: 3000,
-        panelClass: ['error-snackbar'],
-      });
-    }
+  async copyField(text: string, label: string): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      text,
+      `${label} copied to clipboard`,
+      `Could not copy the ${label}. Select it in its field and copy it by hand.`
+    );
+  }
+
+  /** The secret field is masked, so the secret cannot be copied by hand. */
+  async copySecret(secret: string): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      secret,
+      'Client Secret copied to clipboard',
+      'Could not copy the Client Secret'
+    );
   }
 }

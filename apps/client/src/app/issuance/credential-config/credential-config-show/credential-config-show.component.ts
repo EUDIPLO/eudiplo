@@ -1,6 +1,5 @@
 import { Component, type OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Clipboard, ClipboardModule } from '@angular/cdk/clipboard';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
@@ -62,7 +61,6 @@ interface SchemaPathInfo {
     MatTabsModule,
     FlexLayoutModule,
     RouterModule,
-    ClipboardModule,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
@@ -83,7 +81,6 @@ export class CredentialConfigShowComponent implements OnInit {
     private readonly route: ActivatedRoute,
     private readonly snackBar: MatSnackBar,
     private readonly router: Router,
-    private readonly clipboard: Clipboard,
     private readonly jwtService: JwtService,
     private readonly configDocuments: ConfigDocumentService
   ) {}
@@ -211,13 +208,6 @@ export class CredentialConfigShowComponent implements OnInit {
     }
 
     return !this.claimFieldRows.every((row) => this.isRowComplete(row));
-  }
-
-  copyToClipboard(value: string, label: string): void {
-    this.clipboard.copy(value);
-    this.snackBar.open(`${label} copied to clipboard`, 'Close', {
-      duration: 2000,
-    });
   }
 
   ngOnInit(): void {

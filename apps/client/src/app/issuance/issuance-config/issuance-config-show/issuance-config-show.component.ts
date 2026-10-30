@@ -1,5 +1,4 @@
 import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
-import { Clipboard, ClipboardModule } from '@angular/cdk/clipboard';
 import { DatePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -26,6 +25,7 @@ import { ConfigOwnershipDirective } from '../../../config-portability/config-own
 import { ConfigOwnershipNoticeComponent } from '../../../config-portability/config-ownership-notice.component';
 import { getApiErrorMessage } from '../../../utils/error-message';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
+import { copyToClipboard } from '../../../utils/copy-to-clipboard';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 
 interface ChainedAuthorizationServerView {
@@ -72,7 +72,6 @@ interface AuthorizationServerRow {
     MatTableModule,
     FlexLayoutModule,
     RouterModule,
-    ClipboardModule,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
@@ -102,7 +101,6 @@ export class IssuanceConfigShowComponent implements OnInit {
   constructor(
     private readonly issuanceConfigService: IssuanceConfigService,
     private readonly snackBar: MatSnackBar,
-    private readonly clipboard: Clipboard,
     private readonly configDocuments: ConfigDocumentService
   ) {}
 
@@ -290,11 +288,13 @@ export class IssuanceConfigShowComponent implements OnInit {
 
   readonly statusCheckModeLabel = statusCheckModeLabel;
 
-  copyToClipboard(value: string, label: string): void {
-    this.clipboard.copy(value);
-    this.snackBar.open(`${label} copied to clipboard`, 'Close', {
-      duration: 2000,
-    });
+  async copyRegistrationCertificateJwt(jwt: string): Promise<void> {
+    await copyToClipboard(
+      this.snackBar,
+      jwt,
+      'Registration certificate JWT copied to clipboard',
+      'Could not copy the registration certificate JWT. Select it below and copy it by hand.'
+    );
   }
 
   reissueRegistrationCertificate(): void {

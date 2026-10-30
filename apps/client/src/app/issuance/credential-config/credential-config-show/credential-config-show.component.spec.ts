@@ -94,7 +94,6 @@ describe('CredentialConfigShowComponent loading', () => {
       { snapshot: { paramMap: { get: () => 'pid' } } } as never,
       { open: vi.fn() } as never,
       { navigate: vi.fn() } as never,
-      {} as never,
       { hasRole: () => true } as never,
       {} as never
     );
@@ -113,7 +112,6 @@ describe('CredentialConfigShowComponent download', () => {
   it('downloads the configuration document', async () => {
     const downloadWithFeedback = vi.fn().mockResolvedValue(undefined);
     const component = new CredentialConfigShowComponent(
-      {} as never,
       {} as never,
       {} as never,
       {} as never,
@@ -294,7 +292,7 @@ describe('CredentialConfigShowComponent claim fields', () => {
 
   it('names array items with * in the card heading, as the matrix does', () => {
     const component = new CredentialConfigShowComponent(
-      ...(Array.from({ length: 8 }, () => ({})) as never as ConstructorParameters<
+      ...(Array.from({ length: 7 }, () => ({})) as never as ConstructorParameters<
         typeof CredentialConfigShowComponent
       >)
     );
@@ -305,7 +303,7 @@ describe('CredentialConfigShowComponent claim fields', () => {
 
   it('shows the JSON Schema when a nested child leaves a matrix cell empty', () => {
     const component = new CredentialConfigShowComponent(
-      ...(Array.from({ length: 8 }, () => ({})) as never as ConstructorParameters<
+      ...(Array.from({ length: 7 }, () => ({})) as never as ConstructorParameters<
         typeof CredentialConfigShowComponent
       >)
     );

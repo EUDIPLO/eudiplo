@@ -30,6 +30,7 @@ import { LabelledFailure, getApiErrorMessage } from '../../utils/error-message';
 import { SourceLoadState, loadSource, reportSourceFailures } from '../../common/load-source';
 import { SEMVER_REGEX, compareVersionsDesc, proposeNextVersion } from '../schema-version';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { copyToClipboard } from '../../utils/copy-to-clipboard';
 
 function formatNotCarriedOver(values: string[]): string {
   return `Not in the registrar vocabulary, so not carried over: ${values.join(', ')}.`;
@@ -355,14 +356,20 @@ export class SchemaShowComponent implements OnInit {
 
   async copyJwt(): Promise<void> {
     if (!this.id) return;
+    let jwt: string;
     try {
-      const jwt = await this.schemaService.getSignedJwt(this.id, this.item?.version ?? '');
-      await navigator.clipboard.writeText(jwt);
-      this.snackBar.open('Signed JWT copied to clipboard', 'Close', { duration: 3000 });
+      jwt = await this.schemaService.getSignedJwt(this.id, this.item?.version ?? '');
     } catch (error) {
-      console.error('Failed to copy JWT:', error);
-      openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to copy JWT'));
+      console.error('Failed to load JWT:', error);
+      openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to load the signed JWT'));
+      return;
     }
+    await copyToClipboard(
+      this.snackBar,
+      jwt,
+      'Signed JWT copied to clipboard',
+      'Could not copy the signed JWT. Use Download export to save it instead.'
+    );
   }
 
   get jwtUrl(): string {
@@ -400,13 +407,12 @@ export class SchemaShowComponent implements OnInit {
 
   async copyJwtUrl(): Promise<void> {
     if (!this.jwtUrl) return;
-    try {
-      await navigator.clipboard.writeText(this.jwtUrl);
-      this.snackBar.open('JWT URL copied to clipboard', 'Close', { duration: 3000 });
-    } catch (error) {
-      console.error('Failed to copy JWT URL:', error);
-      this.snackBar.open('Failed to copy JWT URL', 'Close', { duration: 3000 });
-    }
+    await copyToClipboard(
+      this.snackBar,
+      this.jwtUrl,
+      'JWT URL copied to clipboard',
+      'Could not copy the JWT URL. Select it in the JWT URL field and copy it by hand.'
+    );
   }
 
   async downloadExport(): Promise<void> {

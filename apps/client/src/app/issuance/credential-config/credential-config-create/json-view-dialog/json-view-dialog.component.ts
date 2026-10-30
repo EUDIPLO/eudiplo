@@ -7,10 +7,12 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { MonacoEditorModule } from 'ngx-monaco-editor-v2';
 import { EditorComponent } from '../../../../utils/editor/editor.component';
 import { SchemaValidation } from '../../../../utils/schemas';
+import { copyToClipboard } from '../../../../utils/copy-to-clipboard';
 
 export interface JsonViewDialogData {
   title: string;
@@ -29,6 +31,7 @@ export interface JsonViewDialogData {
     MatFormFieldModule,
     MatInputModule,
     MatTabsModule,
+    MatTooltipModule,
     MatSnackBarModule,
     ReactiveFormsModule,
     FlexLayoutModule,
@@ -59,13 +62,16 @@ export class JsonViewDialogComponent {
     }
   }
 
-  async copyToClipboard(): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(this.formattedJson);
-      this.snackBar.open('JSON copied to clipboard', 'OK', { duration: 2000 });
-    } catch {
-      this.snackBar.open('Failed to copy to clipboard', 'OK', { duration: 3000 });
-    }
+  /** Copies what the editor shows, including the user's edits. */
+  async copyJson(): Promise<void> {
+    const value: unknown = this.jsonControl.value;
+    const text = typeof value === 'string' ? value : JSON.stringify(value ?? {}, null, 2);
+    await copyToClipboard(
+      this.snackBar,
+      text,
+      'JSON copied to clipboard',
+      'Could not copy the JSON. Select it in the editor and copy it by hand.'
+    );
   }
 
   cancel(): void {

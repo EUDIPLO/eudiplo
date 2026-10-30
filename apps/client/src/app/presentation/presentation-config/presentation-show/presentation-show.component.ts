@@ -1,6 +1,5 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
-import { Clipboard, ClipboardModule } from '@angular/cdk/clipboard';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
@@ -44,7 +43,6 @@ import { LoadErrorComponent } from '../../../common/load-error.component';
     MatTabsModule,
     FlexLayoutModule,
     RouterModule,
-    ClipboardModule,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
@@ -70,7 +68,6 @@ export class PresentationShowComponent implements OnInit {
     private readonly route: ActivatedRoute,
     private readonly snackBar: MatSnackBar,
     private readonly router: Router,
-    private readonly clipboard: Clipboard,
     private readonly configDocuments: ConfigDocumentService
   ) {}
 
@@ -180,13 +177,6 @@ export class PresentationShowComponent implements OnInit {
       .finally(() => {
         this.reissuing = false;
       });
-  }
-
-  copyToClipboard(value: string, label: string): void {
-    this.clipboard.copy(value);
-    this.snackBar.open(`${label} copied to clipboard`, 'Close', {
-      duration: 2000,
-    });
   }
 
   formatLifetime(seconds: number): string {

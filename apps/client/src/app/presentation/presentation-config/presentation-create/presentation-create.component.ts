@@ -872,25 +872,6 @@ export class PresentationCreateComponent implements OnInit {
   }
 
   /**
-   * Copy text to clipboard
-   */
-  async copyToClipboard(text: string, label: string): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(text);
-      this.snackBar.open(`${label} copied to clipboard!`, 'OK', {
-        duration: 2000,
-        panelClass: ['success-snackbar'],
-      });
-    } catch (err) {
-      console.error('Failed to copy text: ', err);
-      this.snackBar.open(`Failed to copy ${label}`, 'OK', {
-        duration: 3000,
-        panelClass: ['error-snackbar'],
-      });
-    }
-  }
-
-  /**
    * Open the issuer metadata browser dialog to import DCQL from an issuer
    */
   importFromIssuer(): void {

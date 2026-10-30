@@ -37,7 +37,6 @@ describe('PresentationShowComponent loading', () => {
       { snapshot: { paramMap: { get: () => 'age-check' } } } as never,
       { open: vi.fn() } as never,
       { navigate: vi.fn() } as never,
-      {} as never,
       {} as never
     );
 
@@ -54,7 +53,6 @@ describe('PresentationShowComponent download', () => {
   it('downloads the configuration document', async () => {
     const downloadWithFeedback = vi.fn().mockResolvedValue(undefined);
     const component = new PresentationShowComponent(
-      {} as never,
       {} as never,
       {} as never,
       {} as never,

@@ -36,7 +36,12 @@
       <td mat-cell *matCellDef="let list">
         <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="4px">
           <span>{{ list.id }}</span>
-          <button matIconButton (click)="copyUri(list.uri)" matTooltip="Copy URI">
+          <button
+            matIconButton
+            (click)="copyUri(list.uri)"
+            matTooltip="Copy URI"
+            [attr.aria-label]="'Copy URI of status list ' + list.id"
+          >
             <mat-icon>content_copy</mat-icon>
           </button>
         </div>
