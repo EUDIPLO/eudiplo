@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import type { ComponentFixture } from '@angular/core/testing';
-import type { MatSnackBar } from '@angular/material/snack-bar';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter } from '@angular/router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -54,12 +54,14 @@ describe('ConfigPortabilityComponent detaching selected resources', () => {
 
   it('gives only the reason when the backend answered none of the requests', async () => {
     detach.mockRejectedValue(new TypeError('Failed to fetch'));
-    // Reloading the list fails too; the summary replaces its snackbar.
+    // Reloading the list fails too; the card reports that, so the summary is the only snackbar.
     listResources.mockRejectedValue(new TypeError('Failed to fetch'));
 
     await component.detachSelected();
 
-    expect(openSnackBar).toHaveBeenLastCalledWith(
+    expect(component.resourcesLoadError).toContain('could not be reached');
+    expect(openSnackBar).toHaveBeenCalledTimes(1);
+    expect(openSnackBar).toHaveBeenCalledWith(
       ...errorSnackBar(
         'Detached 0 of 3 resource(s): the backend could not be reached. ' +
           'Check the connection and try again.'
@@ -763,5 +765,277 @@ describe('ConfigPortabilityComponent template for Reset to file', () => {
     ).nativeElement as HTMLElement;
 
     expect(resetRows(element)).toHaveLength(1);
+  });
+});
+
+describe('ConfigPortabilityComponent resource ownership load states', () => {
+  const resources = [
+    {
+      kind: 'PresentationConfig',
+      resourceId: 'pid',
+      ownership: 'file-managed',
+      source: 'folder:/app/config/demo',
+      generation: 1,
+    },
+  ] as unknown as ConfigResourceMetadata[];
+  const emptyText = 'No resource ownership metadata has been recorded yet.';
+
+  let listResources: ReturnType<typeof vi.fn>;
+  let openSnackBar: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    listResources = vi.fn();
+    openSnackBar = vi.fn();
+    vi.stubGlobal('confirm', () => true);
+    TestBed.configureTestingModule({
+      imports: [ConfigPortabilityComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ConfigPortabilityService,
+          useValue: {
+            listResources,
+            listOperations: vi.fn(async () => []),
+            detach: vi.fn(async () => undefined),
+          },
+        },
+        { provide: JwtService, useValue: { hasRole: () => true } },
+        { provide: MatSnackBar, useValue: { open: openSnackBar } },
+      ],
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function render() {
+    const fixture = TestBed.createComponent(ConfigPortabilityComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  /** The content of the Resource ownership card. */
+  const card = (fixture: ComponentFixture<ConfigPortabilityComponent>) =>
+    [...(fixture.nativeElement as HTMLElement).querySelectorAll('mat-card')].find((element) =>
+      element.querySelector('mat-card-title')?.textContent?.includes('Resource ownership')
+    )!;
+
+  const retryButton = (fixture: ComponentFixture<ConfigPortabilityComponent>) =>
+    [...card(fixture).querySelectorAll<HTMLButtonElement>('app-load-error button')].find((button) =>
+      button.textContent?.includes('Retry')
+    )!;
+
+  it('shows a labelled spinner, not the empty text, while loading', async () => {
+    listResources.mockReturnValue(new Promise(() => undefined));
+    const fixture = TestBed.createComponent(ConfigPortabilityComponent);
+    fixture.detectChanges();
+
+    const spinner = card(fixture).querySelector('mat-spinner');
+    expect(spinner?.getAttribute('aria-label')).toBe('Loading resource ownership');
+    expect(card(fixture).textContent).not.toContain(emptyText);
+    expect(card(fixture).querySelector('app-load-error')).toBeNull();
+  });
+
+  it('shows the reason with a Retry instead of the empty text when loading fails', async () => {
+    listResources.mockRejectedValue({ statusCode: 500, message: 'Database unavailable' });
+    const fixture = await render();
+
+    expect(card(fixture).querySelector('app-load-error')?.textContent).toContain(
+      'Database unavailable'
+    );
+    expect(retryButton(fixture)).toBeDefined();
+    expect(card(fixture).textContent).not.toContain(emptyText);
+    expect(card(fixture).querySelector('mat-spinner')).toBeNull();
+    // The card reports the failure; a snackbar would say it twice.
+    expect(openSnackBar).not.toHaveBeenCalled();
+  });
+
+  it('shows the empty text only after a successful load', async () => {
+    listResources.mockResolvedValue([]);
+    const fixture = await render();
+
+    expect(card(fixture).textContent).toContain(emptyText);
+    expect(card(fixture).querySelector('mat-spinner')).toBeNull();
+    expect(card(fixture).querySelector('app-load-error')).toBeNull();
+  });
+
+  /** A promise the test settles after the component has rendered its loading state. */
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    let reject!: (reason: unknown) => void;
+    const promise = new Promise<T>((done, fail) => {
+      resolve = done;
+      reject = fail;
+    });
+    return { promise, resolve, reject };
+  }
+
+  it('loads again on Retry and moves the focus from the removed Retry to the card title', async () => {
+    listResources.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const reload = deferred<ConfigResourceMetadata[]>();
+    listResources.mockReturnValueOnce(reload.promise);
+    const fixture = await render();
+    retryButton(fixture).focus();
+
+    retryButton(fixture).click();
+    fixture.detectChanges();
+    // The spinner replaced the error card with its focused Retry.
+    expect(card(fixture).querySelector('mat-spinner')).not.toBeNull();
+    expect(document.activeElement).toBe(document.body);
+    reload.resolve(resources);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(listResources).toHaveBeenCalledTimes(2);
+    expect(card(fixture).querySelector('app-load-error')).toBeNull();
+    expect(card(fixture).querySelector('table')?.textContent).toContain('pid');
+    expect(document.activeElement).toBe(card(fixture).querySelector('mat-card-title'));
+  });
+
+  it('gives the focus to the Retry of a new error card when the retry fails again', async () => {
+    listResources.mockRejectedValueOnce({ statusCode: 500, message: 'Database unavailable' });
+    const reload = deferred<ConfigResourceMetadata[]>();
+    listResources.mockReturnValueOnce(reload.promise);
+    const fixture = await render();
+    const firstRetry = retryButton(fixture);
+    firstRetry.focus();
+
+    firstRetry.click();
+    fixture.detectChanges();
+    reload.reject({ statusCode: 500, message: 'Database unavailable' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(listResources).toHaveBeenCalledTimes(2);
+    expect(card(fixture).textContent).not.toContain(emptyText);
+    expect(retryButton(fixture)).not.toBe(firstRetry);
+    expect(document.activeElement).toBe(retryButton(fixture));
+  });
+
+  it('shows the spinner, not the rows of an earlier load, during a retry', async () => {
+    listResources.mockResolvedValueOnce(resources);
+    listResources.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    listResources.mockReturnValueOnce(new Promise(() => undefined));
+    const fixture = await render();
+    await fixture.componentInstance.detach(resources[0]);
+    fixture.detectChanges();
+
+    retryButton(fixture).click();
+    fixture.detectChanges();
+
+    expect(card(fixture).querySelector('mat-spinner')).not.toBeNull();
+    expect(card(fixture).querySelector('table')).toBeNull();
+  });
+
+  it('keeps the table while reloading after an action', async () => {
+    listResources.mockResolvedValueOnce(resources);
+    listResources.mockReturnValueOnce(new Promise(() => undefined));
+    const fixture = await render();
+
+    void fixture.componentInstance.detach(resources[0]);
+    await vi.waitFor(() => expect(listResources).toHaveBeenCalledTimes(2));
+    fixture.detectChanges();
+
+    expect(card(fixture).querySelector('table')?.textContent).toContain('pid');
+    expect(card(fixture).querySelector('mat-spinner')).toBeNull();
+  });
+
+  it('replaces the table with the error card when the reload after an action fails', async () => {
+    listResources.mockResolvedValueOnce(resources);
+    listResources.mockRejectedValueOnce({ statusCode: 500, message: 'Database unavailable' });
+    const fixture = await render();
+
+    await fixture.componentInstance.detach(resources[0]);
+    fixture.detectChanges();
+
+    expect(card(fixture).querySelector('app-load-error')?.textContent).toContain(
+      'Database unavailable'
+    );
+    expect(card(fixture).querySelector('table')).toBeNull();
+    expect(openSnackBar).not.toHaveBeenCalled();
+  });
+
+  it('shows only the result of the latest load when a Retry overlaps a reload', async () => {
+    const stale = deferred<ConfigResourceMetadata[]>();
+    listResources.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    listResources.mockReturnValueOnce(stale.promise);
+    listResources.mockResolvedValueOnce(resources);
+    const fixture = await render();
+    const component = fixture.componentInstance;
+
+    // The reload after a detach is still running when the user retries.
+    const detaching = component.detach(resources[0]);
+    await vi.waitFor(() => expect(listResources).toHaveBeenCalledTimes(2));
+    await component.retryResources();
+    stale.reject(new TypeError('Failed to fetch'));
+    await detaching;
+    fixture.detectChanges();
+
+    expect(component.resourcesLoadError).toBe('');
+    expect(card(fixture).querySelector('table')?.textContent).toContain('pid');
+  });
+
+  it('keeps the rows of a Retry when an older reload succeeds after it', async () => {
+    const older = deferred<ConfigResourceMetadata[]>();
+    listResources.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    listResources.mockReturnValueOnce(older.promise);
+    listResources.mockResolvedValueOnce(resources);
+    const fixture = await render();
+    const component = fixture.componentInstance;
+
+    const detaching = component.detach(resources[0]);
+    await vi.waitFor(() => expect(listResources).toHaveBeenCalledTimes(2));
+    await component.retryResources();
+    older.resolve([
+      { ...resources[0], resourceId: 'outdated' } as unknown as ConfigResourceMetadata,
+    ]);
+    await detaching;
+    fixture.detectChanges();
+
+    const table = card(fixture).querySelector('table')?.textContent;
+    expect(table).toContain('pid');
+    expect(table).not.toContain('outdated');
+  });
+
+  it('keeps the spinner of a pending Retry when an older reload finishes first', async () => {
+    const older = deferred<ConfigResourceMetadata[]>();
+    listResources.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    listResources.mockReturnValueOnce(older.promise);
+    listResources.mockReturnValueOnce(new Promise(() => undefined));
+    const fixture = await render();
+    const component = fixture.componentInstance;
+
+    const detaching = component.detach(resources[0]);
+    await vi.waitFor(() => expect(listResources).toHaveBeenCalledTimes(2));
+    void component.retryResources();
+    older.resolve([]);
+    await detaching;
+    fixture.detectChanges();
+
+    expect(card(fixture).querySelector('mat-spinner')).not.toBeNull();
+    expect(card(fixture).textContent).not.toContain(emptyText);
+  });
+
+  it('leaves the focus where the user moved it during the retry', async () => {
+    listResources.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    let resolve!: (value: ConfigResourceMetadata[]) => void;
+    listResources.mockReturnValueOnce(new Promise((done) => (resolve = done)));
+    const fixture = await render();
+    retryButton(fixture).focus();
+
+    retryButton(fixture).click();
+    fixture.detectChanges();
+    const exportButton = [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll('button'),
+    ].find((button) => button.textContent?.includes('Download bundle'))!;
+    exportButton.focus();
+    resolve(resources);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(document.activeElement).toBe(exportButton);
   });
 });

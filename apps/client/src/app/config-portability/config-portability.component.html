@@ -306,14 +306,20 @@
   <mat-card>
     <mat-card-header>
       <mat-icon mat-card-avatar>policy</mat-icon>
-      <mat-card-title>Resource ownership</mat-card-title>
+      <mat-card-title #resourcesTitle tabindex="-1">Resource ownership</mat-card-title>
       <mat-card-subtitle
         >File-managed resources are read-only until explicitly detached. Startup imports skip
         detached resources until you reset them to the file version.</mat-card-subtitle
       >
     </mat-card-header>
     <mat-card-content class="table-scroll">
-      @if (!resources.length) {
+      @if (resourcesLoading && !resources.length) {
+        <div class="loading-state">
+          <mat-spinner diameter="40" aria-label="Loading resource ownership"></mat-spinner>
+        </div>
+      } @else if (resourcesLoadError) {
+        <app-load-error [message]="resourcesLoadError" (retry)="retryResources()" />
+      } @else if (!resources.length) {
         <p class="muted">No resource ownership metadata has been recorded yet.</p>
       } @else {
         @if (selected.size) {
