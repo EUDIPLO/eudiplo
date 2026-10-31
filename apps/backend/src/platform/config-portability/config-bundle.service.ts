@@ -677,6 +677,19 @@ export class ConfigBundleService {
                     },
                 });
             }
+            if (
+                result.document.kind === "KmsConfig" &&
+                !this.kmsTenantConfigService.canStoreTenantConfig(tenantId)
+            ) {
+                itemIssues.push({
+                    severity: "error",
+                    code: "KMS_CONFIG_FOLDER_MISSING",
+                    path: "/spec",
+                    message:
+                        "The tenant ID is not a folder name, so the tenant has no configuration folder for a kms.json. Import this configuration into a tenant with a valid ID.",
+                    resource: { kind: "KmsConfig", id: reference.id },
+                });
+            }
             const skipExisting =
                 exists && mode === "create" && !skipDiverged && !skipReserved;
             if (skipExisting) {

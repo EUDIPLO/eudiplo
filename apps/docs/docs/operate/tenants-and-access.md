@@ -34,6 +34,12 @@ curl -X POST https://eudiplo.example.com/api/tenant \
   }'
 ```
 
+`POST /api/tenant` accepts only IDs that use lowercase letters, digits, `-` and
+`_`, start with a letter or digit and have at most 63 characters, since the ID
+is also the name of the tenant's folder in `CONFIG_FOLDER`; other IDs answer
+`400`. The startup import does not check folder names against this rule, so
+name tenant folders by it as well.
+
 If you pass `roles`, EUDIPLO also creates the client `acme-admin` with
 `clients:manage` plus these roles, and returns its secret once in the response.
 Use that client to set up the tenant and to create narrower clients. It can

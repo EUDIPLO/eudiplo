@@ -1,3 +1,4 @@
+import { TENANT_ID_PATTERN } from "@eudiplo/config-format/config-format.js";
 import { z } from "zod";
 import { allRoles } from "../../roles/role.enum.js";
 import { SessionStorageConfigSchema } from "./session-storage-config.schema.js";
@@ -9,9 +10,19 @@ const RoleSchema = z.enum(
 
 const NonBlankStringSchema = z.string().trim().min(1);
 
+const TenantIdSchema = z
+    .string()
+    .trim()
+    .regex(
+        TENANT_ID_PATTERN,
+        "Tenant ID must use lowercase letters, digits, '-' and '_', start with a letter or digit and have at most 63 characters.",
+    );
+
 export const CreateTenantSchema = z
     .strictObject({
-        id: NonBlankStringSchema.describe("Unique tenant identifier."),
+        id: TenantIdSchema.describe(
+            "Unique tenant identifier: lowercase letters, digits, `-` and `_`, starting with a letter or digit, at most 63 characters. It is also the name of the tenant's configuration folder.",
+        ),
         name: NonBlankStringSchema.default("EUDIPLO").describe(
             "Display name of the tenant.",
         ),

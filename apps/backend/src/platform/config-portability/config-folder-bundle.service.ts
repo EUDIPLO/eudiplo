@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { extname, join, resolve } from "node:path";
+import { extname, join } from "node:path";
 import {
     normalizeDocument,
     resourceId,
@@ -14,6 +14,7 @@ import {
     NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { tenantConfigFolder } from "../../shared/utils/tenant-config-folder.util.js";
 import { ConfigImportService } from "../config-import/config-import.service.js";
 import { ConfigImportOrchestratorService } from "../config-import/config-import-orchestrator.service.js";
 import { ConfigBundleService } from "./config-bundle.service.js";
@@ -95,10 +96,14 @@ export class ConfigFolderBundleService {
         tenantId: string,
         mode: ConfigImportMode,
     ): Promise<void> {
-        const configRoot = resolve(
+        const tenantRoot = tenantConfigFolder(
             this.configService.getOrThrow<string>("CONFIG_FOLDER"),
+            tenantId,
         );
-        const tenantRoot = join(configRoot, tenantId);
+        // Unreachable after TenantService.setupTenant skipped the tenant.
+        if (!tenantRoot) {
+            throw new Error(`Tenant ID '${tenantId}' is not a folder name`);
+        }
         const bundle = this.buildBundle(tenantId, tenantRoot);
         const source = folderSource(tenantRoot);
         let plan: ConfigImportPlan;
@@ -204,7 +209,12 @@ export class ConfigFolderBundleService {
                 "No CONFIG_FOLDER is configured, so there is no file version to reattach to.",
             );
         }
-        const tenantRoot = join(resolve(configFolder), tenantId);
+        const tenantRoot = tenantConfigFolder(configFolder, tenantId);
+        if (!tenantRoot) {
+            throw new ConflictException(
+                `Tenant ID '${tenantId}' is not a folder name, so it has no config folder to reattach to.`,
+            );
+        }
         const full = this.collectBundle(
             tenantId,
             tenantRoot,

@@ -5,6 +5,7 @@ import { resourceId } from "@eudiplo/config-format/config-format.js";
 import { resolveConfigVariables } from "@eudiplo/config-format/config-values.js";
 import { Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { tenantConfigFolder } from "../../shared/utils/tenant-config-folder.util.js";
 import { ConfigMigrationService } from "../config-portability/config-migration.service.js";
 import { ConfigOwnershipService } from "../config-portability/config-ownership.service.js";
 import { ConfigResourceRegistry } from "../config-portability/config-resource.registry.js";
@@ -62,7 +63,12 @@ export class ConfigImportService {
         );
 
         let counter = 0;
-        const path = join(configPath, tenantId, options.subfolder);
+        const tenantFolder = tenantConfigFolder(configPath, tenantId);
+        // Unreachable after TenantService.setupTenant skipped the tenant.
+        if (!tenantFolder) {
+            throw new Error(`Tenant ID '${tenantId}' is not a folder name`);
+        }
+        const path = join(tenantFolder, options.subfolder);
 
         if (!existsSync(path)) {
             return;

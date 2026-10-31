@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import {
     BadRequestException,
     Injectable,
@@ -18,6 +18,7 @@ import {
 } from "../platform/config-import/config-import-orchestrator.service.js";
 import { ConfigMigrationService } from "../platform/config-portability/config-migration.service.js";
 import { ConfigOwnershipService } from "../platform/config-portability/config-ownership.service.js";
+import { tenantConfigFolder } from "../shared/utils/tenant-config-folder.util.js";
 import { RegistrarConfigEntity } from "./entities/registrar-config.entity.js";
 import { RegistrarAuthService } from "./registrar-auth.service.js";
 import type {
@@ -60,7 +61,12 @@ export class RegistrarConfigService {
         const configPath = this.configService.getOrThrow("CONFIG_FOLDER");
         const mode = this.configImportModeService.resolve();
         const updateExisting = mode !== "create" && mode !== "disabled";
-        const filePath = join(configPath, tenantId, "registrar.json");
+        const tenantFolder = tenantConfigFolder(configPath, tenantId);
+        // Unreachable after TenantService.setupTenant skipped the tenant.
+        if (!tenantFolder) {
+            throw new Error(`Tenant ID '${tenantId}' is not a folder name`);
+        }
+        const filePath = join(tenantFolder, "registrar.json");
 
         if (!existsSync(filePath)) {
             return;
@@ -115,7 +121,7 @@ export class RegistrarConfigService {
                 resourceId: "registrar",
                 ownership: "file-managed",
                 generation: upgraded.document.metadata.generation ?? 1,
-                source: `folder:${resolve(configPath, tenantId)}`,
+                source: `folder:${tenantFolder}`,
                 sourceHash: createHash("sha256")
                     .update(readFileSync(filePath))
                     .digest("hex"),

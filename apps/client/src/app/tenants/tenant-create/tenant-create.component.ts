@@ -63,7 +63,8 @@ export class TenantCreateComponent implements OnInit {
     private readonly apiService: ApiService
   ) {
     this.tenantForm = this.fb.group({
-      id: ['', [Validators.required]],
+      // TENANT_ID_PATTERN of the backend, which trims the ID: it is also a folder name.
+      id: ['', [Validators.required, Validators.pattern(/^\s*[a-z0-9][a-z0-9_-]{0,62}\s*$/)]],
       name: ['', [Validators.required]],
       description: [''],
       roles: new FormControl<Role[]>(['clients:manage'], [Validators.required]),

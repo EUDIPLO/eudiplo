@@ -29,8 +29,14 @@ export class KmsTenantConfigService {
         private readonly kmsProviderRegistry: KmsProviderRegistry,
     ) {}
 
+    /**
+     * The tenant's own `kms.json`, or null when it has none. A tenant whose ID
+     * is no folder name never has one, so reads such as bundle exports keep
+     * working for it.
+     */
     getTenantConfig(tenantId: string): KmsConfig | null {
-        const path = this.getTenantConfigPath(tenantId);
+        const configFolder = this.configService.get<string>("CONFIG_FOLDER");
+        const path = configFolder && kmsConfigFilePath(configFolder, tenantId);
         if (!path || !existsSync(path)) {
             return null;
         }
@@ -38,6 +44,18 @@ export class KmsTenantConfigService {
         return parseRawKmsConfig(
             kmsConfigFileSpec(JSON.parse(readFileSync(path, "utf8")), source),
             source,
+        );
+    }
+
+    /**
+     * False for a tenant whose ID is no folder name: it cannot store a
+     * `kms.json`. True when no CONFIG_FOLDER is configured, which a save
+     * reports itself.
+     */
+    canStoreTenantConfig(tenantId: string): boolean {
+        const configFolder = this.configService.get<string>("CONFIG_FOLDER");
+        return (
+            !configFolder || kmsConfigFilePath(configFolder, tenantId) !== null
         );
     }
 
@@ -140,6 +158,7 @@ export class KmsTenantConfigService {
         this.kmsProviderRegistry.invalidateTenant(tenantId);
     }
 
+    /** Path to write or delete; refuses a tenant ID that is no folder name. */
     private getTenantConfigPath(tenantId: string): string | null {
         const configFolder = this.configService.get<string>("CONFIG_FOLDER");
         if (!configFolder) {
@@ -148,7 +167,7 @@ export class KmsTenantConfigService {
         const path = kmsConfigFilePath(configFolder, tenantId);
         if (!path) {
             throw new BadRequestException(
-                `Tenant ID '${tenantId}' cannot have a kms.json: it is not a folder name`,
+                `Tenant ID '${tenantId}' cannot have a kms.json: it is not a folder name. Export the tenant's configuration and import it into a tenant with a valid ID.`,
             );
         }
         return path;

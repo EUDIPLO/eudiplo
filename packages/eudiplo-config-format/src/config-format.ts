@@ -206,6 +206,15 @@ const issuanceConfigV4ToV5: ConfigMigration = {
 };
 
 /**
+ * Tenant IDs: lowercase letters, digits, `-` and `_`, starting with a letter
+ * or digit, at most 63 characters. A tenant ID is also the name of the
+ * tenant's folder in the configuration folder, so it must not collide with
+ * another tenant's folder on case-insensitive file systems, nor with a file
+ * there such as `kms.json`.
+ */
+export const TENANT_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,62}$/;
+
+/**
  * Why `entityId` is no OpenID Federation Entity Identifier, or `undefined`
  * when it is one. OpenID Federation 1.0 Section 1.2: an https URL with a host
  * and without query or fragment. Credentials, whitespace and control

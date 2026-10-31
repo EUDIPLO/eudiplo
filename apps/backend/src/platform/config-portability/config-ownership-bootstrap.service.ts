@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { Injectable, type OnApplicationBootstrap } from "@nestjs/common";
+import { dirname } from "node:path";
+import {
+    Injectable,
+    Logger,
+    type OnApplicationBootstrap,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -13,6 +17,8 @@ import { ConfigOwnershipService } from "./config-ownership.service.js";
 
 @Injectable()
 export class ConfigOwnershipBootstrapService implements OnApplicationBootstrap {
+    private readonly logger = new Logger(ConfigOwnershipBootstrapService.name);
+
     constructor(
         private readonly configService: ConfigService,
         private readonly ownershipService: ConfigOwnershipService,
@@ -30,8 +36,13 @@ export class ConfigOwnershipBootstrapService implements OnApplicationBootstrap {
             select: { id: true },
         })) {
             const file = kmsConfigFilePath(configFolder, tenant.id);
+            if (!file) {
+                this.logger.warn(
+                    `[${tenant.id}] The tenant ID is not a folder name, so the tenant has no configuration folder: it uses the global kms.json and cannot reattach resources. Move its configuration to a tenant with a valid ID.`,
+                );
+                continue;
+            }
             if (
-                !file ||
                 !existsSync(file) ||
                 (await this.ownershipService.findStored(
                     tenant.id,
@@ -52,7 +63,7 @@ export class ConfigOwnershipBootstrapService implements OnApplicationBootstrap {
                 resourceId: "kms",
                 ownership: "file-managed",
                 generation: document.metadata.generation ?? 1,
-                source: `folder:${resolve(configFolder, tenant.id)}`,
+                source: `folder:${dirname(file)}`,
                 sourceHash: createHash("sha256").update(raw).digest("hex"),
             });
         }

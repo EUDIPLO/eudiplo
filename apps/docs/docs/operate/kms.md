@@ -181,7 +181,11 @@ target provider and switch the configurations that reference it.
 A tenant can add or override providers without touching the global file. Its
 `kms.json` is stored at `<CONFIG_FOLDER>/<tenant-id>/kms.json` and merged over
 the global one: providers with the same `id` replace the global entry, and the
-tenant's `defaultProvider` wins. Manage it through the API (roles
+tenant's `defaultProvider` wins. A tenant created before 10.0 whose ID is no
+folder name has no tenant file and always uses the global configuration; `PUT`
+and `DELETE` below answer `400` for it
+([upgrade guide](../upgrade/9.x-to-10.0.md#tenants-ids-must-be-a-folder-name)).
+Manage it through the API (roles
 `tenant:admin` or `tenants:manage`, because the configuration contains provider
 credentials):
 

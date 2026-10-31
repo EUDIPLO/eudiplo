@@ -1,3 +1,4 @@
+import { Logger } from "@nestjs/common";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("node:fs", () => ({
@@ -10,6 +11,7 @@ import { ConfigOwnershipBootstrapService } from "./config-ownership-bootstrap.se
 
 describe("ConfigOwnershipBootstrapService", () => {
     beforeEach(() => {
+        vi.restoreAllMocks();
         vi.clearAllMocks();
     });
 
@@ -42,8 +44,18 @@ describe("ConfigOwnershipBootstrapService", () => {
             } as any,
         );
 
+        const warn = vi
+            .spyOn(Logger.prototype, "warn")
+            .mockImplementation(() => undefined);
+
         await service.onApplicationBootstrap();
 
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith(
+            expect.stringContaining(
+                "[x/../victim] The tenant ID is not a folder name",
+            ),
+        );
         expect(existsSync).toHaveBeenCalledTimes(1);
         expect(existsSync).toHaveBeenCalledWith("/config/tenant-a/kms.json");
         expect(ownershipService.markApplied).toHaveBeenCalledTimes(1);
