@@ -9,6 +9,7 @@ import {
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { TENANT_ID_PATTERN } from "@eudiplo/config-format/config-format.js";
 import { readStringFlag } from "../../../options.js";
 import {
     configDirectoryName,
@@ -347,7 +348,7 @@ async function assertTenantTargetIsEmpty(tenantPath: string): Promise<void> {
 }
 
 function validateTenantId(tenantId: string): void {
-    if (!/^[a-z0-9](?:[a-z0-9_-]{0,62})$/.test(tenantId)) {
+    if (!TENANT_ID_PATTERN.test(tenantId)) {
         throw new Error(
             "Tenant ID must use lowercase letters, numbers, hyphens, or underscores and be at most 63 characters.",
         );

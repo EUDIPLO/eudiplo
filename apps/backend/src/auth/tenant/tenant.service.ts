@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join } from "node:path";
 import {
     Inject,
     Injectable,
@@ -26,6 +26,7 @@ import {
     sourceInScope,
 } from "../../platform/config-portability/config-ownership.service.js";
 import { RegistrarService } from "../../registrar/registrar.service.js";
+import { tenantConfigFolder } from "../../shared/utils/tenant-config-folder.util.js";
 import { FilesService } from "../../storage/files.service.js";
 import {
     CLIENTS_PROVIDER,
@@ -94,15 +95,24 @@ export class TenantService implements OnApplicationBootstrap {
      * @returns true if tenant is valid and ready for imports, false to skip this tenant
      */
     async setupTenant(tenantId: string): Promise<boolean> {
-        const configPath = this.configService.getOrThrow("CONFIG_FOLDER");
+        const tenantFolder = tenantConfigFolder(
+            this.configService.getOrThrow("CONFIG_FOLDER"),
+            tenantId,
+        );
+        if (!tenantFolder) {
+            this.logger.warn(
+                `[${tenantId}] Skipping tenant folder - the tenant ID is not a folder name`,
+            );
+            return false;
+        }
+        const file = join(tenantFolder, "info.json");
 
         // Check if tenant already exists
         const existing = await this.tenantRepository.findActive(tenantId);
 
         if (existing) {
-            const file = `${configPath}/${tenantId}/info.json`;
             if (existsSync(file)) {
-                await this.reapplyTenantFile(tenantId, configPath, file);
+                await this.reapplyTenantFile(tenantId, tenantFolder, file);
             }
             this.logger.debug(
                 `[${tenantId}] Tenant already exists, proceeding with imports`,
@@ -111,7 +121,6 @@ export class TenantService implements OnApplicationBootstrap {
         }
 
         // Look for info.json
-        const file = `${configPath}/${tenantId}/info.json`;
         if (!existsSync(file)) {
             // Skip folders without info.json - they might be for other purposes
             this.logger.warn(
@@ -153,7 +162,7 @@ export class TenantService implements OnApplicationBootstrap {
                 resourceId: "tenant",
                 ownership: "file-managed",
                 generation: upgraded.document.metadata.generation ?? 1,
-                source: `folder:${resolve(configPath, tenantId)}`,
+                source: `folder:${tenantFolder}`,
                 sourceHash: createHash("sha256")
                     .update(configFile)
                     .digest("hex"),
@@ -176,7 +185,7 @@ export class TenantService implements OnApplicationBootstrap {
      */
     private async reapplyTenantFile(
         tenantId: string,
-        configPath: string,
+        tenantFolder: string,
         file: string,
     ): Promise<void> {
         const configFile = readFileSync(file, "utf-8");
@@ -200,7 +209,7 @@ export class TenantService implements OnApplicationBootstrap {
 
         // The same codes and messages as the startup import of the other
         // files (ConfigFolderBundleService), which does not plan info.json.
-        const source = `folder:${resolve(configPath, tenantId)}`;
+        const source = `folder:${tenantFolder}`;
         const stored = await this.configOwnershipService.get(
             tenantId,
             "Tenant",

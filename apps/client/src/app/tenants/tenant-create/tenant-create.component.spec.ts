@@ -72,6 +72,35 @@ describe('TenantCreateComponent', () => {
     });
   });
 
+  it.each(['x/../victim', '..', '-tenant', 'tenant a', 'Acme', 'kms.json'])(
+    'refuses the tenant ID %j without sending a request',
+    async (id) => {
+      component.tenantForm.setValue({
+        id,
+        name: 'Tenant',
+        description: '',
+        roles: ['clients:manage'],
+      });
+
+      expect(component.tenantForm.get('id')?.hasError('pattern')).toBe(true);
+      await component.onSubmit();
+      expect(fetchMock).not.toHaveBeenCalled();
+    }
+  );
+
+  it('accepts a valid tenant ID with surrounding spaces and sends it trimmed', async () => {
+    component.tenantForm.setValue({
+      id: ' acme-1 ',
+      name: 'Acme',
+      description: '',
+      roles: ['clients:manage'],
+    });
+
+    expect(component.tenantForm.valid).toBe(true);
+    await component.onSubmit();
+    expect((await lastRequest()).body.id).toBe('acme-1');
+  });
+
   it('trims a non-empty create description', async () => {
     component.tenantForm.setValue({
       id: 'tenant',
@@ -158,5 +187,22 @@ describe('TenantCreateComponent', () => {
 
     expect(component.tenantForm.pristine).toBe(true);
     expect(component.tenantForm.get('description')!.value).toBe('');
+  });
+
+  it('still saves a tenant whose ID predates the ID rule', async () => {
+    routeId = 'Acme';
+    component.isEditMode = true;
+    responseBody = { id: 'Acme', name: 'Acme', description: null };
+    await (component as unknown as { loadTenant(id: string): Promise<void> }).loadTenant('Acme');
+    component.tenantForm.get('name')!.setValue('Renamed');
+    component.tenantForm.get('name')!.markAsDirty();
+
+    expect(component.tenantForm.valid).toBe(true);
+    await component.onSubmit();
+    expect(await lastRequest()).toEqual({
+      method: 'PATCH',
+      path: '/api/tenant/Acme',
+      body: { name: 'Renamed' },
+    });
   });
 });

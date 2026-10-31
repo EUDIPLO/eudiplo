@@ -1,4 +1,3 @@
-import { BadRequestException } from "@nestjs/common";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("node:fs", () => ({
@@ -44,17 +43,16 @@ describe("KmsTenantConfigService", () => {
         (tenantId) => {
             const service = createService();
 
-            expect(() => service.getTenantConfig(tenantId)).toThrow(
-                BadRequestException,
-            );
+            // Reads, such as bundle exports, see no tenant file.
+            expect(service.getTenantConfig(tenantId)).toBeNull();
             expect(() => service.saveTenantConfig(tenantId, config)).toThrow(
-                BadRequestException,
+                /not a folder name/,
             );
             expect(() => service.updateTenantConfig(tenantId, config)).toThrow(
-                BadRequestException,
+                /not a folder name/,
             );
             expect(() => service.deleteTenantConfig(tenantId)).toThrow(
-                BadRequestException,
+                /not a folder name/,
             );
 
             expect(existsSync).not.toHaveBeenCalled();
@@ -64,6 +62,21 @@ describe("KmsTenantConfigService", () => {
             expect(rmSync).not.toHaveBeenCalled();
         },
     );
+
+    it("says whether a tenant can store a kms.json", () => {
+        const service = createService();
+
+        expect(service.canStoreTenantConfig("tenant-a")).toBe(true);
+        expect(service.canStoreTenantConfig("x/../victim")).toBe(false);
+        // Without CONFIG_FOLDER, saving reports the missing folder itself.
+        expect(
+            new KmsTenantConfigService(
+                { get: vi.fn(() => undefined) } as any,
+                {} as any,
+                {} as any,
+            ).canStoreTenantConfig("x/../victim"),
+        ).toBe(true);
+    });
 
     it("writes and deletes the tenant's own kms.json", () => {
         const service = createService();

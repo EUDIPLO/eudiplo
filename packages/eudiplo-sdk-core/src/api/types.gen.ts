@@ -276,7 +276,7 @@ export type TenantResponseDto = {
  */
 export type CreateTenantDto = {
     /**
-     * Unique tenant identifier.
+     * Unique tenant identifier: lowercase letters, digits, `-` and `_`, starting with a letter or digit, at most 63 characters. It is also the name of the tenant's configuration folder.
      */
     id: string;
     /**

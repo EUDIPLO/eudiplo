@@ -154,3 +154,32 @@ describe("TenantService updates", () => {
         });
     });
 });
+
+describe("TenantService setupTenant", () => {
+    test.each([String.raw`x\..\victim`, "kms.json"])(
+        "skips the folder %j, which is no tenant folder name",
+        async (tenantId) => {
+            const repository = { findActive: vi.fn() };
+            const service = new TenantService(
+                {} as never,
+                { getOrThrow: vi.fn(() => "/config") } as never,
+                {} as never,
+                {} as never,
+                repository as never,
+                {
+                    getUpDownCounter: vi.fn(() => ({ add: vi.fn() })),
+                } as never,
+                {} as never,
+                { registerTenantSetup: vi.fn() } as never,
+                {} as never,
+                {} as never,
+                {} as never,
+                {} as never,
+                {} as never,
+            );
+
+            await expect(service.setupTenant(tenantId)).resolves.toBe(false);
+            expect(repository.findActive).not.toHaveBeenCalled();
+        },
+    );
+});

@@ -21,11 +21,17 @@
             @if (isEditMode) {
               Tenant ID cannot be changed
             } @else {
-              Must be unique, lowercase, no spaces or special characters
+              Unique; lowercase letters, digits, "-" and "_", starting with a letter or digit, at
+              most 63 characters
             }
           </mat-hint>
           @if (tenantForm.get('id')?.hasError('required')) {
             <mat-error> tenant ID is required </mat-error>
+          } @else if (tenantForm.get('id')?.hasError('pattern')) {
+            <mat-error>
+              Use lowercase letters, digits, "-" and "_", start with a letter or digit, at most 63
+              characters
+            </mat-error>
           }
         </mat-form-field>
 

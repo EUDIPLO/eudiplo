@@ -13,6 +13,37 @@ describe("tenant request schemas", () => {
         ).not.toHaveProperty("description");
     });
 
+    test.each(["acme", "tenant-1", "tenant_a", "9", "a".repeat(63)])(
+        "accepts the tenant ID %j",
+        (id) => {
+            expect(CreateTenantSchema.safeParse({ id }).success).toBe(true);
+        },
+    );
+
+    test.each([
+        "",
+        " ",
+        ".",
+        "..",
+        ".hidden",
+        "-tenant",
+        "Acme",
+        "acme.",
+        "tenant.a",
+        "kms.json",
+        "a".repeat(64),
+        "x/../victim",
+        String.raw`x\..\victim`,
+        "tenant a",
+        "tenant\0a",
+    ])("rejects the tenant ID %j", (id) => {
+        expect(CreateTenantSchema.safeParse({ id }).success).toBe(false);
+    });
+
+    test("trims the tenant ID", () => {
+        expect(CreateTenantSchema.parse({ id: " acme " }).id).toBe("acme");
+    });
+
     test("trims non-blank create descriptions", () => {
         expect(
             CreateTenantSchema.parse({
