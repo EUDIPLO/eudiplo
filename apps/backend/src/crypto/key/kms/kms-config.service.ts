@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
@@ -7,7 +6,7 @@ import {
     type KmsProviderConfig,
     parseResolvedKmsConfig,
 } from "../schemas/kms-config.schema.js";
-import { kmsConfigFileSpec } from "./kms-config-file.js";
+import { kmsConfigFilePath, kmsConfigFileSpec } from "./kms-config-file.js";
 
 const DEFAULT_PROVIDER_ID = "db";
 
@@ -115,11 +114,8 @@ export class KmsConfigService {
             return null;
         }
 
-        const path = tenantId
-            ? join(configFolder, tenantId, "kms.json")
-            : join(configFolder, "kms.json");
-
-        return existsSync(path) ? path : null;
+        const path = kmsConfigFilePath(configFolder, tenantId);
+        return path && existsSync(path) ? path : null;
     }
 }
 

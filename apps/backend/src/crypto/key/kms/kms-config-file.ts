@@ -1,3 +1,4 @@
+import { join, resolve, sep } from "node:path";
 import {
     isConfigDocument,
     migrateDocument,
@@ -38,4 +39,31 @@ export function kmsConfigFileSpec(payload: unknown, source: string): unknown {
         );
     }
     return migrated.document.spec;
+}
+
+/**
+ * Path of the global `kms.json` in `configFolder`, or of the tenant's
+ * `<configFolder>/<tenantId>/kms.json`.
+ *
+ * Tenant IDs are not restricted to a file-name-safe format, so a tenant only
+ * has a `kms.json` when its ID is exactly one folder name. For an ID that is
+ * empty, `.`, `..` or contains a path separator this returns null instead of
+ * the `kms.json` of another folder.
+ */
+export function kmsConfigFilePath(
+    configFolder: string,
+    tenantId?: string,
+): string | null {
+    const root = resolve(configFolder);
+    if (tenantId === undefined) {
+        return join(root, "kms.json");
+    }
+    if (tenantId === "." || tenantId === ".." || /^$|[/\\\0]/.test(tenantId)) {
+        return null;
+    }
+    const path = resolve(root, tenantId, "kms.json");
+    // Implied by the folder name check above; kept as the containment guard
+    // static analysis recognises.
+    const prefix = root.endsWith(sep) ? root : root + sep;
+    return path.startsWith(prefix) ? path : null;
 }
