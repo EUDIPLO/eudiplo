@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import { Injectable, type OnApplicationBootstrap } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
+import { kmsConfigFilePath } from "../../crypto/key/kms/kms-config-file.js";
 import { ConfigImportModeService } from "../config-import/config-import-mode.service.js";
 import { ConfigMigrationService } from "./config-migration.service.js";
 import { ConfigOwnershipService } from "./config-ownership.service.js";
@@ -28,8 +29,9 @@ export class ConfigOwnershipBootstrapService implements OnApplicationBootstrap {
         for (const tenant of await this.tenants.find({
             select: { id: true },
         })) {
-            const file = join(configFolder, tenant.id, "kms.json");
+            const file = kmsConfigFilePath(configFolder, tenant.id);
             if (
+                !file ||
                 !existsSync(file) ||
                 (await this.ownershipService.findStored(
                     tenant.id,

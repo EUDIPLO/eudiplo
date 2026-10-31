@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { atomicWriteFileSync } from "@eudiplo/config-format/config-io.js";
 import {
     BadRequestException,
@@ -12,7 +12,7 @@ import {
     parseRawKmsConfig,
 } from "../schemas/kms-config.schema.js";
 import { KmsConfigService } from "./kms-config.service.js";
-import { kmsConfigFileSpec } from "./kms-config-file.js";
+import { kmsConfigFilePath, kmsConfigFileSpec } from "./kms-config-file.js";
 import {
     KmsSecretDestinationChangedError,
     KmsSecretNotStoredError,
@@ -145,7 +145,13 @@ export class KmsTenantConfigService {
         if (!configFolder) {
             return null;
         }
-        return join(configFolder, tenantId, "kms.json");
+        const path = kmsConfigFilePath(configFolder, tenantId);
+        if (!path) {
+            throw new BadRequestException(
+                `Tenant ID '${tenantId}' cannot have a kms.json: it is not a folder name`,
+            );
+        }
+        return path;
     }
 
     private validateConfig(config: KmsConfig): KmsConfig {

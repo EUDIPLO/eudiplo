@@ -245,4 +245,16 @@ describe("KmsConfigService", () => {
 
         expect(() => createService()).toThrow(/expected a KmsConfig document/);
     });
+
+    it("uses the global config for a tenant ID that is no folder name", () => {
+        vi.mocked(existsSync).mockReturnValue(false);
+        const service = createService();
+        vi.mocked(existsSync).mockClear();
+
+        for (const tenantId of ["../x", "x/../victim"]) {
+            expect(service.getConfig(tenantId)).toBe(service.getConfig());
+        }
+        expect(existsSync).not.toHaveBeenCalled();
+        expect(readFileSync).not.toHaveBeenCalled();
+    });
 });

@@ -1,6 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
-import { kmsConfigFileSpec } from "./kms-config-file.js";
+import { kmsConfigFilePath, kmsConfigFileSpec } from "./kms-config-file.js";
 
 const SOURCE = "global kms.json";
 
@@ -57,5 +57,38 @@ describe("kmsConfigFileSpec", () => {
         expect(() => kmsConfigFileSpec(document, SOURCE)).toThrow(
             /Unknown configuration envelope property/,
         );
+    });
+});
+
+describe("kmsConfigFilePath", () => {
+    it("places the global file in the configuration folder", () => {
+        expect(kmsConfigFilePath("/config")).toBe("/config/kms.json");
+    });
+
+    it("accepts a root configuration folder", () => {
+        expect(kmsConfigFilePath("/", "tenant-a")).toBe("/tenant-a/kms.json");
+    });
+
+    it("places a tenant file in the tenant's folder", () => {
+        expect(kmsConfigFilePath("/config", "tenant-a")).toBe(
+            "/config/tenant-a/kms.json",
+        );
+    });
+
+    it.each([
+        "..",
+        ".",
+        "",
+        "../other",
+        "a/b",
+        "/etc",
+        "a/../../etc",
+        "x/../victim",
+        "/config/tenant-b",
+        "tenant-a/",
+        "a\\b",
+        "a\0b",
+    ])("has no file for the tenant ID %j", (tenantId) => {
+        expect(kmsConfigFilePath("/config", tenantId)).toBeNull();
     });
 });
