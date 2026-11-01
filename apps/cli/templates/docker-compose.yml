@@ -89,7 +89,7 @@ services:
       - eudiplo-network
 
   rustfs:
-    image: rustfs/rustfs:1.0.1
+    image: rustfs/rustfs:1.0.3
     restart: always
     profiles: ['s3', 'standard', 'full']
     ports:
@@ -114,7 +114,7 @@ services:
 
   # S3 bucket initialization using the AWS CLI
   rustfs-init:
-    image: amazon/aws-cli:2.37.10
+    image: amazon/aws-cli:2.38.5
     profiles: ['s3', 'standard', 'full']
     depends_on:
       rustfs:
