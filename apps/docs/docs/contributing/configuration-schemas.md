@@ -57,7 +57,7 @@ Bump the version whenever the accepted content of a resource changes, including 
     ```bash
     pnpm schemas:check-contract        # current DTOs match the committed schemas and snapshots
     pnpm schemas:check                 # bundled snapshots are in sync
-    pnpm schemas:check-history origin/main   # no published snapshot was changed
+    pnpm schemas:check-history origin/main   # no snapshot of a release was changed
     pnpm --filter @eudiplo/website build
     ```
 
@@ -67,7 +67,7 @@ Bump the version whenever the accepted content of a resource changes, including 
 
 ## Immutable snapshots
 
-Files under `schemas/v*/` are publication artifacts. Never edit or delete one; CI compares them with the pull request base (`scripts/check-published-schemas.mjs`) and fails on any change. Each resource schema contains its dependencies in `$defs`, so one resource can move to a new version while the others stay. The schema's own `$schema` is the JSON Schema dialect; its `$id` is the public EUDIPLO URL that files reference.
+Files under `schemas/v*/` are publication artifacts once a release ships them. Never edit or delete one; CI compares the snapshots of the latest release tag before the pull request base with the working tree (`scripts/check-published-schemas.mjs`) and fails on any change. A snapshot that no release has shipped yet can still change before the release, for example to rename a value; files written by a build of `main` in between may then need editing before they import. Each resource schema contains its dependencies in `$defs`, so one resource can move to a new version while the others stay. The schema's own `$schema` is the JSON Schema dialect; its `$id` is the public EUDIPLO URL that files reference.
 
 ## Publishing
 

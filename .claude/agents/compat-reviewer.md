@@ -29,7 +29,7 @@ When the prompt says `audit <area>` instead of naming a change set, there is no 
 
 - Read-only for source files. Bash may run `git`, `gh`, `grep`, `find`, `cat` and these repository checks, which only read:
   ```bash
-  pnpm schemas:check-history origin/main   # no published snapshot under schemas/v*/ was edited
+  pnpm schemas:check-history origin/main   # no snapshot of a release under schemas/v*/ was edited
   pnpm schemas:check                       # bundled snapshots in sync
   ```
   Do not run `schemas:check-contract`, `gen:api`, `gen:sdk`, builds or tests: they write files.
@@ -70,7 +70,7 @@ Database migrations (`apps/backend/src/database/migrations/`)
 Configuration file formats (`packages/eudiplo-config-format/src/config-format.ts`)
 - The resource version in `CONFIG_FORMATS` is bumped when the accepted content changed, including description-only changes to a published schema.
 - Exactly one step from the previous version is added to `CONFIG_MIGRATIONS`, keeps the resource identity, and reports `warning` for lossy automatic changes and `required-input` where a user must decide.
-- A new snapshot exists under `schemas/v<N>/`, nothing under `schemas/v*/` was edited (`pnpm schemas:check-history origin/main`), the bundle is in sync (`pnpm schemas:check`), CLI assets were synced.
+- A new snapshot exists under `schemas/v<N>/`, no snapshot of a release under `schemas/v*/` was edited (`pnpm schemas:check-history origin/main`), the bundle is in sync (`pnpm schemas:check`), CLI assets were synced.
 - Tests for the step exist in `packages/eudiplo-config-format` and `apps/cli/test/config-upgrade.test.ts`.
 
 Environment variables
