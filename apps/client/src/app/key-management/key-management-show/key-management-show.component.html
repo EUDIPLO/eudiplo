@@ -269,9 +269,7 @@
           @if (keyChain.activeCertificate) {
             <p class="unused-certificate-note">
               EUDIPLO also keeps a self-signed certificate for this key.
-              {{
-                isAuthorizationServerKey ? 'Access tokens do not' : 'OpenID Federation does not'
-              }}
+              {{ isAuthorizationServerKey ? 'Access tokens do not' : 'OpenID Federation does not' }}
               use it.
             </p>
           }
