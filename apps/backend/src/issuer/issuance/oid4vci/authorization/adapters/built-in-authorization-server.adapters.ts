@@ -88,7 +88,7 @@ export class KeyChainAccessTokenSigningKeys implements AccessTokenSigningKeys {
     constructor(private readonly keyChain: KeyChainService) {}
 
     async resolve(tenantId: string, keyId?: string) {
-        const keyChain = await this.keyChain.resolveAccessTokenKeyChain(
+        const keyChain = await this.keyChain.resolveAuthorizationServerKeyChain(
             tenantId,
             keyId,
         );

@@ -73,9 +73,9 @@ describe('KeyManagementShowComponent', () => {
     expect(text).not.toContain('Copy PEM');
   });
 
-  it('shows an access token key as the public key of the authorization servers JWKS', () => {
+  it('shows an authorization server key as the public key of the authorization servers JWKS', () => {
     const text = shownWith({
-      usageType: 'accessToken',
+      usageType: 'authorizationServer',
       activePublicKey: { kty: 'EC', crv: 'P-256', kid: 'token-kid' },
       previousPublicKey: { kty: 'EC', crv: 'P-256', kid: 'old-token-kid' },
       activeCertificate: certificate,
@@ -879,7 +879,7 @@ describe('KeyManagementShowComponent certificate request', () => {
     { type: 'internalChain', usageType: 'attestation' },
     { type: 'standalone', usageType: 'encrypt' },
     { type: 'standalone', usageType: 'federation' },
-    { type: 'standalone', usageType: 'accessToken' },
+    { type: 'standalone', usageType: 'authorizationServer' },
   ] as Partial<KeyChainResponseDto>[])('does not offer it for %o', (keyChain) => {
     expect(create(keyChain).offersCertificateRequest).toBe(false);
   });

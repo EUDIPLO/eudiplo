@@ -856,7 +856,7 @@ describe("Issuance - Chained AS Flow", () => {
         const tokenPayload = decodeJwt(tokenResponse.body.access_token);
         expect(tokenPayload.issuer_state).toBeDefined();
 
-        // Signed by the tenant's access token key chain, published in the
+        // Signed by the tenant's authorization server key chain, published in the
         // chained AS JWKS.
         const { kid, alg } = decodeProtectedHeader(
             tokenResponse.body.access_token,
@@ -875,13 +875,13 @@ describe("Issuance - Chained AS Flow", () => {
                 { clockTolerance: 5 },
             ),
         ).resolves.toBeDefined();
-        const accessTokenKeyChains = await request(app.getHttpServer())
+        const authorizationServerKeyChains = await request(app.getHttpServer())
             .get("/key-chain")
-            .query({ usageType: "accessToken" })
+            .query({ usageType: "authorizationServer" })
             .set("Authorization", `Bearer ${authToken}`)
             .expect(200);
         expect(
-            accessTokenKeyChains.body.map(
+            authorizationServerKeyChains.body.map(
                 (keyChain: { activePublicKey: { kid?: string } }) =>
                     keyChain.activePublicKey.kid,
             ),

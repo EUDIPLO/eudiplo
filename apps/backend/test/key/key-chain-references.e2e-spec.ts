@@ -119,7 +119,7 @@ describe("DELETE /key-chain/{id} while configurations name the key chain", () =>
             description: "shared",
         });
         tokenKey = await createKeyChain(app, token, {
-            usageType: KeyUsageType.AccessToken,
+            usageType: KeyUsageType.AuthorizationServer,
             description: "token",
         });
         accessKey = await createKeyChain(app, token, {

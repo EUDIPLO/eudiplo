@@ -31,7 +31,7 @@ import {
     type KeyChainConfigurationChange,
     KeyChainReferences,
 } from "../../crypto/key/application/key-chain-references.js";
-import { accessTokenKeyChainUsageRefusal } from "../../crypto/key/domain/access-token-keys.js";
+import { authorizationServerKeyChainUsageRefusal } from "../../crypto/key/domain/authorization-server-keys.js";
 import { defaultKeyChainUsageRefusal } from "../../crypto/key/domain/default-access-key-chain.js";
 import {
     describeKeyChainReferences,
@@ -1392,14 +1392,14 @@ export class ConfigBundleService {
 
     /**
      * The `token.signingKeyId` of each authorization server must name a key
-     * chain with usage type `accessToken`, else its token requests fail
+     * chain with usage type `authorizationServer`, else its token requests fail
      * after the import. A missing key chain is reported as a missing
      * reference. Like the API, the plan does not refuse a value the stored
      * configuration already has, so an unchanged folder from before the
      * check does not block the tenant's import; it warns instead, as that
      * authorization server's token requests fail.
      */
-    private async checkAccessTokenSigningKeys(
+    private async checkAuthorizationServerKeyChains(
         tenantId: string,
         documents: ConfigDocument[],
         availableKeyChains: Set<string> | undefined,
@@ -1440,7 +1440,7 @@ export class ConfigBundleService {
                 { document, index, serverId, keyChainId },
                 position,
             ): ConfigMigrationIssue[] => {
-                const refusal = accessTokenKeyChainUsageRefusal(
+                const refusal = authorizationServerKeyChainUsageRefusal(
                     keyChainId,
                     usageTypes[position],
                 );
@@ -1651,7 +1651,7 @@ export class ConfigBundleService {
                 documents,
                 available.get("KeyChain"),
             )),
-            ...(await this.checkAccessTokenSigningKeys(
+            ...(await this.checkAuthorizationServerKeyChains(
                 tenantId,
                 documents,
                 available.get("KeyChain"),

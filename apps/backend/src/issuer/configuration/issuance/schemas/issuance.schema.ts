@@ -19,7 +19,7 @@ const ChainedAsTokenConfigSchema = z
             .min(1)
             .optional()
             .describe(
-                'ID of a key chain with usage type "accessToken" that signs the issued access tokens. Without it, the tenant\'s access token key chain signs them.',
+                'ID of a key chain with usage type "authorizationServer" that signs the issued access tokens. Without it, the tenant\'s authorization server key chain signs them.',
             ),
         refreshTokenEnabled: z
             .boolean()

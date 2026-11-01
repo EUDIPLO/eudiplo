@@ -24,7 +24,8 @@ git fetch origin && git ls-tree -d --name-only origin/main schemas/ | sort -V | 
 git ls-tree -r --name-only origin/main schemas/v<N>/ | grep <Kind>
 ```
 
-- If `schemas/v<N>/<Kind>File.schema.json` exists on `origin/main`, it is published and immutable, even if no release contains it yet. Add a v<N> → v<N+1> step (Tenant v2 → v3 went this way). `pnpm schemas:check-history origin/main` fails on any edit.
+- If `schemas/v<N>/<Kind>File.schema.json` is in a release (the latest `v*` tag), it is published and immutable. Add a v<N> → v<N+1> step (Tenant v2 → v3 went this way). `pnpm schemas:check-history origin/main` fails on any edit.
+- If it is on `origin/main` but no release contains it yet, you may still edit that snapshot and its step instead of adding another version; files written by a build of `main` in between may then need editing before they import.
 - If the version exists only on your branch or an unmerged stack, edit that snapshot and its step instead of adding another version. Land it before or with the PR that publishes the snapshot, or move to the next version.
 
 ## 3. Implementation checklist

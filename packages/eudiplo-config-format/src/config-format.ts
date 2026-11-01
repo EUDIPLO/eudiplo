@@ -106,11 +106,11 @@ export function resourceId(input: ConfigFile<unknown>): string {
  * The format version a bare file (a spec without envelope) is read as: v1,
  * except a key chain with `type`, which KeyChain v2 added and which the bare
  * key chain export writes (v3 for usage type `federation`, which KeyChain v3
- * added, v4 for `accessToken`, which KeyChain v4 added), and a KMS configuration with a provider that sets
+ * added, v4 for `authorizationServer`, which KeyChain v4 added), and a KMS configuration with a provider that sets
  * `algorithms` or `defaultAlgorithm`, which KmsConfig v2 added and which the
  * tenant `kms.json` is saved as, a registrar configuration with
  * `relyingPartyContact`, which RegistrarConfig v2 added, key chain defaults
- * with `accessToken`, which KeyChainDefaults v2 added, and a tenant
+ * with `authorizationServer`, which KeyChainDefaults v2 added, and a tenant
  * `info.json` with `defaultAccessKeyChainId`, which TenantConfig v2 added, or
  * with `defaultKeyChains`, which TenantConfig v3 replaced it with (TenantConfig
  * v4 moved it to `key-chain-defaults.json`).
@@ -120,13 +120,13 @@ export function bareFileVersion(
     spec: Record<string, unknown>,
 ): number {
     if (kind === "KeyChain") {
-        if (spec.usageType === "accessToken") return 4;
+        if (spec.usageType === "authorizationServer") return 4;
         if (spec.usageType === "federation") return 3;
         return "type" in spec ? 2 : 1;
     }
     if (kind === "RegistrarConfig")
         return "relyingPartyContact" in spec ? 2 : 1;
-    if (kind === "KeyChainDefaults") return "accessToken" in spec ? 2 : 1;
+    if (kind === "KeyChainDefaults") return "authorizationServer" in spec ? 2 : 1;
     if (kind === "Tenant") {
         if ("defaultKeyChains" in spec) return 3;
         return "defaultAccessKeyChainId" in spec ? 2 : 1;
@@ -297,10 +297,10 @@ const presentationConfigV1ToV2: ConfigMigration = {
 /**
  * IssuanceConfig v6 removes the top-level `signingKeyId`. It only selected
  * the key chain for the access tokens of the built-in authorization server,
- * and from v6 on only a key chain with usage type `accessToken` signs them,
+ * and from v6 on only a key chain with usage type `authorizationServer` signs them,
  * which no key chain of an earlier version has. A set value is therefore
  * dropped with a warning; the built-in authorization server then uses the
- * tenant's access token key chain. A `token.signingKeyId` of an
+ * tenant's authorization server key chain. A `token.signingKeyId` of an
  * authorization server stays, with a warning: it must now name such a key
  * chain, which only its author can create or choose.
  */
@@ -317,7 +317,7 @@ const issuanceConfigV5ToV6: ConfigMigration = {
                 severity: "warning",
                 code: "ISSUANCE_SIGNING_KEY_ID_REMOVED",
                 path: "/spec/signingKeyId",
-                message: `signingKeyId ${JSON.stringify(signingKeyId)} was removed. The built-in authorization server now signs access tokens with the tenant's access token key chain (usage type "accessToken"); to choose one, set token.signingKeyId of its entry.`,
+                message: `signingKeyId ${JSON.stringify(signingKeyId)} was removed. The built-in authorization server now signs access tokens with the tenant's authorization server key chain (usage type "authorizationServer"); to choose one, set token.signingKeyId of its entry.`,
             });
         }
         const servers = Array.isArray(rest.authorizationServers)
@@ -331,9 +331,9 @@ const issuanceConfigV5ToV6: ConfigMigration = {
             if (typeof keyChainId !== "string" || keyChainId === "") return;
             issues.push({
                 severity: "warning",
-                code: "ACCESS_TOKEN_KEY_CHAIN_REQUIRED",
+                code: "AUTHORIZATION_SERVER_KEY_CHAIN_REQUIRED",
                 path: `/spec/authorizationServers/${index}/token/signingKeyId`,
-                message: `token.signingKeyId ${JSON.stringify(keyChainId)} must name a key chain with usage type "accessToken" from now on, else the import is refused. Remove it to use the tenant's access token key chain, or point it to such a key chain.`,
+                message: `token.signingKeyId ${JSON.stringify(keyChainId)} must name a key chain with usage type "authorizationServer" from now on, else the import is refused. Remove it to use the tenant's authorization server key chain, or point it to such a key chain.`,
             });
         });
         return { spec: "signingKeyId" in spec ? rest : spec, issues };
@@ -527,21 +527,21 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         migrate: (spec) => ({ spec }),
     },
     {
-        id: "key-chain-v4-access-token-usage",
+        id: "key-chain-v4-authorization-server-usage",
         kind: "KeyChain",
         from: 3,
         to: 4,
-        // v4 only adds the usage type `accessToken`: a v3 spec is a valid v4
+        // v4 only adds the usage type `authorizationServer`: a v3 spec is a valid v4
         // spec.
         migrate: (spec) => ({ spec }),
     },
     {
-        id: "key-chain-defaults-v2-access-token",
+        id: "key-chain-defaults-v2-authorization-server",
         kind: "KeyChainDefaults",
         from: 1,
         to: 2,
-        // v2 only adds the optional accessToken entry: a v1 spec is a valid
-        // v2 spec, whose tenant keeps using its oldest access token key
+        // v2 only adds the optional authorizationServer entry: a v1 spec is a valid
+        // v2 spec, whose tenant keeps using its oldest authorization server key
         // chain.
         migrate: (spec) => ({ spec }),
     },

@@ -204,9 +204,9 @@ export type DefaultKeyChains = {
      */
     access?: string;
     /**
-     * Access token key chain (usage type accessToken) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant's oldest access token key chain and creates one with ID access-token when the tenant has none.
+     * Authorization server key chain (usage type authorizationServer) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant's oldest authorization server key chain and creates one with ID authorization-server when the tenant has none.
      */
-    accessToken?: string;
+    authorizationServer?: string;
 };
 
 export type ClientEntity = {
@@ -1210,7 +1210,7 @@ export type KeyChainResponseDto = {
     /**
      * Usage type of the key chain.
      */
-    usageType: 'access' | 'accessToken' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
+    usageType: 'access' | 'authorizationServer' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
     /**
      * Type of key chain (standalone or internalChain).
      */
@@ -1323,7 +1323,7 @@ export type KeyChainExportDto = {
     /**
      * Usage type for this key chain.
      */
-    usageType: 'access' | 'accessToken' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
+    usageType: 'access' | 'authorizationServer' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
     /**
      * Key chain type. For internalChain, key and crt are the root CA key and certificate; the import generates a new signing key.
      */
@@ -1372,7 +1372,7 @@ export type KeyChainCreateDto = {
     /**
      * Usage type determines the purpose of this key chain (access, attestation, etc.).
      */
-    usageType: 'access' | 'accessToken' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
+    usageType: 'access' | 'authorizationServer' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
     /**
      * Type of key chain to create.
      */
@@ -1510,7 +1510,7 @@ export type KeyChainImportDto = {
     /**
      * Usage type for this key chain.
      */
-    usageType: 'access' | 'accessToken' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
+    usageType: 'access' | 'authorizationServer' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
     /**
      * Key chain type. standalone: key is the signing key and crt its chain, leaf first. internalChain: key is a CA key and the last crt entry its CA certificate (created if crt is omitted); a new signing key is generated with a certificate issued by it. Without type, key is a CA key only if rotationPolicy.enabled is true and crt is not a single self-signed certificate that is not a CA. The export writes it.
      */
@@ -2188,7 +2188,7 @@ export type KeyChainEntity = {
     /**
      * The purpose/role of this key chain in the system.
      */
-    usageType: 'access' | 'accessToken' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
+    usageType: 'access' | 'authorizationServer' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
     /**
      * The usage type of the keys (sign or encrypt).
      */
@@ -5066,7 +5066,7 @@ export type ChainedAsTokenConfig = {
      */
     lifetimeSeconds?: number;
     /**
-     * ID of a key chain with usage type "accessToken" that signs the issued access tokens. Without it, the tenant's access token key chain signs them.
+     * ID of a key chain with usage type "authorizationServer" that signs the issued access tokens. Without it, the tenant's authorization server key chain signs them.
      */
     signingKeyId?: string;
     /**
@@ -7439,7 +7439,7 @@ export type KeyChainControllerGetAllData = {
         /**
          * Optional usage type filter
          */
-        usageType?: 'access' | 'accessToken' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
+        usageType?: 'access' | 'authorizationServer' | 'attestation' | 'trustList' | 'statusList' | 'federation' | 'encrypt';
     };
     url: '/api/key-chain';
 };

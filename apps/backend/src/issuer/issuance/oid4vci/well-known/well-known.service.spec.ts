@@ -5,7 +5,7 @@ function wellKnown(issuanceConfig: object) {
     const keyChainService = {
         getAccessTokenVerificationKeys: vi.fn(
             async (_tenant, keyId: string | undefined) => [
-                { kty: "EC", kid: keyId ?? "access-token" },
+                { kty: "EC", kid: keyId ?? "authorization-server" },
             ],
         ),
     };
@@ -38,13 +38,13 @@ describe("WellKnownService JWKS of the built-in authorization server", () => {
         ).toHaveBeenCalledWith("tenant-1", "as-key", 900);
     });
 
-    it("falls back to the tenant's access token key chain", async () => {
+    it("falls back to the tenant's authorization server key chain", async () => {
         const { service, keyChainService } = wellKnown({
             authorizationServers: [{ type: "built-in", id: "built-in" }],
         });
 
         await expect(service.getJwks("tenant-1")).resolves.toEqual({
-            keys: [{ kty: "EC", kid: "access-token" }],
+            keys: [{ kty: "EC", kid: "authorization-server" }],
         });
         expect(
             keyChainService.getAccessTokenVerificationKeys,

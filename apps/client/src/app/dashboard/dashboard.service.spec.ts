@@ -608,7 +608,7 @@ describe('DashboardService', () => {
     Object.assign(responses, issuanceSetUp, {
       '/api/key-chain': [
         { id: 'enc', usageType: 'encrypt' },
-        { id: 'access-token', usageType: 'accessToken' },
+        { id: 'authorization-server', usageType: 'authorizationServer' },
       ],
     });
 

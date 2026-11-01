@@ -37,8 +37,8 @@
               "type": "string",
               "minLength": 1
             },
-            "accessToken": {
-              "description": "ID of the access token key chain (usage type accessToken) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant's oldest access token key chain and creates one with ID access-token when the tenant has none.",
+            "authorizationServer": {
+              "description": "ID of the authorization server key chain (usage type authorizationServer) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant's oldest authorization server key chain and creates one with ID authorization-server when the tenant has none.",
               "type": "string",
               "minLength": 1
             }
@@ -110,8 +110,8 @@
           "type": "string",
           "minLength": 1
         },
-        "accessToken": {
-          "description": "ID of the access token key chain (usage type accessToken) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant's oldest access token key chain and creates one with ID access-token when the tenant has none.",
+        "authorizationServer": {
+          "description": "ID of the authorization server key chain (usage type authorizationServer) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant's oldest authorization server key chain and creates one with ID authorization-server when the tenant has none.",
           "type": "string",
           "minLength": 1
         }

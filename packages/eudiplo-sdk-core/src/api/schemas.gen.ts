@@ -365,9 +365,9 @@ export const DefaultKeyChainsSchema = {
             type: 'string',
             description: 'Access key chain that signs presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant\'s access key chains by rule.'
         },
-        accessToken: {
+        authorizationServer: {
             type: 'string',
-            description: 'Access token key chain (usage type accessToken) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant\'s oldest access token key chain and creates one with ID access-token when the tenant has none.'
+            description: 'Authorization server key chain (usage type authorizationServer) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant\'s oldest authorization server key chain and creates one with ID authorization-server when the tenant has none.'
         }
     }
 } as const;
@@ -3008,7 +3008,7 @@ export const KeyChainResponseDtoSchema = {
         usageType: {
             enum: [
                 'access',
-                'accessToken',
+                'authorizationServer',
                 'attestation',
                 'trustList',
                 'statusList',
@@ -3198,7 +3198,7 @@ export const KeyChainExportDtoSchema = {
         usageType: {
             enum: [
                 'access',
-                'accessToken',
+                'authorizationServer',
                 'attestation',
                 'trustList',
                 'statusList',
@@ -3302,7 +3302,7 @@ export const KeyChainCreateDtoSchema = {
             type: 'string',
             enum: [
                 'access',
-                'accessToken',
+                'authorizationServer',
                 'attestation',
                 'trustList',
                 'statusList',
@@ -3519,7 +3519,7 @@ export const KeyChainImportDtoSchema = {
             type: 'string',
             enum: [
                 'access',
-                'accessToken',
+                'authorizationServer',
                 'attestation',
                 'trustList',
                 'statusList',
@@ -5161,7 +5161,7 @@ export const KeyChainEntitySchema = {
             description: 'The purpose/role of this key chain in the system.',
             enum: [
                 'access',
-                'accessToken',
+                'authorizationServer',
                 'attestation',
                 'trustList',
                 'statusList',
@@ -11020,7 +11020,7 @@ export const ChainedAsTokenConfigSchema = {
         },
         signingKeyId: {
             type: 'string',
-            description: 'ID of a key chain with usage type "accessToken" that signs the issued access tokens. Without it, the tenant\'s access token key chain signs them.'
+            description: 'ID of a key chain with usage type "authorizationServer" that signs the issued access tokens. Without it, the tenant\'s authorization server key chain signs them.'
         },
         refreshTokenEnabled: {
             type: 'boolean',

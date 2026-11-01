@@ -1,6 +1,8 @@
 import { webcrypto } from "node:crypto";
 import * as x509 from "@peculiar/x509";
 import { beforeAll, describe, expect, it } from "vitest";
+import { DEFAULT_KEY_CHAIN_ENTRIES } from "../../../auth/tenant/domain/tenant-data.js";
+import { KeyUsageType } from "../types/key-usage-type.js";
 import {
     defaultKeyChainUsageRefusal,
     pickDefaultAccessKeyChain,
@@ -157,6 +159,13 @@ describe("pickDefaultAccessKeyChain", () => {
 });
 
 describe("defaultKeyChainUsageRefusal", () => {
+    it("names every key chain defaults entry after a usage type", () => {
+        // The refusal compares the usage type with the entry name.
+        for (const entry of DEFAULT_KEY_CHAIN_ENTRIES) {
+            expect(Object.values(KeyUsageType)).toContain(entry);
+        }
+    });
+
     it("accepts a key chain whose usage type matches the entry", () => {
         expect(
             defaultKeyChainUsageRefusal("access", "registrar", "access"),

@@ -109,7 +109,7 @@ export class WellKnownService {
 
     /**
      * Returns the JSON Web Key Set (JWKS) for a given tenant: the keys of
-     * the built-in authorization server's access token key chain, the
+     * the key chain of the built-in authorization server, the
      * previous one only while tokens it signed can still be valid.
      * @returns
      */

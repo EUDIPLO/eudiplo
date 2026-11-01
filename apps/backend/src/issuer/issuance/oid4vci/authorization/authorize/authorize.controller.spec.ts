@@ -170,7 +170,7 @@ function createHarness(issuanceConfig: Record<string, unknown> = {}) {
         verifyWalletAttestation: vi.fn().mockResolvedValue(undefined),
     };
     const keyChain = {
-        resolveAccessTokenKeyChain: vi.fn(
+        resolveAuthorizationServerKeyChain: vi.fn(
             async (_tenantId: string, keyId?: string) => ({
                 id: keyId ?? "chain-1",
                 activeJwk: { kty: "EC", crv: "P-256", kid: "kid-1", d: "x" },
@@ -1329,10 +1329,9 @@ describe("Built-in authorization server token endpoint", () => {
                     "urn:ietf:params:oauth:grant-type:pre-authorized_code",
                 "pre-authorized_code": "code-1",
             });
-            expect(h.keyChain.resolveAccessTokenKeyChain).toHaveBeenCalledWith(
-                TENANT,
-                "pinned",
-            );
+            expect(
+                h.keyChain.resolveAuthorizationServerKeyChain,
+            ).toHaveBeenCalledWith(TENANT, "pinned");
             expect(h.oauth.createAccessTokenResponse).toHaveBeenCalledWith(
                 expect.objectContaining({
                     refreshToken: false,

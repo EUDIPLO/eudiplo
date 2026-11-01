@@ -108,11 +108,11 @@ export class ChainedAsTokenConfig extends createZodDto(
 
     /**
      * The key chain that signs the access tokens. Must have usage type
-     * `accessToken`; without it, the tenant's access token key chain signs.
+     * `authorizationServer`; without it, the tenant's authorization server key chain signs.
      */
     @ApiPropertyOptional({
         description:
-            'ID of a key chain with usage type "accessToken" that signs the issued access tokens. Without it, the tenant\'s access token key chain signs them.',
+            'ID of a key chain with usage type "authorizationServer" that signs the issued access tokens. Without it, the tenant\'s authorization server key chain signs them.',
     })
     signingKeyId?: string;
 

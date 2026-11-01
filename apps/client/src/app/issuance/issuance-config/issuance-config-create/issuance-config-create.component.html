@@ -555,18 +555,20 @@
                                   >
                                 </mat-form-field>
                                 <mat-form-field fxFlex subscriptSizing="dynamic">
-                                  <mat-label>Access Token Signing Key</mat-label>
+                                  <mat-label>Authorization Server Key</mat-label>
                                   <mat-select
                                     id="managed-auth-server-signing-key-{{ i }}"
                                     formControlName="signingKeyId"
                                   >
-                                    <mat-option value="">The tenant's access token key</mat-option>
+                                    <mat-option value=""
+                                      >The tenant's authorization server key</mat-option
+                                    >
                                     @for (
-                                      keyChain of accessTokenKeyChains ?? [];
+                                      keyChain of authorizationServerKeyChains ?? [];
                                       track keyChain.id
                                     ) {
                                       <mat-option [value]="keyChain.id">
-                                        {{ accessTokenKeyChainLabel(keyChain) }}
+                                        {{ authorizationServerKeyChainLabel(keyChain) }}
                                       </mat-option>
                                     }
                                     @if (
@@ -586,7 +588,7 @@
                                     }
                                   </mat-select>
                                   <mat-hint
-                                    >Signs this server's access tokens; only Access Token Signing
+                                    >Signs this server's access tokens; only Authorization Server
                                     keys qualify.</mat-hint
                                   >
                                 </mat-form-field>
@@ -594,11 +596,11 @@
 
                               @if (
                                 signingKeyIdInvalid(server.get('token.signingKeyId')?.value) ||
-                                accessTokenKeyChainsLoadFailed ||
-                                accessTokenKeyChains?.length === 0
+                                authorizationServerKeyChainsLoadFailed ||
+                                authorizationServerKeyChains?.length === 0
                               ) {
                                 <div
-                                  class="access-token-key-notice"
+                                  class="authorization-server-key-notice"
                                   fxLayout="column"
                                   fxLayoutGap="8px"
                                 >
@@ -612,29 +614,29 @@
                                       signingKeyIdInvalid(server.get('token.signingKeyId')?.value)
                                     ) {
                                       <span
-                                        >The chosen key chain does not exist or is not an Access
-                                        Token Signing key, so this server's token requests fail.
-                                        Choose another key, or
+                                        >The chosen key chain does not exist or is not an
+                                        Authorization Server key, so this server's token requests
+                                        fail. Choose another key, or
                                         <a
                                           routerLink="/keys/create"
-                                          [queryParams]="{ usage: 'accessToken' }"
+                                          [queryParams]="{ usage: 'authorizationServer' }"
                                           target="_blank"
                                           rel="noopener"
                                           >create one (opens in a new tab)</a
                                         >, then check again.</span
                                       >
-                                    } @else if (accessTokenKeyChainsLoadFailed) {
+                                    } @else if (authorizationServerKeyChainsLoadFailed) {
                                       <span
                                         >The key chains could not be loaded, so the list may be
                                         incomplete.</span
                                       >
                                     } @else {
                                       <span
-                                        >No Access Token Signing key exists yet; EUDIPLO creates one
+                                        >No Authorization Server key exists yet; EUDIPLO creates one
                                         on the first token request. To use your own,
                                         <a
                                           routerLink="/keys/create"
-                                          [queryParams]="{ usage: 'accessToken' }"
+                                          [queryParams]="{ usage: 'authorizationServer' }"
                                           target="_blank"
                                           rel="noopener"
                                           >create one (opens in a new tab)</a
@@ -646,7 +648,7 @@
                                     <button
                                       mat-stroked-button
                                       type="button"
-                                      (click)="checkAccessTokenKeysAgain()"
+                                      (click)="checkAuthorizationServerKeysAgain()"
                                       [disabled]="checkingFederationKey"
                                       disabledInteractive
                                     >

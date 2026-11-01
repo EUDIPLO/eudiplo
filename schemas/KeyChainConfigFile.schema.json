@@ -42,7 +42,7 @@
               "type": "string",
               "enum": [
                 "access",
-                "accessToken",
+                "authorizationServer",
                 "attestation",
                 "trustList",
                 "statusList",
@@ -1526,7 +1526,7 @@
           "type": "string",
           "enum": [
             "access",
-            "accessToken",
+            "authorizationServer",
             "attestation",
             "trustList",
             "statusList",

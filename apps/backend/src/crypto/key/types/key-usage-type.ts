@@ -14,7 +14,7 @@ export enum KeyUsageType {
      * credential requests rely on it, through the authorization servers'
      * JWKS, so it needs no certificate from a CA.
      */
-    AccessToken = "accessToken",
+    AuthorizationServer = "authorizationServer",
     /** Used for credential/attestation signing (SD-JWT VC, mDOC, etc.) */
     Attestation = "attestation",
     /** Used for trust list signing */

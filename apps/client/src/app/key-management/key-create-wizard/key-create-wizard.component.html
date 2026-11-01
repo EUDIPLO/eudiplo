@@ -367,7 +367,7 @@
                 !isInternalChain &&
                 selectedUsage !== 'access' &&
                 selectedUsage !== 'federation' &&
-                selectedUsage !== 'accessToken'
+                selectedUsage !== 'authorizationServer'
               ) {
                 <mat-checkbox formControlName="useExternalCertificate">
                   Use a certificate from an external CA
@@ -618,14 +618,14 @@
                   </span>
                 </div>
               }
-              @if (selectedUsage === 'accessToken') {
+              @if (selectedUsage === 'authorizationServer') {
                 <div class="next-steps-hint">
                   <mat-icon>info</mat-icon>
                   <span>
-                    <strong>Next step:</strong> Choose it as the Access Token Signing Key of an
+                    <strong>Next step:</strong> Choose it as the Authorization Server Key of an
                     authorization server in the issuance configuration. Servers without a chosen key
-                    keep using the tenant's oldest access token key, which is this one only if the
-                    tenant had none.
+                    keep using the tenant's oldest authorization server key, which is this one only
+                    if the tenant had none.
                   </span>
                 </div>
               }

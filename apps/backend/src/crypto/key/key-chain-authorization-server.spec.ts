@@ -83,17 +83,18 @@ function setup(
     return { service: svc as KeyChainService, svc, created };
 }
 
-describe("KeyChainService.resolveAccessTokenKeyChain", () => {
+describe("KeyChainService.resolveAuthorizationServerKeyChain", () => {
     it("never picks an access or attestation key chain", async () => {
         const { service, svc, created } = setup([
             keyChain("registrar", KeyUsageType.Access),
             keyChain("credentials", KeyUsageType.Attestation),
         ]);
 
-        const resolved = await service.resolveAccessTokenKeyChain("tenant");
+        const resolved =
+            await service.resolveAuthorizationServerKeyChain("tenant");
 
-        expect(resolved.id).toBe("access-token");
-        expect(resolved.usageType).toBe(KeyUsageType.AccessToken);
+        expect(resolved.id).toBe("authorization-server");
+        expect(resolved.usageType).toBe(KeyUsageType.AuthorizationServer);
         expect(created).toHaveLength(1);
         // Every tenant has this key chain ID; external KMS key names must
         // not derive from it.
@@ -101,15 +102,15 @@ describe("KeyChainService.resolveAccessTokenKeyChain", () => {
         expect(keyName).toMatch(/^[0-9a-f-]{36}$/);
     });
 
-    it("uses the oldest access token key chain, the ID breaking ties", async () => {
+    it("uses the oldest authorization server key chain, the ID breaking ties", async () => {
         const { service, svc, created } = setup([
-            keyChain("newer", KeyUsageType.AccessToken, new Date(2000)),
-            keyChain("b-old", KeyUsageType.AccessToken, new Date(1000)),
-            keyChain("a-old", KeyUsageType.AccessToken, new Date(1000)),
+            keyChain("newer", KeyUsageType.AuthorizationServer, new Date(2000)),
+            keyChain("b-old", KeyUsageType.AuthorizationServer, new Date(1000)),
+            keyChain("a-old", KeyUsageType.AuthorizationServer, new Date(1000)),
         ]);
 
         await expect(
-            service.resolveAccessTokenKeyChain("tenant"),
+            service.resolveAuthorizationServerKeyChain("tenant"),
         ).resolves.toMatchObject({ id: "a-old" });
         expect(created).toHaveLength(0);
         expect(svc.keyChainRepository.findOne).toHaveBeenCalledWith(
@@ -119,31 +120,35 @@ describe("KeyChainService.resolveAccessTokenKeyChain", () => {
         );
     });
 
-    it("uses the accessToken entry of the key chain defaults", async () => {
+    it("uses the authorizationServer entry of the key chain defaults", async () => {
         const { service } = setup(
             [
-                keyChain("old", KeyUsageType.AccessToken, new Date(0)),
-                keyChain("chosen", KeyUsageType.AccessToken, new Date(5000)),
+                keyChain("old", KeyUsageType.AuthorizationServer, new Date(0)),
+                keyChain(
+                    "chosen",
+                    KeyUsageType.AuthorizationServer,
+                    new Date(5000),
+                ),
             ],
-            { accessToken: "chosen" },
+            { authorizationServer: "chosen" },
         );
 
         await expect(
-            service.resolveAccessTokenKeyChain("tenant"),
+            service.resolveAuthorizationServerKeyChain("tenant"),
         ).resolves.toMatchObject({ id: "chosen" });
     });
 
     it("uses the key chain the authorization server names over the default", async () => {
         const { service } = setup(
             [
-                keyChain("default", KeyUsageType.AccessToken),
-                keyChain("named", KeyUsageType.AccessToken),
+                keyChain("default", KeyUsageType.AuthorizationServer),
+                keyChain("named", KeyUsageType.AuthorizationServer),
             ],
-            { accessToken: "default" },
+            { authorizationServer: "default" },
         );
 
         await expect(
-            service.resolveAccessTokenKeyChain("tenant", "named"),
+            service.resolveAuthorizationServerKeyChain("tenant", "named"),
         ).resolves.toMatchObject({ id: "named" });
     });
 
@@ -153,7 +158,7 @@ describe("KeyChainService.resolveAccessTokenKeyChain", () => {
         ]);
 
         const error = await service
-            .resolveAccessTokenKeyChain("tenant", "credentials")
+            .resolveAuthorizationServerKeyChain("tenant", "credentials")
             .catch((e) => e);
 
         expect(error).toBeInstanceOf(InternalServerErrorException);
@@ -165,12 +170,12 @@ describe("KeyChainService.resolveAccessTokenKeyChain", () => {
 
     it("refuses a default entry that names a missing key chain instead of falling back", async () => {
         const { service, created } = setup(
-            [keyChain("token", KeyUsageType.AccessToken)],
-            { accessToken: "gone" },
+            [keyChain("token", KeyUsageType.AuthorizationServer)],
+            { authorizationServer: "gone" },
         );
 
         await expect(
-            service.resolveAccessTokenKeyChain("tenant"),
+            service.resolveAuthorizationServerKeyChain("tenant"),
         ).rejects.toBeInstanceOf(InternalServerErrorException);
         expect(created).toHaveLength(0);
     });
@@ -181,13 +186,18 @@ describe("KeyChainService.resolveAccessTokenKeyChain", () => {
         const original = svc.createWithId;
         svc.createWithId = vi.fn(async (...args: unknown[]) => {
             // Another request inserts the key chain first.
-            rows.push(keyChain("access-token", KeyUsageType.AccessToken));
+            rows.push(
+                keyChain(
+                    "authorization-server",
+                    KeyUsageType.AuthorizationServer,
+                ),
+            );
             return original(...args);
         });
 
         await expect(
-            service.resolveAccessTokenKeyChain("tenant"),
-        ).resolves.toMatchObject({ id: "access-token" });
+            service.resolveAuthorizationServerKeyChain("tenant"),
+        ).resolves.toMatchObject({ id: "authorization-server" });
         expect(rows).toHaveLength(1);
     });
 
@@ -199,14 +209,19 @@ describe("KeyChainService.resolveAccessTokenKeyChain", () => {
         svc.keyChainRepository.findOne = vi.fn(async (options: any) => {
             const result = await findOne(options);
             if (options.order) {
-                rows.push(keyChain("access-token", KeyUsageType.AccessToken));
+                rows.push(
+                    keyChain(
+                        "authorization-server",
+                        KeyUsageType.AuthorizationServer,
+                    ),
+                );
             }
             return result;
         });
 
         await expect(
-            service.resolveAccessTokenKeyChain("tenant"),
-        ).resolves.toMatchObject({ id: "access-token" });
+            service.resolveAuthorizationServerKeyChain("tenant"),
+        ).resolves.toMatchObject({ id: "authorization-server" });
         expect(svc.createWithId).not.toHaveBeenCalled();
     });
 
@@ -217,7 +232,7 @@ describe("KeyChainService.resolveAccessTokenKeyChain", () => {
         });
 
         const error = await service
-            .resolveAccessTokenKeyChain("tenant")
+            .resolveAuthorizationServerKeyChain("tenant")
             .catch((e) => e);
 
         expect(error).toBeInstanceOf(InternalServerErrorException);
@@ -229,11 +244,11 @@ describe("KeyChainService.resolveAccessTokenKeyChain", () => {
 
     it("fails when a key chain of another usage type holds the ID", async () => {
         const { service, svc } = setup([
-            keyChain("access-token", KeyUsageType.Attestation),
+            keyChain("authorization-server", KeyUsageType.Attestation),
         ]);
 
         await expect(
-            service.resolveAccessTokenKeyChain("tenant"),
+            service.resolveAuthorizationServerKeyChain("tenant"),
         ).rejects.toBeInstanceOf(InternalServerErrorException);
         expect(svc.logger.error).toHaveBeenCalled();
         // No KMS key is created and deleted again on each request.
@@ -241,21 +256,21 @@ describe("KeyChainService.resolveAccessTokenKeyChain", () => {
     });
 });
 
-describe("KeyChainService.accessTokenKeyChainRefusal", () => {
-    it("accepts only access token key chains of the tenant", async () => {
+describe("KeyChainService.authorizationServerKeyChainRefusal", () => {
+    it("accepts only authorization server key chains of the tenant", async () => {
         const { service } = setup([
-            keyChain("token", KeyUsageType.AccessToken),
+            keyChain("token", KeyUsageType.AuthorizationServer),
             keyChain("registrar", KeyUsageType.Access),
         ]);
 
         await expect(
-            service.accessTokenKeyChainRefusal("tenant", "token"),
+            service.authorizationServerKeyChainRefusal("tenant", "token"),
         ).resolves.toBeUndefined();
         await expect(
-            service.accessTokenKeyChainRefusal("tenant", "registrar"),
+            service.authorizationServerKeyChainRefusal("tenant", "registrar"),
         ).resolves.toContain('usage type "access"');
         await expect(
-            service.accessTokenKeyChainRefusal("tenant", "missing"),
+            service.authorizationServerKeyChainRefusal("tenant", "missing"),
         ).resolves.toContain("does not exist");
     });
 });
@@ -272,9 +287,9 @@ describe("KeyChainService.getAccessTokenVerificationKeys", () => {
         expect(created).toHaveLength(0);
     });
 
-    it("publishes the public keys of the access token key chain", async () => {
+    it("publishes the public keys of the authorization server key chain", async () => {
         const { service } = setup([
-            keyChain("token", KeyUsageType.AccessToken),
+            keyChain("token", KeyUsageType.AuthorizationServer),
         ]);
 
         const keys = await service.getAccessTokenVerificationKeys(
@@ -288,7 +303,7 @@ describe("KeyChainService.getAccessTokenVerificationKeys", () => {
     });
 });
 
-describe("KeyChainService creation of the access token key chain", () => {
+describe("KeyChainService creation of the authorization server key chain", () => {
     /** A service whose external KMS generates and deletes keys by name. */
     function withKms(insert: () => Promise<unknown>) {
         const adapter = {
@@ -323,7 +338,10 @@ describe("KeyChainService creation of the access token key chain", () => {
         svc.keyChainRepository = {
             findOne: vi.fn(async () => null),
             findOneOrFail: vi.fn(async () =>
-                keyChain("access-token", KeyUsageType.AccessToken),
+                keyChain(
+                    "authorization-server",
+                    KeyUsageType.AuthorizationServer,
+                ),
             ),
             insert: vi.fn(insert),
             save: vi.fn(),
@@ -334,10 +352,10 @@ describe("KeyChainService creation of the access token key chain", () => {
     it("names the KMS key randomly, never after the key chain ID every tenant shares", async () => {
         const { service, adapter, svc } = withKms(async () => undefined);
 
-        await service.resolveAccessTokenKeyChain("tenant");
+        await service.resolveAuthorizationServerKeyChain("tenant");
 
         const { kid } = adapter.generateKey.mock.calls[0][0];
-        expect(kid).not.toContain("access-token");
+        expect(kid).not.toContain("authorization-server");
         expect(kid).toMatch(/^[0-9a-f-]{36}-active$/);
         expect(svc.keyChainRepository.save).not.toHaveBeenCalled();
     });
@@ -351,12 +369,15 @@ describe("KeyChainService creation of the access token key chain", () => {
             .mockResolvedValueOnce(null) // oldest before creating
             .mockResolvedValueOnce(null) // nothing blocks the ID
             .mockResolvedValueOnce(
-                keyChain("access-token", KeyUsageType.AccessToken),
+                keyChain(
+                    "authorization-server",
+                    KeyUsageType.AuthorizationServer,
+                ),
             );
 
         await expect(
-            service.resolveAccessTokenKeyChain("tenant"),
-        ).resolves.toMatchObject({ id: "access-token" });
+            service.resolveAuthorizationServerKeyChain("tenant"),
+        ).resolves.toMatchObject({ id: "authorization-server" });
 
         const generated = adapter.generateKey.mock.calls[0][0].kid;
         expect(adapter.deleteKey).toHaveBeenCalledWith(

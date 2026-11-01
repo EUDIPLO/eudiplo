@@ -16,13 +16,13 @@ Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eud
 | `IssuanceConfig` | v3 | Optional `verifierKeyPem` (PEM public key) in `walletProviderTrustLists` entries. A v2 file is a valid v3 file. |
 | `IssuanceConfig` | v4 | Optional `walletAttestationStatusCheckMode` on the issuance configuration and its authorization servers. A v3 file is a valid v4 file. |
 | `IssuanceConfig` | v5 | Optional entity configuration fields in `federation` (`entityTypes`, `authorityHints`, `entityKeyChainId`, `entityConfigurationLifetimeSeconds`, `trustMarks`, `entityMetadata`, `includeTrustChain`). A v4 file is a valid v5 file. |
-| `IssuanceConfig` | v6 | The top-level `signingKeyId` is removed; the v5 → v6 step drops a set value with the warning `ISSUANCE_SIGNING_KEY_ID_REMOVED` and keeps `token.signingKeyId` with the warning `ACCESS_TOKEN_KEY_CHAIN_REQUIRED`. |
+| `IssuanceConfig` | v6 | The top-level `signingKeyId` is removed; the v5 → v6 step drops a set value with the warning `ISSUANCE_SIGNING_KEY_ID_REMOVED` and keeps `token.signingKeyId` with the warning `AUTHORIZATION_SERVER_KEY_CHAIN_REQUIRED`. |
 | `CredentialConfig` | v2 | `x509` as `frameworkType` of `schemaMeta.trustedAuthorities` entries. A v1 file is a valid v2 file. |
 | `CredentialConfig` | v3 | `fields[].constraints` accept only JSON Schema validation and annotation keywords. The v2 → v3 step drops other keys with a warning and stops on claim patterns RE2 cannot run (`CLAIM_PATTERN_UNSUPPORTED`). |
 | `KeyChain` | v2 | Optional `type` (`standalone`, `internalChain`). A v1 file is a valid v2 file; a bare key chain file with `type` is read as v2 (`bareFileVersion`). |
 | `KeyChain` | v3 | Usage type `federation`. A v2 file is a valid v3 file; a bare key chain file with usage type `federation` is read as v3. |
-| `KeyChain` | v4 | Usage type `accessToken`. A v3 file is a valid v4 file; a bare key chain file with usage type `accessToken` is read as v4. |
-| `KeyChainDefaults` | v2 | Optional `accessToken` entry. A v1 file is a valid v2 file; a bare `key-chain-defaults.json` with the entry is read as v2 (`bareFileVersion`). |
+| `KeyChain` | v4 | Usage type `authorizationServer`. A v3 file is a valid v4 file; a bare key chain file with usage type `authorizationServer` is read as v4. |
+| `KeyChainDefaults` | v2 | Optional `authorizationServer` entry. A v1 file is a valid v2 file; a bare `key-chain-defaults.json` with the entry is read as v2 (`bareFileVersion`). |
 | `Client` | v2 | The roles `audit:read`, `sessions:read`, `credentials:status` and `keys:manage`. A v1 file is a valid v2 file. |
 | `KmsConfig` | v2 | Optional `algorithms` and `defaultAlgorithm` on providers. A v1 file is a valid v2 file; a bare `kms.json` with either field on a provider is read as v2 (`bareFileVersion`). |
 | `RegistrarConfig` | v2 | Optional `relyingPartyContact`. A v1 file is a valid v2 file; a bare `registrar.json` with the field is read as v2 (`bareFileVersion`). |
@@ -57,7 +57,7 @@ Bump the version whenever the accepted content of a resource changes, including 
     ```bash
     pnpm schemas:check-contract        # current DTOs match the committed schemas and snapshots
     pnpm schemas:check                 # bundled snapshots are in sync
-    pnpm schemas:check-history origin/main   # no published snapshot was changed
+    pnpm schemas:check-history origin/main   # no snapshot of a release was changed
     pnpm --filter @eudiplo/website build
     ```
 
@@ -67,7 +67,7 @@ Bump the version whenever the accepted content of a resource changes, including 
 
 ## Immutable snapshots
 
-Files under `schemas/v*/` are publication artifacts. Never edit or delete one; CI compares them with the pull request base (`scripts/check-published-schemas.mjs`) and fails on any change. Each resource schema contains its dependencies in `$defs`, so one resource can move to a new version while the others stay. The schema's own `$schema` is the JSON Schema dialect; its `$id` is the public EUDIPLO URL that files reference.
+Files under `schemas/v*/` are publication artifacts once a release ships them. Never edit or delete one; CI compares the snapshots of the latest release tag before the pull request base with the working tree (`scripts/check-published-schemas.mjs`) and fails on any change. A snapshot that no release has shipped yet can still change before the release, for example to rename a value; files written by a build of `main` in between may then need editing before they import. Each resource schema contains its dependencies in `$defs`, so one resource can move to a new version while the others stay. The schema's own `$schema` is the JSON Schema dialect; its `$id` is the public EUDIPLO URL that files reference.
 
 ## Publishing
 

@@ -93,7 +93,7 @@ function exchange(
     };
     const signingKeys = {
         resolve: vi.fn(async (_tenantId: string, keyId?: string) => ({
-            keyId: keyId ?? "access-token",
+            keyId: keyId ?? "authorization-server",
             publicJwk:
                 options.publicJwk ?? ({ kty: "EC", crv: "P-256" } as Jwk),
         })),
@@ -143,7 +143,7 @@ describe("ExchangeAccessToken", () => {
         vi.useRealTimers();
     });
 
-    it("issues five minute access tokens with the access token key chain and a 30 day refresh token", async () => {
+    it("issues five minute access tokens with the authorization server key chain and a 30 day refresh token", async () => {
         const { execute, server, sessions, signingKeys } = exchange(
             { authorizationServers: [{ type: "built-in", id: "built-in" }] },
             preAuthorizedCodeRequest,
@@ -161,7 +161,9 @@ describe("ExchangeAccessToken", () => {
             expect.objectContaining({
                 expiresInSeconds: 300,
                 refreshToken: true,
-                signer: expect.objectContaining({ kid: "access-token" }),
+                signer: expect.objectContaining({
+                    kid: "authorization-server",
+                }),
             }),
         );
         expect(sessions.updateIfUnconsumed).toHaveBeenCalledWith(

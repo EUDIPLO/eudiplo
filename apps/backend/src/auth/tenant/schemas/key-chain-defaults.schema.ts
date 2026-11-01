@@ -12,8 +12,8 @@ export const DefaultKeyChainsSchema = z
         access: NonBlankStringSchema.optional().describe(
             "ID of the access key chain used where no configuration names one: presentation requests of configurations without accessKeyChainId and the signed issuer metadata. Without it, EUDIPLO picks one of the tenant's access key chains by rule.",
         ),
-        accessToken: NonBlankStringSchema.optional().describe(
-            "ID of the access token key chain (usage type accessToken) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant's oldest access token key chain and creates one with ID access-token when the tenant has none.",
+        authorizationServer: NonBlankStringSchema.optional().describe(
+            "ID of the authorization server key chain (usage type authorizationServer) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant's oldest authorization server key chain and creates one with ID authorization-server when the tenant has none.",
         ),
     })
     .describe(

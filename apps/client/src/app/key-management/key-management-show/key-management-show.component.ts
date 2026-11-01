@@ -192,7 +192,7 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
    * A standalone signing key can get its certificate from an external CA.
    * The tenant's encryption key chain is listed as standalone but signs
    * nothing, an internal chain's root CA issues its certificates, and
-   * federation and access token keys are published as JWKs without their
+   * federation and authorization server keys are published as JWKs without their
    * certificate.
    */
   get offersCertificateRequest(): boolean {
@@ -243,14 +243,14 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     return this.usageType === 'federation';
   }
 
-  /** Access token keys are published in the JWKS of the authorization servers. */
-  get isAccessTokenKey(): boolean {
-    return this.usageType === 'accessToken';
+  /** Authorization server keys are published in the JWKS of the authorization servers. */
+  get isAuthorizationServerKey(): boolean {
+    return this.usageType === 'authorizationServer';
   }
 
   /** Keys published as a JWK, whose certificate is not used. */
   get publishesJwk(): boolean {
-    return this.isFederationKey || this.isAccessTokenKey;
+    return this.isFederationKey || this.isAuthorizationServerKey;
   }
 
   get activePublicKeyJson(): string {
@@ -281,7 +281,7 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     if (this.isFederationKey) {
       return 'This is a standalone key, published as a JWK in the OpenID Federation entity configuration.';
     }
-    if (this.isAccessTokenKey) {
+    if (this.isAuthorizationServerKey) {
       return 'This is a standalone key, published as a JWK in the JWKS of the authorization servers that sign access tokens with it.';
     }
     if (!this.keyChain.activeCertificate) return 'This is a standalone key.';

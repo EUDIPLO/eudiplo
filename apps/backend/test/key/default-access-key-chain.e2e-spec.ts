@@ -254,7 +254,7 @@ describe("default access key chain in configuration imports", () => {
     let auth: string;
     let access: string;
     let attestation: string;
-    let accessToken: string;
+    let authorizationServer: string;
 
     const api = () => request(app.getHttpServer());
 
@@ -342,8 +342,8 @@ describe("default access key chain in configuration imports", () => {
         attestation = await createKeyChain(app, token, {
             usageType: KeyUsageType.Attestation,
         });
-        accessToken = await createKeyChain(app, token, {
-            usageType: KeyUsageType.AccessToken,
+        authorizationServer = await createKeyChain(app, token, {
+            usageType: KeyUsageType.AuthorizationServer,
         });
     });
 
@@ -397,21 +397,26 @@ describe("default access key chain in configuration imports", () => {
         );
     });
 
-    test("accepts only an access token key chain as accessToken default and token.signingKeyId", async () => {
+    test("accepts only an authorization server key chain as authorizationServer default and token.signingKeyId", async () => {
         const accepted = await plan(
-            bundleOf([{ kind: "KeyChainDefaults", spec: { accessToken } }]),
+            bundleOf([
+                { kind: "KeyChainDefaults", spec: { authorizationServer } },
+            ]),
         );
         expect(accepted.issues).toEqual([]);
 
         const wrongDefault = await plan(
             bundleOf([
-                { kind: "KeyChainDefaults", spec: { accessToken: access } },
+                {
+                    kind: "KeyChainDefaults",
+                    spec: { authorizationServer: access },
+                },
             ]),
         );
         expect(wrongDefault.issues).toContainEqual(
             expect.objectContaining({
                 code: "KEY_CHAIN_USAGE_MISMATCH",
-                path: "/spec/accessToken",
+                path: "/spec/authorizationServer",
             }),
         );
 
@@ -440,7 +445,7 @@ describe("default access key chain in configuration imports", () => {
             }),
         );
         expect(
-            (await plan(issuance(accessToken))).issues.filter(
+            (await plan(issuance(authorizationServer))).issues.filter(
                 (issue) => issue.code === "KEY_CHAIN_USAGE_MISMATCH",
             ),
         ).toEqual([]);

@@ -35,7 +35,7 @@ edit it. The startup import skips it with the warning `RESOURCE_DETACHED`, and
 the rest of the tenant is still imported. This also holds for the tenant
 settings in `info.json` (resource `Tenant/tenant`), such as the session and
 status list settings; the log names it as `Tenant 'tenant'`. The default key
-chains (`access` and `accessToken`) are a resource of their own,
+chains (`access` and `authorizationServer`) are a resource of their own,
 `KeyChainDefaults/defaults` in `key-chain-defaults.json`, so they are detached
 and reattached apart from them.
 

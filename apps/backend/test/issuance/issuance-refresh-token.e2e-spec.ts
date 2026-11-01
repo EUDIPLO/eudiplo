@@ -239,12 +239,12 @@ describe("Issuance - Refresh Token Flow", () => {
     });
 
     test("built-in authorization server honors its token settings", async () => {
-        // An access token key chain of its own, not the tenant's default one.
+        // An authorization server key chain of its own, not the tenant's default one.
         const signingKeyId: string = (
             await request(app.getHttpServer())
                 .post("/key-chain")
                 .set("Authorization", `Bearer ${authToken}`)
-                .send({ usageType: "accessToken", type: "standalone" })
+                .send({ usageType: "authorizationServer", type: "standalone" })
                 .expect(201)
         ).body.id;
         await request(app.getHttpServer())

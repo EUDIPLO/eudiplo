@@ -423,7 +423,7 @@ export class IssuanceService {
             server.id = normalizedId;
         }
 
-        await this.assertAccessTokenSigningKeys(
+        await this.assertAuthorizationServerKeyChains(
             tenantId,
             configuredAuthorizationServers,
             existingConfig.authorizationServers,
@@ -466,11 +466,11 @@ export class IssuanceService {
 
     /**
      * Refuses a `token.signingKeyId` that names no key chain with usage type
-     * `accessToken`. Only values this change sets are checked, so a stored
+     * `authorizationServer`. Only values this change sets are checked, so a stored
      * configuration from before the check can still be changed otherwise;
      * its token requests fail until the value is fixed.
      */
-    private async assertAccessTokenSigningKeys(
+    private async assertAuthorizationServerKeyChains(
         tenantId: string,
         servers: Array<{ id?: string; token?: { signingKeyId?: string } }>,
         storedServers: unknown,
@@ -487,7 +487,7 @@ export class IssuanceService {
         );
         const refusals = await Promise.all(
             changed.map((server) =>
-                this.keyChainService.accessTokenKeyChainRefusal(
+                this.keyChainService.authorizationServerKeyChainRefusal(
                     tenantId,
                     server.token!.signingKeyId!,
                 ),

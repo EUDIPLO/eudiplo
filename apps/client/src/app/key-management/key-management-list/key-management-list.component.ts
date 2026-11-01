@@ -30,7 +30,7 @@ import {
 } from '../default-access-key-chain';
 
 type KeyUsageType =
-  'attestation' | 'statusList' | 'access' | 'accessToken' | 'trustList' | 'federation';
+  'attestation' | 'statusList' | 'access' | 'authorizationServer' | 'trustList' | 'federation';
 
 /**
  * Display item for key chains.
@@ -113,8 +113,8 @@ export class KeyManagementListComponent implements OnInit {
       icon: 'vpn_key',
       description: 'Keys for EUDI Wallet Access Certificates to authenticate to the wallet.',
     },
-    accessToken: {
-      label: 'Access Token Signing Keys',
+    authorizationServer: {
+      label: 'Authorization Server Keys',
       icon: 'key',
       description:
         'Keys that sign the OAuth access tokens of the authorization servers. They never sign credentials or requests to wallets.',

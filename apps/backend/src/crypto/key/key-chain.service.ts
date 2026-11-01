@@ -21,10 +21,10 @@ import {
     certificateNotBefore,
 } from "./cert/certificate-builder.service.js";
 import {
-    accessTokenKeyChainUsageRefusal,
+    authorizationServerKeyChainUsageRefusal,
     accessTokenVerificationKeys,
-    DEFAULT_ACCESS_TOKEN_KEY_CHAIN_ID,
-} from "./domain/access-token-keys.js";
+    DEFAULT_AUTHORIZATION_SERVER_KEY_CHAIN_ID,
+} from "./domain/authorization-server-keys.js";
 import {
     defaultKeyChainUsageRefusal,
     pickDefaultAccessKeyChain,
@@ -661,26 +661,26 @@ export class KeyChainService {
     /**
      * The key chain that signs an authorization server's access tokens:
      * `keyId` when the authorization server names one, else the
-     * `accessToken` entry of the tenant's key chain defaults, else the
-     * tenant's oldest access token key chain. A tenant without any gets one
-     * with ID {@link DEFAULT_ACCESS_TOKEN_KEY_CHAIN_ID}. Only key chains of
-     * usage type `accessToken` qualify, so neither the access certificate
+     * `authorizationServer` entry of the tenant's key chain defaults, else the
+     * tenant's oldest authorization server key chain. A tenant without any gets one
+     * with ID {@link DEFAULT_AUTHORIZATION_SERVER_KEY_CHAIN_ID}. Only key chains of
+     * usage type `authorizationServer` qualify, so neither the access certificate
      * nor a credential signing key ever signs an access token by accident.
      */
-    async resolveAccessTokenKeyChain(
+    async resolveAuthorizationServerKeyChain(
         tenantId: string,
         keyId?: string,
     ): Promise<KeyChainEntity> {
         return (
-            (await this.findAccessTokenKeyChain(tenantId, keyId)) ??
-            this.createDefaultAccessTokenKeyChain(tenantId)
+            (await this.findAuthorizationServerKeyChain(tenantId, keyId)) ??
+            this.createDefaultAuthorizationServerKeyChain(tenantId)
         );
     }
 
     /**
      * Public keys of an authorization server's JWKS: those of
      * {@link accessTokenVerificationKeys} for the key chain of
-     * {@link resolveAccessTokenKeyChain}. Before any token was issued, the
+     * {@link resolveAuthorizationServerKeyChain}. Before any token was issued, the
      * tenant may have none; the JWKS is then empty, so the public endpoint
      * never creates key material.
      */
@@ -689,37 +689,41 @@ export class KeyChainService {
         keyId: string | undefined,
         lifetimeSeconds: number,
     ): Promise<JWK[]> {
-        const keyChain = await this.findAccessTokenKeyChain(tenantId, keyId);
+        const keyChain = await this.findAuthorizationServerKeyChain(
+            tenantId,
+            keyId,
+        );
         return keyChain
             ? accessTokenVerificationKeys(keyChain, lifetimeSeconds)
             : [];
     }
 
     /**
-     * {@link resolveAccessTokenKeyChain} without creating a key chain: null
+     * {@link resolveAuthorizationServerKeyChain} without creating a key chain: null
      * when nothing names one and the tenant has none.
      */
-    private async findAccessTokenKeyChain(
+    private async findAuthorizationServerKeyChain(
         tenantId: string,
         keyId?: string,
     ): Promise<KeyChainEntity | null> {
-        if (keyId) return this.namedAccessTokenKeyChain(tenantId, keyId);
+        if (keyId)
+            return this.namedAuthorizationServerKeyChain(tenantId, keyId);
         const configured = await this.configuredDefaultKeyChainId(
             tenantId,
-            "accessToken",
+            "authorizationServer",
         );
         if (configured) {
-            return this.namedAccessTokenKeyChain(tenantId, configured);
+            return this.namedAuthorizationServerKeyChain(tenantId, configured);
         }
-        return this.oldestAccessTokenKeyChain(tenantId);
+        return this.oldestAuthorizationServerKeyChain(tenantId);
     }
 
     /**
      * Why the key chain `id` cannot sign an authorization server's access
-     * tokens, or undefined when it is an access token key chain of the
+     * tokens, or undefined when it is an authorization server key chain of the
      * tenant.
      */
-    async accessTokenKeyChainRefusal(
+    async authorizationServerKeyChainRefusal(
         tenantId: string,
         id: string,
     ): Promise<string | undefined> {
@@ -730,52 +734,53 @@ export class KeyChainService {
         if (!keyChain) {
             return `Key chain ${JSON.stringify(id)} does not exist in this tenant.`;
         }
-        return accessTokenKeyChainUsageRefusal(id, keyChain.usageType);
+        return authorizationServerKeyChainUsageRefusal(id, keyChain.usageType);
     }
 
-    private async namedAccessTokenKeyChain(
+    private async namedAuthorizationServerKeyChain(
         tenantId: string,
         id: string,
     ): Promise<KeyChainEntity> {
         const keyChain = await this.keyChainRepository.findOne({
             where: { tenantId, id, usage: KeyUsage.Sign },
         });
-        if (keyChain?.usageType === KeyUsageType.AccessToken) return keyChain;
+        if (keyChain?.usageType === KeyUsageType.AuthorizationServer)
+            return keyChain;
         // Wallets see this error, so only the log names the key chain.
         this.logger.warn(
             keyChain
-                ? `[${tenantId}] Key chain ${JSON.stringify(id)} has usage type ${JSON.stringify(keyChain.usageType)} and cannot sign access tokens. Name a key chain with usage type "accessToken" in token.signingKeyId or the accessToken entry of key-chain-defaults.json, or remove the entry.`
-                : `[${tenantId}] The access token key chain ${JSON.stringify(id)} does not exist. Name a key chain with usage type "accessToken" in token.signingKeyId or the accessToken entry of key-chain-defaults.json, or remove the entry.`,
+                ? `[${tenantId}] Key chain ${JSON.stringify(id)} has usage type ${JSON.stringify(keyChain.usageType)} and cannot sign access tokens. Name a key chain with usage type "authorizationServer" in token.signingKeyId or the authorizationServer entry of key-chain-defaults.json, or remove the entry.`
+                : `[${tenantId}] The authorization server key chain ${JSON.stringify(id)} does not exist. Name a key chain with usage type "authorizationServer" in token.signingKeyId or the authorizationServer entry of key-chain-defaults.json, or remove the entry.`,
         );
-        throw accessTokenKeyChainUnavailable();
+        throw authorizationServerKeyChainUnavailable();
     }
 
     /**
-     * The tenant's first access token key chain; the ID breaks ties, as
+     * The tenant's first authorization server key chain; the ID breaks ties, as
      * SQLite stores the creation time in seconds.
      */
-    private oldestAccessTokenKeyChain(
+    private oldestAuthorizationServerKeyChain(
         tenantId: string,
     ): Promise<KeyChainEntity | null> {
         return this.keyChainRepository.findOne({
             where: {
                 tenantId,
                 usage: KeyUsage.Sign,
-                usageType: KeyUsageType.AccessToken,
+                usageType: KeyUsageType.AuthorizationServer,
             },
             order: { createdAt: "ASC", id: "ASC" },
         });
     }
 
     /**
-     * Creates the tenant's access token key chain with the fixed ID. When a
+     * Creates the tenant's authorization server key chain with the fixed ID. When a
      * concurrent request created it first, the insert fails and that one is
      * used.
      */
-    private async createDefaultAccessTokenKeyChain(
+    private async createDefaultAuthorizationServerKeyChain(
         tenantId: string,
     ): Promise<KeyChainEntity> {
-        const id = DEFAULT_ACCESS_TOKEN_KEY_CHAIN_ID;
+        const id = DEFAULT_AUTHORIZATION_SERVER_KEY_CHAIN_ID;
         // A key chain of another usage type that holds the ID fails before
         // any key is generated, so requests cannot create KMS keys in a loop.
         const blocking = await this.keyChainRepository.findOne({
@@ -783,7 +788,7 @@ export class KeyChainService {
             select: { id: true, usageType: true },
         });
         // A concurrent request created it since the lookup.
-        if (blocking?.usageType === KeyUsageType.AccessToken) {
+        if (blocking?.usageType === KeyUsageType.AuthorizationServer) {
             return this.keyChainRepository.findOneOrFail({
                 where: { tenantId, id },
             });
@@ -795,34 +800,35 @@ export class KeyChainService {
                     id,
                     {
                         type: KeyChainType.Standalone,
-                        usageType: KeyUsageType.AccessToken,
+                        usageType: KeyUsageType.AuthorizationServer,
                         description:
-                            "Access token signing key (created by EUDIPLO)",
+                            "Authorization server key (created by EUDIPLO)",
                     },
                     // Every tenant has this ID, so the KMS key name must not
                     // derive from it.
                     { insertOnly: true, keyName: v4() },
                 );
                 this.logger.log(
-                    `[${tenantId}] Created access token key chain ${id}`,
+                    `[${tenantId}] Created authorization server key chain ${id}`,
                 );
             } catch (error) {
                 // A concurrent request may have created it first.
-                const existing = await this.oldestAccessTokenKeyChain(tenantId);
+                const existing =
+                    await this.oldestAuthorizationServerKeyChain(tenantId);
                 if (existing) return existing;
                 this.logger.error(
-                    `[${tenantId}] Could not create the access token key chain ${JSON.stringify(id)}: ${error instanceof Error ? error.message : String(error)}`,
+                    `[${tenantId}] Could not create the authorization server key chain ${JSON.stringify(id)}: ${error instanceof Error ? error.message : String(error)}`,
                 );
-                throw accessTokenKeyChainUnavailable();
+                throw authorizationServerKeyChainUnavailable();
             }
             return this.keyChainRepository.findOneOrFail({
                 where: { tenantId, id },
             });
         }
         this.logger.error(
-            `[${tenantId}] Key chain ${JSON.stringify(id)} has usage type ${JSON.stringify(blocking.usageType)}, so EUDIPLO cannot create its access token key chain with this ID. Create a key chain with usage type "accessToken".`,
+            `[${tenantId}] Key chain ${JSON.stringify(id)} has usage type ${JSON.stringify(blocking.usageType)}, so EUDIPLO cannot create its authorization server key chain with this ID. Create a key chain with usage type "authorizationServer".`,
         );
-        throw accessTokenKeyChainUnavailable();
+        throw authorizationServerKeyChainUnavailable();
     }
 
     async update(
@@ -1382,8 +1388,8 @@ export class KeyChainService {
  * A configuration fault of the tenant, not of the request: wallets get a
  * server error that names no key chain, the log names the cause.
  */
-function accessTokenKeyChainUnavailable(): InternalServerErrorException {
+function authorizationServerKeyChainUnavailable(): InternalServerErrorException {
     return new InternalServerErrorException(
-        "The tenant's access token key chain is not available.",
+        "The tenant's authorization server key chain is not available.",
     );
 }
