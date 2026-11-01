@@ -198,7 +198,7 @@
                         "minimum": 60
                       },
                       "signingKeyId": {
-                        "description": "ID of a key chain with usage type \"accessToken\" that signs the issued access tokens. Without it, the tenant's access token key chain signs them.",
+                        "description": "ID of a key chain with usage type \"authorizationServer\" that signs the issued access tokens. Without it, the tenant's authorization server key chain signs them.",
                         "type": "string",
                         "minLength": 1
                       },
@@ -340,7 +340,7 @@
                         "minimum": 60
                       },
                       "signingKeyId": {
-                        "description": "ID of a key chain with usage type \"accessToken\" that signs the issued access tokens. Without it, the tenant's access token key chain signs them.",
+                        "description": "ID of a key chain with usage type \"authorizationServer\" that signs the issued access tokens. Without it, the tenant's authorization server key chain signs them.",
                         "type": "string",
                         "minLength": 1
                       },
@@ -448,7 +448,7 @@
                         "minimum": 60
                       },
                       "signingKeyId": {
-                        "description": "ID of a key chain with usage type \"accessToken\" that signs the issued access tokens. Without it, the tenant's access token key chain signs them.",
+                        "description": "ID of a key chain with usage type \"authorizationServer\" that signs the issued access tokens. Without it, the tenant's authorization server key chain signs them.",
                         "type": "string",
                         "minLength": 1
                       },

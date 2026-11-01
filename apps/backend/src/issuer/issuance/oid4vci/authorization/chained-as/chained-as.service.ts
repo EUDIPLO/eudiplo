@@ -843,11 +843,12 @@ export class ChainedAsService {
             dpopJkt,
         );
 
-        // The named key chain, else the tenant's access token key chain.
-        const keyChain = await this.keyChainService.resolveAccessTokenKeyChain(
-            tenantId,
-            config.token?.signingKeyId,
-        );
+        // The named key chain, else the tenant's authorization server key chain.
+        const keyChain =
+            await this.keyChainService.resolveAuthorizationServerKeyChain(
+                tenantId,
+                config.token?.signingKeyId,
+            );
 
         // signJWT sets the kid of the key chain's active key.
         const accessToken = await this.keyChainService.signJWT(

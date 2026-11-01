@@ -720,9 +720,9 @@ describe('KeyCreateWizardComponent internal chains', () => {
     );
   });
 
-  it('creates an access token key as a standalone key chain without certificate options', async () => {
+  it('creates an authorization server key as a standalone key chain without certificate options', async () => {
     const component = create();
-    component.usageForm.patchValue({ usage: 'accessToken' });
+    component.usageForm.patchValue({ usage: 'authorizationServer' });
     component.configForm.patchValue({ useExternalCertificate: true });
 
     expect(component.isExternalCertificate).toBe(false);
@@ -730,9 +730,9 @@ describe('KeyCreateWizardComponent internal chains', () => {
 
     expect(keyChainService.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        usageType: 'accessToken',
+        usageType: 'authorizationServer',
         type: 'standalone',
-        description: 'Access Token Signing Key',
+        description: 'Authorization Server Key',
       })
     );
   });
@@ -786,7 +786,14 @@ describe('KeyCreateWizardComponent internal chains', () => {
   it('offers the key chain type only for attestation and status list keys', () => {
     const component = create();
     const offered = (
-      ['attestation', 'statusList', 'access', 'accessToken', 'trustList', 'federation'] as const
+      [
+        'attestation',
+        'statusList',
+        'access',
+        'authorizationServer',
+        'trustList',
+        'federation',
+      ] as const
     ).filter((usage) => {
       component.usageForm.patchValue({ usage });
       return component.showKeyChainTypeStep;

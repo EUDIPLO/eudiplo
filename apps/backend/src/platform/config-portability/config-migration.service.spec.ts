@@ -105,7 +105,7 @@ describe("ConfigMigrationService", () => {
             migrations: [
                 "key-chain-v2-type",
                 "key-chain-v3-federation-usage",
-                "key-chain-v4-access-token-usage",
+                "key-chain-v4-authorization-server-usage",
             ],
         });
     });

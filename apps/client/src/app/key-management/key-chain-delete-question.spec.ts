@@ -20,11 +20,11 @@ describe('keyChainDeleteQuestion', () => {
 });
 
 describe('keyChainDeleteConsequence', () => {
-  it('warns that deleting an access token key ends the tokens it issued', () => {
-    const consequence = keyChainDeleteConsequence('accessToken');
+  it('warns that deleting an authorization server key ends the tokens it issued', () => {
+    const consequence = keyChainDeleteConsequence('authorizationServer');
 
     expect(consequence).toContain('tokens it issued are refused');
-    expect(consequence).toContain('creates a new one with ID access-token');
+    expect(consequence).toContain('creates a new one with ID authorization-server');
   });
 
   it('warns about the federation entity and says nothing for other usage types', () => {

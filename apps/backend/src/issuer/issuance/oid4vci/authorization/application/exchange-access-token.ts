@@ -378,7 +378,7 @@ export class ExchangeAccessToken {
                 }));
         }
 
-        // Key of the built-in entry, else the tenant's access token key chain.
+        // Key of the built-in entry, else the tenant's authorization server key chain.
         const { keyId: signingKeyId, publicJwk } =
             await this.signingKeys.resolve(
                 tenantId,

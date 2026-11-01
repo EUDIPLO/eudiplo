@@ -18,7 +18,7 @@ describe("IssuanceService.storeIssuanceConfiguration", () => {
             federationTrustAnchors: { unregistered },
             outboundUrlPolicy: { allowHttp: () => allowHttp },
             keyChainService: {
-                accessTokenKeyChainRefusal: vi.fn(
+                authorizationServerKeyChainRefusal: vi.fn(
                     async (_tenantId: string, id: string) =>
                         id === "token-key" ? undefined : `${id} refused`,
                 ),
@@ -39,7 +39,7 @@ describe("IssuanceService.storeIssuanceConfiguration", () => {
         }) as IssuanceService,
     });
 
-    it("refuses a token.signingKeyId that names no access token key chain", async () => {
+    it("refuses a token.signingKeyId that names no authorization server key chain", async () => {
         const { issuance, save } = service();
 
         await expect(

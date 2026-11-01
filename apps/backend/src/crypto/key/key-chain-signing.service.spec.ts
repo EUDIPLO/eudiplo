@@ -49,7 +49,7 @@ describe("KeyChainSigningService", () => {
         const keyChain = Object.assign(new KeyChainEntity(), {
             id: "token-chain",
             tenantId: "tenant",
-            usageType: KeyUsageType.AccessToken,
+            usageType: KeyUsageType.AuthorizationServer,
             usage: KeyUsage.Sign,
             kmsProvider: "db",
             activeJwk: withoutKid,

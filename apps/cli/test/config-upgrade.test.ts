@@ -650,7 +650,7 @@ describe("config upgrade", () => {
             "/spec/signingKeyId: warning ISSUANCE_SIGNING_KEY_ID_REMOVED",
         );
         expect(output.stdout + output.stderr).toContain(
-            "/spec/authorizationServers/0/token/signingKeyId: warning ACCESS_TOKEN_KEY_CHAIN_REQUIRED",
+            "/spec/authorizationServers/0/token/signingKeyId: warning AUTHORIZATION_SERVER_KEY_CHAIN_REQUIRED",
         );
         const result = JSON.parse(
             await readFile(`${source}.upgraded.json`, "utf8"),
@@ -658,15 +658,15 @@ describe("config upgrade", () => {
         expect(result.$schema).toBe(schemaUrl("IssuanceConfig", 6));
         expect(result.spec).toEqual({ authorizationServers });
     });
-    it("reads a bare access token key chain export as KeyChain v4", async () => {
+    it("reads a bare authorization server key chain export as KeyChain v4", async () => {
         const { cwd, context } = await setup();
         const source = join(cwd, "folder");
         await mkdir(join(source, "key-chains"), { recursive: true });
         await writeFile(
-            join(source, "key-chains", "access-token.json"),
+            join(source, "key-chains", "authorization-server.json"),
             JSON.stringify({
-                id: "access-token",
-                usageType: "accessToken",
+                id: "authorization-server",
+                usageType: "authorizationServer",
                 type: "standalone",
                 key: { kty: "EC", crv: "P-256", x: "x", y: "y", d: "d" },
             }),
@@ -678,14 +678,14 @@ describe("config upgrade", () => {
                     join(
                         `${source}.upgraded`,
                         "key-chains",
-                        "access-token.json",
+                        "authorization-server.json",
                     ),
                     "utf8",
                 ),
             ),
         ).toMatchObject({
             $schema: schemaUrl("KeyChain", 4),
-            spec: { usageType: "accessToken", type: "standalone" },
+            spec: { usageType: "authorizationServer", type: "standalone" },
         });
     });
     it("upgrades a bare federation key chain export to KeyChain v3", async () => {

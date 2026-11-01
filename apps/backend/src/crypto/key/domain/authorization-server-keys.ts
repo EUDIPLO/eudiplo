@@ -3,27 +3,27 @@ import { KeyUsageType } from "../types/key-usage-type.js";
 import { toPublicJwk } from "./public-jwk.js";
 
 /**
- * ID of the access token key chain EUDIPLO creates for a tenant that has
+ * ID of the authorization server key chain EUDIPLO creates for a tenant that has
  * none. A fixed ID makes the creation idempotent when several requests or
  * instances need it at once.
  */
-export const DEFAULT_ACCESS_TOKEN_KEY_CHAIN_ID = "access-token";
+export const DEFAULT_AUTHORIZATION_SERVER_KEY_CHAIN_ID = "authorization-server";
 
 /**
  * Why the key chain cannot sign an authorization server's access tokens, or
- * undefined when its usage type is `accessToken`.
+ * undefined when its usage type is `authorizationServer`.
  */
-export function accessTokenKeyChainUsageRefusal(
+export function authorizationServerKeyChainUsageRefusal(
     keyChainId: string,
     usageType: unknown,
 ): string | undefined {
-    return usageType === KeyUsageType.AccessToken
+    return usageType === KeyUsageType.AuthorizationServer
         ? undefined
-        : `Key chain ${JSON.stringify(keyChainId)} has usage type ${JSON.stringify(usageType)}; token.signingKeyId needs a key chain with usage type "accessToken".`;
+        : `Key chain ${JSON.stringify(keyChainId)} has usage type ${JSON.stringify(usageType)}; token.signingKeyId needs a key chain with usage type "authorizationServer".`;
 }
 
 /** What {@link accessTokenVerificationKeys} reads from a key chain. */
-export interface AccessTokenKeyChainKeys {
+export interface AuthorizationServerKeyChainKeys {
     id: string;
     activeJwk: JWK;
     previousJwk?: JWK | null;
@@ -38,7 +38,7 @@ export interface AccessTokenKeyChainKeys {
  * too.
  */
 export function accessTokenVerificationKeys(
-    keyChain: AccessTokenKeyChainKeys,
+    keyChain: AuthorizationServerKeyChainKeys,
     lifetimeSeconds: number,
     now: Date = new Date(),
 ): JWK[] {

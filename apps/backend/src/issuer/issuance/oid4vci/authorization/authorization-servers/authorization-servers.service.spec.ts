@@ -54,9 +54,9 @@ function service(
         }),
     };
     const keyChainService = {
-        resolveAccessTokenKeyChain: vi.fn(
+        resolveAuthorizationServerKeyChain: vi.fn(
             async (_tenantId: string, keyId?: string) => ({
-                id: keyId ?? "access-token",
+                id: keyId ?? "authorization-server",
             }),
         ),
         getAccessTokenVerificationKeys: vi
@@ -167,7 +167,7 @@ describe("AuthorizationServersService refresh tokens", () => {
     });
 });
 
-describe("AuthorizationServersService access token key", () => {
+describe("AuthorizationServersService authorization server key", () => {
     beforeEach(() => {
         vi.useFakeTimers();
         vi.setSystemTime(NOW);
@@ -177,7 +177,7 @@ describe("AuthorizationServersService access token key", () => {
         vi.useRealTimers();
     });
 
-    it("signs with the tenant's access token key chain without token.signingKeyId", async () => {
+    it("signs with the tenant's authorization server key chain without token.signingKeyId", async () => {
         const { authorizationServers, keyChainService } = service(
             undefined,
             authorizedSession(),
@@ -189,15 +189,14 @@ describe("AuthorizationServersService access token key", () => {
             codeRequest,
         );
 
-        expect(keyChainService.resolveAccessTokenKeyChain).toHaveBeenCalledWith(
-            "tenant-1",
-            undefined,
-        );
+        expect(
+            keyChainService.resolveAuthorizationServerKeyChain,
+        ).toHaveBeenCalledWith("tenant-1", undefined);
         expect(keyChainService.signJWT).toHaveBeenCalledWith(
             expect.anything(),
             { typ: "at+jwt" },
             "tenant-1",
-            "access-token",
+            "authorization-server",
         );
     });
 

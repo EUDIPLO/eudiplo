@@ -9,8 +9,8 @@ interface AccessTokenSigningKey {
 /** Keys the built-in authorization server signs access tokens with. */
 export interface AccessTokenSigningKeys {
     /**
-     * The key chain `keyId` names, else the tenant's access token key chain.
-     * Only key chains of usage type `accessToken` qualify.
+     * The key chain `keyId` names, else the tenant's authorization server key chain.
+     * Only key chains of usage type `authorizationServer` qualify.
      */
     resolve(tenantId: string, keyId?: string): Promise<AccessTokenSigningKey>;
 }

@@ -191,7 +191,7 @@ describe("portable schema identity and migrations", () => {
         expect(result.migrations).toEqual([
             "key-chain-v2-type",
             "key-chain-v3-federation-usage",
-            "key-chain-v4-access-token-usage",
+            "key-chain-v4-authorization-server-usage",
         ]);
         expect(result.document.$schema).toBe(schemaUrl("KeyChain", 4));
         expect(result.document.spec).toEqual(v1.spec);
@@ -220,10 +220,10 @@ describe("portable schema identity and migrations", () => {
         expect(bareFileVersion("KeyChain", spec)).toBe(3);
     });
 
-    it("accepts the accessToken usage type only from v4 on", () => {
+    it("accepts the authorizationServer usage type only from v4 on", () => {
         const spec = {
-            id: "access-token",
-            usageType: "accessToken",
+            id: "authorization-server",
+            usageType: "authorizationServer",
             keySource: { type: "regenerate" },
         };
         const issues = (version: number) =>
@@ -744,8 +744,8 @@ describe("portable schema identity and migrations", () => {
             ).toBeGreaterThan(0);
     });
 
-    it("accepts the accessToken entry only from KeyChainDefaults v2 on", () => {
-        const spec = { access: "registrar", accessToken: "access-token" };
+    it("accepts the authorizationServer entry only from KeyChainDefaults v2 on", () => {
+        const spec = { access: "registrar", authorizationServer: "authorization-server" };
         const issues = (version: number) =>
             validateConfigDocument(
                 normalizeDocument({
@@ -766,7 +766,7 @@ describe("portable schema identity and migrations", () => {
             },
             validateConfigDocument,
         );
-        expect(result.migrations).toEqual(["key-chain-defaults-v2-access-token"]);
+        expect(result.migrations).toEqual(["key-chain-defaults-v2-authorization-server"]);
         expect(result.document.spec).toEqual({ access: "registrar" });
     });
 
@@ -1019,7 +1019,7 @@ describe("IssuanceConfig v5 to v6", () => {
         ).toEqual([]);
     });
 
-    it("warns about a token.signingKeyId, which must now name an access token key chain", () => {
+    it("warns about a token.signingKeyId, which must now name an authorization server key chain", () => {
         const document = v5();
         (document.spec.authorizationServers[0].token as Record<string, unknown>).signingKeyId =
             "credential-key";
@@ -1029,7 +1029,7 @@ describe("IssuanceConfig v5 to v6", () => {
         expect(result.issues).toEqual([
             expect.objectContaining({
                 severity: "warning",
-                code: "ACCESS_TOKEN_KEY_CHAIN_REQUIRED",
+                code: "AUTHORIZATION_SERVER_KEY_CHAIN_REQUIRED",
                 path: "/spec/authorizationServers/0/token/signingKeyId",
             }),
         ]);

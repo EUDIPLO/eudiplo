@@ -6804,8 +6804,8 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
             "type": "string",
             "minLength": 1
           },
-          "accessToken": {
-            "description": "ID of the access token key chain (usage type accessToken) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant's oldest access token key chain and creates one with ID access-token when the tenant has none.",
+          "authorizationServer": {
+            "description": "ID of the authorization server key chain (usage type authorizationServer) that signs the access tokens of authorization servers without token.signingKeyId and is published in their JWKS. Without it, EUDIPLO uses the tenant's oldest authorization server key chain and creates one with ID authorization-server when the tenant has none.",
             "type": "string",
             "minLength": 1
           }
@@ -12762,7 +12762,7 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
             "type": "string",
             "enum": [
               "access",
-              "accessToken",
+              "authorizationServer",
               "attestation",
               "trustList",
               "statusList",
@@ -14229,7 +14229,7 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
                           "minimum": 60
                         },
                         "signingKeyId": {
-                          "description": "ID of a key chain with usage type \"accessToken\" that signs the issued access tokens. Without it, the tenant's access token key chain signs them.",
+                          "description": "ID of a key chain with usage type \"authorizationServer\" that signs the issued access tokens. Without it, the tenant's authorization server key chain signs them.",
                           "type": "string",
                           "minLength": 1
                         },
@@ -14371,7 +14371,7 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
                           "minimum": 60
                         },
                         "signingKeyId": {
-                          "description": "ID of a key chain with usage type \"accessToken\" that signs the issued access tokens. Without it, the tenant's access token key chain signs them.",
+                          "description": "ID of a key chain with usage type \"authorizationServer\" that signs the issued access tokens. Without it, the tenant's authorization server key chain signs them.",
                           "type": "string",
                           "minLength": 1
                         },
@@ -14479,7 +14479,7 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
                           "minimum": 60
                         },
                         "signingKeyId": {
-                          "description": "ID of a key chain with usage type \"accessToken\" that signs the issued access tokens. Without it, the tenant's access token key chain signs them.",
+                          "description": "ID of a key chain with usage type \"authorizationServer\" that signs the issued access tokens. Without it, the tenant's authorization server key chain signs them.",
                           "type": "string",
                           "minLength": 1
                         },

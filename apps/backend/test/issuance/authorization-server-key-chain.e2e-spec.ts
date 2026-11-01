@@ -27,7 +27,7 @@ setGlobalDispatcher(new Agent({ connect: { rejectUnauthorized: false } }));
 const ATTESTATION_KEY_CHAIN = "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad";
 const ACCESS_KEY_CHAIN = "2f71c235-87e2-43c9-b572-739a3164ce95";
 
-describe("Access token key chain", () => {
+describe("Authorization server key chain", () => {
     let app: INestApplication<App>;
     let authToken: string;
     let ctx: IssuanceTestContext;
@@ -96,18 +96,18 @@ describe("Access token key chain", () => {
         return accessTokenResponse.access_token;
     }
 
-    test("signs access tokens with an access token key chain EUDIPLO creates, never the access certificate or a credential key", async () => {
+    test("signs access tokens with an authorization server key chain EUDIPLO creates, never the access certificate or a credential key", async () => {
         // The tenant has access, attestation, status and trust list key
-        // chains, but no access token key chain yet. The public JWKS does
+        // chains, but no authorization server key chain yet. The public JWKS does
         // not create one.
-        expect(await keyChains("accessToken")).toEqual([]);
+        expect(await keyChains("authorizationServer")).toEqual([]);
         expect(await jwks()).toEqual([]);
-        expect(await keyChains("accessToken")).toEqual([]);
+        expect(await keyChains("authorizationServer")).toEqual([]);
 
         const accessToken = await preAuthorizedAccessToken();
 
-        const [created] = await keyChains("accessToken");
-        expect(created.id).toBe("access-token");
+        const [created] = await keyChains("authorizationServer");
+        expect(created.id).toBe("authorization-server");
         const header = decodeProtectedHeader(accessToken);
         expect(header.kid).toBe(created.activePublicKey.kid);
 
@@ -116,7 +116,7 @@ describe("Access token key chain", () => {
             created.activePublicKey.kid,
         ]);
         const otherKids = (await keyChains())
-            .filter((keyChain) => keyChain.usageType !== "accessToken")
+            .filter((keyChain) => keyChain.usageType !== "authorizationServer")
             .map((keyChain) => keyChain.activePublicKey.kid);
         expect(otherKids).not.toContain(header.kid);
         await expect(
@@ -127,14 +127,14 @@ describe("Access token key chain", () => {
     });
 
     test("keeps the previous key in the JWKS after a rotation", async () => {
-        const [before] = await keyChains("accessToken");
+        const [before] = await keyChains("authorizationServer");
 
         await request(app.getHttpServer())
             .post(`/key-chain/${before.id}/rotate`)
             .set("Authorization", `Bearer ${authToken}`)
             .expect(204);
 
-        const [after] = await keyChains("accessToken");
+        const [after] = await keyChains("authorizationServer");
         expect(after.activePublicKey.kid).not.toBe(before.activePublicKey.kid);
         // Tokens signed before the rotation stay valid for their lifetime.
         expect((await jwks()).map((key) => key.kid)).toEqual([
@@ -165,15 +165,15 @@ describe("Access token key chain", () => {
             .expect(400);
 
         expect(response.body.message).toContain(
-            'needs a key chain with usage type "accessToken"',
+            'needs a key chain with usage type "authorizationServer"',
         );
     });
 
-    test("uses the access token key chain an authorization server names", async () => {
+    test("uses the authorization server key chain an authorization server names", async () => {
         const created = await request(app.getHttpServer())
             .post("/key-chain")
             .set("Authorization", `Bearer ${authToken}`)
-            .send({ usageType: "accessToken", type: "standalone" })
+            .send({ usageType: "authorizationServer", type: "standalone" })
             .expect(201);
         const keyChainId: string = created.body.id;
 
@@ -192,7 +192,7 @@ describe("Access token key chain", () => {
             })
             .expect(201);
 
-        const named = (await keyChains("accessToken")).find(
+        const named = (await keyChains("authorizationServer")).find(
             (keyChain) => keyChain.id === keyChainId,
         )!;
         expect(

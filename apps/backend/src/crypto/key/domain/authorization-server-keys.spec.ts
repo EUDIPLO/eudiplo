@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-    accessTokenKeyChainUsageRefusal,
+    authorizationServerKeyChainUsageRefusal,
     accessTokenVerificationKeys,
-} from "./access-token-keys.js";
+} from "./authorization-server-keys.js";
 
 const active = { kty: "EC", crv: "P-256", x: "a", y: "a", d: "a", kid: "new" };
 const previous = {
@@ -60,13 +60,13 @@ describe("accessTokenVerificationKeys", () => {
     });
 });
 
-describe("accessTokenKeyChainUsageRefusal", () => {
-    it("accepts only the usage type accessToken", () => {
+describe("authorizationServerKeyChainUsageRefusal", () => {
+    it("accepts only the usage type authorizationServer", () => {
         expect(
-            accessTokenKeyChainUsageRefusal("t", "accessToken"),
+            authorizationServerKeyChainUsageRefusal("t", "authorizationServer"),
         ).toBeUndefined();
-        expect(accessTokenKeyChainUsageRefusal("t", "access")).toContain(
-            'needs a key chain with usage type "accessToken"',
-        );
+        expect(
+            authorizationServerKeyChainUsageRefusal("t", "access"),
+        ).toContain('needs a key chain with usage type "authorizationServer"');
     });
 });

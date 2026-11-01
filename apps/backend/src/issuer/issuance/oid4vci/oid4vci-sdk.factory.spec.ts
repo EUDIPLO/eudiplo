@@ -35,7 +35,7 @@ function factory(
     const keyChainService = {
         getAccessTokenVerificationKeys: vi.fn(
             async (_tenant, keyId: string | undefined, lifetime: number) => [
-                { kty: "EC", kid: keyId ?? "access-token", lifetime },
+                { kty: "EC", kid: keyId ?? "authorization-server", lifetime },
             ],
         ),
     };
@@ -67,7 +67,7 @@ const LOCAL_JWKS =
     "https://issuer.example/.well-known/jwks.json/issuers/tenant-1";
 
 describe("Oid4vciSdkFactory local JWKS", () => {
-    it("publishes the access token key of the built-in authorization server", async () => {
+    it("publishes the authorization server key of the built-in authorization server", async () => {
         const { resolveLocalJwks } = factory({
             authorizationServers: [
                 {
@@ -83,18 +83,18 @@ describe("Oid4vciSdkFactory local JWKS", () => {
         });
     });
 
-    it("falls back to the tenant's access token key chain", async () => {
+    it("falls back to the tenant's authorization server key chain", async () => {
         await expect(
             factory({
                 authorizationServers: [{ type: "built-in", id: "built-in" }],
             }).resolveLocalJwks(LOCAL_JWKS),
         ).resolves.toEqual({
-            keys: [{ kty: "EC", kid: "access-token", lifetime: 300 }],
+            keys: [{ kty: "EC", kid: "authorization-server", lifetime: 300 }],
         });
         await expect(
             factory(new Error("not configured")).resolveLocalJwks(LOCAL_JWKS),
         ).resolves.toEqual({
-            keys: [{ kty: "EC", kid: "access-token", lifetime: 300 }],
+            keys: [{ kty: "EC", kid: "authorization-server", lifetime: 300 }],
         });
     });
 

@@ -226,7 +226,7 @@ describe("resolveRefreshTokenPolicy", () => {
 });
 
 describe("builtInAccessTokenSettings", () => {
-    it("defaults to five minutes, the access token key chain and no DPoP", () => {
+    it("defaults to five minutes, the authorization server key chain and no DPoP", () => {
         expect(builtInAccessTokenSettings({})).toEqual({
             lifetimeSeconds: 300,
             signingKeyId: undefined,

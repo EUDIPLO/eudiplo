@@ -137,7 +137,7 @@ export function findBuiltInAuthorizationServer(
 export interface BuiltInAccessTokenSettings {
     lifetimeSeconds: number;
     /**
-     * Key chain id; `undefined` selects the tenant's access token key chain.
+     * Key chain id; `undefined` selects the tenant's authorization server key chain.
      */
     signingKeyId?: string;
     /** DPoP at the token endpoint: issuance `dPopRequired` or the entry's `requireDPoP`. */
@@ -146,7 +146,7 @@ export interface BuiltInAccessTokenSettings {
 
 /**
  * Access token settings of the built-in authorization server. The signing key
- * is the entry's `token.signingKeyId`, else the tenant's access token key
+ * is the entry's `token.signingKeyId`, else the tenant's authorization server key
  * chain; the issuance `signingKeyId` signs credentials, never access tokens.
  */
 export function builtInAccessTokenSettings(

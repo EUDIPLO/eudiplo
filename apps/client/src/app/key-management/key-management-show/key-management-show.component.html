@@ -243,7 +243,7 @@
             <mat-icon class="title-icon">public</mat-icon>
             Public Key
           </mat-card-title>
-          @if (isAccessTokenKey) {
+          @if (isAuthorizationServerKey) {
             <mat-card-subtitle
               >Published in the JWKS of the authorization servers that sign access tokens with this
               key.</mat-card-subtitle
@@ -269,7 +269,10 @@
           @if (keyChain.activeCertificate) {
             <p class="unused-certificate-note">
               EUDIPLO also keeps a self-signed certificate for this key.
-              {{ isAccessTokenKey ? 'Access tokens do not' : 'OpenID Federation does not' }} use it.
+              {{
+                isAuthorizationServerKey ? 'Access tokens do not' : 'OpenID Federation does not'
+              }}
+              use it.
             </p>
           }
           <div class="cert-actions" fxLayout="row" fxLayoutGap="8px">
@@ -288,7 +291,7 @@
               <mat-icon class="title-icon">history</mat-icon>
               Previous Public Key (Grace Period)
             </mat-card-title>
-            @if (isAccessTokenKey) {
+            @if (isAuthorizationServerKey) {
               <mat-card-subtitle>
                 Published for one access token lifetime after the rotation.
               </mat-card-subtitle>
