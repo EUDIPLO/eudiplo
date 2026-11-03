@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { extname } from "node:path";
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+    Inject,
+    Injectable,
+    InternalServerErrorException,
+    Logger,
+    NotFoundException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
@@ -13,7 +19,9 @@ import {
 import {
     FILE_STORAGE,
     FileStorage,
+    InvalidStorageKeyError,
     StoredObject,
+    StoredObjectNotFoundError,
 } from "../storage/storage.types.js";
 import { FileEntity } from "./entities/files.entity.js";
 
@@ -35,6 +43,8 @@ interface FileImportData {
 
 @Injectable()
 export class FilesService {
+    private readonly logger = new Logger(FilesService.name);
+
     constructor(
         @Inject(FILE_STORAGE) private readonly storage: FileStorage,
         @InjectRepository(FileEntity)
@@ -177,15 +187,24 @@ export class FilesService {
      * @param key The unique identifier of the file.
      * @returns A promise that resolves to a readable stream of the file.
      * @throws NotFoundException if the file does not exist.
+     * @throws InternalServerErrorException if the storage fails; the cause
+     * is logged, not returned, as it names paths or the bucket.
      */
     async getStream(key: string) {
         try {
             return await this.storage.getStream(key);
-        } catch (error: any) {
-            if (error?.code === "ENOENT" || error?.name === "NoSuchKey") {
+        } catch (error) {
+            if (
+                error instanceof StoredObjectNotFoundError ||
+                error instanceof InvalidStorageKeyError
+            ) {
                 throw new NotFoundException(`File not found: ${key}`);
             }
-            throw error;
+            this.logger.error(
+                `Reading file ${JSON.stringify(key)} from storage failed`,
+                error instanceof Error ? error.stack : String(error),
+            );
+            throw new InternalServerErrorException("File could not be read");
         }
     }
 
