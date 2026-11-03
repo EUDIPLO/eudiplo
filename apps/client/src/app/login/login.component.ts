@@ -117,7 +117,6 @@ export class LoginComponent implements OnInit, OnDestroy {
       // The session may have expired or been rejected before this page opened.
       this.reportEndedSession();
     }
-    console.log('Initializing login form');
     this.initializeForm();
 
     const initialApiUrl = this.loginForm.get('apiUrl')?.value;
@@ -240,7 +239,6 @@ export class LoginComponent implements OnInit, OnDestroy {
     if (queryParams['clientId'] && queryParams['clientSecret'] && queryParams['apiUrl']) {
       this.selectedLoginMode = 'client';
       this.syncLoginModeState();
-      console.log('Auto-login: All credentials provided via URL');
       void this.onSubmit();
     }
   }
@@ -288,14 +286,6 @@ export class LoginComponent implements OnInit, OnDestroy {
       clientSecret: [defaultValues.clientSecret, [Validators.required, Validators.required]],
       apiUrl: [defaultValues.apiUrl, [Validators.required, Validators.pattern(/^https?:\/\/.+/)]],
     });
-
-    // Log the source of values for debugging (only in development)
-    if (this.environmentService.isDevelopment()) {
-      console.log('Login form initialized with values from:', {
-        fromUrl: Object.keys(queryParams).length > 0 ? queryParams : 'No URL params',
-        fromEnv: 'Environment defaults used when URL params not available',
-      });
-    }
   }
 
   onApiUrlBlur(): void {

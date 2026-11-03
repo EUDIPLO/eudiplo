@@ -5,13 +5,19 @@
     <div fxLayout="row" fxLayoutAlign="space-between center">
       <h2>Webhook Endpoint</h2>
       <div>
-        <button mat-icon-button [routerLink]="['../']" matTooltip="Back to list">
+        <button
+          mat-icon-button
+          [routerLink]="['../']"
+          matTooltip="Back to list"
+          aria-label="Back to list"
+        >
           <mat-icon>arrow_back</mat-icon>
         </button>
         <button
           mat-icon-button
           [routerLink]="['edit']"
           matTooltip="Edit webhook endpoint"
+          aria-label="Edit webhook endpoint"
           appConfigManaged
           managedKind="WebhookEndpoint"
           [managedResourceId]="endpoint.id"
@@ -35,6 +41,7 @@
           mat-icon-button
           (click)="deleteEndpoint()"
           matTooltip="Delete webhook endpoint"
+          aria-label="Delete webhook endpoint"
           color="warn"
           appConfigManaged
           managedKind="WebhookEndpoint"

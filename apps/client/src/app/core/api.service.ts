@@ -764,11 +764,9 @@ export class ApiService implements OnDestroy {
     const timeUntilRefresh = refreshTime - currentTime;
 
     if (timeUntilRefresh > 0) {
-      console.log(`Token refresh scheduled in ${Math.floor(timeUntilRefresh / 60000)} minutes`);
       this.setRefreshTimer(timeUntilRefresh);
     } else {
       // Token is very close to expiration, refresh immediately
-      console.log('Token close to expiration, refreshing immediately');
       this.setRefreshTimer(1000);
     }
   }

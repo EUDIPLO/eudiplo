@@ -13,6 +13,7 @@
           [disabled]="isSavingConfig"
           (click)="openTenantConfigEditor()"
           matTooltip="Show tenant config JSON"
+          aria-label="Show tenant config JSON"
           appConfigManaged
           managedKind="KmsConfig"
           managedResourceId="kms"
@@ -27,6 +28,7 @@
         (click)="refresh()"
         [disabled]="isLoading"
         matTooltip="Refresh providers"
+        aria-label="Refresh providers"
       >
         <mat-icon>refresh</mat-icon>
       </button>
@@ -136,6 +138,7 @@
               [routerLink]="['/keys/create']"
               [queryParams]="{ kmsProvider: row.name }"
               matTooltip="Create key with this provider"
+              [attr.aria-label]="'Create key with provider ' + row.name"
             >
               <mat-icon>add</mat-icon>
             </button>

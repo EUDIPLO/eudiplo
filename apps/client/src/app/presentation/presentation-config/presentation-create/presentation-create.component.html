@@ -443,7 +443,14 @@
                                 color="warn"
                                 type="button"
                                 (click)="removeRegistrationCertPurpose(i)"
-                                matTooltip="Remove purpose"
+                                [matTooltip]="
+                                  'Remove purpose ' +
+                                  (asFormGroup(purposeCtrl).get('lang')?.value || i + 1)
+                                "
+                                [attr.aria-label]="
+                                  'Remove purpose ' +
+                                  (asFormGroup(purposeCtrl).get('lang')?.value || i + 1)
+                                "
                               >
                                 <mat-icon>delete</mat-icon>
                               </button>

@@ -307,7 +307,6 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
     }
 
     if (!isDcApiAvailable()) {
-      console.warn('Digital Credentials API not available — handing off via deep link.');
       this.snackBar.open('Digital Credentials API not available in this browser', 'Close', {
         duration: 3000,
       });
@@ -315,8 +314,6 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
     }
 
     try {
-      console.log('Calling Digital Credentials API (signed)…');
-
       // Call the Digital Credentials API
       const credential = (await navigator.credentials.get({
         mediation: 'required',
@@ -330,14 +327,12 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
         },
       } as CredentialRequestOptions)) as DigitalCredentialResponse | null;
 
-      console.log('Digital Credentials API response:', credential);
-
       if (!credential) {
         throw new Error('No response from Digital Credentials API');
       }
 
       if (credential.data?.error) {
-        console.error('Wallet protocol error:', credential.data.error, credential.data);
+        console.error('Wallet protocol error:', credential.data.error);
         throw new Error(
           `${credential.data.error}${credential.data.error_description ? `: ${credential.data.error_description}` : ''}`
         );
@@ -352,11 +347,10 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
         throw new Error('No response_uri found in request object');
       }
 
-      const submitRes = await firstValueFrom(
+      await firstValueFrom(
         this.httpClient.post(responseUri, { ...credential.data, sendResponse: true })
       );
 
-      console.log('Verifier response:', submitRes);
       this.snackBar.open('Presentation submitted successfully!', 'Close', { duration: 3000 });
 
       // Refresh the session to show updated status

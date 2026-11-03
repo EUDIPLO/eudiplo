@@ -31,6 +31,8 @@ Show the backend's reason when a request fails. The SDK throws the parsed respon
 
 When an action cannot be used right now, keep its button focusable and say why: `disabled` with `disabledInteractive` and the reason in `matTooltip`, as on the schema list and on Reset to Defaults in the settings screens. Material does not block clicks on such a `<button>` (only on links), so the click handler checks the same condition again. `appConfigManaged` locks a Material button through its `ariaDisabled` input and so keeps the button's own `aria-disabled`.
 
+Give an icon-only button (`mat-icon-button`, `matIconButton`) an `aria-label`, usually its tooltip text; otherwise screen readers read the icon name ("delete"). A button repeated per row names its row, for example `[attr.aria-label]="'View tenant ' + tenant.id"`. Lint enforces the label, and it rejects `console.log`: debug output can carry tokens or wallet responses, so log only with `console.warn` or `console.error`, and never whole responses.
+
 When you add or change a backend endpoint, regenerate the SDK with the backend running and rebuild it:
 
 ```bash
@@ -49,7 +51,7 @@ apps/client/src/
 │   ├── services/            # environment, theme, version check, frontend config, session notices, role change notice, Grafana links, JWT helpers
 │   ├── guards/              # auth.guard.ts, roles.guard.ts
 │   ├── common/              # shared base list component, load error card, source loading, small utilities
-│   ├── utils/               # reusable UI: editor, image field, webhook config, schema validation; error messages
+│   ├── utils/               # reusable UI: editor, image field, schema validation; error messages
 │   ├── login/, dashboard/, settings/
 │   ├── issuance/            # credential configs, issuance config, offers, attribute providers
 │   ├── presentation/        # presentation configs and requests

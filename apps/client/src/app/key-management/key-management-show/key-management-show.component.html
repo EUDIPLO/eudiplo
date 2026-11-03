@@ -4,13 +4,19 @@
     <div fxLayout="row" fxLayoutAlign="space-between center">
       <h2>Key Chain: {{ description || keyId }}</h2>
       <div>
-        <button mat-icon-button [routerLink]="['../']" matTooltip="Back to list">
+        <button
+          mat-icon-button
+          [routerLink]="['../']"
+          matTooltip="Back to list"
+          aria-label="Back to list"
+        >
           <mat-icon>arrow_back</mat-icon>
         </button>
         <button
           mat-icon-button
           [routerLink]="['edit']"
           matTooltip="Edit key chain"
+          aria-label="Edit key chain"
           appConfigManaged
           managedKind="KeyChain"
           [managedResourceId]="keyId"
@@ -22,6 +28,7 @@
             mat-icon-button
             (click)="rotateKey()"
             matTooltip="Rotate key now"
+            aria-label="Rotate key now"
             appConfigManaged
             managedKind="KeyChain"
             [managedResourceId]="keyId"
