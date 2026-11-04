@@ -17,7 +17,8 @@ describe('CredentialConfigCreateComponent', () => {
       {} as any,
       {} as any,
       {} as any,
-      {} as any
+      {} as any,
+      { get: () => ({ destroyed: true }) } as any
     );
   });
 
@@ -223,7 +224,8 @@ describe('CredentialConfigCreateComponent', () => {
       {} as any,
       {} as any,
       {} as any,
-      {} as any
+      {} as any,
+      { get: () => ({ destroyed: true }) } as any
     );
     expect(edit.create).toBe(false);
     expect(edit.guidedMode).toBe(false);
@@ -243,7 +245,8 @@ describe('CredentialConfigCreateComponent', () => {
           publicUrl: 'https://eudiplo.example.com',
         }),
       } as any,
-      { getTenantId: () => 'membership-demo' } as any
+      { getTenantId: () => 'membership-demo' } as any,
+      { get: () => ({ destroyed: true }) } as any
     );
     hosted.form.patchValue({ id: 'membership' });
     expect(hosted.getVctUri()).toBe(
@@ -570,7 +573,8 @@ describe('CredentialConfigCreateComponent editing', () => {
       {} as any,
       { loadConfigurations: vi.fn().mockResolvedValue([]) } as any,
       { getConfig: vi.fn().mockResolvedValue(null) } as any,
-      { getTenantId: () => 'tenant' } as any
+      { getTenantId: () => 'tenant' } as any,
+      { get: () => ({ destroyed: true }) } as any
     );
 
     component.ngOnInit();
