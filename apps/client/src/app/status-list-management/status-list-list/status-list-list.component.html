@@ -1,10 +1,20 @@
 <div fxLayout="row" fxLayoutAlign="space-between center">
   <h2>Status Lists</h2>
   <div fxLayout="row" fxLayoutGap="8px">
-    <button matIconButton routerLink="config" matTooltip="Configure default settings">
+    <button
+      matIconButton
+      routerLink="config"
+      matTooltip="Configure default settings"
+      aria-label="Configure default settings"
+    >
       <mat-icon>settings</mat-icon>
     </button>
-    <button matIconButton (click)="navigateToCreate()" matTooltip="Create Status List">
+    <button
+      matIconButton
+      (click)="navigateToCreate()"
+      matTooltip="Create Status List"
+      aria-label="Create Status List"
+    >
       <mat-icon>add</mat-icon>
     </button>
   </div>

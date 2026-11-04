@@ -1,14 +1,9 @@
-import {
-    HeadObjectCommand,
-    NoSuchKey,
-    NotFound,
-    S3Client,
-} from "@aws-sdk/client-s3";
+import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { DynamicModule, Global, Logger, Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { LocalFileStorage } from "./adapters/local.storage.js";
-import { S3FileStorage } from "./adapters/s3.storage.js";
+import { isMissingObject, S3FileStorage } from "./adapters/s3.storage.js";
 import { FileEntity } from "./entities/files.entity.js";
 import { FilesService } from "./files.service.js";
 import { StorageController } from "./storage.controller.js";
@@ -44,12 +39,7 @@ export async function verifyS3Access(
             }),
         );
     } catch (error) {
-        if (
-            error instanceof NotFound ||
-            error instanceof NoSuchKey ||
-            (error instanceof Error &&
-                (error.name === "NotFound" || error.name === "NoSuchKey"))
-        ) {
+        if (isMissingObject(error)) {
             return;
         }
         const reason = error instanceof Error ? error.message : String(error);

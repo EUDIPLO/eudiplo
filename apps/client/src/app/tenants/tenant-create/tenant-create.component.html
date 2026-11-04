@@ -1,7 +1,12 @@
 <div fxLayout="column" fxFlex fxLayoutGap="24px">
   <div fxLayout="row" fxLayoutAlign="space-between center">
     <h2>{{ isEditMode ? 'Edit' : 'Create' }} tenant</h2>
-    <button matIconButton [routerLink]="['../']" matTooltip="Back to Tenant List">
+    <button
+      matIconButton
+      [routerLink]="['../']"
+      matTooltip="Back to Tenant List"
+      aria-label="Back to Tenant List"
+    >
       <mat-icon>arrow_back</mat-icon>
     </button>
   </div>

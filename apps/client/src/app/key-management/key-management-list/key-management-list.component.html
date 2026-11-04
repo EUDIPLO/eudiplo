@@ -2,10 +2,21 @@
   <div fxLayout="row" fxLayoutAlign="space-between center" class="header">
     <h2>Key Management</h2>
     <div fxLayout="row" fxLayoutGap="8px">
-      <button mat-icon-button [routerLink]="['/kms']" matTooltip="KMS Providers">
+      <button
+        mat-icon-button
+        [routerLink]="['/kms']"
+        matTooltip="KMS Providers"
+        aria-label="KMS Providers"
+      >
         <mat-icon>dns</mat-icon>
       </button>
-      <button mat-icon-button color="primary" [routerLink]="['create']" matTooltip="Create Key">
+      <button
+        mat-icon-button
+        color="primary"
+        [routerLink]="['create']"
+        matTooltip="Create Key"
+        aria-label="Create Key"
+      >
         <mat-icon>add</mat-icon>
       </button>
     </div>
@@ -44,7 +55,12 @@
       </mat-select>
     </mat-form-field>
 
-    <button mat-icon-button (click)="clearFilters()" matTooltip="Clear filters">
+    <button
+      mat-icon-button
+      (click)="clearFilters()"
+      matTooltip="Clear filters"
+      aria-label="Clear filters"
+    >
       <mat-icon>filter_alt_off</mat-icon>
     </button>
   </div>

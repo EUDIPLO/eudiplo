@@ -85,17 +85,17 @@ export class AwsSecretsManagerEncryptionKeyProvider
             let keyData: string;
 
             if (response.SecretString) {
-                // Try to parse as JSON first
-                try {
-                    const jsonSecret = JSON.parse(response.SecretString);
-                    keyData = jsonSecret[this.secretKey];
+                const jsonSecret = parseJsonObject(response.SecretString);
+                if (jsonSecret) {
+                    const field = jsonSecret[this.secretKey];
+                    keyData = typeof field === "string" ? field : "";
                     if (!keyData) {
                         throw new Error(
                             `Secret JSON does not contain key "${this.secretKey}"`,
                         );
                     }
-                } catch {
-                    // Not JSON, treat as plain text key
+                } else {
+                    // Not a JSON object, treat as plain text key
                     keyData = response.SecretString;
                 }
             } else if (response.SecretBinary) {
@@ -166,5 +166,20 @@ export class AwsSecretsManagerEncryptionKeyProvider
      */
     private fingerprint(key: Buffer): string {
         return createHash("sha256").update(key).digest("hex").substring(0, 8);
+    }
+}
+
+/**
+ * Parses a secret string as a JSON object. A plain key, including a hex key
+ * that JSON reads as a number, gives undefined.
+ */
+function parseJsonObject(value: string): Record<string, unknown> | undefined {
+    try {
+        const parsed: unknown = JSON.parse(value);
+        return parsed !== null && typeof parsed === "object"
+            ? (parsed as Record<string, unknown>)
+            : undefined;
+    } catch {
+        return undefined;
     }
 }

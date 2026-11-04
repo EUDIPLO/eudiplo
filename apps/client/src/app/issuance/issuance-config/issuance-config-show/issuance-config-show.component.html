@@ -5,13 +5,19 @@
     <div fxLayout="row" fxLayoutAlign="space-between center">
       <h2>Issuer Settings</h2>
       <div>
-        <button mat-icon-button [routerLink]="['../']" matTooltip="Back to list">
+        <button
+          mat-icon-button
+          [routerLink]="['../']"
+          matTooltip="Back to list"
+          aria-label="Back to list"
+        >
           <mat-icon>arrow_back</mat-icon>
         </button>
         <button
           mat-icon-button
           [routerLink]="['edit']"
           matTooltip="Edit configuration"
+          aria-label="Edit configuration"
           appConfigManaged
           managedKind="IssuanceConfig"
           managedResourceId="issuance"

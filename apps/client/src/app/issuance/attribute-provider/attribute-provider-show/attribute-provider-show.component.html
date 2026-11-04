@@ -5,13 +5,19 @@
     <div fxLayout="row" fxLayoutAlign="space-between center">
       <h2>Attribute Provider</h2>
       <div>
-        <button mat-icon-button [routerLink]="['../']" matTooltip="Back to list">
+        <button
+          mat-icon-button
+          [routerLink]="['../']"
+          matTooltip="Back to list"
+          aria-label="Back to list"
+        >
           <mat-icon>arrow_back</mat-icon>
         </button>
         <button
           mat-icon-button
           [routerLink]="['edit']"
           matTooltip="Edit attribute provider"
+          aria-label="Edit attribute provider"
           appConfigManaged
           managedKind="AttributeProvider"
           [managedResourceId]="provider.id"
@@ -35,6 +41,7 @@
           mat-icon-button
           (click)="deleteProvider()"
           matTooltip="Delete attribute provider"
+          aria-label="Delete attribute provider"
           color="warn"
           appConfigManaged
           managedKind="AttributeProvider"

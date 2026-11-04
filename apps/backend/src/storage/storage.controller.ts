@@ -1,7 +1,6 @@
 import {
     Controller,
     Get,
-    NotFoundException,
     Param,
     Post,
     StreamableFile,
@@ -63,20 +62,15 @@ export class StorageController {
             },
         },
     })
-    download(@Param("key") key: string) {
-        return this.filesService
-            .getStream(key)
-            .then(
-                (stream) =>
-                    new StreamableFile(stream.stream, {
-                        //TODO: check if it should be attachment or not
-                        disposition: "attachment",
-                        type: stream.contentType,
-                        length: stream.size,
-                    }),
-            )
-            .catch(() => {
-                throw new NotFoundException();
-            });
+    async download(@Param("key") key: string) {
+        // getStream answers a missing file with a NotFoundException; other
+        // storage errors pass on as 500 and are logged.
+        const stream = await this.filesService.getStream(key);
+        //TODO: check if it should be attachment or not
+        return new StreamableFile(stream.stream, {
+            disposition: "attachment",
+            type: stream.contentType,
+            length: stream.size,
+        });
     }
 }

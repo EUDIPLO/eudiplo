@@ -69,6 +69,10 @@ credentials. A file is protected only by its random key, so do not store
 confidential content. The mapping of keys to tenants and file names is kept in
 the database; deleting a tenant deletes its files.
 
+A download answers 404 when no file is stored under the key. Any other storage
+failure, for example an unreachable S3 endpoint, answers 500 without details;
+the cause is in the backend log.
+
 To move to another storage driver, copy the objects with their keys (for local
 storage the files and their `.meta` files) and switch the variables. Moving
 existing MinIO data to RustFS is described in the
