@@ -131,6 +131,51 @@ describe('CredentialConfigCreateComponent', () => {
     expect(statusManagement.enabled).toBe(true);
   });
 
+  it('loads every display entry and saves them back unchanged', () => {
+    const display = [
+      {
+        name: 'Membership',
+        description: 'Member card',
+        locale: 'en-US',
+        background_color: '#112233',
+        text_color: '#FFFFFF',
+        logo: { uri: 'https://example.com/logo.png' },
+      },
+      {
+        name: 'Mitgliedschaft',
+        description: 'Mitgliedskarte',
+        locale: 'de-DE',
+        background_color: '#445566',
+        text_color: '#000000',
+      },
+    ];
+    const config = {
+      id: 'member',
+      description: 'Membership',
+      vct: 'urn:member',
+      config: { format: 'dc+sd-jwt', display },
+      fields: [],
+    };
+    (component as any).patchFormFromConfig(config);
+    expect(component.displayConfigs.length).toBe(2);
+    expect((component as any).buildConfigurationPayload().config.display).toEqual(display);
+
+    // Loading a configuration with fewer entries drops the extra ones.
+    (component as any).patchFormFromConfig({
+      ...config,
+      config: { format: 'dc+sd-jwt', display: [display[1]] },
+    });
+    expect((component as any).buildConfigurationPayload().config.display).toEqual([display[1]]);
+
+    // Without any display the form keeps one empty entry to fill in.
+    const empty = component.createDisplayConfigGroup().value;
+    for (const withoutDisplay of [{ format: 'dc+sd-jwt', display: [] }, { format: 'dc+sd-jwt' }]) {
+      (component as any).patchFormFromConfig({ ...config, config: withoutDisplay });
+      expect(component.displayConfigs.length).toBe(1);
+      expect(component.displayConfigs.at(0).value).toEqual(empty);
+    }
+  });
+
   it('returns to an invalid earlier step before review or save', () => {
     basics();
     component.displayConfigs.at(0).patchValue({ name: 'Membership', description: 'Member card' });
