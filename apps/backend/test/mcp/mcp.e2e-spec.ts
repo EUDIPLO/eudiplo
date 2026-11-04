@@ -327,6 +327,34 @@ describe("MCP endpoint (e2e)", () => {
         ).toBe(200);
     });
 
+    test("opens no subscriptions/listen stream, with or without a token", async () => {
+        for (const authorization of [`Bearer ${adminToken}`, undefined]) {
+            const response = await fetch(endpoint, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "application/json, text/event-stream",
+                    ...(authorization && { Authorization: authorization }),
+                },
+                body: JSON.stringify({
+                    jsonrpc: "2.0",
+                    id: 9,
+                    method: "subscriptions/listen",
+                    params: {},
+                }),
+                signal: AbortSignal.timeout(5000),
+            });
+            expect(response.status).toBe(404);
+            expect(response.headers.get("content-type")).toContain(
+                "application/json",
+            );
+            expect(await response.json()).toMatchObject({
+                id: 9,
+                error: { code: -32601 },
+            });
+        }
+    });
+
     test("is not part of the OpenAPI document", () => {
         const document = SwaggerModule.createDocument(
             app,

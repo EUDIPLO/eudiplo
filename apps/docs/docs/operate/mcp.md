@@ -120,9 +120,12 @@ as the API asks.
   itself. Give it a token as in step 3.
 - **Streamable HTTP only.** There is no stdio transport. With a valid token,
   `GET` and `DELETE` on the endpoint answer `405`.
-- **No browser pages on other hosts.** A request whose `Origin` header names
-  another host than `localhost`, `127.0.0.1` or `[::1]` answers `403`, also
-  for origins in `CORS_ORIGINS`. MCP clients outside a browser send no
-  `Origin` header.
+- **No subscriptions.** `subscriptions/listen` answers `404` with the JSON-RPC
+  error `-32601` (method not found), before the token and `Origin` checks, so
+  no request keeps a stream open; the tools do not change at runtime.
+- **No browser pages on other hosts.** With a valid token, a request whose
+  `Origin` header names another host than `localhost`, `127.0.0.1` or `[::1]`
+  answers `403`, also for origins in `CORS_ORIGINS`; without one, it answers
+  `401`. MCP clients outside a browser send no `Origin` header.
 - **Read only.** Creating offers or presentation requests, cancelling sessions
   and changing configurations stay in the management API and the web client.

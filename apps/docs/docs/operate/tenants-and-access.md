@@ -202,7 +202,9 @@ To let people sign in with their own accounts, set `OIDC` to a Keycloak realm
   managed through `/api/user` (role `users:manage`) or in the web client. Without
   `OIDC`, `/api/user` answers `501`.
 - Access tokens must carry the tenant ID in the claim named by `OIDC_SUB`
-  (default `tenant_id`) and the roles in `roles` or `realm_access.roles`.
+  (default `tenant_id`) and the roles in `roles` or `realm_access.roles`, and,
+  with `OIDC_AUDIENCE`, that audience in `aud`
+  ([Keycloak SSO](keycloak.md#accept-only-tokens-issued-for-eudiplo)).
 
 The variables and the Keycloak setup are described in [Keycloak SSO](keycloak.md).
 `MASTER_SECRET` is optional in OIDC mode, but the default encryption key is
