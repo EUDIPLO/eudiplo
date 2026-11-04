@@ -2029,7 +2029,7 @@ export type DisplayImage = {
 
 export type Display = {
     name: string;
-    description: string;
+    description?: string;
     locale: string;
     background_color?: string;
     text_color?: string;

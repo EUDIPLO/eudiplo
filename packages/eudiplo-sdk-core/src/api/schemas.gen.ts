@@ -4696,7 +4696,6 @@ export const DisplaySchema = {
     },
     required: [
         'name',
-        'description',
         'locale'
     ]
 } as const;
