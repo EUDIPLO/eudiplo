@@ -10,7 +10,24 @@ import {
     PutObjectCommand,
     S3Client,
 } from "@aws-sdk/client-s3";
-import { FileStorage, PutOptions } from "../storage.types.js";
+import {
+    FileStorage,
+    PutOptions,
+    StoredObjectNotFoundError,
+} from "../storage.types.js";
+
+/**
+ * Whether an S3 error means nothing is stored under the key. The name check
+ * covers SDK versions whose errors are not instances of these classes.
+ */
+export function isMissingObject(error: unknown): boolean {
+    return (
+        error instanceof NotFound ||
+        error instanceof NoSuchKey ||
+        (error instanceof Error &&
+            (error.name === "NotFound" || error.name === "NoSuchKey"))
+    );
+}
 
 /**
  * S3 file storage implementation using AWS SDK v3.
@@ -56,9 +73,13 @@ export class S3FileStorage implements FileStorage {
      * @returns
      */
     async getStream(key: string) {
-        const obj = await this.s3.send(
-            new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-        );
+        const obj = await this.s3
+            .send(new GetObjectCommand({ Bucket: this.bucket, Key: key }))
+            .catch((error: unknown) => {
+                throw isMissingObject(error)
+                    ? new StoredObjectNotFoundError(key)
+                    : error;
+            });
         return {
             stream: obj.Body as Readable,
             contentType: obj.ContentType,
@@ -89,14 +110,7 @@ export class S3FileStorage implements FileStorage {
             return true;
         } catch (error) {
             // Only treat NotFound/NoSuchKey as "not exists", rethrow other errors
-            if (error instanceof NotFound || error instanceof NoSuchKey) {
-                return false;
-            }
-            // Also check error name for compatibility with different SDK versions
-            if (
-                error instanceof Error &&
-                (error.name === "NotFound" || error.name === "NoSuchKey")
-            ) {
+            if (isMissingObject(error)) {
                 return false;
             }
             throw error;

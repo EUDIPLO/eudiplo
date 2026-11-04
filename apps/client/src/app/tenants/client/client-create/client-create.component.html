@@ -5,7 +5,12 @@
   <app-role-lock-notice subject="client" [roles]="unmanageableRoles" />
   <div fxLayout="row" fxLayoutAlign="space-between center">
     <h2>{{ loaded ? 'Edit client' : 'Create client' }}</h2>
-    <button matIconButton [routerLink]="['../']" matTooltip="Back to Client List">
+    <button
+      matIconButton
+      [routerLink]="['../']"
+      matTooltip="Back to Client List"
+      aria-label="Back to Client List"
+    >
       <mat-icon>arrow_back</mat-icon>
     </button>
   </div>

@@ -45,6 +45,8 @@ module.exports = tseslint.config(
       '@angular-eslint/prefer-inject': 'off', // Disable for now as it requires major refactoring
       '@angular-eslint/no-empty-lifecycle-method': 'warn',
       '@angular-eslint/prefer-on-push-component-change-detection': 'off',
+      // Debug output can carry tokens, secrets or wallet responses.
+      'no-console': ['error', { allow: ['warn', 'error'] }],
     },
   },
   {
@@ -53,6 +55,15 @@ module.exports = tseslint.config(
     rules: {
       '@angular-eslint/template/no-negated-async': 'error',
       '@angular-eslint/template/use-track-by-function': 'warn',
+      'no-restricted-syntax': [
+        'error',
+        {
+          // The icon ligature ("delete", "edit") would be the name, and a tooltip only describes.
+          selector:
+            'Element[name=/^(button|a)$/]:has(> TextAttribute[name=/^(mat-icon-button|matIconButton)$/]):not(:has(> TextAttribute[name="aria-label"])):not(:has(> BoundAttribute[name="aria-label"]))',
+          message: 'Give an icon-only button an aria-label, usually its tooltip text.',
+        },
+      ],
     },
   },
   {

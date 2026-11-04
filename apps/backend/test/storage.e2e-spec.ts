@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -7,7 +7,10 @@ import { GenericContainer, StartedTestContainer, Wait } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { LocalFileStorage } from "../src/storage/adapters/local.storage.js";
 import { S3FileStorage } from "../src/storage/adapters/s3.storage.js";
-import type { FileStorage } from "../src/storage/storage.types.js";
+import {
+    type FileStorage,
+    StoredObjectNotFoundError,
+} from "../src/storage/storage.types.js";
 import { describeWithContainers } from "./container-runtime.js";
 
 /**
@@ -43,6 +46,24 @@ function runStorageTests(getStorage: () => FileStorage, name: string) {
             }
             const retrieved = Buffer.concat(chunks).toString();
             expect(retrieved).toBe(content);
+        });
+
+        test("getStream reports a missing key as not found", async () => {
+            const storage = getStorage();
+
+            await expect(
+                storage.getStream(`missing-${Date.now()}/file.txt`),
+            ).rejects.toBeInstanceOf(StoredObjectNotFoundError);
+        });
+
+        test("getStream reports a key that is only a prefix as not found", async () => {
+            const storage = getStorage();
+            const prefix = `test-${Date.now()}-prefix`;
+            await storage.put(`${prefix}/file.txt`, Buffer.from("x"));
+
+            await expect(storage.getStream(prefix)).rejects.toBeInstanceOf(
+                StoredObjectNotFoundError,
+            );
         });
 
         test("put with Readable stream", async () => {
@@ -146,6 +167,29 @@ describe("LocalFileStorage", () => {
     runStorageTests(() => localStorage, "LocalFileStorage operations");
 
     describe("LocalFileStorage-specific features", () => {
+        test("getStream reports a key with a too long name as not found", async () => {
+            await expect(
+                localStorage.getStream(`test/${"a".repeat(300)}.txt`),
+            ).rejects.toBeInstanceOf(StoredObjectNotFoundError);
+        });
+
+        test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+            "getStream passes on other file system errors",
+            async () => {
+                const folder = `test-${Date.now()}-locked`;
+                await localStorage.put(`${folder}/file.txt`, Buffer.from("x"));
+                chmodSync(join(tempDir, folder), 0o000);
+                try {
+                    const error = await localStorage
+                        .getStream(`${folder}/file.txt`)
+                        .catch((e: unknown) => e);
+                    expect(error).toMatchObject({ code: "EACCES" });
+                } finally {
+                    chmodSync(join(tempDir, folder), 0o755);
+                }
+            },
+        );
+
         test("put with actual Readable stream", async () => {
             const key = `test-${Date.now()}/stream-local.txt`;
             const content = "local readable stream content";

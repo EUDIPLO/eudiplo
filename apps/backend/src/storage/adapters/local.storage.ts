@@ -10,7 +10,15 @@ import {
 } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { pipeline, Readable } from "node:stream";
-import { FileStorage, type PutOptions } from "../storage.types.js";
+import {
+    FileStorage,
+    InvalidStorageKeyError,
+    type PutOptions,
+    StoredObjectNotFoundError,
+} from "../storage.types.js";
+
+/** fs errors that mean nothing is stored under the path. */
+const MISSING_FILE_CODES = new Set(["ENOENT", "ENOTDIR", "ENAMETOOLONG"]);
 
 /**
  * Local file storage implementation for development and testing.
@@ -24,7 +32,7 @@ export class LocalFileStorage implements FileStorage {
 
     private resolveSafePath(key: string): string {
         if (!key || key.includes("\0")) {
-            throw new Error("Invalid storage key");
+            throw new InvalidStorageKeyError();
         }
 
         const basePath = resolve(this.baseDir);
@@ -37,7 +45,7 @@ export class LocalFileStorage implements FileStorage {
             relativePath.includes(`/..`) ||
             relativePath === ""
         ) {
-            throw new Error("Invalid storage key");
+            throw new InvalidStorageKeyError();
         }
 
         return fullPath;
@@ -78,18 +86,30 @@ export class LocalFileStorage implements FileStorage {
      * @param key
      * @returns
      */
-    getStream(key: string) {
+    // async, so that every failure is a rejection, as the FileStorage port promises
+    async getStream(key: string) {
         const fullPath = this.resolveSafePath(key);
-        const stat = statSync(fullPath);
+        let stat: ReturnType<typeof statSync>;
+        try {
+            stat = statSync(fullPath);
+        } catch (error: any) {
+            if (MISSING_FILE_CODES.has(error?.code)) {
+                throw new StoredObjectNotFoundError(key);
+            }
+            throw error;
+        }
+        if (!stat.isFile()) {
+            throw new StoredObjectNotFoundError(key);
+        }
         const metaPath = `${fullPath}.meta`;
         const contentType = existsSync(metaPath)
             ? JSON.parse(readFileSync(metaPath, "utf-8")).contentType
             : undefined;
-        return Promise.resolve({
+        return {
             stream: createReadStream(fullPath),
             contentType,
             size: stat.size,
-        });
+        };
     }
 
     /**

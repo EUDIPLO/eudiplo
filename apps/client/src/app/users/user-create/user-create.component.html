@@ -2,7 +2,12 @@
   <app-role-lock-notice subject="user" [roles]="unmanageableRoles" />
   <div fxLayout="row" fxLayoutAlign="space-between center">
     <h2>{{ loaded ? 'Edit user' : 'Create user' }}</h2>
-    <button matIconButton [routerLink]="['../']" matTooltip="Back to Users List">
+    <button
+      matIconButton
+      [routerLink]="['../']"
+      matTooltip="Back to Users List"
+      aria-label="Back to Users List"
+    >
       <mat-icon>arrow_back</mat-icon>
     </button>
   </div>

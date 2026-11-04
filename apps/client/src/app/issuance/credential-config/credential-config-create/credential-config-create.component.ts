@@ -475,7 +475,6 @@ export class CredentialConfigCreateComponent implements OnInit {
       this.snackBar.open(`Please fix invalid fields: ${invalidFields.join(', ')}`, 'Close', {
         duration: 5000,
       });
-      console.log('Invalid fields:', invalidFields);
       return;
     }
 

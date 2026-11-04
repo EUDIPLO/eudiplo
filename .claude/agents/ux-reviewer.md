@@ -53,7 +53,7 @@ Destructive and irreversible actions
 
 Consistency
 - Follows the list / show / create pattern, routes in the feature's `*.routes.ts`, SDK calls in the feature service, not in the component.
-- Uses existing shared components from `common/` and `utils/` (editor, image field, webhook config, schema validation) instead of a new variant.
+- Uses existing shared components from `common/` and `utils/` (editor, image field, schema validation) instead of a new variant.
 - Material components, spacing, icons, button hierarchy (one primary action per view) and terminology match the neighboring screens. The same concept has the same name everywhere ("presentation request", not "verification" on one page).
 - Role-based visibility: controls the current role cannot use (per `roles.guard.ts` and the backend `@Secured` roles) are hidden or disabled with a hint, not shown and then failing with 403.
 - Version check and tenant context are not bypassed by a new route.

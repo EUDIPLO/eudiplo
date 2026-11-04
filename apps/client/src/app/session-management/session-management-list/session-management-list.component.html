@@ -325,7 +325,12 @@
       <ng-container matColumnDef="actions">
         <th mat-header-cell *matHeaderCellDef>Actions</th>
         <td mat-cell *matCellDef="let session">
-          <button matIconButton [routerLink]="[session.id]" matTooltip="View Session Details">
+          <button
+            matIconButton
+            [routerLink]="[session.id]"
+            matTooltip="View Session Details"
+            [attr.aria-label]="'View session ' + session.id"
+          >
             <mat-icon>visibility</mat-icon>
           </button>
         </td>

@@ -15,7 +15,12 @@ import { MatIconModule } from '@angular/material/icon';
         <p>{{ props.description }}</p>
       }
       <div class="d-flex flex-row-reverse">
-        <button matIconButton type="button" (click)="add()">
+        <button
+          matIconButton
+          type="button"
+          (click)="add()"
+          [attr.aria-label]="'Add ' + (props.label || 'item')"
+        >
           <mat-icon>add</mat-icon>
         </button>
       </div>
@@ -31,7 +36,12 @@ import { MatIconModule } from '@angular/material/icon';
           <formly-field class="col" [field]="field"></formly-field>
           @if (field.props!['removable'] !== false) {
             <div class="col-2 text-right">
-              <button matIconButton type="button" (click)="remove(i)">
+              <button
+                matIconButton
+                type="button"
+                (click)="remove(i)"
+                [attr.aria-label]="'Remove item ' + (i + 1)"
+              >
                 <mat-icon>remove</mat-icon>
               </button>
             </div>

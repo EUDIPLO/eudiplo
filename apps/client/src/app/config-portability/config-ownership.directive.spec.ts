@@ -27,6 +27,7 @@ import { ConfigOwnershipService, ConfigResourceOwnership } from './config-owners
       matIconButton
       routerLink="/edit"
       [matTooltip]="editTooltip()"
+      aria-label="Edit"
       appConfigManaged
       managedKind="PresentationConfig"
       [managedResourceId]="id()"

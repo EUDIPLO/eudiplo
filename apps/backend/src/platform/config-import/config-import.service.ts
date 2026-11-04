@@ -36,14 +36,13 @@ export class ConfigImportService {
 
     constructor(
         private readonly configService: ConfigService,
+        private readonly importModeService: ConfigImportModeService,
         @Optional()
         private readonly migrationService?: ConfigMigrationService,
         @Optional()
         private readonly ownershipService?: ConfigOwnershipService,
         @Optional()
         private readonly resourceRegistry?: ConfigResourceRegistry,
-        @Optional()
-        private readonly importModeService?: ConfigImportModeService,
     ) {}
 
     /**
@@ -55,7 +54,7 @@ export class ConfigImportService {
         options: TenantImportOptions<T>,
     ): Promise<void> {
         const configPath = this.configService.getOrThrow("CONFIG_FOLDER");
-        const mode = this.resolveMode();
+        const mode = this.importModeService.resolve();
         if (mode === "disabled") return;
         const updateExisting = mode !== "create";
         const strictConfig = this.configService.get<any>(
@@ -274,20 +273,6 @@ export class ConfigImportService {
         for (const issue of result.issues)
             this.logger.warn(`${issue.path}: ${issue.message}`);
         return result.value;
-    }
-
-    private resolveMode():
-        | "disabled"
-        | import("../config-portability/config-resource.types.js").ConfigImportMode {
-        if (this.importModeService) {
-            return this.importModeService.resolve();
-        }
-        if (!this.configService.get<boolean>("CONFIG_IMPORT")) {
-            return "disabled";
-        }
-        return this.configService.get<boolean>("CONFIG_IMPORT_FORCE")
-            ? "upsert"
-            : "create";
     }
 
     /**
