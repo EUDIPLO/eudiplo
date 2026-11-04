@@ -713,7 +713,6 @@ export class CredentialConfigCreateComponent implements OnInit {
       sdJwtTrustFormat: (normalizedConfig as any).sdJwtTrustFormat || 'x5c',
       // mDOC specific
       docType: normalizedConfig.config?.docType || '',
-      displayConfigs: normalizedConfig.config?.display || [],
       embeddedDisclosurePolicy: this.stringifyField(normalizedConfig.embeddedDisclosurePolicy),
       // Key attestation requirements
       keyAttestationEnabled: !!(normalizedConfig.config as any)?.keyAttestationsRequired,
@@ -739,6 +738,8 @@ export class CredentialConfigCreateComponent implements OnInit {
           ?.reissue_trigger_lifetime_left || 86400,
     } as any);
     this.syncStatusManagementWithActiveCredentials();
+
+    this.setDisplayConfigs(normalizedConfig.config?.display ?? []);
 
     const flatFields = this.flattenFieldDefinitionsForForm(normalizedConfig.fields || []);
     this.fields.clear();
@@ -899,6 +900,20 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   get displayConfigs(): FormArray {
     return this.form.get('displayConfigs') as FormArray;
+  }
+
+  /**
+   * Replaces the display entries with one group per loaded display. `patchValue` on the
+   * FormArray would only fill the groups that already exist and drop the rest.
+   */
+  private setDisplayConfigs(displays: CredentialConfigCreate['config']['display']): void {
+    this.displayConfigs.clear();
+    this.expandedAppearance.clear();
+    for (const display of displays.length > 0 ? displays : [undefined]) {
+      const group = this.createDisplayConfigGroup();
+      group.patchValue(display ?? {});
+      this.displayConfigs.push(group);
+    }
   }
 
   addDisplayConfig(): void {

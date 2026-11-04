@@ -23,6 +23,13 @@ test('create credential config', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Configuration ID' }).fill(id);
   // Guided setup: Basics, Claims, Appearance, Settings, Review
   for (let step = 0; step < 4; step++) {
+    if (step === 2) {
+      // The template's two display entries replace the empty one, each in its own card.
+      const descriptions = page.getByRole('textbox', { name: 'Description' });
+      await expect(descriptions).toHaveCount(2);
+      await expect(descriptions.nth(0)).toHaveValue('PID Credential');
+      await expect(descriptions.nth(1)).toHaveValue('PID Nachweis');
+    }
     await page.getByRole('button', { name: 'Continue' }).click();
   }
   await page.getByRole('button', { name: 'Create Configuration' }).click();
@@ -62,6 +69,85 @@ test('a failed load says why and loads again on Retry', async ({ page }) => {
   await expect(
     page.getByRole('heading', { name: 'Credential Configurations', level: 2 })
   ).toBeFocused();
+});
+
+test('edits every display entry and keeps all of them on save', async ({ page, request }) => {
+  test.skip(
+    !hasAuthCredentials,
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+  );
+  const id = `e2e-displays-${Date.now()}`;
+  const url = `${resolvedE2EConfig.apiBaseUrl}/api/issuer/credentials`;
+  const headers = { Authorization: `Bearer ${await tenantToken(request)}` };
+  const display = [
+    {
+      name: 'Membership',
+      description: 'Member card',
+      locale: 'en-US',
+      background_color: '#112233',
+      text_color: '#FFFFFF',
+    },
+    {
+      name: 'Mitgliedschaft',
+      description: 'Mitgliedskarte',
+      locale: 'de-DE',
+      background_color: '#445566',
+      text_color: '#000000',
+    },
+  ];
+  await writeConfig(
+    () =>
+      request.post(url, {
+        headers,
+        data: {
+          id,
+          description: 'Display entries',
+          vct: `urn:${id}`,
+          config: { format: 'dc+sd-jwt', display },
+          fields: [],
+        },
+      }),
+    `create ${id}`
+  );
+
+  try {
+    await page.goto(`/credential-config/${id}/edit`);
+    await page.getByRole('tab', { name: /Appearance/ }).click();
+    const names = page.getByRole('textbox', { name: 'Display Name' });
+    await expect(names).toHaveCount(2);
+    await expect(names.nth(0)).toHaveValue('Membership');
+    await expect(names.nth(1)).toHaveValue('Mitgliedschaft');
+
+    await names.nth(1).fill('Mitgliedschaft Plus');
+    await page.getByRole('button', { name: 'Save Configuration' }).click();
+    await expect(page).toHaveURL(new RegExp(`/credential-config/${id}$`));
+
+    const response = await request.get(`${url}/${id}`, { headers });
+    expect(response.ok(), `GET ${id}`).toBe(true);
+    expect(((await response.json()) as { config: { display: unknown[] } }).config.display).toEqual([
+      display[0],
+      { ...display[1], name: 'Mitgliedschaft Plus' },
+    ]);
+
+    // Removing the first entry leaves the card of the second one, not a card of the removed one.
+    await page.goto(`/credential-config/${id}/edit`);
+    await page.getByRole('tab', { name: /Appearance/ }).click();
+    await expect(names).toHaveCount(2);
+    await page.getByRole('button', { name: 'Remove display configuration 1' }).click();
+    await expect(names).toHaveCount(1);
+    await expect(names).toHaveValue('Mitgliedschaft Plus');
+    await expect(page.getByRole('textbox', { name: 'Description' })).toHaveValue('Mitgliedskarte');
+    await page.getByRole('button', { name: 'Save Configuration' }).click();
+    await expect(page).toHaveURL(new RegExp(`/credential-config/${id}$`));
+
+    const afterRemove = await request.get(`${url}/${id}`, { headers });
+    expect(afterRemove.ok(), `GET ${id}`).toBe(true);
+    expect(
+      ((await afterRemove.json()) as { config: { display: unknown[] } }).config.display
+    ).toEqual([{ ...display[1], name: 'Mitgliedschaft Plus' }]);
+  } finally {
+    await writeConfig(() => request.delete(`${url}/${id}`, { headers }), `delete ${id}`);
+  }
 });
 
 test('saves edited claim constraints and keeps untouched ones', async ({ page, request }) => {
