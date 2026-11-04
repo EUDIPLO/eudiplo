@@ -13,6 +13,10 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { decodeJwt } from "jose";
 import { Repository } from "typeorm";
 import { ConfigImportService } from "../../../platform/config-import/config-import.service.js";
+import {
+    AUDIENCE_SCOPE,
+    ensureAudienceScope,
+} from "../../keycloak-audience-scope.js";
 import { keycloakAuthorizationRoles } from "../../keycloak-authorization-roles.js";
 import { syncEudiploRealmRoles } from "../../keycloak-realm-roles.js";
 import { allRoles, Role } from "../../roles/role.enum.js";
@@ -26,23 +30,6 @@ import { CreateClientDto } from "../dto/create-client.dto.js";
 import { UpdateClientDto } from "../dto/update-client.dto.js";
 import { ClientEntity } from "../entities/client.entity.js";
 import { CreateClientSchema } from "../schemas/client.schema.js";
-
-/** Client scope that puts `OIDC_AUDIENCE` into access tokens. */
-const AUDIENCE_SCOPE = "eudiplo-audience";
-
-function audienceMapper(audience: string) {
-    return {
-        name: AUDIENCE_SCOPE,
-        protocol: "openid-connect",
-        protocolMapper: "oidc-audience-mapper",
-        config: {
-            "included.custom.audience": audience,
-            "access.token.claim": "true",
-            "id.token.claim": "false",
-            "introspection.token.claim": "true",
-        },
-    };
-}
 
 @Injectable()
 export class KeycloakClientsProvider
@@ -193,7 +180,7 @@ export class KeycloakClientsProvider
             .then(() =>
                 // Fails startup: the audience check is on, so clients
                 // without the scope could not call EUDIPLO at all.
-                this.ensureAudienceScope().catch((err: unknown) => {
+                this.addAudienceScope().catch((err: unknown) => {
                     throw new Error(
                         `Could not set up the Keycloak client scope ${AUDIENCE_SCOPE} for OIDC_AUDIENCE: ${err instanceof Error ? err.message : String(err)}`,
                         { cause: err },
@@ -286,72 +273,36 @@ export class KeycloakClientsProvider
     }
 
     /**
-     * With `OIDC_AUDIENCE`, the client scope that puts it into access tokens,
-     * as a default scope of every client EUDIPLO manages: the web client, the
-     * bootstrap client and the tenant clients. New tenant clients get it in
-     * {@link addClient}. Other clients of the realm are left alone.
+     * With `OIDC_AUDIENCE`, the client scope that puts it into access tokens
+     * ({@link ensureAudienceScope}), as a default scope of every client
+     * EUDIPLO manages: the web client, the bootstrap client and the tenant
+     * clients. New tenant clients get it in {@link addClient}. Other clients
+     * of the realm are left alone.
      */
-    private async ensureAudienceScope(): Promise<void> {
+    private async addAudienceScope(): Promise<void> {
         const audience = this.configService.get<string>("OIDC_AUDIENCE");
         if (!audience) {
             return;
         }
-        const mapper = audienceMapper(audience);
-        let scope = await this.kc.clientScopes.findOneByName({
-            name: AUDIENCE_SCOPE,
-        });
-        if (!scope?.id) {
-            await this.kc.clientScopes.create({
-                name: AUDIENCE_SCOPE,
-                description: "Adds the EUDIPLO audience to access tokens",
-                protocol: "openid-connect",
-                attributes: { "include.in.token.scope": "false" },
-                protocolMappers: [mapper],
-            });
-            scope = await this.kc.clientScopes.findOneByName({
-                name: AUDIENCE_SCOPE,
-            });
-        } else {
-            const existing = (
-                await this.kc.clientScopes.listProtocolMappers({ id: scope.id })
-            ).find((m) => m.name === mapper.name);
-            if (!existing?.id) {
-                await this.kc.clientScopes.addProtocolMapper(
-                    { id: scope.id },
-                    mapper,
-                );
-            } else if (
-                existing.config?.["included.custom.audience"] !== audience
-            ) {
-                await this.kc.clientScopes.updateProtocolMapper(
-                    { id: scope.id, mapperId: existing.id },
-                    { ...mapper, id: existing.id },
-                );
-            }
-        }
-        if (!scope?.id) {
-            throw new Error(`Client scope ${AUDIENCE_SCOPE} was not created`);
-        }
-        this.audienceScopeId = scope.id;
+        const scopeId = await ensureAudienceScope(this.kc, audience);
+        this.audienceScopeId = scopeId;
 
-        // Clients without a tenant come from the environment; tenant
-        // clients from the mirror, and only while Keycloak still has them
-        // for that tenant, as when addClient adopts a client.
+        // Clients without a tenant come from the environment: the web client,
+        // and the bootstrap client when EUDIPLO manages it. Tenant clients
+        // come from the mirror, and only while Keycloak still has them for
+        // that tenant, as when addClient adopts a client.
         const managed = new Map<string, string | undefined>();
-        for (const clientId of [
-            this.configService.get<string>("OIDC_UI_CLIENT_ID") ?? "eudiplo-ui",
-            // The bootstrap client only when EUDIPLO manages it.
-            this.configService.get<string>("AUTH_CLIENT_SECRET")
-                ? this.configService.get<string>("AUTH_CLIENT_ID")
-                : undefined,
-        ]) {
-            if (clientId) managed.set(clientId, undefined);
+        managed.set(this.uiClientId, undefined);
+        const bootstrapClientId =
+            this.configService.get<string>("AUTH_CLIENT_ID");
+        if (bootstrapClientId && this.configService.get("AUTH_CLIENT_SECRET")) {
+            managed.set(bootstrapClientId, undefined);
         }
         for (const mirrored of await this.clientRepo.find({
             select: { clientId: true, tenantId: true },
         })) {
-            if (!managed.has(mirrored.clientId)) {
-                managed.set(mirrored.clientId, mirrored.tenantId ?? undefined);
+            if (mirrored.tenantId && !managed.has(mirrored.clientId)) {
+                managed.set(mirrored.clientId, mirrored.tenantId);
             }
         }
         let added = 0;
@@ -366,7 +317,7 @@ export class KeycloakClientsProvider
             }
             await this.kc.clients.addDefaultClientScope({
                 id: client.id,
-                clientScopeId: scope.id,
+                clientScopeId: scopeId,
             });
             added++;
         }
@@ -375,12 +326,18 @@ export class KeycloakClientsProvider
         );
     }
 
+    /** The public client of the web client (`OIDC_UI_CLIENT_ID`). */
+    private get uiClientId(): string {
+        return (
+            this.configService.get<string>("OIDC_UI_CLIENT_ID") ?? "eudiplo-ui"
+        );
+    }
+
     /**
      * Auto-create or update a public Keycloak client for the Angular UI (Authorization Code + PKCE).
      */
     private async ensureUiPublicClient(): Promise<void> {
-        const uiClientId =
-            this.configService.get<string>("OIDC_UI_CLIENT_ID") ?? "eudiplo-ui";
+        const uiClientId = this.uiClientId;
 
         const uiClientPayload = {
             clientId: uiClientId,

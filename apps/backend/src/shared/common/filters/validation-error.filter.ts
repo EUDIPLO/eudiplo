@@ -12,6 +12,9 @@ import { Response } from "express";
  * Global exception filter for handling ValidationError from @openid4vc/utils.
  * Catches all ValidationError instances, formats them consistently, and returns proper HTTP responses.
  */
+/** The message of a validation error, without its issues outside HTTP. */
+export const VALIDATION_FAILED = "Validation failed";
+
 @Catch(ValidationError)
 export class ValidationErrorFilter implements ExceptionFilter {
     private readonly logger = new Logger(ValidationErrorFilter.name);
@@ -36,7 +39,7 @@ export class ValidationErrorFilter implements ExceptionFilter {
         // Return formatted error response
         response.status(HttpStatus.BAD_REQUEST).json({
             statusCode: HttpStatus.BAD_REQUEST,
-            message: "Validation failed",
+            message: VALIDATION_FAILED,
             errors: issues,
             timestamp: new Date().toISOString(),
         });

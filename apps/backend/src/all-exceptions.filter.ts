@@ -12,6 +12,38 @@ import { redactUrlPath } from "./platform/observability/redact-url.js";
 import { ConflictError } from "./shared/domain/conflict-error.js";
 import { NotFoundError } from "./shared/domain/not-found-error.js";
 
+/**
+ * The status of the application errors the API maps itself, for HTTP here
+ * and for MCP tool calls in `mcp-error.filter.ts`; `undefined` for others.
+ */
+export function applicationErrorStatus(exception: unknown): number | undefined {
+    if (
+        exception instanceof EntityNotFoundError ||
+        exception instanceof NotFoundError
+    ) {
+        return HttpStatus.NOT_FOUND;
+    }
+    if (exception instanceof ConflictError) {
+        return HttpStatus.CONFLICT;
+    }
+    return undefined;
+}
+
+/**
+ * The message of an error that is not an `HttpException`: only outside
+ * production, except for conflicts, whose messages name the taken resource,
+ * never internals.
+ */
+export function applicationErrorMessage(
+    exception: unknown,
+    isProduction = process.env.NODE_ENV === "production",
+): string {
+    return exception instanceof Error &&
+        (!isProduction || exception instanceof ConflictError)
+        ? exception.message
+        : "Internal Server Error";
+}
+
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
     private readonly logger = new Logger(AllExceptionsFilter.name);
@@ -28,19 +60,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
         const request = ctx.getRequest<Request>();
         const requestPath = request.path || request.url.split("?")[0] || "/";
 
-        let status: number;
-        if (exception instanceof HttpException) {
-            status = exception.getStatus();
-        } else if (
-            exception instanceof EntityNotFoundError ||
-            exception instanceof NotFoundError
-        ) {
-            status = HttpStatus.NOT_FOUND;
-        } else if (exception instanceof ConflictError) {
-            status = HttpStatus.CONFLICT;
-        } else {
-            status = HttpStatus.INTERNAL_SERVER_ERROR;
-        }
+        const status =
+            exception instanceof HttpException
+                ? exception.getStatus()
+                : (applicationErrorStatus(exception) ??
+                  HttpStatus.INTERNAL_SERVER_ERROR);
 
         let message: unknown;
         let responseBody: Record<string, unknown> | undefined;
@@ -58,14 +82,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
             } else {
                 message = httpResponse;
             }
-        } else if (
-            exception instanceof Error &&
-            (!isProduction || exception instanceof ConflictError)
-        ) {
-            // Conflict messages name the taken resource, never internals.
-            message = exception.message;
         } else {
-            message = "Internal Server Error";
+            message = applicationErrorMessage(exception, isProduction);
         }
 
         // OAuth error responses (RFC 6749 Section 5.2) carry `error` and

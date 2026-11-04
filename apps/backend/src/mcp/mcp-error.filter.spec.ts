@@ -1,9 +1,9 @@
 import {
-    ConflictException,
+    type ArgumentsHost,
     type INestApplication,
     Injectable,
+    Logger,
     Module,
-    NotFoundException,
     UseFilters,
 } from "@nestjs/common";
 import { EXCEPTION_FILTERS_METADATA } from "@nestjs/common/constants.js";
@@ -11,6 +11,7 @@ import { McpModule, Tool } from "@nestjs/mcp";
 import { connectMcpClient } from "@nestjs/mcp/testing";
 import { Test } from "@nestjs/testing";
 import { ValidationError } from "@openid4vc/utils";
+import { EntityNotFoundError } from "typeorm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AllExceptionsFilter } from "../all-exceptions.filter.js";
 import { ClientIdTaken } from "../auth/client/domain/client-data.js";
@@ -31,6 +32,16 @@ class FailingTools {
         throw new ClientIdTaken("assistant");
     }
 
+    @Tool({ name: "entity" })
+    entity() {
+        throw new EntityNotFoundError("ClientEntity", { clientId: "app" });
+    }
+
+    @Tool({ name: "invalid" })
+    invalid() {
+        throw new ValidationError("bad request object");
+    }
+
     @Tool({ name: "crash" })
     crash() {
         throw new Error("connection to db-internal:5432 refused");
@@ -41,30 +52,51 @@ class FailingTools {
 class FailingToolsModule {}
 
 describe("McpErrorFilter", () => {
-    it("maps missing resources, conflicts and validation errors as the REST filters do", () => {
-        expect(toMcpHttpException(new SessionNotFound())).toEqual(
-            new NotFoundException("Session not found"),
-        );
-        expect(toMcpHttpException(new ClientIdTaken("assistant"))).toEqual(
-            new ConflictException("Client ID 'assistant' is already in use"),
-        );
-        expect(toMcpHttpException(new ValidationError("bad")).getStatus()).toBe(
-            400,
-        );
-    });
+    /** What AllExceptionsFilter answers an HTTP request with. */
+    function restAnswer(error: unknown) {
+        const json = vi.fn();
+        const status = vi.fn().mockReturnValue({ json });
+        new AllExceptionsFilter().catch(error, {
+            getType: () => "http",
+            switchToHttp: () => ({
+                getResponse: () => ({ status }),
+                getRequest: () => ({ method: "GET", path: "/x", url: "/x" }),
+            }),
+        } as unknown as ArgumentsHost);
+        return {
+            status: status.mock.calls[0][0],
+            message: json.mock.calls[0][0].message,
+        };
+    }
 
-    it("keeps the message of a missing resource out of production answers", () => {
-        vi.stubEnv("NODE_ENV", "production");
+    it.each([
+        ["development", "test"],
+        ["production", "production"],
+    ])("answers as the REST API in %s", (_name, nodeEnv) => {
+        vi.stubEnv("NODE_ENV", nodeEnv);
+        vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
         try {
-            expect(toMcpHttpException(new SessionNotFound()).message).toBe(
-                "Not Found",
-            );
-            expect(
-                toMcpHttpException(new ClientIdTaken("assistant")).message,
-            ).toBe("Client ID 'assistant' is already in use");
+            for (const error of [
+                new SessionNotFound(),
+                new EntityNotFoundError("ClientEntity", { clientId: "app" }),
+                new ClientIdTaken("assistant"),
+            ]) {
+                const mcp = toMcpHttpException(error);
+                expect({
+                    status: mcp.getStatus(),
+                    message: mcp.message,
+                }).toEqual(restAnswer(error));
+            }
         } finally {
             vi.unstubAllEnvs();
+            vi.restoreAllMocks();
         }
+    });
+
+    it("answers a validation error with 400, as ValidationErrorFilter", () => {
+        const mcp = toMcpHttpException(new ValidationError("bad"));
+        expect(mcp.getStatus()).toBe(400);
+        expect(mcp.message).toBe("Validation failed");
     });
 
     it("is applied to every tool provider", () => {
@@ -121,9 +153,13 @@ describe("McpErrorFilter", () => {
 
         it("reaches the client with the mapped message", async () => {
             expect(await text("missing")).toBe("Session not found");
+            expect(await text("entity")).toContain(
+                'Could not find any entity of type "ClientEntity"',
+            );
             expect(await text("conflict")).toBe(
                 "Client ID 'assistant' is already in use",
             );
+            expect(await text("invalid")).toBe("Validation failed");
         });
 
         it("still hides other errors", async () => {

@@ -1,51 +1,45 @@
 import {
     BadRequestException,
     Catch,
-    ConflictException,
     type ExceptionFilter,
-    type HttpException,
-    NotFoundException,
+    HttpException,
 } from "@nestjs/common";
 import { ValidationError } from "@openid4vc/utils";
 import { EntityNotFoundError } from "typeorm";
+import {
+    applicationErrorMessage,
+    applicationErrorStatus,
+} from "../all-exceptions.filter.js";
 import { ConflictError } from "../shared/domain/conflict-error.js";
 import { NotFoundError } from "../shared/domain/not-found-error.js";
+import { VALIDATION_FAILED } from "../shared/common/filters/validation-error.filter.js";
+
+type ApplicationError =
+    | NotFoundError
+    | EntityNotFoundError
+    | ConflictError
+    | ValidationError;
 
 /**
- * The application errors that AllExceptionsFilter and ValidationErrorFilter
- * map for HTTP, as HTTP exceptions for MCP tool calls: @nestjs/mcp passes on
- * only the message of an HttpException and answers anything else with
- * "Internal server error". Messages follow the REST rules: a conflict keeps
- * its message, a missing resource only outside production.
+ * An application error as the HTTP exception the management API answers
+ * with (AllExceptionsFilter, ValidationErrorFilter), for MCP tool calls:
+ * @nestjs/mcp passes on only the message of an HttpException and answers
+ * anything else with "Internal server error".
  */
-export function toMcpHttpException(
-    error:
-        | NotFoundError
-        | EntityNotFoundError
-        | ConflictError
-        | ValidationError,
-): HttpException {
-    if (error instanceof ConflictError) {
-        return new ConflictException(error.message);
-    }
+export function toMcpHttpException(error: ApplicationError): HttpException {
     if (error instanceof ValidationError) {
-        return new BadRequestException("Validation failed");
+        return new BadRequestException(VALIDATION_FAILED);
     }
-    return process.env.NODE_ENV === "production"
-        ? new NotFoundException()
-        : new NotFoundException(error.message);
+    return new HttpException(
+        applicationErrorMessage(error),
+        applicationErrorStatus(error) ?? 500,
+    );
 }
 
 /** Applied to every `@McpTools()` provider. */
 @Catch(NotFoundError, EntityNotFoundError, ConflictError, ValidationError)
 export class McpErrorFilter implements ExceptionFilter {
-    catch(
-        error:
-            | NotFoundError
-            | EntityNotFoundError
-            | ConflictError
-            | ValidationError,
-    ): never {
+    catch(error: ApplicationError): never {
         // Thrown, the HTTP exception goes on to the MCP module.
         throw toMcpHttpException(error);
     }

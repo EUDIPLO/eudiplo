@@ -49,12 +49,13 @@ export const AUTH_VALIDATION_SCHEMA: Joi.ObjectSchema = Joi.object({
         .description("Expected JWT alg")
         .meta({ group: "auth", order: 40 }),
 
+    // Empty counts as unset, as an `OIDC_AUDIENCE=` line in an env file.
     OIDC_AUDIENCE: Joi.when("OIDC", {
         is: Joi.exist(),
-        then: Joi.string().min(1).optional(),
-        // Ignored, it would suggest a check that does not happen.
-        otherwise: Joi.forbidden().messages({
-            "any.unknown":
+        then: Joi.string().allow("").optional(),
+        // Ignored, a value would suggest a check that does not happen.
+        otherwise: Joi.string().valid("").optional().messages({
+            "any.only":
                 "OIDC_AUDIENCE only applies in OIDC mode: set OIDC or remove it",
         }),
     })

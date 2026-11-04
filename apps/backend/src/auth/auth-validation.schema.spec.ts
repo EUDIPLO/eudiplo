@@ -34,4 +34,13 @@ describe("OIDC_AUDIENCE", () => {
         );
         expect(AUTH_VALIDATION_SCHEMA.validate(builtIn).error).toBeUndefined();
     });
+
+    it("counts an empty value as unset in both modes", () => {
+        for (const env of [keycloak, builtIn]) {
+            expect(
+                AUTH_VALIDATION_SCHEMA.validate({ ...env, OIDC_AUDIENCE: "" })
+                    .error,
+            ).toBeUndefined();
+        }
+    });
 });
