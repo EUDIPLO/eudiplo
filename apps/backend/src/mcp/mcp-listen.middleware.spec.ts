@@ -51,6 +51,10 @@ describe("RefuseMcpListenMiddleware", () => {
         });
     });
 
+    it("echoes a string id", () => {
+        expect(run(listen("abc")).answer.id).toBe("abc");
+    });
+
     it.each([
         ["without an id", undefined],
         ["with an object id", { nested: true }],
@@ -67,6 +71,11 @@ describe("RefuseMcpListenMiddleware", () => {
             "a body parsed as text",
             "subscriptions/listen",
             { "content-length": "20" },
+        ],
+        [
+            "a raw body",
+            Buffer.from(JSON.stringify(listen(1))),
+            { "content-length": "60" },
         ],
     ])(
         "refuses %s, which the SDK would parse itself",

@@ -398,6 +398,15 @@ describe("MCP endpoint (e2e)", () => {
             "text/event-stream",
         );
         await response.body?.cancel();
+
+        // Without a token as well: the middleware answers, not the SDK.
+        const tokenless = await rawPost(
+            undefined,
+            { ...modernHeaders, "Content-Type": "application/json\u00a0" },
+            modernListen,
+        );
+        expect(tokenless.status).toBe(415);
+        await tokenless.body?.cancel();
     });
 
     test("leaves batches to the SDK, which refuses 2026-07-28 messages in them", async () => {
