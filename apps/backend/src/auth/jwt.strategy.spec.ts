@@ -372,6 +372,9 @@ describe("JwtStrategy", () => {
 
         test("is not checked without OIDC_AUDIENCE, as before", async () => {
             expect(optionsFor(keycloak)).not.toHaveProperty("audience");
+            const empty = { ...keycloak, OIDC_AUDIENCE: "" };
+            expect(optionsFor(empty)).not.toHaveProperty("audience");
+            await expect(verify(empty, "account")).resolves.toBe("accepted");
             await expect(verify(keycloak, undefined)).resolves.toBe("accepted");
             await expect(verify(keycloak, "account")).resolves.toBe("accepted");
         });

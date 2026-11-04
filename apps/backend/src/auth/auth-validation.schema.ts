@@ -60,7 +60,7 @@ export const AUTH_VALIDATION_SCHEMA: Joi.ObjectSchema = Joi.object({
         }),
     })
         .description(
-            "Audience (`aud`) that access tokens must contain in OIDC mode, for example `https://eudiplo.example.com/api`. EUDIPLO adds it to the tokens of the Keycloak clients it manages through the client scope `eudiplo-audience`. Unset, the audience of tokens is not checked, so every token of the realm with EUDIPLO roles is accepted",
+            "Audience (`aud`) that access tokens must contain in OIDC mode, for example `https://eudiplo.example.com/api`. EUDIPLO adds it to the tokens of the Keycloak clients it manages through the client scope `eudiplo-audience`. Unset or empty, the audience of tokens is not checked, so every token of the realm with EUDIPLO roles is accepted. Set without `OIDC`, startup fails",
         )
         .meta({ group: "auth", order: 45 }),
 

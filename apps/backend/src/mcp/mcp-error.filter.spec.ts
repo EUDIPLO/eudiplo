@@ -1,8 +1,6 @@
 import {
-    type ArgumentsHost,
     type INestApplication,
     Injectable,
-    Logger,
     Module,
     UseFilters,
 } from "@nestjs/common";
@@ -52,46 +50,34 @@ class FailingTools {
 class FailingToolsModule {}
 
 describe("McpErrorFilter", () => {
-    /** What AllExceptionsFilter answers an HTTP request with. */
-    function restAnswer(error: unknown) {
-        const json = vi.fn();
-        const status = vi.fn().mockReturnValue({ json });
-        new AllExceptionsFilter().catch(error, {
-            getType: () => "http",
-            switchToHttp: () => ({
-                getResponse: () => ({ status }),
-                getRequest: () => ({ method: "GET", path: "/x", url: "/x" }),
-            }),
-        } as unknown as ArgumentsHost);
-        return {
-            status: status.mock.calls[0][0],
-            message: json.mock.calls[0][0].message,
-        };
-    }
+    const missingSession = new SessionNotFound();
+    const missingEntity = new EntityNotFoundError("ClientEntity", {
+        clientId: "app",
+    });
+    const taken = new ClientIdTaken("assistant");
 
     it.each([
-        ["development", "test"],
-        ["production", "production"],
-    ])("answers as the REST API in %s", (_name, nodeEnv) => {
-        vi.stubEnv("NODE_ENV", nodeEnv);
-        vi.spyOn(Logger.prototype, "error").mockImplementation(() => undefined);
-        try {
-            for (const error of [
-                new SessionNotFound(),
-                new EntityNotFoundError("ClientEntity", { clientId: "app" }),
-                new ClientIdTaken("assistant"),
-            ]) {
+        ["test", missingSession, 404, "Session not found"],
+        ["test", missingEntity, 404, missingEntity.message],
+        ["test", taken, 409, "Client ID 'assistant' is already in use"],
+        // Only the message reaches an MCP client: it names the status where
+        // the REST API's message is generic.
+        ["production", missingSession, 404, "Not Found"],
+        ["production", missingEntity, 404, "Not Found"],
+        ["production", taken, 409, "Client ID 'assistant' is already in use"],
+    ] as const)(
+        "answers with NODE_ENV=%s and %o: %i %s",
+        (nodeEnv, error, status, message) => {
+            vi.stubEnv("NODE_ENV", nodeEnv);
+            try {
                 const mcp = toMcpHttpException(error);
-                expect({
-                    status: mcp.getStatus(),
-                    message: mcp.message,
-                }).toEqual(restAnswer(error));
+                expect(mcp.getStatus()).toBe(status);
+                expect(mcp.message).toBe(message);
+            } finally {
+                vi.unstubAllEnvs();
             }
-        } finally {
-            vi.unstubAllEnvs();
-            vi.restoreAllMocks();
-        }
-    });
+        },
+    );
 
     it("answers a validation error with 400, as ValidationErrorFilter", () => {
         const mcp = toMcpHttpException(new ValidationError("bad"));

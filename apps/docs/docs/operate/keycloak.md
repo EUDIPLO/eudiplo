@@ -80,8 +80,9 @@ On every start, EUDIPLO:
 Restrictive redirect URIs that you set on `eudiplo-ui` are overwritten at the next
 start, so restrict access to the web client at the network level if needed.
 
-**Checkpoint:** the backend log shows `Mode: External OIDC`, and the web client's
-login page offers single sign-on after you enter the backend URL.
+**Checkpoint:** the Authentication section of the startup log shows the mode
+`External OIDC`, and the web client's login page offers single sign-on after
+you enter the backend URL.
 
 ### Accept only tokens issued for EUDIPLO
 
@@ -97,8 +98,10 @@ and are refused at once, so clients need new ones. If EUDIPLO cannot set up the
 scope, for example because `eudiplo-admin` may not manage client scopes, it
 does not start.
 
-**Checkpoint:** the backend log names the audience and the number of clients
-that received the scope.
+**Checkpoint:** the Authentication section of the startup log shows the
+audience, and the log names the number of clients that received the scope.
+Without `OIDC_AUDIENCE`, or with an empty value, the section warns that the
+audience is not checked.
 
 ## 3. Put the tenant into user tokens
 

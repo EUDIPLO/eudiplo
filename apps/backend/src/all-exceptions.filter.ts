@@ -7,42 +7,11 @@ import {
     Logger,
 } from "@nestjs/common";
 import { Request, Response } from "express";
-import { EntityNotFoundError } from "typeorm";
 import { redactUrlPath } from "./platform/observability/redact-url.js";
-import { ConflictError } from "./shared/domain/conflict-error.js";
-import { NotFoundError } from "./shared/domain/not-found-error.js";
-
-/**
- * The status of the application errors the API maps itself, for HTTP here
- * and for MCP tool calls in `mcp-error.filter.ts`; `undefined` for others.
- */
-export function applicationErrorStatus(exception: unknown): number | undefined {
-    if (
-        exception instanceof EntityNotFoundError ||
-        exception instanceof NotFoundError
-    ) {
-        return HttpStatus.NOT_FOUND;
-    }
-    if (exception instanceof ConflictError) {
-        return HttpStatus.CONFLICT;
-    }
-    return undefined;
-}
-
-/**
- * The message of an error that is not an `HttpException`: only outside
- * production, except for conflicts, whose messages name the taken resource,
- * never internals.
- */
-export function applicationErrorMessage(
-    exception: unknown,
-    isProduction = process.env.NODE_ENV === "production",
-): string {
-    return exception instanceof Error &&
-        (!isProduction || exception instanceof ConflictError)
-        ? exception.message
-        : "Internal Server Error";
-}
+import {
+    applicationErrorMessage,
+    applicationErrorStatus,
+} from "./shared/common/filters/application-errors.js";
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {

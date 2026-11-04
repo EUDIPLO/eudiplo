@@ -151,7 +151,11 @@ export class KeycloakClientsProvider
     }
 
     /**
-     * Checks if all the roles are available in the realm. If not they will be created.
+     * Startup steps after the admin login: creates missing realm roles and
+     * the bootstrap and web clients, whose failures are logged, then sets up
+     * the audience scope. That step runs after the catch, so a failed earlier
+     * step does not skip it, and fails startup: with `OIDC_AUDIENCE` set,
+     * clients without the scope could not call EUDIPLO at all.
      */
     private init() {
         const existingRoles: Role[] = allRoles;
@@ -203,7 +207,7 @@ export class KeycloakClientsProvider
             return;
         }
 
-        if (!bootstrapClientId || !bootstrapClientSecret) {
+        if (!this.managedBootstrapClientId) {
             this.logger.warn(
                 "Skipping bootstrap admin client setup: AUTH_CLIENT_ID and AUTH_CLIENT_SECRET must both be set in OIDC mode.",
             );
@@ -293,10 +297,8 @@ export class KeycloakClientsProvider
         // that tenant, as when addClient adopts a client.
         const managed = new Map<string, string | undefined>();
         managed.set(this.uiClientId, undefined);
-        const bootstrapClientId =
-            this.configService.get<string>("AUTH_CLIENT_ID");
-        if (bootstrapClientId && this.configService.get("AUTH_CLIENT_SECRET")) {
-            managed.set(bootstrapClientId, undefined);
+        if (this.managedBootstrapClientId) {
+            managed.set(this.managedBootstrapClientId, undefined);
         }
         for (const mirrored of await this.clientRepo.find({
             select: { clientId: true, tenantId: true },
@@ -324,6 +326,17 @@ export class KeycloakClientsProvider
         this.logger.log(
             `Access tokens must have the audience '${audience}'; client scope '${AUDIENCE_SCOPE}' is on ${added} managed clients`,
         );
+    }
+
+    /**
+     * The bootstrap client, when EUDIPLO manages it: `AUTH_CLIENT_ID` and
+     * `AUTH_CLIENT_SECRET` are both set.
+     */
+    private get managedBootstrapClientId(): string | undefined {
+        const clientId = this.configService.get<string>("AUTH_CLIENT_ID");
+        return clientId && this.configService.get<string>("AUTH_CLIENT_SECRET")
+            ? clientId
+            : undefined;
     }
 
     /** The public client of the web client (`OIDC_UI_CLIENT_ID`). */
@@ -600,13 +613,21 @@ export class KeycloakClientsProvider
         });
         await this.clientRepo.save(entity);
 
-        // 6) The audience scope, after the mirror row: if this fails, the
-        // next start adds it to the mirrored client, as a retry does.
+        // 6) The audience scope, after the mirror row. A failure does not
+        // fail the request, which would lose the secret shown only now:
+        // the next start adds the scope to the mirrored client.
         if (this.audienceScopeId) {
-            await this.kc.clients.addDefaultClientScope({
-                id,
-                clientScopeId: this.audienceScopeId,
-            });
+            await this.kc.clients
+                .addDefaultClientScope({
+                    id,
+                    clientScopeId: this.audienceScopeId,
+                })
+                .catch((err: unknown) =>
+                    this.logger.error(
+                        `Could not add the client scope ${AUDIENCE_SCOPE} to client '${dto.clientId}'; its tokens lack the OIDC_AUDIENCE audience until the next start adds it`,
+                        err,
+                    ),
+                );
         }
 
         return {

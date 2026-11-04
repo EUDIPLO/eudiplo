@@ -4,6 +4,7 @@ import {
     HttpStatus,
     Logger,
 } from "@nestjs/common";
+import { EntityNotFoundError } from "typeorm";
 import { describe, expect, it, vi } from "vitest";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 import { ClientIdTaken } from "./auth/client/domain/client-data.js";
@@ -40,6 +41,7 @@ describe("AllExceptionsFilter", () => {
             "credential configuration",
             new CredentialConfigurationNotFound("t1", "c1"),
         ],
+        ["entity", new EntityNotFoundError("ClientEntity", {})],
     ])("maps a missing %s to 404", (_name, error) => {
         expect(statusFor(error)).toBe(404);
     });
@@ -53,6 +55,11 @@ describe("AllExceptionsFilter", () => {
             expect(respond(new Error("internal detail")).body.message).toBe(
                 "Internal Server Error",
             );
+            // The 404 says it; the message of a missing resource stays out.
+            expect(respond(new SessionNotFound())).toMatchObject({
+                status: 404,
+                body: { message: "Internal Server Error" },
+            });
         } finally {
             vi.unstubAllEnvs();
         }

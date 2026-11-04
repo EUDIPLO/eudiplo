@@ -246,6 +246,14 @@ async function bootstrap() {
             if (oidc) {
                 logger.log(`   → Mode:         External OIDC`);
                 logger.log(`   → Provider:     ${oidc}`);
+                const audience = configService.get<string>("OIDC_AUDIENCE");
+                if (audience) {
+                    logger.log(`   → Audience:     ${audience}`);
+                } else {
+                    logger.warn(
+                        "   → Audience:     not checked; every token of the realm with EUDIPLO roles is accepted. Set OIDC_AUDIENCE",
+                    );
+                }
             } else {
                 logger.log(
                     `   → Mode:         Integrated OAuth2 (Client Credentials)`,

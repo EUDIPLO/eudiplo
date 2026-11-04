@@ -136,7 +136,7 @@ MCP tools in `mcp/tools/` are inbound adapters like controllers (`*.tools.ts` fi
 3. Take the tenant from `tenantOf(callerOf(context))`, never from the input, and reuse the owning service, for example `SessionReads`.
 4. Validate input with the Zod schema of the mirrored DTO and mark reads with `annotations: { readOnlyHint: true }`.
 5. Return summaries: no claims, credentials, secrets or values a wallet redeems a session with. Treat text a wallet chose as untrusted (see the failure codes in `session.tools.ts`).
-6. Let errors through: an `HttpException` keeps its message, and `@McpTools()` maps `NotFoundError`, TypeORM's `EntityNotFoundError`, `ConflictError` and the `ValidationError` of `@openid4vc/utils` as `AllExceptionsFilter` and `ValidationErrorFilter` do for HTTP (`mcp-error.filter.ts`). Any other error reaches the MCP client as `Internal server error`. Update the tools table in `operate/mcp.md` and `test/mcp/mcp.e2e-spec.ts`.
+6. Let errors through: an `HttpException` keeps its message, and `@McpTools()` maps `NotFoundError`, TypeORM's `EntityNotFoundError`, `ConflictError` and the `ValidationError` of `@openid4vc/utils` with the status and message that `AllExceptionsFilter` and `ValidationErrorFilter` give them for HTTP (`shared/common/filters/application-errors.ts`, `mcp-error.filter.ts`); since an MCP client sees only the message, a missing resource says `Not Found` in production. Any other error reaches the MCP client as `Internal server error`. Update the tools table in `operate/mcp.md` and `test/mcp/mcp.e2e-spec.ts`.
 
 Global guards, interceptors and exception filters also run around tool calls. A new one returns early when `context.getType() !== "http"`, as `TraceIdInterceptor` does.
 

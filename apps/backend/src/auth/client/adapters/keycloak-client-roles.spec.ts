@@ -27,7 +27,7 @@ function provider({
             create: vi.fn().mockRejectedValue({ response: { status: 409 } }),
             update: vi.fn().mockResolvedValue(undefined),
             getServiceAccountUser: vi.fn().mockResolvedValue(serviceAccount),
-            addDefaultClientScope: vi.fn(),
+            addDefaultClientScope: vi.fn().mockResolvedValue(undefined),
         },
         roles: {
             find: vi
@@ -91,7 +91,7 @@ function provider({
         clientRepo,
         provider: Object.assign(
             Object.create(KeycloakClientsProvider.prototype),
-            { kc, clientRepo, logger: { warn: vi.fn() } },
+            { kc, clientRepo, logger: { warn: vi.fn(), error: vi.fn() } },
         ) as KeycloakClientsProvider,
     };
 }
@@ -238,6 +238,28 @@ describe("KeycloakClientsProvider.addClient", () => {
         expect(
             kc.clients.addDefaultClientScope.mock.invocationCallOrder[0],
         ).toBeGreaterThan(clientRepo.save.mock.invocationCallOrder[0]);
+    });
+
+    it("returns the client with its secret when the audience scope cannot be added", async () => {
+        const { provider: clients, kc } = provider({
+            kcClient: { id: "kc-app", attributes: { tenant_id: "tenant-1" } },
+        });
+        Object.assign(clients, { audienceScopeId: "scope-1" });
+        kc.clients.addDefaultClientScope.mockRejectedValue(new Error("403"));
+
+        await expect(
+            clients.addClient("tenant-1", { ...dto, secret: "s3cret" }),
+        ).resolves.toMatchObject({ clientId: "app", clientSecret: "s3cret" });
+        expect(
+            (
+                clients as unknown as {
+                    logger: { error: ReturnType<typeof vi.fn> };
+                }
+            ).logger.error,
+        ).toHaveBeenCalledWith(
+            expect.stringContaining("until the next start adds it"),
+            expect.any(Error),
+        );
     });
 });
 

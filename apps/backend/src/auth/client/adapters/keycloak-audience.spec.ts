@@ -170,4 +170,41 @@ describe("KeycloakClientsProvider audience scope", () => {
             "Could not set up the Keycloak client scope eudiplo-audience for OIDC_AUDIENCE: 403 Forbidden",
         );
     });
+
+    it("sets up the scope even when an earlier startup step failed", async () => {
+        const { kc, start, scopesAdded, logger } = provider();
+        kc.roles.find.mockRejectedValue(new Error("boom"));
+
+        await expect(start()).resolves.toBeUndefined();
+
+        expect(logger.error).toHaveBeenCalledWith(
+            "Error initializing Keycloak roles",
+            expect.any(Error),
+        );
+        expect(scopesAdded().map(({ id }) => id)).toEqual([
+            "kc-eudiplo-ui",
+            "kc-root",
+            "kc-shop",
+        ]);
+    });
+
+    it("fails startup when both an earlier step and the scope fail", async () => {
+        const { kc, start } = provider();
+        kc.roles.find.mockRejectedValue(new Error("boom"));
+        kc.clientScopes.findOneByName.mockRejectedValue(new Error("403"));
+
+        await expect(start()).rejects.toThrow(
+            "Could not set up the Keycloak client scope eudiplo-audience",
+        );
+    });
+
+    it("keeps the bootstrap client when a mirror row has its client ID", async () => {
+        const { start, scopesAdded } = provider({
+            mirrored: [["root", "acme"]],
+        });
+
+        await start();
+
+        expect(scopesAdded().map(({ id }) => id)).toContain("kc-root");
+    });
 });
