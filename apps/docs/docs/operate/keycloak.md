@@ -35,8 +35,8 @@ EUDIPLO uses two Keycloak clients:
    **Standard flow** and **Direct access grants**.
 3. Under **Service account roles**, assign the `realm-management` role
    `realm-admin`. EUDIPLO creates realm roles and manages users, clients, client
-   secrets and service-account role mappings. To use a narrower role set, check
-   that it covers all of these.
+   secrets, service-account role mappings and, with `OIDC_AUDIENCE`, client
+   scopes. To use a narrower role set, check that it covers all of these.
 4. In the client's **Advanced** settings, enable
    **Use refresh tokens for client credentials grant**. Without it, startup can
    fail with `Cannot read properties of undefined (reading 'split')`.
@@ -55,7 +55,7 @@ MASTER_SECRET=<random, 32+ characters>   # derives the default encryption key
 # OIDC_SUB=tenant_id            # claim that carries the tenant
 # OIDC_ALGORITHM=RS256          # RS256, PS256 or ES256
 # OIDC_INTERNAL_ISSUER_URL=     # expected token issuer, defaults to OIDC
-# OIDC_AUDIENCE=https://eudiplo.example.com/api   # recommended, see below
+# OIDC_AUDIENCE=                # no default: aud is not checked; recommended, see below
 # Optional: a Keycloak client with tenants:manage for automation
 AUTH_CLIENT_ID=root
 AUTH_CLIENT_SECRET=<secret>
@@ -80,6 +80,9 @@ On every start, EUDIPLO:
 Restrictive redirect URIs that you set on `eudiplo-ui` are overwritten at the next
 start, so restrict access to the web client at the network level if needed.
 
+**Checkpoint:** the backend log shows `Mode: External OIDC`, and the web client's
+login page offers single sign-on after you enter the backend URL.
+
 ### Accept only tokens issued for EUDIPLO
 
 Without `OIDC_AUDIENCE`, EUDIPLO accepts every access token of the realm that
@@ -90,13 +93,12 @@ refuses tokens whose `aud` does not contain it with `401`. The client scope
 tenant clients get the scope when EUDIPLO creates them. Add the scope as a
 **Default** client scope to any other client whose tokens call EUDIPLO, such as
 your own automation clients. Tokens issued before the change lack the audience
-and stop working, so clients request new ones within the realm's access token
-lifespan.
+and are refused at once, so clients need new ones. If EUDIPLO cannot set up the
+scope, for example because `eudiplo-admin` may not manage client scopes, it
+does not start.
 
-**Checkpoint:** the backend log shows `Mode: External OIDC`, and the web client's
-login page offers single sign-on after you enter the backend URL. With
-`OIDC_AUDIENCE`, it also names the audience and the number of clients that
-received the scope.
+**Checkpoint:** the backend log names the audience and the number of clients
+that received the scope.
 
 ## 3. Put the tenant into user tokens
 
@@ -150,6 +152,7 @@ and shows only that tenant's data.
 | ---------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | Startup fails with `reading 'split'`                 | Refresh tokens for client credentials disabled on `eudiplo-admin` | Enable **Use refresh tokens for client credentials grant**                     |
 | API calls return 401 after login                     | Token `iss` differs from `OIDC_INTERNAL_ISSUER_URL`/`OIDC`, or wrong `OIDC_ALGORITHM` | Compare the `iss` and `alg` of a token with the configuration |
+| Startup fails with `Could not set up the Keycloak client scope eudiplo-audience` | `eudiplo-admin` may not create client scopes or assign them to clients | Give it `realm-admin` ([step 1](#1-create-the-admin-client)), or the `realm-management` roles that cover clients and client scopes |
 | 401 since `OIDC_AUDIENCE` is set                     | The token's `aud` lacks the audience: its client has no `eudiplo-audience` scope, or the token is older | Add `eudiplo-audience` as a **Default** client scope to the client ([audience](#accept-only-tokens-issued-for-eudiplo)) and request a new token |
 | `This endpoint requires a tenant context`            | User token has no `tenant_id` claim                         | Add the mapper from [step 3](#3-put-the-tenant-into-user-tokens)                       |
 | `403` on an endpoint                                 | Missing realm role                                          | Assign the role listed for the endpoint in the [roles reference](../reference/roles.md#endpoints) |

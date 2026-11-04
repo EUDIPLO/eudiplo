@@ -4,17 +4,31 @@ import { KeycloakClientsProvider } from "./keycloak-clients.service.js";
 const AUDIENCE = "https://eudiplo.example.com/api";
 
 function provider({
-    env = { OIDC_AUDIENCE: AUDIENCE, AUTH_CLIENT_ID: "root" },
+    env = {
+        OIDC_AUDIENCE: AUDIENCE,
+        AUTH_CLIENT_ID: "root",
+        AUTH_CLIENT_SECRET: "secret",
+    },
     scope,
     mappers = [],
-    kcClients = ["eudiplo-ui", "root", "shop"],
-    mirrored = ["shop", "gone"],
+    kcClients = {
+        "eudiplo-ui": undefined,
+        root: undefined,
+        shop: "acme",
+        backend: undefined,
+    },
+    mirrored = [
+        ["shop", "acme"],
+        ["gone", "acme"],
+        ["backend", "acme"],
+    ],
 }: {
     env?: Record<string, string>;
     scope?: { id: string };
     mappers?: { id?: string; name?: string; config?: Record<string, string> }[];
-    kcClients?: string[];
-    mirrored?: string[];
+    /** Keycloak clients by client ID, with their tenant attribute. */
+    kcClients?: Record<string, string | undefined>;
+    mirrored?: [string, string][];
 } = {}) {
     let created = false;
     const kc = {
@@ -33,15 +47,31 @@ function provider({
         },
         clients: {
             find: vi.fn(async ({ clientId }: { clientId: string }) =>
-                kcClients.includes(clientId) ? [{ id: `kc-${clientId}` }] : [],
+                clientId in kcClients
+                    ? [
+                          {
+                              id: `kc-${clientId}`,
+                              attributes: kcClients[clientId]
+                                  ? { tenant_id: kcClients[clientId] }
+                                  : {},
+                          },
+                      ]
+                    : [],
             ),
             addDefaultClientScope: vi.fn(),
+            create: vi.fn().mockResolvedValue({ id: "kc-ui" }),
         },
+        roles: { find: vi.fn().mockResolvedValue([]), create: vi.fn() },
     };
     const clientRepo = {
         find: vi
             .fn()
-            .mockResolvedValue(mirrored.map((clientId) => ({ clientId }))),
+            .mockResolvedValue(
+                mirrored.map(([clientId, tenantId]) => ({
+                    clientId,
+                    tenantId,
+                })),
+            ),
     };
     const configService = { get: (key: string) => env[key] };
     const logger = { log: vi.fn(), error: vi.fn(), warn: vi.fn() };
@@ -90,7 +120,8 @@ describe("KeycloakClientsProvider audience scope", () => {
             }),
         );
         // The web client, the bootstrap client and the mirrored tenant
-        // clients that still exist in Keycloak.
+        // clients that Keycloak still has for their tenant: "gone" was
+        // deleted, and "backend" is another client with the same ID.
         expect(scopesAdded(kc)).toEqual([
             { id: "kc-eudiplo-ui", clientScopeId: "scope-new" },
             { id: "kc-root", clientScopeId: "scope-new" },
@@ -152,5 +183,40 @@ describe("KeycloakClientsProvider audience scope", () => {
 
         expect(kc.clientScopes.addProtocolMapper).not.toHaveBeenCalled();
         expect(kc.clientScopes.updateProtocolMapper).not.toHaveBeenCalled();
+    });
+
+    it("fails startup when the scope cannot be set up, as every token would be refused", async () => {
+        const { kc, subject } = provider({ env: { OIDC_AUDIENCE: AUDIENCE } });
+        kc.clientScopes.findOneByName.mockRejectedValue(
+            new Error("403 Forbidden"),
+        );
+
+        await expect(
+            (subject as unknown as { init(): Promise<void> }).init(),
+        ).rejects.toThrow(
+            "Could not set up the Keycloak client scope eudiplo-audience for OIDC_AUDIENCE: 403 Forbidden",
+        );
+    });
+
+    it("starts without OIDC_AUDIENCE, as before", async () => {
+        const { kc, subject } = provider({ env: {} });
+
+        await expect(
+            (subject as unknown as { init(): Promise<void> }).init(),
+        ).resolves.toBeUndefined();
+        expect(kc.clientScopes.findOneByName).not.toHaveBeenCalled();
+    });
+
+    it("leaves an AUTH_CLIENT_ID client alone that EUDIPLO does not manage", async () => {
+        const { kc, ensure } = provider({
+            env: { OIDC_AUDIENCE: AUDIENCE, AUTH_CLIENT_ID: "root" },
+        });
+
+        await ensure();
+
+        expect(scopesAdded(kc).map(({ id }) => id)).toEqual([
+            "kc-eudiplo-ui",
+            "kc-shop",
+        ]);
     });
 });

@@ -219,7 +219,11 @@ describe("KeycloakClientsProvider.addClient", () => {
     });
 
     it("gives the client the audience scope when OIDC_AUDIENCE is set", async () => {
-        const { provider: clients, kc } = provider({
+        const {
+            provider: clients,
+            kc,
+            clientRepo,
+        } = provider({
             kcClient: { id: "kc-app", attributes: { tenant_id: "tenant-1" } },
         });
         Object.assign(clients, { audienceScopeId: "scope-1" });
@@ -230,6 +234,10 @@ describe("KeycloakClientsProvider.addClient", () => {
             id: "kc-app",
             clientScopeId: "scope-1",
         });
+        // After the mirror row, so the next start can add a scope that failed.
+        expect(
+            kc.clients.addDefaultClientScope.mock.invocationCallOrder[0],
+        ).toBeGreaterThan(clientRepo.save.mock.invocationCallOrder[0]);
     });
 });
 

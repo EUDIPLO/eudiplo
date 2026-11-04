@@ -52,7 +52,11 @@ export const AUTH_VALIDATION_SCHEMA: Joi.ObjectSchema = Joi.object({
     OIDC_AUDIENCE: Joi.when("OIDC", {
         is: Joi.exist(),
         then: Joi.string().min(1).optional(),
-        otherwise: Joi.optional(),
+        // Ignored, it would suggest a check that does not happen.
+        otherwise: Joi.forbidden().messages({
+            "any.unknown":
+                "OIDC_AUDIENCE only applies in OIDC mode: set OIDC or remove it",
+        }),
     })
         .description(
             "Audience (`aud`) that access tokens must contain in OIDC mode, for example `https://eudiplo.example.com/api`. EUDIPLO adds it to the tokens of the Keycloak clients it manages through the client scope `eudiplo-audience`. Unset, the audience of tokens is not checked, so every token of the realm with EUDIPLO roles is accepted",

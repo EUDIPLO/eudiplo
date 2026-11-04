@@ -186,16 +186,20 @@ export class KeycloakClientsProvider
 
                 await this.ensureBootstrapAdminClient();
                 await this.ensureUiPublicClient();
-                await this.ensureAudienceScope().catch((err) =>
-                    this.logger.error(
-                        `Could not set up the client scope ${AUDIENCE_SCOPE}: tokens of clients without it are rejected, as they lack the OIDC_AUDIENCE audience`,
-                        err,
-                    ),
-                );
             })
             .catch((err) => {
                 this.logger.error("Error initializing Keycloak roles", err);
-            });
+            })
+            .then(() =>
+                // Fails startup: the audience check is on, so clients
+                // without the scope could not call EUDIPLO at all.
+                this.ensureAudienceScope().catch((err: unknown) => {
+                    throw new Error(
+                        `Could not set up the Keycloak client scope ${AUDIENCE_SCOPE} for OIDC_AUDIENCE: ${err instanceof Error ? err.message : String(err)}`,
+                        { cause: err },
+                    );
+                }),
+            );
     }
 
     /**
@@ -330,23 +334,41 @@ export class KeycloakClientsProvider
         }
         this.audienceScopeId = scope.id;
 
-        const managed = [
+        // Clients without a tenant come from the environment; tenant
+        // clients from the mirror, and only while Keycloak still has them
+        // for that tenant, as when addClient adopts a client.
+        const managed = new Map<string, string | undefined>();
+        for (const clientId of [
             this.configService.get<string>("OIDC_UI_CLIENT_ID") ?? "eudiplo-ui",
-            this.configService.get<string>("AUTH_CLIENT_ID"),
-            ...(await this.clientRepo.find({ select: { clientId: true } })).map(
-                (client) => client.clientId,
-            ),
-        ].filter((clientId): clientId is string => !!clientId);
-        let added = 0;
-        for (const clientId of new Set(managed)) {
-            const client = (await this.kc.clients.find({ clientId }))[0];
-            if (client?.id) {
-                await this.kc.clients.addDefaultClientScope({
-                    id: client.id,
-                    clientScopeId: scope.id,
-                });
-                added++;
+            // The bootstrap client only when EUDIPLO manages it.
+            this.configService.get<string>("AUTH_CLIENT_SECRET")
+                ? this.configService.get<string>("AUTH_CLIENT_ID")
+                : undefined,
+        ]) {
+            if (clientId) managed.set(clientId, undefined);
+        }
+        for (const mirrored of await this.clientRepo.find({
+            select: { clientId: true, tenantId: true },
+        })) {
+            if (!managed.has(mirrored.clientId)) {
+                managed.set(mirrored.clientId, mirrored.tenantId ?? undefined);
             }
+        }
+        let added = 0;
+        for (const [clientId, tenantId] of managed) {
+            const client = (await this.kc.clients.find({ clientId }))[0];
+            if (
+                !client?.id ||
+                (tenantId !== undefined &&
+                    this.getTenantOwnerFromKcClient(client) !== tenantId)
+            ) {
+                continue;
+            }
+            await this.kc.clients.addDefaultClientScope({
+                id: client.id,
+                clientScopeId: scope.id,
+            });
+            added++;
         }
         this.logger.log(
             `Access tokens must have the audience '${audience}'; client scope '${AUDIENCE_SCOPE}' is on ${added} managed clients`,
@@ -589,13 +611,6 @@ export class KeycloakClientsProvider
             );
         }
 
-        if (this.audienceScopeId) {
-            await this.kc.clients.addDefaultClientScope({
-                id,
-                clientScopeId: this.audienceScopeId,
-            });
-        }
-
         // 3) Generate secret once (show only on creation)
         const secret = dto.secret
             ? { value: dto.secret }
@@ -627,6 +642,15 @@ export class KeycloakClientsProvider
             tenant: { id: tenantId },
         });
         await this.clientRepo.save(entity);
+
+        // 6) The audience scope, after the mirror row: if this fails, the
+        // next start adds it to the mirrored client, as a retry does.
+        if (this.audienceScopeId) {
+            await this.kc.clients.addDefaultClientScope({
+                id,
+                clientScopeId: this.audienceScopeId,
+            });
+        }
 
         return {
             clientId: dto.clientId,
