@@ -1,11 +1,8 @@
-import { Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { ConfigImportModeService } from "./config-import-mode.service.js";
 
 describe("ConfigImportModeService", () => {
-    afterEach(() => vi.restoreAllMocks());
-
     it.each(["disabled", "create", "upsert", "replace"] as const)(
         "uses explicit %s mode",
         (mode) => {
@@ -14,34 +11,17 @@ describe("ConfigImportModeService", () => {
         },
     );
 
-    it("maps legacy disabled configuration", () => {
-        expect(createService({ CONFIG_IMPORT: false }).resolve()).toBe(
-            "disabled",
-        );
+    it("is disabled without CONFIG_IMPORT_MODE", () => {
+        expect(createService({}).resolve()).toBe("disabled");
     });
 
-    it("maps legacy non-force import to create", () => {
-        vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+    it("ignores the removed CONFIG_IMPORT and CONFIG_IMPORT_FORCE", () => {
         expect(
             createService({
                 CONFIG_IMPORT: true,
-                CONFIG_IMPORT_FORCE: false,
+                CONFIG_IMPORT_FORCE: true,
             }).resolve(),
-        ).toBe("create");
-    });
-
-    it("maps legacy force import to upsert and warns once", () => {
-        const warning = vi
-            .spyOn(Logger.prototype, "warn")
-            .mockImplementation(() => undefined);
-        const service = createService({
-            CONFIG_IMPORT: true,
-            CONFIG_IMPORT_FORCE: true,
-        });
-
-        expect(service.resolve()).toBe("upsert");
-        expect(service.resolve()).toBe("upsert");
-        expect(warning).toHaveBeenCalledTimes(1);
+        ).toBe("disabled");
     });
 });
 
