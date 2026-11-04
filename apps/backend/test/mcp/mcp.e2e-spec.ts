@@ -4,8 +4,10 @@ import type { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test } from "@nestjs/testing";
 import {
+    CLIENT_CAPABILITIES_META_KEY,
     type CallToolResult,
     Client,
+    PROTOCOL_VERSION_META_KEY,
     StreamableHTTPClientTransport,
 } from "@modelcontextprotocol/client";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
@@ -121,6 +123,12 @@ describe("MCP endpoint (e2e)", () => {
     const rawPost = (
         authorization?: string,
         headers: Record<string, string> = {},
+        message: unknown = {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/list",
+            params: {},
+        },
     ) =>
         fetch(endpoint, {
             method: "POST",
@@ -130,13 +138,33 @@ describe("MCP endpoint (e2e)", () => {
                 ...(authorization && { Authorization: authorization }),
                 ...headers,
             },
-            body: JSON.stringify({
-                jsonrpc: "2.0",
-                id: 1,
-                method: "tools/list",
-                params: {},
-            }),
+            body: JSON.stringify(message),
+            // A stream would never end on its own.
+            signal: AbortSignal.timeout(5000),
         });
+
+    /**
+     * A `subscriptions/listen` request of protocol revision 2026-07-28, the
+     * only kind the SDK answers with a stream: it needs the `_meta`
+     * envelope and both headers.
+     */
+    const MODERN_REVISION = "2026-07-28";
+    const modernListen = {
+        jsonrpc: "2.0",
+        id: 9,
+        method: "subscriptions/listen",
+        params: {
+            notifications: {},
+            _meta: {
+                [PROTOCOL_VERSION_META_KEY]: MODERN_REVISION,
+                [CLIENT_CAPABILITIES_META_KEY]: {},
+            },
+        },
+    };
+    const modernHeaders = {
+        "MCP-Protocol-Version": MODERN_REVISION,
+        "Mcp-Method": "subscriptions/listen",
+    };
 
     beforeAll(async () => {
         rmSync("../../tmp/service.db", { force: true });
@@ -321,6 +349,11 @@ describe("MCP endpoint (e2e)", () => {
                 })
             ).status,
         ).toBe(403);
+        // The token is checked first.
+        expect(
+            (await rawPost(undefined, { Origin: "https://attacker.example" }))
+                .status,
+        ).toBe(401);
         expect(
             (await rawPost(authorization, { Origin: "http://localhost:6274" }))
                 .status,
@@ -328,31 +361,54 @@ describe("MCP endpoint (e2e)", () => {
     });
 
     test("opens no subscriptions/listen stream, with or without a token", async () => {
+        const legacyListen = {
+            jsonrpc: "2.0",
+            id: 9,
+            method: "subscriptions/listen",
+            params: {},
+        };
         for (const authorization of [`Bearer ${adminToken}`, undefined]) {
-            const response = await fetch(endpoint, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Accept: "application/json, text/event-stream",
-                    ...(authorization && { Authorization: authorization }),
-                },
-                body: JSON.stringify({
-                    jsonrpc: "2.0",
+            for (const [message, headers] of [
+                [modernListen, modernHeaders],
+                [legacyListen, {}],
+            ] as const) {
+                const response = await rawPost(authorization, headers, message);
+                expect(response.status).toBe(404);
+                expect(response.headers.get("content-type")).toContain(
+                    "application/json",
+                );
+                expect(await response.json()).toMatchObject({
                     id: 9,
-                    method: "subscriptions/listen",
-                    params: {},
-                }),
-                signal: AbortSignal.timeout(5000),
-            });
-            expect(response.status).toBe(404);
-            expect(response.headers.get("content-type")).toContain(
-                "application/json",
-            );
-            expect(await response.json()).toMatchObject({
-                id: 9,
-                error: { code: -32601 },
-            });
+                    error: { code: -32601 },
+                });
+            }
         }
+    });
+
+    test("refuses a body Express did not parse, which the SDK would parse itself", async () => {
+        // A no-break space after the type: Express's JSON parser skips the
+        // body, the SDK's content type check trims it and accepts the body.
+        const response = await rawPost(
+            `Bearer ${adminToken}`,
+            { ...modernHeaders, "Content-Type": "application/json\u00a0" },
+            modernListen,
+        );
+        expect(response.status).toBe(415);
+        expect(response.headers.get("content-type")).not.toContain(
+            "text/event-stream",
+        );
+        await response.body?.cancel();
+    });
+
+    test("leaves batches to the SDK, which refuses 2026-07-28 messages in them", async () => {
+        const response = await rawPost(`Bearer ${adminToken}`, modernHeaders, [
+            modernListen,
+        ]);
+        expect(response.status).toBe(400);
+        expect(response.headers.get("content-type")).not.toContain(
+            "text/event-stream",
+        );
+        await response.body?.cancel();
     });
 
     test("is not part of the OpenAPI document", () => {

@@ -122,7 +122,8 @@ as the API asks.
   `GET` and `DELETE` on the endpoint answer `405`.
 - **No subscriptions.** `subscriptions/listen` answers `404` with the JSON-RPC
   error `-32601` (method not found), before the token and `Origin` checks, so
-  no request keeps a stream open; the tools do not change at runtime.
+  no request keeps a stream open; the tools do not change at runtime. A body
+  that is not `application/json` answers `415`.
 - **No browser pages on other hosts.** With a valid token, a request whose
   `Origin` header names another host than `localhost`, `127.0.0.1` or `[::1]`
   answers `403`, also for origins in `CORS_ORIGINS`; without one, it answers
