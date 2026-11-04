@@ -210,8 +210,11 @@ export interface PresentationRequestOptions {
    */
   reference?: string;
   /**
-   * Optional browser origin used for DC API audience binding.
-   * For server-side flows, pass the caller origin explicitly.
+   * Origin of the page that calls the Digital Credentials API, sent as
+   * `expected_origin`. Defaults to `location.origin` in a browser. Server-side
+   * calls must set it from their own configuration, never from end-user input,
+   * unless `allowedOrigins` of the presentation configuration lists exactly one
+   * origin. When `allowedOrigins` is set, it must be one of them.
    */
   origin?: string;
 }

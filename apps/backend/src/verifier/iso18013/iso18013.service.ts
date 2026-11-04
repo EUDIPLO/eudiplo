@@ -55,6 +55,7 @@ import {
 } from "../../webhook/ports/presentation-result-publisher.js";
 import { WebhookConfig } from "../../webhook/webhook.dto.js";
 import { CredentialVerifierFormatRegistry } from "../presentations/application/credential-verifier-format-registry.js";
+import { allowedExpectedOrigin } from "../presentations/configuration/allowed-expected-origin.js";
 import { PresentationConfigService } from "../presentations/configuration/presentation-config.service.js";
 import { verificationFailureDetails } from "../presentations/credential/verification-failure.js";
 import { missingTrustedAuthorities } from "../presentations/domain/trusted-authority-requirement.js";
@@ -203,7 +204,7 @@ export class Iso18013Service {
     async createOffer(
         requestId: string,
         tenantId: string,
-        origin: string,
+        expectedOrigin: string | undefined,
         skewSeconds?: number,
         webhook?: WebhookConfig,
         reference?: string,
@@ -213,6 +214,13 @@ export class Iso18013Service {
                 requestId,
                 tenantId,
             );
+        // The session transcript binds the response to this origin, which
+        // the wallet compares with the origin of the calling page.
+        const origin = allowedExpectedOrigin(
+            requestId,
+            expectedOrigin,
+            config.allowedOrigins,
+        );
 
         const pubJwk =
             await this.encryptionService.getEncryptionPublicKey(tenantId);

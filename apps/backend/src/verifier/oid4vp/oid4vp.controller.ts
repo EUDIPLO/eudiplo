@@ -7,10 +7,8 @@ import {
     HttpStatus,
     Param,
     Post,
-    Req,
 } from "@nestjs/common";
 import { ApiParam, ApiTags } from "@nestjs/swagger";
-import { Request } from "express";
 import { AuthorizationResponse } from "./dto/authorization-response.dto.js";
 import { Oid4vpService } from "./oid4vp.service.js";
 
@@ -43,12 +41,8 @@ export class Oid4vpController {
      */
     @Get("request")
     @Header("Content-Type", "application/oauth-authz-req+jwt")
-    getRequestWithSession(
-        @Param("sessionId") sessionId: string,
-        @Req() req: Request,
-    ) {
-        const origin = req.get("origin") as string;
-        return this.oid4vpService.getAuthorizationRequest(sessionId, origin);
+    getRequestWithSession(@Param("sessionId") sessionId: string) {
+        return this.oid4vpService.getAuthorizationRequest(sessionId);
     }
 
     /**
@@ -61,16 +55,8 @@ export class Oid4vpController {
      */
     @Get("request/no-redirect")
     @Header("Content-Type", "application/oauth-authz-req+jwt")
-    getRequestNoRedirectWithSession(
-        @Param("sessionId") sessionId: string,
-        @Req() req: Request,
-    ) {
-        const origin = req.get("origin") as string;
-        return this.oid4vpService.getAuthorizationRequest(
-            sessionId,
-            origin,
-            true,
-        );
+    getRequestNoRedirectWithSession(@Param("sessionId") sessionId: string) {
+        return this.oid4vpService.getAuthorizationRequest(sessionId, true);
     }
 
     /**
@@ -83,12 +69,8 @@ export class Oid4vpController {
      */
     @Post("request")
     @Header("Content-Type", "application/oauth-authz-req+jwt")
-    getPostRequestWithSession(
-        @Param("sessionId") sessionId: string,
-        @Req() req: Request,
-    ) {
-        const origin = req.get("origin") as string;
-        return this.oid4vpService.getAuthorizationRequest(sessionId, origin);
+    getPostRequestWithSession(@Param("sessionId") sessionId: string) {
+        return this.oid4vpService.getAuthorizationRequest(sessionId);
     }
 
     /**

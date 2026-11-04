@@ -18,6 +18,7 @@ import {
 import { TrustList } from "../../src/issuer/trust-list/entities/trust-list.entity.js";
 import { ConfigBundleService } from "../../src/platform/config-portability/config-bundle.service.js";
 import { ConfigFolderBundleService } from "../../src/platform/config-portability/config-folder-bundle.service.js";
+import { PresentationConfig } from "../../src/verifier/presentations/entities/presentation-config.entity.js";
 
 /** A client with tenant:admin, added to each tenant folder before startup. */
 const adminSecret = "admin-secret";
@@ -218,6 +219,47 @@ describe("single-resource configuration documents", () => {
 
         const after = await service.plan("demo", bundle, "upsert");
         expect(after.planFingerprint).toBe(before.planFingerprint);
+    });
+
+    it("exports the allowed origins of a presentation configuration", async () => {
+        const repository = app
+            .get(DataSource)
+            .getRepository(PresentationConfig);
+        const [withOrigins, without] = await repository.find({
+            where: { tenantId: "demo" },
+            order: { id: "ASC" },
+            take: 2,
+        });
+        const auth = await token(adminClientId("demo"), adminSecret);
+        await repository.update(
+            { tenantId: "demo", id: withOrigins.id },
+            { allowedOrigins: ["https://shop.example"] },
+        );
+        try {
+            const exported = await download(
+                auth,
+                "PresentationConfig",
+                withOrigins.id,
+            ).expect(200);
+            expect(exported.body.$schema).toBe(
+                schemaUrl("PresentationConfig", 4),
+            );
+            expect(exported.body.spec.allowedOrigins).toEqual([
+                "https://shop.example",
+            ]);
+
+            const plain = await download(
+                auth,
+                "PresentationConfig",
+                without.id,
+            ).expect(200);
+            expect(plain.body.spec).not.toHaveProperty("allowedOrigins");
+        } finally {
+            await repository.update(
+                { tenantId: "demo", id: withOrigins.id },
+                { allowedOrigins: null },
+            );
+        }
     });
 
     it("keeps the private keys of a key chain held in the database", async () => {

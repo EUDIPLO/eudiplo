@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isSerializedWebOrigin } from "../../../shared/domain/web-origin.js";
 import { RegistrationCertificateRequestSchema } from "../dto/vp-request.dto.js";
 
 const CredentialIdSchema = z
@@ -485,6 +486,29 @@ export const PresentationConfigCreateSchema = z
             .optional()
             .describe(
                 "Optional key chain id for access token/auth operations.",
+            ),
+        allowedOrigins: z
+            .array(
+                z
+                    .string()
+                    .regex(
+                        // Also in the published JSON Schema: lower-case host
+                        // or IP address, a port only if it is not the default
+                        // (443, 80), spelled out without lookahead so that
+                        // RE2-based validators accept the pattern
+                        /^(?:https:\/\/(?:[a-z0-9.-]+|\[[0-9a-f:.]+\])(?::(?:[1-9]|[1-9][0-9]|[1-35-9][0-9]{2}|4[0-35-9][0-9]|44[0-24-9]|[1-9][0-9]{3,4}))?|http:\/\/(?:[a-z0-9.-]+|\[[0-9a-f:.]+\])(?::(?:[1-9]|[1-79][0-9]|8[1-9]|[1-9][0-9]{2,4}))?)$/,
+                        "expected an origin such as https://shop.example",
+                    )
+                    .refine(isSerializedWebOrigin, {
+                        message:
+                            "expected an origin in serialized form: lower-case host, no default port, path or trailing slash",
+                    }),
+            )
+            .max(100)
+            .nullable()
+            .optional()
+            .describe(
+                "Origins (http(s)://host[:port]) of the web pages allowed to request this presentation over the Digital Credentials API. When set, dc-api and iso-18013-7 offers are refused for any other expected_origin, and an offer without expected_origin uses the only listed origin. Unset: any expected_origin is accepted. Not used for uri requests.",
             ),
         readerAuth: z
             .boolean()

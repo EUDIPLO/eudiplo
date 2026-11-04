@@ -122,6 +122,15 @@
                     <span matListItemLine>{{ config.redirectUri }}</span>
                   </mat-list-item>
                 }
+                <mat-list-item lines="3">
+                  <mat-icon matListItemIcon>public</mat-icon>
+                  <span matListItemTitle>Allowed origins (Digital Credentials API)</span>
+                  <span matListItemLine class="wrapping-line">{{
+                    config.allowedOrigins?.length
+                      ? config.allowedOrigins.join(', ')
+                      : 'Not restricted'
+                  }}</span>
+                </mat-list-item>
                 <mat-list-item>
                   <mat-icon matListItemIcon>badge</mat-icon>
                   <span matListItemTitle>Access Certificate</span>

@@ -3,7 +3,6 @@ import {
     Controller,
     ForbiddenException,
     Post,
-    Req,
     Res,
 } from "@nestjs/common";
 import {
@@ -13,7 +12,7 @@ import {
     ApiResponse,
     ApiTags,
 } from "@nestjs/swagger";
-import { Request, Response } from "express";
+import { Response } from "express";
 import { Role } from "../../auth/roles/role.enum.js";
 import { Secured } from "../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../auth/token.decorator.js";
@@ -73,14 +72,13 @@ export class VerifierOfferController {
                 value: {
                     response_type: ResponseType.DC_API,
                     requestId: "pid",
-                    expected_origin: "http://localhost:8080",
+                    expected_origin: "https://shop.example",
                 },
             },
         },
     })
     @Post()
     async getOffer(
-        @Req() req: Request,
         @Res() res: Response,
         @Body() body: PresentationRequest,
         @Token() user: TokenPayload,
@@ -96,17 +94,17 @@ export class VerifierOfferController {
             }
         }
 
+        // Only the caller's explicit value counts: an Origin header here is
+        // that of whoever reached the caller's backend, not the caller's own
+        // page. allowedOrigins of the configuration may limit it further.
+        const expectedOrigin = body.expected_origin;
+
         // ISO 18013-7 Annex C: org.iso.mdoc via DC API
         if (body.response_type === ResponseType.ISO_18013_7) {
-            const origin =
-                body.expected_origin ??
-                req.get("origin") ??
-                req.get("host") ??
-                "";
             const offer = await this.iso18013Service.createOffer(
                 body.requestId,
                 user.entity!.id,
-                origin,
+                expectedOrigin,
                 body.skewSeconds,
                 body.webhook,
                 body.reference,
@@ -126,7 +124,7 @@ export class VerifierOfferController {
             },
             user.entity!.id,
             body.response_type === ResponseType.DC_API,
-            body.expected_origin ?? req.get("origin") ?? req.get("host") ?? "",
+            expectedOrigin,
         );
         values.uri = `openid4vp://?${values.uri}`;
         values.crossDeviceUri = `openid4vp://?${values.crossDeviceUri}`;

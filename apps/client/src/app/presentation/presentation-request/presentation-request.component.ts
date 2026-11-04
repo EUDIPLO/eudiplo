@@ -17,6 +17,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { OfferResponse, PresentationConfig, PresentationRequest } from '@eudiplo/sdk-core';
 import { PresentationManagementService } from '../presentation-config/presentation-management.service';
@@ -50,6 +51,7 @@ type PresentationRequestWithClientIdScheme = PresentationRequest & {
     MatTooltipModule,
     FlexLayoutModule,
     RouterModule,
+    ConfigOwnershipDirective,
     MatSlideToggleModule,
     EditorComponent,
   ],
@@ -58,6 +60,8 @@ type PresentationRequestWithClientIdScheme = PresentationRequest & {
   styleUrl: './presentation-request.component.scss',
 })
 export class PresentationRequestComponent implements OnInit {
+  /** Origin the browser sends with the offer request, which the DC API call uses too. */
+  readonly pageOrigin = window.location.origin;
   form: FormGroup;
   configs: PresentationConfig[] = [];
   loading = false;
@@ -137,6 +141,17 @@ export class PresentationRequestComponent implements OnInit {
     }
   }
 
+  /**
+   * Why a DC API request for the selected configuration would be refused: the request names
+   * this page's origin, and a configuration with allowedOrigins accepts only those.
+   */
+  get dcApiOriginProblem(): string | null {
+    const config = this.selectedConfig;
+    if (!this.form.get('dcapi')?.value || !config?.allowedOrigins?.length) return null;
+    if (config.allowedOrigins.includes(this.pageOrigin)) return null;
+    return `Presentation configuration "${config.id}" does not list this page's origin, ${this.pageOrigin}, under Allowed origins (Digital Credentials API).`;
+  }
+
   get selectedConfig(): PresentationConfig | undefined {
     const selectedId = this.form.get('requestId')?.value;
     return this.configs.find((config) => config.id === selectedId);
@@ -174,6 +189,11 @@ export class PresentationRequestComponent implements OnInit {
     const requestId = this.form.get('requestId')?.value;
     await this.evaluateReadiness(requestId || undefined);
 
+    if (this.dcApiOriginProblem) {
+      this.snackBar.open(this.dcApiOriginProblem, 'Close', { duration: 5000 });
+      return;
+    }
+
     if (!this.isReadyToGenerate) {
       this.snackBar.open(this.readinessError || 'Presentation cannot be generated yet.', 'Close', {
         duration: 4000,
@@ -208,6 +228,8 @@ export class PresentationRequestComponent implements OnInit {
       const offerRequest: PresentationRequestWithClientIdScheme = {
         requestId: formValue.requestId,
         response_type: formValue.dcapi ? 'dc-api' : 'uri',
+        // The wallet is called from this page, so the request is bound to its origin.
+        ...(formValue.dcapi && { expected_origin: this.pageOrigin }),
         ...(formValue.clientIdScheme &&
           formValue.clientIdScheme !== 'x509_hash' && {
             clientIdScheme: formValue.clientIdScheme as ClientIdScheme,

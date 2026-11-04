@@ -38,6 +38,7 @@ import {
     type VerifiedPresentation,
     VerifyPresentationResponse,
 } from "../presentations/application/verify-presentation-response.js";
+import { allowedExpectedOrigin } from "../presentations/configuration/allowed-expected-origin.js";
 import { PresentationConfigService } from "../presentations/configuration/presentation-config.service.js";
 import { PresentationRegistrationCertificateService } from "../presentations/configuration/presentation-registration-certificate.service.js";
 import { verificationFailureDetails } from "../presentations/credential/verification-failure.js";
@@ -188,7 +189,6 @@ export class Oid4vpService {
     @Span("oid4vp.getAuthorizationRequest")
     async getAuthorizationRequest(
         nonce: string,
-        origin: string,
         noRedirect = false,
     ): Promise<string> {
         const session = await this.resolveSessionByNonce(nonce);
@@ -203,16 +203,8 @@ export class Oid4vpService {
         });
 
         return this.retrievePresentationRequest
-            .execute(
-                session,
-                origin,
-                noRedirect,
-                (sessionId, requestOrigin, shouldNotRedirect) =>
-                    this.createAuthorizationRequest(
-                        sessionId,
-                        requestOrigin,
-                        shouldNotRedirect,
-                    ),
+            .execute(session, noRedirect, (sessionId, shouldNotRedirect) =>
+                this.createAuthorizationRequest(sessionId, shouldNotRedirect),
             )
             .catch((error: unknown) => {
                 throw sessionNotUsableException(error);
@@ -226,7 +218,6 @@ export class Oid4vpService {
     @Span("oid4vp.createAuthorizationRequest")
     async createAuthorizationRequest(
         sessionId: string,
-        origin: string,
         noRedirect = false,
     ): Promise<string> {
         const session = await this.sessionStore.getForInternalFlow(sessionId);
@@ -359,14 +350,11 @@ export class Oid4vpService {
             // to separate the wallet-facing identifier (request-id) from the
             // frontend-facing session ID (transaction-id).
             const walletFacingId = session.walletNonce ?? session.id;
-            const normalizedExpectedOrigin = session.useDcApi
-                ? this.normalizeExpectedOrigin(origin)
-                : undefined;
-
-            if (session.useDcApi && !normalizedExpectedOrigin) {
-                this.logger.warn(
-                    { sessionId: session.id, origin },
-                    "Missing or invalid Origin header for DC API request; expected_origins omitted",
+            // The origin was chosen when the offer was created; the Origin
+            // header of whoever fetches the request never decides it.
+            if (session.useDcApi && !session.browserOrigin) {
+                throw new BadRequestException(
+                    "DC API session has no allowed origin; create a new presentation request",
                 );
             }
 
@@ -379,8 +367,8 @@ export class Oid4vpService {
                         ? "dc_api.jwt"
                         : "direct_post.jwt",
                     nonce,
-                    expected_origins: normalizedExpectedOrigin
-                        ? [normalizedExpectedOrigin]
+                    expected_origins: session.useDcApi
+                        ? [session.browserOrigin!]
                         : undefined,
                     dcql_query,
                     client_metadata: {
@@ -494,23 +482,6 @@ export class Oid4vpService {
         return publicJwk;
     }
 
-    private normalizeExpectedOrigin(origin: string): string | undefined {
-        const trimmed = origin.trim();
-        if (!trimmed) {
-            return undefined;
-        }
-
-        const prefixed = /^https?:\/\//i.test(trimmed)
-            ? trimmed
-            : `http://${trimmed}`;
-
-        try {
-            return new URL(prefixed).origin;
-        } catch {
-            return undefined;
-        }
-    }
-
     /**
      * Creates a request for the OID4VP flow.
      * @param requestId
@@ -523,13 +494,20 @@ export class Oid4vpService {
         values: PresentationRequestOptions,
         tenantId: string,
         useDcApi: boolean,
-        origin: string,
+        expectedOrigin?: string,
     ): Promise<OfferResponse> {
         const presentationConfig =
             await this.presentationConfigService.getPresentationConfig(
                 requestId,
                 tenantId,
             );
+        const browserOrigin = useDcApi
+            ? allowedExpectedOrigin(
+                  requestId,
+                  expectedOrigin,
+                  presentationConfig.allowedOrigins,
+              )
+            : undefined;
         const fresh = values.session === undefined;
         values.session = values.session || v4();
 
@@ -626,6 +604,7 @@ export class Oid4vpService {
                 requestUrl: `openid4vp://?${queryString}`,
                 expiresAt,
                 useDcApi,
+                browserOrigin,
                 clientId,
                 accessKeyChainId: cert.keyId,
                 responseUri,
@@ -639,7 +618,6 @@ export class Oid4vpService {
             if (request_uri_method === "get") {
                 const signedJwt = await this.createAuthorizationRequest(
                     session.id,
-                    origin,
                 );
                 // Store the request object before the offer is returned, so
                 // the wallet (or a DC API caller reading the session) gets
@@ -658,6 +636,7 @@ export class Oid4vpService {
                 requestUrl: `openid4vp://?${queryString}`,
                 expiresAt,
                 useDcApi,
+                browserOrigin,
                 clientId,
                 accessKeyChainId: cert.keyId,
             });

@@ -30,6 +30,7 @@ function setup(
         }),
     };
     const configImportService = { importConfigsForTenant: vi.fn() };
+    const auditLogService = { record: vi.fn() };
     const registrationCertificates = {
         scheduleRefresh: vi.fn(),
         validateImported:
@@ -44,7 +45,7 @@ function setup(
         registrationCertificates as any,
         configImportService as any,
         { register: vi.fn() } as any,
-        {} as any,
+        auditLogService as any,
         federationTrustAnchors as any,
         {
             publicUrl: "https://eudiplo.example",
@@ -57,6 +58,7 @@ function setup(
         configImportService,
         registrationCertificates,
         federationTrustAnchors,
+        auditLogService,
     };
 }
 
@@ -283,5 +285,31 @@ describe("PresentationConfigService imported registration certificate", () => {
 
         expect(validateImported).not.toHaveBeenCalled();
         expect(repository.save).toHaveBeenCalled();
+    });
+});
+
+describe("PresentationConfigService audit log", () => {
+    it("records a change of allowedOrigins and readerAuth", async () => {
+        const { service, auditLogService } = setup();
+
+        await service.updatePresentationConfig(
+            "pid",
+            "tenant",
+            { allowedOrigins: ["https://shop.example"], readerAuth: true },
+            { sub: "admin", client: { clientId: "admin" } } as any,
+        );
+
+        expect(auditLogService.record).toHaveBeenCalledWith(
+            expect.objectContaining({
+                actionType: "presentation_config_updated",
+                changedFields: expect.arrayContaining([
+                    "allowedOrigins",
+                    "readerAuth",
+                ]),
+                after: expect.objectContaining({
+                    allowedOrigins: ["https://shop.example"],
+                }),
+            }),
+        );
     });
 });

@@ -241,7 +241,7 @@ And `mdocverifierService.verify()` uses `SessionTranscript.forOid4VpDcApi()` whe
 
 ```typescript
 dcApiProtocol?: string  // "iso-18013-7"; unset for OID4VP sessions
-browserOrigin?: string  // stored at offer time to reconstruct the DCAPIHandover on response
+browserOrigin?: string  // the offer's expected_origin (limited to allowedOrigins when set), stored at offer time for every DC API session: OID4VP expected_origins, ISO DCAPIHandover
 ```
 
 The existing `vp_nonce` field stores the 16-byte nonce as a hex string, and the

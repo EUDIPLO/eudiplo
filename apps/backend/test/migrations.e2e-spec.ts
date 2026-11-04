@@ -26,6 +26,7 @@ import { AddDefaultAccessKeyChainIdToTenant1785600000000 } from "../src/database
 import { AddStatusUpdatedAtToStatusMapping1785700000000 } from "../src/database/migrations/1785700000000-AddStatusUpdatedAtToStatusMapping.js";
 import { MoveDefaultAccessKeyChainIntoDefaultKeyChains1785800000000 } from "../src/database/migrations/1785800000000-MoveDefaultAccessKeyChainIntoDefaultKeyChains.js";
 import { DropIssuanceSigningKeyId1785900000000 } from "../src/database/migrations/1785900000000-DropIssuanceSigningKeyId.js";
+import { AddAllowedOriginsToPresentationConfig1786000000000 } from "../src/database/migrations/1786000000000-AddAllowedOriginsToPresentationConfig.js";
 import { describeWithContainers } from "./container-runtime.js";
 import {
     addTokensValidAfterContract,
@@ -1153,6 +1154,43 @@ describe("Migration tests", () => {
             });
         });
     });
+
+    describeNullableColumn(
+        "AddAllowedOriginsToPresentationConfig1786000000000",
+        new AddAllowedOriginsToPresentationConfig1786000000000(),
+        {
+            table: "presentation_config",
+            column: "allowedOrigins",
+            entities: async () => {
+                const [
+                    { PresentationConfig },
+                    { WebhookEndpointEntity },
+                    { TenantEntity },
+                    { ClientEntity },
+                ] = await Promise.all([
+                    import(
+                        "../src/verifier/presentations/entities/presentation-config.entity.js"
+                    ),
+                    import(
+                        "../src/issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js"
+                    ),
+                    import("../src/auth/tenant/entities/tenant.entity.js"),
+                    import("../src/auth/client/entities/client.entity.js"),
+                ]);
+                return [
+                    PresentationConfig,
+                    WebhookEndpointEntity,
+                    TenantEntity,
+                    ClientEntity,
+                ];
+            },
+            seed: [
+                `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't')`,
+                `INSERT INTO "presentation_config" ("id", "tenantId", "dcql_query") VALUES ('pid', 't', '{"credentials":[]}')`,
+            ],
+            row: `"id" = 'pid'`,
+        },
+    );
 
     describeNullableSessionColumn(
         "AddAccessKeyChainIdToSession1784900000000",

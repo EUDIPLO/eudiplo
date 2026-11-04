@@ -33,7 +33,7 @@ export const CONFIG_FORMATS = {
     PresentationConfig: {
         slug: "presentation-config",
         file: "PresentationConfigFile",
-        version: 3,
+        version: 4,
     },
     AttributeProvider: {
         slug: "attribute-provider",
@@ -113,7 +113,8 @@ export function resourceId(input: ConfigFile<unknown>): string {
  * with `authorizationServer`, which KeyChainDefaults v2 added, and a tenant
  * `info.json` with `defaultAccessKeyChainId`, which TenantConfig v2 added, or
  * with `defaultKeyChains`, which TenantConfig v3 replaced it with (TenantConfig
- * v4 moved it to `key-chain-defaults.json`).
+ * v4 moved it to `key-chain-defaults.json`), and a presentation configuration
+ * with `allowedOrigins`, which PresentationConfig v4 added.
  */
 export function bareFileVersion(
     kind: ConfigResourceKind,
@@ -127,6 +128,7 @@ export function bareFileVersion(
     if (kind === "RegistrarConfig")
         return "relyingPartyContact" in spec ? 2 : 1;
     if (kind === "KeyChainDefaults") return "authorizationServer" in spec ? 2 : 1;
+    if (kind === "PresentationConfig") return "allowedOrigins" in spec ? 4 : 1;
     if (kind === "Tenant") {
         if ("defaultKeyChains" in spec) return 3;
         return "defaultAccessKeyChainId" in spec ? 2 : 1;
@@ -566,6 +568,15 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         // and requires them to be non-empty. A v2 spec with non-empty string
         // values is a valid v3 spec; an empty `values` array fails v3
         // validation, since it could never match a disclosed claim.
+        migrate: (spec) => ({ spec }),
+    },
+    {
+        id: "presentation-config-v4-allowed-origins",
+        kind: "PresentationConfig",
+        from: 3,
+        to: 4,
+        // v4 adds the optional allowedOrigins: a v3 spec is a valid v4 spec,
+        // and without the field any expected_origin is accepted as before.
         migrate: (spec) => ({ spec }),
     },
 ];

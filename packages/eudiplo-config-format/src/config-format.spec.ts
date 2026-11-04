@@ -364,6 +364,12 @@ describe("portable schema identity and migrations", () => {
         ["Tenant", { name: "Demo", defaultKeyChains: { access: "access" } }, 3],
         ["Tenant", { name: "Demo", defaultAccessKeyChainId: "access" }, 2],
         ["Tenant", { name: "Demo" }, 1],
+        [
+            "PresentationConfig",
+            { id: "age", allowedOrigins: ["https://shop.example"] },
+            4,
+        ],
+        ["PresentationConfig", { id: "age" }, 1],
     ] as const)("reads a bare %s file %o as v%i", (kind, spec, version) => {
         expect(bareFileVersion(kind, spec)).toBe(version);
     });
@@ -1088,6 +1094,7 @@ describe("PresentationConfig v1 to v2", () => {
         expect(result.migrations).toEqual([
             "presentation-config-v2-provides-attestations",
             "presentation-config-v3-typed-claim-values",
+            "presentation-config-v4-allowed-origins",
         ]);
         expect(result.document.spec.registration_cert).toEqual({
             body: privacy,
@@ -1182,9 +1189,10 @@ describe("PresentationConfig v2 to v3", () => {
         expect(result.issues).toEqual([]);
         expect(result.migrations).toEqual([
             "presentation-config-v3-typed-claim-values",
+            "presentation-config-v4-allowed-origins",
         ]);
         expect(result.document.$schema).toBe(
-            schemaUrl("PresentationConfig", 3),
+            schemaUrl("PresentationConfig", 4),
         );
         expect(result.document.spec).toEqual(v2.spec);
         expect(
@@ -1220,6 +1228,71 @@ describe("PresentationConfig v2 to v3", () => {
                     message: "must NOT have fewer than 1 items",
                 }),
             ]),
+        );
+    });
+});
+
+describe("PresentationConfig v3 to v4", () => {
+    const spec = {
+        id: "age",
+        dcql_query: {
+            credentials: [
+                {
+                    id: "pid",
+                    format: "dc+sd-jwt",
+                    meta: { vct_values: ["urn:eudi:pid:de:1"] },
+                },
+            ],
+        },
+    };
+    const withOrigins = (version: number, allowedOrigins: unknown) =>
+        normalizeDocument({
+            $schema: schemaUrl("PresentationConfig", version),
+            spec: { ...spec, allowedOrigins },
+        });
+
+    it("upgrades a v3 document unchanged and only once", () => {
+        const v3 = { $schema: schemaUrl("PresentationConfig", 3), spec };
+        const result = migrateDocument(v3, validateConfigDocument);
+
+        expect(result.issues).toEqual([]);
+        expect(result.migrations).toEqual([
+            "presentation-config-v4-allowed-origins",
+        ]);
+        expect(result.document.$schema).toBe(
+            schemaUrl("PresentationConfig", 4),
+        );
+        expect(result.document.spec).toEqual(spec);
+        expect(
+            migrateDocument(result.document, validateConfigDocument).migrations,
+        ).toEqual([]);
+    });
+
+    it("accepts allowedOrigins only from v4 on", () => {
+        expect(
+            validateConfigDocument(withOrigins(4, ["https://shop.example"])),
+        ).toEqual([]);
+        expect(
+            validateConfigDocument(withOrigins(3, ["https://shop.example"])),
+        ).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    message: "Unknown property: allowedOrigins",
+                }),
+            ]),
+        );
+    });
+
+    it.each([
+        "https://shop.example/checkout",
+        "https://shop.example/",
+        "https://Shop.example",
+        "https://shop.example:443",
+        "http://shop.example:80",
+        "shop.example",
+    ])("refuses the allowed origin %s", (origin) => {
+        expect(validateConfigDocument(withOrigins(4, [origin]))).not.toEqual(
+            [],
         );
     });
 });

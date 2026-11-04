@@ -4,11 +4,11 @@ title: Configuration Schemas
 
 # Configuration schemas
 
-Configuration files name their format in `$schema`, for example `https://eudiplo.dev/schemas/v3/PresentationConfigFile.schema.json`. This page explains how these format versions work, how to bump one, and how the schemas are published. The file format itself is described in [Configuration as code](../operate/configuration-as-code.md).
+Configuration files name their format in `$schema`, for example `https://eudiplo.dev/schemas/v4/PresentationConfigFile.schema.json`. This page explains how these format versions work, how to bump one, and how the schemas are published. The file format itself is described in [Configuration as code](../operate/configuration-as-code.md).
 
 ## Format versions
 
-Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eudiplo-config-format/src/config-format.ts`); it is independent of the application version. EUDIPLO 9.0 introduced the first bumps; `IssuanceConfig` v3 followed in 9.1, `CredentialConfig` v2 and v3, `KeyChain` v2, `Client` v2, `KmsConfig` v2, `RegistrarConfig` v2, `Tenant` v2 to v4, `IssuanceConfig` v4 to v6, `KeyChain` v3 and v4 and `KeyChainDefaults` v2 in 10.0:
+Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eudiplo-config-format/src/config-format.ts`); it is independent of the application version. EUDIPLO 9.0 introduced the first bumps; `IssuanceConfig` v3 followed in 9.1, `CredentialConfig` v2 and v3, `KeyChain` v2, `Client` v2, `KmsConfig` v2, `RegistrarConfig` v2, `Tenant` v2 to v4, `IssuanceConfig` v4 to v6, `KeyChain` v3 and v4, `KeyChainDefaults` v2 and `PresentationConfig` v4 in 10.0:
 
 | Resource | Version | Change |
 | --- | --- | --- |
@@ -31,6 +31,7 @@ Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eud
 | `Tenant` | v4 | `defaultKeyChains` moves to the new resource `KeyChainDefaults` (`key-chain-defaults.json`, v1); the v3 → v4 step drops it with the warning `DEFAULT_KEY_CHAINS_MOVED`. |
 | `PresentationConfig` | v2 | `registration_cert.body.provided_attestations` is replaced by the registrar's `provides_attestations` (string array). The v1 → v2 step drops the old field with a warning. |
 | `PresentationConfig` | v3 | DCQL claim `values` accept integers and booleans besides strings and must be non-empty. A v2 file is a valid v3 file unless it has an empty `values` array. |
+| `PresentationConfig` | v4 | Optional `allowedOrigins` (web origins for Digital Credentials API requests). A v3 file is a valid v4 file; a bare presentation file with `allowedOrigins` is read as v4 (`bareFileVersion`). |
 | All other resources | v1 | |
 
 The backend and the CLI bundle every published snapshot (`schemas/v*/`) and never fetch schema URLs from files. Older files are upgraded on import, one version step at a time, through `CONFIG_MIGRATIONS`: the startup import and bundle imports (`POST /api/config-bundles/plan` and `/import`) accept warnings and stop on issues that need input; `eudiplo config upgrade <file-or-folder>` does the same offline. A file with a newer version than the running release supports is rejected, so 9.0 exports cannot be imported into 8.x.

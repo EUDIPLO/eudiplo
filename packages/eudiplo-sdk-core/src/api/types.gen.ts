@@ -2718,6 +2718,13 @@ export type PresentationConfig = {
      */
     accessKeyChainId?: string | null;
     /**
+     * Origins of the web pages allowed to request this presentation over the
+     * Digital Credentials API. When set, `dc-api` and `iso-18013-7` offers
+     * are bound to one of them; unset, any `expected_origin` is accepted.
+     * `uri` offers ignore them.
+     */
+    allowedOrigins?: Array<string> | null;
+    /**
      * Enable reader authentication for the ISO 18013-7 Annex C (DC API) flow.
      *
      * When `true`, the DeviceRequest embeds a detached `readerAuth` COSE_Sign1
@@ -3390,6 +3397,10 @@ export type PresentationConfigCreateDto = {
      */
     accessKeyChainId?: Array<string>;
     /**
+     * Origins (http(s)://host[:port]) of the web pages allowed to request this presentation over the Digital Credentials API. When set, dc-api and iso-18013-7 offers are refused for any other expected_origin, and an offer without expected_origin uses the only listed origin. Unset: any expected_origin is accepted. Not used for uri requests.
+     */
+    allowedOrigins?: Array<string> | null;
+    /**
      * Whether reader authentication is required for mDoc requests.
      */
     readerAuth?: Array<boolean>;
@@ -3698,6 +3709,10 @@ export type PresentationConfigUpdateDto = {
      * Optional key chain id for access token/auth operations.
      */
     accessKeyChainId?: Array<string>;
+    /**
+     * Origins (http(s)://host[:port]) of the web pages allowed to request this presentation over the Digital Credentials API. When set, dc-api and iso-18013-7 offers are refused for any other expected_origin, and an offer without expected_origin uses the only listed origin. Unset: any expected_origin is accepted. Not used for uri requests.
+     */
+    allowedOrigins?: Array<string> | null;
     /**
      * Whether reader authentication is required for mDoc requests.
      */
@@ -6362,8 +6377,13 @@ export type PresentationRequest = {
      */
     redirectUri?: string;
     /**
-     * Optional expected browser origin for DC API key-binding audience.
-     * Example: "http://localhost:8080"
+     * Origin of the page that calls the Digital Credentials API (`dc-api`,
+     * `iso-18013-7`). Required for these response types unless
+     * `allowedOrigins` of the presentation configuration lists exactly one
+     * origin; must be one of `allowedOrigins` when they are set. Set it from
+     * your own configuration, never from end-user input such as a forwarded
+     * `Origin` header.
+     * Example: "https://shop.example"
      */
     expected_origin?: string;
     /**
@@ -6557,6 +6577,13 @@ export type PresentationConfigWritable = {
      * at the application level in the service layer.
      */
     accessKeyChainId?: string | null;
+    /**
+     * Origins of the web pages allowed to request this presentation over the
+     * Digital Credentials API. When set, `dc-api` and `iso-18013-7` offers
+     * are bound to one of them; unset, any `expected_origin` is accepted.
+     * `uri` offers ignore them.
+     */
+    allowedOrigins?: Array<string> | null;
     /**
      * Enable reader authentication for the ISO 18013-7 Annex C (DC API) flow.
      *

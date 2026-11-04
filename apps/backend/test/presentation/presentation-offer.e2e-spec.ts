@@ -215,6 +215,240 @@ describe("Presentation - Offer Creation", () => {
         expect(sessionRes.body.clientId).toBe(expectedClientId);
     });
 
+    describe("Digital Credentials API origins", () => {
+        const allowedOrigin = "https://shop.example";
+        const configId = "pid-de-dc-api";
+
+        beforeAll(async () => {
+            const source = await request(app.getHttpServer())
+                .get("/verifier/config/pid-de")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            await request(app.getHttpServer())
+                .post("/verifier/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    id: configId,
+                    description: "PID over the Digital Credentials API",
+                    dcql_query: source.body.dcql_query,
+                    allowedOrigins: [allowedOrigin],
+                })
+                .expect(201);
+        });
+
+        function offer(
+            body: Record<string, unknown>,
+            origin?: string,
+        ): request.Test {
+            const req = request(app.getHttpServer())
+                .post("/verifier/offer")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`);
+            if (origin) req.set("Origin", origin);
+            return req.send(body);
+        }
+
+        async function sessionOf(session: string) {
+            const res = await request(app.getHttpServer())
+                .get(`/session/${session}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            return res.body;
+        }
+
+        function payloadOf(jwt: string) {
+            return JSON.parse(
+                Buffer.from(jwt.split(".")[1], "base64url").toString(),
+            );
+        }
+
+        test("signs expected_origin for a configuration without allowedOrigins", async () => {
+            const res = await offer({
+                response_type: ResponseType.DC_API,
+                requestId: "pid-no-hook",
+                expected_origin: "https://any.example/checkout",
+            }).expect(201);
+
+            const session = await sessionOf(res.body.session);
+            expect(payloadOf(session.requestObject).expected_origins).toEqual([
+                "https://any.example",
+            ]);
+        });
+
+        test("ignores the Origin header without expected_origin", async () => {
+            const res = await offer(
+                {
+                    response_type: ResponseType.DC_API,
+                    requestId: "pid-no-hook",
+                },
+                "https://evil.example",
+            ).expect(400);
+
+            expect(res.body.message).toContain("needs expected_origin");
+        });
+
+        test("ignores the Origin header of an iso-18013-7 offer", async () => {
+            const res = await offer(
+                {
+                    response_type: ResponseType.ISO_18013_7,
+                    requestId: "pid-de",
+                },
+                "https://evil.example",
+            ).expect(400);
+
+            expect(res.body.message).toContain("needs expected_origin");
+        });
+
+        test("lifts the restriction when allowedOrigins is cleared with null", async () => {
+            const patch = (allowedOrigins: string[] | null) =>
+                request(app.getHttpServer())
+                    .patch(`/verifier/config/${configId}`)
+                    .trustLocalhost()
+                    .set("Authorization", `Bearer ${authToken}`)
+                    .send({ allowedOrigins })
+                    .expect(200);
+            await patch(null);
+            try {
+                const res = await offer({
+                    response_type: ResponseType.DC_API,
+                    requestId: configId,
+                    expected_origin: "https://other.example",
+                }).expect(201);
+
+                const session = await sessionOf(res.body.session);
+                expect(
+                    payloadOf(session.requestObject).expected_origins,
+                ).toEqual(["https://other.example"]);
+            } finally {
+                await patch([allowedOrigin]);
+            }
+        });
+
+        test("refuses a value without scheme", async () => {
+            const res = await offer({
+                response_type: ResponseType.DC_API,
+                requestId: "pid-no-hook",
+                expected_origin: "shop.example",
+            }).expect(400);
+
+            expect(res.body.message).toContain("not an http or https origin");
+        });
+
+        test("binds an iso-18013-7 offer to the only allowed origin", async () => {
+            const res = await offer({
+                response_type: ResponseType.ISO_18013_7,
+                requestId: configId,
+            }).expect(201);
+
+            const session = await sessionOf(res.body.session);
+            expect(session.browserOrigin).toBe(allowedOrigin);
+        });
+
+        test("refuses a dc-api offer whose expected_origin is not allowed", async () => {
+            const res = await offer({
+                response_type: ResponseType.DC_API,
+                requestId: configId,
+                expected_origin: "https://evil.example",
+            }).expect(400);
+
+            expect(res.body.message).toContain(
+                "does not allow the origin https://evil.example",
+            );
+        });
+
+        test("refuses an iso-18013-7 offer whose origin is not allowed", async () => {
+            const res = await offer({
+                response_type: ResponseType.ISO_18013_7,
+                requestId: configId,
+                expected_origin: "https://evil.example",
+            }).expect(400);
+
+            expect(res.body.message).toContain(
+                "does not allow the origin https://evil.example",
+            );
+        });
+
+        test("uses the only allowed origin, not the Origin header", async () => {
+            const res = await offer(
+                { response_type: ResponseType.DC_API, requestId: configId },
+                "https://evil.example",
+            ).expect(201);
+
+            const session = await sessionOf(res.body.session);
+            expect(payloadOf(session.requestObject).expected_origins).toEqual([
+                allowedOrigin,
+            ]);
+        });
+
+        test("signs a requested origin from several allowed ones", async () => {
+            const second = "https://checkout.shop.example";
+            await request(app.getHttpServer())
+                .patch(`/verifier/config/${configId}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({ allowedOrigins: [allowedOrigin, second] })
+                .expect(200);
+            try {
+                const res = await offer({
+                    response_type: ResponseType.DC_API,
+                    requestId: configId,
+                    expected_origin: second,
+                }).expect(201);
+
+                const session = await sessionOf(res.body.session);
+                expect(
+                    payloadOf(session.requestObject).expected_origins,
+                ).toEqual([second]);
+            } finally {
+                await request(app.getHttpServer())
+                    .patch(`/verifier/config/${configId}`)
+                    .trustLocalhost()
+                    .set("Authorization", `Bearer ${authToken}`)
+                    .send({ allowedOrigins: [allowedOrigin] })
+                    .expect(200);
+            }
+        });
+
+        test("uses the only allowed origin for a server-side call", async () => {
+            const res = await offer({
+                response_type: ResponseType.DC_API,
+                requestId: configId,
+            }).expect(201);
+
+            const session = await sessionOf(res.body.session);
+            expect(payloadOf(session.requestObject).expected_origins).toEqual([
+                allowedOrigin,
+            ]);
+        });
+
+        test("serves the request object signed at offer time to a fetch with another Origin", async () => {
+            const res = await offer({
+                response_type: ResponseType.DC_API,
+                requestId: configId,
+            }).expect(201);
+            const session = await sessionOf(res.body.session);
+
+            const fetched = await request(app.getHttpServer())
+                .get(`/presentations/${session.walletNonce}/oid4vp/request`)
+                .trustLocalhost()
+                .set("Origin", "https://evil.example")
+                .buffer(true)
+                .parse((response, callback) => {
+                    let text = "";
+                    response.on("data", (chunk) => (text += chunk));
+                    response.on("end", () => callback(null, text));
+                })
+                .expect(200);
+
+            expect(payloadOf(fetched.body).expected_origins).toEqual([
+                allowedOrigin,
+            ]);
+        });
+    });
+
     describe("ISO 18013-7 response endpoint", () => {
         async function isoOffer() {
             const res = await request(app.getHttpServer())

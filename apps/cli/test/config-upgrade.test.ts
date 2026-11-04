@@ -253,6 +253,57 @@ describe("config upgrade", () => {
         );
         expect(result.spec).toEqual(spec);
     });
+    it("upgrades a v3 presentation configuration to v4 with the spec unchanged", async () => {
+        const { cwd, context, output } = await setup();
+        const source = join(cwd, "presentation-folder");
+        await mkdir(join(source, "presentation"), { recursive: true });
+        await writeFile(
+            join(source, "info.json"),
+            JSON.stringify({
+                $schema: schemaUrl("Tenant"),
+                metadata: { generation: 1 },
+                spec: { name: "Example" },
+            }),
+        );
+        const spec = {
+            id: "age",
+            dcql_query: {
+                credentials: [
+                    {
+                        id: "pid",
+                        format: "dc+sd-jwt",
+                        meta: { vct_values: ["urn:eudi:pid:de:1"] },
+                    },
+                ],
+            },
+        };
+        await writeFile(
+            join(source, "presentation", "age.json"),
+            JSON.stringify({
+                $schema: schemaUrl("PresentationConfig", 3),
+                spec,
+            }),
+        );
+
+        expect(
+            await runCli(["config", "upgrade", source, "--check"], context),
+        ).toBe(1);
+        expect(output.stdout).toContain(
+            "presentation/age.json: upgrade required",
+        );
+        expect(await runCli(["config", "upgrade", source], context)).toBe(0);
+        const result = JSON.parse(
+            await readFile(
+                join(`${source}.upgraded`, "presentation", "age.json"),
+                "utf8",
+            ),
+        );
+        expect(result.$schema).toBe(
+            "https://eudiplo.dev/schemas/v4/PresentationConfigFile.schema.json",
+        );
+        expect(result.spec).toEqual(spec);
+    });
+
     it("upgrades a v4 issuance configuration to v5 and blocks an invalid federation entity id", async () => {
         const { cwd, context, output } = await setup();
         const source = join(cwd, "issuance.json");
