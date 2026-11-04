@@ -1,14 +1,25 @@
-import { applyDecorators, Injectable, UseGuards } from "@nestjs/common";
+import {
+    applyDecorators,
+    Injectable,
+    UseFilters,
+    UseGuards,
+} from "@nestjs/common";
 import type { Role } from "../auth/roles/role.enum.js";
 import { RoleMatch, Roles } from "../auth/roles/roles.decorator.js";
+import { McpErrorFilter } from "./mcp-error.filter.js";
 import { McpRolesGuard } from "./mcp-roles.guard.js";
 
 /**
  * A provider of MCP tools. Every call of its tools runs the role check, so a
- * tool without `@McpSecured` is refused instead of open.
+ * tool without `@McpSecured` is refused instead of open, and its application
+ * errors are mapped as for the management API.
  */
 export function McpTools(): ClassDecorator {
-    return applyDecorators(Injectable(), UseGuards(McpRolesGuard));
+    return applyDecorators(
+        Injectable(),
+        UseGuards(McpRolesGuard),
+        UseFilters(new McpErrorFilter()),
+    );
 }
 
 /**
