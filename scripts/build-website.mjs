@@ -55,12 +55,30 @@ for (const file of [
   "fonts",
   "img",
   "_headers",
+  "_redirects",
   "404.html",
 ]) {
   if (!existsSync(resolve(website, file)))
     throw new Error(`Missing website asset: ${file}`);
   cpSync(resolve(website, file), resolve(output, file), { recursive: true });
 }
+// RFC 9116 security.txt: Expires is set at build time, less than a year ahead,
+// so every deploy republishes a current file. docs.eudiplo.dev redirects here.
+const securityTxt = readFileSync(resolve(website, "security.txt"), "utf8");
+if (!/^contact:/im.test(securityTxt) || /^expires:/im.test(securityTxt))
+  throw new Error("security.txt needs a Contact and no fixed Expires field");
+const securityPolicy = readFileSync(resolve(root, "SECURITY.md"), "utf8");
+for (const [, contact] of securityTxt.matchAll(/^contact:\s*(\S+)/gim))
+  if (!securityPolicy.includes(contact))
+    throw new Error(`security.txt Contact not in SECURITY.md: ${contact}`);
+const expires = new Date();
+expires.setUTCHours(0, 0, 0, 0);
+expires.setUTCDate(expires.getUTCDate() + 360);
+mkdirSync(resolve(output, ".well-known"));
+writeFileSync(
+  resolve(output, ".well-known/security.txt"),
+  `${securityTxt.trimEnd()}\nExpires: ${expires.toISOString()}\n`,
+);
 for (const { path } of schemas.values()) {
   const target = resolve(output, "schemas", path);
   mkdirSync(resolve(target, ".."), { recursive: true });
