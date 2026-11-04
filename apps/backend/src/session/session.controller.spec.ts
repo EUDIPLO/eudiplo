@@ -15,6 +15,7 @@ import { SessionStatus } from "./domain/session-state.js";
 import type { SessionLogStoreService } from "./logging/session-log-store.service.js";
 import { SessionController } from "./session.controller.js";
 import type { SessionConfigService } from "./session-config.service.js";
+import { SessionReads } from "./session-reads.js";
 
 function createController() {
     const sessions = {
@@ -36,7 +37,10 @@ function createController() {
         statusList as unknown as StatusListService,
         logs as unknown as SessionLogStoreService,
         cancel as unknown as CancelSession,
-        sessionConfig as unknown as SessionConfigService,
+        new SessionReads(
+            sessions as unknown as SessionStore,
+            sessionConfig as unknown as SessionConfigService,
+        ),
     );
     return { controller, sessions, logs, cancel, statusList, sessionConfig };
 }

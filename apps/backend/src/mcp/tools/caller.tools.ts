@@ -1,10 +1,9 @@
-import { Injectable } from "@nestjs/common";
 import { type McpContext, Tool } from "@nestjs/mcp";
 import { allRoles, isRole } from "../../auth/roles/role.enum.js";
 import { callerOf, type McpRequest } from "../mcp-caller.js";
-import { McpSecured } from "../mcp-secured.decorator.js";
+import { McpSecured, McpTools } from "../mcp-secured.decorator.js";
 
-@Injectable()
+@McpTools()
 export class CallerTools {
     @Tool({
         name: "get_caller",

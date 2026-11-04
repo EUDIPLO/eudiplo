@@ -48,6 +48,7 @@ import {
 import { SessionController } from "./session.controller.js";
 import { SessionConfigController } from "./session-config.controller.js";
 import { SessionConfigService } from "./session-config.service.js";
+import { SessionReads } from "./session-reads.js";
 import { SessionEventsController } from "./session-events.controller.js";
 import { SessionEventsService } from "./session-events.service.js";
 import { SESSION_SETTINGS, type SessionSettings } from "./session-settings.js";
@@ -185,6 +186,7 @@ import { SESSION_SETTINGS, type SessionSettings } from "./session-settings.js";
                 ),
         },
         SessionConfigService,
+        SessionReads,
         {
             provide: SESSION_SETTINGS,
             inject: [ConfigService],
@@ -208,6 +210,7 @@ import { SESSION_SETTINGS, type SessionSettings } from "./session-settings.js";
         SessionConfigService,
         SessionEventsService,
         SessionLoggingModule,
+        SessionReads,
     ],
     controllers: [
         SessionController,

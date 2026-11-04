@@ -112,7 +112,9 @@ function roleOf(file: string): Role {
     if (/(^|\/)ports\//.test(file)) return "port";
     if (/(^|\/)(adapters|infrastructure|entities)\//.test(file))
         return "adapter";
-    if (file.endsWith(".controller.ts")) return "controller";
+    // MCP tool providers are inbound adapters like controllers.
+    if (file.endsWith(".controller.ts") || file.endsWith(".tools.ts"))
+        return "controller";
     if (file.endsWith(".module.ts")) return "composition";
     return "legacy";
 }

@@ -1,4 +1,3 @@
-import { Injectable } from "@nestjs/common";
 import { type McpContext, Tool } from "@nestjs/mcp";
 import { Role } from "../../auth/roles/role.enum.js";
 import { CredentialConfigService } from "../../issuer/configuration/credentials/credential-config/credential-config.service.js";
@@ -6,7 +5,7 @@ import type { CredentialConfiguration } from "../../issuer/configuration/credent
 import { PresentationConfigService } from "../../verifier/presentations/configuration/presentation-config.service.js";
 import type { PresentationConfig } from "../../verifier/presentations/entities/presentation-config.entity.js";
 import { callerOf, type McpRequest, tenantOf } from "../mcp-caller.js";
-import { McpSecured } from "../mcp-secured.decorator.js";
+import { McpSecured, McpTools } from "../mcp-secured.decorator.js";
 
 /**
  * Overviews of the tenant's configurations, with the roles of the list
@@ -14,7 +13,7 @@ import { McpSecured } from "../mcp-secured.decorator.js";
  * documents, with claim templates, keys and webhooks, stay in the
  * management API.
  */
-@Injectable()
+@McpTools()
 export class ConfigurationTools {
     constructor(
         private readonly credentialConfigs: CredentialConfigService,

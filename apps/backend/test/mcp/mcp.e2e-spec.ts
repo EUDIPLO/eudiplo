@@ -23,6 +23,7 @@ import { Role } from "../../src/auth/roles/role.enum.js";
 import { GLOBAL_PREFIX_EXCLUSIONS } from "../../src/main.helpers.js";
 import { ValidationErrorFilter } from "../../src/shared/common/filters/validation-error.filter.js";
 import { createAppValidationPipe } from "../../src/shared/common/zod/zod-schema.util.js";
+import { federationKey } from "../federation/federation-fixture.js";
 
 const CLAIM_VALUE = "Erika-Mustermann-MCP";
 
@@ -161,6 +162,7 @@ describe("MCP endpoint (e2e)", () => {
         otherTenantToken = await createTenant("mcp-other", [
             Role.Issuances,
             Role.IssuanceOffer,
+            Role.PresentationRequest,
         ]);
         verifierToken = await createClient("mcp-verifier", [
             Role.PresentationRequest,
@@ -199,6 +201,39 @@ describe("MCP endpoint (e2e)", () => {
                         {
                             frameworkType: "x509",
                             value: Buffer.from("root").toString("base64"),
+                        },
+                    ],
+                },
+            })
+            .expect(201);
+        await api()
+            .post("/api/federation-trust-anchor")
+            .set("Authorization", admin)
+            .send({
+                id: "trust-anchor",
+                entityId: "https://trust-anchor.example",
+                jwks: { keys: [(await federationKey("trust-anchor")).jwk] },
+            })
+            .expect(201);
+        await api()
+            .post("/api/verifier/config")
+            .set("Authorization", admin)
+            .send({
+                id: "age-check",
+                description: "Age check",
+                dcql_query: {
+                    credentials: [
+                        {
+                            id: "pid",
+                            format: "dc+sd-jwt",
+                            meta: { vct_values: ["urn:eudi:pid:1"] },
+                            claims: [{ path: ["age_over_18"] }],
+                            trusted_authorities: [
+                                {
+                                    type: "openid_federation",
+                                    values: ["https://trust-anchor.example"],
+                                },
+                            ],
                         },
                     ],
                 },
@@ -308,14 +343,12 @@ describe("MCP endpoint (e2e)", () => {
         expect(textOf(denied)).toBe(
             "This tool needs one of the roles issuance:manage",
         );
-        expect(
-            jsonOf(
-                await call(verifierToken, "list_presentation_configurations"),
-            ),
-        ).toEqual([]);
-
+        // The root client holds only tenants:manage.
         const root = await call(rootToken, "list_sessions");
         expect(root.isError).toBe(true);
+        expect(textOf(root)).toBe(
+            "This tool needs one of the roles issuance:offer, presentation:request, sessions:read",
+        );
     });
 
     test("credential configurations are those of the token's tenant", async () => {
@@ -335,6 +368,35 @@ describe("MCP endpoint (e2e)", () => {
         expect(
             jsonOf(
                 await call(otherTenantToken, "list_credential_configurations"),
+            ),
+        ).toEqual([]);
+    });
+
+    test("presentation configurations are those of the token's tenant, as summaries", async () => {
+        const result = await call(
+            verifierToken,
+            "list_presentation_configurations",
+        );
+        expect(jsonOf(result)).toEqual([
+            {
+                id: "age-check",
+                description: "Age check",
+                credentials: [
+                    {
+                        id: "pid",
+                        format: "dc+sd-jwt",
+                        vctValues: ["urn:eudi:pid:1"],
+                    },
+                ],
+            },
+        ]);
+        expect(textOf(result)).not.toContain("age_over_18");
+        expect(
+            jsonOf(
+                await call(
+                    otherTenantToken,
+                    "list_presentation_configurations",
+                ),
             ),
         ).toEqual([]);
     });
@@ -368,13 +430,26 @@ describe("MCP endpoint (e2e)", () => {
             pageSize: 1000,
         });
         expect(result.isError).toBe(true);
+        expect(textOf(result)).toContain("pageSize");
     });
 
     test("get_session_stats counts the sessions and adds the retention", async () => {
         const stats = jsonOf(await call(adminToken, "get_session_stats"));
-        expect(stats).toHaveProperty("issuance");
-        expect(stats).toHaveProperty("presentation");
-        expect(stats).toHaveProperty("retention");
+        expect(stats.issuance).toMatchObject({
+            total: 1,
+            byStatus: { active: 1 },
+        });
+        expect(stats.presentation.total).toBe(0);
+        expect(stats.retention).toHaveProperty("ttlSeconds");
+
+        const other = jsonOf(await call(otherTenantToken, "get_session_stats"));
+        expect(other.issuance.total).toBe(0);
+        expect(other.presentation.total).toBe(0);
+
+        // presentation:request alone counts presentation sessions only.
+        expect(
+            jsonOf(await call(verifierToken, "get_session_stats")),
+        ).not.toHaveProperty("issuance");
     });
 
     test("a token stops working when its client is deleted, as for the management API", async () => {

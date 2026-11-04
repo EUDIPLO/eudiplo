@@ -122,6 +122,22 @@ describe("architecture dependency rules", () => {
         ).toHaveLength(2);
     });
 
+    it("treats MCP tool providers as controllers", () => {
+        const dependencies = graph({
+            "mcp/tools/session.tools.ts":
+                'import type { Repository } from "typeorm";',
+            "mcp/tools/other.tools.ts":
+                'import { Store } from "../../feature/adapters/store.js";',
+            "feature/adapters/store.ts": "export class Store {}",
+        });
+        expect(
+            controllerPersistenceViolations(dependencies, root),
+        ).toHaveLength(1);
+        expect(architectureDebt(dependencies, root)).toEqual({
+            "mcp/tools/other.tools.ts": ["controller->adapter"],
+        });
+    });
+
     it("follows renamed imports forwarded by a local export", () => {
         const dependencies = graph({
             "feature/feature.controller.ts":

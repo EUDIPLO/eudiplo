@@ -1,5 +1,5 @@
 ---
-title: AI Assistants (MCP, experimental)
+title: AI assistants (MCP, experimental)
 sidebar_label: AI assistants (MCP)
 ---
 
@@ -7,15 +7,14 @@ sidebar_label: AI assistants (MCP)
 The MCP endpoint and its tools may change in minor releases.
 :::
 
-# AI assistants (MCP)
-
 Let an AI assistant or another [Model Context Protocol](https://modelcontextprotocol.io)
 (MCP) client read a tenant's configurations and sessions, for example to ask
 why offers failed today. The endpoint is off by default and its tools only read.
 
-**Prerequisites:** a token with `clients:manage` in the tenant, such as the
-`<tenant>-admin` client ([tenants and access](tenants-and-access.md)), and an
-MCP client that supports Streamable HTTP with a custom `Authorization` header.
+**Prerequisites:** a token with `clients:manage` in the tenant that also holds
+the roles you give the assistant, or `tenant:admin`
+([granting roles](../reference/roles.md#granting-roles)), and an MCP client
+that supports Streamable HTTP with a custom `Authorization` header.
 
 ## 1. Enable the endpoint
 
@@ -25,8 +24,9 @@ MCP_ENABLED=true
 
 After a restart, EUDIPLO serves `POST /api/mcp` over Streamable HTTP. It keeps
 no session between requests, so it works behind any load balancer. The route is
-part of the management API: CORS and your [WAF rules](waf.md) for `/api/*`
-apply, and it is not in the OpenAPI document.
+part of the management API: your [WAF rules](waf.md) for `/api/*` apply, and
+it is not in the OpenAPI document. `CORS_ORIGINS` does not open it to browser
+pages ([limits](#limits)).
 
 ## 2. Create a client for the assistant
 
@@ -47,7 +47,8 @@ curl -X POST https://eudiplo.example.com/api/client \
 The token works for the whole management API, not only for `/api/mcp`, so a
 role allows the assistant everything it allows elsewhere: with
 `issuance:manage`, it could also change credential configurations through
-`/api/issuer/credentials`. `sessions:read` alone only reads.
+`/api/issuer/credentials`. `sessions:read` alone changes nothing, but through
+`GET /api/session/{id}` it also reads issued claims and presented credentials.
 
 ## 3. Get an access token
 
@@ -97,14 +98,20 @@ The assistant sends every tool result to its language model, so the tools
 return less than the endpoints they mirror:
 
 - **Sessions** come as the summaries of the session list: ID, status,
-  timestamps, presentation configuration, failure code and the offer's
-  `reference`. Claims, presented credentials, offer and request URIs and codes
-  are never returned. The visibility rules of the session endpoints apply
+  timestamps, presentation configuration, failure code and the `reference` of
+  the offer or presentation request. Claims, presented credentials, offer and
+  request URIs and codes are never returned. The visibility rules of the
+  session endpoints apply
   ([API clients with least privilege](tenants-and-access.md#api-clients-with-least-privilege)).
+- **Failure codes** a wallet sent that are not a short code (letters, digits,
+  `_`, `.`, `:` and `-`, at most 64 characters) come as `[withheld]`. A wallet
+  chooses the error code of its response, and the assistant would read any
+  other text as part of the answer.
 - **Configurations** come without claim templates, keys, webhooks and
   registration certificates.
 
-Keep personal data out of the `reference` of offers, as the API asks.
+Keep personal data out of the `reference` of offers and presentation requests,
+as the API asks.
 
 ## Limits
 
@@ -114,7 +121,8 @@ Keep personal data out of the `reference` of offers, as the API asks.
 - **Streamable HTTP only.** There is no stdio transport. With a valid token,
   `GET` and `DELETE` on the endpoint answer `405`.
 - **No browser pages on other hosts.** A request whose `Origin` header names
-  another host than `localhost` answers `403`. MCP clients outside a browser
-  send no `Origin` header.
+  another host than `localhost`, `127.0.0.1` or `[::1]` answers `403`, also
+  for origins in `CORS_ORIGINS`. MCP clients outside a browser send no
+  `Origin` header.
 - **Read only.** Creating offers or presentation requests, cancelling sessions
   and changing configurations stay in the management API and the web client.

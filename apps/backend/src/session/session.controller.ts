@@ -47,7 +47,7 @@ import { SessionStatsQueryDto } from "./dto/session-stats-query.dto.js";
 import { SessionStatsResponseDto } from "./dto/session-stats-response.dto.js";
 import { Session } from "./entities/session.entity.js";
 import { SessionLogStoreService } from "./logging/session-log-store.service.js";
-import { SessionConfigService } from "./session-config.service.js";
+import { SessionReads } from "./session-reads.js";
 import {
     credentialStatusScope,
     readOnlySessionTypes,
@@ -73,7 +73,7 @@ export class SessionController {
         private readonly statusListService: StatusListService,
         private readonly logStoreService: SessionLogStoreService,
         private readonly cancelSession: CancelSession,
-        private readonly sessionConfig: SessionConfigService,
+        private readonly reads: SessionReads,
     ) {}
 
     /**
@@ -89,11 +89,7 @@ export class SessionController {
         @Token() token: TokenPayload,
         @Query() query: SessionQueryDto,
     ): Promise<PaginatedSessionResponseDto> {
-        return this.sessions.listForTenant(
-            token.entity!.id,
-            { ...query, hideOpen: readOnlySessionTypes(token) },
-            sessionReadScope(token),
-        );
+        return this.reads.list(token.entity!.id, token, query);
     }
 
     /**
@@ -110,16 +106,7 @@ export class SessionController {
         @Token() token: TokenPayload,
         @Query() query: SessionStatsQueryDto,
     ): Promise<SessionStatsResponseDto> {
-        const tenantId = token.entity!.id;
-        const [stats, retention] = await Promise.all([
-            this.sessions.statsForTenant(
-                tenantId,
-                sessionReadScope(token),
-                query,
-            ),
-            this.sessionConfig.getEffectiveConfig(tenantId),
-        ]);
-        return { ...stats, retention };
+        return this.reads.stats(token.entity!.id, token, query);
     }
 
     /**

@@ -127,6 +127,19 @@ Placement rules: put protocol and business behavior in its feature directory; pu
 4. Put the logic in the owning service or use case, not in the controller.
 5. Add unit tests and an E2E test (`apps/backend/test/<area>/*.e2e-spec.ts`), then regenerate the SDK with the backend running (`pnpm gen:sdk`) and commit the result.
 
+### An MCP tool
+
+MCP tools in `mcp/tools/` are inbound adapters like controllers (`*.tools.ts` files are checked as controllers) and are served only with `MCP_ENABLED` ([AI assistants](../operate/mcp.md)).
+
+1. Add the method to an `@McpTools()` provider; register a new provider in `McpToolsModule`, since only its providers are served.
+2. Declare `@McpSecured([Role.…])` with the roles of the management endpoint the tool mirrors; `mcp-tools.spec.ts` compares them, and a tool without it is refused.
+3. Take the tenant from `tenantOf(callerOf(context))`, never from the input, and reuse the owning service, for example `SessionReads`.
+4. Validate input with the Zod schema of the mirrored DTO and mark reads with `annotations: { readOnlyHint: true }`.
+5. Return summaries: no claims, credentials, secrets or values a wallet redeems a session with. Treat text a wallet chose as untrusted (see the failure codes in `session.tools.ts`).
+6. Throw `HttpException`s for expected failures: other errors reach the MCP client as `Internal server error`. Update the tools table in `operate/mcp.md` and `test/mcp/mcp.e2e-spec.ts`.
+
+Global guards, interceptors and exception filters also run around tool calls. A new one returns early when `context.getType() !== "http"`, as `TraceIdInterceptor` does.
+
 ### A wallet-facing or public endpoint
 
 Protocol endpoints (OID4VCI, OID4VP, ISO 18013-7, `.well-known`, public status and trust lists) must not carry the `/api` prefix. Add the route to `GLOBAL_PREFIX_EXCLUSIONS` in `main.helpers.ts` (covered by `main.helpers.spec.ts`). Map application errors to the protocol's error format in the controller (for example `OAuthError` for OAuth endpoints).
