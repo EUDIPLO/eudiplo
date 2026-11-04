@@ -1,4 +1,4 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { IncomingMessage } from "node:http";
 import { METHOD_NOT_FOUND } from "@modelcontextprotocol/server";
 import { Injectable, type NestMiddleware } from "@nestjs/common";
 
@@ -23,23 +23,29 @@ function isParsedJson(body: unknown): body is object {
     );
 }
 
+/**
+ * The Express response of the middleware (EUDIPLO runs on
+ * `@nestjs/platform-express`), typed by what it needs here.
+ */
+interface JsonResponse {
+    status(code: number): { json(body: unknown): void };
+}
+
 function reply(
-    response: ServerResponse,
+    response: JsonResponse,
     status: number,
     id: unknown,
     code: number,
     message: string,
 ): void {
-    response.statusCode = status;
-    response.setHeader("Content-Type", "application/json");
-    response.end(
-        JSON.stringify({
-            jsonrpc: "2.0",
-            // The SDK echoes only string and number IDs.
-            id: typeof id === "string" || typeof id === "number" ? id : null,
-            error: { code, message },
-        }),
-    );
+    // `json()` serializes and sets `Content-Type: application/json`, so a
+    // reflected ID cannot be read as markup.
+    response.status(status).json({
+        jsonrpc: "2.0",
+        // The SDK echoes only string and number IDs.
+        id: typeof id === "string" || typeof id === "number" ? id : null,
+        error: { code, message },
+    });
 }
 
 /**
@@ -60,7 +66,7 @@ function reply(
 export class RefuseMcpListenMiddleware implements NestMiddleware {
     use(
         request: IncomingMessage & { body?: unknown },
-        response: ServerResponse,
+        response: JsonResponse,
         next: () => void,
     ): void {
         const { body } = request;
