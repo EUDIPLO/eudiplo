@@ -88,3 +88,6 @@ build
 # Claude Code: local worktrees and personal settings
 .claude/worktrees/
 .claude/settings.local.json
+
+# Local Wrangler / Miniflare state (wrangler pages dev)
+.wrangler/

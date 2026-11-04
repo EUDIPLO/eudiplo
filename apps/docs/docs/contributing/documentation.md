@@ -94,6 +94,8 @@ Both workflows deploy the website and the documentation together with `.github/w
 
 So docs.eudiplo.dev describes the latest release, and the preview describes `main`. A `docs:` commit triggers no release, so documentation-only changes reach production by running *Versioned Release* with `deploy_site_only`. It refuses to deploy while a release is pending, because `main` could then document unreleased behavior; release first in that case.
 
+The website build publishes [eudiplo.dev/.well-known/security.txt](https://eudiplo.dev/.well-known/security.txt) (RFC 9116) from `apps/website/security.txt`. The build adds the `Expires` field, 360 days after the build date, so the source file must not contain one. `/security.txt` and `docs.eudiplo.dev/.well-known/security.txt` redirect to that file. Its `Contact` values must appear in `SECURITY.md`, or the build fails. Deploy production at least every 360 days so `Expires` does not lapse.
+
 The site has no per-version copies (`versioned_docs/` does not exist). Documentation of an older release is the `apps/docs/docs` folder at its git tag, which is how the [upgrade overview](../upgrade/index.md) links to old upgrade guides.
 
 Document the behavior of `main`. A change that breaks existing setups also needs an entry in the upgrade guide of the next major (see [Releases](./releases.md#commit-messages)).
