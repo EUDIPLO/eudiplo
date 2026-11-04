@@ -55,6 +55,7 @@ MASTER_SECRET=<random, 32+ characters>   # derives the default encryption key
 # OIDC_SUB=tenant_id            # claim that carries the tenant
 # OIDC_ALGORITHM=RS256          # RS256, PS256 or ES256
 # OIDC_INTERNAL_ISSUER_URL=     # expected token issuer, defaults to OIDC
+# OIDC_AUDIENCE=https://eudiplo.example.com/api   # recommended, see below
 # Optional: a Keycloak client with tenants:manage for automation
 AUTH_CLIENT_ID=root
 AUTH_CLIENT_SECRET=<secret>
@@ -71,13 +72,31 @@ On every start, EUDIPLO:
 - creates or updates the public client `eudiplo-ui`, with redirect URIs and web
   origins set to `*`,
 - creates or updates the `AUTH_CLIENT_ID` client with `tenants:manage`, if both
-  `AUTH_CLIENT_ID` and `AUTH_CLIENT_SECRET` are set.
+  `AUTH_CLIENT_ID` and `AUTH_CLIENT_SECRET` are set,
+- with `OIDC_AUDIENCE`, creates or updates the client scope `eudiplo-audience`
+  and adds it as a default scope to these two clients and to every tenant client
+  EUDIPLO created.
 
 Restrictive redirect URIs that you set on `eudiplo-ui` are overwritten at the next
 start, so restrict access to the web client at the network level if needed.
 
+### Accept only tokens issued for EUDIPLO
+
+Without `OIDC_AUDIENCE`, EUDIPLO accepts every access token of the realm that
+carries EUDIPLO roles, whichever client it was issued to. Set `OIDC_AUDIENCE`
+to a value of your choice, for example the management API URL, and EUDIPLO
+refuses tokens whose `aud` does not contain it with `401`. The client scope
+`eudiplo-audience` adds it to the tokens of the clients EUDIPLO manages, and new
+tenant clients get the scope when EUDIPLO creates them. Add the scope as a
+**Default** client scope to any other client whose tokens call EUDIPLO, such as
+your own automation clients. Tokens issued before the change lack the audience
+and stop working, so clients request new ones within the realm's access token
+lifespan.
+
 **Checkpoint:** the backend log shows `Mode: External OIDC`, and the web client's
-login page offers single sign-on after you enter the backend URL.
+login page offers single sign-on after you enter the backend URL. With
+`OIDC_AUDIENCE`, it also names the audience and the number of clients that
+received the scope.
 
 ## 3. Put the tenant into user tokens
 
@@ -131,6 +150,7 @@ and shows only that tenant's data.
 | ---------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | Startup fails with `reading 'split'`                 | Refresh tokens for client credentials disabled on `eudiplo-admin` | Enable **Use refresh tokens for client credentials grant**                     |
 | API calls return 401 after login                     | Token `iss` differs from `OIDC_INTERNAL_ISSUER_URL`/`OIDC`, or wrong `OIDC_ALGORITHM` | Compare the `iss` and `alg` of a token with the configuration |
+| 401 since `OIDC_AUDIENCE` is set                     | The token's `aud` lacks the audience: its client has no `eudiplo-audience` scope, or the token is older | Add `eudiplo-audience` as a **Default** client scope to the client ([audience](#accept-only-tokens-issued-for-eudiplo)) and request a new token |
 | `This endpoint requires a tenant context`            | User token has no `tenant_id` claim                         | Add the mapper from [step 3](#3-put-the-tenant-into-user-tokens)                       |
 | `403` on an endpoint                                 | Missing realm role                                          | Assign the role listed for the endpoint in the [roles reference](../reference/roles.md#endpoints) |
 | `403` "Cannot grant …" or "Cannot manage …"          | The roles involved go beyond the caller's own               | Assign the realm role to the caller in Keycloak ([granting roles](../reference/roles.md#granting-roles)). A target with a `realm-management` role or another client role can only be managed in Keycloak |

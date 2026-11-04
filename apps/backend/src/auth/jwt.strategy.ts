@@ -44,6 +44,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
 
     private static getExternalOIDCConfig(configService: ConfigService) {
         const keycloakIssuerUrl = configService.get("OIDC_INTERNAL_ISSUER_URL");
+        const audience = configService.get<string>("OIDC_AUDIENCE");
         const jwksUri = `${keycloakIssuerUrl}/protocol/openid-connect/certs`;
 
         return {
@@ -67,6 +68,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
             algorithms: [configService.get("OIDC_ALGORITHM")],
             issuer: keycloakIssuerUrl,
+            // Only tokens issued for EUDIPLO, when the operator names its
+            // audience; other clients of the realm get other audiences.
+            ...(audience && { audience }),
         };
     }
 

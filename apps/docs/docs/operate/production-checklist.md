@@ -78,6 +78,9 @@ again after major upgrades. Each item links to the guide that explains it.
       configuration pipeline ([Roles](../reference/roles.md)).
 - [ ] People sign in through your identity provider rather than with shared
       client secrets ([Keycloak SSO](keycloak.md)).
+- [ ] With Keycloak, `OIDC_AUDIENCE` is set, so EUDIPLO accepts only tokens
+      issued for it, not every token of the realm
+      ([Keycloak SSO](keycloak.md#accept-only-tokens-issued-for-eudiplo)).
 
 ## Keys, certificates and checks
 

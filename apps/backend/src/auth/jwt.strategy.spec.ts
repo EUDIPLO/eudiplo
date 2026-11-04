@@ -1,4 +1,6 @@
 import { UnauthorizedException } from "@nestjs/common";
+import { exportSPKI, generateKeyPair, SignJWT } from "jose";
+import { Strategy } from "passport-jwt";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { ClientData } from "./client/domain/client-data.js";
 import { TenantNotFound } from "./tenant/domain/tenant-data.js";
@@ -316,6 +318,73 @@ describe("JwtStrategy", () => {
                     roles: [Role.IssuanceOffer],
                 } as never),
             ).rejects.toThrow(UnauthorizedException);
+        });
+    });
+
+    describe("Keycloak token audience", () => {
+        const issuer = "https://keycloak.example.com/realms/eudiplo";
+        const keycloak = {
+            OIDC: issuer,
+            OIDC_INTERNAL_ISSUER_URL: issuer,
+            OIDC_SUB: "tenant_id",
+            OIDC_ALGORITHM: "RS256",
+        };
+        const audience = "https://eudiplo.example.com/api";
+
+        /** The verification options JwtStrategy hands to passport-jwt. */
+        const optionsFor = (values: Record<string, string>) =>
+            JwtStrategy["getExternalOIDCConfig"](configService(values));
+
+        /**
+         * Verifies `aud` tokens with passport-jwt and the strategy's
+         * options, the realm key standing in for the JWKS.
+         */
+        async function verify(
+            values: Record<string, string>,
+            aud: string | string[] | undefined,
+        ): Promise<"accepted" | "rejected"> {
+            const { publicKey, privateKey } = await generateKeyPair("RS256");
+            const jwt = new SignJWT({ tenant_id: "acme" })
+                .setProtectedHeader({ alg: "RS256" })
+                .setIssuer(issuer)
+                .setIssuedAt()
+                .setExpirationTime("5m");
+            if (aud) jwt.setAudience(aud);
+            const token = await jwt.sign(privateKey);
+            const { secretOrKeyProvider: _, ...options } = optionsFor(values);
+            const strategy = new Strategy(
+                { ...options, secretOrKey: await exportSPKI(publicKey) },
+                (_payload: unknown, done: (e: null, u: object) => void) =>
+                    done(null, {}),
+            );
+            return new Promise((resolve, reject) => {
+                Object.assign(strategy, {
+                    success: () => resolve("accepted"),
+                    fail: () => resolve("rejected"),
+                    error: reject,
+                });
+                strategy.authenticate(
+                    { headers: { authorization: `Bearer ${token}` } } as never,
+                    {},
+                );
+            });
+        }
+
+        test("is not checked without OIDC_AUDIENCE, as before", async () => {
+            expect(optionsFor(keycloak)).not.toHaveProperty("audience");
+            await expect(verify(keycloak, undefined)).resolves.toBe("accepted");
+            await expect(verify(keycloak, "account")).resolves.toBe("accepted");
+        });
+
+        test("must contain OIDC_AUDIENCE when it is set", async () => {
+            const values = { ...keycloak, OIDC_AUDIENCE: audience };
+
+            await expect(verify(values, audience)).resolves.toBe("accepted");
+            await expect(verify(values, ["account", audience])).resolves.toBe(
+                "accepted",
+            );
+            await expect(verify(values, "account")).resolves.toBe("rejected");
+            await expect(verify(values, undefined)).resolves.toBe("rejected");
         });
     });
 });

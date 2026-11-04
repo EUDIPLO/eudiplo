@@ -27,6 +27,7 @@ function provider({
             create: vi.fn().mockRejectedValue({ response: { status: 409 } }),
             update: vi.fn().mockResolvedValue(undefined),
             getServiceAccountUser: vi.fn().mockResolvedValue(serviceAccount),
+            addDefaultClientScope: vi.fn(),
         },
         roles: {
             find: vi
@@ -214,6 +215,21 @@ describe("KeycloakClientsProvider.addClient", () => {
 
         expect(kc.clients.update).toHaveBeenCalled();
         expect(clientRepo.save).toHaveBeenCalled();
+        expect(kc.clients.addDefaultClientScope).not.toHaveBeenCalled();
+    });
+
+    it("gives the client the audience scope when OIDC_AUDIENCE is set", async () => {
+        const { provider: clients, kc } = provider({
+            kcClient: { id: "kc-app", attributes: { tenant_id: "tenant-1" } },
+        });
+        Object.assign(clients, { audienceScopeId: "scope-1" });
+
+        await clients.addClient("tenant-1", dto);
+
+        expect(kc.clients.addDefaultClientScope).toHaveBeenCalledWith({
+            id: "kc-app",
+            clientScopeId: "scope-1",
+        });
     });
 });
 

@@ -58,7 +58,9 @@ Request a token for `assistant` with the client credentials grant
 assistant cannot renew it: when it expires, request a new one and update the
 assistant's configuration. With [Keycloak](keycloak.md), use a token of a
 Keycloak client; it lasts only the realm's access token lifespan, 5 minutes by
-default ([revoke access](tenants-and-access.md#revoke-access)).
+default ([revoke access](tenants-and-access.md#revoke-access)). Set
+`OIDC_AUDIENCE` there, so that EUDIPLO accepts only tokens issued for it
+([Keycloak](keycloak.md#accept-only-tokens-issued-for-eudiplo)).
 
 ## 4. Connect the assistant
 
