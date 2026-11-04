@@ -6345,6 +6345,19 @@ export const PresentationConfigSchema = {
             ],
             description: 'Optional ID of the access certificate to use for signing the presentation request.\nIf not provided, the default access certificate for the tenant will be used.\n\nNote: This is intentionally NOT a TypeORM relationship because CertEntity uses\na composite primary key (id + tenantId), and SQLite cannot create foreign keys\nthat reference only part of a composite primary key. The relationship is handled\nat the application level in the service layer.'
         },
+        allowedOrigins: {
+            description: 'Origins of the web pages allowed to request this presentation over the\nDigital Credentials API. When set, `dc-api` and `iso-18013-7` offers\nare bound to one of them; unset, any `expected_origin` is accepted.\n`uri` offers ignore them.',
+            example: [
+                'https://shop.example'
+            ],
+            type: [
+                'array',
+                'null'
+            ],
+            items: {
+                type: 'string'
+            }
+        },
         readerAuth: {
             type: [
                 'boolean',
@@ -7637,6 +7650,22 @@ export const PresentationConfigCreateDtoSchema = {
                 type: 'string'
             }
         },
+        allowedOrigins: {
+            description: 'Origins (http(s)://host[:port]) of the web pages allowed to request this presentation over the Digital Credentials API. When set, dc-api and iso-18013-7 offers are refused for any other expected_origin, and an offer without expected_origin uses the only listed origin. Unset: any expected_origin is accepted. Not used for uri requests.',
+            anyOf: [
+                {
+                    maxItems: 100,
+                    type: 'array',
+                    items: {
+                        type: 'string',
+                        pattern: '^(?:https:\\/\\/(?:[a-z0-9.-]+|\\[[0-9a-f:.]+\\])(?::(?:[1-9]|[1-9][0-9]|[1-35-9][0-9]{2}|4[0-35-9][0-9]|44[0-24-9]|[1-9][0-9]{3,4}))?|http:\\/\\/(?:[a-z0-9.-]+|\\[[0-9a-f:.]+\\])(?::(?:[1-9]|[1-79][0-9]|8[1-9]|[1-9][0-9]{2,4}))?)$'
+                    }
+                },
+                {
+                    type: 'null'
+                }
+            ]
+        },
         readerAuth: {
             description: 'Whether reader authentication is required for mDoc requests.',
             type: 'array',
@@ -8324,6 +8353,22 @@ export const PresentationConfigUpdateDtoSchema = {
             items: {
                 type: 'string'
             }
+        },
+        allowedOrigins: {
+            description: 'Origins (http(s)://host[:port]) of the web pages allowed to request this presentation over the Digital Credentials API. When set, dc-api and iso-18013-7 offers are refused for any other expected_origin, and an offer without expected_origin uses the only listed origin. Unset: any expected_origin is accepted. Not used for uri requests.',
+            anyOf: [
+                {
+                    maxItems: 100,
+                    type: 'array',
+                    items: {
+                        type: 'string',
+                        pattern: '^(?:https:\\/\\/(?:[a-z0-9.-]+|\\[[0-9a-f:.]+\\])(?::(?:[1-9]|[1-9][0-9]|[1-35-9][0-9]{2}|4[0-35-9][0-9]|44[0-24-9]|[1-9][0-9]{3,4}))?|http:\\/\\/(?:[a-z0-9.-]+|\\[[0-9a-f:.]+\\])(?::(?:[1-9]|[1-79][0-9]|8[1-9]|[1-9][0-9]{2,4}))?)$'
+                    }
+                },
+                {
+                    type: 'null'
+                }
+            ]
         },
         readerAuth: {
             description: 'Whether reader authentication is required for mDoc requests.',
@@ -13465,7 +13510,7 @@ export const PresentationRequestSchema = {
             example: 'https://example.com/callback?session={sessionId}'
         },
         expected_origin: {
-            description: 'Optional expected browser origin for DC API key-binding audience.\nExample: "http://localhost:8080"',
+            description: 'Origin of the page that calls the Digital Credentials API (`dc-api`,\n`iso-18013-7`). Required for these response types unless\n`allowedOrigins` of the presentation configuration lists exactly one\norigin; must be one of `allowedOrigins` when they are set. Set it from\nyour own configuration, never from end-user input such as a forwarded\n`Origin` header.\nExample: "https://shop.example"',
             type: 'string'
         },
         skewSeconds: {
@@ -13878,6 +13923,19 @@ export const PresentationConfigWritableSchema = {
                 'null'
             ],
             description: 'Optional ID of the access certificate to use for signing the presentation request.\nIf not provided, the default access certificate for the tenant will be used.\n\nNote: This is intentionally NOT a TypeORM relationship because CertEntity uses\na composite primary key (id + tenantId), and SQLite cannot create foreign keys\nthat reference only part of a composite primary key. The relationship is handled\nat the application level in the service layer.'
+        },
+        allowedOrigins: {
+            description: 'Origins of the web pages allowed to request this presentation over the\nDigital Credentials API. When set, `dc-api` and `iso-18013-7` offers\nare bound to one of them; unset, any `expected_origin` is accepted.\n`uri` offers ignore them.',
+            example: [
+                'https://shop.example'
+            ],
+            type: [
+                'array',
+                'null'
+            ],
+            items: {
+                type: 'string'
+            }
         },
         readerAuth: {
             type: [

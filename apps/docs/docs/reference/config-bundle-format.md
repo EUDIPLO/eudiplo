@@ -14,7 +14,7 @@ Every portable resource is one JSON document:
 
 ```json
 {
-    "$schema": "https://eudiplo.dev/schemas/v3/PresentationConfigFile.schema.json",
+    "$schema": "https://eudiplo.dev/schemas/v4/PresentationConfigFile.schema.json",
     "metadata": { "generation": 3, "ownership": "file-managed" },
     "spec": { "id": "age-check" }
 }
@@ -32,8 +32,8 @@ once per tenant and have no ID.
 In tenant config folders, the importer also accepts *bare* files (only the
 `spec` content) at the known paths and wraps them; a document with an unknown
 `$schema` or a newer version than the backend supports is rejected. A bare file
-names no version, so it is read as version 1, except key chain, KMS, registrar
-and tenant files
+names no version, so it is read as version 1, except key chain, KMS, registrar,
+tenant and presentation files
 ([format versions](#resource-types-and-versions)): prefer documents, which
 `GET /api/config-bundles/resources/:kind/:id/document` and the Web Client's
 download buttons write ([single resources](#single-resources)).
@@ -54,7 +54,7 @@ rejects versions newer than its own.
 | `RegistrarConfig`    | `RegistrarConfigFile`         | 2               | yes       |
 | `IssuanceConfig`     | `IssuanceConfigFile`          | 6               | yes       |
 | `CredentialConfig`   | `CredentialConfigFile`        | 3               |           |
-| `PresentationConfig` | `PresentationConfigFile`      | 3               |           |
+| `PresentationConfig` | `PresentationConfigFile`      | 4               |           |
 | `AttributeProvider`  | `AttributeProviderConfigFile` | 1               |           |
 | `WebhookEndpoint`    | `WebhookEndpointConfigFile`   | 1               |           |
 | `TrustList`          | `TrustListConfigFile`         | 1               |           |
@@ -79,6 +79,12 @@ IssuanceConfig v2 and PresentationConfig v2 and v3 were introduced with EUDIPLO
 (PEM public key of the list signer) to `walletProviderTrustLists` entries. A v2
 document is migrated unchanged; releases that only know v2, such as 9.0, cannot
 read v3 files.
+
+**PresentationConfig v4** came with EUDIPLO 10.0. It adds the optional
+`allowedOrigins`, the web origins that may request the presentation over the
+Digital Credentials API ([Allowed origins](../presentation/configure-verification.md#allowed-origins-digital-credentials-api)).
+A v3 document is migrated unchanged, and a bare presentation file with
+`allowedOrigins` is read as v4. 9.x cannot read v4 files.
 
 **IssuanceConfig v4** came with EUDIPLO 10.0. It adds the optional
 `walletAttestationStatusCheckMode` (`strict`, `best_effort` or `disabled`) to the

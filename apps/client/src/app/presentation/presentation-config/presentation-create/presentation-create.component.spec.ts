@@ -208,6 +208,88 @@ describe('Presentation configuration flow', () => {
     );
   });
 
+  it('saves allowed origins entered one per line as a list', () => {
+    fill();
+    component.form.patchValue({
+      allowedOrigins: 'https://shop.example\n\n  http://localhost:4200  ',
+    });
+    component.createOrUpdatePresentation();
+    expect(service.createConfiguration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowedOrigins: ['https://shop.example', 'http://localhost:4200'],
+      })
+    );
+  });
+
+  it('also splits allowed origins at commas and shows the saved list for review', () => {
+    fill();
+    component.form.patchValue({ allowedOrigins: 'https://a.example, https://b.example' });
+    expect(component.allowedOriginsSummary).toBe('https://a.example, https://b.example');
+    component.createOrUpdatePresentation();
+    expect(service.createConfiguration).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedOrigins: ['https://a.example', 'https://b.example'] })
+    );
+  });
+
+  it('reviews an empty origin list as not restricted', () => {
+    fill();
+    component.form.patchValue({ allowedOrigins: '  \n ' });
+    expect(component.allowedOriginsSummary).toBe('Not restricted');
+  });
+
+  it('clears allowed origins with null and leaves them out of exports', () => {
+    fill();
+    component.form.patchValue({ allowedOrigins: '  ' });
+    expect(component['getCompleteConfiguration'](true).allowedOrigins).toBeUndefined();
+    component.createOrUpdatePresentation();
+    expect(service.createConfiguration).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedOrigins: null })
+    );
+  });
+
+  it('names at most two invalid origins', () => {
+    const control = component.form.get('allowedOrigins')!;
+    control.setValue(
+      'https://a.example/\nhttps://b.example/\nhttps://c.example/\nhttps://d.example/'
+    );
+    expect(control.getError('invalidOrigins')).toBe(
+      'https://a.example/, https://b.example/ and 2 more'
+    );
+  });
+
+  it('refuses more than 100 allowed origins', () => {
+    const control = component.form.get('allowedOrigins')!;
+    control.setValue(
+      Array.from({ length: 101 }, (_, index) => `https://${index}.example`).join('\n')
+    );
+    expect(control.hasError('tooManyOrigins')).toBe(true);
+  });
+
+  it('refuses allowed origins that are not origins', () => {
+    fill();
+    const control = component.form.get('allowedOrigins')!;
+    control.setValue('https://shop.example/checkout\nhttps://ok.example');
+    expect(control.getError('invalidOrigins')).toBe('https://shop.example/checkout');
+    component.activeStep = 3;
+    component.createOrUpdatePresentation();
+    expect(service.createConfiguration).not.toHaveBeenCalled();
+    expect(component.activeStep).toBe(2);
+  });
+
+  it('loads allowed origins from JSON into the form, one per line', () => {
+    fill();
+    component['loadConfigurationFromJson']({
+      id: 'test',
+      description: 'Test request',
+      dcql_query: query,
+      allowedOrigins: ['https://shop.example', 'https://app.example'],
+    });
+    expect(component.form.get('allowedOrigins')!.value).toBe(
+      'https://shop.example\nhttps://app.example'
+    );
+    expect(component.hasRequestOverrides).toBe(true);
+  });
+
   it('reports JSON null as invalid without crashing the editor', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
@@ -273,17 +355,26 @@ describe('Presentation configuration flow', () => {
       description: 'Existing request',
       dcql_query: advanced,
       lifeTime: 600,
+      allowedOrigins: ['https://shop.example', 'https://app.example'],
     });
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
+    expect(component.form.get('allowedOrigins')!.value).toBe(
+      'https://shop.example\nhttps://app.example'
+    );
     expect(component.guided).toBe(false);
     expect(component.form.get('id')!.disabled).toBe(true);
     component.toggleGuided();
     component.createOrUpdatePresentation();
     expect(client.patch).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: expect.objectContaining({ id: 'existing', dcql_query: advanced, lifeTime: 600 }),
+        body: expect.objectContaining({
+          id: 'existing',
+          dcql_query: advanced,
+          lifeTime: 600,
+          allowedOrigins: ['https://shop.example', 'https://app.example'],
+        }),
       })
     );
   });

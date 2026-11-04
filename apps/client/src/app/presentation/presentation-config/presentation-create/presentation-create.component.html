@@ -218,6 +218,34 @@
                     </mat-hint>
                   </mat-form-field>
 
+                  <mat-form-field subscriptSizing="dynamic">
+                    <mat-label>Allowed origins (Digital Credentials API)</mat-label>
+                    <textarea
+                      matInput
+                      formControlName="allowedOrigins"
+                      rows="2"
+                      placeholder="https://shop.example"
+                    ></textarea>
+                    @if (form.controls['allowedOrigins'].hasError('invalidOrigins')) {
+                      <mat-error>
+                        Not an origin:
+                        {{ form.controls['allowedOrigins'].getError('invalidOrigins') }}. Use the
+                        form https://host[:port] or http://host[:port] with a lower-case host,
+                        without the default port (443 for https, 80 for http), path or trailing
+                        slash.
+                      </mat-error>
+                    }
+                    @if (form.controls['allowedOrigins'].hasError('tooManyOrigins')) {
+                      <mat-error>List at most 100 origins.</mat-error>
+                    }
+                    <mat-hint>
+                      Optional, one origin per line. When set, DC API and ISO 18013-7 requests are
+                      only created for pages on these origins; to start them from this Web Client,
+                      include <code>{{ pageOrigin }}</code
+                      >. Empty: not restricted, any origin the request names is accepted.
+                    </mat-hint>
+                  </mat-form-field>
+
                   <mat-form-field>
                     <mat-label>Access Key Chain (optional)</mat-label>
                     <mat-select formControlName="accessKeyChainId">
@@ -570,6 +598,10 @@
               <div>
                 <dt>Redirect</dt>
                 <dd>{{ form.get('redirectUri')?.value || 'None' }}</dd>
+              </div>
+              <div>
+                <dt>Allowed origins (Digital Credentials API)</dt>
+                <dd>{{ allowedOriginsSummary }}</dd>
               </div>
               <div>
                 <dt>Attachments</dt>

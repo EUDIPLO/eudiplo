@@ -1,4 +1,5 @@
 import Joi from "joi";
+import { isSerializedWebOrigin } from "../../shared/domain/web-origin.js";
 
 /**
  * Split a comma-separated `CORS_ORIGINS` value into its entries.
@@ -13,24 +14,6 @@ export function splitCorsOrigins(value: string | undefined): string[] {
 }
 
 /**
- * Check whether a value is a serialized web origin as sent by browsers in the
- * `Origin` header: `http(s)` scheme, lowercase host, optional non-default port,
- * and no path, query, fragment or trailing slash.
- */
-export function isValidCorsOrigin(value: string): boolean {
-    let url: URL;
-    try {
-        url = new URL(value);
-    } catch {
-        return false;
-    }
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-        return false;
-    }
-    return url.origin === value;
-}
-
-/**
  * Validation schema for cross-origin resource sharing (CORS).
  */
 export const CORS_VALIDATION_SCHEMA = Joi.object({
@@ -39,7 +22,7 @@ export const CORS_VALIDATION_SCHEMA = Joi.object({
         .optional()
         .custom((value: string, helpers) => {
             const invalid = splitCorsOrigins(value).filter(
-                (origin) => !isValidCorsOrigin(origin),
+                (origin) => !isSerializedWebOrigin(origin),
             );
             if (invalid.length > 0) {
                 return helpers.message({

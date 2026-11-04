@@ -361,5 +361,7 @@ function sanitizeForLog(config: PresentationConfig): Record<string, unknown> {
         attached: config.attached,
         redirectUri: config.redirectUri,
         accessKeyChainId: config.accessKeyChainId,
+        allowedOrigins: config.allowedOrigins,
+        readerAuth: config.readerAuth,
     };
 }

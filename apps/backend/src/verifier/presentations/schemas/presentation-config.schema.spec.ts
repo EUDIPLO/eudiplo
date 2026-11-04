@@ -57,6 +57,33 @@ describe("PresentationConfigCreateSchema", () => {
         expect(withBody({ provided_attestations: [{ vct: "x" }] })).toBe(false);
     });
 
+    it("accepts allowedOrigins only in serialized origin form", () => {
+        const withOrigins = (allowedOrigins: unknown) =>
+            PresentationConfigCreateSchema.safeParse({
+                ...basePresentationConfig,
+                allowedOrigins,
+            }).success;
+
+        expect(
+            withOrigins(["https://shop.example", "http://localhost:4200"]),
+        ).toBe(true);
+        expect(withOrigins(null)).toBe(true);
+        expect(withOrigins(["https://shop.example/"])).toBe(false);
+        expect(withOrigins(["https://shop.example/checkout"])).toBe(false);
+        expect(withOrigins(["https://Shop.example"])).toBe(false);
+        expect(withOrigins(["https://shop.example:443"])).toBe(false);
+        expect(withOrigins(["shop.example"])).toBe(false);
+        expect(withOrigins(["*"])).toBe(false);
+        expect(withOrigins("https://shop.example")).toBe(false);
+        const many = (count: number) =>
+            Array.from(
+                { length: count },
+                (_, index) => `https://${index}.example`,
+            );
+        expect(withOrigins(many(100))).toBe(true);
+        expect(withOrigins(many(101))).toBe(false);
+    });
+
     it("continues rejecting unrelated fields", () => {
         const result = PresentationConfigCreateSchema.safeParse({
             ...basePresentationConfig,

@@ -17,7 +17,7 @@ Open **Credential Verification → Verification Configs → Create**. The guided
 
 1. **Name**: a unique ID (the `requestId` you use later) and an internal description.
 2. **Credentials**: **Import from Issuer** reads credential types and claims from an issuer's metadata, **Import from Schema** starts from registrar schema metadata, and **Add credential** lets you enter the type and claims yourself.
-3. **Settings**: review the request lifetime (default 300 seconds), the status check mode (default strict) and the access key chain (default: the tenant's access key chain). Expand the panels for redirect URI, registration certificate, webhook endpoint (**Application integration**) or transaction data.
+3. **Settings**: review the request lifetime (default 300 seconds), the status check mode (default strict) and the access key chain (default: the tenant's access key chain). Expand the panels for redirect URI, [allowed origins](#allowed-origins-digital-credentials-api) for the Digital Credentials API (**Request and verification options**), registration certificate, webhook endpoint (**Application integration**) or transaction data.
 4. **Review**: check the request and create the configuration. Use **Create offer** on the saved configuration to test it with a wallet.
 
 **Switch to editor** shows all sections at once; existing configurations open in this mode. **Use guided setup** returns to the steps. Both modes edit the same form.
@@ -107,6 +107,20 @@ If the wallet ecosystem requires a registration certificate, set `registration_c
 ```
 
 An imported `jwt` is used without a registrar call, after the time and overasking checks. For `id` and `body`, EUDIPLO needs a registrar configuration for the tenant and attaches no certificate without one. Resolution, caching and the overasking check are described in [Registration Certificates](../trust/registration-certificates.md).
+
+## Allowed origins (Digital Credentials API)
+
+[DC API requests](requests.md#digital-credentials-api) (`dc-api` and `iso-18013-7`) are bound to the origin of the page that calls the wallet: OpenID4VP requests carry it in the signed `expected_origins` claim, ISO 18013-7 requests in the session transcript. The wallet checks it against the origin the browser reports and refuses requests from other pages. Your backend names that origin in each request (`expected_origin`). To limit which origins any caller may name, list them in `allowedOrigins`:
+
+```json
+{
+    "allowedOrigins": ["https://shop.example.com"]
+}
+```
+
+With the list, EUDIPLO creates `dc-api` and `iso-18013-7` requests only for these origins, and a request without `expected_origin` uses the only listed origin. Without it, any origin the request names is accepted. `uri` requests do not use the list. Each entry is an origin in serialized form, such as `https://shop.example.com` or `http://localhost:4200`; the exact rules are in the [validation rules](../reference/presentation-configuration.md#validation-rules).
+
+Set the list when callers you do not fully control create requests, for example a client whose secret runs in a browser. To start DC API requests from the Web Client for a configuration with the list, add the Web Client's origin as well, for example `http://localhost:4200`. Since 10.0.
 
 ## Reader authentication (ISO 18013-7)
 

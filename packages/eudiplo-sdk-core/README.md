@@ -95,9 +95,11 @@ import { EudiploClient } from '@eudiplo/sdk-core';
 
 const client = new EudiploClient({...});
 
-// Create DC API session with request object
+// Create DC API session with request object. In a browser, origin defaults
+// to location.origin; on a server, set the origin of your page.
 const session = await client.createDcApiPresentationRequest({
   configId: 'age-over-18',
+  origin: 'https://shop.example',
 });
 
 // Submit using the browser-native DC API end-to-end
@@ -108,6 +110,7 @@ const result = await client.submitDcApiPresentation(session);
 
 For production deployments, keep `clientId` and `clientSecret` on the server.
 Use `EudiploClient` methods to run the full flow (`createDcApiPresentationRequest` + `submitDcApiPresentation`) from trusted backend/application code.
+Server-side calls must pass `origin`, the origin of the page that calls the wallet, taken from your own configuration and never from the end user's request. Without it, EUDIPLO answers `400` unless the presentation configuration lists exactly one allowed origin.
 
 ### Class-based API (More Control)
 

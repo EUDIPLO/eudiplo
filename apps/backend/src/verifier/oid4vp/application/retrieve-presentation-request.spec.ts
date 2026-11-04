@@ -31,12 +31,7 @@ describe("RetrievePresentationRequest", () => {
         const generate = vi.fn();
 
         await expect(
-            useCase.execute(
-                session("cached.jwt.value"),
-                "https://wallet.example",
-                false,
-                generate,
-            ),
+            useCase.execute(session("cached.jwt.value"), false, generate),
         ).resolves.toBe("cached.jwt.value");
         expect(generate).not.toHaveBeenCalled();
         expect(update).not.toHaveBeenCalled();
@@ -46,12 +41,7 @@ describe("RetrievePresentationRequest", () => {
         const { update, useCase } = setup();
 
         await expect(
-            useCase.execute(
-                session("cached.jwt.value"),
-                "origin",
-                true,
-                vi.fn(),
-            ),
+            useCase.execute(session("cached.jwt.value"), true, vi.fn()),
         ).resolves.toBe("cached.jwt.value");
         expect(update).toHaveBeenCalledExactlyOnceWith(
             "tenant-1",
@@ -66,19 +56,10 @@ describe("RetrievePresentationRequest", () => {
         const { update, useCase } = setup();
         const generate = vi.fn().mockResolvedValue("generated.jwt.value");
 
-        await expect(
-            useCase.execute(
-                session(),
-                "https://wallet.example",
-                false,
-                generate,
-            ),
-        ).resolves.toBe("generated.jwt.value");
-        expect(generate).toHaveBeenCalledExactlyOnceWith(
-            "session-1",
-            "https://wallet.example",
-            false,
+        await expect(useCase.execute(session(), false, generate)).resolves.toBe(
+            "generated.jwt.value",
         );
+        expect(generate).toHaveBeenCalledExactlyOnceWith("session-1", false);
         expect(update).toHaveBeenCalledExactlyOnceWith(
             "tenant-1",
             "session-1",
@@ -92,7 +73,7 @@ describe("RetrievePresentationRequest", () => {
         const { executeFrom, useCase } = setup();
         const current = session("cached.jwt.value");
 
-        await useCase.execute(current, "origin", false, vi.fn());
+        await useCase.execute(current, false, vi.fn());
 
         expect(executeFrom).toHaveBeenCalledExactlyOnceWith(
             current,
@@ -115,7 +96,6 @@ describe("RetrievePresentationRequest", () => {
             await expect(
                 useCase.execute(
                     session("cached.jwt.value", values),
-                    "origin",
                     true,
                     generate,
                 ),
@@ -135,7 +115,6 @@ describe("RetrievePresentationRequest", () => {
                     status: SessionStatus.Fetched,
                     expiresAt: new Date(Date.now() + 60_000),
                 }),
-                "origin",
                 false,
                 vi.fn(),
             ),

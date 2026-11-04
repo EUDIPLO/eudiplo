@@ -29,6 +29,7 @@ The table is generated at build time from the Zod schema the backend validates w
 | `attached`              | Stored with the configuration; currently not sent to the wallet.                                                                                                                                                                          |
 | `redirectUri`           | Same-device redirect target. `{sessionId}` is replaced with the session ID. A request can override it, except for ISO 18013-7. See [Receive Results](../presentation/receive-results.md).                                                  |
 | `accessKeyChainId`      | Access key chain that signs the request, determines the `client_id` and signs `readerAuth`. Without it, EUDIPLO uses the tenant's [default access key chain](../trust/keys-and-certificates.md#default-access-key-chain): `access` of its key chain defaults, else one picked by rule, which prefers a registrar or other CA-issued certificate. |
+| `allowedOrigins`        | Unset or empty: any `expected_origin` is accepted. When set, `dc-api` and `iso-18013-7` requests must name one of these origins, or none if exactly one is listed. Not used for `uri` requests. See [Allowed origins](../presentation/configure-verification.md#allowed-origins-digital-credentials-api). |
 | `readerAuth`            | `false`. ISO 18013-7 only: sign the `DeviceRequest` with the access key chain. Requires the `db` KMS provider for that key.                                                                                                                |
 
 ## Validation rules
@@ -39,6 +40,7 @@ Rules that the table cannot show:
 - `meta` is required: `vct_values` (at least one) for `dc+sd-jwt`, `doctype_value` for `mso_mdoc`.
 - Every credential query needs `trusted_authorities` with an `etsi_tl` trust list or an `openid_federation` trust anchor, unless `SKIP_TRUST_AUTHORITY=true`. See [DCQL](../presentation/dcql.md#accept-only-trusted-issuers).
 - Every ID in `claim_sets` must reference the `id` of a claim in the same credential query; claim IDs are unique.
+- Each `allowedOrigins` entry is an origin in serialized form: `https` or `http` scheme, lower-case host, a port only if it is not the default (`443`, `80`), no path, query, credentials or trailing slash. At most 100 entries.
 - `transaction_data` entries whose `type` starts with `urn:eudi:sca:` must be a supported [TS12 type with a valid payload](../presentation/transaction-data.md#ts12-sca-transaction-data).
 
 ## Server-managed fields

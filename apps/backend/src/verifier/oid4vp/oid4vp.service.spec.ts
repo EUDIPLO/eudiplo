@@ -761,7 +761,7 @@ describe("OID4VP expired or finished requests", () => {
         });
 
         const error = await service
-            .getAuthorizationRequest("nonce", "https://wallet.example")
+            .getAuthorizationRequest("nonce")
             .catch((error) => error);
 
         expect(error.getStatus()).toBe(400);
@@ -770,12 +770,19 @@ describe("OID4VP expired or finished requests", () => {
 });
 
 describe("OID4VP request creation", () => {
-    function createService(updateForTenant: ReturnType<typeof vi.fn>) {
+    function createService(
+        updateForTenant: ReturnType<typeof vi.fn>,
+        presentationConfig: Record<string, unknown> = {
+            allowedOrigins: ["https://rp"],
+        },
+    ) {
         return Object.assign(
             Object.create(Oid4vpService.prototype) as Oid4vpService,
             {
                 presentationConfigService: {
-                    getPresentationConfig: vi.fn().mockResolvedValue({}),
+                    getPresentationConfig: vi
+                        .fn()
+                        .mockResolvedValue(presentationConfig),
                 },
                 certService: {
                     find: vi.fn().mockResolvedValue({ keyId: "access-a" }),
@@ -810,7 +817,6 @@ describe("OID4VP request creation", () => {
             { clientIdScheme: "openid_federation" },
             "tenant",
             false,
-            "https://rp",
         );
 
         expect(new URLSearchParams(offer.uri).get("client_id")).toBe(
@@ -836,7 +842,6 @@ describe("OID4VP request creation", () => {
                 { clientIdScheme: "openid_federation" },
                 "tenant",
                 false,
-                "https://rp",
             )
             .catch((error) => error);
 
@@ -860,7 +865,6 @@ describe("OID4VP request creation", () => {
                 { clientIdScheme: "openid_federation" },
                 "tenant",
                 false,
-                "https://rp",
             )
             .catch((error) => error);
 
@@ -921,16 +925,135 @@ describe("OID4VP request creation", () => {
         );
     });
 
-    it("stores the access key chain of the client_id on a new session", async () => {
-        const service = createService(vi.fn().mockResolvedValue(undefined));
+    it("binds a DC API session to the requested allowed origin", async () => {
+        const service = createService(vi.fn().mockResolvedValue(undefined), {
+            allowedOrigins: ["https://shop.example", "https://rp"],
+        });
+
+        await service.createRequest(
+            "presentation",
+            {},
+            "tenant",
+            true,
+            "https://rp/checkout",
+        );
+
+        expect(
+            (service as unknown as { createSession: { execute: unknown } })
+                .createSession.execute,
+        ).toHaveBeenCalledWith(
+            expect.objectContaining({
+                useDcApi: true,
+                browserOrigin: "https://rp",
+            }),
+        );
+    });
+
+    it.each([
+        [
+            "without expected_origin and allowedOrigins",
+            {},
+            undefined,
+            'Presentation config "presentation" needs expected_origin',
+        ],
+        [
+            "for an origin it does not list",
+            { allowedOrigins: ["https://rp"] },
+            "https://evil.example",
+            'Presentation config "presentation" does not allow the origin https://evil.example',
+        ],
+        [
+            "without an origin while several are allowed",
+            { allowedOrigins: ["https://rp", "https://shop.example"] },
+            undefined,
+            "set expected_origin",
+        ],
+    ])(
+        "refuses a DC API request %s",
+        async (_case, presentationConfig, origin, message) => {
+            const updateForTenant = vi.fn();
+            const service = createService(updateForTenant, presentationConfig);
+
+            const error = await service
+                .createRequest("presentation", {}, "tenant", true, origin)
+                .catch((error) => error);
+
+            expect(error.getStatus()).toBe(400);
+            expect(error.message).toContain(message);
+            expect(
+                (service as unknown as { createSession: { execute: unknown } })
+                    .createSession.execute,
+            ).not.toHaveBeenCalled();
+        },
+    );
+
+    it("binds an existing session to the allowed origin of a DC API request", async () => {
+        const updateForTenant = vi.fn().mockResolvedValue(undefined);
+        const service = createService(updateForTenant);
+
+        await service.createRequest(
+            "presentation",
+            { session: "existing" },
+            "tenant",
+            true,
+            "https://rp",
+        );
+
+        expect(updateForTenant).toHaveBeenCalledExactlyOnceWith(
+            "tenant",
+            "existing",
+            expect.objectContaining({
+                useDcApi: true,
+                browserOrigin: "https://rp",
+            }),
+        );
+    });
+
+    it("binds a DC API session to any origin without allowedOrigins", async () => {
+        const service = createService(vi.fn().mockResolvedValue(undefined), {});
+
+        await service.createRequest(
+            "presentation",
+            {},
+            "tenant",
+            true,
+            "https://shop.example",
+        );
+
+        expect(
+            (service as unknown as { createSession: { execute: unknown } })
+                .createSession.execute,
+        ).toHaveBeenCalledWith(
+            expect.objectContaining({ browserOrigin: "https://shop.example" }),
+        );
+    });
+
+    it("ignores the origin of uri requests", async () => {
+        const service = createService(vi.fn().mockResolvedValue(undefined), {});
 
         await service.createRequest(
             "presentation",
             {},
             "tenant",
             false,
-            "https://rp",
+            "https://evil.example",
         );
+
+        expect(
+            (service as unknown as { createSession: { execute: unknown } })
+                .createSession.execute,
+        ).toHaveBeenCalledWith(
+            expect.objectContaining({
+                useDcApi: false,
+                browserOrigin: undefined,
+            }),
+        );
+    });
+
+    it("stores the access key chain of the client_id on a new session", async () => {
+        const service = createService(vi.fn().mockResolvedValue(undefined));
+
+        await service.createRequest("presentation", {}, "tenant", false);
 
         expect(
             (service as unknown as { createSession: { execute: unknown } })
@@ -952,7 +1075,6 @@ describe("OID4VP request creation", () => {
             { session: "existing" },
             "tenant",
             false,
-            "https://rp",
         );
 
         expect(updateForTenant).toHaveBeenCalledExactlyOnceWith(
@@ -1067,7 +1189,7 @@ describe("OID4VP request object signing key", () => {
             accessKeyChainId: "access-a",
         });
 
-        await service.createAuthorizationRequest("session", "https://rp");
+        await service.createAuthorizationRequest("session");
 
         const [payload, header, , keyId] = signJWT.mock.calls[0];
         expect(payload.client_id).toBe(federationClientId);
@@ -1102,7 +1224,7 @@ describe("OID4VP request object signing key", () => {
             includeTrustChain: true,
         });
 
-        await service.createAuthorizationRequest("session", "https://rp");
+        await service.createAuthorizationRequest("session");
 
         expect(signJWT.mock.calls[0][1].trust_chain).toEqual([
             "ec",
@@ -1125,7 +1247,7 @@ describe("OID4VP request object signing key", () => {
         });
 
         await expect(
-            service.createAuthorizationRequest("session", "https://rp"),
+            service.createAuthorizationRequest("session"),
         ).rejects.toThrow("no longer configured");
         expect(signJWT).not.toHaveBeenCalled();
     });
@@ -1136,7 +1258,7 @@ describe("OID4VP request object signing key", () => {
             accessKeyChainId: "access-a",
         });
 
-        await service.createAuthorizationRequest("session", "https://rp");
+        await service.createAuthorizationRequest("session");
 
         expect(find).toHaveBeenCalledWith(
             expect.objectContaining({ keyId: "access-a" }),
@@ -1158,7 +1280,7 @@ describe("OID4VP request object signing key", () => {
                 { registration_cert: { body: {} } },
             );
 
-        await service.createAuthorizationRequest("session", "https://rp");
+        await service.createAuthorizationRequest("session");
 
         expect(getOrIssueRegistrationCertificate).toHaveBeenCalledWith(
             expect.objectContaining({ registration_cert: { body: {} } }),
@@ -1177,9 +1299,50 @@ describe("OID4VP request object signing key", () => {
             { accessKeyChainId: "configured" },
         );
 
-        await service.createAuthorizationRequest("session", "https://rp");
+        await service.createAuthorizationRequest("session");
 
         expect(signJWT.mock.calls[0][3]).toBe("configured");
+    });
+
+    it("signs the origin stored on a DC API session as expected_origins", async () => {
+        const { service, signJWT } = createService({
+            clientId: "x509_hash:hash-of-access-a",
+            accessKeyChainId: "access-a",
+            useDcApi: true,
+            browserOrigin: "https://shop.example",
+        });
+
+        await service.createAuthorizationRequest("session");
+
+        const [payload] = signJWT.mock.calls[0];
+        expect(payload.expected_origins).toEqual(["https://shop.example"]);
+        expect(payload.response_mode).toBe("dc_api.jwt");
+    });
+
+    it("refuses to sign a DC API session without an allowed origin", async () => {
+        const { service, signJWT } = createService({
+            clientId: "x509_hash:hash-of-access-a",
+            accessKeyChainId: "access-a",
+            useDcApi: true,
+        });
+
+        await expect(
+            service.createAuthorizationRequest("session"),
+        ).rejects.toThrow("DC API session has no allowed origin");
+        expect(signJWT).not.toHaveBeenCalled();
+    });
+
+    it("signs no expected_origins for uri sessions", async () => {
+        const { service, signJWT } = createService({
+            clientId: "x509_hash:hash-of-access-a",
+            accessKeyChainId: "access-a",
+            useDcApi: false,
+            browserOrigin: "https://shop.example",
+        });
+
+        await service.createAuthorizationRequest("session");
+
+        expect(signJWT.mock.calls[0][0].expected_origins).toBeUndefined();
     });
 
     it("announces the mdoc algorithms with the OID4VP 1.0 Appendix B.2.2 parameters", async () => {
@@ -1188,7 +1351,7 @@ describe("OID4VP request object signing key", () => {
             accessKeyChainId: "access-a",
         });
 
-        await service.createAuthorizationRequest("session", "https://rp");
+        await service.createAuthorizationRequest("session");
 
         expect(
             signJWT.mock.calls[0][0].client_metadata.vp_formats_supported
@@ -1207,7 +1370,7 @@ describe("OID4VP request object signing key", () => {
         find.mockRejectedValueOnce(new Error("Key chain not found"));
 
         await expect(
-            service.createAuthorizationRequest("session", "https://rp"),
+            service.createAuthorizationRequest("session"),
         ).rejects.toThrow("Key chain not found");
         expect(find).toHaveBeenCalledExactlyOnceWith(
             expect.objectContaining({ keyId: "access-a" }),

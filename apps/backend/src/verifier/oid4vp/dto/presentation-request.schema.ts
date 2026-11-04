@@ -38,7 +38,9 @@ export const PresentationRequestSchema = z
         expected_origin: z
             .string()
             .optional()
-            .describe("Expected browser origin for DC API key binding."),
+            .describe(
+                "Origin of the page that calls the Digital Credentials API (dc-api, iso-18013-7), for example https://shop.example. Required for these response types unless allowedOrigins of the presentation configuration lists exactly one origin; must be one of allowedOrigins when they are set. Set it from your own configuration, never from end-user input such as a forwarded Origin header.",
+            ),
         transaction_data: z
             .array(TransactionDataSchema)
             .optional()

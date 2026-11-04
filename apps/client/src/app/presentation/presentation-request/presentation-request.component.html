@@ -45,9 +45,36 @@
                 <mat-error>Please select a presentation configuration</mat-error>
               }
             </mat-form-field>
-            <mat-slide-toggle formControlName="dcapi">
+            <mat-slide-toggle
+              formControlName="dcapi"
+              [aria-describedby]="dcApiOriginProblem ? 'dc-api-origin-problem' : ''"
+            >
               Use DC-API instead of QR-Code
             </mat-slide-toggle>
+            <div role="status">
+              @if (dcApiOriginProblem; as problem) {
+                <div id="dc-api-origin-problem" class="readiness-hint readiness-error">
+                  <mat-icon aria-hidden="true">error</mat-icon>
+                  <span>
+                    {{ problem }}
+                    @if (canManagePresentationConfigs && selectedConfig) {
+                      Add it under Settings, Request and verification options, or for a file-managed
+                      configuration to allowedOrigins in its source file.
+                      <a
+                        mat-button
+                        [routerLink]="['/presentation-config', selectedConfig.id, 'edit']"
+                        appConfigManaged
+                        managedKind="PresentationConfig"
+                        [managedResourceId]="selectedConfig.id"
+                        >Edit the configuration</a
+                      >
+                    } @else {
+                      Ask an administrator with presentation:manage to add it.
+                    }
+                  </span>
+                </div>
+              }
+            </div>
             <mat-form-field appearance="outline" class="full-width">
               <mat-label>Client identifier</mat-label>
               <mat-select formControlName="clientIdScheme">
@@ -112,7 +139,11 @@
               color="primary"
               type="submit"
               [disabled]="
-                form.invalid || generatingOffer || checkingReadiness || !isReadyToGenerate
+                form.invalid ||
+                generatingOffer ||
+                checkingReadiness ||
+                !isReadyToGenerate ||
+                !!dcApiOriginProblem
               "
             >
               Generate Request

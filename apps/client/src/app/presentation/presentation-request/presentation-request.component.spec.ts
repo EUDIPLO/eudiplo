@@ -1,3 +1,4 @@
+import { ChangeDetectorRef } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, provideRouter } from '@angular/router';
@@ -38,6 +39,64 @@ describe('PresentationRequestComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  describe('DC API origin check', () => {
+    const origin = window.location.origin;
+
+    function select(allowedOrigins?: string[] | null) {
+      component.configs = [{ id: 'pid', allowedOrigins } as any];
+      component.form.patchValue({ requestId: 'pid', dcapi: true });
+    }
+
+    it('names the missing origin and blocks the request', async () => {
+      service.loadConfigurations.mockResolvedValue([
+        { id: 'pid', allowedOrigins: ['https://other.example'] },
+      ]);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      component.form.patchValue({ requestId: 'pid', dcapi: true });
+      fixture.debugElement.injector.get(ChangeDetectorRef).markForCheck();
+      fixture.detectChanges();
+
+      const message = fixture.nativeElement.querySelector('#dc-api-origin-problem');
+      expect(message?.textContent).toContain(origin);
+      const toggle = fixture.nativeElement.querySelector('button[role="switch"]');
+      expect(toggle.getAttribute('aria-describedby')).toContain('dc-api-origin-problem');
+
+      await component.onSubmit();
+      expect(service.getOffer).not.toHaveBeenCalled();
+    });
+
+    it('accepts a configuration without allowed origins and names this page', async () => {
+      select(null);
+      expect(component.dcApiOriginProblem).toBeNull();
+
+      await component.onSubmit();
+      expect(service.getOffer).toHaveBeenCalledWith(
+        expect.objectContaining({ response_type: 'dc-api', expected_origin: origin })
+      );
+    });
+
+    it('allows a configuration that lists this page', async () => {
+      select([origin]);
+      expect(component.dcApiOriginProblem).toBeNull();
+
+      await component.onSubmit();
+      expect(service.getOffer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestId: 'pid',
+          response_type: 'dc-api',
+          expected_origin: origin,
+        })
+      );
+    });
+
+    it('does not check uri requests', () => {
+      select(null);
+      component.form.patchValue({ dcapi: false });
+      expect(component.dcApiOriginProblem).toBeNull();
+    });
   });
 
   it('requests an x509_san_dns client ID when selected', async () => {

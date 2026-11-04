@@ -1825,6 +1825,10 @@ export class ConfigBundleService {
                     attached: entity.attached,
                     redirectUri: entity.redirectUri,
                     accessKeyChainId: entity.accessKeyChainId,
+                    // An empty list restricts nothing, like no list.
+                    allowedOrigins: entity.allowedOrigins?.length
+                        ? entity.allowedOrigins
+                        : undefined,
                     readerAuth: entity.readerAuth,
                 };
             case "AttributeProvider":

@@ -47,6 +47,7 @@ describe("Iso18013Service.createOffer per-request webhook override", () => {
                 webhookEndpointId: "endpoint-1",
                 readerAuth: false,
                 lifeTime: 300,
+                allowedOrigins: ["https://origin.example"],
             }),
         };
         const encryptionService = {
@@ -116,6 +117,59 @@ describe("Iso18013Service.createOffer per-request webhook override", () => {
         expect(sessionCreate).toHaveBeenCalledWith(
             expect.objectContaining({ parsedWebhook: CONFIG_WEBHOOK }),
         );
+    });
+
+    it("binds the session transcript to the allowed origin", async () => {
+        await service.createOffer(
+            "req",
+            "tenant",
+            "https://origin.example/checkout",
+        );
+
+        expect(sessionCreate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                browserOrigin: "https://origin.example",
+            }),
+        );
+    });
+
+    it("uses the only allowed origin when none is requested", async () => {
+        await service.createOffer("req", "tenant", undefined);
+
+        expect(sessionCreate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                browserOrigin: "https://origin.example",
+            }),
+        );
+    });
+
+    it("needs an origin when the configuration lists none", async () => {
+        (
+            service as unknown as {
+                presentationConfigService: {
+                    getPresentationConfig: ReturnType<typeof vi.fn>;
+                };
+            }
+        ).presentationConfigService.getPresentationConfig.mockResolvedValueOnce(
+            {
+                dcql_query: { credentials: [] },
+                allowedOrigins: null,
+            },
+        );
+
+        await expect(
+            service.createOffer("req", "tenant", undefined),
+        ).rejects.toThrow('Presentation config "req" needs expected_origin');
+        expect(sessionCreate).not.toHaveBeenCalled();
+    });
+
+    it("refuses an origin the configuration does not allow", async () => {
+        await expect(
+            service.createOffer("req", "tenant", "https://evil.example"),
+        ).rejects.toThrow(
+            'Presentation config "req" does not allow the origin https://evil.example',
+        );
+        expect(sessionCreate).not.toHaveBeenCalled();
     });
 });
 

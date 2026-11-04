@@ -111,3 +111,48 @@ describe('PresentationShowComponent download', () => {
     expect(button?.getAttribute('aria-busy')).toBe('false');
   });
 });
+
+describe('PresentationShowComponent allowed origins', () => {
+  async function render(allowedOrigins: string[] | null): Promise<string> {
+    TestBed.configureTestingModule({
+      imports: [PresentationShowComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({ id: 'age-check' }) } },
+        },
+        {
+          provide: PresentationManagementService,
+          useValue: {
+            getPresentationById: async () => ({
+              id: 'age-check',
+              dcql_query: { credentials: [] },
+              allowedOrigins,
+            }),
+          },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(PresentationShowComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.config).toBeTruthy());
+    fixture.detectChanges();
+    const items = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('mat-list-item')
+    ) as HTMLElement[];
+    const item = items.find((element) =>
+      element.textContent?.includes('Allowed origins (Digital Credentials API)')
+    );
+    return item?.textContent ?? '';
+  }
+
+  it('lists the allowed origins', async () => {
+    const text = await render(['https://shop.example', 'https://app.example']);
+    expect(text).toContain('https://shop.example, https://app.example');
+  });
+
+  it('says the origins are not restricted without a list', async () => {
+    expect(await render(null)).toContain('Not restricted');
+  });
+});

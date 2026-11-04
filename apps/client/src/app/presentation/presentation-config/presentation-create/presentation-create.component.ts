@@ -1,5 +1,13 @@
 import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
-import { FormArray, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import {
+  AbstractControl,
+  FormArray,
+  FormControl,
+  FormGroup,
+  ReactiveFormsModule,
+  ValidationErrors,
+  Validators,
+} from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -185,6 +193,7 @@ export class PresentationCreateComponent implements OnInit {
       id: new FormControl(undefined, [Validators.required]),
       description: new FormControl(undefined, [Validators.required]),
       redirectUri: new FormControl(undefined),
+      allowedOrigins: new FormControl('', [allowedOriginsValidator]),
       accessKeyChainId: new FormControl(undefined),
       dcql_query: new FormControl(undefined, [
         Validators.required,
@@ -289,6 +298,8 @@ export class PresentationCreateComponent implements OnInit {
             formData.transaction_data = JSON.stringify(formData.transaction_data, null, 2);
           }
 
+          formData.allowedOrigins = formatAllowedOrigins(formData.allowedOrigins);
+
           (formData.attached || []).forEach(() => this.addAttachment());
 
           // Remove inline webhook config since we only support webhook endpoint references
@@ -369,8 +380,18 @@ export class PresentationCreateComponent implements OnInit {
       value.lifeTime !== 300 ||
       value.statusCheckMode !== 'strict' ||
       !!value.accessKeyChainId ||
-      !!value.redirectUri
+      !!value.redirectUri ||
+      parseAllowedOrigins(value.allowedOrigins).length > 0
     );
+  }
+
+  /** Origin of this Web Client, which DC API requests started from it need in the list. */
+  readonly pageOrigin = window.location.origin;
+
+  /** What the Review step shows for the allowed origins: the list that will be saved. */
+  get allowedOriginsSummary(): string {
+    const origins = parseAllowedOrigins(this.form.get('allowedOrigins')?.value);
+    return origins.length ? origins.join(', ') : NO_ALLOWED_ORIGINS;
   }
 
   get hasRegistrationCertificate(): boolean {
@@ -735,6 +756,14 @@ export class PresentationCreateComponent implements OnInit {
       formValue.accessKeyChainId = undefined;
     }
 
+    const allowedOrigins = parseAllowedOrigins(formValue.allowedOrigins);
+    // null clears the list on update; exports leave an empty list out
+    formValue.allowedOrigins = allowedOrigins.length
+      ? allowedOrigins
+      : forExport
+        ? undefined
+        : null;
+
     if (
       formValue.transaction_data == null ||
       (Array.isArray(formValue.transaction_data) && formValue.transaction_data.length === 0) ||
@@ -850,6 +879,7 @@ export class PresentationCreateComponent implements OnInit {
         ? extractSchema(formData.registration_cert)
         : null;
       delete formData.registration_cert;
+      formData.allowedOrigins = formatAllowedOrigins(formData.allowedOrigins);
       const existingId = this.form.get('id')?.value;
       this.getFormArray('attached').clear();
       this.registrationCertPurposeArray.clear();
@@ -1053,4 +1083,48 @@ export class PresentationCreateComponent implements OnInit {
       this.registrationCertTabIndex = 1;
     }
   }
+}
+
+const NO_ALLOWED_ORIGINS = 'Not restricted';
+
+/** Origins entered one per line (commas also separate them). */
+function parseAllowedOrigins(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((entry) => typeof entry === 'string');
+  if (typeof value !== 'string') return [];
+  return value
+    .split(/[\n,]/)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function formatAllowedOrigins(value: unknown): string {
+  return parseAllowedOrigins(value).join('\n');
+}
+
+/** The pattern of the backend schema: lower-case host or IP address, no default port. */
+const SERIALIZED_ORIGIN_PATTERN =
+  /^(?:https:\/\/(?:[a-z0-9.-]+|\[[0-9a-f:.]+\])(?::(?:[1-9]|[1-9][0-9]|[1-35-9][0-9]{2}|4[0-35-9][0-9]|44[0-24-9]|[1-9][0-9]{3,4}))?|http:\/\/(?:[a-z0-9.-]+|\[[0-9a-f:.]+\])(?::(?:[1-9]|[1-79][0-9]|8[1-9]|[1-9][0-9]{2,4}))?)$/;
+const MAX_ALLOWED_ORIGINS = 100;
+
+/** Mirrors the backend rule: an http(s) origin in serialized form. */
+function isSerializedWebOrigin(value: string): boolean {
+  if (!SERIALIZED_ORIGIN_PATTERN.test(value)) return false;
+  try {
+    return new URL(value).origin === value;
+  } catch {
+    return false;
+  }
+}
+
+function allowedOriginsValidator(control: AbstractControl): ValidationErrors | null {
+  const origins = parseAllowedOrigins(control.value);
+  if (origins.length > MAX_ALLOWED_ORIGINS) {
+    return { tooManyOrigins: MAX_ALLOWED_ORIGINS };
+  }
+  const invalid = origins.filter((entry) => !isSerializedWebOrigin(entry));
+  if (!invalid.length) return null;
+  const shown = invalid.slice(0, 2).join(', ');
+  return {
+    invalidOrigins: invalid.length > 2 ? `${shown} and ${invalid.length - 2} more` : shown,
+  };
 }

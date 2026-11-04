@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { VALIDATION_SCHEMA } from "./combined.schema.js";
 import {
     CORS_VALIDATION_SCHEMA,
-    isValidCorsOrigin,
     splitCorsOrigins,
 } from "./cors-validation.schema.js";
 
@@ -19,31 +18,6 @@ describe("splitCorsOrigins", () => {
                 " https://a.example.com ,,http://localhost:4200, ",
             ),
         ).toEqual(["https://a.example.com", "http://localhost:4200"]);
-    });
-});
-
-describe("isValidCorsOrigin", () => {
-    it.each([
-        "https://console.example.com",
-        "http://localhost:4200",
-        "http://127.0.0.1:3000",
-        "https://[::1]:8443",
-    ])("accepts %s", (origin) => {
-        expect(isValidCorsOrigin(origin)).toBe(true);
-    });
-
-    it.each([
-        "*",
-        "console.example.com",
-        "https://console.example.com/",
-        "https://console.example.com/path",
-        "https://console.example.com?x=1",
-        "https://Console.Example.com",
-        "https://console.example.com:443",
-        "ftp://console.example.com",
-        "null",
-    ])("rejects %s", (origin) => {
-        expect(isValidCorsOrigin(origin)).toBe(false);
     });
 });
 

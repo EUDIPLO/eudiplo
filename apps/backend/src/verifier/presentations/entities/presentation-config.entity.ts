@@ -484,6 +484,16 @@ export class PresentationConfig {
     accessKeyChainId?: string | null;
 
     /**
+     * Origins of the web pages allowed to request this presentation over the
+     * Digital Credentials API. When set, `dc-api` and `iso-18013-7` offers
+     * are bound to one of them; unset, any `expected_origin` is accepted.
+     * `uri` offers ignore them.
+     * @example ["https://shop.example"]
+     */
+    @Column("json", { nullable: true })
+    allowedOrigins?: string[] | null;
+
+    /**
      * Enable reader authentication for the ISO 18013-7 Annex C (DC API) flow.
      *
      * When `true`, the DeviceRequest embeds a detached `readerAuth` COSE_Sign1

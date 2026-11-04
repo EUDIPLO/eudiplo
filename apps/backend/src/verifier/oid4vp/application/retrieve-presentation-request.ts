@@ -17,13 +17,8 @@ export class RetrievePresentationRequest {
      */
     async execute(
         session: SessionData,
-        origin: string,
         noRedirect: boolean,
-        generate: (
-            sessionId: string,
-            origin: string,
-            noRedirect: boolean,
-        ) => Promise<string>,
+        generate: (sessionId: string, noRedirect: boolean) => Promise<string>,
     ): Promise<string> {
         assertSessionUsable(session, new Date());
 
@@ -39,7 +34,7 @@ export class RetrievePresentationRequest {
                 );
             }
         } else {
-            requestObject = await generate(session.id, origin, noRedirect);
+            requestObject = await generate(session.id, noRedirect);
             await this.updateSession.updateForTenant(
                 session.tenantId,
                 session.id,

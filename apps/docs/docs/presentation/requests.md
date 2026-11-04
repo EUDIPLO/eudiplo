@@ -47,7 +47,7 @@ The request expires after the configuration's `lifeTime` (default 300 seconds). 
 
 | Status | Cause                                                                                    |
 | ------ | ---------------------------------------------------------------------------------------- |
-| `400`  | The body does not match the schema, `x509_san_dns` was requested for a certificate without DNS name, or `openid_federation` for a tenant without federation verifier entity. |
+| `400`  | The body does not match the schema, `x509_san_dns` was requested for a certificate without DNS name, or `openid_federation` for a tenant without federation verifier entity, or, for `dc-api` and `iso-18013-7`, `expected_origin` is missing (unless `allowedOrigins` lists exactly one origin), not an `http(s)` origin, or not in the configuration's [`allowedOrigins`](configure-verification.md#allowed-origins-digital-credentials-api). |
 | `403`  | The API client is not allowed to use this `requestId`.                                   |
 | `404`  | No usable access key chain: none exists, `accessKeyChainId` points to none, or its certificate is invalid. |
 | `409`  | No presentation configuration with this `requestId` exists.                              |
@@ -78,7 +78,7 @@ With `response_type: "dc-api"` the browser asks the wallet through `navigator.cr
     }
     ```
 
-    Without `expected_origin`, EUDIPLO uses the request's `Origin` header and then its `Host` header. A server-side call has no browser origin, so always set it there.
+    `expected_origin` is required. Take it from your own configuration, never from end-user input: if your backend passes on the `Origin` header of the browser request it received, any website can have your verifier sign requests for it. The value is an `http` or `https` origin or URL; a path in it is ignored (`https://shop.example.com/checkout` stands for `https://shop.example.com`), and a value without scheme fails with `400`. If the presentation configuration has [`allowedOrigins`](configure-verification.md#allowed-origins-digital-credentials-api), the value must be one of them, and with exactly one listed origin you can leave it out. The `Origin` and `Host` headers of this call are not used; before 10.0, EUDIPLO fell back to them.
 
 2. **Your backend reads the signed request object** from `GET /api/session/{session}` (field `requestObject`) and hands it to the page.
 
@@ -119,7 +119,7 @@ if (isDcApiAvailable()) {
 }
 ```
 
-`verifyWithDcApi()` runs entirely in the browser and needs the API client's secret there. Use it for demos only; in production, keep steps 1 and 2 on your backend.
+`verifyWithDcApi()` runs entirely in the browser and needs the API client's secret there. Use it for demos only; in production, keep steps 1 and 2 on your backend. Anyone who copies the secret can create requests for any origin, so set [`allowedOrigins`](configure-verification.md#allowed-origins-digital-credentials-api) on the configurations such a client may use.
 
 ## ISO 18013-7 Annex C
 
@@ -156,6 +156,6 @@ Differences from the OpenID4VP flows:
 - Every element is requested with intent to retain `false`, whatever `intent_to_retain` says.
 - Request at least one claim. Without `claims`, EUDIPLO still sends the request with an empty element list, which ISO 18013-5 does not allow, so wallets may reject it.
 - `redirectUri`, `transaction_data` and `clientIdScheme` from the request are ignored; the configuration's `redirectUri` still applies after a successful presentation.
-- `expected_origin` must equal the origin of the page that calls the DC API, because the session transcript is bound to it.
+- `expected_origin` must equal the origin of the page that calls the DC API, because the session transcript is bound to it. The same rules as for `dc-api` apply: it is required unless the configuration's [`allowedOrigins`](configure-verification.md#allowed-origins-digital-credentials-api) lists exactly one origin, and must be one of them when they are set.
 - Elements the wallet does not return are not rejected separately, and `values` constraints are not checked; check the claims in the result.
 - Set [`readerAuth`](configure-verification.md#reader-authentication-iso-18013-7) to sign the request so the wallet can authenticate the verifier.
