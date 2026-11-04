@@ -17,6 +17,13 @@ describe("SessionQueryDto", () => {
         expect(parse({ status: ["active", "pending"] }).success).toBe(false);
     });
 
+    it("keeps each status once, however often it is repeated", () => {
+        expect(
+            parse({ status: Array(1000).fill("active").concat("failed") }).data
+                ?.status,
+        ).toEqual([SessionStatus.Active, SessionStatus.Failed]);
+    });
+
     it("parses ISO 8601 timestamps with an offset", () => {
         expect(
             parse({

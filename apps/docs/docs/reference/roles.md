@@ -7,7 +7,8 @@ title: Roles
 The roles of the management API and the endpoints that accept them, generated
 from the backend's role enum and the `@Secured` decorators of its controllers.
 How to assign roles to clients and users is described in
-[Tenants and access](../operate/tenants-and-access.md).
+[Tenants and access](../operate/tenants-and-access.md); the roles of the MCP
+tools are listed in [AI assistants (MCP)](../operate/mcp.md#tools).
 
 A caller passes the role check if it has **any** of an endpoint's roles;
 where the roles are joined with "and", it needs **all** of them. With the

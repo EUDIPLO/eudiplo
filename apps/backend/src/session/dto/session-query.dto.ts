@@ -36,9 +36,13 @@ export const SessionQuerySchema = z
         page: z.coerce.number().int().min(1).default(1),
         pageSize: z.coerce.number().int().min(1).max(100).default(25),
         // A repeated query parameter arrives as an array, a single one as a string.
+        // Each status is kept once: the list becomes SQL bind parameters,
+        // and an MCP tool call can send a long array in its JSON body.
         status: z
             .union([z.enum(SessionStatus), z.array(z.enum(SessionStatus))])
-            .transform((value) => (Array.isArray(value) ? value : [value]))
+            .transform((value) => [
+                ...new Set(Array.isArray(value) ? value : [value]),
+            ])
             .optional(),
         type: z.enum(["issuance", "presentation"]).optional(),
         createdFrom: timestamp.optional(),

@@ -4,7 +4,7 @@ export const MCP_VALIDATION_SCHEMA: Joi.ObjectSchema = Joi.object({
     MCP_ENABLED: Joi.boolean()
         .default(false)
         .description(
-            "Serve the experimental MCP (Model Context Protocol) endpoint at `/api/mcp`, so AI assistants can read a tenant's configurations and sessions. It accepts the access tokens of the management API, and every tool needs the roles of the matching management endpoint",
+            "Serve the experimental MCP (Model Context Protocol) endpoint at `/api/mcp`, so AI assistants can read a tenant's configurations and sessions. It accepts the access tokens of the management API, and each tool checks the roles of the management endpoint it mirrors",
         )
         .meta({ group: "mcp", order: 10 }),
 });

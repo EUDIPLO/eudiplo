@@ -43,7 +43,7 @@ operators' browsers on the `PUBLIC_URL` host too
 | Methods       | `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `OPTIONS` for the CORS preflight of the web client                                                                         |
 | Content types | `application/json`; `multipart/form-data` for `POST /api/storage`, `/api/config-bundles/plan/archive` and `/api/config-bundles/import/archive`; `application/x-www-form-urlencoded` for `POST /api/oauth2/token` |
 | Body size     | 50 MB for the two archive routes, 10 MB for JSON                                                                                                                       |
-| Streaming     | `GET /api/session/{id}/events` is a server-sent event stream: no buffering, long read timeout ([TLS and reverse proxy](tls.md#behind-a-reverse-proxy))              |
+| Streaming     | `GET /api/session/{id}/events` is a server-sent event stream: no buffering, long read timeout ([TLS and reverse proxy](tls.md#behind-a-reverse-proxy)). With `MCP_ENABLED`, `POST /api/mcp` can answer with a short `text/event-stream` that ends after the result ([AI assistants](mcp.md)) |
 | Rate limits   | `POST /api/oauth2/token`, against guessing client secrets                                                                                                              |
 
 Management request bodies contain values that injection signatures mistake for

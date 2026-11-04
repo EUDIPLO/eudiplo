@@ -2,6 +2,7 @@ import { Module, UseGuards } from "@nestjs/common";
 import { McpModule } from "@nestjs/mcp";
 import { ApiExcludeController } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../auth/auth.guard.js";
+import { EUDIPLO_VERSION } from "./mcp-server-info.js";
 import { McpToolsModule } from "./mcp-tools.module.js";
 
 const INSTRUCTIONS =
@@ -18,7 +19,7 @@ const INSTRUCTIONS =
         McpModule.forRoot({
             name: "eudiplo",
             title: "EUDIPLO",
-            version: process.env.VERSION ?? "main",
+            version: EUDIPLO_VERSION,
             websiteUrl: "https://docs.eudiplo.dev/",
             instructions: INSTRUCTIONS,
             include: [McpToolsModule],

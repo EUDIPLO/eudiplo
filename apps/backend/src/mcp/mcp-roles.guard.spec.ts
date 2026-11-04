@@ -63,7 +63,11 @@ describe("McpRolesGuard", () => {
             guard.canActivate(
                 call("all", { user: { roles: [Role.IssuanceOffer] } }),
             ),
-        ).toThrow(ForbiddenException);
+        ).toThrow(
+            new ForbiddenException(
+                "This tool needs all of the roles issuance:offer, sessions:read",
+            ),
+        );
         expect(
             guard.canActivate(
                 call("all", {

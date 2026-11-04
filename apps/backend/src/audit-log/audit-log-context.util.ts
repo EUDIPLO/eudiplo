@@ -1,13 +1,13 @@
 import { createParamDecorator, type ExecutionContext } from "@nestjs/common";
 import type { Request } from "express";
-import { TokenPayload } from "../auth/token.decorator.js";
+import { clientIdOf, TokenPayload } from "../auth/token.decorator.js";
 import type {
     AuditLogActor,
     AuditLogRequestMeta,
 } from "./audit-log.service.js";
 
 export function resolveAuditActor(token: TokenPayload): AuditLogActor {
-    const clientId = token.client?.clientId || token.authorizedParty;
+    const clientId = clientIdOf(token);
 
     if (token.subject && clientId && token.subject !== clientId) {
         return {

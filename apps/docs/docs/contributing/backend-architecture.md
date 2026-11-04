@@ -177,7 +177,7 @@ OpenID Federation is split the same way: the `FederationResolver` port (`trust/p
 
 `apps/backend/src/platform/module-boundaries.spec.ts` and `apps/backend/test/architecture/dependency-rules.spec.ts` run with `pnpm --filter @eudiplo/backend test`. They use the TypeScript compiler API, so no extra lint tool is involved.
 
-- Files in feature-local `application/`, `domain/` and `ports/` folders are migrated core code and are checked automatically (tests excluded). `adapters/`, `infrastructure/` and `entities/` are infrastructure; `*.controller.ts` and `*.module.ts` are inbound adapters and composition roots.
+- Files in feature-local `application/`, `domain/` and `ports/` folders are migrated core code and are checked automatically (tests excluded). `adapters/`, `infrastructure/` and `entities/` are infrastructure; `*.controller.ts`, the MCP tool providers `*.tools.ts` and `*.module.ts` are inbound adapters and composition roots.
 - Core checks follow the transitive local import graph, including type-only imports, re-exports, dynamic imports and path aliases. Computed imports in core code are rejected.
 - Application code may import only `Inject`, `Injectable` and `Optional` from `@nestjs/common`; domain and port code may not depend on NestJS. The forbidden packages are `forbiddenPackages` in `test/architecture/dependency-rules.ts`. Add newly encountered infrastructure SDKs there with a fixture test.
 - Domain code must not depend on application code; ports may use domain models but not application classes.

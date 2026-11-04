@@ -45,6 +45,14 @@ export interface TokenPayload {
     authorizedParty?: string;
 }
 
+/**
+ * The OAuth client a token was issued to: the stored client, otherwise the
+ * authorized party of a Keycloak token.
+ */
+export function clientIdOf(token: TokenPayload): string | undefined {
+    return token.client?.clientId || token.authorizedParty || undefined;
+}
+
 export interface InternalTokenPayload extends TokenPayload {
     /**
      * Tenant ID

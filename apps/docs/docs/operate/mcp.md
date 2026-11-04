@@ -11,8 +11,8 @@ Let an AI assistant or another [Model Context Protocol](https://modelcontextprot
 (MCP) client read a tenant's configurations and sessions, for example to ask
 why offers failed today. The endpoint is off by default and its tools only read.
 
-**Prerequisites:** a token with `clients:manage` in the tenant that also holds
-the roles you give the assistant, or `tenant:admin`
+**Prerequisites:** a token with `clients:manage` in the tenant, and either the
+roles you give the assistant or `tenant:admin`
 ([granting roles](../reference/roles.md#granting-roles)), and an MCP client
 that supports Streamable HTTP with a custom `Authorization` header.
 
@@ -31,7 +31,8 @@ pages ([limits](#limits)).
 ## 2. Create a client for the assistant
 
 Give the assistant a client of its own with the roles of the tools it needs
-([tools](#tools)):
+([tools](#tools)), as described in
+[API clients with least privilege](tenants-and-access.md#api-clients-with-least-privilege):
 
 ```bash
 curl -X POST https://eudiplo.example.com/api/client \
@@ -44,7 +45,7 @@ curl -X POST https://eudiplo.example.com/api/client \
   }'
 ```
 
-The token works for the whole management API, not only for `/api/mcp`, so a
+Keep the `clientSecret` of the response; it is shown only once. The token works for the whole management API, not only for `/api/mcp`, so a
 role allows the assistant everything it allows elsewhere: with
 `issuance:manage`, it could also change credential configurations through
 `/api/issuer/credentials`. `sessions:read` alone changes nothing, but through
@@ -52,16 +53,12 @@ role allows the assistant everything it allows elsewhere: with
 
 ## 3. Get an access token
 
-```bash
-curl -X POST https://eudiplo.example.com/api/oauth2/token \
-  -d grant_type=client_credentials \
-  -d client_id=assistant \
-  -d client_secret="$ASSISTANT_SECRET"
-```
-
-Tokens of the built-in server expire after 24 hours, and the assistant cannot
-renew them: request a new one and update the assistant's configuration. With
-[Keycloak](keycloak.md), use a token of a Keycloak client instead.
+Request a token for `assistant` with the client credentials grant
+([built-in OAuth2 server](tenants-and-access.md#built-in-oauth2-server)). The
+assistant cannot renew it: when it expires, request a new one and update the
+assistant's configuration. With [Keycloak](keycloak.md), use a token of a
+Keycloak client; it lasts only the realm's access token lifespan, 5 minutes by
+default ([revoke access](tenants-and-access.md#revoke-access)).
 
 ## 4. Connect the assistant
 
@@ -103,10 +100,11 @@ return less than the endpoints they mirror:
   request URIs and codes are never returned. The visibility rules of the
   session endpoints apply
   ([API clients with least privilege](tenants-and-access.md#api-clients-with-least-privilege)).
-- **Failure codes** a wallet sent that are not a short code (letters, digits,
-  `_`, `.`, `:` and `-`, at most 64 characters) come as `[withheld]`. A wallet
-  chooses the error code of its response, and the assistant would read any
-  other text as part of the answer.
+- **Failure codes** come as `[withheld]` unless they are one of EUDIPLO's
+  [failure codes](../reference/session-outcome.md#failure-codes) or an error
+  code that OAuth 2.0 or OpenID4VP defines for wallets. A wallet chooses the
+  error code of its response, and the assistant would read any other text as
+  part of the answer.
 - **Configurations** come without claim templates, keys, webhooks and
   registration certificates.
 

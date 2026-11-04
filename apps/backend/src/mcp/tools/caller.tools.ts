@@ -1,7 +1,9 @@
 import { type McpContext, Tool } from "@nestjs/mcp";
 import { allRoles, isRole } from "../../auth/roles/role.enum.js";
+import { clientIdOf } from "../../auth/token.decorator.js";
 import { callerOf, type McpRequest } from "../mcp-caller.js";
 import { McpSecured, McpTools } from "../mcp-secured.decorator.js";
+import { EUDIPLO_VERSION } from "../mcp-server-info.js";
 
 @McpTools()
 export class CallerTools {
@@ -16,16 +18,12 @@ export class CallerTools {
     getCaller(_input: unknown, context: McpContext<McpRequest>) {
         const token = callerOf(context);
         return {
-            clientId:
-                token.client?.clientId ??
-                token.authorizedParty ??
-                token.subject ??
-                null,
+            clientId: clientIdOf(token) ?? token.subject ?? null,
             tenant: token.entity
                 ? { id: token.entity.id, name: token.entity.name }
                 : null,
             roles: token.roles.filter(isRole),
-            version: process.env.VERSION ?? "main",
+            version: EUDIPLO_VERSION,
         };
     }
 }
