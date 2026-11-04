@@ -140,7 +140,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     // Check if user is already authenticated
     this.returnUrl = appPath(this.route.snapshot.queryParams['returnUrl']);
     if (this.apiService.getAuthenticationStatus()) {
-      this.continueToApp();
+      void this.continueToApp();
       return;
     }
     if (this.apiService.hasKeptSession()) {
@@ -178,8 +178,8 @@ export class LoginComponent implements OnInit, OnDestroy {
       .pipe(take(1))
       .subscribe((resumed) => {
         if (resumed) {
-          this.keptSession.set(null);
-          this.continueToApp();
+          // The resuming status stays until the next page opens.
+          void this.continueToApp().finally(() => this.keptSession.set(null));
           return;
         }
         this.showForm();
@@ -259,9 +259,12 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.keptSession.set(null);
   }
 
-  /** Opens the page the guard sent the user away from, or the dashboard. */
-  private continueToApp(): void {
-    void this.router.navigateByUrl(this.returnUrl ?? '/dashboard');
+  /**
+   * Opens the page the guard sent the user away from, or the dashboard. Resolves
+   * when the guards, which wait for the caller's roles, have decided.
+   */
+  private continueToApp(): Promise<boolean> {
+    return this.router.navigateByUrl(this.returnUrl ?? '/dashboard');
   }
 
   private autoLoginIfParamsProvided(): void {
@@ -488,6 +491,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     // Signing in with the form replaces a kept session.
     this.stopWaitingForKeptSession();
     this.isLoading = true;
+    let signedIn = false;
 
     try {
       if (this.selectedLoginMode === 'sso') {
@@ -532,7 +536,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       ) {
         this.returnUrl = undefined;
       }
-      this.continueToApp();
+      signedIn = true;
     } catch (error: any) {
       console.error('Login failed:', error);
 
@@ -553,9 +557,15 @@ export class LoginComponent implements OnInit, OnDestroy {
         duration: 8000,
         panelClass: ['error-snackbar'],
       });
-    } finally {
-      this.isLoading = false;
     }
+    if (signedIn) {
+      // The form stays busy until the next page opens; a failed navigation is
+      // no failed sign-in.
+      await this.continueToApp().catch((error) =>
+        console.error('Opening the page after sign-in failed:', error)
+      );
+    }
+    this.isLoading = false;
   }
 
   /**

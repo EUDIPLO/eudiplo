@@ -229,10 +229,9 @@ earlier mode: Keycloak clients, the built-in `AUTH_CLIENT_ID` root client and
 those, `sub` names such a record gets the record's limits; if the record
 belongs to another tenant than the token's, the token gets `401`.
 
-The web client does not read `OIDC_ROLES_CLAIM` or `OIDC_SUB` yet: it takes the
-roles from `roles` or `realm_access.roles` and the tenant from `tenant_id`.
-With other claims, its menu stays empty and its pages say "Access denied",
-although the API accepts the token; call the API directly until then.
+The web client does not read roles or the tenant from the token itself. It asks
+the backend (`GET /api/auth/me`), so its menus follow `OIDC_ROLES_CLAIM` and
+`OIDC_SUB` and show what the API allows.
 
 The variables and the Keycloak setup are described in [Keycloak SSO](keycloak.md).
 `MASTER_SECRET` is optional in OIDC mode, but the default encryption key is

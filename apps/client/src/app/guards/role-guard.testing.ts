@@ -1,29 +1,44 @@
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { type ActivatedRouteSnapshot, type Route, Router } from '@angular/router';
+import {
+  type ActivatedRouteSnapshot,
+  type Route,
+  Router,
+  type RouterStateSnapshot,
+} from '@angular/router';
+import { client } from '@eudiplo/sdk-core';
+import { Subject } from 'rxjs';
 import { expect, vi } from 'vitest';
 
 import { ApiService } from '../core';
-import type { Role } from '../services/jwt.service';
+import type { Caller, Role } from '../services/jwt.service';
 import { RoleGuard } from './roles.guard';
 
-/** An unsigned access token with the given roles and claims; JwtService only decodes it. */
-export function accessToken(roles: string[], claims: Record<string, unknown> = {}): string {
-  const payload = btoa(JSON.stringify({ ...claims, roles }))
-    .replaceAll('+', '-')
-    .replaceAll('/', '_')
-    .replaceAll('=', '');
-  return `header.${payload}.signature`;
+/**
+ * Answers `GET /api/auth/me` of the SDK with a caller that has the given roles
+ * and claims, for the rest of the spec file; `test-setup.ts` starts each file
+ * with a `fetch` that never settles.
+ */
+export function respondWithCaller(caller: () => Partial<Caller> & { roles: string[] }): void {
+  client.setConfig({
+    fetch: async () =>
+      new Response(JSON.stringify({ subject: null, tenantId: null, ...caller() }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+  });
 }
 
 /**
- * Runs the real RoleGuard and JwtService of a route against a token with the given roles.
+ * Runs the real RoleGuard and JwtService of a route for a caller with the given roles.
  * Call it in beforeEach; `navigate` and `openSnackBar` record where a denied user is sent.
  */
 export function roleGuardHarness() {
   let token = '';
+  let roles: Role[] = [];
   const navigate = vi.fn();
   const openSnackBar = vi.fn();
+  respondWithCaller(() => ({ roles }));
   TestBed.configureTestingModule({
     providers: [
       {
@@ -32,6 +47,8 @@ export function roleGuardHarness() {
           get accessToken() {
             return token;
           },
+          getClientId: () => undefined,
+          sessionEnded$: new Subject<void>(),
         },
       },
       { provide: Router, useValue: { navigate } },
@@ -43,11 +60,13 @@ export function roleGuardHarness() {
     navigate,
     openSnackBar,
     /** Whether the route's RoleGuard lets a caller with these roles in. */
-    canOpen(route: Route, roles: Role[]): boolean {
+    canOpen(route: Route, callerRoles: Role[]): Promise<boolean> {
       expect(route.canActivate).toContain(RoleGuard);
-      token = accessToken(roles);
+      // A new token, so the guard loads its caller.
+      token = `token-${callerRoles.join(',')}-${Math.random()}`;
+      roles = callerRoles;
       const snapshot = { data: route.data } as unknown as ActivatedRouteSnapshot;
-      return TestBed.inject(RoleGuard).canActivate(snapshot);
+      return TestBed.inject(RoleGuard).canActivate(snapshot, { url: '/' } as RouterStateSnapshot);
     },
   };
 }

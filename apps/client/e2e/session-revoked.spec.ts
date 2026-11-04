@@ -58,8 +58,6 @@ test.describe('client with changed roles', () => {
       )
     ).toBeVisible();
     await expect(nav.getByText('Credential Types', { exact: true })).toHaveCount(0);
-    // With the secret, the new token names the role; no new login is suggested.
-    await expect(page.getByText('Your API client may have lost a role')).toHaveCount(0);
     await expect(page).toHaveURL(/\/credential-config$/);
     await page.getByRole('button', { name: 'Leave page' }).click();
     await expect(page).toHaveURL(/\/dashboard$/);
@@ -75,7 +73,7 @@ test.describe('reloaded session with changed roles', () => {
     'E2E client whose roles change while a reloaded tab is signed in'
   );
 
-  test('suggests a new login, as the tab has no secret to renew its token', async ({
+  test('names the removed role without a new login, although the tab cannot renew its token', async ({
     page,
     request,
   }) => {
@@ -94,11 +92,14 @@ test.describe('reloaded session with changed roles', () => {
     await refused;
 
     await expect(
-      page.getByText('Your API client may have lost a role this page needs')
+      page.getByText(
+        'Your API client no longer has the role issuance:manage, which this page needs.'
+      )
     ).toBeVisible();
+    await expect(nav.getByText('Credential Types', { exact: true })).toHaveCount(0);
     await expect(page).toHaveURL(/\/credential-config$/);
-    await page.getByRole('button', { name: 'Log in' }).click();
-    await expect(page).toHaveURL(/\/login$/);
+    await page.getByRole('button', { name: 'Leave page' }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
   });
 });
 
@@ -110,7 +111,7 @@ test.describe('reloaded session that saves after its roles changed', () => {
     'E2E client whose roles change before a reloaded tab saves'
   );
 
-  test('keeps the suggestion visible when the page reports a refused save', async ({
+  test('keeps the notice visible when the page reports a refused save', async ({
     page,
     request,
   }) => {
@@ -132,9 +133,11 @@ test.describe('reloaded session that saves after its roles changed', () => {
     await create.click();
     await refused;
 
-    // The page's own "Failed to create" message must not hide the suggestion.
+    // The page's own "Failed to create" message must not hide the notice.
     await expect(
-      page.getByText('Your API client may have lost a role this page needs')
+      page.getByText(
+        'Your API client no longer has the role issuance:manage, which this page needs.'
+      )
     ).toBeVisible();
     await expect(page.getByText('Failed to create attribute provider')).toHaveCount(0);
     await expect(page).toHaveURL(/\/attribute-providers\/create$/);

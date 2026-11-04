@@ -1,5 +1,4 @@
-import { ApiService } from '../core';
-import { JwtService, type JWTPayload } from '../services/jwt.service';
+import { JwtService, type Caller } from '../services/jwt.service';
 import {
   DEFAULT_DASHBOARD_SECTIONS,
   DashboardPreferencesService,
@@ -7,7 +6,7 @@ import {
 } from './dashboard-preferences.service';
 
 describe('DashboardPreferencesService', () => {
-  let payload: JWTPayload;
+  let caller: Caller;
   let service: DashboardPreferencesService;
 
   beforeEach(() => {
@@ -24,10 +23,9 @@ describe('DashboardPreferencesService', () => {
     } as Storage;
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage });
     localStorage.clear();
-    payload = { sub: 'user-a', tenant_id: 'tenant-a', roles: [] };
-    const apiService = { accessToken: 'token' } as ApiService;
-    const jwtService = { decodeToken: () => payload } as unknown as JwtService;
-    service = new DashboardPreferencesService(apiService, jwtService);
+    caller = { subject: 'user-a', tenantId: 'tenant-a', roles: [] };
+    const jwtService = { getCaller: () => caller } as unknown as JwtService;
+    service = new DashboardPreferencesService(jwtService);
   });
 
   it('shows every section when nothing is saved', () => {
@@ -49,7 +47,7 @@ describe('DashboardPreferencesService', () => {
 
   it('keeps sections separate between users', () => {
     service.save({ ...DEFAULT_DASHBOARD_SECTIONS, activity: false });
-    payload = { sub: 'user-b', tenant_id: 'tenant-a', roles: [] };
+    caller = { subject: 'user-b', tenantId: 'tenant-a', roles: [] };
 
     expect(service.load()).toEqual(DEFAULT_DASHBOARD_SECTIONS);
   });

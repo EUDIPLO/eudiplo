@@ -133,6 +133,32 @@ describe("Generic OIDC provider (e2e)", () => {
         expect(keyManager.status).toBe(403);
     });
 
+    test("tells the Web Client the tenant and the roles of OIDC_ROLES_CLAIM", async () => {
+        const response = await as(
+            await personToken([Role.SessionsRead, Role.IssuanceOffer]),
+        )
+            .get("/auth/me")
+            .expect(200);
+
+        expect(response.body).toEqual({
+            subject: "person-1",
+            tenantId: TENANT,
+            roles: [Role.SessionsRead, Role.IssuanceOffer],
+        });
+    });
+
+    test("grants no roles for a roles claim that is a string, not a list", async () => {
+        const token = await sign({
+            sub: "person-1",
+            tenant_id: TENANT,
+            eudiplo: { roles: Role.SessionsRead },
+        });
+
+        const response = await as(token).get("/auth/me").expect(200);
+
+        expect(response.body.roles).toEqual([]);
+    });
+
     test("refuses a token for another audience", async () => {
         const token = await sign(
             {

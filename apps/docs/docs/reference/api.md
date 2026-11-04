@@ -57,6 +57,8 @@ When `OIDC` is set, for example to use [Keycloak](../operate/keycloak.md), `/api
 
 This includes the session event stream `GET /api/session/{id}/events`, which does not accept tokens in the URL. Browsers cannot set headers on an `EventSource`, so read the stream from your backend.
 
+`GET /api/auth/me` needs no role and returns the subject, tenant and roles the backend grants for the token: with the built-in server the client's current roles, with an external provider those of the token's claims. Use it to check which tenant and roles a token resolves to.
+
 ## `@eudiplo/sdk-core`
 
 `@eudiplo/sdk-core` is the TypeScript client for the management API. It works in Node.js 20+ and in browsers.

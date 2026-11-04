@@ -5,7 +5,8 @@ import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiRefusalService, ApiService } from '../core';
-import { accessToken } from '../guards/role-guard.testing';
+import { respondWithCaller } from '../guards/role-guard.testing';
+import { JwtService } from './jwt.service';
 import { RoleChangeService } from './role-change.service';
 
 interface RouteStub {
@@ -23,7 +24,16 @@ function routeWithRoles(...roles: (string | string[] | undefined)[]): RouteStub 
 }
 
 describe('RoleChangeService', () => {
-  let api: { accessToken: string; tokenRenewed$: Subject<void>; logout: ReturnType<typeof vi.fn> };
+  let api: {
+    accessToken: string;
+    tokenRenewed$: Subject<void>;
+    sessionEnded$: Subject<void>;
+    getClientId: () => string;
+  };
+  /** The caller the backend returns from now on. */
+  let caller: { subject: string; roles: string[] };
+  let callerRequests: number;
+  let tokens: number;
   let rolesRefused: Subject<void>;
   let router: {
     url: string;
@@ -39,19 +49,38 @@ describe('RoleChangeService', () => {
   const texts = () => snackBar.open.mock.calls.map((call) => call[0]);
 
   /** Signs in as `client` with `roles` and starts the service. */
-  function signIn(roles: string[], client = 'shop'): void {
-    api.accessToken = accessToken(roles, { sub: client });
+  async function signIn(roles: string[], client = 'shop'): Promise<void> {
+    api.accessToken = `token-${++tokens}`;
+    caller = { subject: client, roles };
+    await TestBed.inject(JwtService).loadCaller();
     service.start();
   }
 
+  /** Lets the service's own caller request and comparison finish. */
+  const settle = () => new Promise((resolve) => setTimeout(resolve));
+
   /** A new token of `client` arrives, for example after a refresh. */
-  function renew(roles: string[], client = 'shop'): void {
-    api.accessToken = accessToken(roles, { sub: client });
+  async function renew(roles: string[], client = 'shop'): Promise<void> {
+    api.accessToken = `token-${++tokens}`;
+    caller = { subject: client, roles };
     api.tokenRenewed$.next();
+    await settle();
   }
 
   beforeEach(() => {
-    api = { accessToken: '', tokenRenewed$: new Subject<void>(), logout: vi.fn() };
+    api = {
+      accessToken: '',
+      tokenRenewed$: new Subject<void>(),
+      sessionEnded$: new Subject<void>(),
+      // The client that signed in last, as its caller's subject.
+      getClientId: () => caller.subject,
+    };
+    tokens = 0;
+    callerRequests = 0;
+    respondWithCaller(() => {
+      callerRequests++;
+      return caller;
+    });
     rolesRefused = new Subject<void>();
     router = {
       url: '/dashboard',
@@ -83,11 +112,11 @@ describe('RoleChangeService', () => {
 
   afterEach(() => service.stop());
 
-  it('names the lost roles while the page does not need them', () => {
+  it('names the lost roles while the page does not need them', async () => {
     router.routerState.snapshot.root = routeWithRoles(undefined, 'presentation:manage');
-    signIn(['presentation:manage', 'issuance:manage', 'clients:manage']);
+    await signIn(['presentation:manage', 'issuance:manage', 'clients:manage']);
 
-    renew(['presentation:manage']);
+    await renew(['presentation:manage']);
 
     expect(texts()).toEqual([
       'Your API client no longer has the roles issuance:manage, clients:manage; the pages that need them are hidden.',
@@ -95,11 +124,11 @@ describe('RoleChangeService', () => {
     expect(router.navigate).not.toHaveBeenCalled();
   });
 
-  it('offers to leave a page that needs a lost role, and leaves only on request', () => {
+  it('offers to leave a page that needs a lost role, and leaves only on request', async () => {
     router.routerState.snapshot.root = routeWithRoles(undefined, 'issuance:manage');
-    signIn(['presentation:manage', 'issuance:manage']);
+    await signIn(['presentation:manage', 'issuance:manage']);
 
-    renew(['presentation:manage']);
+    await renew(['presentation:manage']);
 
     expect(texts()).toEqual([
       'Your API client no longer has the role issuance:manage, which this page needs. Copy unsaved changes before you leave it.',
@@ -112,149 +141,133 @@ describe('RoleChangeService', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/']);
   });
 
-  it('stays quiet on a page that needs any of several roles while one is left', () => {
+  it('stays quiet on a page that needs any of several roles while one is left', async () => {
     router.routerState.snapshot.root = routeWithRoles(['issuance:manage', 'presentation:manage']);
-    signIn(['presentation:manage', 'issuance:manage']);
+    await signIn(['presentation:manage', 'issuance:manage']);
 
-    renew(['presentation:manage']);
+    await renew(['presentation:manage']);
 
     expect(snackBar.open.mock.calls[0][1]).toBe('OK');
   });
 
-  it('compares each new token with the one before', () => {
-    signIn(['presentation:manage', 'issuance:manage']);
+  it('compares each new token with the one before', async () => {
+    await signIn(['presentation:manage', 'issuance:manage']);
 
-    renew(['presentation:manage', 'issuance:manage']);
-    renew(['presentation:manage']);
-    renew(['presentation:manage']);
+    await renew(['presentation:manage', 'issuance:manage']);
+    await renew(['presentation:manage']);
+    await renew(['presentation:manage']);
 
     expect(snackBar.open).toHaveBeenCalledOnce();
   });
 
-  it('says nothing for another client, on the login page, after logout or after stop', () => {
-    signIn(['presentation:manage', 'issuance:manage']);
+  it('says nothing for another client, on the login page, after logout or after stop', async () => {
+    await signIn(['presentation:manage', 'issuance:manage']);
 
-    renew(['presentation:manage'], 'other');
+    await renew(['presentation:manage'], 'other');
     router.url = '/login';
-    renew([], 'other');
+    await renew([], 'other');
     router.url = '/dashboard';
     api.accessToken = '';
-    api.tokenRenewed$.next();
-    renew([], 'other');
+    api.sessionEnded$.next();
+    await renew(['issuance:manage'], 'other');
+    const requestsBeforeStop = callerRequests;
     service.stop();
-    renew([], 'other');
+    await renew([], 'other');
+
+    expect(snackBar.open).not.toHaveBeenCalled();
+    expect(callerRequests).toBe(requestsBeforeStop);
+  });
+
+  it('says nothing when the same client signs in again with fewer roles after a logout', async () => {
+    await signIn(['presentation:manage', 'issuance:manage']);
+
+    api.accessToken = '';
+    api.sessionEnded$.next();
+    await renew(['presentation:manage']);
 
     expect(snackBar.open).not.toHaveBeenCalled();
   });
 
+  it('loads the caller of each renewed token itself', async () => {
+    await signIn(['presentation:manage']);
+
+    await renew(['presentation:manage']);
+    await renew(['presentation:manage']);
+
+    expect(callerRequests).toBe(3);
+  });
+
   describe('without a secret to renew the token', () => {
-    const hint =
-      'Your API client may have lost a role this page needs: the backend refused a request for missing roles. Log in again to get its current roles; unsaved changes on this page will be lost.';
-
-    it('suggests a new login once per token when the role check refuses a page the token may open', () => {
+    it('loads the roles again when the role check refuses a request, and names the lost one', async () => {
       router.routerState.snapshot.root = routeWithRoles(undefined, 'issuance:manage');
-      signIn(['presentation:manage', 'issuance:manage']);
+      await signIn(['presentation:manage', 'issuance:manage']);
 
+      caller = { subject: 'shop', roles: ['presentation:manage'] };
       rolesRefused.next();
-      rolesRefused.next();
+      await settle();
 
-      expect(texts()).toEqual([hint]);
-      expect(snackBar.open.mock.calls[0][1]).toBe('Log in');
-      expect(snackBar.open.mock.calls[0][2]).toMatchObject({ duration: 0 });
-      expect(api.logout).not.toHaveBeenCalled();
-
-      action.next();
-      expect(api.logout).toHaveBeenCalledOnce();
-      expect(router.navigate).toHaveBeenCalledWith(['/login']);
-
-      // A new token, for example from a new login, gets the hint again.
-      signIn(['issuance:manage']);
-      rolesRefused.next();
-      expect(texts()).toEqual([hint, hint]);
+      expect(callerRequests).toBe(2);
+      expect(texts()).toEqual([
+        'Your API client no longer has the role issuance:manage, which this page needs. Copy unsaved changes before you leave it.',
+      ]);
+      expect(TestBed.inject(JwtService).hasRole('issuance:manage')).toBe(false);
     });
 
-    it('suggests a new login on a page that needs any of several roles the token has one of', () => {
-      router.routerState.snapshot.root = routeWithRoles(['issuance:manage', 'presentation:manage']);
-      signIn(['presentation:manage']);
+    it('names the lost role in a reloaded tab, whose caller the guards loaded after the start', async () => {
+      router.routerState.snapshot.root = routeWithRoles(undefined, 'issuance:manage');
+      api.accessToken = `token-${++tokens}`;
+      caller = { subject: 'shop', roles: ['presentation:manage', 'issuance:manage'] };
+      service.start();
+      await TestBed.inject(JwtService).loadCaller();
 
+      caller = { subject: 'shop', roles: ['presentation:manage'] };
       rolesRefused.next();
+      await settle();
 
-      expect(texts()).toEqual([hint]);
+      expect(texts()).toEqual([
+        'Your API client no longer has the role issuance:manage, which this page needs. Copy unsaved changes before you leave it.',
+      ]);
     });
 
-    it('comes back once when another message replaces it, then with the next refusal', () => {
+    it('brings the notice back when the page is refused again, as its own error may have replaced it', async () => {
       router.routerState.snapshot.root = routeWithRoles(undefined, 'issuance:manage');
-      signIn(['issuance:manage']);
+      await signIn(['presentation:manage', 'issuance:manage']);
+      caller = { subject: 'shop', roles: ['presentation:manage'] };
 
       rolesRefused.next();
-      // For example the page's own "Failed to save" message.
-      dismissals[0].next({ dismissedByAction: false });
-      expect(texts()).toEqual([hint, hint]);
-
-      // Replaced again, for example by a notice that comes back by itself.
-      dismissals[1].next({ dismissedByAction: false });
-      expect(texts()).toEqual([hint, hint]);
+      await settle();
       rolesRefused.next();
-      expect(texts()).toEqual([hint, hint, hint]);
+      await settle();
+
+      expect(texts()).toEqual([
+        'Your API client no longer has the role issuance:manage, which this page needs. Copy unsaved changes before you leave it.',
+        'Your API client lacks a role this page needs. Copy unsaved changes before you leave it.',
+      ]);
+      expect(snackBar.open.mock.calls[1][1]).toBe('Leave page');
     });
 
-    it('does not come back for a replaced token or on the login page', () => {
+    it('stays quiet when the roles did not change, as a new login would not change them', async () => {
       router.routerState.snapshot.root = routeWithRoles(undefined, 'issuance:manage');
-      signIn(['issuance:manage']);
-      rolesRefused.next();
-      router.url = '/login';
-      dismissals[0].next({ dismissedByAction: false });
+      await signIn(['issuance:manage']);
 
-      router.url = '/dashboard';
       rolesRefused.next();
-      api.accessToken = accessToken(['issuance:manage'], { sub: 'shop', jti: 'next' });
-      dismissals[1].next({ dismissedByAction: false });
+      await settle();
 
-      expect(texts()).toEqual([hint, hint]);
+      expect(callerRequests).toBe(2);
+      expect(snackBar.open).not.toHaveBeenCalled();
     });
 
-    it('keeps the hint of a new token when the hint of an older one closes late', () => {
-      router.routerState.snapshot.root = routeWithRoles(undefined, 'issuance:manage');
-      signIn(['issuance:manage']);
-      rolesRefused.next();
+    it('does not load the roles again on the login page or after stop', async () => {
+      await signIn(['issuance:manage']);
 
-      signIn(['issuance:manage', 'presentation:manage']);
-      rolesRefused.next();
-      dismissals[0].next({ dismissedByAction: false });
-      rolesRefused.next();
-
-      expect(texts()).toEqual([hint, hint]);
-    });
-
-    it('does not show the hint again for a token after its Log in action', () => {
-      router.routerState.snapshot.root = routeWithRoles(undefined, 'issuance:manage');
-      signIn(['issuance:manage']);
-
-      rolesRefused.next();
-      dismissals[0].next({ dismissedByAction: true });
-      rolesRefused.next();
-
-      expect(texts()).toEqual([hint]);
-    });
-
-    it('stays quiet where a new token would be refused too', () => {
-      signIn(['presentation:manage']);
-
-      // A page without a role, a page whose role the token lacks, the login page.
-      rolesRefused.next();
-      router.routerState.snapshot.root = routeWithRoles(undefined, 'issuance:manage');
-      rolesRefused.next();
-      router.routerState.snapshot.root = routeWithRoles(undefined, 'presentation:manage');
       router.url = '/login';
       rolesRefused.next();
       router.url = '/dashboard';
-      api.accessToken = '';
-      rolesRefused.next();
-      signIn(['presentation:manage']);
       service.stop();
       rolesRefused.next();
+      await settle();
 
-      expect(snackBar.open).not.toHaveBeenCalled();
+      expect(callerRequests).toBe(1);
     });
   });
 });

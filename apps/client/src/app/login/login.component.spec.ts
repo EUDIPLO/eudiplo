@@ -350,6 +350,33 @@ describe('LoginComponent with a kept session', () => {
     expect(navigateByUrl).toHaveBeenCalledWith('/dashboard');
   });
 
+  it('stays busy until the next page opens, as its guards wait for the roles', async () => {
+    let opened: (value: boolean) => void = () => undefined;
+    navigateByUrl.mockReturnValue(new Promise((resolve) => (opened = resolve)));
+    render();
+    button('Sign out and use other credentials')?.click();
+
+    const submitted = submitForm('client-a', 'http://backend.test');
+    await vi.waitFor(() => expect(navigateByUrl).toHaveBeenCalled());
+    expect(fixture.componentInstance.isLoading).toBe(true);
+
+    opened(true);
+    await submitted;
+    expect(fixture.componentInstance.isLoading).toBe(false);
+  });
+
+  it('does not report a failed navigation after a sign-in as a failed sign-in', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    navigateByUrl.mockRejectedValue(new Error('Loading chunk failed'));
+    render();
+    button('Sign out and use other credentials')?.click();
+
+    await submitForm('client-a', 'http://backend.test');
+
+    expect(snackTexts()).toEqual(['Login successful!']);
+    expect(fixture.componentInstance.isLoading).toBe(false);
+  });
+
   it('stops waiting when the page is left', () => {
     render();
 

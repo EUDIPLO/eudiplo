@@ -1,3 +1,4 @@
+import { NEVER } from 'rxjs';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
@@ -28,7 +29,7 @@ describe('ClientShowComponent', () => {
       imports: [ClientShowComponent],
       providers: [
         provideRouter([]),
-        { provide: ApiService, useValue: { getClientId: () => 'admin' } },
+        { provide: ApiService, useValue: { getClientId: () => 'admin', sessionEnded$: NEVER } },
       ],
     }).compileComponents();
 

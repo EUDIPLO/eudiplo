@@ -1,6 +1,5 @@
 import { Injectable } from '@angular/core';
 
-import { ApiService } from '../core';
 import { JwtService } from '../services/jwt.service';
 
 export type DashboardSection = 'activity' | 'recentActivity' | 'sessionOverview' | 'quickActions';
@@ -20,10 +19,7 @@ const legacyStoragePrefix = 'eudiplo.dashboard.preferences.v1';
 
 @Injectable({ providedIn: 'root' })
 export class DashboardPreferencesService {
-  constructor(
-    private readonly apiService: ApiService,
-    private readonly jwtService: JwtService
-  ) {}
+  constructor(private readonly jwtService: JwtService) {}
 
   load(): DashboardSections {
     try {
@@ -65,9 +61,9 @@ export class DashboardPreferencesService {
   }
 
   private storageKey(prefix: string): string {
-    const payload = this.jwtService.decodeToken(this.apiService.accessToken);
-    const tenant = payload?.tenant_id || 'default';
-    const user = payload?.sub || payload?.preferred_username || 'anonymous';
+    const caller = this.jwtService.getCaller();
+    const tenant = caller?.tenantId || 'default';
+    const user = caller?.subject || 'anonymous';
     return `${prefix}.${encodeURIComponent(tenant)}.${encodeURIComponent(user)}`;
   }
 }
