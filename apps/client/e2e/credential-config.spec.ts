@@ -149,3 +149,273 @@ test('saves edited claim constraints and keeps untouched ones', async ({ page, r
     await writeConfig(() => request.delete(`${url}/${id}`, { headers }), `delete ${id}`);
   }
 });
+
+test('removing a claim or label leaves the next one in its place with its own values', async ({
+  page,
+  request,
+}) => {
+  test.skip(
+    !hasAuthCredentials,
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+  );
+  const id = `e2e-claim-rows-${Date.now()}`;
+  const url = `${resolvedE2EConfig.apiBaseUrl}/api/issuer/credentials`;
+  const headers = { Authorization: `Bearer ${await tenantToken(request)}` };
+  await writeConfig(
+    () =>
+      request.post(url, {
+        headers,
+        data: {
+          id,
+          description: 'Claim rows',
+          vct: `urn:${id}`,
+          config: {
+            format: 'dc+sd-jwt',
+            display: [{ name: 'Claim rows', description: 'Claim rows', locale: 'en-US' }],
+          },
+          fields: [
+            {
+              path: ['given_name'],
+              type: 'string',
+              display: [
+                { locale: 'en-US', name: 'Given name' },
+                { locale: 'de-DE', name: 'Vorname' },
+              ],
+            },
+            {
+              path: ['family_name'],
+              type: 'string',
+              display: [{ locale: 'en-US', name: 'Family name' }],
+            },
+            {
+              path: ['birthdate'],
+              type: 'string',
+              display: [
+                { locale: 'en-US', name: 'Birth date' },
+                { locale: 'de-DE', name: 'Geburtsdatum' },
+              ],
+            },
+          ],
+        },
+      }),
+    `create ${id}`
+  );
+
+  try {
+    await page.goto(`/credential-config/${id}/edit`);
+    await page.getByRole('tab', { name: /Claims/ }).click();
+    await page.getByRole('button', { name: /^family_name string/ }).click();
+    await page
+      .getByRole('region', { name: /^family_name string/ })
+      .getByRole('button', { name: 'Remove Field' })
+      .click();
+
+    // The next claim takes the place and the focus of the removed one, with its own values.
+    await expect(page.getByRole('button', { name: /^family_name string/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^birthdate string/ })).toBeFocused();
+    await page.keyboard.press('Enter');
+    const birthdate = page.getByRole('region', { name: /^birthdate string/ });
+    await expect(birthdate.getByRole('textbox', { name: 'Path' })).toHaveValue('birthdate');
+    await birthdate.getByRole('textbox', { name: 'Default Value' }).fill('1990-01-01');
+
+    // The next label of the same claim takes the focus, not a label of an earlier claim.
+    const birthdateLabels = birthdate.getByRole('textbox', { name: 'Name', exact: true });
+    await birthdate.getByRole('button', { name: 'Remove label en-US of claim 2' }).click();
+    await expect(birthdateLabels).toHaveCount(1);
+    await expect(birthdateLabels).toHaveValue('Geburtsdatum');
+    await expect(birthdateLabels).toBeFocused();
+    // Without labels left, focus goes to the claim's Add Label.
+    await birthdate.getByRole('button', { name: 'Remove label de-DE of claim 2' }).click();
+    await expect(birthdateLabels).toHaveCount(0);
+    await expect(birthdate.getByRole('button', { name: 'Add Label' })).toBeFocused();
+
+    await page.getByRole('button', { name: /^given_name string/ }).click();
+    const givenName = page.getByRole('region', { name: /^given_name string/ });
+    await givenName.getByRole('button', { name: 'Remove label en-US of claim 1' }).click();
+    const givenNameLabels = givenName.getByRole('textbox', { name: 'Name', exact: true });
+    await expect(givenNameLabels).toHaveCount(1);
+    await expect(givenNameLabels).toHaveValue('Vorname');
+    await expect(givenNameLabels).toBeFocused();
+
+    await page.getByRole('button', { name: 'Save Configuration' }).click();
+    await expect(page).toHaveURL(new RegExp(`/credential-config/${id}$`));
+
+    const response = await request.get(`${url}/${id}`, { headers });
+    expect(response.ok(), `GET ${id}`).toBe(true);
+    const fields = ((await response.json()) as { fields: ClaimFieldDefinitionDto[] }).fields;
+    expect(fields.map((field) => field.path)).toEqual([['given_name'], ['birthdate']]);
+    expect(fields[0].defaultValue).toBeUndefined();
+    expect(fields[0].display).toEqual([{ locale: 'de-DE', name: 'Vorname' }]);
+    expect(fields[1].defaultValue).toBe('1990-01-01');
+    expect(fields[1].display).toBeUndefined();
+  } finally {
+    await writeConfig(() => request.delete(`${url}/${id}`, { headers }), `delete ${id}`);
+  }
+});
+
+test('moving or removing an interactive authorization step keeps each step with its values', async ({
+  page,
+  request,
+}) => {
+  test.skip(
+    !hasAuthCredentials,
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+  );
+  const id = `e2e-iae-steps-${Date.now()}`;
+  const url = `${resolvedE2EConfig.apiBaseUrl}/api/issuer/credentials`;
+  const headers = { Authorization: `Bearer ${await tenantToken(request)}` };
+  const step = (name: string) => ({
+    type: 'redirect_to_web',
+    label: name,
+    url: `https://example.com/${name}`,
+    description: `Step ${name}`,
+  });
+  await writeConfig(
+    () =>
+      request.post(url, {
+        headers,
+        data: {
+          id,
+          description: 'Interactive authorization steps',
+          vct: `urn:${id}`,
+          config: {
+            format: 'dc+sd-jwt',
+            display: [{ name: 'Steps', description: 'Steps', locale: 'en-US' }],
+          },
+          fields: [],
+          iaeActions: [step('a'), step('b'), step('c')],
+        },
+      }),
+    `create ${id}`
+  );
+  const expectOrder = async (...names: string[]) => {
+    for (const [index, name] of names.entries()) {
+      await expect(urls.nth(index)).toHaveValue(`https://example.com/${name}`);
+    }
+  };
+  const urls = page.getByRole('textbox', { name: 'Redirect URL' });
+
+  try {
+    await page.goto(`/credential-config/${id}/edit`);
+    await page.getByRole('tab', { name: /Settings/ }).click();
+    await page.getByRole('button', { name: 'Interactive Authorization Actions' }).click();
+    await expect(urls).toHaveCount(3);
+
+    // A moved step shows its own values at its new position and keeps the focus.
+    await page.getByRole('button', { name: 'Move step 3 up' }).click();
+    await expectOrder('a', 'c', 'b');
+    await expect(page.getByRole('button', { name: 'Move step 2 up' })).toBeFocused();
+
+    // At the top, Move up keeps the focus and does nothing when pressed again.
+    await page.keyboard.press('Enter');
+    await expectOrder('c', 'a', 'b');
+    const firstUp = page.getByRole('button', { name: 'Move step 1 up' });
+    await expect(firstUp).toBeFocused();
+    await expect(firstUp).toHaveAttribute('aria-disabled', 'true');
+    await expect(firstUp).toHaveAccessibleDescription('Step 1 is already first');
+    await page.keyboard.press('Enter');
+    await expectOrder('c', 'a', 'b');
+
+    await page.getByRole('button', { name: 'Move step 2 down' }).click();
+    await expectOrder('c', 'b', 'a');
+    const lastDown = page.getByRole('button', { name: 'Move step 3 down' });
+    await expect(lastDown).toBeFocused();
+    await expect(lastDown).toHaveAccessibleDescription('Step 3 is already last');
+
+    // Dragging a step by its handle moves its values with it. The first card goes to the top
+    // of the viewport, so the handle of the second one is on screen as well.
+    await page
+      .locator('.iae-action-card')
+      .first()
+      .evaluate((card) => card.scrollIntoView({ block: 'start' }));
+    const handles = page.locator('.iae-action-card .drag-handle');
+    const from = (await handles.nth(1).boundingBox())!;
+    const to = (await handles.nth(0).boundingBox())!;
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 20 });
+    await page.mouse.up();
+    await expectOrder('b', 'c', 'a');
+
+    // Removing a step that is not the last focuses the step now in its place.
+    await page.getByRole('button', { name: 'Remove step 2' }).click();
+    await expect(urls).toHaveCount(2);
+    await expectOrder('b', 'a');
+    await expect(page.getByText('Step 2: Redirect to Web')).toBeFocused();
+
+    await urls.nth(0).fill('https://example.com/b2');
+    await page.getByRole('button', { name: 'Save Configuration' }).click();
+    await expect(page).toHaveURL(new RegExp(`/credential-config/${id}$`));
+
+    const response = await request.get(`${url}/${id}`, { headers });
+    expect(response.ok(), `GET ${id}`).toBe(true);
+    expect(((await response.json()) as { iaeActions: unknown[] }).iaeActions).toEqual([
+      { ...step('b'), url: 'https://example.com/b2' },
+      step('a'),
+    ]);
+  } finally {
+    await writeConfig(() => request.delete(`${url}/${id}`, { headers }), `delete ${id}`);
+  }
+});
+
+test('removing the last row of a list moves focus to its Add button', async ({ page }) => {
+  test.skip(
+    !hasAuthCredentials,
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+  );
+  await page.goto('/credential-config/create');
+  await page.getByRole('button', { name: 'Show all settings' }).click();
+
+  await page.getByRole('tab', { name: /Claims/ }).click();
+  const addField = page.getByRole('button', { name: 'Add Field' });
+  await addField.click();
+  await page.getByRole('button', { name: 'Remove Field' }).click();
+  await expect(page.getByRole('button', { name: 'Remove Field' })).toHaveCount(0);
+  await expect(addField).toBeFocused();
+
+  // A display entry other than the first goes to the one before it.
+  await page.getByRole('tab', { name: /Appearance/ }).click();
+  await page.getByRole('button', { name: 'Add Display Configuration' }).click();
+  await page.getByRole('button', { name: 'Remove display configuration 2' }).click();
+  await expect(page.getByText('Display Configuration 1', { exact: true })).toBeFocused();
+
+  await page.getByRole('tab', { name: /Settings/ }).click();
+  await page.getByRole('button', { name: 'Interactive Authorization Actions' }).click();
+  const addAction = page.getByRole('button', { name: 'Add Action' });
+  await addAction.click();
+  await page.getByRole('menuitem', { name: 'Redirect to Web' }).click();
+  await page.getByRole('button', { name: 'Remove step 1' }).click();
+  await expect(page.getByRole('button', { name: 'Remove step 1' })).toHaveCount(0);
+  await expect(addAction).toBeFocused();
+});
+
+test('loading a template over existing claims shows and edits the loaded claims', async ({
+  page,
+}) => {
+  test.skip(
+    !hasAuthCredentials,
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+  );
+  await page.goto('/credential-config/create');
+  await page.getByRole('button', { name: 'Show all settings' }).click();
+  await page.getByRole('tab', { name: /Claims/ }).click();
+  await page.getByRole('button', { name: 'Add Field' }).click();
+  await page.getByRole('textbox', { name: 'Path' }).fill('custom_claim');
+
+  await page.getByRole('button', { name: 'Templates' }).click();
+  await page
+    .getByRole('menuitem', {
+      name: 'PID (Personal Identity Document) German Personal Identity Document configuration',
+    })
+    .click();
+  await expect(page.getByRole('button', { name: /^custom_claim/ })).toHaveCount(0);
+  await page.getByRole('button', { name: /^address\.country string/ }).click();
+  const path = page
+    .getByRole('region', { name: /^address\.country string/ })
+    .getByRole('textbox', { name: 'Path' });
+  await expect(path).toHaveValue('address.country');
+
+  // The input edits the claim its panel shows, so the panel title follows it.
+  await path.fill('address.country_code');
+  await expect(page.getByRole('button', { name: /^address\.country_code string/ })).toBeVisible();
+});

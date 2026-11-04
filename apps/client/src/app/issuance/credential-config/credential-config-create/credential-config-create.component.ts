@@ -1,4 +1,13 @@
-import { Component, type OnInit, ChangeDetectionStrategy } from '@angular/core';
+import {
+  Component,
+  type OnInit,
+  ChangeDetectionStrategy,
+  ElementRef,
+  Injector,
+  QueryList,
+  ViewChild,
+  ViewChildren,
+} from '@angular/core';
 import {
   AbstractControl,
   FormArray,
@@ -65,6 +74,7 @@ import { JwtService } from '../../../services/jwt.service';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { SourceLoadState, loadSource, reportSourceFailures } from '../../../common/load-source';
+import { focusAfterRenderIfLost } from '../../../common/focus-if-lost.util';
 
 /** The sources of the options of the form's selects. */
 type CredentialConfigSource =
@@ -295,6 +305,26 @@ export class CredentialConfigCreateComponent implements OnInit {
   private publicUrl: string | null = null;
   private tenantId: string | null = null;
 
+  // Where focus goes when the row holding it is removed or moved, in the order of the rows.
+  @ViewChildren('claimHeader', { read: ElementRef })
+  private readonly claimHeaders?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChild('addFieldButton', { read: ElementRef })
+  private readonly addFieldButton?: ElementRef<HTMLElement>;
+  @ViewChildren('claimLabelName', { read: ElementRef })
+  private readonly claimLabelNames?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChildren('addLabelButton', { read: ElementRef })
+  private readonly addLabelButtons?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChildren('displayTitle', { read: ElementRef })
+  private readonly displayTitles?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChildren('iaeStepTitle', { read: ElementRef })
+  private readonly iaeStepTitles?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChild('addActionButton', { read: ElementRef })
+  private readonly addActionButton?: ElementRef<HTMLElement>;
+  @ViewChildren('moveUpButton', { read: ElementRef })
+  private readonly moveUpButtons?: QueryList<ElementRef<HTMLButtonElement>>;
+  @ViewChildren('moveDownButton', { read: ElementRef })
+  private readonly moveDownButtons?: QueryList<ElementRef<HTMLButtonElement>>;
+
   get isMdocFormat(): boolean {
     return this.form.get('format')?.value === 'mso_mdoc';
   }
@@ -307,7 +337,8 @@ export class CredentialConfigCreateComponent implements OnInit {
     private readonly dialog: MatDialog,
     private readonly presentationManagementService: PresentationManagementService,
     private readonly frontendConfigService: FrontendConfigService,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    private readonly injector: Injector
   ) {
     this.form = new FormGroup({
       id: new FormControl('', [Validators.required]),
@@ -908,7 +939,23 @@ export class CredentialConfigCreateComponent implements OnInit {
   removeDisplayConfig(index: number): void {
     if (this.displayConfigs.length > 1) {
       this.displayConfigs.removeAt(index);
+      this.focusRowAfterRemoval(() => this.displayTitles?.toArray(), index);
     }
+  }
+
+  /**
+   * After a row was removed with the control holding focus, focuses the row now at its index,
+   * the new last row when it was the last one, or `fallback` when no row is left.
+   */
+  private focusRowAfterRemoval(
+    rows: () => ElementRef<HTMLElement>[] | undefined,
+    index: number,
+    fallback?: () => ElementRef<HTMLElement> | undefined
+  ): void {
+    focusAfterRenderIfLost(this.injector, () => {
+      const remaining = rows() ?? [];
+      return (remaining[Math.min(index, remaining.length - 1)] ?? fallback?.())?.nativeElement;
+    });
   }
 
   // Field Definition Management
@@ -1039,6 +1086,11 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   removeField(index: number): void {
     this.fields.removeAt(index);
+    this.focusRowAfterRemoval(
+      () => this.claimHeaders?.toArray(),
+      index,
+      () => this.addFieldButton
+    );
   }
 
   addFieldDisplay(fieldIndex: number): void {
@@ -1047,6 +1099,14 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   removeFieldDisplay(fieldIndex: number, displayIndex: number): void {
     this.getFieldDisplayArray(fieldIndex).removeAt(displayIndex);
+    this.focusRowAfterRemoval(
+      () =>
+        this.claimLabelNames?.filter(
+          (name) => name.nativeElement.dataset['claim'] === String(fieldIndex)
+        ),
+      displayIndex,
+      () => this.addLabelButtons?.get(fieldIndex)
+    );
   }
 
   // IAE Actions Management
@@ -1094,6 +1154,11 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   removeIaeAction(index: number): void {
     this.iaeActions.removeAt(index);
+    this.focusRowAfterRemoval(
+      () => this.iaeStepTitles?.toArray(),
+      index,
+      () => this.addActionButton
+    );
   }
 
   moveIaeAction(index: number, direction: 'up' | 'down'): void {
@@ -1103,6 +1168,15 @@ export class CredentialConfigCreateComponent implements OnInit {
     const action = this.iaeActions.at(index);
     this.iaeActions.removeAt(index);
     this.iaeActions.insert(newIndex, action);
+
+    // The card moves with its step, which can take focus off the pressed button. That button
+    // stays focusable at the first or last position, so pressing it again does not move back.
+    focusAfterRenderIfLost(
+      this.injector,
+      () =>
+        (direction === 'up' ? this.moveUpButtons : this.moveDownButtons)?.get(newIndex)
+          ?.nativeElement
+    );
   }
 
   onIaeActionTypeChange(index: number, newType: string): void {
