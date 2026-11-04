@@ -89,6 +89,7 @@ const sidebars: SidebarsConfig = {
         'operate/cli',
         'operate/configuration-as-code',
         'operate/tenants-and-access',
+        'operate/mcp',
         'operate/keycloak',
         'operate/database',
         'operate/encryption-keys',

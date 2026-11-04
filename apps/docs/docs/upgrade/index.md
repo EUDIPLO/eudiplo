@@ -53,6 +53,7 @@ EUDIPLO follows [Semantic Versioning](https://semver.org/):
 
 - **Breaking changes only in major versions.** Removed or renamed API fields and endpoints, changed defaults, stricter validation, new required environment variables and changed configuration formats wait for a major release, which comes with an upgrade guide. A breaking change in a minor or patch release is a bug; please [report it](https://github.com/EUDIPLO/eudiplo/issues/new?template=bug_report.md).
 - **Deprecation before removal** where feasible: a minor release deprecates, the next major removes.
+- **Experimental features may change in minor releases.** They are marked as experimental in the documentation, and the release notes name such changes. These are the [interactive authorization endpoint](../issuance/interactive-authorization.md) and the [MCP endpoint](../operate/mcp.md) `/api/mcp` with its tools. `MCP_ENABLED`, which turns the MCP endpoint on, and its default (off) follow the rules above.
 - **Database migrations are automatic.** No manual SQL is needed.
 - **Configuration files are versioned per resource.** A release imports files of its own and older format versions and upgrades them; it rejects files with a newer version. Files exported from a new major can therefore not be imported into the previous one.
 - **Client and backend** of the same release work together; releases that differ only in the patch version are compatible.

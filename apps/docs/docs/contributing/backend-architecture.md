@@ -106,6 +106,7 @@ apps/backend/src/
 │   ├── verifier-offer/# presentation request API
 │   ├── iso18013/      # ISO 18013-7 (mdoc over the DC API)
 │   └── resolver/      # key resolution for verification
+├── mcp/               # MCP endpoint (MCP_ENABLED): read-only tools over the management services
 ├── registrar/         # registrar configuration and schema metadata
 ├── session/           # session lifecycle, events, retention, session logs
 ├── storage/           # file storage (local, S3)

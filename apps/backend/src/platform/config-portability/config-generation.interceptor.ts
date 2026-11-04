@@ -23,6 +23,11 @@ export class ConfigGenerationInterceptor implements NestInterceptor {
         context: ExecutionContext,
         next: CallHandler,
     ): Observable<unknown> {
+        // MCP tool calls run through global interceptors too, without a
+        // request of their own.
+        if (context.getType() !== "http") {
+            return next.handle();
+        }
         const request = context
             .switchToHttp()
             .getRequest<Request & { user?: TokenPayload }>();

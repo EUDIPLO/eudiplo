@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { SessionStatsFilter } from "../domain/session-stats.js";
 import { orderedRange, timestamp } from "./session-query.dto.js";
 
-const SessionStatsQuerySchema = z
+export const SessionStatsQuerySchema = z
     .object({
         createdFrom: timestamp.optional(),
         createdTo: timestamp.optional(),

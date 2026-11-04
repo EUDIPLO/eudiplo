@@ -147,7 +147,7 @@ export function readGraph(
 }
 
 const forbiddenPackages =
-    /^(typeorm|@nestjs\/(typeorm|axios|config|schedule|event-emitter|swagger)|express|axios|undici|node-vault|nestjs-otel|@opentelemetry\/[^/]+|@aws-sdk\/[^/]+|@azure\/[^/]+|@keycloak\/keycloak-admin-client|class-validator|class-transformer|nestjs-zod|nestjs-pino|(?:node:)?(?:fs|http|https))(\/|$)/;
+    /^(typeorm|@nestjs\/(typeorm|axios|config|schedule|event-emitter|swagger)|express|axios|undici|node-vault|nestjs-otel|@opentelemetry\/[^/]+|@aws-sdk\/[^/]+|@azure\/[^/]+|@keycloak\/keycloak-admin-client|@modelcontextprotocol\/[^/]+|class-validator|class-transformer|nestjs-zod|nestjs-pino|(?:node:)?(?:fs|http|https))(\/|$)/;
 const coreRoles: Role[] = ["application", "domain", "port"];
 
 /** Check the transitive closure so an unclassified helper/barrel cannot hide an adapter. */

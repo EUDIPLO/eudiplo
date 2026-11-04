@@ -5,6 +5,7 @@ import { ConfigGenerationInterceptor } from "./config-generation.interceptor.js"
 
 function context(request: Record<string, unknown>) {
     return {
+        getType: () => "http",
         switchToHttp: () => ({ getRequest: () => request }),
     } as any;
 }
@@ -133,5 +134,26 @@ describe("ConfigGenerationInterceptor", () => {
             "automation",
             true,
         );
+    });
+
+    it("passes MCP tool calls through", async () => {
+        const routes = { match: vi.fn() };
+        const interceptor = new ConfigGenerationInterceptor(
+            {} as any,
+            routes as any,
+            {} as any,
+        );
+        const switchToHttp = vi.fn();
+
+        await expect(
+            firstValueFrom(
+                interceptor.intercept(
+                    { getType: () => "mcp", switchToHttp } as any,
+                    { handle: () => of({ ok: true }) },
+                ),
+            ),
+        ).resolves.toEqual({ ok: true });
+        expect(switchToHttp).not.toHaveBeenCalled();
+        expect(routes.match).not.toHaveBeenCalled();
     });
 });

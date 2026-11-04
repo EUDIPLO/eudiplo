@@ -103,6 +103,7 @@ it derives the key that decrypts private keys and session data.
 | CLI install, instances and drivers            | [CLI](cli.md)                                                 |
 | Export, validate and import configuration     | [Configuration as code](configuration-as-code.md)             |
 | Tenants, API clients, users and SSO           | [Tenants and access](tenants-and-access.md), [Keycloak](keycloak.md) |
+| AI assistants over MCP                        | [AI assistants (MCP)](mcp.md)                                 |
 | Database, migrations, session retention       | [Database](database.md)                                       |
 | Encryption of data at rest                    | [Encryption keys](encryption-keys.md)                         |
 | Files, images and logos                       | [Object storage](object-storage.md)                           |

@@ -17,6 +17,7 @@ function respond(exception: unknown) {
     const json = vi.fn();
     const status = vi.fn().mockReturnValue({ json });
     const host = {
+        getType: () => "http",
         switchToHttp: () => ({
             getResponse: () => ({ status }),
             getRequest: () => ({ method: "GET", path: "/x", url: "/x" }),
@@ -88,5 +89,18 @@ describe("AllExceptionsFilter", () => {
         } finally {
             log.mockRestore();
         }
+    });
+
+    it("leaves MCP tool calls to the MCP module", () => {
+        const switchToHttp = vi.fn();
+        const host = {
+            getType: () => "mcp",
+            switchToHttp,
+        } as unknown as ArgumentsHost;
+
+        expect(
+            new AllExceptionsFilter().catch(new Error("boom"), host),
+        ).toBeUndefined();
+        expect(switchToHttp).not.toHaveBeenCalled();
     });
 });

@@ -3,6 +3,7 @@ import { AUTH_VALIDATION_SCHEMA } from "../../auth/auth-validation.schema.js";
 import { CRYPTO_VALIDATION_SCHEMA } from "../../crypto/key/crypto-implementation/crypto-validation.schema.js";
 import { DB_VALIDATION_SCHEMA } from "../../database/database-validation.schema.js";
 import { ISSUER_VALIDATION_SCHEMA } from "../../issuer/issuer-validation.schema.js";
+import { MCP_VALIDATION_SCHEMA } from "../../mcp/mcp-validation.schema.js";
 import { STATUS_LIST_VALIDATION_SCHEMA } from "../../issuer/status-list/status-list-validation.schema.js";
 import { SESSION_VALIDATION_SCHEMA } from "../../session/session-validation.schema.js";
 import { STORAGE_VALIDATION_SCHEMA } from "../../storage/storage-validation.schema.js";
@@ -38,4 +39,5 @@ export const VALIDATION_SCHEMA = BASE_VALIDATION_SCHEMA.concat(
     .concat(FEDERATION_VALIDATION_SCHEMA)
     .concat(WEBHOOK_VALIDATION_SCHEMA)
     .concat(TLS_VALIDATION_SCHEMA)
+    .concat(MCP_VALIDATION_SCHEMA)
     .concat(SKIP_VALIDATION_SCHEMA);

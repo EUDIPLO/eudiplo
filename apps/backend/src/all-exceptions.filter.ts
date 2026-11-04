@@ -17,6 +17,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
     private readonly logger = new Logger(AllExceptionsFilter.name);
 
     catch(exception: unknown, host: ArgumentsHost) {
+        // An MCP tool call has no HTTP response to write. Returning nothing
+        // hands the exception back to the MCP module, which answers the call.
+        if (host.getType() !== "http") {
+            return;
+        }
         const isProduction = process.env.NODE_ENV === "production";
         const ctx = host.switchToHttp();
         const response = ctx.getResponse<Response>();

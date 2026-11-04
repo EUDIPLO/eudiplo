@@ -14,7 +14,7 @@ Every EUDIPLO instance serves its own OpenAPI specification, so the reference al
 | Management API | `/api/docs` | `/api/docs-json` | Everything under `/api`: tenants, clients, configurations, key chains, offers, sessions, lists |
 | Protocol API   | `/docs`     | `/docs-json`     | Wallet-facing OID4VCI, OID4VP and ISO 18013-7 endpoints, metadata, status and trust lists      |
 
-Both are OpenAPI 3.1 documents. In Swagger UI, choose **Authorize** to call the management API with a client's credentials.
+Both are OpenAPI 3.1 documents. In Swagger UI, choose **Authorize** to call the management API with a client's credentials. The experimental MCP endpoint `/api/mcp` is not part of them; see [AI assistants (MCP)](../operate/mcp.md).
 
 ## Path prefixes
 

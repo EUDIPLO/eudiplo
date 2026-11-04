@@ -1,7 +1,10 @@
 import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { Role } from "./role.enum.js";
-import { ROLES_KEY, RoleRequirement } from "./roles.decorator.js";
+import {
+    meetsRoleRequirement,
+    ROLES_KEY,
+    RoleRequirement,
+} from "./roles.decorator.js";
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -17,10 +20,6 @@ export class RolesGuard implements CanActivate {
             return true;
         }
         const { user } = context.switchToHttp().getRequest();
-        const granted = (role: Role) => user.roles?.includes(role) ?? false;
-        // An empty list denies in both modes; `[].every()` alone would allow.
-        return requirement.match === "all"
-            ? requirement.roles.length > 0 && requirement.roles.every(granted)
-            : requirement.roles.some(granted);
+        return meetsRoleRequirement(requirement, user.roles);
     }
 }

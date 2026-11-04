@@ -51,6 +51,10 @@ See [OpenID Federation](../trust/federation.md).
 
 <ConfigTable group="log" />
 
+## MCP
+
+<ConfigTable group="mcp" />
+
 ## Observability
 
 <ConfigTable group="observability" />

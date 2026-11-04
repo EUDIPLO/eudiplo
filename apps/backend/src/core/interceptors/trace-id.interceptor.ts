@@ -22,6 +22,11 @@ import { Observable } from "rxjs";
 @Injectable()
 export class TraceIdInterceptor implements NestInterceptor {
     intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+        // MCP tool calls run through global interceptors too; the HTTP
+        // response of their endpoint is not theirs to change.
+        if (context.getType() !== "http") {
+            return next.handle();
+        }
         const response = context.switchToHttp().getResponse<Response>();
         const span = trace.getActiveSpan();
 

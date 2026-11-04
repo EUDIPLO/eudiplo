@@ -54,6 +54,8 @@ describe("architecture dependency rules", () => {
         'import { plainToInstance } from "class-transformer";',
         'import { createZodDto } from "nestjs-zod";',
         'import { PinoLogger } from "nestjs-pino";',
+        'import { McpServer } from "@modelcontextprotocol/server";',
+        'import { Tool } from "@nestjs/mcp";',
         "const implementation = await import(selectedModule);",
     ])("rejects infrastructure dependency: %s", (source) => {
         expect(

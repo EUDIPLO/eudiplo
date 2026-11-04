@@ -33,6 +33,13 @@ describe("Home", () => {
             });
     });
 
+    test("serves no MCP endpoint without MCP_ENABLED", () => {
+        return request(app.getHttpServer())
+            .post("/mcp")
+            .send({ jsonrpc: "2.0", id: 1, method: "tools/list" })
+            .expect(404);
+    });
+
     test("GET /version requires authentication", () => {
         return request(app.getHttpServer()).get("/version").expect(401);
     });

@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { ConfigModule, ConfigService } from "@nestjs/config";
+import { ConditionalModule, ConfigModule, ConfigService } from "@nestjs/config";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { MulterModule } from "@nestjs/platform-express";
 import { ScheduleModule } from "@nestjs/schedule";
@@ -11,6 +11,8 @@ import { CryptoModule } from "./crypto/crypto.module.js";
 import { KeyModule } from "./crypto/key/key.module.js";
 import { DatabaseModule } from "./database/database.module.js";
 import { IssuerModule } from "./issuer/issuer.module.js";
+import { McpServerModule } from "./mcp/mcp-server.module.js";
+import { isMcpEnabled } from "./mcp/mcp-validation.schema.js";
 import { VALIDATION_SCHEMA } from "./platform/config/combined.schema.js";
 import { ConfigImportModule } from "./platform/config-import/config-import.module.js";
 import { ConfigPortabilityModule } from "./platform/config-portability/config-portability.module.js";
@@ -58,6 +60,9 @@ import { VerifierModule } from "./verifier/verifier.module.js";
         StorageModule.forRoot(),
         ConfigPortabilityModule,
         ConfigImportModule,
+        ConditionalModule.registerWhen(McpServerModule, isMcpEnabled, {
+            debug: false,
+        }),
     ],
     controllers: [],
     providers: [],

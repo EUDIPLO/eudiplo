@@ -1,0 +1,120 @@
+---
+title: AI Assistants (MCP, experimental)
+sidebar_label: AI assistants (MCP)
+---
+
+:::caution[Experimental]
+The MCP endpoint and its tools may change in minor releases.
+:::
+
+# AI assistants (MCP)
+
+Let an AI assistant or another [Model Context Protocol](https://modelcontextprotocol.io)
+(MCP) client read a tenant's configurations and sessions, for example to ask
+why offers failed today. The endpoint is off by default and its tools only read.
+
+**Prerequisites:** a token with `clients:manage` in the tenant, such as the
+`<tenant>-admin` client ([tenants and access](tenants-and-access.md)), and an
+MCP client that supports Streamable HTTP with a custom `Authorization` header.
+
+## 1. Enable the endpoint
+
+```env
+MCP_ENABLED=true
+```
+
+After a restart, EUDIPLO serves `POST /api/mcp` over Streamable HTTP. It keeps
+no session between requests, so it works behind any load balancer. The route is
+part of the management API: CORS and your [WAF rules](waf.md) for `/api/*`
+apply, and it is not in the OpenAPI document.
+
+## 2. Create a client for the assistant
+
+Give the assistant a client of its own with the roles of the tools it needs
+([tools](#tools)):
+
+```bash
+curl -X POST https://eudiplo.example.com/api/client \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientId": "assistant",
+    "description": "AI assistant, reads sessions",
+    "roles": ["sessions:read"]
+  }'
+```
+
+The token works for the whole management API, not only for `/api/mcp`, so a
+role allows the assistant everything it allows elsewhere: with
+`issuance:manage`, it could also change credential configurations through
+`/api/issuer/credentials`. `sessions:read` alone only reads.
+
+## 3. Get an access token
+
+```bash
+curl -X POST https://eudiplo.example.com/api/oauth2/token \
+  -d grant_type=client_credentials \
+  -d client_id=assistant \
+  -d client_secret="$ASSISTANT_SECRET"
+```
+
+Tokens of the built-in server expire after 24 hours, and the assistant cannot
+renew them: request a new one and update the assistant's configuration. With
+[Keycloak](keycloak.md), use a token of a Keycloak client instead.
+
+## 4. Connect the assistant
+
+Point the MCP client at `https://eudiplo.example.com/api/mcp` and send the
+token as `Authorization: Bearer <token>`. In Claude Code, for example:
+
+```bash
+claude mcp add --transport http eudiplo https://eudiplo.example.com/api/mcp \
+  --header "Authorization: Bearer $EUDIPLO_TOKEN"
+```
+
+**Checkpoint:** ask the assistant which EUDIPLO tenant it is connected to. It
+calls `get_caller` and answers with the tenant and the client's roles.
+
+## Tools
+
+Every tool reads only the tenant of the token and needs one of the roles of the
+management endpoint it mirrors. A call without them answers with the roles it
+needs.
+
+| Tool | Returns | Roles | Mirrors |
+| --- | --- | --- | --- |
+| `get_caller` | Tenant, client ID and EUDIPLO roles of the token, EUDIPLO version | Any EUDIPLO role | — |
+| `list_sessions` | One page of session summaries; takes the filters of the session list | `issuance:offer`, `presentation:request` or `sessions:read` | `GET /api/session` |
+| `get_session_stats` | Session counts per type and status, frequent failure codes, retention settings | `issuance:offer`, `presentation:request` or `sessions:read` | `GET /api/session/stats` |
+| `list_credential_configurations` | ID, description, display name, format, vct or docType, status management | `issuance:manage` | `GET /api/issuer/credentials` |
+| `list_presentation_configurations` | ID, description, and the DCQL query ID, format and vct values or docType of each requested credential | `presentation:manage` or `presentation:request` | `GET /api/verifier/config` |
+
+The root client (`tenants:manage`, no tenant) can only call `get_caller`.
+
+## What the assistant receives
+
+The assistant sends every tool result to its language model, so the tools
+return less than the endpoints they mirror:
+
+- **Sessions** come as the summaries of the session list: ID, status,
+  timestamps, presentation configuration, failure code and the offer's
+  `reference`. Claims, presented credentials, offer and request URIs and codes
+  are never returned. The visibility rules of the session endpoints apply
+  ([API clients with least privilege](tenants-and-access.md#api-clients-with-least-privilege)).
+- **Configurations** come without claim templates, keys, webhooks and
+  registration certificates.
+
+Keep personal data out of the `reference` of offers, as the API asks.
+
+## Limits
+
+- **No sign-in from the client.** The endpoint answers `401` without OAuth
+  protected resource metadata, so an MCP client cannot obtain a token by
+  itself. Give it a token as in step 3.
+- **Streamable HTTP only.** There is no stdio transport. With a valid token,
+  `GET` and `DELETE` on the endpoint answer `405`.
+- **No browser pages on other hosts.** A request whose `Origin` header names
+  another host than `localhost` answers `403`. MCP clients outside a browser
+  send no `Origin` header.
+- **Read only.** Creating offers or presentation requests, cancelling sessions
+  and changing configurations stay in the management API and the web client.

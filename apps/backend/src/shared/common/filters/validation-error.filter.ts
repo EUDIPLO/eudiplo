@@ -17,6 +17,11 @@ export class ValidationErrorFilter implements ExceptionFilter {
     private readonly logger = new Logger(ValidationErrorFilter.name);
 
     catch(exception: ValidationError, host: ArgumentsHost) {
+        // Not an HTTP request, for example an MCP tool call: let its own
+        // error handling answer.
+        if (host.getType() !== "http") {
+            return;
+        }
         const ctx = host.switchToHttp();
         const response = ctx.getResponse<Response>();
 
