@@ -8,7 +8,7 @@ import type {
 } from "../../session/domain/session-stats.js";
 import { SessionQuerySchema } from "../../session/dto/session-query.dto.js";
 import { SessionStatsQuerySchema } from "../../session/dto/session-stats-query.dto.js";
-import { SessionReads } from "../../session/session-reads.js";
+import { SessionReads } from "../../session/application/session-reads.js";
 import type { VerificationFailureType } from "../../verifier/presentations/credential/verification-failure.js";
 import { CLAIM_VALUE_MISMATCH } from "../../verifier/presentations/domain/dcql-claim-policy.js";
 import { callerOf, type McpRequest, tenantOf } from "../mcp-caller.js";

@@ -48,7 +48,11 @@ import {
 import { SessionController } from "./session.controller.js";
 import { SessionConfigController } from "./session-config.controller.js";
 import { SessionConfigService } from "./session-config.service.js";
-import { SessionReads } from "./session-reads.js";
+import {
+    SESSION_RETENTION_SETTINGS,
+    type SessionRetentionSettingsSource,
+} from "./ports/session-retention-settings.js";
+import { SessionReads } from "./application/session-reads.js";
 import { SessionEventsController } from "./session-events.controller.js";
 import { SessionEventsService } from "./session-events.service.js";
 import { SESSION_SETTINGS, type SessionSettings } from "./session-settings.js";
@@ -186,7 +190,23 @@ import { SESSION_SETTINGS, type SessionSettings } from "./session-settings.js";
                 ),
         },
         SessionConfigService,
-        SessionReads,
+        {
+            provide: SESSION_RETENTION_SETTINGS,
+            inject: [SessionConfigService],
+            useFactory: (
+                config: SessionConfigService,
+            ): SessionRetentionSettingsSource => ({
+                forTenant: (tenantId) => config.getEffectiveConfig(tenantId),
+            }),
+        },
+        {
+            provide: SessionReads,
+            inject: [SessionStore, SESSION_RETENTION_SETTINGS],
+            useFactory: (
+                sessions: SessionStore,
+                retention: SessionRetentionSettingsSource,
+            ) => new SessionReads(sessions, retention),
+        },
         {
             provide: SESSION_SETTINGS,
             inject: [ConfigService],

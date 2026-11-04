@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Role } from "../auth/roles/role.enum.js";
-import type { TokenPayload } from "../auth/token.decorator.js";
+import { Role } from "../../auth/roles/role.enum.js";
 import {
     credentialStatusScope,
     mayChangeSessions,
@@ -9,7 +8,7 @@ import {
     sessionReadScope,
 } from "./session-scope.js";
 
-const token = (roles: Role[]) => ({ roles }) as TokenPayload;
+const token = (roles: Role[]) => ({ roles });
 
 const sideRoleCases = [
     [[Role.PresentationRequest], "presentation"],

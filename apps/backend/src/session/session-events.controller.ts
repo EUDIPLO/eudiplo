@@ -6,7 +6,10 @@ import { Secured } from "../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../auth/token.decorator.js";
 import { SessionStore } from "./application/session-store.js";
 import { SessionEventsService } from "./session-events.service.js";
-import { readOnlySessionTypes, sessionReadScope } from "./session-scope.js";
+import {
+    readOnlySessionTypes,
+    sessionReadScope,
+} from "./domain/session-scope.js";
 
 /**
  * Controller for Server-Sent Events (SSE) based session status updates.

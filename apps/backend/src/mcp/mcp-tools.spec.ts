@@ -14,7 +14,7 @@ import { PresentationManagementController } from "../verifier/presentations/pres
 import type { McpRequest } from "./mcp-caller.js";
 import { McpRolesGuard } from "./mcp-roles.guard.js";
 import { McpToolsModule } from "./mcp-tools.module.js";
-import { SessionReads } from "../session/session-reads.js";
+import { SessionReads } from "../session/application/session-reads.js";
 import { CallerTools } from "./tools/caller.tools.js";
 import { ConfigurationTools } from "./tools/configuration.tools.js";
 import { SessionTools, WITHHELD_FAILURE_CODE } from "./tools/session.tools.js";
@@ -161,8 +161,16 @@ describe("CallerTools", () => {
 });
 
 describe("SessionTools", () => {
-    const toolsWith = (sessions: object, config: object = {}) =>
-        new SessionTools(new SessionReads(sessions as any, config as any));
+    const toolsWith = (
+        sessions: object,
+        config: { getEffectiveConfig?: (tenantId: string) => unknown } = {},
+    ) =>
+        new SessionTools(
+            new SessionReads(sessions as any, {
+                forTenant: (tenantId) =>
+                    config.getEffectiveConfig?.(tenantId) as any,
+            }),
+        );
     const summary = (failureCode: string | null) => ({
         id: "s1",
         status: "failed",

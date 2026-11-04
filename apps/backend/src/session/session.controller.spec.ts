@@ -10,12 +10,11 @@ import {
     SessionNotCancellable,
 } from "./application/cancel-session.js";
 import { SessionNotFound } from "./application/session-errors.js";
+import { SessionReads } from "./application/session-reads.js";
 import type { SessionStore } from "./application/session-store.js";
 import { SessionStatus } from "./domain/session-state.js";
 import type { SessionLogStoreService } from "./logging/session-log-store.service.js";
 import { SessionController } from "./session.controller.js";
-import type { SessionConfigService } from "./session-config.service.js";
-import { SessionReads } from "./session-reads.js";
 
 function createController() {
     const sessions = {
@@ -37,10 +36,9 @@ function createController() {
         statusList as unknown as StatusListService,
         logs as unknown as SessionLogStoreService,
         cancel as unknown as CancelSession,
-        new SessionReads(
-            sessions as unknown as SessionStore,
-            sessionConfig as unknown as SessionConfigService,
-        ),
+        new SessionReads(sessions as unknown as SessionStore, {
+            forTenant: (tenantId) => sessionConfig.getEffectiveConfig(tenantId),
+        }),
     );
     return { controller, sessions, logs, cancel, statusList, sessionConfig };
 }

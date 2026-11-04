@@ -1,6 +1,10 @@
-import { Role } from "../auth/roles/role.enum.js";
-import type { TokenPayload } from "../auth/token.decorator.js";
-import type { SessionType } from "./domain/session-list.js";
+import { Role } from "../../auth/roles/role.enum.js";
+import type { SessionType } from "./session-list.js";
+
+/** What the session rules need of a management caller: its roles. */
+export interface SessionCaller {
+    roles?: readonly Role[];
+}
 
 const issuanceRoles = [Role.IssuanceOffer, Role.Issuances];
 const presentationRoles = [Role.PresentationRequest, Role.Presentations];
@@ -11,7 +15,7 @@ const presentationRoles = [Role.PresentationRequest, Role.Presentations];
  * `presentation:request` or `presentation:manage`. `undefined` means both.
  */
 export function sessionChangeScope(
-    token: TokenPayload,
+    token: SessionCaller,
 ): SessionType | undefined {
     return scopeOf(token, issuanceRoles, presentationRoles);
 }
@@ -27,7 +31,7 @@ const changerRoles = [Role.IssuanceOffer, Role.PresentationRequest];
  * them with; `sessions:read`, also together with a manage role, only reads.
  */
 export function mayChangeSessions(
-    token: TokenPayload,
+    token: SessionCaller,
     type: SessionType,
 ): boolean {
     const roles = token.roles ?? [];
@@ -46,7 +50,7 @@ export function mayChangeSessions(
  * it, and the others come without those values. Empty without
  * `sessions:read`, so other role sets read as before.
  */
-export function readOnlySessionTypes(token: TokenPayload): SessionType[] {
+export function readOnlySessionTypes(token: SessionCaller): SessionType[] {
     if (!token.roles?.includes(Role.SessionsRead)) return [];
     return (["issuance", "presentation"] as const).filter(
         (type) => !mayChangeSessions(token, type),
@@ -61,7 +65,9 @@ export function readOnlySessionTypes(token: TokenPayload): SessionType[] {
  * `sessions:read`. Never use it for changes, or `sessions:read` would widen
  * them to the other type.
  */
-export function sessionReadScope(token: TokenPayload): SessionType | undefined {
+export function sessionReadScope(
+    token: SessionCaller,
+): SessionType | undefined {
     return scopeOf(
         token,
         [...issuanceRoles, Role.SessionsRead],
@@ -75,7 +81,7 @@ export function sessionReadScope(token: TokenPayload): SessionType | undefined {
  * which changes their status.
  */
 export function credentialStatusScope(
-    token: TokenPayload,
+    token: SessionCaller,
 ): SessionType | undefined {
     return scopeOf(
         token,
@@ -85,7 +91,7 @@ export function credentialStatusScope(
 }
 
 function scopeOf(
-    token: TokenPayload,
+    token: SessionCaller,
     issuanceSide: Role[],
     presentationSide: Role[],
 ): SessionType | undefined {

@@ -32,6 +32,7 @@ import {
     CancelSession,
     SessionNotCancellable,
 } from "./application/cancel-session.js";
+import { SessionReads } from "./application/session-reads.js";
 import { SessionStore } from "./application/session-store.js";
 import type { SessionData } from "./domain/session-data.js";
 import { typeOfSession } from "./domain/session-list.js";
@@ -47,13 +48,12 @@ import { SessionStatsQueryDto } from "./dto/session-stats-query.dto.js";
 import { SessionStatsResponseDto } from "./dto/session-stats-response.dto.js";
 import { Session } from "./entities/session.entity.js";
 import { SessionLogStoreService } from "./logging/session-log-store.service.js";
-import { SessionReads } from "./session-reads.js";
 import {
     credentialStatusScope,
     readOnlySessionTypes,
     sessionChangeScope,
     sessionReadScope,
-} from "./session-scope.js";
+} from "./domain/session-scope.js";
 
 /** How the session reads treat a client with only `sessions:read` for a type. */
 const READ_ONLY_NOTE =
