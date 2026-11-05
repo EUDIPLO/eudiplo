@@ -11,6 +11,7 @@ import { EntityNotFoundError } from "typeorm";
 import { redactUrlPath } from "./platform/observability/redact-url.js";
 import { ConflictError } from "./shared/domain/conflict-error.js";
 import { NotFoundError } from "./shared/domain/not-found-error.js";
+import { NotSupportedError } from "./shared/domain/not-supported-error.js";
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -33,6 +34,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
             status = HttpStatus.NOT_FOUND;
         } else if (exception instanceof ConflictError) {
             status = HttpStatus.CONFLICT;
+        } else if (exception instanceof NotSupportedError) {
+            status = HttpStatus.NOT_IMPLEMENTED;
         } else {
             status = HttpStatus.INTERNAL_SERVER_ERROR;
         }
@@ -55,9 +58,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
             }
         } else if (
             exception instanceof Error &&
-            (!isProduction || exception instanceof ConflictError)
+            (!isProduction ||
+                exception instanceof ConflictError ||
+                exception instanceof NotSupportedError)
         ) {
-            // Conflict messages name the taken resource, never internals.
+            // Conflict messages name the taken resource and not-supported
+            // messages the setting behind them, never internals.
             message = exception.message;
         } else {
             message = "Internal Server Error";

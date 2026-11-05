@@ -6,7 +6,10 @@ import {
 } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
-import { ClientIdTaken } from "./auth/client/domain/client-data.js";
+import {
+    ClientIdTaken,
+    ClientsManagedByIdentityProvider,
+} from "./auth/client/domain/client-data.js";
 import { TenantNotFound } from "./auth/tenant/domain/tenant-data.js";
 import { CredentialConfigurationNotFound } from "./issuer/configuration/credentials/domain/credential-configuration.js";
 import { IssuanceConfigurationNotFound } from "./issuer/configuration/issuance/domain/issuance-configuration.js";
@@ -51,6 +54,21 @@ describe("AllExceptionsFilter", () => {
             expect(body.message).toBe("Client ID 'c1' is already in use");
             expect(respond(new Error("internal detail")).body.message).toBe(
                 "Internal Server Error",
+            );
+        } finally {
+            vi.unstubAllEnvs();
+        }
+    });
+
+    it("maps what the instance does not offer to 501 and keeps its message in production", () => {
+        vi.stubEnv("NODE_ENV", "production");
+        try {
+            const { status, body } = respond(
+                new ClientsManagedByIdentityProvider(),
+            );
+            expect(status).toBe(501);
+            expect(body.message).toBe(
+                "Clients are managed in the identity provider (OIDC_PROVIDER=generic).",
             );
         } finally {
             vi.unstubAllEnvs();

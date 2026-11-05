@@ -1,10 +1,15 @@
 import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { AUTH_SETTINGS, type AuthSettings } from "./auth-settings.js";
 import { InternalClientsProvider } from "./client/adapters/internal-clients.service.js";
 import { CLIENTS_PROVIDER } from "./client/client.provider.js";
 import { OidcDiscoveryDto } from "./dto/oidc-discovery.dto.js";
 import { TokenResponse } from "./dto/token-response.dto.js";
 import { ACCESS_TOKEN_LIFETIME_SECONDS, JwtService } from "./jwt.service.js";
+import {
+    OIDC_ISSUER_METADATA,
+    type OidcIssuerMetadata,
+} from "./ports/oidc-issuer-metadata.js";
 import { InternalTokenPayload } from "./token.decorator.js";
 
 /**
@@ -23,6 +28,9 @@ export class AuthService {
         @Inject(CLIENTS_PROVIDER)
         private readonly clients: InternalClientsProvider,
         private readonly configService: ConfigService,
+        @Inject(AUTH_SETTINGS) private readonly settings: AuthSettings,
+        @Inject(OIDC_ISSUER_METADATA)
+        private readonly issuerMetadata: OidcIssuerMetadata | null,
     ) {}
 
     /**
@@ -118,21 +126,26 @@ export class AuthService {
      */
     getOidcDiscovery(): OidcDiscoveryDto {
         const publicUrl = this.configService.getOrThrow<string>("PUBLIC_URL");
-        const oidc = this.configService.get<string>("OIDC");
-        const tokenEndpoint = oidc
-            ? `${oidc}/protocol/openid-connect/token`
-            : `${publicUrl}/api/oauth2/token`;
+        const settings = this.settings;
+        const builtin = settings.mode === "builtin";
+        // Another provider's endpoints come from its discovery document.
+        const provider = this.issuerMetadata;
+        const tokenEndpoint = builtin
+            ? `${publicUrl}/api/oauth2/token`
+            : (provider?.token_endpoint ??
+              `${settings.issuer}/protocol/openid-connect/token`);
 
         return {
-            issuer: oidc ?? publicUrl,
+            issuer: builtin ? publicUrl : settings.issuer,
             token_endpoint: tokenEndpoint,
-            jwks_uri: `${publicUrl}/.well-known/jwks.json`,
+            jwks_uri:
+                provider?.jwks_uri ?? `${publicUrl}/.well-known/jwks.json`,
             response_types_supported: ["token"],
             grant_types_supported: ["client_credentials"],
-            ...(oidc && {
-                ui_client_id:
-                    this.configService.get<string>("OIDC_UI_CLIENT_ID") ??
-                    "eudiplo-ui",
+            // The Web Client signs in to other providers with client
+            // credentials only, so it offers single sign-on just for Keycloak.
+            ...(settings.mode === "keycloak" && {
+                ui_client_id: settings.uiClientId,
             }),
             token_endpoint_auth_methods_supported: [
                 "client_secret_basic",

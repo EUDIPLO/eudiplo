@@ -6822,6 +6822,10 @@ export type TenantControllerInitTenantErrors = {
      * The admin client ID `<id>-admin` is used by another tenant or the root client
      */
     409: unknown;
+    /**
+     * With `OIDC_PROVIDER=generic`, `roles` are refused: the identity provider manages the clients
+     */
+    501: unknown;
 };
 
 export type TenantControllerInitTenantResponses = {
@@ -6945,6 +6949,13 @@ export type ClientControllerGetClientsData = {
     url: '/api/client';
 };
 
+export type ClientControllerGetClientsErrors = {
+    /**
+     * With `OIDC_PROVIDER=generic`, the identity provider manages the clients
+     */
+    501: unknown;
+};
+
 export type ClientControllerGetClientsResponses = {
     200: Array<ClientEntity>;
 };
@@ -6967,6 +6978,10 @@ export type ClientControllerCreateClientErrors = {
      * The client ID is already in use
      */
     409: unknown;
+    /**
+     * With `OIDC_PROVIDER=generic`, the identity provider manages the clients
+     */
+    501: unknown;
 };
 
 export type ClientControllerCreateClientResponses = {
@@ -6989,6 +7004,10 @@ export type ClientControllerDeleteClientErrors = {
      * The client has a role the caller neither holds nor may grant
      */
     403: unknown;
+    /**
+     * With `OIDC_PROVIDER=generic`, the identity provider manages the clients
+     */
+    501: unknown;
 };
 
 export type ClientControllerDeleteClientResponses = {
@@ -7014,6 +7033,10 @@ export type ClientControllerGetClientErrors = {
      * Client not found
      */
     404: unknown;
+    /**
+     * With `OIDC_PROVIDER=generic`, the identity provider manages the clients
+     */
+    501: unknown;
 };
 
 export type ClientControllerGetClientResponses = {
@@ -7040,6 +7063,10 @@ export type ClientControllerUpdateClientErrors = {
      * Client not found
      */
     404: unknown;
+    /**
+     * With `OIDC_PROVIDER=generic`, the identity provider manages the clients
+     */
+    501: unknown;
 };
 
 export type ClientControllerUpdateClientResponses = {
@@ -7066,6 +7093,10 @@ export type ClientControllerRotateClientSecretErrors = {
      * Client not found
      */
     404: unknown;
+    /**
+     * With `OIDC_PROVIDER=generic`, the identity provider manages the clients
+     */
+    501: unknown;
 };
 
 export type ClientControllerRotateClientSecretResponses = {
@@ -7266,6 +7297,13 @@ export type UserControllerGetUsersData = {
     url: '/api/user';
 };
 
+export type UserControllerGetUsersErrors = {
+    /**
+     * People are managed only with Keycloak: without `OIDC`, or with `OIDC_PROVIDER=generic`, where the identity provider manages them
+     */
+    501: unknown;
+};
+
 export type UserControllerGetUsersResponses = {
     200: Array<ManagedUserDto>;
 };
@@ -7284,6 +7322,10 @@ export type UserControllerCreateUserErrors = {
      * The caller may not grant one of the requested roles
      */
     403: unknown;
+    /**
+     * People are managed only with Keycloak: without `OIDC`, or with `OIDC_PROVIDER=generic`, where the identity provider manages them
+     */
+    501: unknown;
 };
 
 export type UserControllerCreateUserResponses = {
@@ -7306,6 +7348,10 @@ export type UserControllerDeleteUserErrors = {
      * The user has a role the caller neither holds nor may grant
      */
     403: unknown;
+    /**
+     * People are managed only with Keycloak: without `OIDC`, or with `OIDC_PROVIDER=generic`, where the identity provider manages them
+     */
+    501: unknown;
 };
 
 export type UserControllerDeleteUserResponses = {
@@ -7324,6 +7370,13 @@ export type UserControllerGetUserData = {
     };
     query?: never;
     url: '/api/user/{id}';
+};
+
+export type UserControllerGetUserErrors = {
+    /**
+     * People are managed only with Keycloak: without `OIDC`, or with `OIDC_PROVIDER=generic`, where the identity provider manages them
+     */
+    501: unknown;
 };
 
 export type UserControllerGetUserResponses = {
@@ -7350,6 +7403,10 @@ export type UserControllerUpdateUserErrors = {
      * User not found
      */
     404: unknown;
+    /**
+     * People are managed only with Keycloak: without `OIDC`, or with `OIDC_PROVIDER=generic`, where the identity provider manages them
+     */
+    501: unknown;
 };
 
 export type UserControllerUpdateUserResponses = {

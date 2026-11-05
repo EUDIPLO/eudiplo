@@ -1,9 +1,12 @@
 import { UnauthorizedException } from "@nestjs/common";
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { readAuthSettings } from "./auth-settings.js";
+import { IdpManagedClientsProvider } from "./client/adapters/idp-managed-clients.service.js";
 import type { ClientData } from "./client/domain/client-data.js";
-import { TenantNotFound } from "./tenant/domain/tenant-data.js";
-import { JwtStrategy } from "./jwt.strategy.js";
+import { externalTokenChecks, JwtStrategy } from "./jwt.strategy.js";
+import type { OidcIssuerMetadata } from "./ports/oidc-issuer-metadata.js";
 import { Role } from "./roles/role.enum.js";
+import { TenantNotFound } from "./tenant/domain/tenant-data.js";
 import type { InternalTokenPayload } from "./token.decorator.js";
 
 const DAY = 24 * 60 * 60;
@@ -20,6 +23,21 @@ function configService(values: Record<string, string>) {
 }
 
 describe("JwtStrategy", () => {
+    /** A strategy for these settings, as AuthModule builds it. */
+    function strategyFor(
+        values: Record<string, string>,
+        issuerMetadata: OidcIssuerMetadata | null,
+        clients: object = clientsProvider,
+    ) {
+        return new JwtStrategy(
+            configService(values),
+            tenantService as never,
+            clients as never,
+            readAuthSettings(configService(values)),
+            issuerMetadata,
+        );
+    }
+
     let clients: Map<string, ClientData>;
     let tenantService: { getTenant: ReturnType<typeof vi.fn> };
     let clientsProvider: { getClientById: ReturnType<typeof vi.fn> };
@@ -38,11 +56,7 @@ describe("JwtStrategy", () => {
         let strategy: JwtStrategy;
 
         beforeEach(() => {
-            strategy = new JwtStrategy(
-                configService({ MASTER_SECRET: "x".repeat(32) }),
-                tenantService as never,
-                clientsProvider as never,
-            );
+            strategy = strategyFor({ MASTER_SECRET: "x".repeat(32) }, null);
         });
 
         function token(
@@ -230,16 +244,15 @@ describe("JwtStrategy", () => {
         let strategy: JwtStrategy;
 
         beforeEach(() => {
-            strategy = new JwtStrategy(
-                configService({
+            strategy = strategyFor(
+                {
                     OIDC: "https://keycloak.example.com/realms/eudiplo",
                     OIDC_INTERNAL_ISSUER_URL:
                         "https://keycloak.example.com/realms/eudiplo",
                     OIDC_SUB: "tenant_id",
                     OIDC_ALGORITHM: "RS256",
-                }),
-                tenantService as never,
-                clientsProvider as never,
+                },
+                null,
             );
         });
 
@@ -302,6 +315,82 @@ describe("JwtStrategy", () => {
             ).rejects.toThrow("db down");
         });
 
+        test("takes the roles from OIDC_ROLES_CLAIM when it is set", async () => {
+            const withClaim = strategyFor(
+                {
+                    OIDC: "https://keycloak.example.com/realms/eudiplo",
+                    OIDC_INTERNAL_ISSUER_URL:
+                        "https://keycloak.example.com/realms/eudiplo",
+                    OIDC_SUB: "tenant_id",
+                    OIDC_ALGORITHM: "RS256",
+                    OIDC_ROLES_CLAIM: "resource_access.eudiplo.roles",
+                },
+                null,
+            );
+
+            const user = await withClaim.validate({
+                tenant_id: "acme",
+                azp: "eudiplo-ui",
+                realm_access: { roles: [Role.Tenants] },
+                resource_access: { eudiplo: { roles: [Role.Issuances] } },
+            } as never);
+
+            expect(user.roles).toEqual([Role.Issuances]);
+        });
+
+        test("checks the realm's issuer and keys, and no audience unless it is set", () => {
+            const keycloak = {
+                OIDC: "https://keycloak.example.com/realms/eudiplo",
+                OIDC_INTERNAL_ISSUER_URL: "http://keycloak:8080/realms/eudiplo",
+                OIDC_SUB: "tenant_id",
+                OIDC_ALGORITHM: "RS256",
+            };
+
+            expect(
+                externalTokenChecks(
+                    readAuthSettings(configService(keycloak)) as never,
+                    null,
+                ),
+            ).toEqual({
+                issuer: "http://keycloak:8080/realms/eudiplo",
+                jwksUri:
+                    "http://keycloak:8080/realms/eudiplo/protocol/openid-connect/certs",
+                audience: undefined,
+                algorithms: ["RS256"],
+            });
+            expect(
+                externalTokenChecks(
+                    readAuthSettings(
+                        configService({
+                            ...keycloak,
+                            OIDC_AUDIENCE: "eudiplo",
+                        }),
+                    ) as never,
+                    null,
+                ).audience,
+            ).toBe("eudiplo");
+        });
+
+        test("takes no roles from a roles claim that is a string", async () => {
+            const user = await strategy.validate({
+                tenant_id: "acme",
+                sub: "user-uuid",
+                roles: "not-tenant:admin-really",
+            } as never);
+
+            expect(user.roles).toEqual([]);
+        });
+
+        test("accepts a token without expiry, as before", async () => {
+            const user = await strategy.validate({
+                tenant_id: "acme",
+                sub: "user-uuid",
+                realm_access: { roles: [Role.Issuances] },
+            } as never);
+
+            expect(user.roles).toEqual([Role.Issuances]);
+        });
+
         test("rejects a token whose client ID now belongs to another tenant", async () => {
             clients.set("shop", {
                 clientId: "shop",
@@ -316,6 +405,93 @@ describe("JwtStrategy", () => {
                     roles: [Role.IssuanceOffer],
                 } as never),
             ).rejects.toThrow(UnauthorizedException);
+        });
+    });
+    describe("other OpenID Connect provider", () => {
+        const settings = {
+            OIDC: "https://auth.example.com/application/o/eudiplo/",
+            OIDC_PROVIDER: "generic",
+            OIDC_INTERNAL_ISSUER_URL:
+                "http://authentik:9000/application/o/eudiplo/",
+            OIDC_AUDIENCE: "eudiplo-api",
+            OIDC_SUB: "tenant_id",
+            OIDC_ALGORITHM: "RS256",
+            OIDC_ROLES_CLAIM: "urn:zitadel:iam:org:project:roles",
+        };
+        const metadata = {
+            issuer: "https://auth.example.com/application/o/eudiplo/",
+            jwks_uri: "https://auth.example.com/application/o/eudiplo/jwks/",
+            token_endpoint: "https://auth.example.com/application/o/token/",
+        };
+
+        test("takes the roles from the keys of an object claim and keeps no client", async () => {
+            const strategy = strategyFor(
+                settings,
+                metadata,
+                new IdpManagedClientsProvider(configService({}), {
+                    findOne: async () => null,
+                } as never),
+            );
+
+            const user = await strategy.validate({
+                tenant_id: "acme",
+                sub: "person",
+                azp: "eudiplo-ui",
+                exp: NOW + 300,
+                "urn:zitadel:iam:org:project:roles": {
+                    [Role.Issuances]: { "1": "acme" },
+                },
+            } as never);
+
+            expect(user.roles).toEqual([Role.Issuances]);
+            expect(user.entity?.id).toBe("acme");
+            expect(user.subject).toBe("person");
+            expect(user.client).toBeUndefined();
+        });
+
+        test("refuses a token without expiry, which would never expire", async () => {
+            await expect(
+                strategyFor(settings, metadata).validate({
+                    tenant_id: "acme",
+                    sub: "person",
+                } as never),
+            ).rejects.toThrow(
+                new UnauthorizedException("Access token has no expiry"),
+            );
+        });
+
+        test("checks the discovery document's issuer, keys and the audience", () => {
+            expect(
+                externalTokenChecks(
+                    readAuthSettings(configService(settings)) as never,
+                    metadata,
+                ),
+            ).toEqual({
+                issuer: metadata.issuer,
+                jwksUri: metadata.jwks_uri,
+                audience: "eudiplo-api",
+                algorithms: ["RS256"],
+            });
+        });
+
+        test("loads the keys from OIDC_JWKS_URI when it is set", () => {
+            const checks = externalTokenChecks(
+                readAuthSettings(
+                    configService({
+                        ...settings,
+                        OIDC_JWKS_URI: "http://authentik:9000/jwks/",
+                    }),
+                ) as never,
+                metadata,
+            );
+
+            expect(checks.jwksUri).toBe("http://authentik:9000/jwks/");
+        });
+
+        test("cannot start without the discovery document", () => {
+            expect(() => strategyFor(settings, null)).toThrow(
+                "The OIDC discovery document was not loaded",
+            );
         });
     });
 });

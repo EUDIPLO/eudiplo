@@ -30,6 +30,11 @@ import { USERS_PROVIDER, UsersProvider } from "./user.provider.js";
 const MANAGE_DENIED = manageDeniedDescription("user");
 
 @ApiTags("User")
+@ApiResponse({
+    status: 501,
+    description:
+        "People are managed only with Keycloak: without `OIDC`, or with `OIDC_PROVIDER=generic`, where the identity provider manages them",
+})
 @Controller("user")
 export class UserController {
     constructor(

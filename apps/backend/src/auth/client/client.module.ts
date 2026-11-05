@@ -7,11 +7,13 @@ import {
     ConfigImportOrchestratorService,
     ImportPhase,
 } from "../../platform/config-import/config-import-orchestrator.service.js";
+import { readAuthSettings } from "../auth-settings.js";
+import { IdpManagedClientsProvider } from "./adapters/idp-managed-clients.service.js";
 import { InternalClientsProvider } from "./adapters/internal-clients.service.js";
 import { KeycloakClientsProvider } from "./adapters/keycloak-clients.service.js";
 import { ClientController } from "./client.controller.js";
-import { ClientAccessService } from "./client-access.service.js";
 import { CLIENTS_PROVIDER, ClientsProvider } from "./client.provider.js";
+import { ClientAccessService } from "./client-access.service.js";
 import { ClientEntity } from "./entities/client.entity.js";
 
 @Module({
@@ -31,18 +33,21 @@ import { ClientEntity } from "./entities/client.entity.js";
                 configImportService: ConfigImportService,
                 configImportOrchestrator: ConfigImportOrchestratorService,
             ): ClientsProvider => {
-                const useKeycloak = !!configService.get<string>("OIDC"); // if OIDC base/realm is configured, pick KC
-                const provider = useKeycloak
-                    ? new KeycloakClientsProvider(
-                          configService,
-                          repo,
-                          configImportService,
-                      )
-                    : new InternalClientsProvider(
-                          configService,
-                          repo,
-                          configImportService,
-                      );
+                const { mode } = readAuthSettings(configService);
+                const provider =
+                    mode === "keycloak"
+                        ? new KeycloakClientsProvider(
+                              configService,
+                              repo,
+                              configImportService,
+                          )
+                        : mode === "generic"
+                          ? new IdpManagedClientsProvider(configService, repo)
+                          : new InternalClientsProvider(
+                                configService,
+                                repo,
+                                configImportService,
+                            );
                 configImportOrchestrator.register(
                     "clients",
                     ImportPhase.CORE,

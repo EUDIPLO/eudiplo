@@ -192,8 +192,9 @@ the limits apply at once, role changes in Keycloak with the next token.
 
 ## External OIDC provider and human users
 
-To let people sign in with their own accounts, set `OIDC` to a Keycloak realm
-(OIDC mode always uses Keycloak's admin API). Then:
+To let people sign in with their own accounts, set `OIDC` to a Keycloak realm.
+With `OIDC_PROVIDER=keycloak`, the default, EUDIPLO manages clients and people
+through Keycloak's admin API. Then:
 
 - EUDIPLO accepts Keycloak access tokens instead of issuing its own; the
   built-in `POST /api/oauth2/token` is disabled.
@@ -202,7 +203,19 @@ To let people sign in with their own accounts, set `OIDC` to a Keycloak realm
   managed through `/api/user` (role `users:manage`) or in the web client. Without
   `OIDC`, `/api/user` answers `501`.
 - Access tokens must carry the tenant ID in the claim named by `OIDC_SUB`
-  (default `tenant_id`) and the roles in `roles` or `realm_access.roles`.
+  (default `tenant_id`) and the roles in `roles` or `realm_access.roles`, or in
+  the claim named by `OIDC_ROLES_CLAIM`.
+
+Another OpenID Connect provider, such as Authentik, Zitadel, Auth0 or Entra ID,
+works with `OIDC_PROVIDER=generic` for signing in only. EUDIPLO then loads the
+provider's discovery document at startup, checks the issuer, the signing keys
+and the required `OIDC_AUDIENCE`, and accepts only JWT access tokens. The
+provider manages clients and people: `/api/client`, `/api/user` and creating a
+tenant with `roles` answer `501`, and the web client signs in with client
+credentials only. Tokens get no client limits (`allowedIssuanceConfigs`,
+`allowedPresentationConfigs`), except those of clients created before in
+Keycloak mode, which keep their stored limits and tenant. The settings are listed in the
+[environment variable reference](../reference/environment-variables.md#authentication).
 
 The variables and the Keycloak setup are described in [Keycloak SSO](keycloak.md).
 `MASTER_SECRET` is optional in OIDC mode, but the default encryption key is

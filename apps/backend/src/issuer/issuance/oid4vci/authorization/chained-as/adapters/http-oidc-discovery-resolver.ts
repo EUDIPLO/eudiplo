@@ -1,3 +1,4 @@
+import { oidcDiscoveryUrl } from "../../../../../../shared/domain/oidc-discovery-url.js";
 import type { OutboundUrlPolicyService } from "../../../../../../webhook/outbound-url-policy.service.js";
 import { getAuthorizationServerJson } from "../../../adapters/authorization-server-http.js";
 import type {
@@ -10,10 +11,9 @@ export class HttpOidcDiscoveryResolver implements OidcDiscoveryResolver {
     constructor(private readonly outboundUrlPolicy: OutboundUrlPolicyService) {}
 
     resolve(issuer: string): Promise<OidcDiscoveryDocument> {
-        const wellKnownUrl = `${issuer.replace(/\/$/, "")}/.well-known/openid-configuration`;
         return getAuthorizationServerJson<OidcDiscoveryDocument>(
             this.outboundUrlPolicy,
-            wellKnownUrl,
+            oidcDiscoveryUrl(issuer),
         );
     }
 }

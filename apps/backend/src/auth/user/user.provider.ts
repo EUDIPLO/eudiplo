@@ -1,7 +1,18 @@
+import { NotSupportedError } from "../../shared/domain/not-supported-error.js";
 import { ManagedUserDto } from "./dto/managed-user.dto.js";
 import type { CreateUser, UpdateUser } from "./schemas/create-user.schema.js";
 
 export const USERS_PROVIDER = "USERS_PROVIDER";
+
+/** With `OIDC_PROVIDER=generic`, the identity provider manages the people. */
+export class UsersManagedByIdentityProvider extends NotSupportedError {
+    constructor() {
+        super(
+            "Users are managed in the identity provider (OIDC_PROVIDER=generic).",
+        );
+        this.name = "UsersManagedByIdentityProvider";
+    }
+}
 
 export abstract class UsersProvider {
     abstract getUsers(tenantId: string): Promise<ManagedUserDto[]>;

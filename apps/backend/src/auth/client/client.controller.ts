@@ -35,6 +35,11 @@ const MANAGE_DENIED = manageDeniedDescription("client");
  * Controller to manage clients.
  */
 @ApiTags("Client")
+@ApiResponse({
+    status: 501,
+    description:
+        "With `OIDC_PROVIDER=generic`, the identity provider manages the clients",
+})
 @Controller("client")
 export class ClientController {
     constructor(

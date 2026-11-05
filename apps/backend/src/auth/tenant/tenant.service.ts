@@ -302,6 +302,9 @@ export class TenantService implements OnApplicationBootstrap {
         requestMeta?: AuditLogRequestMeta,
     ) {
         const adminClientId = `${data.id}-admin`;
+        if (data.roles) {
+            this.clients.assertCanCreateClients();
+        }
         const existingAdmin = data.roles
             ? await this.clients.getClientById(adminClientId)
             : null;

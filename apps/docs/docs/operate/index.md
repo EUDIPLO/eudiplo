@@ -70,7 +70,7 @@ the [environment variable reference](../reference/environment-variables.md).
 | ------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `PUBLIC_URL`                                | The URL wallets and browsers use. It appears in offers, metadata and redirects. Default `http://localhost:3000`. |
 | `MASTER_SECRET`                             | Signs management tokens of the built-in OAuth2 server and, with the default `ENCRYPTION_KEY_SOURCE=env`, derives the [encryption key](encryption-keys.md). At least 32 characters. |
-| `AUTH_CLIENT_ID`, `AUTH_CLIENT_SECRET`      | The first management client, created with the `tenants:manage` role on the first start. Required unless you use [Keycloak SSO](keycloak.md) (`OIDC`). |
+| `AUTH_CLIENT_ID`, `AUTH_CLIENT_SECRET`      | The first management client, created with the `tenants:manage` role on the first start. Required unless `OIDC` is set for single sign-on, for example with [Keycloak](keycloak.md); unused with `OIDC_PROVIDER=generic`. |
 
 Without further settings, the backend uses SQLite and local file storage in
 `FOLDER` (`/app/config` in the image). A minimal container start:
