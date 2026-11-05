@@ -55,8 +55,10 @@ export class OidcIssuerMetadataLoader {
             ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
         const now = options.now ?? Date.now;
         const deadline = now() + (options.retryMs ?? DISCOVERY_RETRY_MS);
-        let delay = FIRST_DELAY_MS;
-        for (let attempt = 1; ; attempt++) {
+        const attempt = async (
+            count: number,
+            delay: number,
+        ): Promise<OidcIssuerMetadata> => {
             try {
                 return this.validate(await this.fetch(url), options);
             } catch (error) {
@@ -70,12 +72,13 @@ export class OidcIssuerMetadataLoader {
                     );
                 }
                 this.logger.warn(
-                    `Loading the OIDC discovery document from ${url} failed (attempt ${attempt}): ${reason}. Retrying in ${delay} ms`,
+                    `Loading the OIDC discovery document from ${url} failed (attempt ${count}): ${reason}. Retrying in ${delay} ms`,
                 );
                 await sleep(delay);
-                delay = Math.min(delay * 2, MAX_DELAY_MS);
+                return attempt(count + 1, Math.min(delay * 2, MAX_DELAY_MS));
             }
-        }
+        };
+        return attempt(1, FIRST_DELAY_MS);
     }
 
     private async fetch(url: string): Promise<unknown> {

@@ -57,7 +57,9 @@ export abstract class ClientsProvider {
      * Fails when EUDIPLO cannot create clients, so that a caller such as
      * tenant creation fails before it changes anything.
      */
-    assertCanCreateClients(): void {}
+    assertCanCreateClients(): void {
+        // EUDIPLO creates clients unless an adapter says otherwise.
+    }
     abstract importForTenant(tenantId: string): Promise<void>;
 
     // Only for internal backend (not used with KC; you’ll validate JWTs instead)

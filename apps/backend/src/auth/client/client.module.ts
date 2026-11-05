@@ -33,21 +33,24 @@ import { ClientEntity } from "./entities/client.entity.js";
                 configImportService: ConfigImportService,
                 configImportOrchestrator: ConfigImportOrchestratorService,
             ): ClientsProvider => {
-                const { mode } = readAuthSettings(configService);
-                const provider =
-                    mode === "keycloak"
-                        ? new KeycloakClientsProvider(
-                              configService,
-                              repo,
-                              configImportService,
-                          )
-                        : mode === "generic"
-                          ? new IdpManagedClientsProvider(configService, repo)
-                          : new InternalClientsProvider(
-                                configService,
-                                repo,
-                                configImportService,
-                            );
+                const providers = {
+                    builtin: () =>
+                        new InternalClientsProvider(
+                            configService,
+                            repo,
+                            configImportService,
+                        ),
+                    keycloak: () =>
+                        new KeycloakClientsProvider(
+                            configService,
+                            repo,
+                            configImportService,
+                        ),
+                    generic: () =>
+                        new IdpManagedClientsProvider(configService, repo),
+                };
+                const provider: ClientsProvider =
+                    providers[readAuthSettings(configService).mode]();
                 configImportOrchestrator.register(
                     "clients",
                     ImportPhase.CORE,

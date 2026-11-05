@@ -120,12 +120,15 @@ describe("Generic OIDC provider (e2e)", () => {
 
     test("accepts the provider's token and resolves its tenant and nested roles", async () => {
         // Session counts need a tenant and sessions:read.
-        await as(await personToken([Role.SessionsRead]))
-            .get("/session/stats")
-            .expect(200);
-        await as(await personToken([Role.Keys]))
-            .get("/session/stats")
-            .expect(403);
+        const reader = await as(await personToken([Role.SessionsRead])).get(
+            "/session/stats",
+        );
+        const keyManager = await as(await personToken([Role.Keys])).get(
+            "/session/stats",
+        );
+
+        expect(reader.status).toBe(200);
+        expect(keyManager.status).toBe(403);
     });
 
     test("refuses a token for another audience", async () => {
@@ -138,7 +141,9 @@ describe("Generic OIDC provider (e2e)", () => {
             { audience: "other-app" },
         );
 
-        await as(token).get("/session/stats").expect(401);
+        const response = await as(token).get("/session/stats");
+
+        expect(response.status).toBe(401);
     });
 
     test("refuses a token of another issuer, also one without the trailing slash", async () => {
@@ -151,7 +156,9 @@ describe("Generic OIDC provider (e2e)", () => {
             { issuer: issuer.slice(0, -1) },
         );
 
-        await as(token).get("/session/stats").expect(401);
+        const response = await as(token).get("/session/stats");
+
+        expect(response.status).toBe(401);
     });
 
     test("refuses a token signed with another key", async () => {
@@ -164,7 +171,9 @@ describe("Generic OIDC provider (e2e)", () => {
             { foreignKey: true },
         );
 
-        await as(token).get("/session/stats").expect(401);
+        const response = await as(token).get("/session/stats");
+
+        expect(response.status).toBe(401);
     });
 
     test("names a bearer token that is no JWT", async () => {
@@ -178,8 +187,8 @@ describe("Generic OIDC provider (e2e)", () => {
     test("leaves clients and people to the identity provider", async () => {
         const token = await personToken([Role.Clients, Role.Users]);
 
-        await as(token).get("/client").expect(501);
-        await as(token).get("/user").expect(501);
+        expect((await as(token).get("/client")).status).toBe(501);
+        expect((await as(token).get("/user")).status).toBe(501);
     });
 
     test("refuses a tenant with an admin client before it creates the tenant", async () => {
