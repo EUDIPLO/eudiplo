@@ -1,5 +1,14 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  ChangeDetectionStrategy,
+  ElementRef,
+  Injector,
+  QueryList,
+  ViewChild,
+  ViewChildren,
+} from '@angular/core';
 import {
   type AbstractControl,
   FormArray,
@@ -35,6 +44,7 @@ import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { fieldErrorMessage, showIssuesAtFields } from '../../utils/form-errors';
+import { focusRowAfterRemoval } from '../../common/focus-if-lost.util';
 
 /** Common info fields for both internal and external entities */
 interface EntityInfoForm {
@@ -109,10 +119,17 @@ export class TrustListEditComponent implements OnInit {
     minimap: { enabled: false },
   };
 
+  // Where focus goes when the entity holding it is removed, in the order of the entities.
+  @ViewChildren('entityHeader', { read: ElementRef })
+  private readonly entityHeaders?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChild('addEntityButton', { read: ElementRef })
+  private readonly addEntityButton?: ElementRef<HTMLElement>;
+
   constructor(
     private readonly route: ActivatedRoute,
     private readonly router: Router,
-    private readonly snackBar: MatSnackBar
+    private readonly snackBar: MatSnackBar,
+    private readonly injector: Injector
   ) {}
 
   ngOnInit() {
@@ -404,6 +421,12 @@ export class TrustListEditComponent implements OnInit {
 
   removeEntity(index: number): void {
     this.entitiesArray.removeAt(index);
+    focusRowAfterRemoval(
+      this.injector,
+      () => this.entityHeaders?.map((header) => header.nativeElement),
+      index,
+      () => this.addEntityButton?.nativeElement
+    );
   }
 
   getEntityType(index: number): 'internal' | 'external' {

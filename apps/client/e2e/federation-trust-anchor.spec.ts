@@ -1,10 +1,11 @@
 import { generateKeyPairSync } from 'node:crypto';
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './support/test';
-import { hasRootCredentials, resolvedE2EConfig } from './support/e2e-config';
+import { hasRootCredentials } from './support/e2e-config';
 import { createKeyChain } from './support/key-chains';
+import { federationSection } from './support/federation';
 import { loginWithClientCredentials } from './support/login';
-import { createTenant, type TestTenant } from './support/tenants';
+import { createTenant, tenantRequest, type TestTenant } from './support/tenants';
 
 // OpenID Federation trust anchors: registered with their federation keys under
 // Cryptographic Assets, then picked in Issuer Settings and in a presentation
@@ -15,7 +16,6 @@ test.use({ storageState: { cookies: [], origins: [] } });
 // Each test builds on the trust anchor and configurations the earlier ones saved.
 test.describe.configure({ mode: 'serial' });
 
-const api = resolvedE2EConfig.apiBaseUrl;
 const anchorId = 'example-federation';
 const entityId = 'https://ta.example.org';
 const unregistered = 'https://unregistered-ta.example.org';
@@ -39,28 +39,12 @@ test.beforeAll(async () => {
   await createKeyChain(tenant.token, 'access', 'Federation verifier access');
 });
 
-function apiRequest(method: string, path: string, body?: unknown): Promise<Response> {
-  return fetch(`${api}/api${path}`, {
-    method,
-    headers: { Authorization: `Bearer ${tenant.token}`, 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-}
+const apiRequest = (method: string, path: string, body?: unknown) =>
+  tenantRequest(tenant, method, path, body);
 
 async function selectOption(page: Page, field: Locator, option: string | RegExp) {
   await field.click();
   await page.getByRole('option', { name: option }).click();
-}
-
-/** The OpenID Federation section on the Trust step of Issuer Settings, opened. */
-async function federationSection(page: Page): Promise<Locator> {
-  const section = page
-    .locator('mat-expansion-panel')
-    .filter({ has: page.getByText('OpenID Federation', { exact: true }) })
-    .first();
-  const header = section.locator('mat-expansion-panel-header');
-  if ((await header.getAttribute('aria-expanded')) !== 'true') await header.click();
-  return section;
 }
 
 test('registers a trust anchor with its federation keys', async ({ page }) => {

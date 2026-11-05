@@ -1,8 +1,10 @@
 import type { Page, Response } from '@playwright/test';
 import { expect, test } from './support/test';
 import { useTenantClient } from './support/clients';
-import { resolvedE2EConfig } from './support/e2e-config';
+import { hasRootCredentials, resolvedE2EConfig } from './support/e2e-config';
+import { certificatePem, createKeyChain } from './support/key-chains';
 import { loginWithClientCredentials } from './support/login';
+import { createTenant } from './support/tenants';
 
 function isTrustListRequest(response: Response): boolean {
   return response.url().endsWith('/api/trust-list') && response.request().method() === 'GET';
@@ -64,5 +66,89 @@ test.describe('verifier admin', () => {
       .filter({ has: page.getByText('Referenced by Presentation Configs', { exact: true }) });
     await expect(card.locator('a[href="/presentation-config/pid"]')).toBeVisible();
     await expect(card.locator('a[href="/presentation-config/age-over-18"]')).toBeVisible();
+  });
+});
+
+test.describe('entities', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('removing an entity leaves the next one in its place with its own values', async ({
+    page,
+  }) => {
+    test.skip(
+      !hasRootCredentials,
+      'Set AUTH_CLIENT_ID and AUTH_CLIENT_SECRET of the backend to create a tenant.'
+    );
+    const tenant = await createTenant('trust-list-rows', 'Trust List Rows', ['issuance:manage']);
+    const api = `${resolvedE2EConfig.apiBaseUrl}/api/trust-list`;
+    const headers = { Authorization: `Bearer ${tenant.token}`, 'Content-Type': 'application/json' };
+    const keyChainId = await createKeyChain(tenant.token, 'trustList', 'Trust list rows signing');
+    const created = await fetch(api, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        id: 'rows',
+        description: 'Three entities',
+        keyChainId,
+        entities: ['A', 'B', 'C'].map((name) => ({
+          type: 'external',
+          providerType: 'attestation-provider',
+          issuerCertPem: certificatePem,
+          revocationCertPem: certificatePem,
+          info: { name: `Entity ${name}`, country: name === 'C' ? 'FR' : 'DE' },
+        })),
+      }),
+    });
+    expect(created.status, await created.clone().text()).toBe(201);
+
+    await loginWithClientCredentials(page, tenant.clientId, tenant.clientSecret);
+    await page.goto('/trust-list/rows/edit');
+    await page.getByRole('button', { name: /External Entity #2/ }).click();
+    await page
+      .getByRole('region', { name: /External Entity #2/ })
+      .getByRole('button', { name: 'Remove Entity' })
+      .click();
+
+    // The next entity takes the place and the focus of the removed one, with its own values.
+    await expect(page.getByRole('button', { name: /External Entity #3/ })).toHaveCount(0);
+    const header = page.getByRole('button', { name: /External Entity #2/ });
+    await expect(header).toBeFocused();
+    // The header names the entity, so it does not read like the one just removed.
+    await expect(header).toHaveAccessibleName(/^External Entity #2 · Entity C/);
+    // Opening entity 2 closed the last one: only one panel is open at a time.
+    await expect(header).toHaveAttribute('aria-expanded', 'false');
+    await page.keyboard.press('Enter');
+    const second = page.getByRole('region', { name: /External Entity #2/ });
+    await expect(second.getByRole('textbox', { name: 'Entity Name' })).toHaveValue('Entity C');
+    await expect(second.getByRole('textbox', { name: 'Country' })).toHaveValue('FR');
+    await second.getByRole('textbox', { name: 'Entity Name' }).fill('Entity C edited');
+
+    const save = page.getByRole('button', { name: 'Save Changes' });
+    await expect(save).not.toHaveAttribute('aria-busy', 'true');
+    await save.click();
+    await expect(page).toHaveURL(/\/trust-list$/);
+
+    const stored = await fetch(`${api}/rows`, { headers });
+    expect(stored.ok).toBe(true);
+    const { entityConfig } = (await stored.json()) as {
+      entityConfig: { info: { name: string; country?: string } }[];
+    };
+    expect(entityConfig.map(({ info }) => [info.name, info.country])).toEqual([
+      ['Entity A', 'DE'],
+      ['Entity C edited', 'FR'],
+    ]);
+
+    // Removing the last entity moves focus to the new last one, the only one to Add Internal Entity.
+    await page.goto('/trust-list/rows/edit');
+    await page
+      .getByRole('region', { name: /External Entity #2/ })
+      .getByRole('button', { name: 'Remove Entity' })
+      .click();
+    await expect(page.getByRole('button', { name: /External Entity #1 · Entity A/ })).toBeFocused();
+    await page
+      .getByRole('region', { name: /External Entity #1/ })
+      .getByRole('button', { name: 'Remove Entity' })
+      .click();
+    await expect(page.getByRole('button', { name: 'Add Internal Entity' })).toBeFocused();
   });
 });
