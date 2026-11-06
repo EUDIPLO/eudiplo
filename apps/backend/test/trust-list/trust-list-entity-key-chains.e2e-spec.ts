@@ -176,19 +176,21 @@ describe("Trust list entity key chain usage types (e2e)", () => {
         await api()
             .get("/trust-list/swapped")
             .set("Authorization", auth)
-            .expect((res) => expect(res.status).not.toBe(200));
+            .expect(404);
     });
 
-    test("still answers 409 for a key chain that does not exist", async () => {
+    test("refuses a key chain that does not exist at its field", async () => {
         const response = await saveTrustList("post", "unknown-key-chain", [
             internal("does-not-exist", statusListKeyChain),
-        ]);
+        ]).expect(400);
 
-        expect(response.status).toBe(409);
-        expect(response.body.message).toBe(
-            "Key chain does-not-exist not found",
-        );
-        expect(response.body.errors).toBeUndefined();
+        expect(response.body.errors).toEqual([
+            {
+                path: ["entities", 0, "issuerKeyChainId"],
+                code: "key_chain_not_found",
+                message: 'Key chain "does-not-exist" does not exist.',
+            },
+        ]);
     });
 
     test("accepts the attestation key chain for revocation, as status lists fall back to it", async () => {

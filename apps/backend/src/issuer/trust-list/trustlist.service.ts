@@ -1,15 +1,16 @@
-import { X509Certificate } from "node:crypto";
 import {
     BadRequestException,
     ConflictException,
     Injectable,
     Logger,
+    NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
     createLoTE,
     type LoTE,
     type LoTEDocument,
+    LoTEException,
     type TrustedEntity as LoTETrustedEntity,
     service,
     signLoTE,
@@ -32,12 +33,18 @@ import {
 import { loadConfigDto } from "../../shared/utils/config-file-loader.util.js";
 import { TrustListReferences } from "./application/trust-list-references.js";
 import {
-    type EntityKeyChainUsageIssue,
     entityKeyChainReferences,
     entityKeyChainUsageRefusal,
     storedEntityKeyChains,
-    TrustListEntityKeyChainUsageError,
 } from "./domain/trust-list-entity-key-chains.js";
+import {
+    type ExternalEntityCertificates,
+    entityInfoIssues,
+    externalEntityCertificates,
+    keyChainNotFoundIssue,
+    TrustListInputError,
+    type TrustListInputIssue,
+} from "./domain/trust-list-input.js";
 import { TrustListInUseError } from "./domain/trust-list-reference.js";
 import {
     trustListKeyChainUsageRefusal,
@@ -76,20 +83,17 @@ type TrustListVersionChanges = Pick<
     Partial<Pick<TrustList, "description" | "keyChainId" | "entityConfig">>;
 
 /**
- * The certificate of a key chain whose usage type was checked for this list.
- * Only these may be published, so a missing one is a programming error.
+ * A value that the input check of this list found, such as the certificate of
+ * a key chain it names. A missing one is a programming error.
  */
-function checkedCertificate(
-    certificates: ReadonlyMap<string, CertificateInfo>,
-    keyChainId: string,
-): CertificateInfo {
-    const certificate = certificates.get(keyChainId);
-    if (!certificate) {
+function checked<K, V>(values: ReadonlyMap<K, V>, key: K, what: string): V {
+    const value = values.get(key);
+    if (value === undefined) {
         throw new Error(
-            `Key chain ${JSON.stringify(keyChainId)} was not checked for this trust list`,
+            `${what} ${JSON.stringify(key)} was not checked for this trust list`,
         );
     }
-    return certificate;
+    return value;
 }
 
 /** Stored list content; lists created by older releases lack the `LoTE` wrapper. */
@@ -156,11 +160,27 @@ export class TrustListService {
         return this.trustListRepo.findOneByOrFail({ tenantId, id });
     }
 
+    /**
+     * The trust list for the management API. Unlike {@link findOne}, whose
+     * callers include presentation and registrar flows that expect the
+     * repository's error, a missing list is a `NotFoundException` whose
+     * message the API returns in production too.
+     * @throws NotFoundException when the tenant has no trust list with this ID
+     */
+    async get(tenantId: string, id: string): Promise<TrustList> {
+        const trustList = await this.trustListRepo.findOneBy({ tenantId, id });
+        if (!trustList) {
+            throw new NotFoundException("Trust list not found");
+        }
+        return trustList;
+    }
+
+    /** @throws NotFoundException when the tenant has no trust list with this ID */
     async exportTrustList(
         tenantId: string,
         id: string,
     ): Promise<TrustListCreateDto> {
-        return trustListConfig(await this.findOne(tenantId, id));
+        return trustListConfig(await this.get(tenantId, id));
     }
 
     /**
@@ -176,7 +196,7 @@ export class TrustListService {
         id: string,
         values: TrustListCreateDto,
     ): Promise<TrustList> {
-        const existing = await this.findOne(tenantId, id);
+        const existing = await this.get(tenantId, id);
         const tenant = await this.tenantRepository.findOneByOrFail({
             id: tenantId,
         });
@@ -223,11 +243,17 @@ export class TrustListService {
      * @param tenantId
      * @param trustListId
      * @returns
+     * @throws NotFoundException when the tenant has no such trust list
      */
-    getVersionHistory(
+    async getVersionHistory(
         tenantId: string,
         trustListId: string,
     ): Promise<TrustListVersion[]> {
+        if (
+            !(await this.trustListRepo.existsBy({ tenantId, id: trustListId }))
+        ) {
+            throw new NotFoundException("Trust list not found");
+        }
         return this.trustListVersionRepo.find({
             where: { tenantId, trustListId },
             order: { sequenceNumber: "DESC" },
@@ -240,17 +266,22 @@ export class TrustListService {
      * @param trustListId
      * @param versionId
      * @returns
+     * @throws NotFoundException when the tenant has no such list or version
      */
-    getVersion(
+    async getVersion(
         tenantId: string,
         trustListId: string,
         versionId: string,
     ): Promise<TrustListVersion> {
-        return this.trustListVersionRepo.findOneByOrFail({
+        const version = await this.trustListVersionRepo.findOneBy({
             tenantId,
             trustListId,
             id: versionId,
         });
+        if (!version) {
+            throw new NotFoundException("Trust list version not found");
+        }
+        return version;
     }
 
     /**
@@ -314,37 +345,6 @@ export class TrustListService {
     }
 
     /**
-     * The certificate of the key chain that signs the list: the one in
-     * `keyChainId`, else the one the stored list uses, else a `trustList` key
-     * chain of the tenant. A named or kept key chain must have usage type
-     * `trustList`; a key chain import that reuses its ID can change it. Only
-     * the tenant's pick also checks the certificate for expiry and revocation.
-     */
-    private async signingCertificate(
-        tenantId: string,
-        keyChainId: string | undefined,
-        storedKeyChainId: string | undefined,
-    ): Promise<CertificateInfo> {
-        const signing = trustListSigningKeyChain(keyChainId, storedKeyChainId);
-        if (!signing) {
-            return this.certService.find({
-                tenantId,
-                type: KeyUsageType.TrustList,
-            });
-        }
-        const cert = await this.certService.getCertificateById(
-            tenantId,
-            signing.id,
-        );
-        const refusal = trustListKeyChainUsageRefusal(
-            signing,
-            cert.keyChain?.usageType,
-        );
-        if (refusal) throw new BadRequestException(refusal);
-        return cert;
-    }
-
-    /**
      * Shared logic for creating and saving a trust list (used by both API and import)
      * @param config The configuration for the trust list
      * @param tenant The tenant entity
@@ -355,28 +355,12 @@ export class TrustListService {
         tenant: Pick<TenantEntity, "id" | "name">,
         existing?: TrustList,
     ): Promise<TrustList> {
-        // Validate external certificates first, so a malformed certificate is
-        // reported before any key chain error.
-        for (const entity of config.entities || []) {
-            if (entity.type === "external") {
-                this.certificateBase64(entity.issuerCertPem, "issuerCertPem");
-                this.certificateBase64(
-                    entity.revocationCertPem,
-                    "revocationCertPem",
-                );
-            }
-        }
-        const entityCertificates = await this.internalEntityCertificates(
+        const { signer, entries } = await this.checkedEntries(
             tenant.id,
-            config.entities,
-            existing?.entityConfig,
+            config,
+            existing,
         );
-
-        const cert = await this.signingCertificate(
-            tenant.id,
-            config.keyChainId,
-            existing?.keyChainId,
-        );
+        const cert = signer ?? (await this.defaultSigner(tenant.id, existing));
 
         // Keep the stored state: it becomes the previous version on updates
         const previous = existing ? { ...existing } : undefined;
@@ -400,54 +384,6 @@ export class TrustListService {
             trustList.sequenceNumber = (existing.sequenceNumber || 1) + 1;
         } else {
             trustList.sequenceNumber = 1;
-        }
-
-        const entries: LoTETrustedEntity[] = [];
-        for (const entity of config.entities || []) {
-            if (entity.type === "internal") {
-                // Internal: certificates of the key chains resolved above
-                const issuerCert = checkedCertificate(
-                    entityCertificates,
-                    entity.issuerKeyChainId,
-                );
-                const revocationCert = checkedCertificate(
-                    entityCertificates,
-                    entity.revocationKeyChainId,
-                );
-                try {
-                    const leaf = new X509Certificate(issuerCert.crt[0]);
-                    // X509Certificate.fingerprint returns SHA-1 by default; compute SHA-256 for parity with verifier logs.
-                    const der = leaf.raw;
-                    const _thumb = Array.from(
-                        new Uint8Array(
-                            await crypto.subtle.digest("SHA-256", der),
-                        ),
-                    )
-                        .map((b) => b.toString(16).padStart(2, "0"))
-                        .join(":")
-                        .toUpperCase();
-                } catch {
-                    // ignore diagnostic failures
-                }
-                entries.push(
-                    this.createEntityFromCert(
-                        issuerCert,
-                        revocationCert,
-                        entity.info,
-                        entity.providerType,
-                    ),
-                );
-            } else {
-                // External: use PEM certificates directly with provided info
-                entries.push(
-                    this.createEntityFromPem(
-                        entity.issuerCertPem,
-                        entity.revocationCertPem,
-                        entity.info,
-                        entity.providerType,
-                    ),
-                );
-            }
         }
 
         trustList.data = this.createList(
@@ -476,7 +412,45 @@ export class TrustListService {
                 `Trust list ${previous.id} was modified concurrently; retry the update`,
             );
         }
-        return this.findOne(previous.tenantId, previous.id);
+        return this.get(previous.tenantId, previous.id);
+    }
+
+    /** The LoTE entry of an entity whose input {@link checkedEntries} accepted. */
+    private createEntity(
+        entity: TrustListCreateDto["entities"][number],
+        index: number,
+        keyChainCertificates: ReadonlyMap<string, CertificateInfo>,
+        externalCertificates: ReadonlyMap<number, ExternalEntityCertificates>,
+    ): LoTETrustedEntity {
+        if (entity.type === "internal") {
+            // Internal: certificates of the key chains read above
+            return this.createEntityFromCert(
+                checked(
+                    keyChainCertificates,
+                    entity.issuerKeyChainId,
+                    "Key chain",
+                ),
+                checked(
+                    keyChainCertificates,
+                    entity.revocationKeyChainId,
+                    "Key chain",
+                ),
+                entity.info,
+                entity.providerType,
+            );
+        }
+        // External: the certificates parsed above, never the input as given
+        const { issuerCertPem, revocationCertPem } = checked(
+            externalCertificates,
+            index,
+            "Entity",
+        );
+        return this.createEntityFromData(
+            issuerCertPem,
+            revocationCertPem,
+            entity.info,
+            entity.providerType,
+        );
     }
 
     /**
@@ -558,50 +532,63 @@ export class TrustListService {
     }
 
     /**
-     * The Base64 DER of the certificate in `pem`, given as PEM or Base64 DER.
-     * The trust list publishes this parsed value, never the input as given.
+     * Checks what the body schema cannot, and builds the LoTE entries of the
+     * entities, all before a trust list key chain is picked: the key chains
+     * the list names, read in batched queries, the external certificates and
+     * the entity info. A key chain of another usage type that the stored list
+     * already names in the same entity field is accepted.
+     * @returns the certificate of `keyChainId`, when set, and the entries
+     * @throws TrustListInputError with an issue at each refused field
      */
-    private certificateBase64(pem: string, fieldName: string): string {
-        if (!pem || pem.trim() === "") {
-            throw new BadRequestException(`${fieldName} is required`);
-        }
-        try {
-            return new X509Certificate(
-                pem.includes("-----BEGIN")
-                    ? pem
-                    : Buffer.from(pem.replaceAll(/\s/g, ""), "base64"),
-            ).raw.toString("base64");
-        } catch {
-            throw new BadRequestException(
-                `${fieldName} is not a valid X.509 certificate`,
-            );
-        }
-    }
-
-    /**
-     * The certificates of the key chains that internal entities name, by key
-     * chain ID. A key chain whose usage type cannot provide the certificate of
-     * its field is refused, unless the stored list already names it there.
-     * @throws TrustListEntityKeyChainUsageError with an issue per such field
-     */
-    private async internalEntityCertificates(
+    private async checkedEntries(
         tenantId: string,
-        entities: TrustListCreateDto["entities"],
-        storedEntities: TrustList["entityConfig"] | undefined,
-    ): Promise<Map<string, CertificateInfo>> {
-        const certificates = new Map<string, CertificateInfo>();
-        const issues: EntityKeyChainUsageIssue[] = [];
-        const isStored = storedEntityKeyChains(storedEntities);
-        const lookup = (keyChainId: string) =>
-            this.certService.getCertificateById(tenantId, keyChainId);
-        for (const reference of entityKeyChainReferences(entities)) {
+        config: TrustListCreateDto,
+        existing: TrustList | undefined,
+    ): Promise<{ signer?: CertificateInfo; entries: LoTETrustedEntity[] }> {
+        const external = externalEntityCertificates(config.entities);
+        const issues: TrustListInputIssue[] = [
+            ...external.issues,
+            ...entityInfoIssues(config.entities),
+        ];
+        const references = entityKeyChainReferences(config.entities);
+        const certificates = await this.certService.getCertificatesByIds(
+            tenantId,
+            [
+                ...(config.keyChainId ? [config.keyChainId] : []),
+                ...references.map(({ keyChainId }) => keyChainId),
+            ],
+        );
+
+        let signer: CertificateInfo | undefined;
+        if (config.keyChainId) {
+            signer = certificates.get(config.keyChainId);
+            const refusal =
+                signer &&
+                trustListKeyChainUsageRefusal(
+                    trustListSigningKeyChain(config.keyChainId, undefined)!,
+                    signer.keyChain?.usageType,
+                );
+            if (!signer) {
+                issues.push(
+                    keyChainNotFoundIssue(["keyChainId"], config.keyChainId),
+                );
+            } else if (refusal) {
+                issues.push({
+                    path: ["keyChainId"],
+                    message: refusal,
+                    code: "key_chain_usage_mismatch",
+                });
+            }
+        }
+
+        const isStored = storedEntityKeyChains(existing?.entityConfig);
+        for (const reference of references) {
             const { index, field, keyChainId } = reference;
-            let cert = certificates.get(keyChainId);
+            const path = ["entities", index, field];
+            const cert = certificates.get(keyChainId);
             if (!cert) {
-                // One lookup at a time: the request body decides how many key
-                // chains it names, and the first missing one ends the save.
-                cert = await lookup(keyChainId); // NOSONAR: sequential on purpose
-                certificates.set(keyChainId, cert);
+                issues.push(keyChainNotFoundIssue(path, keyChainId));
+                continue;
             }
             const refusal = entityKeyChainUsageRefusal(
                 field,
@@ -609,13 +596,81 @@ export class TrustListService {
                 cert.keyChain?.usageType,
             );
             if (refusal && !isStored(reference)) {
-                issues.push({ index, field, message: refusal });
+                issues.push({
+                    path,
+                    message: refusal,
+                    code: "key_chain_usage_mismatch",
+                });
             }
         }
         if (issues.length > 0) {
-            throw new TrustListEntityKeyChainUsageError(issues);
+            throw new TrustListInputError(issues);
         }
-        return certificates;
+
+        const entries: LoTETrustedEntity[] = [];
+        for (const [index, entity] of config.entities.entries()) {
+            try {
+                entries.push(
+                    this.createEntity(
+                        entity,
+                        index,
+                        certificates,
+                        external.certificates,
+                    ),
+                );
+            } catch (error) {
+                // Entity info that entityInfoIssues does not foresee
+                if (!(error instanceof LoTEException)) throw error;
+                issues.push({
+                    path: ["entities", index, "info"],
+                    message: error.message,
+                    code: "invalid_entity_info",
+                });
+            }
+        }
+        if (issues.length > 0) {
+            throw new TrustListInputError(issues);
+        }
+        return { signer, entries };
+    }
+
+    /**
+     * The key chain that signs a list whose body names none: the one the
+     * stored list is signed with, else a `trustList` key chain of the tenant,
+     * whose certificate is also checked for expiry and revocation. A kept key
+     * chain must still have usage type `trustList`; a key chain import that
+     * reuses its ID can change it.
+     * @throws ConflictException when none can sign: the body names no key
+     * chain, so it is the stored state that blocks the save
+     */
+    private async defaultSigner(
+        tenantId: string,
+        existing: TrustList | undefined,
+    ): Promise<CertificateInfo> {
+        const kept = trustListSigningKeyChain(undefined, existing?.keyChainId);
+        try {
+            if (!kept) {
+                return await this.certService.find({
+                    tenantId,
+                    type: KeyUsageType.TrustList,
+                });
+            }
+            const cert = await this.certService.getCertificateById(
+                tenantId,
+                kept.id,
+            );
+            const refusal = trustListKeyChainUsageRefusal(
+                kept,
+                cert.keyChain?.usageType,
+            );
+            if (refusal) throw new ConflictException(refusal);
+            return cert;
+        } catch (error) {
+            if (!(error instanceof NotFoundException)) throw error;
+            throw new ConflictException(
+                `${error.message}. Create a key chain with usage type "${KeyUsageType.TrustList}" or name one in keyChainId.`,
+            );
+        }
     }
 
     /**
@@ -691,23 +746,6 @@ export class TrustListService {
         return this.createEntityFromData(
             this.formatCertEntity(issuerCert),
             this.formatCertEntity(revocationCert),
-            info,
-            providerType,
-        );
-    }
-
-    /**
-     * Create a LoTE trusted entity from PEM certificates
-     */
-    private createEntityFromPem(
-        issuerCertPem: string,
-        revocationCertPem: string,
-        info: TrustListEntityInfo,
-        providerType?: TrustListEntity["providerType"],
-    ): LoTETrustedEntity {
-        return this.createEntityFromData(
-            this.certificateBase64(issuerCertPem, "issuerCertPem"),
-            this.certificateBase64(revocationCertPem, "revocationCertPem"),
             info,
             providerType,
         );

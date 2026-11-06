@@ -70,6 +70,9 @@ export const schemaDocs: SchemaDoc[] = [
                 "`internal` references key chains of this tenant; `external` carries the certificates directly, as PEM or Base64 DER.",
             "entities.issuerCertPem": "Issuer certificate as PEM or Base64 DER.",
             "entities.revocationCertPem": "Revocation/status certificate as PEM or Base64 DER.",
+            "entities.info.country":
+                "Optional country code of two characters, such as `DE`, or `EU`; defaults to `EU`.",
+            "entities.info.uri": "Optional information URI of the entity, as an absolute URL.",
         },
     },
     { name: "schema-metadata-publish", schema: SignSchemaMetaConfigSchema },

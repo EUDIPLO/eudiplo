@@ -1015,3 +1015,57 @@ describe("KeyChainService.deleteUnreferenced", () => {
         expect(findReferences).not.toHaveBeenCalled();
     });
 });
+
+describe("KeyChainService.getEntities", () => {
+    type Where = { tenantId: string; id?: { value: string[] } };
+    const stored = ["k1", "k550", "other"].map((id) => keyChain({ id }));
+    function serviceWithKeyChains() {
+        const service = Object.create(KeyChainService.prototype) as any;
+        service.keyChainRepository = {
+            find: vi.fn(async ({ where }: { where: Where }) =>
+                stored.filter(
+                    ({ id, tenantId }) =>
+                        tenantId === where.tenantId &&
+                        (!where.id || where.id.value.includes(id)),
+                ),
+            ),
+        };
+        return service as KeyChainService & {
+            keyChainRepository: { find: ReturnType<typeof vi.fn> };
+        };
+    }
+
+    it("reads distinct IDs of the tenant in one query", async () => {
+        const service = serviceWithKeyChains();
+
+        const found = await service.getEntities("tenant", ["k1", "k2", "k1"]);
+
+        expect(found.map(({ id }) => id)).toEqual(["k1"]);
+        expect(service.keyChainRepository.find).toHaveBeenCalledTimes(1);
+        const [[{ where }]] = service.keyChainRepository.find.mock.calls as [
+            [{ where: Where }],
+        ];
+        expect(where.tenantId).toBe("tenant");
+        expect(where.id?.value).toEqual(["k1", "k2"]);
+    });
+
+    it("reads the tenant's key chains once for more IDs than one query binds", async () => {
+        const service = serviceWithKeyChains();
+        const ids = Array.from({ length: 600 }, (_, i) => `k${i}`);
+
+        const found = await service.getEntities("tenant", ids);
+
+        expect(found.map(({ id }) => id)).toEqual(["k1", "k550"]);
+        expect(service.keyChainRepository.find).toHaveBeenCalledTimes(1);
+        expect(service.keyChainRepository.find).toHaveBeenCalledWith({
+            where: { tenantId: "tenant" },
+        });
+    });
+
+    it("queries nothing without IDs", async () => {
+        const service = serviceWithKeyChains();
+
+        await expect(service.getEntities("tenant", [])).resolves.toEqual([]);
+        expect(service.keyChainRepository.find).not.toHaveBeenCalled();
+    });
+});
