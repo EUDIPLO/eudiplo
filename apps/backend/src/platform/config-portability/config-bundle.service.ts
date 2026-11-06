@@ -1485,40 +1485,56 @@ export class ConfigBundleService {
         availableKeyChains: Set<string> | undefined,
         actions: ReturnType<typeof planActions>,
     ): Promise<ConfigMigrationIssue[]> {
-        const issues: ConfigMigrationIssue[] = [];
-        for (const document of documents) {
-            if (document.kind !== "TrustList") continue;
-            const id = resourceId(document);
-            const action = actions.get(`TrustList/${id}`)?.action;
-            if (!action || action === "skip") continue;
-            const named = (document.spec as { keyChainId?: unknown })
-                .keyChainId;
-            const keyChainId = typeof named === "string" ? named : undefined;
-            const stored = keyChainId
-                ? undefined
-                : await this.trustLists.findOne({
-                      where: { tenantId, id },
-                      select: { id: true, keyChainId: true },
-                  });
-            const signing = trustListSigningKeyChain(
-                keyChainId,
-                stored?.keyChainId,
-            );
-            if (!signing || !availableKeyChains?.has(signing.id)) continue;
-            const refusal = trustListKeyChainUsageRefusal(
-                signing,
-                await this.keyChainUsageType(tenantId, documents, signing.id),
-            );
-            if (!refusal) continue;
-            issues.push({
-                severity: action === "unchanged" ? "warning" : "error",
-                code: "KEY_CHAIN_USAGE_MISMATCH",
-                path: "/spec/keyChainId",
-                message: refusal,
-                resource: { kind: "TrustList", id },
-            });
-        }
-        return issues;
+        const issues = await Promise.all(
+            documents
+                .filter((document) => document.kind === "TrustList")
+                .map(
+                    async (
+                        document,
+                    ): Promise<ConfigMigrationIssue | undefined> => {
+                        const id = resourceId(document);
+                        const action = actions.get(`TrustList/${id}`)?.action;
+                        if (!action || action === "skip") return undefined;
+                        const named = (
+                            document.spec as { keyChainId?: unknown }
+                        ).keyChainId;
+                        const keyChainId =
+                            typeof named === "string" ? named : undefined;
+                        const stored = keyChainId
+                            ? undefined
+                            : await this.trustLists.findOne({
+                                  where: { tenantId, id },
+                                  select: { id: true, keyChainId: true },
+                              });
+                        const signing = trustListSigningKeyChain(
+                            keyChainId,
+                            stored?.keyChainId,
+                        );
+                        if (!signing || !availableKeyChains?.has(signing.id))
+                            return undefined;
+                        const refusal = trustListKeyChainUsageRefusal(
+                            signing,
+                            await this.keyChainUsageType(
+                                tenantId,
+                                documents,
+                                signing.id,
+                            ),
+                        );
+                        if (!refusal) return undefined;
+                        return {
+                            severity:
+                                action === "unchanged" ? "warning" : "error",
+                            code: "KEY_CHAIN_USAGE_MISMATCH",
+                            path: "/spec/keyChainId",
+                            message: refusal,
+                            resource: { kind: "TrustList", id },
+                        };
+                    },
+                ),
+        );
+        return issues.filter(
+            (issue): issue is ConfigMigrationIssue => issue !== undefined,
+        );
     }
 
     /** Usage type of a key chain of the bundle, else of the tenant. */
