@@ -249,6 +249,16 @@ describe('CredentialConfigShowComponent claim fields', () => {
     );
   });
 
+  it('previews what wallets receive of entries stored before the color and locale checks', async () => {
+    const page = await renderTab(/Visual/, 'dc+sd-jwt', [
+      { name: 'PID', locale: 'en-US', background_color: '#12107C', text_color: 'navy' },
+      { name: 'PID (copy)', locale: 'en-us' },
+      { name: 'PID', locale: 'de-DE' },
+    ]);
+    expect(page.querySelectorAll('.locale-chips mat-chip')).toHaveLength(2);
+    expect(page.textContent).toContain('Wallets do not receive some stored colors');
+  });
+
   it('shows no default-color note when both colors are set', async () => {
     const page = await renderTab(/Visual/, 'dc+sd-jwt', [
       { name: 'PID', locale: 'en-US', background_color: '#12107C', text_color: '#FFFFFF' },

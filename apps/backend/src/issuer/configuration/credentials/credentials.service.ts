@@ -1,4 +1,5 @@
 import { UnsupportedClaimPattern } from "@eudiplo/config-format/claim-patterns.js";
+import { publishableDisplayEntries } from "@eudiplo/config-format/display-entries.js";
 import {
     ConflictException,
     Inject,
@@ -283,8 +284,11 @@ export class CredentialsService {
         entity: CredentialConfig,
     ): Record<string, unknown> | undefined {
         const metadata: Record<string, unknown> = {};
-        if (entity.config.display) {
-            metadata.display = entity.config.display;
+        // OID4VCI 1.0 Section 12.2.4: `display`, when present, is a non-empty array of
+        // entries with numerical CSS colors, one per language. Configurations stored before
+        // these checks may still break the last two rules until they are saved again.
+        if (entity.config.display?.length) {
+            metadata.display = publishableDisplayEntries(entity.config.display);
         }
         if (entity.fields.length > 0) {
             metadata.claims = buildClaimsMetadata(entity.fields as any);
