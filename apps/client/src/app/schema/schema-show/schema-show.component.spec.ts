@@ -1,5 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTooltip } from '@angular/material/tooltip';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
 import { EMPTY, Subject, of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -1283,8 +1285,49 @@ describe('SchemaShowComponent page', () => {
     const publish = [...element.querySelectorAll<HTMLButtonElement>('button')].find(
       (b) => b.textContent?.trim() === 'Publish'
     )!;
-    expect(publish.disabled).toBe(true);
-    expect(text(fixture)).toContain('Loading credential configs and the registrar vocabulary…');
+    const reason = 'Loading credential configs and the registrar vocabulary…';
+    expect(publish.disabled).toBe(false);
+    expect(publish.getAttribute('aria-disabled')).toBe('true');
+    expect(
+      fixture.debugElement
+        .queryAll(By.directive(MatTooltip))
+        .find((tooltip) => tooltip.nativeElement === publish)!
+        .injector.get(MatTooltip).message
+    ).toBe(reason);
+    expect(text(fixture)).toContain(reason);
+    publish.click();
+    expect(schemaService['publishSchemaMetadataVersion']).not.toHaveBeenCalled();
+  });
+
+  it('says which field keeps the new version from being published and focuses it', async () => {
+    const fixture = await render();
+    const component = fixture.componentInstance;
+    // The component imports MatSnackBarModule, whose provider wins over the test's.
+    const open = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open');
+    component.togglePublishForm();
+    fixture.detectChanges();
+    component.publishForm.controls.newVersion.setValue('1.0.0');
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const publish = [...element.querySelectorAll<HTMLButtonElement>('button')].find(
+      (b) => b.textContent?.trim() === 'Publish'
+    )!;
+    expect(publish.getAttribute('aria-disabled')).toBeNull();
+
+    publish.focus();
+    publish.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement?.getAttribute('formcontrolname')).toBe('newVersion');
+    });
+    expect(text(fixture)).toContain('This version exists already.');
+    expect(open).toHaveBeenLastCalledWith(
+      'Check the highlighted fields.',
+      'Close',
+      expect.anything()
+    );
+    expect(schemaService['publishSchemaMetadataVersion']).not.toHaveBeenCalled();
   });
 
   it('does not navigate after a delete that finishes once the user has left', async () => {
