@@ -364,6 +364,12 @@ export class PresentationCreateComponent implements OnInit {
     this.activeStep++;
   }
 
+  previousStep(): void {
+    // Back waits for a running save, like Save, and stays focusable while it does.
+    if (this.saving) return;
+    this.activeStep = Math.max(0, this.activeStep - 1);
+  }
+
   submitPresentation(): void {
     if (this.loadingConfig || this.loadError) return;
     if (this.guided && this.activeStep < 3) {
@@ -596,7 +602,7 @@ export class PresentationCreateComponent implements OnInit {
     return value as FormGroup;
   }
 
-  /** Save stays focusable while a save runs, so its tooltip says why it waits. */
+  /** Save and Back stay focusable while a save runs, so their tooltip says why they wait. */
   get saveTooltip(): string {
     return this.saving ? 'Saving the presentation configuration…' : '';
   }

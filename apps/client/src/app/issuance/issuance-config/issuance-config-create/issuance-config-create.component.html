@@ -1415,7 +1415,14 @@
       <div class="form-actions" fxLayout="row" fxLayoutGap="16px" fxLayoutAlign="end center">
         <button mat-button type="button" [routerLink]="['../']">Cancel</button>
         @if (guidedMode && activeStep > 0) {
-          <button mat-stroked-button type="button" (click)="previousStep()" [disabled]="loading">
+          <button
+            mat-stroked-button
+            type="button"
+            (click)="previousStep()"
+            [disabled]="loading"
+            disabledInteractive
+            [matTooltip]="saveTooltip"
+          >
             Back
           </button>
         }

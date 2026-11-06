@@ -228,6 +228,35 @@ describe('Presentation configuration flow', () => {
     expectUnavailable(fixture, reissue, 'Reissuing the registration certificate…');
   });
 
+  it('steps back while idle and keeps the guided Back focusable while the configuration is saved', async () => {
+    service.createConfiguration.mockReturnValue(new Promise(() => undefined));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fill();
+    component.guided = true;
+    component.activeStep = 3;
+    component.furthestStep = 3;
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const back = [...element.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Back'
+    )!;
+    expectAvailable(fixture, back);
+    back.click();
+    expect(component.activeStep).toBe(2);
+    component.activeStep = 3;
+    fixture.detectChanges();
+
+    element.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    fixture.detectChanges();
+    back.click();
+    fixture.detectChanges();
+
+    expect(service.createConfiguration).toHaveBeenCalledOnce();
+    expect(component.activeStep).toBe(3);
+    expectUnavailable(fixture, back, 'Saving the presentation configuration…');
+  });
+
   it('does not save when Enter is pressed before review', () => {
     fill();
     component.submitPresentation();

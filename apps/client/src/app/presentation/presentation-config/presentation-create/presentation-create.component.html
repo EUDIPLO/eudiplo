@@ -672,7 +672,14 @@
         </button>
         <span class="action-spacer"></span>
         @if (guided && activeStep > 0) {
-          <button mat-stroked-button type="button" (click)="activeStep = activeStep - 1">
+          <button
+            mat-stroked-button
+            type="button"
+            (click)="previousStep()"
+            [disabled]="saving"
+            disabledInteractive
+            [matTooltip]="saveTooltip"
+          >
             Back
           </button>
         }

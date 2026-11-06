@@ -769,7 +769,8 @@ describe('CredentialConfigCreateComponent editing', () => {
 describe('CredentialConfigCreateComponent Save', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('waits while the configuration is saved: a second click sends nothing', async () => {
+  /** Renders the create form with a configuration that can be saved; the save never answers. */
+  async function render() {
     const save = vi.fn(() => new Promise(() => undefined));
     vi.spyOn(client, 'get').mockResolvedValue({ data: [] } as any);
     await TestBed.configureTestingModule({
@@ -801,9 +802,14 @@ describe('CredentialConfigCreateComponent Save', () => {
     const component = fixture.componentInstance;
     fixture.detectChanges();
     await fixture.whenStable();
-    component.toggleGuidedMode();
     component.form.patchValue({ id: 'member', description: 'Membership', vctString: 'urn:member' });
     component.displayConfigs.at(0).patchValue({ name: 'Membership', description: 'Member card' });
+    return { fixture, component, save };
+  }
+
+  it('waits while the configuration is saved: a second click sends nothing', async () => {
+    const { fixture, component, save } = await render();
+    component.toggleGuidedMode();
     fixture.detectChanges();
     const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
       'button[type="submit"]'
@@ -817,5 +823,30 @@ describe('CredentialConfigCreateComponent Save', () => {
 
     expect(save).toHaveBeenCalledOnce();
     expectUnavailable(fixture, button, 'Saving the credential configuration…');
+  });
+
+  it('steps back while idle and keeps Back focusable while the configuration is saved', async () => {
+    const { fixture, component, save } = await render();
+    component.activeStep = 4;
+    component.furthestStep = 4;
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const back = [...element.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Back'
+    )!;
+    expectAvailable(fixture, back);
+    back.click();
+    expect(component.activeStep).toBe(3);
+    component.activeStep = 4;
+    fixture.detectChanges();
+
+    element.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    fixture.detectChanges();
+    back.click();
+    fixture.detectChanges();
+
+    expect(save).toHaveBeenCalledOnce();
+    expect(component.activeStep).toBe(4);
+    expectUnavailable(fixture, back, 'Saving the credential configuration…');
   });
 });

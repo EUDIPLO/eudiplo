@@ -678,7 +678,8 @@ describe('issuer settings guided setup', () => {
 describe('issuer settings Save', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('waits while the settings are saved: a second click sends nothing', async () => {
+  /** Renders the issuer settings once they can be saved; the save never answers. */
+  async function render() {
     const save = vi.fn(() => new Promise(() => undefined));
     vi.spyOn(client, 'get').mockResolvedValue({ data: [] } as any);
     await TestBed.configureTestingModule({
@@ -733,6 +734,11 @@ describe('issuer settings Save', () => {
       fixture.detectChanges();
       expect(button.getAttribute('aria-busy')).toBeNull();
     });
+    return { fixture, component, save, button };
+  }
+
+  it('waits while the settings are saved: a second click sends nothing', async () => {
+    const { fixture, save, button } = await render();
     expectAvailable(fixture, button);
 
     button.click();
@@ -742,5 +748,30 @@ describe('issuer settings Save', () => {
 
     expect(save).toHaveBeenCalledOnce();
     expectUnavailable(fixture, button, 'Saving the issuer settings…');
+  });
+
+  it('steps back while idle and keeps Back focusable while the settings are saved', async () => {
+    const { fixture, component, save, button } = await render();
+    component.toggleGuidedMode();
+    component.activeStep = 3;
+    component.furthestStep = 3;
+    fixture.detectChanges();
+    const back = [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
+    ].find((candidate) => candidate.textContent?.trim() === 'Back')!;
+    expectAvailable(fixture, back);
+    back.click();
+    expect(component.activeStep).toBe(2);
+    component.activeStep = 3;
+    fixture.detectChanges();
+
+    button.click();
+    fixture.detectChanges();
+    back.click();
+    fixture.detectChanges();
+
+    expect(save).toHaveBeenCalledOnce();
+    expect(component.activeStep).toBe(3);
+    expectUnavailable(fixture, back, 'Saving the issuer settings…');
   });
 });
