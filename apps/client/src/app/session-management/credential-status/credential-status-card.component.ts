@@ -2,8 +2,11 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  ElementRef,
+  Injector,
   Input,
   type OnChanges,
+  ViewChild,
   inject,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
@@ -13,6 +16,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { SessionManagementService } from '../session-management.service';
 import {
   groupCredentialStatus,
@@ -53,6 +57,10 @@ export class CredentialStatusCardComponent implements OnChanges {
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   private readonly changeDetector = inject(ChangeDetectorRef);
+  private readonly injector = inject(Injector);
+  /** Takes the focus when the focused action goes away with the status it changed. */
+  @ViewChild('cardTitle', { read: ElementRef })
+  private readonly cardTitle?: ElementRef<HTMLElement>;
 
   groups: CredentialStatusGroup[] = [];
   updating = false;
@@ -100,7 +108,14 @@ export class CredentialStatusCardComponent implements OnChanges {
       .join('\n');
   }
 
+  /** The actions stay focusable while a change runs, so their tooltip says why they wait. */
+  get updatingTooltip(): string {
+    return this.updating ? 'Changing the credential status…' : '';
+  }
+
   change(group: CredentialStatusGroup, status: CredentialStatusValue): void {
+    // `disabledInteractive` keeps the actions clickable while they look disabled.
+    if (this.updating) return;
     const count = group.entries.filter((entry) => entry.status !== status).length;
     this.dialog
       .open<CredentialStatusDialogComponent, CredentialStatusDialogData, boolean>(
@@ -128,8 +143,11 @@ export class CredentialStatusCardComponent implements OnChanges {
             panelClass: ['error-snackbar'],
           });
         } finally {
-          this.updating = false;
+          // The actions wait until the new status is shown, so none acts on the old one.
           await this.load();
+          this.updating = false;
+          // The new status may no longer offer the action that was used.
+          focusAfterRenderIfLost(this.injector, () => this.cardTitle?.nativeElement);
         }
       });
   }
