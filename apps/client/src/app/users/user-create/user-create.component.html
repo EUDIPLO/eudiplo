@@ -5,8 +5,8 @@
     <button
       matIconButton
       [routerLink]="['../']"
-      matTooltip="Back to Users List"
-      aria-label="Back to Users List"
+      [matTooltip]="loaded ? 'Back to User Details' : 'Back to Users List'"
+      [attr.aria-label]="loaded ? 'Back to User Details' : 'Back to Users List'"
     >
       <mat-icon>arrow_back</mat-icon>
     </button>

@@ -8,8 +8,8 @@
     <button
       matIconButton
       [routerLink]="['../']"
-      matTooltip="Back to Client List"
-      aria-label="Back to Client List"
+      [matTooltip]="loaded ? 'Back to Client Details' : 'Back to Clients List'"
+      [attr.aria-label]="loaded ? 'Back to Client Details' : 'Back to Clients List'"
     >
       <mat-icon>arrow_back</mat-icon>
     </button>

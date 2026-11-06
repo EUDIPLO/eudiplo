@@ -433,3 +433,43 @@ describe('ClientCreateComponent config restrictions', () => {
     expect(select(fixture, CREDENTIAL).getAttribute('aria-disabled')).toBe('false');
   });
 });
+
+describe('ClientCreateComponent back button', () => {
+  async function backLabel(params: Record<string, string>): Promise<string | null> {
+    await TestBed.configureTestingModule({
+      imports: [ClientCreateComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap(params) } },
+        },
+        { provide: ApiService, useValue: { getClientId: () => 'admin' } },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+        {
+          provide: JwtService,
+          useValue: {
+            getRoles: () => ['clients:manage'],
+            hasRole: () => false,
+            grantHint: () => '',
+            canUseConfigPortability: () => false,
+          },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ClientCreateComponent);
+    fixture.detectChanges();
+    const back = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(
+      (button) => button.querySelector('mat-icon')?.textContent?.trim() === 'arrow_back'
+    );
+    return back?.getAttribute('aria-label') ?? null;
+  }
+
+  it('names the client list it leads to when creating a client', async () => {
+    expect(await backLabel({})).toBe('Back to Clients List');
+  });
+
+  it('names the client page it leads to when editing a client', async () => {
+    expect(await backLabel({ id: 'some-client' })).toBe('Back to Client Details');
+  });
+});
