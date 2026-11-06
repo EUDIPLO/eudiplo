@@ -210,14 +210,15 @@ jobs:
         with:
           node-version: 22
       - run: npx @eudiplo/cli@10 config validate tenants ./config
+      - run: npx @eudiplo/cli@10 config upgrade ./config --check
 ```
 
-Use the CLI major version that matches your backend. The dummy value only lets the placeholder resolve; the real secret stays on the instance ([Validate in CI](../operate/configuration-as-code.md#validate-in-ci)). The backend runs a few checks that the schemas cannot express, so an import can still fail on a folder that passed (see [Troubleshooting](#troubleshooting)).
+Use the CLI major version that matches your backend. The dummy value only lets the placeholder resolve; the real secret stays on the instance ([Validate in CI](../operate/configuration-as-code.md#validate-in-ci)). The backend runs a few checks that the schemas cannot express, so an import can still fail on a folder that passed (see [Troubleshooting](#troubleshooting)). The upgrade check also fails when a newer 10.x CLI raises a format version; upgrade the files only once the instance runs that release too ([Upgrade old files](../operate/configuration-as-code.md#upgrade-old-files)).
 
-**Checkpoint:** the job's command passes locally without the real secret, and on GitHub the workflow passes:
+**Checkpoint:** the job's commands pass locally without the real secret, and on GitHub the workflow passes:
 
 ```bash
-MEMBERSHIP_FILES_ADMIN_SECRET=ci-placeholder eudiplo config validate tenants ./config
+MEMBERSHIP_FILES_ADMIN_SECRET=ci-placeholder eudiplo config validate tenants ./config && eudiplo config upgrade ./config --check
 ```
 
 ## Step 7: Check the whole deployment
