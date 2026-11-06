@@ -1,7 +1,16 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { LoTE } from "@owf/eudi-lote";
 import { TrustListService } from "../issuer/trust-list/trustlist.service.js";
-import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
+import {
+    type CollectedTrustedEntities,
+    CollectTrustedEntities,
+} from "./application/collect-trusted-entities.js";
+import {
+    type DiscardedTrustList,
+    describeDiscardedTrustLists,
+    isTrustListCurrent,
+    OutdatedTrustListsError,
+} from "./domain/trust-list-freshness.js";
 import { LoteParserService } from "./lote-parser.service.js";
 import {
     TRUST_STORE_SETTINGS,
@@ -10,19 +19,27 @@ import {
 import { TrustedEntity, TrustListRef, TrustListSource } from "./types.js";
 
 /**
- * Built trust store with TrustedEntities preserving service groupings.
+ * Built trust store with TrustedEntities preserving service groupings, the
+ * lists left out as outdated (name them when a certificate is not trusted, so
+ * operators can tell a lapsed list from a missing entry) and when it was
+ * fetched.
  */
-export type BuiltTrustStore = {
-    fetchedAt: number;
-    nextUpdate?: string;
-    /** TrustedEntities with their services (issuance + revocation) grouped */
-    entities: TrustedEntity[];
-};
+export type BuiltTrustStore = CollectedTrustedEntities & { fetchedAt: number };
+
+/**
+ * How long a source whose lists are all outdated is answered without fetching
+ * them again, so lapsed lists are not fetched once per request.
+ */
+const OUTDATED_RETRY_MS = 60 * 1000;
 
 @Injectable()
 export class TrustStoreService {
     private readonly logger = new Logger(TrustStoreService.name);
     private readonly cache = new Map<string, BuiltTrustStore>();
+    private readonly outdated = new Map<
+        string,
+        { error: OutdatedTrustListsError; until: number }
+    >();
 
     constructor(
         private readonly collectTrustedEntities: CollectTrustedEntities,
@@ -32,6 +49,15 @@ export class TrustStoreService {
         private readonly loteParser: LoteParserService,
     ) {}
 
+    /**
+     * Fetch, verify and filter the source's lists, or reuse the cached result
+     * for `cacheTtlMs` while its current lists stay current. Outdated lists
+     * are left out ({@link BuiltTrustStore.discarded}) and logged. A source
+     * whose lists are all outdated is rejected for one minute without
+     * fetching them again.
+     * @throws when a list cannot be fetched or verified, or when every list
+     * is outdated (`OutdatedTrustListsError`); callers must fail closed
+     */
     async getTrustStore(
         source: TrustListSource,
         cacheTtlMs = 5 * 60 * 1000,
@@ -66,11 +92,37 @@ export class TrustStoreService {
         const cacheKey = this.buildCacheKey(source);
         const cached = this.cache.get(cacheKey);
 
-        if (cached && Date.now() - cached.fetchedAt < cacheTtlMs) {
+        // A cached store whose earliest current list has reached its
+        // NextUpdate is refetched: the list operator may have published a
+        // newer one.
+        if (
+            cached &&
+            Date.now() - cached.fetchedAt < cacheTtlMs &&
+            (cached.nextUpdate === undefined ||
+                isTrustListCurrent(cached.nextUpdate, new Date()))
+        ) {
             return cached;
         }
 
-        const result = await this.collectTrustedEntities.execute(source);
+        const outdated = this.outdated.get(cacheKey);
+        if (outdated && Date.now() < outdated.until) {
+            throw outdated.error;
+        }
+
+        let result: CollectedTrustedEntities;
+        try {
+            result = await this.collectTrustedEntities.execute(source);
+        } catch (error) {
+            if (error instanceof OutdatedTrustListsError) {
+                this.warnDiscarded(error.discarded, "no current list is left");
+                this.rememberOutdated(cacheKey, error);
+            }
+            throw error;
+        }
+        this.outdated.delete(cacheKey);
+        if (result.discarded.length > 0) {
+            this.warnDiscarded(result.discarded, "using the current lists");
+        }
         const store: BuiltTrustStore = { fetchedAt: Date.now(), ...result };
         this.cache.set(cacheKey, store);
 
@@ -85,7 +137,8 @@ export class TrustStoreService {
      * trust (DCQL `trusted_authorities` sent to the wallet). Managed lists are
      * read from their stored content; external lists are fetched and their
      * signature verified like in {@link getTrustStore}, sharing its cache.
-     * Staleness is not checked here; verification still fails closed on it.
+     * Either way an outdated list throws {@link OutdatedTrustListsError}, so
+     * no hint names issuers that verification leaves out with the list.
      */
     async getListedEntities(
         ref: TrustListRef,
@@ -95,14 +148,36 @@ export class TrustStoreService {
             return (await this.getTrustStore({ tenantId, lotes: [ref] }))
                 .entities;
         }
-        const { data } = await this.trustListService.findOne(
-            tenantId,
-            ref.trustListId.trim(),
-        );
+        const id = ref.trustListId.trim();
+        const { data } = await this.trustListService.findOne(tenantId, id);
         if (!data) return [];
         // Stored as `{ LoTE: ... }`; lists created by older releases lack the wrapper.
         const lote = ((data as { LoTE?: LoTE }).LoTE ?? data) as LoTE;
+        const nextUpdate = lote.ListAndSchemeInformation?.NextUpdate;
+        if (!isTrustListCurrent(nextUpdate, new Date())) {
+            // The caller logs the error with the list it names.
+            throw new OutdatedTrustListsError([{ list: id, nextUpdate }]);
+        }
         return this.loteParser.parse(lote).entities;
+    }
+
+    /**
+     * Name discarded lists for operators; the errors that reach wallets do
+     * not, see {@link OutdatedTrustListsError}.
+     */
+    private warnDiscarded(discarded: DiscardedTrustList[], effect: string) {
+        this.logger.warn(
+            `Discarded outdated trust list(s), ${effect}: ${describeDiscardedTrustLists(discarded)}`,
+        );
+    }
+
+    /** Remember a rejected source, dropping entries that have run out. */
+    private rememberOutdated(cacheKey: string, error: OutdatedTrustListsError) {
+        const now = Date.now();
+        for (const [key, entry] of this.outdated) {
+            if (entry.until <= now) this.outdated.delete(key);
+        }
+        this.outdated.set(cacheKey, { error, until: now + OUTDATED_RETRY_MS });
     }
 
     /**
@@ -111,6 +186,7 @@ export class TrustStoreService {
      */
     clearCache(): void {
         this.cache.clear();
+        this.outdated.clear();
     }
 
     private buildCacheKey(source: TrustListSource): string {

@@ -1,7 +1,10 @@
+import { type Logger, UnauthorizedException } from "@nestjs/common";
 import { ES256 } from "@owf/crypto";
 import * as x509 from "@peculiar/x509";
 import { describe, expect, it, vi } from "vitest";
+import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
 import { RevocationListUnavailableError } from "./revocation-policy.util.js";
+import { TrustStoreService } from "./trust-store.service.js";
 import { RevocationCheckMode, ServiceTypeIdentifiers } from "./types.js";
 import { WalletAttestationService } from "./wallet-attestation.service.js";
 import {
@@ -665,6 +668,7 @@ describe("WalletAttestationService wallet attestation signer", () => {
                 trustStoreService: {
                     getTrustStore: async () => ({
                         entities: [{ entityId: "provider", services }],
+                        discarded: [],
                     }),
                 },
                 x509ValidationService: new X509ValidationService(),
@@ -723,5 +727,119 @@ describe("WalletAttestationService wallet attestation signer", () => {
                 },
             ]),
         ).rejects.toThrow("Wallet provider certificate is not trusted");
+    });
+
+    // A replayed older provider list keeps its valid signature; its passed
+    // NextUpdate discards it (ETSI TS 119 602 §6.3.15), the other lists count.
+    describe("with an outdated wallet-provider list", () => {
+        const day = 86_400_000;
+        const current = () => new Date(Date.now() + day).toISOString();
+        const outdated = () => new Date(Date.now() - day).toISOString();
+
+        async function verifyWith(
+            lists: Array<{ withProvider: boolean; nextUpdate: string }>,
+        ) {
+            const { attestationCa, jwt } = await provider();
+            const providerEntity = {
+                entityId: "provider",
+                services: [
+                    {
+                        serviceTypeIdentifier:
+                            ServiceTypeIdentifiers.WalletSolutionIssuance,
+                        certValue: der(attestationCa),
+                    },
+                ],
+            };
+            const otherEntity = {
+                entityId: "other provider",
+                services: [
+                    {
+                        serviceTypeIdentifier:
+                            ServiceTypeIdentifiers.WalletSolutionIssuance,
+                        certValue: der((await provider()).attestationCa),
+                    },
+                ],
+            };
+            const loadVerified = vi.fn();
+            for (const list of lists) {
+                loadVerified.mockResolvedValueOnce({
+                    // Without the provider, the list names another one.
+                    entities: [
+                        list.withProvider ? providerEntity : otherEntity,
+                    ],
+                    nextUpdate: list.nextUpdate,
+                });
+            }
+            const trustStoreService = new TrustStoreService(
+                new CollectTrustedEntities({ loadVerified }),
+                {} as never,
+                {} as never,
+                {} as never,
+            );
+            vi.spyOn(
+                (trustStoreService as unknown as { logger: Logger }).logger,
+                "warn",
+            ).mockImplementation(() => {});
+            return (
+                Object.assign(
+                    Object.create(WalletAttestationService.prototype),
+                    {
+                        getIssuer: () => ({ verifyWalletAttestation: vi.fn() }),
+                        settings: { cryptoToleranceSeconds: 0 },
+                        logger: { debug: vi.fn(), warn: vi.fn() },
+                        trustStoreService,
+                        x509ValidationService: new X509ValidationService(),
+                    },
+                ) as WalletAttestationService
+            ).verifyWalletAttestation(
+                "tenant",
+                { clientAttestationJwt: jwt, clientAttestationPopJwt: "pop" },
+                "https://as.example",
+                true,
+                lists.map((_, i) => ({
+                    url: `https://trust.example/list-${i}`,
+                    verifierX509Der: "MII",
+                })),
+                // The attestation has no status claim; only provider trust is under test.
+                RevocationCheckMode.Disabled,
+            );
+        }
+
+        it("accepts a provider in a current list next to an outdated one", async () => {
+            await expect(
+                verifyWith([
+                    { withProvider: true, nextUpdate: current() },
+                    { withProvider: true, nextUpdate: outdated() },
+                ]),
+            ).resolves.toBeUndefined();
+        });
+
+        it("rejects with 401 a provider listed only in the outdated list, and says lists were left out", async () => {
+            const rejected = verifyWith([
+                { withProvider: false, nextUpdate: current() },
+                { withProvider: true, nextUpdate: outdated() },
+            ]);
+            await expect(rejected).rejects.toBeInstanceOf(
+                UnauthorizedException,
+            );
+            await expect(rejected).rejects.toThrow(
+                "Wallet provider certificate is not trusted - no matching entity in trust list (1 outdated trust list(s) left out; the server log names them)",
+            );
+            // The answer goes to the wallet; only the log names the list.
+            await expect(rejected).rejects.not.toThrow("trust.example");
+        });
+
+        it("rejects with 401 when every list is outdated", async () => {
+            const rejected = verifyWith([
+                { withProvider: true, nextUpdate: outdated() },
+                { withProvider: true, nextUpdate: outdated() },
+            ]);
+            await expect(rejected).rejects.toBeInstanceOf(
+                UnauthorizedException,
+            );
+            await expect(rejected).rejects.toThrow(
+                "No configured trust list is current",
+            );
+        });
     });
 });

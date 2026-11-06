@@ -9,10 +9,15 @@ import { MdocverifierService } from "./mdocverifier.service.js";
 
 describe("MdocverifierService failure classification", () => {
     let service: MdocverifierService;
+    let chainValidation: {
+        getTrustedCertificateBuffers: ReturnType<typeof vi.fn>;
+        discardedTrustListsDetail: ReturnType<typeof vi.fn>;
+    };
 
     beforeEach(() => {
-        const chainValidation = {
+        chainValidation = {
             getTrustedCertificateBuffers: vi.fn().mockResolvedValue([]),
+            discardedTrustListsDetail: vi.fn().mockResolvedValue(undefined),
         };
         const logger = {
             setContext: vi.fn(),
@@ -104,6 +109,32 @@ describe("MdocverifierService failure classification", () => {
         expect(result.failureType).toBe("signature_invalid");
     });
 
+    it("names lists discarded as outdated when the issuer is not trusted", async () => {
+        vi.spyOn(service as any, "extractErrorDetails").mockResolvedValue({
+            docType: "org.iso.18013.5.1.mDL",
+            issuerCertInfo: "issuer",
+            issuerThumbprint: "thumb",
+            issuerValidity: "validity",
+            trustedCertsSummary: "none",
+        });
+        chainValidation.discardedTrustListsDetail.mockResolvedValue(
+            'Discarded outdated trust lists (their issuers are not trusted): https://trust.example/old (NextUpdate "2026-01-01T00:00:00Z")',
+        );
+
+        const result = await (service as any).handleVerificationError(
+            "AA",
+            new Error(
+                "No trusted certificate was found while validating the X.509 chain",
+            ),
+            { trustListSource: { lotes: [] } },
+        );
+
+        expect(result.failureType).toBe("trust_chain_not_trusted");
+        expect(result.failureReason).toContain(
+            "Discarded outdated trust lists (their issuers are not trusted): https://trust.example/old",
+        );
+    });
+
     it("overrides signature_invalid with trust-chain failure when probe fails", async () => {
         vi.spyOn(DeviceResponse, "decode").mockReturnValue({
             documents: [{}],
@@ -140,6 +171,46 @@ describe("MdocverifierService failure classification", () => {
 
         expect(result.failureType).toBe("no_trust_chain_to_root");
         expect(result.failureReason).toBe("No issuer chain to trusted root");
+    });
+
+    it("names discarded lists once when the chain probe already did", async () => {
+        const detail =
+            "Discarded outdated trust lists (their issuers are not trusted): https://trust.example/old (NextUpdate null)";
+        vi.spyOn(DeviceResponse, "decode").mockReturnValue({
+            documents: [{}],
+        } as any);
+        vi.spyOn(service as any, "extractErrorDetails").mockResolvedValue({
+            docType: "org.iso.18013.5.1.mDL",
+            issuerCertInfo: "issuer",
+            issuerThumbprint: "thumb",
+            issuerValidity: "validity",
+            trustedCertsSummary: "none",
+        });
+        vi.spyOn(
+            service as any,
+            "validateIssuerCertificateChain",
+        ).mockResolvedValue({
+            verified: false,
+            matchedEntity: null,
+            error: "chain_build_failed",
+            errorDetails: `No issuer chain to trusted root | ${detail}`,
+        });
+        chainValidation.discardedTrustListsDetail.mockResolvedValue(detail);
+        const trustListSource = {
+            lotes: [{ url: "https://trust.example/old" }],
+        };
+
+        const result = await (service as any).handleVerificationError(
+            "AA",
+            new Error("Device signature must be valid"),
+            { trustListSource, policy: { requireX5c: true } },
+        );
+
+        expect(result.failureType).toBe("no_trust_chain_to_root");
+        expect(result.failureReason.split(detail)).toHaveLength(2);
+        expect(chainValidation.discardedTrustListsDetail).toHaveBeenCalledWith(
+            trustListSource,
+        );
     });
 });
 

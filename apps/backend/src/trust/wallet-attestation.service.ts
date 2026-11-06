@@ -12,6 +12,7 @@ import { Span } from "nestjs-otel";
 import { CryptoService } from "../crypto/crypto.service.js";
 import { CryptoImplementationService } from "../crypto/key/crypto-implementation/crypto-implementation.service.js";
 import { TrustListRef } from "../verifier/presentations/entities/presentation-config.entity.js";
+import { discardedTrustListsNote } from "./domain/trust-list-freshness.js";
 import {
     RevocationListUnavailableError,
     revocationModeToPolicy,
@@ -193,9 +194,12 @@ export class WalletAttestationService {
         const trustStore =
             await this.trustStoreService.getTrustStore(trustListSource);
 
+        // Says when outdated lists were left out, so a missing provider is
+        // not mistaken for one that is not listed at all.
+        const note = discardedTrustListsNote(trustStore.discarded);
         if (trustStore.entities.length === 0) {
             throw new UnauthorizedException(
-                "No trusted wallet providers found in configured trust lists",
+                `No trusted wallet providers found in configured trust lists${note}`,
             );
         }
 
@@ -208,7 +212,7 @@ export class WalletAttestationService {
 
             if (!match) {
                 throw new UnauthorizedException(
-                    "Wallet provider certificate is not trusted - no matching entity in trust list",
+                    `Wallet provider certificate is not trusted - no matching entity in trust list${note}`,
                 );
             }
 
@@ -222,7 +226,7 @@ export class WalletAttestationService {
                 throw err;
             }
             throw new UnauthorizedException(
-                `Certificate chain validation failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+                `Certificate chain validation failed: ${err instanceof Error ? err.message : "Unknown error"}${note}`,
             );
         }
     }

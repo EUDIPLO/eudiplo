@@ -1,5 +1,8 @@
+import type { Logger } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CollectTrustedEntities } from "../../../trust/application/collect-trusted-entities.js";
+import { TrustStoreService } from "../../../trust/trust-store.service.js";
 import type { TrustListSource } from "../../../trust/types.js";
 import { X509ValidationService } from "../../../trust/x509-validation.service.js";
 import {
@@ -25,13 +28,14 @@ describe("CredentialChainValidationService — trust list availability", () => {
     let trustStore: { getTrustStore: ReturnType<typeof vi.fn> };
     let x509v: Record<string, ReturnType<typeof vi.fn>>;
     let service: CredentialChainValidationService;
+    let logger: Record<string, ReturnType<typeof vi.fn>>;
 
     beforeEach(() => {
         trustStore = { getTrustStore: vi.fn() };
         x509v = {
             parseX5c: vi.fn().mockReturnValue([{ subject: "leaf" }]),
         };
-        const logger = {
+        logger = {
             setContext: vi.fn(),
             error: vi.fn(),
             warn: vi.fn(),
@@ -57,16 +61,42 @@ describe("CredentialChainValidationService — trust list availability", () => {
         expect(result.error).toBe("trust_list_unavailable");
     });
 
-    it("fails closed when the configured trust list is stale (NextUpdate in the past)", async () => {
-        trustStore.getTrustStore.mockResolvedValue({
+    it("fails closed when every configured trust list is past its NextUpdate", async () => {
+        const loadVerified = vi.fn().mockResolvedValue({
             entities: [],
             nextUpdate: new Date(Date.now() - 86_400_000).toISOString(),
         });
+        const store = new TrustStoreService(
+            new CollectTrustedEntities({ loadVerified }),
+            {} as never,
+            {} as never,
+            {} as never,
+        );
+        vi.spyOn(
+            (store as unknown as { logger: Logger }).logger,
+            "warn",
+        ).mockImplementation(() => {});
+        const withRealStore = new CredentialChainValidationService(
+            store,
+            x509v as any,
+            {} as any,
+            logger as any,
+        );
 
-        const result = await service.validateChain(["<cert>"], LOTE_SOURCE, {});
+        const result = await withRealStore.validateChain(
+            ["<cert>"],
+            {
+                lotes: [
+                    { url: "https://trust.example/lote.jwt" },
+                    { url: "https://trust.example/second.jwt" },
+                ],
+            } as TrustListSource,
+            {},
+        );
 
         expect(result.verified).toBe(false);
         expect(result.error).toBe("trust_list_unavailable");
+        expect(loadVerified).toHaveBeenCalledTimes(2);
     });
 
     it("skips trust validation (opt-out) when no trust list is configured", async () => {
@@ -161,6 +191,7 @@ describe("CredentialChainValidationService — status list signer", () => {
                     certValue: b64(s.cert),
                 })),
             })),
+            discarded: [],
         };
         return new CredentialChainValidationService(
             { getTrustStore: vi.fn().mockResolvedValue(store) } as any,
@@ -185,6 +216,96 @@ describe("CredentialChainValidationService — status list signer", () => {
         expect(result.verified).toBe(true);
         return result.matchedEntity;
     }
+
+    // ETSI TS 119 602 §6.3.15: an outdated list is discarded on its own; the
+    // issuers of the current lists are still trusted.
+    describe("with an outdated trust list next to a current one", () => {
+        const day = 86_400_000;
+        const OUTDATED_URL = "https://trust.example/outdated.jwt";
+
+        async function serviceWithLists() {
+            const currentCa = await selfSigned("Current Issuer CA", true);
+            const outdatedCa = await selfSigned("Outdated Issuer CA", true);
+            const entity = (entityId: string, ca: Cert) => ({
+                entityId,
+                services: [
+                    { serviceTypeIdentifier: ISSUANCE, certValue: b64(ca) },
+                ],
+            });
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce({
+                    entities: [entity("current", currentCa)],
+                    nextUpdate: new Date(Date.now() + day).toISOString(),
+                })
+                .mockResolvedValueOnce({
+                    entities: [entity("outdated", outdatedCa)],
+                    nextUpdate: new Date(Date.now() - day).toISOString(),
+                });
+            const store = new TrustStoreService(
+                new CollectTrustedEntities({ loadVerified }),
+                {} as never,
+                {} as never,
+                {} as never,
+            );
+            vi.spyOn(
+                (store as unknown as { logger: Logger }).logger,
+                "warn",
+            ).mockImplementation(() => {});
+            const service = new CredentialChainValidationService(
+                store,
+                new X509ValidationService(),
+                {} as any,
+                {
+                    setContext: vi.fn(),
+                    error: vi.fn(),
+                    warn: vi.fn(),
+                    debug: vi.fn(),
+                } as any,
+            );
+            const source = {
+                lotes: [
+                    { url: "https://trust.example/current.jwt" },
+                    { url: OUTDATED_URL },
+                ],
+            } as TrustListSource;
+            return { service, source, currentCa, outdatedCa };
+        }
+
+        it("accepts a credential of an issuer in the current list", async () => {
+            const { service, source, currentCa } = await serviceWithLists();
+            const signer = await issuedBy(currentCa, "Credential");
+
+            await expect(
+                service.validateChain([b64(signer)], source, {}),
+            ).resolves.toMatchObject({ verified: true });
+        });
+
+        it("rejects a credential of an issuer only in the outdated list, naming the list in the details", async () => {
+            const { service, source, outdatedCa } = await serviceWithLists();
+            const signer = await issuedBy(outdatedCa, "Credential");
+
+            const result = await service.validateChain(
+                [b64(signer)],
+                source,
+                {},
+            );
+
+            expect(result.verified).toBe(false);
+            expect(result.error).not.toBe("trust_list_unavailable");
+            expect(result.errorDetails).toContain(
+                `Discarded outdated trust lists (their issuers are not trusted): ${OUTDATED_URL}`,
+            );
+        });
+
+        it("names the discarded lists for verifiers that check anchors themselves", async () => {
+            const { service, source } = await serviceWithLists();
+
+            await expect(
+                service.discardedTrustListsDetail(source),
+            ).resolves.toContain(OUTDATED_URL);
+        });
+    });
 
     describe("entity without a revocation service", () => {
         let issuerCa: Cert;
