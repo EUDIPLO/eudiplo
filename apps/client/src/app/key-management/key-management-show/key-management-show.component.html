@@ -381,7 +381,12 @@
                 mat-stroked-button
                 (click)="enrollWithRegistrar()"
                 [disabled]="isEnrolling"
-                matTooltip="Request a certificate for this key from the registrar"
+                disabledInteractive
+                [matTooltip]="
+                  isEnrolling
+                    ? 'Enrolling this key with the registrar…'
+                    : 'Request a certificate for this key from the registrar'
+                "
                 appConfigManaged
                 managedKind="KeyChain"
                 [managedResourceId]="keyId"
