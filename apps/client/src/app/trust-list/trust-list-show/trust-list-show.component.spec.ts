@@ -12,6 +12,7 @@ import { FrontendConfigService } from '../../services/frontend-config.service';
 import { JwtService, type Role } from '../../services/jwt.service';
 import { ConfigDocumentService } from '../../config-portability/config-document.service';
 import { TrustListShowComponent } from './trust-list-show.component';
+import { expectUnavailable, tooltipOf } from '../../common/unavailable-action.testing';
 
 /** Answers the trust list requests of the page with this body and status, and no versions. */
 function serveTrustList(trustList: object, status = 200): void {
@@ -562,12 +563,18 @@ describe('TrustListShowComponent delete', () => {
     references: [{ kind: 'PresentationConfig', id: 'membership' }],
   };
 
-  /** Serves the list and answers its DELETE with `status` and `body`. */
-  function serve(status: number, body?: object): void {
+  /**
+   * Serves the list and answers its DELETE with `status` and `body`, or not at
+   * all with `'never'`. Returns the URLs of the DELETE requests.
+   */
+  function serve(status: number | 'never', body?: object): string[] {
+    const deletes: string[] = [];
     client.setConfig({
       fetch: async (request: RequestInfo | URL) => {
         const req = request instanceof Request ? request : new Request(String(request));
         if (req.method === 'DELETE') {
+          deletes.push(req.url);
+          if (status === 'never') return new Promise<Response>(() => undefined);
           return body
             ? new Response(JSON.stringify(body), {
                 status,
@@ -582,6 +589,7 @@ describe('TrustListShowComponent delete', () => {
         });
       },
     });
+    return deletes;
   }
 
   async function render() {
@@ -605,7 +613,7 @@ describe('TrustListShowComponent delete', () => {
     // MatSnackBarModule in the component's imports provides its own MatSnackBar.
     const snackBar = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open');
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
-    return { component: fixture.componentInstance, snackBar, navigate };
+    return { fixture, component: fixture.componentInstance, snackBar, navigate };
   }
 
   afterEach(() => {
@@ -628,6 +636,31 @@ describe('TrustListShowComponent delete', () => {
       )
     );
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('keeps Delete focusable while the list is deleted: a second click sends one request', async () => {
+    const deletes = serve('never');
+    const { fixture } = await render();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    fixture.detectChanges();
+    const remove = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[aria-label="Delete list"]'
+    )!;
+    // Clicks are held back until the ownership lookup of the managed resource has answered.
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(remove.getAttribute('aria-busy')).toBeNull();
+    });
+    expect(tooltipOf(fixture, remove)).toBe('Delete list');
+
+    remove.click();
+    fixture.detectChanges();
+    remove.click();
+    fixture.detectChanges();
+
+    await vi.waitFor(() => expect(deletes).toHaveLength(1));
+    expect(confirm).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, remove, 'Deleting the trust list…');
   });
 
   it('returns to the list after deleting', async () => {
