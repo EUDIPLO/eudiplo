@@ -6,6 +6,7 @@ import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionManagementService } from '../session-management.service';
 import { CredentialStatusCardComponent } from './credential-status-card.component';
+import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 
 describe('CredentialStatusCardComponent', () => {
   let fixture: ComponentFixture<CredentialStatusCardComponent>;
@@ -100,6 +101,59 @@ describe('CredentialStatusCardComponent', () => {
     expect(element.textContent).toContain('1 valid');
     expect(buttons(element)).toEqual([]);
     expect(element.textContent).toContain('needs the credentials:status or issuance:manage role');
+  });
+
+  function revokeButton(element: HTMLElement): HTMLButtonElement {
+    return [...element.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Revoke')
+    )!;
+  }
+
+  it('keeps the actions focusable while a change runs: a second click sends one request', async () => {
+    sessions.updateCredentialStatus.mockReturnValue(new Promise(() => undefined));
+    const element = await render([valid]);
+    const revoke = revokeButton(element);
+    expectAvailable(fixture, revoke);
+
+    revoke.click();
+    fixture.detectChanges();
+    revoke.click();
+    fixture.detectChanges();
+
+    expect(dialog.open).toHaveBeenCalledOnce();
+    expect(sessions.updateCredentialStatus).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, revoke, 'Changing the credential status…');
+  });
+
+  it('keeps the actions unavailable until the changed status is shown', async () => {
+    const element = await render([valid]);
+    sessions.getCredentialStatus.mockReturnValue(new Promise(() => undefined));
+    const revoke = revokeButton(element);
+
+    revoke.click();
+    await vi.waitFor(() => expect(sessions.getCredentialStatus).toHaveBeenCalledTimes(2));
+    fixture.detectChanges();
+
+    expect(sessions.updateCredentialStatus).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, revoke, 'Changing the credential status…');
+  });
+
+  it('moves the focus to the card title when the used action goes away with the change', async () => {
+    const element = await render([valid]);
+    sessions.getCredentialStatus.mockResolvedValue([{ ...valid, status: 1 }]);
+    const revoke = revokeButton(element);
+    revoke.focus();
+
+    revoke.click();
+    await vi.waitFor(() => expect(sessions.getCredentialStatus).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(revokeButton(element)).toBeUndefined();
+    });
+
+    await vi.waitFor(() =>
+      expect(document.activeElement?.textContent?.trim()).toBe('Credential Status')
+    );
   });
 
   it('revokes the credentials of a configuration after confirmation and reads the status again', async () => {

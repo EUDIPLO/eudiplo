@@ -28,12 +28,16 @@ export function expectUnavailable(
   expect(tooltipOf(fixture, button)).toBe(reason);
 }
 
-/** `button` can be used and has no reason to give. */
+/**
+ * `button` can be used and has no reason to give: its tooltip is empty, or
+ * `description` for a button whose tooltip names its action.
+ */
 export function expectAvailable(
   fixture: ComponentFixture<unknown>,
-  button: HTMLButtonElement
+  button: HTMLButtonElement,
+  description = ''
 ): void {
   expect(button.disabled).toBe(false);
   expect(button.getAttribute('aria-disabled')).toBeNull();
-  expect(tooltipOf(fixture, button)).toBe('');
+  expect(tooltipOf(fixture, button)).toBe(description);
 }

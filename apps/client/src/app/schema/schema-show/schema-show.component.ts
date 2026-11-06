@@ -1,5 +1,14 @@
 import { CommonModule, DatePipe } from '@angular/common';
-import { Component, DestroyRef, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  ElementRef,
+  Injector,
+  OnInit,
+  ViewChild,
+  inject,
+} from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -31,6 +40,7 @@ import { SourceLoadState, loadSource, reportSourceFailures } from '../../common/
 import { SEMVER_REGEX, compareVersionsDesc, proposeNextVersion } from '../schema-version';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
+import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 
 function formatNotCarriedOver(values: string[]): string {
   return `Not in the registrar vocabulary, so not carried over: ${values.join(', ')}.`;
@@ -62,6 +72,9 @@ function formatNotCarriedOver(values: string[]): string {
 })
 export class SchemaShowComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
+  /** Takes the focus when the focused Deprecate goes away with a finished deprecation. */
+  @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly schemaService = inject(SchemaService);
@@ -772,6 +785,7 @@ export class SchemaShowComponent implements OnInit {
    * as its successor.
    */
   async deprecate(): Promise<void> {
+    // `disabledInteractive` keeps Deprecate clickable while it looks disabled.
     if (!this.item || this.item.deprecated || this.deprecating) return;
     const entry = this.item;
     const successor = this.newestVersionAbove(entry.version);
@@ -795,10 +809,13 @@ export class SchemaShowComponent implements OnInit {
     // Show the new state unless another version was opened meanwhile.
     if (updated && this.item === entry) {
       this.item = updated;
+      // Deprecate is not offered for a deprecated version, so its focus would fall to the page.
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
     }
   }
 
   async delete(): Promise<void> {
+    // `disabledInteractive` keeps Delete clickable while it looks disabled.
     if (!this.item || this.deleting) return;
     const entry = this.item;
     const question = [

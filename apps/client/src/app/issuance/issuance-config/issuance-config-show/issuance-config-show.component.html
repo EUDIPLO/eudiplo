@@ -417,6 +417,8 @@
                     color="primary"
                     (click)="reissueRegistrationCertificate()"
                     [disabled]="reissuing"
+                    disabledInteractive
+                    [matTooltip]="reissuing ? 'Regenerating the registration certificate…' : ''"
                   >
                     <mat-icon>autorenew</mat-icon>
                     {{ reissuing ? 'Regenerating...' : 'Regenerate now' }}
