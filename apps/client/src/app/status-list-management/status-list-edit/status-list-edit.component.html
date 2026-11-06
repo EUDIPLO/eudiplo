@@ -257,10 +257,18 @@
                     type="number"
                     formControlName="capacity"
                     placeholder="Use tenant default"
-                    min="1000"
                   />
                   <mat-icon matSuffix>storage</mat-icon>
-                  <mat-hint>Maximum number of credential entries in this list</mat-hint>
+                  <mat-hint>
+                    Maximum number of credential entries in this list, from 1,000 to 1,000,000
+                  </mat-hint>
+                  @if (form.get('capacity')?.hasError('integer')) {
+                    <mat-error>Enter a whole number of entries</mat-error>
+                  } @else if (form.get('capacity')?.hasError('min')) {
+                    <mat-error>Capacity must be at least 1,000</mat-error>
+                  } @else if (form.get('capacity')?.hasError('max')) {
+                    <mat-error>Capacity must be at most 1,000,000</mat-error>
+                  }
                 </mat-form-field>
 
                 <div fxLayout="row wrap" fxLayoutGap="8px">

@@ -106,4 +106,34 @@ describe('StatusListEditComponent Save', () => {
     expect(save.textContent).toContain('Saving…');
     expectUnavailable(fixture, save, 'Saving the status list…');
   });
+
+  it.each([1000, 1_000_000])('creates a status list with a capacity of %s', async (capacity) => {
+    const createList = vi.fn(() => new Promise(() => undefined));
+    const { fixture, save } = await render(createList);
+    fixture.componentInstance.form.patchValue({ capacity });
+
+    save.click();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('mat-error')).toBeNull();
+    expect(createList).toHaveBeenCalledWith(expect.objectContaining({ capacity }));
+  });
+
+  it.each([
+    [500, 'Capacity must be at least 1,000'],
+    [2_000_000, 'Capacity must be at most 1,000,000'],
+    [1000.5, 'Enter a whole number of entries'],
+  ])('says why it creates no status list with a capacity of %s', async (capacity, error) => {
+    const createList = vi.fn();
+    const { fixture, save } = await render(createList);
+    fixture.componentInstance.form.patchValue({ capacity });
+
+    save.click();
+    fixture.detectChanges();
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('mat-error')?.textContent?.trim()
+    ).toBe(error);
+    expect(createList).not.toHaveBeenCalled();
+  });
 });
