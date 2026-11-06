@@ -31,6 +31,7 @@ const sidebars: SidebarsConfig = {
         'cookbooks/revocable-credentials',
         'cookbooks/trusted-issuers',
         'cookbooks/production-vm',
+        'cookbooks/manage-with-cli',
         'troubleshooting',
       ],
     },

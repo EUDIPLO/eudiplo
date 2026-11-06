@@ -16,7 +16,7 @@ Notes on fields whose generated description is incomplete:
 
 | Field | Note |
 | --- | --- |
-| `config.display[].name`, `.locale`, `.description` | Name, locale and description of the credential (the schema shares these descriptions with claim display entries). |
+| `config.display[].locale` | Compared case-insensitively: `en-US` and `en-us` count as the same locale. |
 | `config.scope` | Published as `scope` in the issuer metadata only. EUDIPLO does not map OAuth scopes to credential configurations; wallets select credentials with `authorization_details`. |
 | `config.proofTypesSupported` | Defaults to both `jwt` and `attestation`. |
 | `config.credentialReusePolicy.options[]` | `batch_size` (minimum 2) is required for `once_only`, `rotating-batch` and `per-relying-party`. `reissue_trigger_unused` is required for `once_only` and must be lower than `batch_size`. `reissue_trigger_lifetime_left` (seconds) is required for `limited_time`, `rotating-batch` and `per-relying-party`. `options` is required when `id` is `arf_annex_ii`. See [Reuse policy](../issuance/credential-configuration.md#publish-a-reuse-policy). |

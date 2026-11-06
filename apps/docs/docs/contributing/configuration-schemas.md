@@ -8,7 +8,7 @@ Configuration files name their format in `$schema`, for example `https://eudiplo
 
 ## Format versions
 
-Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eudiplo-config-format/src/config-format.ts`); it is independent of the application version. EUDIPLO 9.0 introduced the first bumps; `IssuanceConfig` v3 followed in 9.1, `CredentialConfig` v2 and v3, `KeyChain` v2, `Client` v2, `KmsConfig` v2, `RegistrarConfig` v2, `Tenant` v2 to v4, `IssuanceConfig` v4 to v6, `KeyChain` v3 and v4, `KeyChainDefaults` v2 and `PresentationConfig` v4 in 10.0:
+Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eudiplo-config-format/src/config-format.ts`); it is independent of the application version. EUDIPLO 9.0 introduced the first bumps; `IssuanceConfig` v3 followed in 9.1, `CredentialConfig` v2 to v4, `KeyChain` v2, `Client` v2, `KmsConfig` v2, `RegistrarConfig` v2, `Tenant` v2 to v4, `IssuanceConfig` v4 to v6, `KeyChain` v3 and v4, `KeyChainDefaults` v2 and `PresentationConfig` v4 in 10.0:
 
 | Resource | Version | Change |
 | --- | --- | --- |
@@ -19,6 +19,7 @@ Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eud
 | `IssuanceConfig` | v6 | The top-level `signingKeyId` is removed; the v5 → v6 step drops a set value with the warning `ISSUANCE_SIGNING_KEY_ID_REMOVED` and keeps `token.signingKeyId` with the warning `AUTHORIZATION_SERVER_KEY_CHAIN_REQUIRED`. |
 | `CredentialConfig` | v2 | `x509` as `frameworkType` of `schemaMeta.trustedAuthorities` entries. A v1 file is a valid v2 file. |
 | `CredentialConfig` | v3 | `fields[].constraints` accept only JSON Schema validation and annotation keywords. The v2 → v3 step drops other keys with a warning and stops on claim patterns RE2 cannot run (`CLAIM_PATTERN_UNSUPPORTED`). |
+| `CredentialConfig` | v4 | `config.display[]` colors must be CSS Color Level 3 numerical values, and each locale may appear once. The v3 → v4 step trims colors and lowercases their function names, drops the ones wallets cannot read with the warning `DISPLAY_COLOR_REMOVED` and stops on a repeated locale (`DISPLAY_LOCALE_DUPLICATE`). |
 | `KeyChain` | v2 | Optional `type` (`standalone`, `internalChain`). A v1 file is a valid v2 file; a bare key chain file with `type` is read as v2 (`bareFileVersion`). |
 | `KeyChain` | v3 | Usage type `federation`. A v2 file is a valid v3 file; a bare key chain file with usage type `federation` is read as v3. |
 | `KeyChain` | v4 | Usage type `authorizationServer`. A v3 file is a valid v4 file; a bare key chain file with usage type `authorizationServer` is read as v4. |
@@ -52,8 +53,16 @@ Bump the version whenever the accepted content of a resource changes, including 
     pnpm --filter @eudiplo/cli assets:sync    # copies schemas and templates into the CLI
     ```
 
-5. Add tests for the migration step (valid transformation, source and target validation, required input, running the upgrade twice) in `packages/eudiplo-config-format` and, for CLI behavior, `apps/cli/test/config-upgrade.test.ts`.
-6. Run the checks CI runs:
+5. Bring the bundled demo tenant to the new version. `eudiplo init --demo-tenant` and `eudiplo config tenant create --template demo` copy `assets/config/demo`, so a file there that is behind fails `eudiplo config upgrade --check` in a fresh project. The CLI test `generates configuration that needs no upgrade` (`apps/cli/test/runtime.test.ts`) fails until you upgrade it from the repository root (`dev` runs in `apps/cli`, and the `--output` folder must not exist yet):
+
+    ```bash
+    pnpm --filter @eudiplo/cli dev config upgrade ../../assets/config/demo --output ../../tmp/demo-upgraded
+    cp -R tmp/demo-upgraded/. assets/config/demo/ && rm -rf tmp/demo-upgraded
+    pnpm --filter @eudiplo/cli assets:sync
+    ```
+
+6. Add tests for the migration step (valid transformation, source and target validation, required input, running the upgrade twice) in `packages/eudiplo-config-format` and, for CLI behavior, `apps/cli/test/config-upgrade.test.ts`.
+7. Run the checks CI runs:
 
     ```bash
     pnpm schemas:check-contract        # current DTOs match the committed schemas and snapshots
@@ -62,7 +71,7 @@ Bump the version whenever the accepted content of a resource changes, including 
     pnpm --filter @eudiplo/website build
     ```
 
-7. Commit schema, snapshot, generated files, tests and documentation together, and describe the change in the [upgrade guide](../upgrade/index.md) of the next major: files exported by the new release cannot be imported into older ones. A new `KeyChain` version also changes the hash stored for each applied document, so the next `upsert` or `replace` import applies every file-managed key chain once more, with new signing keys for CA keys; say so in that guide too.
+8. Commit schema, snapshot, generated files, tests and documentation together, and describe the change in the [upgrade guide](../upgrade/index.md) of the next major: files exported by the new release cannot be imported into older ones. A migration step that rewrites the `spec` or `metadata` of a `KeyChain` document, or of a `Client` document with `"secret": "!generate"`, makes such a document differ from the one last applied, so the next `upsert` or `replace` import applies it once more: CA keys get a new signing key, `regenerate` creates new key material and the client gets a new secret, which a startup import does not show. Say so in that guide too. A step that returns `spec` and `metadata` unchanged keeps them as they are.
 
 `schemas:snapshot` without a resource name checks and snapshots every current resource. Running `schemas:snapshot` alone is not enough: `schemas:check-contract` fails when a DTO changed but the version was not bumped.
 

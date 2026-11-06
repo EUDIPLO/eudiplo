@@ -4,7 +4,7 @@
   }
   <!-- Header -->
   <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2>{{ isEditMode ? 'Edit' : 'Create' }} Trust List</h2>
+    <h2 #pageHeading tabindex="-1">{{ isEditMode ? 'Edit' : 'Create' }} Trust List</h2>
     <div fxLayout="row" fxLayoutGap="8px">
       <a
         mat-stroked-button
@@ -26,7 +26,17 @@
     </div>
   </div>
 
-  @if (form) {
+  @if (loading) {
+    <p><output>Loading trust list…</output></p>
+  } @else if (loadError) {
+    <app-load-error
+      [message]="loadError"
+      hint="The trust list can only be edited after it has been loaded."
+      (retry)="load()"
+    >
+      <a mat-button routerLink="/trust-list">Back to the list</a>
+    </app-load-error>
+  } @else {
     <form [formGroup]="form" (ngSubmit)="onSubmit()" fxLayout="column" fxLayoutGap="24px">
       <!-- Basic Information Card -->
       <mat-card>
@@ -39,7 +49,7 @@
         </mat-card-header>
 
         <mat-card-content>
-          <div fxLayout="column" fxLayoutGap="16px">
+          <div #basicFields fxLayout="column" fxLayoutGap="16px">
             <mat-form-field appearance="outline">
               <mat-label>ID</mat-label>
               <input
@@ -68,6 +78,9 @@
               <mat-label>Signing Key Chain</mat-label>
               <mat-select formControlName="keyChainId">
                 <mat-option value="">Auto-generate</mat-option>
+                @if (unlistedKeyChain(form.get('keyChainId')?.value, trustListKeyChains); as id) {
+                  <mat-option [value]="id">{{ id }}</mat-option>
+                }
                 @for (keyChain of trustListKeyChains; track keyChain.id) {
                   <mat-option [value]="keyChain.id">
                     {{
@@ -79,9 +92,14 @@
                 }
               </mat-select>
               <mat-icon matSuffix>key</mat-icon>
-              <mat-hint>Key chain used to sign the trust list JWT</mat-hint>
+              <mat-hint>{{ keyChainHint('Key chain used to sign the trust list JWT') }}</mat-hint>
               <mat-error>{{ fieldError('keyChainId') }}</mat-error>
             </mat-form-field>
+            @if (keyChainsLoadError) {
+              <ng-container
+                *ngTemplateOutlet="retryKeyChainsButton; context: { $implicit: basicFields }"
+              />
+            }
           </div>
         </mat-card-content>
       </mat-card>
@@ -184,43 +202,80 @@
                   </mat-form-field>
                   @if (getEntityType(i) === 'internal') {
                     <!-- Internal Entity Form - Key Chain Selection -->
-                    <mat-form-field appearance="outline">
-                      <mat-label>Issuer Key Chain</mat-label>
-                      <mat-select formControlName="issuerKeyChainId">
-                        @for (keyChain of attestationKeyChains; track keyChain.id) {
-                          <mat-option [value]="keyChain.id">
-                            {{
-                              keyChain.description
-                                ? keyChain.description + ' (' + keyChain.id + ')'
-                                : keyChain.id
-                            }}
-                          </mat-option>
-                        }
-                      </mat-select>
-                      <mat-icon matSuffix>key</mat-icon>
-                      <mat-hint>Key chain used for credential signing</mat-hint>
-                      <mat-error>{{ fieldError('entities.' + i + '.issuerKeyChainId') }}</mat-error>
-                    </mat-form-field>
+                    <div #entityKeyChainFields fxLayout="column" fxLayoutGap="16px">
+                      <mat-form-field appearance="outline">
+                        <mat-label>Issuer Key Chain</mat-label>
+                        <mat-select formControlName="issuerKeyChainId">
+                          @if (
+                            unlistedKeyChain(
+                              entity.get('issuerKeyChainId')?.value,
+                              attestationKeyChains
+                            );
+                            as id
+                          ) {
+                            <mat-option [value]="id">{{ id }}</mat-option>
+                          }
+                          @for (keyChain of attestationKeyChains; track keyChain.id) {
+                            <mat-option [value]="keyChain.id">
+                              {{
+                                keyChain.description
+                                  ? keyChain.description + ' (' + keyChain.id + ')'
+                                  : keyChain.id
+                              }}
+                            </mat-option>
+                          }
+                        </mat-select>
+                        <mat-icon matSuffix>key</mat-icon>
+                        <mat-hint>{{
+                          keyChainHint('Key chain used for credential signing')
+                        }}</mat-hint>
+                        <mat-error>{{
+                          fieldError('entities.' + i + '.issuerKeyChainId', keyChainRequiredMessage)
+                        }}</mat-error>
+                      </mat-form-field>
 
-                    <mat-form-field appearance="outline">
-                      <mat-label>Revocation Key Chain</mat-label>
-                      <mat-select formControlName="revocationKeyChainId">
-                        @for (keyChain of statusListKeyChains; track keyChain.id) {
-                          <mat-option [value]="keyChain.id">
-                            {{
-                              keyChain.description
-                                ? keyChain.description + ' (' + keyChain.id + ')'
-                                : keyChain.id
-                            }}
-                          </mat-option>
-                        }
-                      </mat-select>
-                      <mat-icon matSuffix>gpp_maybe</mat-icon>
-                      <mat-hint>Key chain used for status list signing</mat-hint>
-                      <mat-error>{{
-                        fieldError('entities.' + i + '.revocationKeyChainId')
-                      }}</mat-error>
-                    </mat-form-field>
+                      <mat-form-field appearance="outline">
+                        <mat-label>Revocation Key Chain</mat-label>
+                        <mat-select formControlName="revocationKeyChainId">
+                          @if (
+                            unlistedKeyChain(
+                              entity.get('revocationKeyChainId')?.value,
+                              statusListKeyChains
+                            );
+                            as id
+                          ) {
+                            <mat-option [value]="id">{{ id }}</mat-option>
+                          }
+                          @for (keyChain of statusListKeyChains; track keyChain.id) {
+                            <mat-option [value]="keyChain.id">
+                              {{
+                                keyChain.description
+                                  ? keyChain.description + ' (' + keyChain.id + ')'
+                                  : keyChain.id
+                              }}
+                            </mat-option>
+                          }
+                        </mat-select>
+                        <mat-icon matSuffix>gpp_maybe</mat-icon>
+                        <mat-hint>{{
+                          keyChainHint('Key chain used for status list signing')
+                        }}</mat-hint>
+                        <mat-error>{{
+                          fieldError(
+                            'entities.' + i + '.revocationKeyChainId',
+                            keyChainRequiredMessage
+                          )
+                        }}</mat-error>
+                      </mat-form-field>
+                      @if (keyChainsLoadError) {
+                        <ng-container
+                          *ngTemplateOutlet="
+                            retryKeyChainsButton;
+                            context: { $implicit: entityKeyChainFields }
+                          "
+                        />
+                      }
+                    </div>
 
                     <mat-divider></mat-divider>
                   }
@@ -366,3 +421,21 @@
     </form>
   }
 </div>
+
+<!-- Next to the key chain selects in `fields`, which take the focus once the key chains are loaded. -->
+<ng-template #retryKeyChainsButton let-fields>
+  <div>
+    <button
+      mat-button
+      type="button"
+      [disabled]="loadingKeyChains"
+      disabledInteractive
+      [attr.aria-busy]="loadingKeyChains"
+      [matTooltip]="loadingKeyChains ? 'Loading key chains…' : ''"
+      (click)="retryKeyChains(fields)"
+    >
+      <mat-icon>refresh</mat-icon>
+      Retry loading key chains
+    </button>
+  </div>
+</ng-template>

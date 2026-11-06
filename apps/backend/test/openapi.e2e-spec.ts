@@ -233,6 +233,14 @@ describe("OpenAPI contract", () => {
         ]);
     });
 
+    test("requires only name and locale in a credential display entry", () => {
+        const schema = document.components?.schemas?.Display as {
+            required?: string[];
+        };
+
+        expect(schema.required?.sort()).toEqual(["locale", "name"]);
+    });
+
     test("documents key JSON, form, binary, SSE, and no-content responses", () => {
         const versionOperation = getOperation(document, "/api/version", "get");
         expect(

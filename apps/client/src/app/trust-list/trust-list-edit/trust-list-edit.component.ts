@@ -44,7 +44,8 @@ import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { fieldErrorMessage, showIssuesAtFields } from '../../utils/form-errors';
-import { focusRowAfterRemoval } from '../../common/focus-if-lost.util';
+import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../common/focus-if-lost.util';
+import { LoadErrorComponent } from '../../common/load-error.component';
 
 /** Common info fields for both internal and external entities */
 interface EntityInfoForm {
@@ -92,6 +93,7 @@ interface ExternalEntityForm extends EntityInfoForm {
     EditorComponent,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
+    LoadErrorComponent,
   ],
   templateUrl: './trust-list-edit.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -101,6 +103,10 @@ export class TrustListEditComponent implements OnInit {
   trustListId?: string | null;
   trustList?: TrustList;
   form!: FormGroup;
+  /** While the trust list to edit is requested; the form waits for it. */
+  loading = false;
+  /** Set when the trust list to edit could not be loaded, so no empty form is shown. */
+  loadError = '';
   /** While a save runs, so a second click does not send it again. */
   saving = false;
   /** Entities with a field the backend rejected; their panels open and stay open. */
@@ -112,6 +118,10 @@ export class TrustListEditComponent implements OnInit {
   attestationKeyChains: KeyChainResponseDto[] = [];
   statusListKeyChains: KeyChainResponseDto[] = [];
   trustListKeyChains: KeyChainResponseDto[] = [];
+  /** While the key chains are requested, so a second Retry does not send it again. */
+  loadingKeyChains = false;
+  /** Set when the key chains could not be loaded; the key chain selects say so and offer a retry. */
+  keyChainsLoadError = '';
 
   editorOptionsPem = {
     automaticLayout: true,
@@ -124,6 +134,7 @@ export class TrustListEditComponent implements OnInit {
   private readonly entityHeaders?: QueryList<ElementRef<HTMLElement>>;
   @ViewChild('addEntityButton', { read: ElementRef })
   private readonly addEntityButton?: ElementRef<HTMLElement>;
+  @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
 
   constructor(
     private readonly route: ActivatedRoute,
@@ -142,10 +153,10 @@ export class TrustListEditComponent implements OnInit {
       entities: new FormArray([]),
     });
 
-    this.loadKeyChains();
+    void this.loadKeyChains();
 
     if (this.trustListId) {
-      this.loadTrustList();
+      void this.load();
     }
   }
 
@@ -158,6 +169,7 @@ export class TrustListEditComponent implements OnInit {
   }
 
   private async loadKeyChains(): Promise<void> {
+    this.loadingKeyChains = true;
     try {
       const response = await keyChainControllerGetAll({});
       this.availableKeyChains = response.data ?? [];
@@ -172,14 +184,60 @@ export class TrustListEditComponent implements OnInit {
       this.trustListKeyChains = this.availableKeyChains.filter(
         (kc) => kc.usageType === 'trustList'
       );
+      this.keyChainsLoadError = '';
     } catch (error) {
       console.error('Failed to load key chains:', error);
-      openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to load key chains'));
+      this.keyChainsLoadError = getApiErrorMessage(error, 'Failed to load key chains');
+      openErrorSnackBar(this.snackBar, this.keyChainsLoadError);
+    } finally {
+      this.loadingKeyChains = false;
     }
   }
 
-  private async loadTrustList(): Promise<void> {
+  /**
+   * Loads the key chains again, keeping what the user entered. After a success the Retry button
+   * is gone, so focus moves to the first select in `fields`, the key chain selects it was next to.
+   */
+  async retryKeyChains(fields: HTMLElement): Promise<void> {
+    if (this.loadingKeyChains) return;
+    await this.loadKeyChains();
+    if (!this.keyChainsLoadError) {
+      focusAfterRenderIfLost(
+        this.injector,
+        () => fields.querySelector<HTMLElement>('mat-select') ?? undefined
+      );
+    }
+  }
+
+  /**
+   * The selected key chain while the key chains are loading or could not be loaded and it is
+   * not among `options`, so its select shows the stored ID instead of looking empty; '' otherwise.
+   */
+  unlistedKeyChain(value: unknown, options: KeyChainResponseDto[]): string {
+    if (!this.loadingKeyChains && !this.keyChainsLoadError) return '';
+    if (typeof value !== 'string' || !value) return '';
+    return options.some((keyChain) => keyChain.id === value) ? '' : value;
+  }
+
+  /** The hint of a key chain select: `hint`, unless the key chains are loading or failed to load. */
+  keyChainHint(hint: string): string {
+    if (this.loadingKeyChains) return 'Loading key chains…';
+    return this.keyChainsLoadError ? 'Could not load key chains.' : hint;
+  }
+
+  /** Under an empty required key chain select, which replaces its hint: why it may be empty. */
+  get keyChainRequiredMessage(): string {
+    return this.keyChainsLoadError ? 'The key chains could not be loaded.' : 'Select a key chain.';
+  }
+
+  /** Loads the trust list to edit; on failure the form stays hidden behind a retry. */
+  async load(): Promise<void> {
     if (!this.trustListId) return;
+    const retrying = this.loadError !== '';
+    this.loading = true;
+    this.loadError = '';
+    // The form needs the key chains too; a retry of the page also retries them if they failed.
+    if (retrying && this.keyChainsLoadError && !this.loadingKeyChains) void this.loadKeyChains();
 
     try {
       const response = await trustListControllerGetTrustList({
@@ -187,6 +245,9 @@ export class TrustListEditComponent implements OnInit {
       });
 
       this.trustList = response.data;
+      // A defence: the form shows only after a successful load, so it holds no entities yet;
+      // should it ever load twice, the stored entities replace the form's, never add to them.
+      this.entitiesArray.clear();
 
       this.form.patchValue({
         id: this.trustList.id || this.trustListId,
@@ -202,8 +263,13 @@ export class TrustListEditComponent implements OnInit {
       }
     } catch (error) {
       console.error('Failed to load trust list:', error);
-      openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to load trust list'));
-      this.router.navigate(['/trust-list']);
+      this.loadError = getApiErrorMessage(error, 'Failed to load trust list');
+    } finally {
+      this.loading = false;
+    }
+    // The retry removed the error card with its focused Retry button.
+    if (retrying && !this.loadError) {
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
     }
   }
 
