@@ -48,38 +48,6 @@ describe("CredentialsService proof_types_supported generation", () => {
             .credential_metadata as Record<string, unknown> | undefined;
     };
 
-    describe("credential_metadata.display", () => {
-        it("publishes display entries and leaves out an empty display", async () => {
-            const display = [{ name: "PID", locale: "en-US" }];
-            expect(
-                (await getCredentialMetadata(buildEntity({ display })))
-                    ?.display,
-            ).toEqual(display);
-            // A display, when present, must be a non-empty array (OID4VCI 1.0 Section 12.2.4).
-            expect(
-                await getCredentialMetadata(buildEntity({ display: [] })),
-            ).toBeUndefined();
-        });
-
-        it("leaves out colors and repeated locales stored before CredentialConfig v4", async () => {
-            const display = [
-                {
-                    name: "PID",
-                    locale: "en-US",
-                    background_color: "#12107C",
-                    text_color: "navy",
-                },
-                { name: "PID (copy)", locale: "en-us" },
-            ];
-            expect(
-                (await getCredentialMetadata(buildEntity({ display })))
-                    ?.display,
-            ).toEqual([
-                { name: "PID", locale: "en-US", background_color: "#12107C" },
-            ]);
-        });
-    });
-
     const getProofTypes = async (
         entity: CredentialConfig,
     ): Promise<ProofTypesSupported> => {
@@ -116,6 +84,38 @@ describe("CredentialsService proof_types_supported generation", () => {
                 } as unknown as KeyChainService,
             },
         );
+    });
+
+    describe("credential_metadata.display", () => {
+        it("publishes display entries and leaves out an empty display", async () => {
+            const display = [{ name: "PID", locale: "en-US" }];
+            expect(
+                (await getCredentialMetadata(buildEntity({ display })))
+                    ?.display,
+            ).toEqual(display);
+            // A display, when present, must be a non-empty array (OID4VCI 1.0 Section 12.2.4).
+            expect(
+                await getCredentialMetadata(buildEntity({ display: [] })),
+            ).toBeUndefined();
+        });
+
+        it("leaves out colors and repeated locales stored before CredentialConfig v4", async () => {
+            const display = [
+                {
+                    name: "PID",
+                    locale: "en-US",
+                    background_color: "#12107C",
+                    text_color: "navy",
+                },
+                { name: "PID (copy)", locale: "en-us" },
+            ];
+            expect(
+                (await getCredentialMetadata(buildEntity({ display })))
+                    ?.display,
+            ).toEqual([
+                { name: "PID", locale: "en-US", background_color: "#12107C" },
+            ]);
+        });
     });
 
     const credentialAlgs = async (
