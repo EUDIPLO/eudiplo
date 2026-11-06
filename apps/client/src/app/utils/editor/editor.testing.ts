@@ -16,7 +16,13 @@ export class EditorStub implements ControlValueAccessor {
   @Input() schema: unknown;
   @Input() editorOptions: unknown;
   @Input() errors: unknown;
-  writeValue(): void {}
-  registerOnChange(): void {}
-  registerOnTouched(): void {}
+  writeValue(): void {
+    // The stub shows nothing, so it has no value to write.
+  }
+  registerOnChange(): void {
+    // The stub never changes its value, so it never calls back.
+  }
+  registerOnTouched(): void {
+    // The stub cannot be focused, so it is never touched.
+  }
 }

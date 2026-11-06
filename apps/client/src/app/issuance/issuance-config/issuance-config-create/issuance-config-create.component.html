@@ -2,14 +2,16 @@
   <app-config-ownership-notice kind="IssuanceConfig" resourceId="issuance" />
   <!-- Header -->
   <div class="settings-header" fxLayout="row" fxLayoutAlign="space-between center">
-    <h2>Issuer Settings</h2>
+    <h2 #pageHeading tabindex="-1">Issuer Settings</h2>
     <div class="header-actions" fxLayout="row" fxLayoutAlign="end center">
       <!-- JSON View Button -->
       <button
         mat-stroked-button
+        type="button"
         (click)="viewAsJson()"
-        [disabled]="loadingConfig || !!loadError"
-        matTooltip="View/Edit as JSON"
+        [disabled]="!!jsonViewUnavailableReason"
+        disabledInteractive
+        [matTooltip]="jsonViewUnavailableReason || 'View/Edit as JSON'"
       >
         <mat-icon>code</mat-icon>
         JSON View
@@ -38,8 +40,11 @@
     <p role="status">Loading issuer settings…</p>
   }
   @if (loadError) {
-    <p role="alert">{{ loadError }}</p>
-    <button mat-stroked-button type="button" (click)="loadConfigForEdit()">Retry loading</button>
+    <app-load-error
+      [message]="loadError"
+      hint="Retry before making changes."
+      (retry)="loadConfigForEdit()"
+    />
   }
   @if (!loadingConfig && !loadError) {
     <div class="setup-guide">
@@ -379,6 +384,7 @@
                               </p>
                               @if (!server.get('inheritWalletProviderTrustLists')?.value) {
                                 <div
+                                  #serverTrustLists
                                   fxLayout="column"
                                   fxLayoutGap="12px"
                                   class="trust-lists-section"
@@ -396,6 +402,7 @@
                                           $implicit: trustList,
                                           list: getAuthorizationServerWalletProviderTrustLists(i),
                                           index: j,
+                                          section: serverTrustLists,
                                         }
                                       "
                                     />
@@ -405,7 +412,12 @@
                                       getAuthorizationServerWalletProviderTrustLists(i)
                                     )
                                   ) {
-                                    <ng-container *ngTemplateOutlet="walletTrustListLoadError" />
+                                    <ng-container
+                                      *ngTemplateOutlet="
+                                        walletTrustListLoadError;
+                                        context: { section: serverTrustLists }
+                                      "
+                                    />
                                   }
                                   <div
                                     fxLayout="row"
@@ -413,6 +425,7 @@
                                     fxLayoutGap="8px"
                                   >
                                     <button
+                                      #addManagedTrustListButton
                                       mat-raised-button
                                       type="button"
                                       (click)="
@@ -592,7 +605,7 @@
                                         fail. Choose another key, or
                                         <a
                                           routerLink="/keys/create"
-                                          [queryParams]="{ usage: 'authorizationServer' }"
+                                          [queryParams]="authorizationServerKeyLinkParams"
                                           target="_blank"
                                           rel="noopener"
                                           >create one (opens in a new tab)</a
@@ -609,7 +622,7 @@
                                         on the first token request. To use your own,
                                         <a
                                           routerLink="/keys/create"
-                                          [queryParams]="{ usage: 'authorizationServer' }"
+                                          [queryParams]="authorizationServerKeyLinkParams"
                                           target="_blank"
                                           rel="noopener"
                                           >create one (opens in a new tab)</a
@@ -915,7 +928,12 @@
                         >
                       </mat-form-field>
 
-                      <div fxLayout="column" fxLayoutGap="16px" class="trust-lists-section">
+                      <div
+                        #sharedTrustLists
+                        fxLayout="column"
+                        fxLayoutGap="16px"
+                        class="trust-lists-section"
+                      >
                         <p class="section-hint">
                           <mat-icon>info</mat-icon>
                           These lists validate key attestations during issuance and are the default
@@ -935,15 +953,22 @@
                                 $implicit: trustList,
                                 list: walletProviderTrustLists,
                                 index: i,
+                                section: sharedTrustLists,
                               }
                             "
                           />
                         }
                         @if (hasManagedEntry(walletProviderTrustLists)) {
-                          <ng-container *ngTemplateOutlet="walletTrustListLoadError" />
+                          <ng-container
+                            *ngTemplateOutlet="
+                              walletTrustListLoadError;
+                              context: { section: sharedTrustLists }
+                            "
+                          />
                         }
                         <div fxLayout="row" fxLayoutAlign="center center" fxLayoutGap="8px">
                           <button
+                            #addManagedTrustListButton
                             mat-raised-button
                             type="button"
                             (click)="addWalletProviderTrustList('managed')"
@@ -1106,7 +1131,7 @@
                                   the entity configuration cannot be signed and is not published.
                                   <a
                                     routerLink="/keys/create"
-                                    [queryParams]="{ usage: 'federation' }"
+                                    [queryParams]="federationKeyLinkParams"
                                     target="_blank"
                                     rel="noopener"
                                     >Create a federation key (opens in a new tab)</a
@@ -1415,13 +1440,23 @@
   }
 </div>
 
-<ng-template #walletTrustListEntry let-trustList let-list="list" let-index="index">
+<ng-template
+  #walletTrustListEntry
+  let-trustList
+  let-list="list"
+  let-index="index"
+  let-section="section"
+>
   <div fxLayout="column" fxLayoutGap="8px" class="trust-list-entry">
     <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
       @if (trustList.get('mode')?.value === 'managed') {
         <mat-form-field fxFlex>
           <mat-label>Managed trust list {{ index + 1 }}</mat-label>
-          <mat-select [formControl]="trustListControl(trustList, 'trustListId')">
+          <mat-select
+            #trustListField
+            #managedTrustListField
+            [formControl]="trustListControl(trustList, 'trustListId')"
+          >
             @if (managedTrustListNote(trustList.get('trustListId')?.value); as note) {
               <mat-option [value]="trustList.get('trustListId')?.value"
                 >{{ trustList.get('trustListId')?.value }} ({{ note }})</mat-option
@@ -1451,6 +1486,7 @@
         <mat-form-field fxFlex>
           <mat-label>Trust list URL {{ index + 1 }}</mat-label>
           <input
+            #trustListField
             (keydown.enter)="onInputEnter($event)"
             matInput
             [formControl]="trustListControl(trustList, 'url')"
@@ -1464,7 +1500,7 @@
         matIconButton
         type="button"
         color="warn"
-        (click)="removeTrustListEntry(list, index)"
+        (click)="removeTrustListEntry(list, index, section)"
         matTooltip="Remove this trust list"
         [attr.aria-label]="'Remove trust list ' + (index + 1)"
       >
@@ -1528,11 +1564,13 @@
   </div>
 </ng-template>
 
-<ng-template #walletTrustListLoadError>
+<ng-template #walletTrustListLoadError let-section="section">
   @if (trustListsError) {
     <p class="trust-list-error" role="alert">
       {{ trustListsError }}
-      <button mat-button type="button" (click)="loadTrustLists()">Retry</button>
+      <button #trustListRetryButton mat-button type="button" (click)="retryTrustLists(section)">
+        Retry
+      </button>
     </p>
   }
 </ng-template>

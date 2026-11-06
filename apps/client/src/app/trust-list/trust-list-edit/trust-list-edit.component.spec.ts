@@ -302,7 +302,7 @@ describe('TrustListEditComponent loading the trust list', () => {
 
     await component.load();
 
-    expect(component.entitiesArray.length).toBe(2);
+    expect(component.entitiesArray).toHaveLength(2);
   });
 
   it('says next to the key chain selects that the key chains failed to load', async () => {
@@ -436,7 +436,8 @@ describe('TrustListEditComponent loading the trust list', () => {
     harness.detectChanges();
 
     const noIssuer = 'No credential signing key chains. Create one in Key Management.';
-    const noRevocation = 'No status list key chains. Create one in Key Management.';
+    const noRevocation =
+      'No status list or credential signing key chains. Create one in Key Management.';
     expect(hints(page, noIssuer)).toHaveLength(1);
     expect(hints(page, noRevocation)).toHaveLength(1);
     // The signing key chain select is not required, so it keeps its usual hint and gets no link.
@@ -478,8 +479,8 @@ describe('TrustListEditComponent loading the trust list', () => {
   });
 
   it('reloads the key chains after one was created, keeping the focus while one is missing', async () => {
-    // Only the credential signing key chain is missing.
-    answers.keyChains = { status: 200, body: [keyChains[1], keyChains[2]] };
+    // Neither a credential signing nor a status list key chain exists.
+    answers.keyChains = { status: 200, body: [keyChains[2]] };
     const { harness, component, page } = await render();
     await vi.waitFor(() => {
       harness.detectChanges();
@@ -489,7 +490,10 @@ describe('TrustListEditComponent loading the trust list', () => {
       [...page.querySelectorAll('a[href^="/keys/create"]')].map((link) =>
         link.getAttribute('href')
       );
-    expect(createLinks()).toEqual(['/keys/create?usage=attestation']);
+    expect(createLinks()).toEqual([
+      '/keys/create?usage=attestation',
+      '/keys/create?usage=statusList',
+    ]);
     const header = () => page.querySelector('mat-panel-description')?.textContent?.trim();
     // The stored issuer key chain is not among the loaded ones.
     await vi.waitFor(() => {
@@ -518,13 +522,13 @@ describe('TrustListEditComponent loading the trust list', () => {
     });
     expect(header()).toBe('Using system certificates');
 
-    // The credential signing key chain was created in the other tab; now a status list one is
-    // missing, so the same button stays to reload, with the focus on it.
-    answers.keyChains = { status: 200, body: [keyChains[0], keyChains[2]] };
+    // A status list key chain was created in the other tab; the issuer still has none, so the
+    // same button stays to reload, with the focus on it.
+    answers.keyChains = { status: 200, body: [keyChains[1], keyChains[2]] };
     reload.click();
     await vi.waitFor(() => expect(component.loadingKeyChains).toBe(false));
     harness.detectChanges();
-    expect(createLinks()).toEqual(['/keys/create?usage=statusList']);
+    expect(createLinks()).toEqual(['/keys/create?usage=attestation']);
     expect(buttons(page, 'Reload key chains')).toEqual([reload]);
     expect(document.activeElement).toBe(reload);
 
@@ -545,6 +549,129 @@ describe('TrustListEditComponent loading the trust list', () => {
       expect(selected(page, 'revocationKeyChainId')).toBe('status-keys');
     });
     expect(header()).toBe('Using system certificates');
+  });
+
+  /** Opens the select of this form control and reads its option groups and options. */
+  async function openOptions(harness: RouterTestingHarness, page: HTMLElement, control: string) {
+    page.querySelector<HTMLElement>(`mat-select[formcontrolname="${control}"]`)!.click();
+    let options: (string | undefined)[] = [];
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      options = [...document.querySelectorAll('mat-option')].map((option) =>
+        option.textContent?.trim()
+      );
+      expect(options.length).toBeGreaterThan(0);
+    });
+    const groups = [...document.querySelectorAll('mat-optgroup .mat-mdc-optgroup-label')].map(
+      (label) => label.textContent?.trim()
+    );
+    return { groups, options };
+  }
+
+  /** The stored list, whose internal entity uses its credential signing key chain for revocation. */
+  const revokedWithIssuerKeys = {
+    status: 200,
+    body: {
+      ...trustList,
+      entityConfig: [
+        { ...trustList.entityConfig[0], revocationKeyChainId: 'issuer-keys' },
+        trustList.entityConfig[1],
+      ],
+    },
+  };
+
+  it('offers credential signing key chains for revocation when no status list key chain exists', async () => {
+    answers.trustList = revokedWithIssuerKeys;
+    answers.keyChains = { status: 200, body: [keyChains[0], keyChains[2]] };
+    const { harness, component, page } = await render();
+
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(component.loadingKeyChains).toBe(false);
+      expect(selected(page, 'revocationKeyChainId')).toBe('Issuer keys (issuer-keys)');
+    });
+    // They sign the status lists then, so the select offers them and says why.
+    expect(
+      hints(
+        page,
+        'No status list key chains, so a credential signing key chain signs the status lists.'
+      )
+    ).toHaveLength(1);
+    expect(page.querySelector('mat-panel-description')?.textContent?.trim()).toBe(
+      'Using system certificates'
+    );
+    // The select is not empty, so nothing asks for a status list key chain.
+    expect(page.querySelector('a[href^="/keys/create"]')).toBeNull();
+    expect(buttons(page, 'Reload key chains')).toHaveLength(0);
+    // Only credential signing key chains, under their own heading; not the trust list key chain.
+    expect(await openOptions(harness, page, 'revocationKeyChainId')).toEqual({
+      groups: ['Credential signing key chains'],
+      options: ['Issuer keys (issuer-keys)'],
+    });
+  });
+
+  it('offers credential signing key chains after the status list ones, for pinned status lists', async () => {
+    answers.trustList = revokedWithIssuerKeys;
+    const { harness, component, page } = await render();
+
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(component.loadingKeyChains).toBe(false);
+      expect(selected(page, 'revocationKeyChainId')).toBe('Issuer keys (issuer-keys)');
+    });
+    // The backend accepts it, so no reason and no "check" in the header, but the hint says which
+    // status lists it signs.
+    const pinnedOnly =
+      'A credential signing key chain signs only the status lists pinned to it; the others are signed by a status list key chain.';
+    expect(hints(page, pinnedOnly)).toHaveLength(1);
+    expect(page.querySelector('mat-panel-description')?.textContent?.trim()).toBe(
+      'Using system certificates'
+    );
+
+    // Choosing a status list key chain drops the hint, and the credential signing key chain stays
+    // offered, so the choice can be undone.
+    component.entitiesArray.at(0).get('revocationKeyChainId')?.setValue('status-keys');
+    harness.detectChanges();
+    expect(hints(page, pinnedOnly)).toHaveLength(0);
+    expect(hints(page, 'Key chain used for status list signing')).toHaveLength(1);
+    // Status list key chains first, then the credential signing ones under their own heading.
+    expect(await openOptions(harness, page, 'revocationKeyChainId')).toEqual({
+      groups: [
+        'Status list key chains',
+        'Credential signing key chains (for status lists pinned to them)',
+      ],
+      options: ['status-keys', 'Issuer keys (issuer-keys)'],
+    });
+  });
+
+  it('says why a stored revocation key chain of another usage type is not offered', async () => {
+    answers.trustList = {
+      status: 200,
+      body: {
+        ...trustList,
+        entityConfig: [
+          { ...trustList.entityConfig[0], revocationKeyChainId: 'trust-list-signing' },
+          trustList.entityConfig[1],
+        ],
+      },
+    };
+    const { harness, page } = await render();
+
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(selected(page, 'revocationKeyChainId')).toBe(
+        'trust-list-signing (not a status list or credential signing key chain)'
+      );
+    });
+    expect(
+      hints(
+        page,
+        'This is not a status list or credential signing key chain; saving still puts its certificate in the trust list. Choose another.'
+      )
+    ).toHaveLength(1);
+    expect(page.querySelector('mat-panel-description')?.textContent?.trim()).toBe(
+      'Check the selected key chains'
+    );
   });
 
   it('says why a stored key chain is not among the loaded key chains', async () => {

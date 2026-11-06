@@ -196,7 +196,11 @@ describe('CredentialConfigShowComponent claim fields', () => {
     },
   ];
 
-  async function renderTab(label: RegExp, format = 'dc+sd-jwt'): Promise<HTMLElement> {
+  async function renderTab(
+    label: RegExp,
+    format = 'dc+sd-jwt',
+    display?: object[]
+  ): Promise<HTMLElement> {
     TestBed.configureTestingModule({
       imports: [CredentialConfigShowComponent],
       providers: [
@@ -212,7 +216,7 @@ describe('CredentialConfigShowComponent claim fields', () => {
     const fixture = TestBed.createComponent(CredentialConfigShowComponent);
     fixture.componentInstance.config = {
       id: 'pid',
-      config: { format },
+      config: { format, display },
       fields,
     } as unknown as CredentialConfig;
     fixture.detectChanges();
@@ -235,6 +239,33 @@ describe('CredentialConfigShowComponent claim fields', () => {
     );
     return row?.textContent ?? '';
   }
+
+  it('previews a display without description or colors as the wallet default', async () => {
+    const page = await renderTab(/Visual/, 'dc+sd-jwt', [{ name: 'PID', locale: 'en-US' }]);
+    expect(page.querySelector('.preview-name')?.textContent).toContain('PID');
+    expect(page.querySelector('.preview-description')).toBeNull();
+    expect(page.querySelector('.preview-note')?.textContent).toContain(
+      'Wallets use their own colors where none are set.'
+    );
+  });
+
+  it('previews what wallets receive of entries stored before the color and locale checks', async () => {
+    const page = await renderTab(/Visual/, 'dc+sd-jwt', [
+      { name: 'PID', locale: 'en-US', background_color: '#12107C', text_color: 'navy' },
+      { name: 'PID (copy)', locale: 'en-us' },
+      { name: 'PID', locale: 'de-DE' },
+    ]);
+    expect(page.querySelectorAll('.locale-chips mat-chip')).toHaveLength(2);
+    expect(page.textContent).toContain('Wallets do not receive some stored colors');
+  });
+
+  it('shows no default-color note when both colors are set', async () => {
+    const page = await renderTab(/Visual/, 'dc+sd-jwt', [
+      { name: 'PID', locale: 'en-US', background_color: '#12107C', text_color: '#FFFFFF' },
+    ]);
+    expect(page.querySelector('.preview-name')).not.toBeNull();
+    expect(page.querySelector('.preview-note')).toBeNull();
+  });
 
   it('shows type, default value and constraints of every field, nested children included', async () => {
     const page = await renderTab(/Visual/);

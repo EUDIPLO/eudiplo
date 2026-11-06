@@ -35,6 +35,12 @@
     <app-load-error [message]="loadError" (retry)="load()">
       <a mat-button routerLink="/federation-trust-anchor">Back to the list</a>
     </app-load-error>
+  } @else if (registeredForForm) {
+    <app-return-to-form
+      [heading]="registeredForForm.heading"
+      [link]="['/federation-trust-anchor', registeredForForm.id]"
+      linkLabel="Open trust anchor"
+    />
   } @else {
     <form
       #formElement

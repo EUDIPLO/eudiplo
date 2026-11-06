@@ -69,6 +69,11 @@ import { schemaFormValidator } from '../../../utils/schema-form-validator';
 import { claimSchemaError, unsupportedConstraintsError } from '../../../utils/claim-schema-check';
 import { LabelledFailure, getApiErrorMessage } from '../../../utils/error-message';
 import { hostedVctUrl } from '../../../utils/public-url';
+import {
+  displayColorValidator,
+  uniqueDisplayLocaleValidator,
+} from '../../../utils/display-entries';
+import { ErrorStateMatcher } from '@angular/material/core';
 import { FrontendConfigService } from '../../../services/frontend-config.service';
 import { JwtService } from '../../../services/jwt.service';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
@@ -342,7 +347,7 @@ export class CredentialConfigCreateComponent implements OnInit {
   ) {
     this.form = new FormGroup({
       id: new FormControl('', [Validators.required]),
-      description: new FormControl('', Validators.required),
+      description: new FormControl(''),
       format: new FormControl('dc+sd-jwt', [Validators.required]),
       keyChainId: new FormControl(''),
       scope: new FormControl(''),
@@ -409,6 +414,9 @@ export class CredentialConfigCreateComponent implements OnInit {
     this.form
       .get('activeCredentialsEnabled')
       ?.valueChanges.subscribe(() => this.syncStatusManagementWithActiveCredentials());
+
+    // A locale is checked against the other entries, which do not revalidate on their own.
+    this.displayConfigs.valueChanges.subscribe(() => this.revalidateDisplayLocales());
 
     if (this.route.snapshot.params['id']) {
       this.create = false;
@@ -912,13 +920,18 @@ export class CredentialConfigCreateComponent implements OnInit {
   }
 
   // Display Configuration Management
+  /**
+   * Description and colors are optional, as in the API: an empty color lets the wallet use
+   * its own default, so neither new nor loaded entries get a color the user did not set.
+   * Colors and locales follow the API's rules (OID4VCI 1.0 Section 12.2.4).
+   */
   createDisplayConfigGroup(): FormGroup {
     return new FormGroup({
       name: new FormControl('', [Validators.required]),
-      description: new FormControl('', [Validators.required]),
-      locale: new FormControl('en-US', [Validators.required]),
-      background_color: new FormControl('#FFFFFF'),
-      text_color: new FormControl('#000000'),
+      description: new FormControl(''),
+      locale: new FormControl('en-US', [Validators.required, uniqueDisplayLocaleValidator]),
+      background_color: new FormControl('', displayColorValidator),
+      text_color: new FormControl('', displayColorValidator),
       // Handle both nested (from API/JSON) and flattened (from form) formats
       background_image: new FormGroup({
         uri: new FormControl(''),
@@ -934,8 +947,26 @@ export class CredentialConfigCreateComponent implements OnInit {
   }
 
   /**
+   * A repeated locale comes from another entry's change, so its error shows without the user
+   * touching this entry's select first.
+   */
+  readonly localeErrorState: ErrorStateMatcher = {
+    isErrorState: (control, form) =>
+      !!control?.invalid &&
+      (control.touched || control.hasError('duplicateLocale') || !!form?.submitted),
+  };
+
+  private revalidateDisplayLocales(): void {
+    for (const entry of this.displayConfigs.controls) {
+      entry.get('locale')?.updateValueAndValidity({ emitEvent: false });
+    }
+  }
+
+  /**
    * Replaces the display entries with one group per loaded display. `patchValue` on the
-   * FormArray would only fill the groups that already exist and drop the rest.
+   * FormArray would only fill the groups that already exist and drop the rest. A loaded entry
+   * the API would now refuse (a color or locale stored before these checks) starts expanded
+   * with its errors shown, so it is not hidden in the panel.
    */
   private setDisplayConfigs(displays: CredentialConfigCreate['config']['display']): void {
     this.displayConfigs.clear();
@@ -945,10 +976,64 @@ export class CredentialConfigCreateComponent implements OnInit {
       group.patchValue(display ?? {});
       this.displayConfigs.push(group);
     }
+    if (displays.length === 0) return;
+    for (const group of this.displayConfigs.controls) {
+      if (group.invalid) {
+        this.expandedAppearance.add(group);
+        group.markAllAsTouched();
+      }
+    }
   }
 
+  /** The first listed locale no display entry uses yet; Add is disabled without one. */
+  get unusedDisplayLocale(): string | undefined {
+    const used = new Set(
+      this.displayConfigs.controls.map((entry) =>
+        String(entry.get('locale')?.value ?? '').toLowerCase()
+      )
+    );
+    return this.localeOptions.find((option) => !used.has(option.value.toLowerCase()))?.value;
+  }
+
+  /** Adds an entry for the first listed locale no entry uses yet. */
   addDisplayConfig(): void {
-    this.displayConfigs.push(this.createDisplayConfigGroup());
+    const locale = this.unusedDisplayLocale;
+    if (!locale) return;
+    const group = this.createDisplayConfigGroup();
+    group.get('locale')?.setValue(locale);
+    this.displayConfigs.push(group);
+  }
+
+  /**
+   * The listed locales, plus a loaded one that is not in the list so the select shows it.
+   * Locales other entries use are disabled; a repeated locale then only comes from a loaded
+   * configuration.
+   */
+  displayLocaleOptions(
+    entry: AbstractControl
+  ): { value: string; label: string; disabled: boolean }[] {
+    const locale = entry.get('locale')?.value;
+    const usedElsewhere = new Set(
+      this.displayConfigs.controls
+        .filter((other) => other !== entry)
+        .map((other) => String(other.get('locale')?.value ?? '').toLowerCase())
+    );
+    const options =
+      typeof locale === 'string' &&
+      locale !== '' &&
+      !this.localeOptions.some((option) => option.value === locale)
+        ? [...this.localeOptions, { value: locale, label: locale }]
+        : this.localeOptions;
+    return options.map((option) => ({
+      ...option,
+      disabled: option.value !== locale && usedElsewhere.has(option.value.toLowerCase()),
+    }));
+  }
+
+  /** The color the swatch previews: none while the field is empty or refused. */
+  swatchColor(control: AbstractControl | null): string | null {
+    const color = typeof control?.value === 'string' ? control.value.trim() : '';
+    return color && control?.valid ? color : null;
   }
 
   removeDisplayConfig(index: number): void {
@@ -1310,6 +1395,8 @@ export class CredentialConfigCreateComponent implements OnInit {
     );
 
     formValue.fields = this.buildFieldsPayload(formValue.fields || []);
+    // Optional, as in the API; null clears a description on update.
+    formValue.description = formValue.description?.trim() || null;
 
     // Omit empty optional strings so they remain valid against the config schema.
     if (!formValue.keyChainId?.trim()) {
@@ -1401,13 +1488,26 @@ export class CredentialConfigCreateComponent implements OnInit {
     return mode === 'extract' ? extractSchema(value) : parsed;
   }
 
-  /** Drops display images without a URI: the API requires `uri` when an image is set. */
+  /**
+   * Trims the optional description and colors and leaves out what is empty: an empty description or color is not sent (the wallet then uses its own
+   * default), and an image needs a `uri` in the API.
+   */
   private buildDisplayPayload(displays: any[] | undefined): any[] {
-    return (displays ?? []).map(({ background_image, logo, ...display }: any) => ({
-      ...display,
-      ...(background_image?.uri ? { background_image } : {}),
-      ...(logo?.uri ? { logo } : {}),
-    }));
+    return (displays ?? []).map(({ background_image, logo, ...display }: any) => {
+      for (const key of ['description', 'background_color', 'text_color']) {
+        const value = display[key]?.trim();
+        if (value) {
+          display[key] = value;
+        } else {
+          delete display[key];
+        }
+      }
+      return {
+        ...display,
+        ...(background_image?.uri ? { background_image } : {}),
+        ...(logo?.uri ? { logo } : {}),
+      };
+    });
   }
 
   private buildFieldsPayload(rawFields: any[]): ClaimFieldDefinitionDto[] {

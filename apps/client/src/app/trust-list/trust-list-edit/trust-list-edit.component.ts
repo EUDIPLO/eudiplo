@@ -80,13 +80,16 @@ interface ExternalEntityForm extends EntityInfoForm {
   revocationCertPem: FormControl<string>;
 }
 
-/** The usage types the key chain selects of this page list. */
+/**
+ * The key chain selects of this page, by the usage type they are for: an entity's issuer
+ * (`attestation`) and revocation (`statusList`) key chain, and the trust list's own (`trustList`).
+ */
 type TrustListKeyChainUsage = 'attestation' | 'statusList' | 'trustList';
 
-/** How hints and options name a usage type, in the words of Key Management. */
+/** How hints and options name the key chains a select accepts, in the words of Key Management. */
 const KEY_CHAIN_USAGE_NAMES: Record<TrustListKeyChainUsage, string> = {
   attestation: 'credential signing',
-  statusList: 'status list',
+  statusList: 'status list or credential signing',
   trustList: 'trust list',
 };
 
@@ -136,6 +139,15 @@ export class TrustListEditComponent implements OnInit {
   attestationKeyChains: KeyChainResponseDto[] = [];
   statusListKeyChains: KeyChainResponseDto[] = [];
   trustListKeyChains: KeyChainResponseDto[] = [];
+  /**
+   * The option groups of the Revocation Key Chain select. The backend accepts a status list key
+   * chain there, or a credential signing one, which signs the status lists that are pinned to it,
+   * and all of them when the tenant has no status list key chain. Status list key chains come
+   * first, so the usual choice stays the first one.
+   */
+  revocationGroups: { label: string; keyChains: KeyChainResponseDto[] }[] = [];
+  /** The key chains of `revocationGroups`, in their order. */
+  private revocationKeyChains: KeyChainResponseDto[] = [];
   /** While the key chains are requested, so a second Retry does not send it again. */
   loadingKeyChains = false;
   /** Set when the key chains could not be loaded; the key chain selects say so and offer a retry. */
@@ -229,6 +241,16 @@ export class TrustListEditComponent implements OnInit {
       this.trustListKeyChains = this.availableKeyChains.filter(
         (kc) => kc.usageType === 'trustList'
       );
+      this.revocationGroups = [
+        { label: 'Status list key chains', keyChains: this.statusListKeyChains },
+        {
+          label: this.statusListKeyChains.length
+            ? 'Credential signing key chains (for status lists pinned to them)'
+            : 'Credential signing key chains',
+          keyChains: this.attestationKeyChains,
+        },
+      ].filter((group) => group.keyChains.length > 0);
+      this.revocationKeyChains = this.revocationGroups.flatMap((group) => group.keyChains);
       this.keyChainsLoadError = '';
       this.keyChainsLoaded = true;
     } catch (error) {
@@ -270,13 +292,18 @@ export class TrustListEditComponent implements OnInit {
     void this.retryKeyChains(fields);
   }
 
+  /** How an option names a key chain. */
+  keyChainLabel(keyChain: KeyChainResponseDto): string {
+    return keyChain.description ? `${keyChain.description} (${keyChain.id})` : keyChain.id;
+  }
+
   /** The key chains a select for `usage` offers. */
   private keyChainsOf(usage: TrustListKeyChainUsage): KeyChainResponseDto[] {
     switch (usage) {
       case 'attestation':
         return this.attestationKeyChains;
       case 'statusList':
-        return this.statusListKeyChains;
+        return this.revocationKeyChains;
       case 'trustList':
         return this.trustListKeyChains;
     }
@@ -284,8 +311,8 @@ export class TrustListEditComponent implements OnInit {
 
   /**
    * The selected key chain when it is not among the options for `usage`, so its select shows the
-   * stored ID instead of looking empty, and says why it is not listed while the key chains are
-   * known: it has another usage type, or it does not exist. Undefined when it is listed.
+   * stored ID instead of looking empty. While the key chains are known, its label says why it is
+   * not listed: another usage type, or it does not exist. Undefined when it is listed.
    */
   unlistedKeyChain(
     value: unknown,
@@ -325,7 +352,9 @@ export class TrustListEditComponent implements OnInit {
       case 'missing':
         return 'This key chain does not exist, so saving fails. Choose another.';
       case 'otherUsage':
-        // The backend checks the usage of the signing key chain, not of an entity's key chains.
+        // The backend refuses a signing key chain of another usage type. An entity's key chain of
+        // another usage type is accepted when the stored list already names it there, which is
+        // the only way the form holds one, since its selects offer only accepted usage types.
         return usage === 'trustList'
           ? 'This is not a trust list key chain, so saving fails. Choose another.'
           : `This is not a ${KEY_CHAIN_USAGE_NAMES[usage]} key chain; saving still puts its certificate in the trust list. Choose another.`;
@@ -334,12 +363,30 @@ export class TrustListEditComponent implements OnInit {
     }
   }
 
-  /** Whether an internal entity selects a key chain its select does not offer, as its header says. */
+  /**
+   * Whether an internal entity selects a key chain that is of another usage type or does not
+   * exist, as its header says, since its panel may be collapsed.
+   */
   entityKeyChainsToCheck(entity: AbstractControl): boolean {
     return (
       this.unlistedReason(entity.get('issuerKeyChainId')?.value, 'attestation') !== undefined ||
       this.unlistedReason(entity.get('revocationKeyChainId')?.value, 'statusList') !== undefined
     );
+  }
+
+  /**
+   * For the revocation select holding `value`: when a credential signing key chain signs the
+   * status lists, as the select offers them too; '' when it holds none or the key chains are not
+   * known.
+   */
+  private credentialSigningRevocationHint(value: unknown): string {
+    if (!this.keyChainsKnown || !this.attestationKeyChains.length) return '';
+    if (!this.statusListKeyChains.length) {
+      return 'No status list key chains, so a credential signing key chain signs the status lists.';
+    }
+    return this.attestationKeyChains.some((keyChain) => keyChain.id === value)
+      ? 'A credential signing key chain signs only the status lists pinned to it; the others are signed by a status list key chain.'
+      : '';
   }
 
   /** Whether the key chains are known and none of them has `usage`. */
@@ -363,8 +410,9 @@ export class TrustListEditComponent implements OnInit {
 
   /**
    * The hint of the key chain select for `usage` holding `value`: `hint`, unless the key chains
-   * are loading or failed to load, the select does not offer `value`, or, for a required select,
-   * no key chain has that usage.
+   * are loading or failed to load, the select does not offer `value`, for a required select no
+   * key chain has that usage, or a credential signing key chain may sign the revocation's status
+   * lists.
    */
   keyChainHint(hint: string, value: unknown, usage: TrustListKeyChainUsage): string {
     if (this.loadingKeyChains) return 'Loading key chains…';
@@ -374,7 +422,9 @@ export class TrustListEditComponent implements OnInit {
     // The signing key chain select may stay empty (an update keeps the stored key chain, a create
     // looks one up), so only the entities' selects say that none has their usage.
     if (usage !== 'trustList' && this.noKeyChains(usage)) return this.noKeyChainsMessage(usage);
-    return hint;
+    const credentialSigning =
+      usage === 'statusList' ? this.credentialSigningRevocationHint(value) : '';
+    return credentialSigning || hint;
   }
 
   /** Under an empty required key chain select of `usage`, which replaces its hint: why it may be empty. */

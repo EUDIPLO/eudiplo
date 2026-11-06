@@ -47,6 +47,8 @@ import { asSentence, getApiErrorMessage, getHttpErrorMessage } from '../../utils
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { JwtService } from '../../services/jwt.service';
 import { focusIfFocusWasLost } from '../../common/focus-if-lost.util';
+import { type CreatedForForm, openedFromForm } from '../../common/return-to-form';
+import { ReturnToFormComponent } from '../../common/return-to-form.component';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
 
 export type KeyUsageSelection =
@@ -101,6 +103,7 @@ function requiredText(control: AbstractControl): ValidationErrors | null {
     MatTooltipModule,
     FlexLayoutModule,
     ReactiveFormsModule,
+    ReturnToFormComponent,
     RouterModule,
   ],
   templateUrl: './key-create-wizard.component.html',
@@ -148,6 +151,10 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   /** Why the registrar configuration could not be read; null when it was read or is missing. */
   registrarConfigError: string | null = null;
   enrollmentError: EnrollmentError | null = null;
+  /** Set when a form in another tab opened the wizard to get the key chain it misses. */
+  openedFromForm = false;
+  /** The key chain created for that form; the wizard then says to return to the form's tab. */
+  createdForForm: CreatedForForm | null = null;
   availableKmsProviders: KmsProviderInfoDto[] = [];
   defaultKmsProvider = 'db';
 
@@ -368,6 +375,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
     if (this.usageOptions.some((option) => option.value === requestedUsage)) {
       this.usageForm.get('usage')!.setValue(requestedUsage);
     }
+    this.openedFromForm = openedFromForm(this.route.snapshot.queryParamMap);
     // Pre-check registrar config so we can show status quickly
     // checkRegistrarConfig handles its own errors.
     if (this.canUseRegistrar) void this.checkRegistrarConfig();
@@ -692,20 +700,25 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
 
       const result = await this.keyChainService.create(createDto);
 
-      // Show success message with next steps
+      // The key cannot sign before its certificate is stored, which its page requests.
       if (this.requestsCertificate) {
         this.snackBar.open(
-          'Key created. Create its CSR on this page and store the certificate your CA issues.',
+          this.openedFromForm
+            ? 'Key created. Create its CSR on this page and store the certificate your CA issues, then return to the tab with your form.'
+            : 'Key created. Create its CSR on this page and store the certificate your CA issues.',
           'Close',
-          { duration: 8000 }
+          { duration: this.openedFromForm ? 12000 : 8000 }
         );
+        this.router.navigate(['/keys', result.id], {
+          queryParams: { certificate: 'request' },
+        });
+      } else if (this.openedFromForm) {
+        this.returnToForm(result.id, `Key chain "${createDto.description}" created`);
       } else {
+        // Show success message with next steps
         this.showSuccessMessage(usage);
+        this.router.navigate(['/keys', result.id]);
       }
-      this.router.navigate(
-        ['/keys', result.id],
-        this.requestsCertificate ? { queryParams: { certificate: 'request' } } : undefined
-      );
     } catch (error) {
       console.error('Error creating key chain:', error);
       const fallback = this.importsExternalKey
@@ -731,6 +744,10 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       rotationPolicy: this.isExternalCaChain ? this.rotationPolicy() : undefined,
     };
     const result = await this.keyChainService.import(importDto);
+    if (this.openedFromForm) {
+      this.returnToForm(result.id, `Key chain "${importDto.description}" imported`);
+      return;
+    }
     this.snackBar.open(
       this.isExternalCaChain
         ? 'CA imported and signing key created.'
@@ -762,14 +779,19 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
    */
   private async enrollWithRegistrar(description?: string): Promise<void> {
     let keyId: string;
+    const keyDescription = description || this.getDefaultDescription();
     try {
       ({ certId: keyId } = await this.registrarService.createAccessKeyChain({
-        description: description || this.getDefaultDescription(),
+        description: keyDescription,
         kmsProvider: this.configForm.value.kmsProvider || this.defaultKmsProvider || 'db',
       }));
     } catch (error) {
       console.error('Error enrolling certificate:', error);
       this.showEnrollmentError(this.enrollmentErrorFor(error));
+      return;
+    }
+    if (this.openedFromForm) {
+      this.returnToForm(keyId, `Key chain "${keyDescription}" created and enrolled`);
       return;
     }
     this.snackBar
@@ -830,6 +852,20 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
     } else {
       this.enrollmentError = enrollmentError;
     }
+  }
+
+  /**
+   * Shows the new key chain in place of the wizard and says to return to the
+   * form that opened it, without offering pages that would take this tab away.
+   * A user who left the wizard meanwhile gets the outcome in a snackbar and
+   * stays where they are.
+   */
+  private returnToForm(id: string, heading: string): void {
+    if (this.destroyed) {
+      this.snackBar.open(`${heading}.`, 'Close', { duration: 5000 });
+      return;
+    }
+    this.createdForForm = { id, heading };
   }
 
   private showSuccessMessage(usage: KeyUsageSelection): void {
