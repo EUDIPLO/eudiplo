@@ -65,6 +65,7 @@ import { schemaFormValidator } from '../../../utils/schema-form-validator';
 import { getApiErrorMessage } from '../../../utils/error-message';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../../common/load-error.component';
+import { jsonViewUnavailableReason } from '../../../common/json-view';
 
 @Component({
   selector: 'app-presentation-create',
@@ -681,10 +682,20 @@ export class PresentationCreateComponent implements OnInit {
     }
   }
 
+  /** Why JSON View cannot be opened right now, or '' when it can; its tooltip. */
+  get jsonViewUnavailableReason(): string {
+    return jsonViewUnavailableReason(
+      { loading: this.loadingConfig, loadError: this.loadError, saving: this.saving },
+      'the presentation configuration'
+    );
+  }
+
   /**
    * Show/Edit the entire presentation config as JSON
    */
   viewAsJson(): void {
+    // The button stays clickable while it cannot be used (disabledInteractive).
+    if (this.jsonViewUnavailableReason) return;
     const currentConfig = this.getCompleteConfiguration();
     const dialogRef = this.dialog.open(JsonViewDialogComponent, {
       data: {

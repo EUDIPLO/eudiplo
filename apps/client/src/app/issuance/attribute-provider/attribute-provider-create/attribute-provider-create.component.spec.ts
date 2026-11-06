@@ -1,3 +1,4 @@
+import { EMPTY } from 'rxjs';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AttributeProviderCreateComponent } from './attribute-provider-create.component';
@@ -113,5 +114,72 @@ describe('AttributeProviderCreateComponent save', () => {
 
     expect(component.loadError).toBe('Failed to load attribute provider: Not found');
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe('AttributeProviderCreateComponent JSON View', () => {
+  it('opens JSON View only with the loaded attribute provider and says why it waits', async () => {
+    const open = vi.fn(() => ({ afterClosed: () => EMPTY }));
+    const getById = vi
+      .fn()
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' })
+      .mockResolvedValue({ id: 'example', name: 'Example', url: 'https://a' });
+    const component = new AttributeProviderCreateComponent(
+      { getById } as never,
+      { navigate: vi.fn() } as never,
+      { snapshot: { paramMap: { get: () => 'example' } } } as never,
+      { open: vi.fn() } as never,
+      { open } as never
+    );
+
+    component.ngOnInit();
+    expect(component.jsonViewUnavailableReason).toBe(
+      'Wait until the attribute provider has loaded'
+    );
+    // The button stays clickable while it cannot be used, so the handler checks again.
+    component.viewAsJson();
+    await vi.waitFor(() => expect(component.loading).toBe(false));
+    expect(component.jsonViewUnavailableReason).toBe(
+      'Retry loading the attribute provider before opening JSON View'
+    );
+    component.viewAsJson();
+    expect(open).not.toHaveBeenCalled();
+
+    component.retryLoad();
+    await vi.waitFor(() => expect(component.loading).toBe(false));
+    expect(component.jsonViewUnavailableReason).toBe('');
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
+  });
+
+  it('opens JSON View right away when creating an attribute provider, but not while it saves', async () => {
+    const open = vi.fn(() => ({ afterClosed: () => EMPTY }));
+    let rejectSave!: (error: unknown) => void;
+    const create = vi.fn(() => new Promise((_, reject) => (rejectSave = reject)));
+    const component = new AttributeProviderCreateComponent(
+      { create } as never,
+      { navigate: vi.fn() } as never,
+      { snapshot: { paramMap: { get: () => null } } } as never,
+      { open: vi.fn() } as never,
+      { open } as never
+    );
+
+    component.ngOnInit();
+    expect(component.loading).toBe(false);
+    expect(component.jsonViewUnavailableReason).toBe('');
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
+
+    // A successful save leaves the screen, so the dialog would stay open over the next one.
+    component.form.patchValue({ id: 'example', name: 'Example', url: 'https://a' });
+    component.onSubmit();
+    expect(component.jsonViewUnavailableReason).toBe(
+      'Wait until the attribute provider has been saved'
+    );
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
+    rejectSave({ statusCode: 500, message: 'Unavailable' });
+    await vi.waitFor(() => expect(component.saving).toBe(false));
+    expect(component.jsonViewUnavailableReason).toBe('');
   });
 });

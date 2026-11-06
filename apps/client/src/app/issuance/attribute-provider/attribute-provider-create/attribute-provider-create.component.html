@@ -11,9 +11,11 @@
     <div fxLayout="row" fxLayoutGap="8px">
       <button
         mat-stroked-button
+        type="button"
         (click)="viewAsJson()"
-        matTooltip="View/Edit as JSON"
-        [disabled]="loading || !!loadError"
+        [disabled]="!!jsonViewUnavailableReason"
+        disabledInteractive
+        [matTooltip]="jsonViewUnavailableReason || 'View/Edit as JSON'"
       >
         <mat-icon>code</mat-icon>
         JSON View

@@ -1,3 +1,4 @@
+import { EMPTY } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClaimFieldDefinitionDto } from '@eudiplo/sdk-core';
 import { CredentialConfigCreateComponent } from './credential-config-create.component';
@@ -584,5 +585,78 @@ describe('CredentialConfigCreateComponent editing', () => {
     expect(component.loadError).toBe('Failed to load credential configuration: Forbidden resource');
     component.onSubmit();
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe('CredentialConfigCreateComponent JSON View', () => {
+  function editor(params: Record<string, string>, service: Record<string, unknown>) {
+    const open = vi.fn(() => ({ afterClosed: () => EMPTY }));
+    const component = new CredentialConfigCreateComponent(
+      service as any,
+      { navigate: vi.fn() } as any,
+      { snapshot: { params } } as any,
+      { open: vi.fn() } as any,
+      { open } as any,
+      { loadConfigurations: vi.fn().mockResolvedValue([]) } as any,
+      { getConfig: vi.fn().mockResolvedValue(null) } as any,
+      { getTenantId: () => 'tenant' } as any,
+      { get: () => ({ destroyed: true }) } as any
+    );
+    return { component, open };
+  }
+
+  it('opens only with the loaded configuration and says why it waits', async () => {
+    const getConfig = vi
+      .fn()
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' })
+      .mockResolvedValue({ id: 'pid', description: 'PID', vct: 'urn:pid' });
+    const { component, open } = editor({ id: 'pid' }, { getConfig });
+
+    component.loadConfigForEdit();
+    expect(component.jsonViewUnavailableReason).toBe(
+      'Wait until the credential configuration has loaded'
+    );
+    // The button stays clickable while it cannot be used, so the handler checks again.
+    component.viewAsJson();
+    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+    expect(component.jsonViewUnavailableReason).toBe(
+      'Retry loading the credential configuration before opening JSON View'
+    );
+    component.viewAsJson();
+    expect(open).not.toHaveBeenCalled();
+
+    component.loadConfigForEdit();
+    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+    expect(component.jsonViewUnavailableReason).toBe('');
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
+  });
+
+  it('opens right away when creating a configuration, but not while it saves', async () => {
+    let rejectSave!: (error: unknown) => void;
+    const saveConfiguration = vi.fn(() => new Promise((_, reject) => (rejectSave = reject)));
+    const getConfig = vi.fn();
+    const { component, open } = editor({}, { getConfig, saveConfiguration });
+
+    component.ngOnInit();
+    expect(getConfig).not.toHaveBeenCalled();
+    expect(component.loadingConfig).toBe(false);
+    expect(component.jsonViewUnavailableReason).toBe('');
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
+
+    // A successful save leaves the screen, so the dialog would stay open over the next one.
+    component.form.patchValue({ id: 'member', description: 'Membership', vctString: 'urn:member' });
+    component.displayConfigs.at(0).patchValue({ name: 'Membership', description: 'Member card' });
+    for (let i = 0; i < 5; i++) component.submitCredential();
+    expect(saveConfiguration).toHaveBeenCalledOnce();
+    expect(component.jsonViewUnavailableReason).toBe(
+      'Wait until the credential configuration has been saved'
+    );
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
+    rejectSave({ statusCode: 500, message: 'Unavailable' });
+    await vi.waitFor(() => expect(component.loading).toBe(false));
+    expect(component.jsonViewUnavailableReason).toBe('');
   });
 });
