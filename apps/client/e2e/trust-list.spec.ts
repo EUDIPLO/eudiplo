@@ -246,7 +246,9 @@ test.describe('edit page', () => {
     );
     await expect(noIssuer).toBeVisible();
     await expect(
-      page.getByText('No status list key chains. Create one in Key Management.')
+      page.getByText(
+        'No status list or credential signing key chains. Create one in Key Management.'
+      )
     ).toBeVisible();
     // A new tab, so the form keeps what was entered.
     const createIssuer = page.getByRole('link', {
@@ -276,5 +278,47 @@ test.describe('edit page', () => {
     await expect(issuer).toBeFocused();
     await issuer.click();
     await expect(page.getByRole('option', { name: /^Own issuer/ })).toBeVisible();
+  });
+
+  test('without status list key chains, the credential signing key chain also signs revocation', async ({
+    page,
+  }) => {
+    const token = await signInWithTrustList(page);
+    const keyChainId = await createKeyChain(token, 'attestation', 'Own issuer');
+    await page.goto(`/trust-list/${id}/edit`);
+    await page.getByRole('button', { name: 'Add Internal Entity' }).click();
+    const entity = page.getByRole('region', { name: /Internal Entity #2/ });
+
+    await entity.getByRole('combobox', { name: /^Issuer Key Chain/ }).click();
+    await page.getByRole('option', { name: /^Own issuer/ }).click();
+    // A click while the panel still closes would reopen it or hit its backdrop.
+    await expect(page.getByRole('listbox')).toBeHidden();
+    await expect(
+      entity.getByText(
+        'No status list key chains, so a credential signing key chain signs the status lists.'
+      )
+    ).toBeVisible();
+    await entity.getByRole('combobox', { name: /^Revocation Key Chain/ }).click();
+    await expect(page.getByRole('group', { name: 'Credential signing key chains' })).toBeVisible();
+    await page.getByRole('option', { name: /^Own issuer/ }).click();
+    await entity.getByRole('textbox', { name: 'Entity Name' }).fill('Own Issuer');
+
+    const save = page.getByRole('button', { name: 'Save Changes' });
+    await expect(save).not.toHaveAttribute('aria-busy', 'true');
+    await save.click();
+    await expect(page).toHaveURL(/\/trust-list$/);
+
+    // The backend accepted it for revocation, and the stored list names it there.
+    const stored = await fetch(`${resolvedE2EConfig.apiBaseUrl}/api/trust-list/${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(stored.ok).toBe(true);
+    const { entityConfig } = (await stored.json()) as {
+      entityConfig: { type: string; issuerKeyChainId?: string; revocationKeyChainId?: string }[];
+    };
+    expect(entityConfig.find((entry) => entry.type === 'internal')).toMatchObject({
+      issuerKeyChainId: keyChainId,
+      revocationKeyChainId: keyChainId,
+    });
   });
 });

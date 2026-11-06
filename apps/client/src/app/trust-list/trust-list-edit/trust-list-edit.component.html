@@ -83,11 +83,7 @@
                 }
                 @for (keyChain of trustListKeyChains; track keyChain.id) {
                   <mat-option [value]="keyChain.id">
-                    {{
-                      keyChain.description
-                        ? keyChain.description + ' (' + keyChain.id + ')'
-                        : keyChain.id
-                    }}
+                    {{ keyChainLabel(keyChain) }}
                   </mat-option>
                 }
               </mat-select>
@@ -223,11 +219,7 @@
                           }
                           @for (keyChain of attestationKeyChains; track keyChain.id) {
                             <mat-option [value]="keyChain.id">
-                              {{
-                                keyChain.description
-                                  ? keyChain.description + ' (' + keyChain.id + ')'
-                                  : keyChain.id
-                              }}
+                              {{ keyChainLabel(keyChain) }}
                             </mat-option>
                           }
                         </mat-select>
@@ -259,14 +251,14 @@
                           ) {
                             <mat-option [value]="unlisted.id">{{ unlisted.label }}</mat-option>
                           }
-                          @for (keyChain of statusListKeyChains; track keyChain.id) {
-                            <mat-option [value]="keyChain.id">
-                              {{
-                                keyChain.description
-                                  ? keyChain.description + ' (' + keyChain.id + ')'
-                                  : keyChain.id
-                              }}
-                            </mat-option>
+                          @for (group of revocationGroups; track group.label) {
+                            <mat-optgroup [label]="group.label">
+                              @for (keyChain of group.keyChains; track keyChain.id) {
+                                <mat-option [value]="keyChain.id">{{
+                                  keyChainLabel(keyChain)
+                                }}</mat-option>
+                              }
+                            </mat-optgroup>
                           }
                         </mat-select>
                         <mat-icon matSuffix>gpp_maybe</mat-icon>
