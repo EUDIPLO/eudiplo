@@ -7,7 +7,9 @@ title: CLI
 The `eudiplo` command creates and runs Compose deployments, registers existing
 deployments, and checks any of them with `doctor`. This page shows how to install
 it and use it; every command and option is listed in the
-[CLI reference](../reference/cli.md).
+[CLI reference](../reference/cli.md). The
+[Manage an instance with the CLI](../cookbooks/manage-with-cli.md) cookbook
+walks through day-to-day work on a running instance.
 
 ## Install
 

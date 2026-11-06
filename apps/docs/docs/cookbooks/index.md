@@ -15,6 +15,7 @@ Each cookbook ends in a working result and has a checkpoint after every step. St
 | [Revocable credentials](revocable-credentials.md)            | You revoke or suspend one issued credential and the next presentation fails                            | `curl` and `jq`                                                                   | Issue and verify                   | 30 min     |
 | [Accept only trusted issuers](trusted-issuers.md)            | A credential from an issuer outside your trust list is rejected, and verification works with a list published by someone else | `curl` and `jq`                                                                   | Issue and verify                   | 25 min     |
 | [Production on one VM](production-vm.md)                     | EUDIPLO on a Linux server behind a TLS reverse proxy, with backups and a strict health check           | A VM with a DNS name, ports 80 and 443 open                                        | Nothing                            | 60 min     |
+| [Manage an instance with the CLI](manage-with-cli.md)        | A tenant kept as files in Git, validated in CI and applied on every start; edits in the Web Client are locked | Docker or Podman, `jq`, `openssl`, Git                                       | Install and connect, or nothing    | 30 min     |
 
 For a single task outside these recipes, go to the guides: [Issuance](../issuance/index.md), [Presentation](../presentation/index.md), [Trust](../trust/index.md) and [Operate](../operate/index.md). If a step fails, see [Troubleshooting](../troubleshooting.md).
 
@@ -33,6 +34,7 @@ All recipes use these values. Keep them unchanged so each recipe can reuse what 
 | `membership-check`         | Presentation configuration ID                                         |
 | `membership`               | Credential query ID inside the presentation request                   |
 | `cookbook`                 | CLI instance name of the local deployment                             |
+| `membership-files`         | Tenant ID of the tenant kept as files (CLI recipe)                    |
 
 The credential configuration ID names what EUDIPLO issues. The VCT is the credential type the wallet must match. The presentation configuration ID names the reusable verification request.
 
