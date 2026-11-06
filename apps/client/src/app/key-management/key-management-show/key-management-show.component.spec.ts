@@ -781,6 +781,57 @@ describe('KeyManagementShowComponent delete', () => {
 
     expect(keyChainService.delete).not.toHaveBeenCalled();
   });
+  it('keeps Delete key chain focusable and says why while it deletes', async () => {
+    keyChainService.delete.mockReturnValue(new Promise(() => undefined));
+    TestBed.configureTestingModule({
+      imports: [KeyManagementShowComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { paramMap: of(convertToParamMap({ id: 'signing' })) },
+        },
+        {
+          provide: KeyChainService,
+          useValue: {
+            ...keyChainService,
+            getById: async () => ({
+              ...keyChain,
+              type: 'standalone',
+              rotationPolicy: { enabled: false },
+            }),
+          },
+        },
+        {
+          provide: JwtService,
+          useValue: { hasRole: () => false, canUseConfigPortability: () => false },
+        },
+        { provide: MatSnackBar, useValue: snackBar },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+      ],
+    });
+    const fixture = TestBed.createComponent(KeyManagementShowComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.keyChain).toBeDefined());
+    fixture.detectChanges();
+    const remove = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[aria-label="Delete key chain"]'
+    )!;
+    // Clicks are held back until the ownership lookup of the managed resource has answered.
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(remove.getAttribute('aria-busy')).toBeNull();
+    });
+    expect(tooltipOf(fixture, remove)).toBe('Delete key chain');
+
+    remove.click();
+    fixture.detectChanges();
+    remove.click();
+    fixture.detectChanges();
+
+    expect(keyChainService.delete).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, remove, 'Deleting the key chain…');
+  });
 });
 
 describe('KeyManagementShowComponent default access key chain', () => {

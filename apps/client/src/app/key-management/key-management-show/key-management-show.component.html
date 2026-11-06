@@ -79,7 +79,7 @@
           [disabled]="deleting"
           disabledInteractive
           color="warn"
-          matTooltip="Delete key chain"
+          [matTooltip]="deleting ? 'Deleting the key chain…' : 'Delete key chain'"
           aria-label="Delete key chain"
           appConfigManaged
           managedKind="KeyChain"
