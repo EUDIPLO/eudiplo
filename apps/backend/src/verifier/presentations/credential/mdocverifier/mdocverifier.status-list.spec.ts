@@ -32,9 +32,16 @@ import { StatusListVerifierService } from "../../../../trust/status-list-verifie
 import { TrustFetchService } from "../../../../trust/trust-fetch.service.js";
 import { OutboundUrlPolicyService } from "../../../../webhook/outbound-url-policy.service.js";
 import { mdocContext } from "../../mdoc-context.js";
+import type { MdocTrustedCertificates } from "../credential-chain-validation.service.js";
 import { MdocverifierService } from "./mdocverifier.service.js";
 
 const docType = "eu.europa.ec.eudi.pid.1";
+
+/** A certificate and the private key it certifies, as JWK. */
+type SigningCertificate = {
+    jwk: Record<string, unknown>;
+    certificate: Uint8Array;
+};
 const namespace = "eu.europa.ec.eudi.pid.1";
 
 /** Words that read as "unavailable" when matched in an error message. */
@@ -152,10 +159,15 @@ describe("MdocverifierService status list fetch", () => {
         {
             statuses = [0, 0, 0, 0, 0, 0, 0, 0],
             unprotectedX5Chain = false,
-        }: { statuses?: number[]; unprotectedX5Chain?: boolean } = {},
+            signer = { jwk: issuerJwk, certificate: issuerCertificate },
+        }: {
+            statuses?: number[];
+            unprotectedX5Chain?: boolean;
+            signer?: SigningCertificate;
+        } = {},
     ): Promise<Uint8Array> {
         const now = Math.floor(Date.now() / 1000);
-        const x5chain: [number, unknown] = [33, [issuerCertificate]];
+        const x5chain: [number, unknown] = [33, [signer.certificate]];
         const cwt = new StatusListCwt({
             payload: {
                 subject: uri,
@@ -174,7 +186,7 @@ describe("MdocverifierService status list fetch", () => {
         });
         return cwt.signAndEncode(
             {
-                signingKey: CoseKey.fromJwk(issuerJwk),
+                signingKey: CoseKey.fromJwk(signer.jwk),
                 algorithm: SignatureAlgorithm.ES256,
             },
             { sign: mdocContext.cose.sign1.sign },
@@ -207,15 +219,24 @@ describe("MdocverifierService status list fetch", () => {
         );
     }
 
-    /** Self-signed mDOC presentation whose MSO carries `status`. */
-    async function presentation(status: StatusOptions) {
+    /**
+     * mDOC presentation whose MSO carries `status`, signed by the self-signed
+     * issuer certificate unless `signer` is given.
+     */
+    async function presentation(
+        status: StatusOptions,
+        signer: SigningCertificate = {
+            jwk: issuerJwk,
+            certificate: issuerCertificate,
+        },
+    ) {
         const issuer = new Issuer(docType, mdocContext);
         issuer.addIssuerNamespace(namespace, { given_name: "Erika" });
         const now = new Date();
         const validUntil = new Date(now.getTime() + 3_600_000);
         const issuerSigned = await issuer.sign({
-            signingKey: CoseKey.fromJwk(issuerJwk),
-            certificates: [issuerCertificate],
+            signingKey: CoseKey.fromJwk(signer.jwk),
+            certificates: [signer.certificate],
             algorithm: SignatureAlgorithm.ES256,
             digestAlgorithm: "SHA-256",
             deviceKeyInfo: { deviceKey: DeviceKey.fromJwk(deviceJwk) },
@@ -290,10 +311,14 @@ describe("MdocverifierService status list fetch", () => {
             ),
         } as never);
 
-    /** Verifier without a trust list, as in the fallback described above. */
+    /**
+     * Verifier without a trust list, as in the fallback described above, or
+     * with the trust anchor entries a trust list gives.
+     */
     const verifier = (
         outboundUrlPolicy: OutboundUrlPolicyService,
         publicUrl = "https://eudiplo.example",
+        trustedEntries: MdocTrustedCertificates[] = [],
     ) => {
         const logger = {
             setContext: vi.fn(),
@@ -302,11 +327,13 @@ describe("MdocverifierService status list fetch", () => {
             debug: vi.fn(),
         };
         const chainValidation = {
-            getTrustedCertificateBuffers: vi.fn().mockResolvedValue([]),
-            getTrustedStatusCertificateBuffers: vi.fn().mockResolvedValue([]),
+            getTrustedCertificateEntries: vi
+                .fn()
+                .mockResolvedValue(trustedEntries),
             validateChain: vi
                 .fn()
                 .mockResolvedValue({ verified: true, matchedEntity: null }),
+            discardedTrustListsDetail: vi.fn().mockResolvedValue(undefined),
         };
         const statusLists = new StatusListVerifierService(
             new TrustFetchService(outboundUrlPolicy, { publicUrl }),
@@ -322,8 +349,9 @@ describe("MdocverifierService status list fetch", () => {
         service: MdocverifierService,
         status: StatusOptions,
         failClosed = true,
+        signer?: SigningCertificate,
     ) => {
-        const { vp, sessionTranscript } = await presentation(status);
+        const { vp, sessionTranscript } = await presentation(status, signer);
         return service.verify(
             vp,
             { protocol: "iso-18013-7", sessionTranscript },
@@ -403,6 +431,182 @@ describe("MdocverifierService status list fetch", () => {
         expect(result.verified).toBe(false);
         expect(result.failureReason).toContain("unprotected header");
         expect(requests).toEqual(["/status/unprotected-x5chain"]);
+    });
+
+    /**
+     * With a trust list, @owf/mdoc checks the status list against the status
+     * anchors of the entry whose issuance anchor the credential chain ends
+     * at. Issuers here are listed as CAs, so that anchor is not the document
+     * signer.
+     */
+    describe("status list signer paired with the issuer", () => {
+        const keyAlgorithm = { name: "ECDSA", namedCurve: "P-256" };
+        const signingAlgorithm = { name: "ECDSA", hash: "SHA-256" };
+        let serial = 10;
+        type Issued = SigningCertificate & {
+            cert: x509.X509Certificate;
+            keys: CryptoKeyPair;
+        };
+
+        async function keyPair(): Promise<CryptoKeyPair> {
+            return (await crypto.subtle.generateKey(keyAlgorithm, true, [
+                "sign",
+                "verify",
+            ])) as CryptoKeyPair;
+        }
+
+        async function issued(
+            cert: x509.X509Certificate,
+            keys: CryptoKeyPair,
+        ): Promise<Issued> {
+            return {
+                cert,
+                keys,
+                certificate: new Uint8Array(cert.rawData),
+                jwk: (await exportJWK(keys.privateKey)) as Record<
+                    string,
+                    unknown
+                >,
+            };
+        }
+
+        async function ca(name: string): Promise<Issued> {
+            const keys = await keyPair();
+            const cert = await x509.X509CertificateGenerator.createSelfSigned({
+                serialNumber: String(serial++),
+                name: `C=DE, CN=${name}`,
+                notBefore: new Date(Date.now() - 60_000),
+                notAfter: new Date(Date.now() + 3_600_000),
+                signingAlgorithm,
+                keys,
+                extensions: [
+                    new x509.BasicConstraintsExtension(true, undefined, true),
+                ],
+            });
+            return issued(cert, keys);
+        }
+
+        async function issuedBy(parent: Issued, name: string): Promise<Issued> {
+            const keys = await keyPair();
+            const cert = await x509.X509CertificateGenerator.create({
+                serialNumber: String(serial++),
+                subject: `C=DE, CN=${name}`,
+                issuer: parent.cert.subject,
+                notBefore: new Date(Date.now() - 60_000),
+                notAfter: new Date(Date.now() + 3_600_000),
+                signingAlgorithm,
+                publicKey: keys.publicKey,
+                signingKey: parent.keys.privateKey,
+            });
+            return issued(cert, keys);
+        }
+
+        let documentSigner: Issued;
+        let issuerCa: Issued;
+        let revocationCa: Issued;
+        let otherCa: Issued;
+        let otherRevocationCa: Issued;
+        let entries: MdocTrustedCertificates[];
+
+        beforeAll(async () => {
+            issuerCa = await ca("PID Provider CA");
+            revocationCa = await ca("PID Provider Status CA");
+            otherCa = await ca("Other Provider CA");
+            otherRevocationCa = await ca("Other Provider Status CA");
+            documentSigner = await issuedBy(issuerCa, "PID Document Signer");
+            entries = [
+                {
+                    issuance: [issuerCa.certificate],
+                    status: [revocationCa.certificate],
+                },
+                {
+                    issuance: [otherCa.certificate],
+                    status: [otherRevocationCa.certificate],
+                },
+            ];
+
+            published.set("/status/paired", {
+                contentType: "application/statuslist+cwt",
+                token: await signStatusListCwt(`${loopbackIp}/status/paired`, {
+                    signer: await issuedBy(revocationCa, "PID Status Signer"),
+                }),
+            });
+            published.set("/status/other-issuer", {
+                contentType: "application/statuslist+cwt",
+                token: await signStatusListCwt(
+                    `${loopbackIp}/status/other-issuer`,
+                    {
+                        signer: await issuedBy(
+                            otherRevocationCa,
+                            "Other Status Signer",
+                        ),
+                    },
+                ),
+            });
+        });
+
+        it("accepts a status list signed under the issuer's revocation CA", async () => {
+            const result = await verify(
+                verifier(policy(), loopbackIp, entries),
+                statusListAt(`${loopbackIp}/status/paired`),
+                true,
+                documentSigner,
+            );
+
+            expect(result).toMatchObject({ verified: true });
+            expect(requests).toEqual(["/status/paired"]);
+        });
+
+        it("rejects a status list signed under another issuer's revocation CA", async () => {
+            const result = await verify(
+                verifier(policy(), loopbackIp, entries),
+                statusListAt(`${loopbackIp}/status/other-issuer`),
+                true,
+                documentSigner,
+            );
+
+            expect(result.verified).toBe(false);
+            expect(result.failureReason).toContain("No trusted certificate");
+            expect(requests).toEqual(["/status/other-issuer"]);
+        });
+
+        it("rejects another issuer's status list for a pinned document signer", async () => {
+            // The self-signed issuer certificate is listed itself, so the
+            // credential chain ends at the document signer.
+            const result = await verify(
+                verifier(policy(), loopbackIp, [
+                    {
+                        issuance: [issuerCertificate],
+                        status: [revocationCa.certificate],
+                    },
+                    {
+                        issuance: [otherCa.certificate],
+                        status: [otherRevocationCa.certificate],
+                    },
+                ]),
+                statusListAt(`${loopbackIp}/status/other-issuer`),
+            );
+
+            expect(result.verified).toBe(false);
+            expect(result.failureReason).toContain("No trusted certificate");
+        });
+
+        it("rejects every status list of an issuer without status signers", async () => {
+            // No fallback to the issuance anchor: the issuer CA could
+            // otherwise sign its own status lists.
+            const result = await verify(
+                verifier(policy(), loopbackIp, [
+                    { issuance: [issuerCa.certificate], status: [] },
+                ]),
+                statusListAt(`${loopbackIp}/status/paired`),
+                true,
+                documentSigner,
+            );
+
+            expect(result.verified).toBe(false);
+            expect(result.failureReason).toContain("Atleast one certificate");
+            expect(requests).toEqual([]);
+        });
     });
 
     describe("identifier lists", () => {

@@ -112,7 +112,7 @@ describe("CredentialChainValidationService — trust list availability", () => {
 
         // Non-authoritative anchor augmentation: returns [] rather than throwing.
         await expect(
-            service.getTrustedCertificateBuffers(LOTE_SOURCE),
+            service.getTrustedCertificateEntries(LOTE_SOURCE),
         ).resolves.toEqual([]);
     });
 });
@@ -133,6 +133,10 @@ describe("CredentialChainValidationService — status list signer", () => {
     const REVOCATION = "http://uri.etsi.org/19602/SvcType/EAA/Revocation";
     const PID_ISSUANCE = "http://uri.etsi.org/19602/SvcType/PID/Issuance";
     const PID_REVOCATION = "http://uri.etsi.org/19602/SvcType/PID/Revocation";
+    const WALLET_ISSUANCE =
+        "http://uri.etsi.org/19602/SvcType/WalletSolution/Issuance";
+    const WALLET_REVOCATION =
+        "http://uri.etsi.org/19602/SvcType/WalletSolution/Revocation";
     let serial = 1;
 
     type Cert = { cert: x509.X509Certificate; keys: CryptoKeyPair };
@@ -460,6 +464,222 @@ describe("CredentialChainValidationService — status list signer", () => {
                     LOTE_SOURCE,
                 ),
             ).resolves.toBe(false);
+        });
+    });
+
+    describe("entity that also lists a wallet solution", () => {
+        let pidCa: Cert;
+        let pidRevocationCa: Cert;
+        let walletCa: Cert;
+        let walletRevocationCa: Cert;
+        let service: CredentialChainValidationService;
+
+        beforeEach(async () => {
+            pidCa = await selfSigned("PID Provider CA", true);
+            pidRevocationCa = await selfSigned("PID Revocation CA", true);
+            walletCa = await selfSigned("Wallet Provider CA", true);
+            walletRevocationCa = await selfSigned("Wallet Revocation CA", true);
+            service = serviceWith([
+                {
+                    entityId: "pid-and-wallet-provider",
+                    services: [
+                        {
+                            serviceTypeIdentifier: WALLET_ISSUANCE,
+                            cert: walletCa,
+                        },
+                        {
+                            serviceTypeIdentifier: WALLET_REVOCATION,
+                            cert: walletRevocationCa,
+                        },
+                        { serviceTypeIdentifier: PID_ISSUANCE, cert: pidCa },
+                        {
+                            serviceTypeIdentifier: PID_REVOCATION,
+                            cert: pidRevocationCa,
+                        },
+                    ],
+                },
+            ]);
+        });
+
+        it("rejects a credential under its WalletSolution/Issuance certificate", async () => {
+            const result = await service.validateChain(
+                [b64(await issuedBy(walletCa, "Credential"))],
+                LOTE_SOURCE,
+            );
+
+            expect(result.verified).toBe(false);
+            expect(result.error).toBe("no_trusted_entity_match");
+        });
+
+        it("accepts a PID/Revocation signer for a PID credential, not a WalletSolution/Revocation signer", async () => {
+            const matched = await credentialMatch(service, [
+                b64(await issuedBy(pidCa, "PID")),
+            ]);
+            expect(matched?.issuanceServiceType).toBe(PID_ISSUANCE);
+
+            await expect(
+                service.verifyStatusListSignature(
+                    [b64(await issuedBy(pidRevocationCa, "Status List"))],
+                    matched,
+                    LOTE_SOURCE,
+                ),
+            ).resolves.toBe(true);
+            await expect(
+                service.verifyStatusListSignature(
+                    [b64(await issuedBy(walletRevocationCa, "Status List"))],
+                    matched,
+                    LOTE_SOURCE,
+                ),
+            ).resolves.toBe(false);
+        });
+
+        it("requires the issuance certificate when only another profile's revocation service is listed", async () => {
+            const onlyWalletRevocation = serviceWith([
+                {
+                    entityId: "pid-provider",
+                    services: [
+                        { serviceTypeIdentifier: PID_ISSUANCE, cert: pidCa },
+                        {
+                            serviceTypeIdentifier: WALLET_REVOCATION,
+                            cert: walletRevocationCa,
+                        },
+                    ],
+                },
+            ]);
+            const matched = await credentialMatch(onlyWalletRevocation, [
+                b64(await issuedBy(pidCa, "PID")),
+            ]);
+
+            await expect(
+                onlyWalletRevocation.verifyStatusListSignature(
+                    [b64(await issuedBy(walletRevocationCa, "Status List"))],
+                    matched,
+                    LOTE_SOURCE,
+                ),
+            ).resolves.toBe(false);
+            await expect(
+                onlyWalletRevocation.verifyStatusListSignature(
+                    [b64(await issuedBy(pidCa, "Status List"))],
+                    matched,
+                    LOTE_SOURCE,
+                ),
+            ).resolves.toBe(true);
+        });
+
+        it("gives the mdoc library one entry per credential issuer service with its paired status signers", async () => {
+            const eaaCa = await selfSigned("EAA Provider CA", true);
+            const withEaa = serviceWith([
+                {
+                    entityId: "pid-and-wallet-provider",
+                    services: [
+                        {
+                            serviceTypeIdentifier: WALLET_ISSUANCE,
+                            cert: walletCa,
+                        },
+                        {
+                            serviceTypeIdentifier: WALLET_REVOCATION,
+                            cert: walletRevocationCa,
+                        },
+                        { serviceTypeIdentifier: PID_ISSUANCE, cert: pidCa },
+                        {
+                            serviceTypeIdentifier: PID_REVOCATION,
+                            cert: pidRevocationCa,
+                        },
+                    ],
+                },
+                {
+                    entityId: "eaa-provider",
+                    services: [
+                        { serviceTypeIdentifier: ISSUANCE, cert: eaaCa },
+                    ],
+                },
+            ]);
+            const der = ({ cert }: Cert) => new Uint8Array(cert.rawData);
+
+            await expect(
+                withEaa.getTrustedCertificateEntries(LOTE_SOURCE),
+            ).resolves.toEqual([
+                { issuance: [der(pidCa)], status: [der(pidRevocationCa)] },
+                { issuance: [der(eaaCa)], status: [der(eaaCa)] },
+            ]);
+        });
+
+        it("shares one status array between the mdoc entries of a service type", async () => {
+            const secondPidCa = await selfSigned("Second PID CA", true);
+            const entries = await serviceWith([
+                {
+                    entityId: "pid-provider",
+                    services: [
+                        { serviceTypeIdentifier: PID_ISSUANCE, cert: pidCa },
+                        {
+                            serviceTypeIdentifier: PID_ISSUANCE,
+                            cert: secondPidCa,
+                        },
+                        {
+                            serviceTypeIdentifier: PID_REVOCATION,
+                            cert: pidRevocationCa,
+                        },
+                    ],
+                },
+            ]).getTrustedCertificateEntries(LOTE_SOURCE);
+
+            expect(entries).toHaveLength(2);
+            expect(entries[0].status).toEqual([
+                new Uint8Array(pidRevocationCa.cert.rawData),
+            ]);
+            expect(entries[1].status).toBe(entries[0].status);
+        });
+
+        it("drops mdoc entries and status signers whose certificate does not parse", async () => {
+            const warn = vi.fn();
+            const withBrokenCerts = new CredentialChainValidationService(
+                {
+                    getTrustStore: vi.fn().mockResolvedValue({
+                        entities: [
+                            {
+                                entityId: "broken-revocation",
+                                services: [
+                                    {
+                                        serviceTypeIdentifier: PID_ISSUANCE,
+                                        certValue: b64(pidCa),
+                                    },
+                                    {
+                                        serviceTypeIdentifier: PID_REVOCATION,
+                                        certValue: "not a certificate",
+                                    },
+                                ],
+                            },
+                            {
+                                entityId: "broken-issuance",
+                                services: [
+                                    {
+                                        serviceTypeIdentifier: ISSUANCE,
+                                        certValue: "not a certificate",
+                                    },
+                                ],
+                            },
+                        ],
+                    }),
+                } as any,
+                new X509ValidationService(),
+                {} as any,
+                {
+                    setContext: vi.fn(),
+                    error: vi.fn(),
+                    warn,
+                    debug: vi.fn(),
+                } as any,
+            );
+
+            // No status signer is left for the PID entry: the mdoc library
+            // then rejects its status lists instead of trusting another
+            // certificate.
+            await expect(
+                withBrokenCerts.getTrustedCertificateEntries(LOTE_SOURCE),
+            ).resolves.toEqual([
+                { issuance: [new Uint8Array(pidCa.cert.rawData)], status: [] },
+            ]);
+            expect(warn).toHaveBeenCalledTimes(2);
         });
     });
 
