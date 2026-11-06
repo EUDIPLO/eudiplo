@@ -8,8 +8,9 @@ import { createTenant, tenantRequest, type TestTenant } from './support/tenants'
 // Rows of Issuer Settings (languages, authorization servers, trust anchors) stay bound to
 // their own values when a row is removed, moved or changes its type: the screen shows them,
 // edits reach them and the saved settings have them. Focus moves to the row in the place of
-// a removed one, or to the Add button. The demo tenant's settings are read-only, so the spec
-// creates a tenant; each test stores the same settings with three rows in each list first.
+// a removed one, or to the Add button, and to the page heading after a retried load. The demo
+// tenant's settings are read-only, so the spec creates a tenant; each test stores the same
+// settings with three rows in each list first.
 
 test.use({ storageState: { cookies: [], origins: [] } });
 // The tests share the tenant's settings, so they run one after another.
@@ -251,4 +252,41 @@ test('removing a trust anchor leaves the next one in its place with its own valu
       entityConfigurationUri: `${anchorEntityId('ta-three')}/federation`,
     },
   ]);
+});
+
+test('a retry after a failed load shows the settings and moves focus to the heading', async ({
+  page,
+}) => {
+  // The first two loads fail, each with its own reason, so the test can tell the cards apart.
+  const failures = ['Settings unavailable', 'Still unavailable'];
+  await page.route(
+    (url) => url.pathname === '/api/issuer/config',
+    (route) => {
+      const message = route.request().method() === 'GET' ? failures.shift() : undefined;
+      return message
+        ? route.fulfill({
+            status: 500,
+            contentType: 'application/json',
+            body: JSON.stringify({ statusCode: 500, message }),
+          })
+        : route.fallback();
+    }
+  );
+  await page.reload();
+
+  await expect(page.getByRole('alert').filter({ hasText: 'Settings unavailable.' })).toBeVisible();
+  await expect(page.getByText('Retry before making changes.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Language 1' })).toHaveCount(0);
+  const retry = page.getByRole('button', { name: 'Retry', exact: true });
+
+  // A retry that fails again puts the focus on the new card's Retry; one that loads moves it to
+  // the heading.
+  await retry.click();
+  const failedAgain = page.getByRole('alert').filter({ hasText: 'Still unavailable.' });
+  await expect(failedAgain).toBeVisible();
+  await expect(retry).toBeFocused();
+  await retry.click();
+  await expect(page.getByRole('heading', { name: 'Language 3' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Issuer Settings' })).toBeFocused();
+  await expect(failedAgain).toHaveCount(0);
 });

@@ -4356,6 +4356,208 @@ export const WebhookEndpointEntitySchema = {
     ]
 } as const;
 
+export const DisplayImageSchema = {
+    type: 'object',
+    properties: {
+        uri: {
+            type: 'string',
+            description: 'Image URI.'
+        }
+    },
+    required: [
+        'uri'
+    ]
+} as const;
+
+export const DisplaySchema = {
+    type: 'object',
+    properties: {
+        name: {
+            type: 'string',
+            description: 'Credential name shown by wallets.'
+        },
+        description: {
+            type: 'string',
+            description: 'Optional description of the credential for this locale.'
+        },
+        locale: {
+            type: 'string',
+            description: 'Language tag of this entry, for example en-US. Each locale may appear once.'
+        },
+        background_color: {
+            type: 'string',
+            description: 'Optional background color for card-style rendering, as a CSS Color Level 3 numerical value: #rgb, #rrggbb, transparent, or lowercase rgb(), rgba(), hsl() or hsla() with comma-separated values. Without it, wallets use their own.',
+            pattern: '^(?:#(?:[0-9a-fA-F]{3}){1,2}|rgb\\( *[+-]?\\d+ *, *[+-]?\\d+ *, *[+-]?\\d+ *\\)|rgb\\( *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *\\)|rgba\\( *[+-]?\\d+ *, *[+-]?\\d+ *, *[+-]?\\d+ *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+) *\\)|rgba\\( *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+) *\\)|hsl\\( *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+) *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *\\)|hsla\\( *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+) *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+) *\\)|transparent)$'
+        },
+        text_color: {
+            type: 'string',
+            description: 'Optional text color for card-style rendering, as a CSS Color Level 3 numerical value: #rgb, #rrggbb, transparent, or lowercase rgb(), rgba(), hsl() or hsla() with comma-separated values. Without it, wallets use their own.',
+            pattern: '^(?:#(?:[0-9a-fA-F]{3}){1,2}|rgb\\( *[+-]?\\d+ *, *[+-]?\\d+ *, *[+-]?\\d+ *\\)|rgb\\( *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *\\)|rgba\\( *[+-]?\\d+ *, *[+-]?\\d+ *, *[+-]?\\d+ *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+) *\\)|rgba\\( *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+) *\\)|hsl\\( *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+) *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *\\)|hsla\\( *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+) *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)% *, *[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+) *\\)|transparent)$'
+        },
+        background_image: {
+            description: 'Background image.',
+            allOf: [
+                {
+                    $ref: '#/components/schemas/DisplayImage'
+                }
+            ]
+        },
+        logo: {
+            description: 'Logo.',
+            allOf: [
+                {
+                    $ref: '#/components/schemas/DisplayImage'
+                }
+            ]
+        }
+    },
+    required: [
+        'name',
+        'locale'
+    ]
+} as const;
+
+export const KeyAttestationsRequiredSchema = {
+    type: 'object',
+    properties: {
+        key_storage: {
+            items: {
+                type: 'string'
+            },
+            description: 'List of required key storage types (e.g., iso_18045_high, iso_18045_moderate)',
+            example: [
+                'iso_18045_high',
+                'iso_18045_moderate'
+            ],
+            type: 'array'
+        },
+        user_authentication: {
+            items: {
+                type: 'string'
+            },
+            description: 'List of required user authentication types (e.g., iso_18045_high, iso_18045_moderate)',
+            example: [
+                'iso_18045_high',
+                'iso_18045_moderate'
+            ],
+            type: 'array'
+        }
+    },
+    additionalProperties: false
+} as const;
+
+export const CredentialReusePolicySchema = {
+    type: 'object',
+    properties: {
+        id: {
+            type: 'string',
+            minLength: 1
+        },
+        options: {
+            type: 'array',
+            items: {
+                type: 'object',
+                properties: {
+                    details: {
+                        minItems: 1,
+                        type: 'array',
+                        items: {
+                            type: 'string',
+                            enum: [
+                                'once_only',
+                                'limited_time',
+                                'limited-time',
+                                'rotating-batch',
+                                'per-relying-party'
+                            ]
+                        }
+                    },
+                    batch_size: {
+                        type: 'integer',
+                        minimum: 2,
+                        maximum: 9007199254740991
+                    },
+                    reissue_trigger_unused: {
+                        type: 'integer',
+                        minimum: 0,
+                        maximum: 9007199254740991
+                    },
+                    reissue_trigger_lifetime_left: {
+                        type: 'integer',
+                        minimum: 0,
+                        maximum: 9007199254740991
+                    }
+                },
+                required: [
+                    'details'
+                ],
+                additionalProperties: false
+            }
+        }
+    },
+    required: [
+        'id'
+    ],
+    additionalProperties: false
+} as const;
+
+export const IssuerMetadataCredentialConfigSchema = {
+    type: 'object',
+    properties: {
+        display: {
+            description: 'Display metadata shown by wallets, one entry per locale.',
+            type: 'array',
+            items: {
+                $ref: '#/components/schemas/Display'
+            }
+        },
+        keyAttestationsRequired: {
+            description: 'Key attestation requirements for JWT proofs for this credential.\nWhen set, this is published in proof_types_supported.jwt.key_attestations_required\nfor this specific credential configuration.',
+            allOf: [
+                {
+                    $ref: '#/components/schemas/KeyAttestationsRequired'
+                }
+            ]
+        },
+        proofTypesSupported: {
+            type: 'array',
+            description: 'Supported proof types for this credential configuration. Defaults to [\'attestation\', \'jwt\'].',
+            items: {
+                type: 'string',
+                enum: [
+                    'jwt',
+                    'attestation'
+                ]
+            },
+            example: [
+                'attestation',
+                'jwt'
+            ]
+        },
+        credentialReusePolicy: {
+            $ref: '#/components/schemas/CredentialReusePolicy'
+        },
+        format: {
+            type: 'string',
+            enum: [
+                'dc+sd-jwt',
+                'mso_mdoc'
+            ]
+        },
+        scope: {
+            type: 'string'
+        },
+        docType: {
+            type: 'string',
+            description: 'Document type for mDOC credentials (e.g., "org.iso.18013.5.1.mDL").\nOnly applicable when format is "mso_mdoc".'
+        }
+    },
+    required: [
+        'display',
+        'format'
+    ]
+} as const;
+
 export const SchemaUriEntrySchema = {
     type: 'object',
     properties: {
@@ -4571,189 +4773,6 @@ export const EmbeddedDisclosurePolicySchema = {
         'policy'
     ],
     additionalProperties: false
-} as const;
-
-export const KeyAttestationsRequiredSchema = {
-    type: 'object',
-    properties: {
-        key_storage: {
-            items: {
-                type: 'string'
-            },
-            description: 'List of required key storage types (e.g., iso_18045_high, iso_18045_moderate)',
-            example: [
-                'iso_18045_high',
-                'iso_18045_moderate'
-            ],
-            type: 'array'
-        },
-        user_authentication: {
-            items: {
-                type: 'string'
-            },
-            description: 'List of required user authentication types (e.g., iso_18045_high, iso_18045_moderate)',
-            example: [
-                'iso_18045_high',
-                'iso_18045_moderate'
-            ],
-            type: 'array'
-        }
-    },
-    additionalProperties: false
-} as const;
-
-export const CredentialReusePolicySchema = {
-    type: 'object',
-    properties: {
-        id: {
-            type: 'string',
-            minLength: 1
-        },
-        options: {
-            type: 'array',
-            items: {
-                type: 'object',
-                properties: {
-                    details: {
-                        minItems: 1,
-                        type: 'array',
-                        items: {
-                            type: 'string',
-                            enum: [
-                                'once_only',
-                                'limited_time',
-                                'limited-time',
-                                'rotating-batch',
-                                'per-relying-party'
-                            ]
-                        }
-                    },
-                    batch_size: {
-                        type: 'integer',
-                        minimum: 2,
-                        maximum: 9007199254740991
-                    },
-                    reissue_trigger_unused: {
-                        type: 'integer',
-                        minimum: 0,
-                        maximum: 9007199254740991
-                    },
-                    reissue_trigger_lifetime_left: {
-                        type: 'integer',
-                        minimum: 0,
-                        maximum: 9007199254740991
-                    }
-                },
-                required: [
-                    'details'
-                ],
-                additionalProperties: false
-            }
-        }
-    },
-    required: [
-        'id'
-    ],
-    additionalProperties: false
-} as const;
-
-export const DisplayImageSchema = {
-    type: 'object',
-    properties: {
-        uri: {
-            type: 'string'
-        }
-    },
-    required: [
-        'uri'
-    ]
-} as const;
-
-export const DisplaySchema = {
-    type: 'object',
-    properties: {
-        name: {
-            type: 'string'
-        },
-        description: {
-            type: 'string'
-        },
-        locale: {
-            type: 'string'
-        },
-        background_color: {
-            type: 'string'
-        },
-        text_color: {
-            type: 'string'
-        },
-        background_image: {
-            $ref: '#/components/schemas/DisplayImage'
-        },
-        logo: {
-            $ref: '#/components/schemas/DisplayImage'
-        }
-    },
-    required: [
-        'name',
-        'locale'
-    ]
-} as const;
-
-export const IssuerMetadataCredentialConfigSchema = {
-    type: 'object',
-    properties: {
-        keyAttestationsRequired: {
-            description: 'Key attestation requirements for JWT proofs for this credential.\nWhen set, this is published in proof_types_supported.jwt.key_attestations_required\nfor this specific credential configuration.',
-            allOf: [
-                {
-                    $ref: '#/components/schemas/KeyAttestationsRequired'
-                }
-            ]
-        },
-        proofTypesSupported: {
-            type: 'array',
-            description: 'Supported proof types for this credential configuration. Defaults to [\'attestation\', \'jwt\'].',
-            items: {
-                type: 'string',
-                enum: [
-                    'jwt',
-                    'attestation'
-                ]
-            },
-            example: [
-                'attestation',
-                'jwt'
-            ]
-        },
-        credentialReusePolicy: {
-            $ref: '#/components/schemas/CredentialReusePolicy'
-        },
-        format: {
-            type: 'string',
-            enum: [
-                'dc+sd-jwt',
-                'mso_mdoc'
-            ]
-        },
-        display: {
-            type: 'array',
-            items: {
-                $ref: '#/components/schemas/Display'
-            }
-        },
-        scope: {
-            type: 'string'
-        },
-        docType: {
-            type: 'string',
-            description: 'Document type for mDOC credentials (e.g., "org.iso.18013.5.1.mDL").\nOnly applicable when format is "mso_mdoc".'
-        }
-    },
-    required: [
-        'format',
-        'display'
-    ]
 } as const;
 
 export const FieldDisplayDtoSchema = {
@@ -5280,6 +5299,9 @@ export const ActiveCredentialPolicySchema = {
 export const CredentialConfigSchema = {
     type: 'object',
     properties: {
+        config: {
+            $ref: '#/components/schemas/IssuerMetadataCredentialConfig'
+        },
         vct: {
             description: 'VCT as a URI string (e.g., urn:eudi:pid:de:1) or as an object for EUDIPLO-hosted VCT',
             anyOf: [
@@ -5366,9 +5388,6 @@ export const CredentialConfigSchema = {
                 }
             ]
         },
-        config: {
-            $ref: '#/components/schemas/IssuerMetadataCredentialConfig'
-        },
         fields: {
             type: 'array',
             items: {
@@ -5436,9 +5455,9 @@ export const CredentialConfigSchema = {
         }
     },
     required: [
+        'config',
         'id',
         'tenant',
-        'config',
         'fields'
     ]
 } as const;
@@ -5446,6 +5465,9 @@ export const CredentialConfigSchema = {
 export const CredentialConfigCreateSchema = {
     type: 'object',
     properties: {
+        config: {
+            $ref: '#/components/schemas/IssuerMetadataCredentialConfig'
+        },
         vct: {
             description: 'VCT as a URI string (e.g., urn:eudi:pid:de:1) or as an object for EUDIPLO-hosted VCT',
             anyOf: [
@@ -5523,9 +5545,6 @@ export const CredentialConfigCreateSchema = {
                 'string',
                 'null'
             ]
-        },
-        config: {
-            $ref: '#/components/schemas/IssuerMetadataCredentialConfig'
         },
         fields: {
             type: 'array',
@@ -5585,8 +5604,8 @@ export const CredentialConfigCreateSchema = {
         }
     },
     required: [
-        'id',
         'config',
+        'id',
         'fields'
     ]
 } as const;
@@ -5594,6 +5613,9 @@ export const CredentialConfigCreateSchema = {
 export const CredentialConfigUpdateSchema = {
     type: 'object',
     properties: {
+        config: {
+            $ref: '#/components/schemas/IssuerMetadataCredentialConfig'
+        },
         vct: {
             description: 'VCT as a URI string (e.g., urn:eudi:pid:de:1) or as an object for EUDIPLO-hosted VCT',
             anyOf: [
@@ -5671,9 +5693,6 @@ export const CredentialConfigUpdateSchema = {
                 'string',
                 'null'
             ]
-        },
-        config: {
-            $ref: '#/components/schemas/IssuerMetadataCredentialConfig'
         },
         fields: {
             type: 'array',
@@ -13798,7 +13817,7 @@ export const ConfigDocumentDtoSchema = {
         $schema: {
             type: 'string',
             description: 'Canonical schema URL; names the kind and the format version',
-            example: 'https://eudiplo.dev/schemas/v3/CredentialConfigFile.schema.json'
+            example: 'https://eudiplo.dev/schemas/v4/CredentialConfigFile.schema.json'
         },
         metadata: {
             $ref: '#/components/schemas/ConfigDocumentMetadataDto'

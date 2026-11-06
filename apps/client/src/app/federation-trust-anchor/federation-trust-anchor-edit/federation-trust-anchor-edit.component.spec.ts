@@ -1,6 +1,4 @@
-import { Component, forwardRef, Input } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { NG_VALUE_ACCESSOR, type ControlValueAccessor } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -10,25 +8,9 @@ import { IssuanceConfigService } from '../../issuance/issuance-config/issuance-c
 import { PresentationManagementService } from '../../presentation/presentation-config/presentation-management.service';
 import { JwtService } from '../../services/jwt.service';
 import { EditorComponent } from '../../utils/editor/editor.component';
+import { EditorStub } from '../../utils/editor/editor.testing';
 import { FederationTrustAnchorService } from '../federation-trust-anchor.service';
 import { FederationTrustAnchorEditComponent } from './federation-trust-anchor-edit.component';
-
-/** Stands in for the Monaco editor, which needs a browser. */
-@Component({
-  selector: 'app-editor',
-  template: '',
-  providers: [
-    { provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => EditorStub), multi: true },
-  ],
-})
-class EditorStub implements ControlValueAccessor {
-  @Input() schema: unknown;
-  @Input() editorOptions: unknown;
-  @Input() errors: unknown;
-  writeValue(): void {}
-  registerOnChange(): void {}
-  registerOnTouched(): void {}
-}
 
 const jwks = { keys: [{ kty: 'EC' as const, kid: 'ta-2026', crv: 'P-256', x: 'x', y: 'y' }] };
 const anchor = {

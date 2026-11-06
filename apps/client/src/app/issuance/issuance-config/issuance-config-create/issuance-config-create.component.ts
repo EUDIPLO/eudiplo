@@ -67,6 +67,7 @@ import { JwtService } from '../../../services/jwt.service';
 import { ApiService } from '../../../core';
 import { entityIdUrl } from '../../../utils/public-url';
 import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../../common/focus-if-lost.util';
+import { LoadErrorComponent } from '../../../common/load-error.component';
 import { fromFormQueryParams } from '../../../common/return-to-form';
 import { FederationTrustAnchorSelectComponent } from '../../../federation-trust-anchor/federation-trust-anchor-select/federation-trust-anchor-select.component';
 import {
@@ -112,6 +113,7 @@ type WalletProviderTrustListEntry = Omit<WalletProviderTrustListRefDto, 'verifie
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
     FederationTrustAnchorSelectComponent,
+    LoadErrorComponent,
   ],
   templateUrl: './issuance-config-create.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -478,6 +480,14 @@ export class IssuanceConfigCreateComponent implements OnInit {
   private readonly trustAnchorSelects?: QueryList<FederationTrustAnchorSelectComponent>;
   @ViewChild('addTrustAnchorButton', { read: ElementRef })
   private readonly addTrustAnchorButton?: ElementRef<HTMLElement>;
+  // The select or URL field and the Add managed trust list buttons of every wallet provider
+  // trust list on the page; removeTrustListEntry picks those of one list.
+  @ViewChildren('trustListField', { read: ElementRef })
+  private readonly trustListFields?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChildren('addManagedTrustListButton', { read: ElementRef })
+  private readonly addManagedTrustListButtons?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChild('pageHeading', { read: ElementRef })
+  private readonly pageHeading?: ElementRef<HTMLElement>;
   /** Trust anchors of the stored configuration, which the backend keeps even when unregistered. */
   private storedTrustAnchorIds = new Set<string>();
   private registrarRegistrationCertificateDefaults: Record<string, unknown> | null = null;
@@ -747,6 +757,7 @@ export class IssuanceConfigCreateComponent implements OnInit {
   }
 
   async loadConfigForEdit(): Promise<void> {
+    const retrying = this.loadError !== '';
     this.loadingConfig = true;
     this.loadError = '';
     try {
@@ -760,8 +771,10 @@ export class IssuanceConfigCreateComponent implements OnInit {
       this.guidedMode =
         !config.display?.length || this.route.snapshot.queryParamMap?.get('setup') === 'true';
       if (!this.displays.length) this.addDisplay();
+      // The retry removed the error card with its focused Retry button.
+      if (retrying) focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
     } catch (error) {
-      this.loadError = `${asSentence(getApiErrorMessage(error, 'Could not load issuer settings'))} Retry before making changes.`;
+      this.loadError = asSentence(getApiErrorMessage(error, 'Could not load issuer settings'));
     } finally {
       this.loadingConfig = false;
     }
@@ -1570,8 +1583,22 @@ export class IssuanceConfigCreateComponent implements OnInit {
     return trustLists.controls.some((entry) => entry.get('mode')?.value === 'managed');
   }
 
-  removeTrustListEntry(trustLists: FormArray, index: number): void {
+  /**
+   * Removes entry `index` of `trustLists`. The shared lists and each authorization server's own
+   * lists use the same entry template, so focus moves within `section`, the element holding
+   * that list's entries and Add buttons: to the entry now in its place, the new last entry, or
+   * Add managed trust list.
+   */
+  removeTrustListEntry(trustLists: FormArray, index: number, section: HTMLElement): void {
     trustLists.removeAt(index);
+    const inSection = (refs?: QueryList<ElementRef<HTMLElement>>) =>
+      refs?.map((ref) => ref.nativeElement).filter((element) => section.contains(element)) ?? [];
+    focusRowAfterRemoval(
+      this.injector,
+      () => inSection(this.trustListFields),
+      index,
+      () => inSection(this.addManagedTrustListButtons)[0]
+    );
   }
 
   /** The control `name` of a trust list entry, for the shared entry template. */

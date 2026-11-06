@@ -12,6 +12,7 @@ import {
     configChanges,
     stableConfigJson,
 } from "@eudiplo/config-format/config-values.js";
+import { publishableDisplayEntries } from "@eudiplo/config-format/display-entries.js";
 import {
     BadRequestException,
     ConflictException,
@@ -1904,7 +1905,17 @@ export class ConfigBundleService {
                 return {
                     id: entity.id,
                     description: entity.description,
-                    config: entity.config,
+                    // Stored before CredentialConfig v4, display entries may hold colors
+                    // or repeated locales v4 refuses; the export leaves them out as the
+                    // issuer metadata does
+                    config: entity.config.display
+                        ? {
+                              ...entity.config,
+                              display: publishableDisplayEntries(
+                                  entity.config.display,
+                              ),
+                          }
+                        : entity.config,
                     // Stored before CredentialConfig v3, constraints may carry
                     // keys that v3 refuses; the export leaves them out
                     fields: sanitizeClaimFields(entity.fields ?? []).fields,

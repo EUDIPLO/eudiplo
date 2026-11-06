@@ -308,6 +308,37 @@ export class TrustListService {
             },
         );
     }
+
+    /**
+     * The certificate of the key chain that signs the list: the one in
+     * `keyChainId`, else the one the stored list uses, else a `trustList` key
+     * chain of the tenant. A named or kept key chain must have usage type
+     * `trustList`; a key chain import that reuses its ID can change it. Only
+     * the tenant's pick also checks the certificate for expiry and revocation.
+     */
+    private async signingCertificate(
+        tenantId: string,
+        keyChainId: string | undefined,
+        storedKeyChainId: string | undefined,
+    ): Promise<CertificateInfo> {
+        const id = keyChainId ?? storedKeyChainId;
+        if (!id) {
+            return this.certService.find({
+                tenantId,
+                type: KeyUsageType.TrustList,
+            });
+        }
+        const cert = await this.certService.getCertificateById(tenantId, id);
+        if (cert.keyChain?.usageType !== KeyUsageType.TrustList) {
+            throw new BadRequestException(
+                keyChainId
+                    ? `Key chain ${id} is not valid for Trust List usage (key lacks TrustList usage)`
+                    : `Key chain ${id} of this trust list is not valid for Trust List usage (key lacks TrustList usage). Name a key chain with usage type trustList in keyChainId.`,
+            );
+        }
+        return cert;
+    }
+
     /**
      * Shared logic for creating and saving a trust list (used by both API and import)
      * @param config The configuration for the trust list
@@ -319,7 +350,8 @@ export class TrustListService {
         tenant: Pick<TenantEntity, "id" | "name">,
         existing?: TrustList,
     ): Promise<TrustList> {
-        // Validate external certificates before findOrCreate below can create a key chain.
+        // Validate external certificates first, so a malformed certificate is
+        // reported before any key chain error.
         for (const entity of config.entities || []) {
             if (entity.type === "external") {
                 this.certificateBase64(entity.issuerCertPem, "issuerCertPem");
@@ -335,29 +367,11 @@ export class TrustListService {
             existing?.entityConfig,
         );
 
-        let cert: CertificateInfo;
-        if (config.keyChainId) {
-            cert = await this.certService.getCertificateById(
-                tenant.id,
-                config.keyChainId,
-            );
-            // Check if the key has the TrustList usage
-            if (cert.keyChain?.usageType !== KeyUsageType.TrustList) {
-                throw new BadRequestException(
-                    `Key chain ${config.keyChainId} is not valid for Trust List usage (key lacks TrustList usage)`,
-                );
-            }
-        } else if (existing?.keyChainId) {
-            cert = await this.certService.getCertificateById(
-                tenant.id,
-                existing.keyChainId,
-            );
-        } else {
-            cert = await this.certService.findOrCreate({
-                tenantId: tenant.id,
-                type: KeyUsageType.TrustList,
-            });
-        }
+        const cert = await this.signingCertificate(
+            tenant.id,
+            config.keyChainId,
+            existing?.keyChainId,
+        );
 
         // Keep the stored state: it becomes the previous version on updates
         const previous = existing ? { ...existing } : undefined;
