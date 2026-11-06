@@ -293,7 +293,7 @@ describe('TrustListEditComponent loading the trust list', () => {
 
     await component.load();
 
-    expect(component.entitiesArray.length).toBe(2);
+    expect(component.entitiesArray).toHaveLength(2);
   });
 
   it('says next to the key chain selects that the key chains failed to load', async () => {
