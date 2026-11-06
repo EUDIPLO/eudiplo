@@ -398,21 +398,102 @@ describe('SchemaCreateComponent required fields', () => {
     client.setConfig({ fetch: () => new Promise<Response>(() => undefined) });
   });
 
+  /** The field that holds focus, by its label. */
+  function focusedLabel(): string | undefined {
+    return document.activeElement
+      ?.closest('mat-form-field')
+      ?.querySelector('mat-label')
+      ?.textContent?.trim();
+  }
+
   it('says what is missing when Submit is pressed without schema URI and trusted authority', async () => {
     const fixture = await render();
+    // The component's own injector provides the snack bar it uses.
+    const open = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open');
     expect(text(fixture)).not.toContain('At least one schema URI is required');
 
     const submit = submitButton(fixture);
-    expect(submit.disabled).toBe(false);
+    expectAvailable(fixture, submit);
+    submit.focus();
     submit.click();
-    fixture.detectChanges();
 
+    // The select that fills the schema URIs shows their error, so it takes the focus.
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(focusedLabel()).toBe('Select credential configs');
+    });
     expect(publishSchemaMetadata).not.toHaveBeenCalled();
     expect(text(fixture)).toContain('At least one schema URI is required.');
     expect(text(fixture)).toContain('At least one trusted authority is required.');
-    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain(
-      'Some required fields are missing or invalid.'
+    expect(open).toHaveBeenLastCalledWith(
+      'Check the highlighted fields in Schema URIs, Trusted Authorities.',
+      'Close',
+      expect.anything()
     );
+  });
+
+  it('focuses the first missing field and names each part of the form that holds one', async () => {
+    const fixture = await render();
+    const open = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open');
+    const component = fixture.componentInstance;
+    component.composeForm.patchValue({ version: '' });
+    component.importSchemaConfigIds.setValue(['pid']);
+    component.syncSchemaURIsFromSelection();
+    component.addX509TrustAnchor();
+    fixture.detectChanges();
+
+    submitButton(fixture).click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement?.getAttribute('formcontrolname')).toBe('version');
+    });
+    expect(open).toHaveBeenLastCalledWith(
+      'Check the highlighted fields in Compose Schema, Trusted Authorities.',
+      'Close',
+      expect.anything()
+    );
+    expect(publishSchemaMetadata).not.toHaveBeenCalled();
+  });
+
+  it('focuses Add Root Certificate when no trust list can be selected', async () => {
+    trustLists = { status: 200, body: [] };
+    const fixture = await render();
+    const open = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open');
+    const component = fixture.componentInstance;
+    component.importSchemaConfigIds.setValue(['pid']);
+    component.syncSchemaURIsFromSelection();
+    fixture.detectChanges();
+
+    submitButton(fixture).click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement?.textContent).toContain('Add Root Certificate');
+    });
+    expect(open).toHaveBeenLastCalledWith(
+      'Check the highlighted fields in Trusted Authorities.',
+      'Close',
+      expect.anything()
+    );
+    expect(publishSchemaMetadata).not.toHaveBeenCalled();
+  });
+
+  it('focuses an empty root certificate when it is the only field left to fix', async () => {
+    const fixture = await render();
+    const component = fixture.componentInstance;
+    component.importSchemaConfigIds.setValue(['pid']);
+    component.syncSchemaURIsFromSelection();
+    component.addX509TrustAnchor();
+    fixture.detectChanges();
+
+    submitButton(fixture).click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement?.id).toBe('root-certificate-1');
+    });
+    expect(publishSchemaMetadata).not.toHaveBeenCalled();
   });
 
   it('flags a trust-list select that was left empty, and clears it for a root certificate', async () => {
