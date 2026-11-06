@@ -1,5 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { Injector } from '@angular/core';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatDialog } from '@angular/material/dialog';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import type { Session } from '@eudiplo/sdk-core';
@@ -9,6 +11,8 @@ import { of, throwError } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SessionManagementShowComponent } from './session-management-show.component';
+import { SessionManagementService } from '../session-management.service';
+import { expectUnavailable, tooltipOf } from '../../common/unavailable-action.testing';
 
 describe('SessionManagementShowComponent', () => {
   let component: SessionManagementShowComponent;
@@ -77,6 +81,95 @@ describe('SessionManagementShowComponent', () => {
     expect(component.canRecreateOffer()).toBe(false);
     expect(component.canSeeOffer()).toBe(false);
     expect(component.canReadCredentialStatus()).toBe(false);
+  });
+
+  describe('Cancel Offer', () => {
+    let cancelSession: ReturnType<typeof vi.spyOn>;
+    let getSession: ReturnType<typeof vi.spyOn>;
+    let openDialog: ReturnType<typeof vi.spyOn>;
+
+    function renderCancel(): HTMLButtonElement {
+      roles = ['issuance:offer'];
+      component.session = {
+        ...issuance,
+        createdAt: '2026-10-11T10:00:00.000Z',
+        updatedAt: '2026-10-11T10:00:00.000Z',
+        notifications: [],
+      } as unknown as Session;
+      fixture.detectChanges();
+      return [
+        ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
+      ].find((button) => button.textContent?.includes('Cancel Offer'))!;
+    }
+
+    beforeEach(() => {
+      const sessions = TestBed.inject(SessionManagementService);
+      cancelSession = vi.spyOn(sessions, 'cancelSession');
+      getSession = vi.spyOn(sessions, 'getSession');
+      vi.spyOn(sessions, 'getSessionLogs').mockResolvedValue([] as never);
+      vi.spyOn(sessions, 'getCredentialStatus').mockResolvedValue([]);
+      openDialog = vi.spyOn(TestBed.inject(MatDialog), 'open').mockReturnValue({
+        afterClosed: () => of({ reason: 'sent to the wrong person' }),
+      } as never);
+    });
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it('stays focusable while the offer is cancelled: a second click sends one request', async () => {
+      cancelSession.mockReturnValue(new Promise(() => undefined));
+      const cancel = renderCancel();
+      expect(tooltipOf(fixture, cancel)).toBe(
+        'Cancel this offer, so a wallet can no longer use it'
+      );
+
+      cancel.click();
+      fixture.detectChanges();
+      cancel.click();
+      fixture.detectChanges();
+
+      expect(openDialog).toHaveBeenCalledOnce();
+      expect(cancelSession).toHaveBeenCalledOnce();
+      expectUnavailable(fixture, cancel, 'Cancelling this offer…');
+    });
+
+    it('says the same for Cancel Request on a presentation session', async () => {
+      cancelSession.mockReturnValue(new Promise(() => undefined));
+      roles = ['presentation:request'];
+      component.session = {
+        ...presentation,
+        createdAt: '2026-10-11T10:00:00.000Z',
+        updatedAt: '2026-10-11T10:00:00.000Z',
+      } as unknown as Session;
+      fixture.detectChanges();
+      const cancel = [
+        ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
+      ].find((button) => button.textContent?.includes('Cancel Request'))!;
+      expect(tooltipOf(fixture, cancel)).toBe(
+        'Cancel this request, so a wallet can no longer answer it'
+      );
+
+      cancel.click();
+      fixture.detectChanges();
+
+      expect(cancelSession).toHaveBeenCalledOnce();
+      expectUnavailable(fixture, cancel, 'Cancelling this request…');
+    });
+
+    it('moves the focus to the heading once the cancelled offer no longer offers Cancel', async () => {
+      cancelSession.mockResolvedValue(undefined);
+      getSession.mockResolvedValue({ ...component.session, status: 'cancelled' } as never);
+      const cancel = renderCancel();
+      cancel.focus();
+
+      cancel.click();
+      await vi.waitFor(() => expect(component.cancelling).toBe(false));
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.textContent).not.toContain('Cancel Offer');
+      await vi.waitFor(() =>
+        expect(document.activeElement?.textContent?.trim()).toBe('Issuance Session')
+      );
+    });
   });
 
   it('counts the manage roles toward a side, like the backend', () => {
@@ -388,7 +481,8 @@ describe('SessionManagementShowComponent errors', () => {
       { getConfig: () => Promise.resolve(), isEnabled: () => false } as never,
       { open: () => ({ afterClosed: () => of({ reason: 'test' }) }) } as never,
       // The caller may change the session, so cancel and the offer are offered.
-      { hasRole: () => true } as never
+      { hasRole: () => true } as never,
+      TestBed.inject(Injector)
     );
     component.session = { id: 'session', status: 'active', ...session } as Session;
     return component;

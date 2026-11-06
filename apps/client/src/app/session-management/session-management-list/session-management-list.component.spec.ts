@@ -11,6 +11,7 @@ import { PresentationManagementService } from '../../presentation/presentation-c
 import { JwtService } from '../../services/jwt.service';
 import { SessionManagementService } from '../session-management.service';
 import { SessionManagementListComponent } from './session-management-list.component';
+import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 
 describe('SessionManagementListComponent', () => {
   let component: SessionManagementListComponent;
@@ -240,6 +241,115 @@ describe('SessionManagementListComponent', () => {
     expect(cancelSession).toHaveBeenCalledWith('s-2', 'sent to wrong recipient');
     expect(component.selection.selected).toEqual([]);
   });
+
+  function bulkButton(label: string): HTMLButtonElement {
+    return [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
+    ].find((button) => button.textContent?.includes(label))!;
+  }
+
+  /** Selects a pending session; the cancellation dialog answers with a reason. */
+  async function selectPending() {
+    await setup();
+    const open = vi
+      .spyOn(TestBed.inject(MatDialog), 'open')
+      .mockReturnValue({ afterClosed: () => of({ reason: 'sent to wrong recipient' }) } as never);
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true)
+    );
+    component.selection.select({ id: 's-1', status: 'active' } as Session);
+    fixture.detectChanges();
+    return { open, confirm: window.confirm as ReturnType<typeof vi.fn> };
+  }
+
+  it('describes the bulk actions while they can be used', async () => {
+    await selectPending();
+
+    expectAvailable(
+      fixture,
+      bulkButton('Cancel Selected'),
+      'Cancel the selected offers a wallet has not redeemed yet, so it can no longer use them'
+    );
+    expectAvailable(fixture, bulkButton('Delete Selected'), 'Delete selected sessions');
+  });
+
+  it('keeps both bulk actions focusable while a cancellation runs: a second click sends nothing', async () => {
+    const { open, confirm } = await selectPending();
+    cancelSession.mockReturnValue(new Promise(() => undefined));
+    const cancel = bulkButton('Cancel Selected');
+    const remove = bulkButton('Delete Selected');
+
+    cancel.click();
+    await vi.waitFor(() => expect(component.cancellingSelected).toBe(true));
+    fixture.detectChanges();
+    cancel.click();
+    remove.click();
+    fixture.detectChanges();
+
+    expect(open).toHaveBeenCalledOnce();
+    expect(cancelSession).toHaveBeenCalledOnce();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(deleteSession).not.toHaveBeenCalled();
+    expectUnavailable(fixture, cancel, 'Cancelling the selected sessions…');
+    expectUnavailable(fixture, remove, 'Cancelling the selected sessions…');
+  });
+
+  it('keeps both bulk actions focusable while a delete runs: a second click sends nothing', async () => {
+    const { open, confirm } = await selectPending();
+    deleteSession.mockReturnValue(new Promise(() => undefined));
+    const cancel = bulkButton('Cancel Selected');
+    const remove = bulkButton('Delete Selected');
+
+    remove.click();
+    fixture.detectChanges();
+    remove.click();
+    cancel.click();
+    fixture.detectChanges();
+
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(deleteSession).toHaveBeenCalledOnce();
+    expect(open).not.toHaveBeenCalled();
+    expectUnavailable(fixture, remove, 'Deleting the selected sessions…');
+    expectUnavailable(fixture, cancel, 'Deleting the selected sessions…');
+  });
+
+  it('says why Cancel Selected is unavailable when no selected session can be cancelled', async () => {
+    await setup();
+    const open = vi.spyOn(TestBed.inject(MatDialog), 'open');
+    component.selection.select(
+      { id: 's-3', status: 'completed' } as Session,
+      { id: 's-4', status: 'active', consumed: true } as Session
+    );
+    fixture.detectChanges();
+    const cancel = bulkButton('Cancel Selected');
+
+    expectUnavailable(
+      fixture,
+      cancel,
+      'None of the selected sessions can be cancelled: a wallet has redeemed them or they have ended'
+    );
+    cancel.click();
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['a cancellation', 'Cancel Selected', () => component.cancelSelectedSessions()],
+    ['a delete', 'Delete Selected', () => component.deleteSelectedSessions()],
+    ['Clear', 'Clear', async () => component.clearSelection()],
+  ])(
+    'moves the focus to the heading when the bulk actions go away after %s',
+    async (_, label, act) => {
+      await selectPending();
+      bulkButton(label).focus();
+
+      await act();
+      fixture.detectChanges();
+
+      expect(bulkButton('Cancel Selected')).toBeUndefined();
+      await vi.waitFor(() => expect(document.activeElement?.textContent?.trim()).toBe('Sessions'));
+    }
+  );
 
   it('reports sessions that were no longer pending apart from other errors', async () => {
     await setup();
