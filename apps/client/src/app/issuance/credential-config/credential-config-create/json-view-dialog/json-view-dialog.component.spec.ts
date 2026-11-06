@@ -97,6 +97,33 @@ describe('JsonViewDialogComponent Apply Changes', () => {
     expect(close).not.toHaveBeenCalled();
   });
 
+  it('asks for JSON when the editor is empty', async () => {
+    const { fixture, close, snackBar, apply, focusEditor } = await render();
+    fixture.componentInstance.jsonControl.setValue('');
+
+    apply.click();
+
+    expect(snackBar.open.mock.lastCall?.[0]).toBe('Enter the JSON to apply.');
+    expect(focusEditor).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it('says why JSON that does not match the schema cannot be applied', async () => {
+    const { fixture, close, snackBar, apply, focusEditor } = await render();
+    // The editor reports a schema mismatch as `invalidSchema` with its message.
+    fixture.componentInstance.jsonControl.setErrors({
+      invalidSchema: 'must have required property id',
+    });
+
+    apply.click();
+
+    expect(snackBar.open.mock.lastCall?.[0]).toBe(
+      'Fix the JSON first: must have required property id'
+    );
+    expect(focusEditor).toHaveBeenCalledOnce();
+    expect(close).not.toHaveBeenCalled();
+  });
+
   it('applies valid JSON', async () => {
     const { close, apply, focusEditor } = await render();
 

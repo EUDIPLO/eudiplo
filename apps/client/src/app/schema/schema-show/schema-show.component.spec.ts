@@ -1295,8 +1295,39 @@ describe('SchemaShowComponent page', () => {
         .injector.get(MatTooltip).message
     ).toBe(reason);
     expect(text(fixture)).toContain(reason);
+    // Without the check, the click would fail to rebuild the schema URIs and say so.
+    const open = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open');
     publish.click();
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(open).not.toHaveBeenCalled();
     expect(schemaService['publishSchemaMetadataVersion']).not.toHaveBeenCalled();
+  });
+
+  it('publishes once when Publish is clicked again while it runs, and says why it waits', async () => {
+    schemaService['publishSchemaMetadataVersion'].mockReturnValue(new Promise(() => undefined));
+    const fixture = await render();
+    fixture.componentInstance.togglePublishForm();
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const publish = () =>
+      [...element.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+        ['Publish', 'Publishing…'].includes(b.textContent?.trim() ?? '')
+      )!;
+
+    publish().click();
+    fixture.detectChanges();
+    publish().click();
+    await new Promise((resolve) => setTimeout(resolve));
+    fixture.detectChanges();
+
+    expect(schemaService['publishSchemaMetadataVersion']).toHaveBeenCalledOnce();
+    expect(publish().getAttribute('aria-disabled')).toBe('true');
+    expect(
+      fixture.debugElement
+        .queryAll(By.directive(MatTooltip))
+        .find((tooltip) => tooltip.nativeElement === publish())!
+        .injector.get(MatTooltip).message
+    ).toBe('Publishing the new version…');
   });
 
   it('says which field keeps the new version from being published and focuses it', async () => {

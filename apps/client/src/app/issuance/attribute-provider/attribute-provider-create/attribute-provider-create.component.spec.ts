@@ -47,6 +47,13 @@ describe('AttributeProviderCreateComponent save', () => {
     );
     expect(component.fieldError('url', 'URL is required')).toBe('Must be an https URL');
     expect(component.fieldError('authHeaderName')).toBe('Invalid header name');
+
+    // Until a rejected field is edited, Save points at it instead of sending the same again.
+    component.onSubmit();
+    expect(create).toHaveBeenCalledOnce();
+    expect(snackBar.open.mock.lastCall?.[0]).toBe(
+      'Check the highlighted fields in Provider Details, Authentication.'
+    );
   });
 
   it('shows rejected fields when an update is rejected', async () => {

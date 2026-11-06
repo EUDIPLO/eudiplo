@@ -2,6 +2,8 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormBuilder } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTooltip } from '@angular/material/tooltip';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -136,6 +138,18 @@ describe('KeyCreateWizardComponent', () => {
       false,
       true,
     ]);
+    // Create & Enroll stays focusable and says why it waits.
+    const enrolling = [...element.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.includes('Enrolling...')
+    )!;
+    expect(enrolling.disabled).toBe(false);
+    expect(enrolling.getAttribute('aria-disabled')).toBe('true');
+    expect(
+      fixture.debugElement
+        .queryAll(By.directive(MatTooltip))
+        .find((tooltip) => tooltip.nativeElement === enrolling)!
+        .injector.get(MatTooltip).message
+    ).toBe('Creating the key and enrolling it with the registrar…');
   });
 
   it('says which fields keep a key from being imported, focuses the first one and sends nothing', async () => {
@@ -280,6 +294,23 @@ describe('KeyCreateWizardComponent registrar enrollment', () => {
       kmsProvider: 'vault',
     });
     expect(router.navigate).toHaveBeenCalledWith(['/keys', 'key-1']);
+  });
+
+  it('enrolls once when Create & Enroll is clicked again while it runs, and says why it waits', async () => {
+    let finish!: () => void;
+    registrarService.createAccessKeyChain.mockReturnValue(
+      new Promise((resolve) => (finish = () => resolve({ id: 'c', certId: 'key-1', crt: 'PEM' })))
+    );
+    const component = create();
+    expect(component.createTooltip).toBe('');
+
+    const first = component.createKey();
+    expect(component.createTooltip).toBe('Creating the key and enrolling it with the registrar…');
+    await component.createKey();
+    finish();
+    await first;
+
+    expect(registrarService.createAccessKeyChain).toHaveBeenCalledOnce();
   });
 
   it('says why next to Create & Enroll when the registrar authentication fails', async () => {
@@ -521,6 +552,18 @@ describe('KeyCreateWizardComponent errors', () => {
   beforeEach(() => {
     keyChainService = { import: vi.fn() };
     snackBar = { open: vi.fn() };
+  });
+
+  it('requires the key and certificate only while an earlier step chose to import them', () => {
+    const component = create('');
+    expect(component.configForm.valid).toBe(false);
+
+    component.accessSourceForm.patchValue({ accessSource: 'selfSigned' });
+    expect(component.configForm.valid).toBe(true);
+
+    component.accessSourceForm.patchValue({ accessSource: 'external' });
+    expect(component.configForm.valid).toBe(false);
+    expect(component.createTooltip).toBe('');
   });
 
   it('asks for the certificate chain instead of importing without one', async () => {

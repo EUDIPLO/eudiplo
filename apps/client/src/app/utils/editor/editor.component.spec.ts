@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 import { provideMonacoEditor } from 'ngx-monaco-editor-v2';
 
+import { focusField } from '../../common/field-to-fix.util';
 import { EditorComponent } from './editor.component';
 import { transactionDataArraySchema } from '../schemas';
 
@@ -68,6 +69,19 @@ describe('EditorComponent', () => {
       expect(editor.focus).not.toHaveBeenCalled();
       expect(document.activeElement).toBe(elsewhere);
       elsewhere.remove();
+    });
+
+    it("is how a form's Save focuses the field, until the editor is destroyed", () => {
+      const editor = monaco();
+      component.onEditorInit(editor);
+      const host = fixture.nativeElement as HTMLElement;
+
+      focusField(host);
+      expect(editor.focus).toHaveBeenCalledTimes(1);
+
+      fixture.destroy();
+      focusField(host);
+      expect(editor.focus).toHaveBeenCalledTimes(1);
     });
   });
 });
