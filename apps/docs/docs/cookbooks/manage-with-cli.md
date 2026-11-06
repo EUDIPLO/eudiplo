@@ -81,7 +81,7 @@ Create these four files in `config/membership-files/`.
 }
 ```
 
-`regenerate` makes EUDIPLO create the key material on the first import, so the private key never appears in a file and every instance you apply the folder to gets a key of its own. Restarts with the unchanged file keep the key. A change to this file, even to `description`, creates a new key on the next start, and so does the first start after an upgrade that changes the key chain file format ([details](../reference/config-bundle-format.md#import-modes-and-plan-actions)).
+`regenerate` makes EUDIPLO create the key material on the first import, so the private key never appears in a file and every instance you apply the folder to gets a key of its own. Restarts with the unchanged file keep the key. A change to this file, even to `description`, creates a new key on the next start ([details](../reference/config-bundle-format.md#import-modes-and-plan-actions)).
 
 `issuance/issuance.json`, the issuer settings:
 
