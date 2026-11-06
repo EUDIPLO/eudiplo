@@ -607,7 +607,7 @@ describe("TrustListService", () => {
             // Each key chain is read once; a refused list creates no
             // trust list key chain and is not saved.
             expect(certService.getCertificateById).toHaveBeenCalledTimes(1);
-            expect(certService.findOrCreate).not.toHaveBeenCalled();
+            expect(certService.find).not.toHaveBeenCalled();
             expect(trustListRepo.save).not.toHaveBeenCalled();
         });
 
@@ -633,7 +633,7 @@ describe("TrustListService", () => {
                     { id: "tenant", name: "Tenant" },
                 ),
             ).rejects.toThrow("Key chain not found");
-            expect(certService.findOrCreate).not.toHaveBeenCalled();
+            expect(certService.find).not.toHaveBeenCalled();
         });
     });
 

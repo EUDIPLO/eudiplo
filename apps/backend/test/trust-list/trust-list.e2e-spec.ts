@@ -63,6 +63,28 @@ function importKeyChain(
         .expect(201);
 }
 
+/**
+ * Imports the attestation and status list key chains of the HAIP fixtures,
+ * which internal entities need as issuer and revocation key chains.
+ */
+async function importEntityKeyChains(
+    app: INestApplication<App>,
+    token: string,
+    configFolder: string,
+): Promise<void> {
+    for (const file of ["attestation", "status-list"]) {
+        await request(app.getHttpServer())
+            .post("/key-chain/import")
+            .set("Authorization", `Bearer ${token}`)
+            .send(
+                readConfig<KeyChainImportDto>(
+                    join(configFolder, `haip/key-chains/${file}.json`),
+                ),
+            )
+            .expect(201);
+    }
+}
+
 describe("Trust List e2e Tests", () => {
     let ctx: TestContext;
 
@@ -421,6 +443,7 @@ describe("Trust List e2e Tests", () => {
                 [Role.Issuances, Role.Keys],
             );
             auth = `Bearer ${token}`;
+            await importEntityKeyChains(ctx.app, token, ctx.configFolder);
             key = await newPrivateKey();
             await importKeyChain(ctx.app, token, {
                 id: keyChainId,
@@ -437,8 +460,10 @@ describe("Trust List e2e Tests", () => {
                     entities: [
                         {
                             type: "internal",
-                            issuerKeyChainId: keyChainId,
-                            revocationKeyChainId: keyChainId,
+                            issuerKeyChainId:
+                                "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                            revocationKeyChainId:
+                                "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
                             info: { name: "Bundle Provider" },
                         },
                     ],
@@ -1256,6 +1281,7 @@ describe("Trust List e2e Tests", () => {
                 ctx.clientSecret,
                 "trust-list-without-key-chain",
             );
+            await importEntityKeyChains(ctx.app, token, ctx.configFolder);
 
             const response = await request(ctx.app.getHttpServer())
                 .post("/trust-list")
@@ -1265,8 +1291,10 @@ describe("Trust List e2e Tests", () => {
                     entities: [
                         {
                             type: "internal",
-                            issuerKeyChainId: "issuer",
-                            revocationKeyChainId: "revocation",
+                            issuerKeyChainId:
+                                "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                            revocationKeyChainId:
+                                "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
                             info: { name: "Test Provider" },
                         },
                     ],
