@@ -8,7 +8,11 @@ import { JwtService } from '../../services/jwt.service';
 import { SchemaService } from '../schema.service';
 import { SchemaShowComponent } from './schema-show.component';
 import { errorSnackBarDuration } from '../../utils/error-snackbar';
-import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
+import {
+  expectAvailable,
+  expectUnavailable,
+  tooltipOf,
+} from '../../common/unavailable-action.testing';
 
 /** The arguments of an error snackbar with this text. */
 const errorSnackBar = (text: string) =>
@@ -1249,6 +1253,57 @@ describe('SchemaShowComponent page', () => {
 
     expect(schemaService['updateMetadata']).toHaveBeenCalledOnce();
     expectUnavailable(fixture, save, 'Saving the catalog metadata…');
+  });
+
+  it('keeps Deprecate focusable while the version is deprecated: a second click sends nothing', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    schemaService['deprecateVersion'].mockReturnValue(new Promise(() => undefined));
+    const fixture = await render();
+    const deprecate = button(fixture, 'Deprecate version 1.0.0') as HTMLButtonElement;
+    expect(tooltipOf(fixture, deprecate)).toBe('Deprecate this version');
+
+    deprecate.click();
+    fixture.detectChanges();
+    deprecate.click();
+    fixture.detectChanges();
+
+    expect(schemaService['deprecateVersion']).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, deprecate, 'Deprecating this version…');
+  });
+
+  it('moves the focus to the heading when Deprecate goes away with a finished deprecation', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    let finish!: (entry: unknown) => void;
+    schemaService['deprecateVersion'].mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    const fixture = await render();
+    const deprecate = button(fixture, 'Deprecate version 1.0.0');
+    deprecate.focus();
+
+    const deprecating = fixture.componentInstance.deprecate();
+    fixture.detectChanges();
+    finish(currentVersion({ deprecated: true }));
+    await deprecating;
+    fixture.detectChanges();
+
+    await vi.waitFor(() =>
+      expect(document.activeElement?.textContent?.trim()).toBe('Schema Details')
+    );
+  });
+
+  it('keeps Delete focusable while the version is deleted: a second click sends nothing', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    schemaService['delete'].mockReturnValue(new Promise(() => undefined));
+    const fixture = await render();
+    const remove = button(fixture, 'Delete version 1.0.0') as HTMLButtonElement;
+    expect(tooltipOf(fixture, remove)).toBe('Delete this version');
+
+    remove.click();
+    fixture.detectChanges();
+    remove.click();
+    fixture.detectChanges();
+
+    expect(schemaService['delete']).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, remove, 'Deleting this version…');
   });
 
   it('offers no Deprecate for a version that is deprecated already', async () => {
