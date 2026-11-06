@@ -625,10 +625,6 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
     this.stepper.next();
   }
 
-  /**
-   * Create the key chain based on wizard selections.
-   * For registrar enrollment, creates the key then requests a certificate.
-   */
   /** Create stays focusable while the key chain is created, so its tooltip says why it waits. */
   get createTooltip(): string {
     if (!this.isSubmitting) return '';
@@ -638,6 +634,10 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
     return this.importsExternalKey ? 'Importing the key chain…' : 'Creating the key chain…';
   }
 
+  /**
+   * Create the key chain based on wizard selections.
+   * For registrar enrollment, creates the key then requests a certificate.
+   */
   async createKey(): Promise<void> {
     // `disabledInteractive` keeps Create clickable while it looks disabled.
     if (this.isSubmitting) return;
