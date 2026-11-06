@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PresentationShowComponent } from './presentation-show.component';
 import { renderDownloadButton } from '../../../config-portability/config-document.testing';
 import { PresentationManagementService } from '../presentation-management.service';
-import { expectUnavailable, tooltipOf } from '../../../common/unavailable-action.testing';
+import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
 
 describe('PresentationShowComponent', () => {
   let component: PresentationShowComponent;
@@ -204,7 +204,7 @@ describe('PresentationShowComponent registration certificate', () => {
       expect(button).toBeDefined();
       return button!;
     });
-    expect(tooltipOf(fixture, reissue)).toBe('');
+    expectAvailable(fixture, reissue);
 
     reissue.click();
     fixture.detectChanges();

@@ -12,7 +12,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { JwtService } from '../../services/jwt.service';
 import { RegistrarService } from '../../registrar/registrar.service';
 import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
-import { expectUnavailable, tooltipOf } from '../../common/unavailable-action.testing';
+import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 
 describe('KeyManagementShowComponent', () => {
   let component: KeyManagementShowComponent;
@@ -593,9 +593,7 @@ describe('KeyManagementShowComponent registrar enrollment', () => {
       fixture.detectChanges();
       expect(enroll.getAttribute('aria-busy')).toBeNull();
     });
-    expect(tooltipOf(fixture, enroll)).toBe(
-      'Request a certificate for this key from the registrar'
-    );
+    expectAvailable(fixture, enroll, 'Request a certificate for this key from the registrar');
 
     enroll.click();
     fixture.detectChanges();
@@ -822,7 +820,7 @@ describe('KeyManagementShowComponent delete', () => {
       fixture.detectChanges();
       expect(remove.getAttribute('aria-busy')).toBeNull();
     });
-    expect(tooltipOf(fixture, remove)).toBe('Delete key chain');
+    expectAvailable(fixture, remove, 'Delete key chain');
 
     remove.click();
     fixture.detectChanges();

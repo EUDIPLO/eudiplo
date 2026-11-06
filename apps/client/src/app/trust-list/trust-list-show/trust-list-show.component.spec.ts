@@ -12,7 +12,7 @@ import { FrontendConfigService } from '../../services/frontend-config.service';
 import { JwtService, type Role } from '../../services/jwt.service';
 import { ConfigDocumentService } from '../../config-portability/config-document.service';
 import { TrustListShowComponent } from './trust-list-show.component';
-import { expectUnavailable, tooltipOf } from '../../common/unavailable-action.testing';
+import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 
 /** Answers the trust list requests of the page with this body and status, and no versions. */
 function serveTrustList(trustList: object, status = 200): void {
@@ -651,7 +651,7 @@ describe('TrustListShowComponent delete', () => {
       fixture.detectChanges();
       expect(remove.getAttribute('aria-busy')).toBeNull();
     });
-    expect(tooltipOf(fixture, remove)).toBe('Delete list');
+    expectAvailable(fixture, remove, 'Delete list');
 
     remove.click();
     fixture.detectChanges();

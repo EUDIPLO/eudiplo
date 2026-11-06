@@ -7,7 +7,7 @@ import { IssuanceConfigShowComponent } from './issuance-config-show.component';
 import { renderDownloadButton } from '../../../config-portability/config-document.testing';
 import { IssuanceConfigService } from '../issuance-config.service';
 import { ConfigDocumentService } from '../../../config-portability/config-document.service';
-import { expectUnavailable, tooltipOf } from '../../../common/unavailable-action.testing';
+import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
 
 describe('IssuanceConfigShowComponent', () => {
   let component: IssuanceConfigShowComponent;
@@ -191,7 +191,7 @@ describe('IssuanceConfigShowComponent registration certificate', () => {
       expect(button).toBeDefined();
       return button!;
     });
-    expect(tooltipOf(fixture, regenerate)).toBe('');
+    expectAvailable(fixture, regenerate);
 
     regenerate.click();
     fixture.detectChanges();

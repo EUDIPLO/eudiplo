@@ -8,11 +8,7 @@ import { JwtService } from '../../services/jwt.service';
 import { SchemaService } from '../schema.service';
 import { SchemaShowComponent } from './schema-show.component';
 import { errorSnackBarDuration } from '../../utils/error-snackbar';
-import {
-  expectAvailable,
-  expectUnavailable,
-  tooltipOf,
-} from '../../common/unavailable-action.testing';
+import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 
 /** The arguments of an error snackbar with this text. */
 const errorSnackBar = (text: string) =>
@@ -1260,7 +1256,7 @@ describe('SchemaShowComponent page', () => {
     schemaService['deprecateVersion'].mockReturnValue(new Promise(() => undefined));
     const fixture = await render();
     const deprecate = button(fixture, 'Deprecate version 1.0.0') as HTMLButtonElement;
-    expect(tooltipOf(fixture, deprecate)).toBe('Deprecate this version');
+    expectAvailable(fixture, deprecate, 'Deprecate this version');
 
     deprecate.click();
     fixture.detectChanges();
@@ -1295,7 +1291,7 @@ describe('SchemaShowComponent page', () => {
     schemaService['delete'].mockReturnValue(new Promise(() => undefined));
     const fixture = await render();
     const remove = button(fixture, 'Delete version 1.0.0') as HTMLButtonElement;
-    expect(tooltipOf(fixture, remove)).toBe('Delete this version');
+    expectAvailable(fixture, remove, 'Delete this version');
 
     remove.click();
     fixture.detectChanges();

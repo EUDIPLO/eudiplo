@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SessionManagementShowComponent } from './session-management-show.component';
 import { SessionManagementService } from '../session-management.service';
-import { expectUnavailable, tooltipOf } from '../../common/unavailable-action.testing';
+import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 
 describe('SessionManagementShowComponent', () => {
   let component: SessionManagementShowComponent;
@@ -118,9 +118,7 @@ describe('SessionManagementShowComponent', () => {
     it('stays focusable while the offer is cancelled: a second click sends one request', async () => {
       cancelSession.mockReturnValue(new Promise(() => undefined));
       const cancel = renderCancel();
-      expect(tooltipOf(fixture, cancel)).toBe(
-        'Cancel this offer, so a wallet can no longer use it'
-      );
+      expectAvailable(fixture, cancel, 'Cancel this offer, so a wallet can no longer use it');
 
       cancel.click();
       fixture.detectChanges();
@@ -144,9 +142,7 @@ describe('SessionManagementShowComponent', () => {
       const cancel = [
         ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
       ].find((button) => button.textContent?.includes('Cancel Request'))!;
-      expect(tooltipOf(fixture, cancel)).toBe(
-        'Cancel this request, so a wallet can no longer answer it'
-      );
+      expectAvailable(fixture, cancel, 'Cancel this request, so a wallet can no longer answer it');
 
       cancel.click();
       fixture.detectChanges();

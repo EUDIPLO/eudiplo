@@ -11,11 +11,7 @@ import { RegistrarService } from '../../../registrar/registrar.service';
 import { EditorComponent } from '../../../utils/editor/editor.component';
 import { ThemeService } from '../../../services/theme.service';
 import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
-import {
-  expectAvailable,
-  expectUnavailable,
-  tooltipOf,
-} from '../../../common/unavailable-action.testing';
+import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
 
 const query = {
   credentials: [
@@ -217,7 +213,7 @@ describe('Presentation configuration flow', () => {
       expect(button).toBeDefined();
       return button!;
     });
-    expect(tooltipOf(fixture, reissue)).toBe('');
+    expectAvailable(fixture, reissue);
 
     reissue.click();
     fixture.detectChanges();

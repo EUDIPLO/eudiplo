@@ -7,7 +7,7 @@ import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
-import { expectUnavailable, tooltipOf } from '../../common/unavailable-action.testing';
+import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 import { JwtService } from '../../services/jwt.service';
 import { KeyChainService } from '../key-chain.service';
 import { KeyManagementProvidersComponent } from './key-management-providers.component';
@@ -168,7 +168,7 @@ describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
       fixture.detectChanges();
       expect(button.getAttribute('aria-busy')).toBeNull();
     });
-    expect(tooltipOf(fixture, button)).toBe('Show tenant config JSON');
+    expectAvailable(fixture, button, 'Show tenant config JSON');
 
     button.click();
     fixture.detectChanges();
