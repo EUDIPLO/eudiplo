@@ -413,6 +413,13 @@ export class RegistrarComponent implements OnInit {
     });
   }
 
+  /** Drops the previous backend rejections before a save; the backend checks again. */
+  private dropBackendRejections(): void {
+    for (const control of this.fieldControls()) {
+      if (control.hasError('server')) control.updateValueAndValidity({ emitEvent: false });
+    }
+  }
+
   async saveConfig(): Promise<void> {
     // `disabledInteractive` keeps the button clickable while it looks disabled.
     if (this.isSaving || this.isDeleting) return;
@@ -420,10 +427,7 @@ export class RegistrarComponent implements OnInit {
       this.showWhatBlocksSaving();
       return;
     }
-    // Drop the previous backend rejections; the backend checks again.
-    for (const control of this.fieldControls()) {
-      if (control.hasError('server')) control.updateValueAndValidity({ emitEvent: false });
-    }
+    this.dropBackendRejections();
 
     const formValue = this.configForm.value;
     const isUpdate = this.config !== null;
