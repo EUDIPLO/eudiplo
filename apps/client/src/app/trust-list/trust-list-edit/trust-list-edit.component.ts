@@ -16,6 +16,7 @@ import {
   FormControl,
   FormGroup,
   ReactiveFormsModule,
+  type ValidationErrors,
   Validators,
 } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -29,7 +30,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatDividerModule } from '@angular/material/divider';
-import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { ActivatedRoute, type Params, Router, RouterModule } from '@angular/router';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import {
   keyChainControllerGetAll,
@@ -47,6 +48,7 @@ import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { fieldErrorMessage, showIssuesAtFields } from '../../utils/form-errors';
 import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
+import { fromFormQueryParams } from '../../common/return-to-form';
 
 /** Common info fields for both internal and external entities */
 interface EntityInfoForm {
@@ -83,6 +85,13 @@ type TrustListKeyChainUsage = 'attestation' | 'statusList' | 'trustList';
 const KEY_CHAIN_USAGE_NAMES: Record<TrustListKeyChainUsage, string> = {
   attestation: 'credential signing',
   statusList: 'status list or credential signing',
+  trustList: 'trust list',
+};
+
+/** How a create link names the usage type of the key chain it creates for a select of a usage. */
+const CREATED_KEY_CHAIN_NAMES: Record<TrustListKeyChainUsage, string> = {
+  attestation: 'credential signing',
+  statusList: 'status list',
   trustList: 'trust list',
 };
 
@@ -147,6 +156,18 @@ export class TrustListEditComponent implements OnInit {
   keyChainsLoadError = '';
   /** Set once the key chains have loaded, so an empty list means the tenant has none of its kind. */
   private keyChainsLoaded = false;
+  /** The usages of the signing key chain select, and of an internal entity's key chain selects. */
+  readonly signingKeyChainUsages: readonly TrustListKeyChainUsage[] = ['trustList'];
+  readonly entityKeyChainUsages: readonly TrustListKeyChainUsage[] = ['attestation', 'statusList'];
+  /**
+   * Query parameters of the create links per usage: the key wizard preselects the usage and, once
+   * the key chain exists, says to return to this tab instead of leaving it.
+   */
+  private readonly keyChainLinkParams: Readonly<Record<TrustListKeyChainUsage, Params>> = {
+    attestation: fromFormQueryParams({ usage: 'attestation' }),
+    statusList: fromFormQueryParams({ usage: 'statusList' }),
+    trustList: fromFormQueryParams({ usage: 'trustList' }),
+  };
 
   /**
    * Whether the key chain lists say what the tenant has: they loaded, and the last load did not
@@ -184,7 +205,9 @@ export class TrustListEditComponent implements OnInit {
     this.form = new FormGroup({
       id: new FormControl('', { validators: [Validators.required] }),
       description: new FormControl(''),
-      keyChainId: new FormControl(''),
+      keyChainId: new FormControl('', {
+        validators: (control) => this.signingKeyChainError(control),
+      }),
       entities: new FormArray([]),
     });
 
@@ -238,6 +261,22 @@ export class TrustListEditComponent implements OnInit {
     } finally {
       this.loadingKeyChains = false;
     }
+    this.revalidateSigningKeyChain();
+  }
+
+  /**
+   * Validates the signing key chain again once the key chains or the stored trust list arrive,
+   * since whether saving with it fails depends on both. The select looks filled in even then, so it
+   * shows its error at once instead of waiting to be touched. An issue the backend put at the field
+   * stays until the field is edited.
+   */
+  private revalidateSigningKeyChain(): void {
+    const signing = this.form.get('keyChainId');
+    if (!signing) return;
+    const server: unknown = signing.getError('server');
+    signing.updateValueAndValidity();
+    if (typeof server === 'string') signing.setErrors({ ...signing.errors, server });
+    if (signing.invalid) signing.markAsTouched();
   }
 
   /**
@@ -324,18 +363,22 @@ export class TrustListEditComponent implements OnInit {
       : 'missing';
   }
 
-  /** What saving does with a selected key chain the select for `usage` does not offer; '' otherwise. */
-  private unlistedKeyChainWarning(value: unknown, usage: TrustListKeyChainUsage): string {
+  /**
+   * What saving does with a key chain that an entity's select for `usage` holds but does not offer;
+   * '' otherwise. The signing key chain select has {@link signingKeyChainProblem}.
+   */
+  private unlistedKeyChainWarning(
+    value: unknown,
+    usage: Exclude<TrustListKeyChainUsage, 'trustList'>
+  ): string {
     switch (this.unlistedReason(value, usage)) {
       case 'missing':
-        return 'This key chain does not exist, so saving fails. Choose another.';
+        return missingKeyChainMessage('This key chain');
       case 'otherUsage':
-        // The backend refuses a signing key chain of another usage type. An entity's key chain of
-        // another usage type is accepted when the stored list already names it there, which is
-        // the only way the form holds one, since its selects offer only accepted usage types.
-        return usage === 'trustList'
-          ? 'This is not a trust list key chain, so saving fails. Choose another.'
-          : `This is not a ${KEY_CHAIN_USAGE_NAMES[usage]} key chain; saving still puts its certificate in the trust list. Choose another.`;
+        // An entity's key chain of another usage type is accepted when the stored list already
+        // names it there, which is the only way the form holds one, since its selects offer only
+        // accepted usage types.
+        return `This is not a ${KEY_CHAIN_USAGE_NAMES[usage]} key chain; saving still puts its certificate in the trust list. Choose another.`;
       default:
         return '';
     }
@@ -372,13 +415,57 @@ export class TrustListEditComponent implements OnInit {
     return this.keyChainsKnown && this.keyChainsOf(usage).length === 0;
   }
 
-  /** Whether the internal entities' key chain selects need a retry, or a key chain created first. */
-  get entityKeyChainsMissing(): boolean {
-    return (
-      this.keyChainsLoadError !== '' ||
-      this.noKeyChains('attestation') ||
-      this.noKeyChains('statusList')
-    );
+  /** The query parameters of the create link for a select of `usage`, the same object each time. */
+  keyChainLinkParamsOf(usage: TrustListKeyChainUsage): Params {
+    return this.keyChainLinkParams[usage];
+  }
+
+  /** How the create link for a select of `usage` names the key chain it creates. */
+  createdKeyChainName(usage: TrustListKeyChainUsage): string {
+    return CREATED_KEY_CHAIN_NAMES[usage];
+  }
+
+  /**
+   * The empty option of the signing key chain select, which leaves `keyChainId` out: a create
+   * then signs with a trust list key chain of the tenant, and fails without one; an update keeps
+   * the stored key chain.
+   */
+  get defaultSigningKeyChainLabel(): string {
+    return this.isEditMode
+      ? 'Keep the current key chain'
+      : 'Any trust list key chain of the tenant';
+  }
+
+  /**
+   * Why saving fails with `value` in the signing key chain select, as far as the loaded key chains
+   * tell; '' when it does not, or nothing is known. The key chain that would sign is the selected
+   * one or, when the empty option keeps it on edit, the current one. The backend refuses one that
+   * is gone or lacks trust list usage, and a create without one while the tenant has no trust list
+   * key chain to look up.
+   */
+  signingKeyChainProblem(value: unknown): string {
+    const kept = !value && this.isEditMode;
+    // Until the trust list has loaded, nothing is known about the key chain it keeps.
+    if (kept && !this.trustList) return '';
+    const keyChainId = value || (kept ? this.trustList?.keyChainId : '');
+    const reason = this.unlistedReason(keyChainId, 'trustList');
+    if (reason === 'missing') {
+      return missingKeyChainMessage(kept ? 'The current key chain' : 'This key chain');
+    }
+    if (reason === 'otherUsage') {
+      return `${kept ? 'The current key chain' : 'This'} is not a trust list key chain, so saving fails. Choose another.`;
+    }
+    return !keyChainId && this.noKeyChains('trustList') ? this.noKeyChainsMessage('trustList') : '';
+  }
+
+  /** The signing key chain is invalid while saving with it fails, so the form says why first. */
+  private signingKeyChainError(control: AbstractControl): ValidationErrors | null {
+    return this.signingKeyChainProblem(control.value) ? { signingKeyChain: true } : null;
+  }
+
+  /** Whether key chain selects of `usages` need a retry, or a key chain created first. */
+  keyChainActionsNeeded(usages: readonly TrustListKeyChainUsage[]): boolean {
+    return this.keyChainsLoadError !== '' || usages.some((usage) => this.noKeyChains(usage));
   }
 
   /** Why a select for `usage` has no options, and where to create one. */
@@ -388,24 +475,28 @@ export class TrustListEditComponent implements OnInit {
 
   /**
    * The hint of the key chain select for `usage` holding `value`: `hint`, unless the key chains
-   * are loading or failed to load, the select does not offer `value`, for a required select no
+   * are loading or failed to load, saving with `value` fails or the select does not offer it, no
    * key chain has that usage, or a credential signing key chain may sign the revocation's status
    * lists.
    */
   keyChainHint(hint: string, value: unknown, usage: TrustListKeyChainUsage): string {
     if (this.loadingKeyChains) return 'Loading key chains…';
     if (this.keyChainsLoadError) return 'Could not load key chains.';
-    const warning = this.unlistedKeyChainWarning(value, usage);
+    const warning =
+      usage === 'trustList'
+        ? this.signingKeyChainProblem(value)
+        : this.unlistedKeyChainWarning(value, usage);
     if (warning) return warning;
-    // The signing key chain select may stay empty (an update keeps the stored key chain, a create
-    // looks one up), so only the entities' selects say that none has their usage.
-    if (usage !== 'trustList' && this.noKeyChains(usage)) return this.noKeyChainsMessage(usage);
+    if (this.noKeyChains(usage)) return this.noKeyChainsMessage(usage);
     const credentialSigning =
       usage === 'statusList' ? this.credentialSigningRevocationHint(value) : '';
     return credentialSigning || hint;
   }
 
-  /** Under an empty required key chain select of `usage`, which replaces its hint: why it may be empty. */
+  /**
+   * Under an empty key chain select of `usage` that must not stay empty, which replaces its hint:
+   * why it may be empty.
+   */
   keyChainRequiredMessage(usage: TrustListKeyChainUsage): string {
     if (this.keyChainsLoadError) return 'The key chains could not be loaded.';
     return this.noKeyChains(usage) ? this.noKeyChainsMessage(usage) : 'Select a key chain.';
@@ -442,6 +533,7 @@ export class TrustListEditComponent implements OnInit {
       } else if (this.trustList.data) {
         this.loadEntitiesFromData(this.trustList.data);
       }
+      this.revalidateSigningKeyChain();
     } catch (error) {
       console.error('Failed to load trust list:', error);
       this.loadError = getApiErrorMessage(error, 'Failed to load trust list');
@@ -788,6 +880,11 @@ export class TrustListEditComponent implements OnInit {
   fieldError(path: string, localMessage = ''): string {
     return fieldErrorMessage(this.form.get(path), localMessage);
   }
+}
+
+/** Under a key chain select whose key chain, named by `subject`, no longer exists. */
+function missingKeyChainMessage(subject: string): string {
+  return `${subject} does not exist, so saving fails. Choose another.`;
 }
 
 /**

@@ -54,7 +54,8 @@ describe('TrustListEditComponent save', () => {
                   { path: ['entities', 0, 'type'], message: 'Invalid option' },
                 ],
               }
-            : []
+            : // The tenant's key chains: one can sign the trust list.
+              [{ id: 'trust-list-signing', usageType: 'trustList' }]
         ),
         { status: rejected ? 400 : 200, headers: { 'Content-Type': 'application/json' } }
       );
@@ -168,12 +169,15 @@ describe('TrustListEditComponent loading the trust list', () => {
     client.setConfig({ fetch: () => new Promise<Response>(() => undefined) });
   });
 
-  /** Opens the edit page of the trust list under its real route. */
-  async function render() {
+  /** Opens the edit page of the trust list, or the page at `url`, under its real route. */
+  async function render(url = `/trust-list/${trustList.id}/edit`) {
     await TestBed.configureTestingModule({
       imports: [TrustListEditComponent],
       providers: [
-        provideRouter([{ path: 'trust-list/:id/edit', component: TrustListEditComponent }]),
+        provideRouter([
+          { path: 'trust-list/create', component: TrustListEditComponent },
+          { path: 'trust-list/:id/edit', component: TrustListEditComponent },
+        ]),
         { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
         { provide: JwtService, useValue: { canUseConfigPortability: () => false } },
       ],
@@ -187,10 +191,7 @@ describe('TrustListEditComponent loading the trust list', () => {
     const snackBar = vi.spyOn(MatSnackBar.prototype, 'open');
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigate');
     const harness = await RouterTestingHarness.create();
-    const component = await harness.navigateByUrl(
-      `/trust-list/${trustList.id}/edit`,
-      TrustListEditComponent
-    );
+    const component = await harness.navigateByUrl(url, TrustListEditComponent);
     const page = harness.routeNativeElement!;
     return { harness, component, page, snackBar, navigate };
   }
@@ -409,13 +410,13 @@ describe('TrustListEditComponent loading the trust list', () => {
   });
 
   it('says why an internal entity has no key chain to select, and links to create one', async () => {
-    // Only the external entity is stored, no signing key chain is chosen, and the tenant has no
-    // key chains at all.
+    // Only the external entity is stored, and the tenant has no key chains besides the one that
+    // signs the trust list.
     answers.trustList = {
       status: 200,
-      body: { ...trustList, keyChainId: '', entityConfig: [trustList.entityConfig[1]] },
+      body: { ...trustList, entityConfig: [trustList.entityConfig[1]] },
     };
-    answers.keyChains = { status: 200, body: [] };
+    answers.keyChains = { status: 200, body: [keyChains[2]] };
     const { harness, component, page } = await render();
     await vi.waitFor(() => {
       harness.detectChanges();
@@ -431,7 +432,7 @@ describe('TrustListEditComponent loading the trust list', () => {
       'No status list or credential signing key chains. Create one in Key Management.';
     expect(hints(page, noIssuer)).toHaveLength(1);
     expect(hints(page, noRevocation)).toHaveLength(1);
-    // The signing key chain select is not required, so it keeps its usual hint and gets no link.
+    // The signing key chain select has its key chain, so it keeps its usual hint and gets no link.
     expect(hints(page, 'Key chain used to sign the trust list JWT')).toHaveLength(1);
     expect(hints(page, 'No trust list key chains. Create one in Key Management.')).toHaveLength(0);
     // The links open in a new tab, so the form keeps what was entered.
@@ -440,12 +441,12 @@ describe('TrustListEditComponent loading the trust list', () => {
       links.map((link) => [link.getAttribute('href'), link.target, link.textContent?.trim()])
     ).toEqual([
       [
-        '/keys/create?usage=attestation',
+        '/keys/create?usage=attestation&from=form',
         '_blank',
         expect.stringMatching(/Create credential signing key chain\s+\(opens in a new tab\)$/),
       ],
       [
-        '/keys/create?usage=statusList',
+        '/keys/create?usage=statusList&from=form',
         '_blank',
         expect.stringMatching(/Create status list key chain\s+\(opens in a new tab\)$/),
       ],
@@ -468,6 +469,218 @@ describe('TrustListEditComponent loading the trust list', () => {
     expect(buttons(page, 'Save Changes')[0].disabled).toBe(true);
   });
 
+  it('on create, says that no trust list key chain can sign the list, and links to create one', async () => {
+    answers.trustList = null;
+    answers.keyChains = { status: 200, body: [keyChains[0], keyChains[1]] };
+    const { harness, component, page } = await render('/trust-list/create');
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(buttons(page, 'Reload key chains')).toHaveLength(1);
+    });
+    // Without a selection, a create signs with a trust list key chain of the tenant, of which
+    // there is none, so saving would fail.
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(selected(page, 'keyChainId')).toBe('Any trust list key chain of the tenant');
+    });
+    // So the form cannot be sent. The select looks filled in, so instead of a hint it shows the
+    // reason as its error at once, without being touched first.
+    const signing = component.form.get('keyChainId')!;
+    expect(signing.hasError('signingKeyChain')).toBe(true);
+    const errors = () =>
+      [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim());
+    expect(errors()).toEqual(['No trust list key chains. Create one in Key Management.']);
+    expect(hints(page, 'Key chain used to sign the trust list JWT')).toHaveLength(0);
+    const links = [...page.querySelectorAll<HTMLAnchorElement>('a[href^="/keys/create"]')];
+    expect(
+      links.map((link) => [link.getAttribute('href'), link.target, link.textContent?.trim()])
+    ).toEqual([
+      [
+        '/keys/create?usage=trustList&from=form',
+        '_blank',
+        expect.stringMatching(/Create trust list key chain\s+\(opens in a new tab\)$/),
+      ],
+    ]);
+
+    // Created in the other tab: Reload removes the error, the link and itself, and focus moves to
+    // the signing key chain select.
+    answers.keyChains = { status: 200, body: keyChains };
+    const reload = buttons(page, 'Reload key chains')[0];
+    reload.focus();
+    reload.click();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(buttons(page, 'Reload key chains')).toHaveLength(0);
+      expect(document.activeElement?.getAttribute('formcontrolname')).toBe('keyChainId');
+    });
+    expect(page.querySelector('a[href^="/keys/create"]')).toBeNull();
+    expect(hints(page, 'Key chain used to sign the trust list JWT')).toHaveLength(1);
+    expect(errors()).toEqual([]);
+    expect(signing.value).toBe('');
+    expect(signing.valid).toBe(true);
+  });
+
+  it('on edit, the empty signing option keeps the current trust list key chain', async () => {
+    const { harness, component, page } = await render();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector('form')).not.toBeNull();
+      expect(component.loadingKeyChains).toBe(false);
+    });
+
+    const signing = component.form.get('keyChainId')!;
+    signing.setValue('');
+    signing.markAsTouched();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(selected(page, 'keyChainId')).toBe('Keep the current key chain');
+    });
+    expect(hints(page, 'Key chain used to sign the trust list JWT')).toHaveLength(1);
+    expect(signing.valid).toBe(true);
+    expect(page.querySelector('a[href^="/keys/create"]')).toBeNull();
+
+    // Saving leaves keyChainId out, so the backend keeps the current key chain.
+    const sent: Request[] = [];
+    client.setConfig({
+      fetch: async (input: RequestInfo | URL) => {
+        const request = input instanceof Request ? input : new Request(input);
+        sent.push(request.clone());
+        return json({ status: 200, body: trustList });
+      },
+    });
+    await component.onSubmit();
+    const update = sent.find((request) => request.method === 'PUT');
+    expect(new URL(update!.url).pathname).toMatch(/\/api\/trust-list\/membership-issuers$/);
+    const body = (await update!.json()) as Record<string, unknown>;
+    expect(body).not.toHaveProperty('keyChainId');
+    expect(body['entities']).toHaveLength(2);
+  });
+
+  it('on edit, does not save with a signing key chain of another usage, selected or kept', async () => {
+    // The current signing key chain now signs credentials, so the tenant has no trust list key
+    // chain, and an update that names it or keeps it fails.
+    answers.keyChains = {
+      status: 200,
+      body: [keyChains[0], keyChains[1], { id: 'trust-list-signing', usageType: 'attestation' }],
+    };
+    const { harness, component, page } = await render();
+    const errors = () =>
+      [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim());
+    // The select looks filled in, so it shows why at once, without being touched first.
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(errors()).toEqual([
+        'This is not a trust list key chain, so saving fails. Choose another.',
+      ]);
+    });
+    const signing = component.form.get('keyChainId')!;
+    expect(signing.hasError('signingKeyChain')).toBe(true);
+    expect(buttons(page, 'Save Changes')[0].disabled).toBe(true);
+
+    // Keeping the current key chain keeps the same key chain, so it fails the same way.
+    signing.setValue('');
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(selected(page, 'keyChainId')).toBe('Keep the current key chain');
+    });
+    expect(errors()).toEqual([
+      'The current key chain is not a trust list key chain, so saving fails. Choose another.',
+    ]);
+    expect(signing.hasError('signingKeyChain')).toBe(true);
+    expect(
+      [...page.querySelectorAll('a[href^="/keys/create"]')].map((link) => link.getAttribute('href'))
+    ).toEqual(['/keys/create?usage=trustList&from=form']);
+    expect(buttons(page, 'Reload key chains')).toHaveLength(1);
+  });
+
+  it('on edit, does not save with a signing key chain that no longer exists, selected or kept', async () => {
+    answers.keyChains = { status: 200, body: [keyChains[0], keyChains[1]] };
+    const { harness, component, page } = await render();
+    const errors = () =>
+      [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim());
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(errors()).toEqual(['This key chain does not exist, so saving fails. Choose another.']);
+    });
+
+    component.form.get('keyChainId')!.setValue('');
+    harness.detectChanges();
+    expect(errors()).toEqual([
+      'The current key chain does not exist, so saving fails. Choose another.',
+    ]);
+    expect(component.form.get('keyChainId')!.invalid).toBe(true);
+  });
+
+  it('shows the signing key chain error at once when the trust list arrives after the key chains', async () => {
+    answers.keyChains = { status: 200, body: [keyChains[0], keyChains[1]] };
+    let releaseTrustList!: () => void;
+    const trustListArrives = new Promise<void>((resolve) => (releaseTrustList = resolve));
+    client.setConfig({
+      fetch: async (input: RequestInfo | URL) => {
+        const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
+        if (path.endsWith('/api/key-chain')) return json(answers.keyChains!);
+        await trustListArrives;
+        return json(answers.trustList!);
+      },
+    });
+    const { harness, component, page } = await render();
+    await vi.waitFor(() => expect(component.attestationKeyChains).toHaveLength(1));
+
+    releaseTrustList();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(
+        [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim())
+      ).toEqual(['This key chain does not exist, so saving fails. Choose another.']);
+    });
+  });
+
+  it('keeps an issue the backend put at the signing key chain when the key chains reload', async () => {
+    const { harness, component, page } = await render();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector('form')).not.toBeNull();
+      expect(component.loadingKeyChains).toBe(false);
+    });
+    const signing = component.form.get('keyChainId')!;
+    signing.setErrors({ server: 'Rejected by the backend' });
+
+    // The user returns from creating a key chain in another tab.
+    component.openKeyChainCreation(page);
+    window.dispatchEvent(new Event('focus'));
+    await vi.waitFor(() => expect(keyChainRequests).toBe(2));
+    await vi.waitFor(() => expect(component.loadingKeyChains).toBe(false));
+
+    expect(component.fieldError('keyChainId')).toBe('Rejected by the backend');
+    // Editing the field removes it.
+    signing.setValue('');
+    expect(component.fieldError('keyChainId')).toBe('');
+  });
+
+  it('on create, does not block an empty signing key chain while the key chains are unknown', async () => {
+    answers.trustList = null;
+    answers.keyChains = { status: 200, body: [keyChains[0], keyChains[1]] };
+    const { harness, component, page } = await render('/trust-list/create');
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(buttons(page, 'Reload key chains')).toHaveLength(1);
+    });
+    const signing = component.form.get('keyChainId')!;
+    expect(signing.hasError('signingKeyChain')).toBe(true);
+
+    // After a failed reload nothing is known about the key chains, so the select only says that
+    // and offers a retry; the backend answers for a save.
+    answers.keyChains = { status: 500, body: failure };
+    buttons(page, 'Reload key chains')[0].click();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(buttons(page, 'Retry loading key chains')).toHaveLength(1);
+    });
+    expect(signing.valid).toBe(true);
+    expect(hints(page, 'Could not load key chains.')).toHaveLength(1);
+    expect(page.querySelector('a[href^="/keys/create"]')).toBeNull();
+  });
+
   it('reloads the key chains after one was created, keeping the focus while one is missing', async () => {
     // Neither a credential signing nor a status list key chain exists.
     answers.keyChains = { status: 200, body: [keyChains[2]] };
@@ -481,8 +694,8 @@ describe('TrustListEditComponent loading the trust list', () => {
         link.getAttribute('href')
       );
     expect(createLinks()).toEqual([
-      '/keys/create?usage=attestation',
-      '/keys/create?usage=statusList',
+      '/keys/create?usage=attestation&from=form',
+      '/keys/create?usage=statusList&from=form',
     ]);
     const header = () => page.querySelector('mat-panel-description')?.textContent?.trim();
     // The stored issuer key chain is not among the loaded ones.
@@ -518,7 +731,7 @@ describe('TrustListEditComponent loading the trust list', () => {
     reload.click();
     await vi.waitFor(() => expect(component.loadingKeyChains).toBe(false));
     harness.detectChanges();
-    expect(createLinks()).toEqual(['/keys/create?usage=attestation']);
+    expect(createLinks()).toEqual(['/keys/create?usage=attestation&from=form']);
     expect(buttons(page, 'Reload key chains')).toEqual([reload]);
     expect(document.activeElement).toBe(reload);
 
@@ -689,9 +902,10 @@ describe('TrustListEditComponent loading the trust list', () => {
       issuerKeyChainId: 'issuer-keys',
       revocationKeyChainId: 'status-keys',
     });
+    // Saving fails with that signing key chain, so its select shows that as its error.
     expect(
-      hints(page, 'This is not a trust list key chain, so saving fails. Choose another.')
-    ).toHaveLength(1);
+      [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim())
+    ).toEqual(['This is not a trust list key chain, so saving fails. Choose another.']);
     expect(
       hints(
         page,
@@ -723,7 +937,9 @@ describe('TrustListEditComponent loading the trust list', () => {
     window.dispatchEvent(new Event('focus'));
     expect(component.loadingKeyChains).toBe(false);
 
-    const link = page.querySelector<HTMLAnchorElement>('a[href="/keys/create?usage=attestation"]')!;
+    const link = page.querySelector<HTMLAnchorElement>(
+      'a[href="/keys/create?usage=attestation&from=form"]'
+    )!;
     // The test opens no tab.
     link.addEventListener('click', (event) => event.preventDefault());
     link.focus();
