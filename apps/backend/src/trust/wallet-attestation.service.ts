@@ -22,7 +22,6 @@ import {
 } from "./status-list-verifier.service.js";
 import { BuiltTrustStore, TrustStoreService } from "./trust-store.service.js";
 import {
-    getRevocationServices,
     normalizeTrustListRefs,
     RevocationCheckMode,
     TrustListSource,
@@ -424,22 +423,8 @@ export class WalletAttestationService {
             // service, or else every EAA/Revocation service. An entity
             // without one must sign it under the certificate that its wallet
             // attestations are signed under.
-            const revocationServices = getRevocationServices(
-                matchedEntity.entity,
-                matchedEntity.issuanceServiceType,
-            );
-            const signerCertValues =
-                revocationServices.length > 0
-                    ? revocationServices.map((s) => ({
-                          certValue: s.certValue,
-                      }))
-                    : [
-                          {
-                              certValue: Buffer.from(
-                                  matchedEntity.issuanceCert.rawData,
-                              ).toString("base64"),
-                          },
-                      ];
+            const signers =
+                this.x509ValidationService.statusListSigners(matchedEntity);
 
             // Build and verify the status list's certificate chain
             const presented = this.x509ValidationService.parseX5c(x5c);
@@ -452,7 +437,7 @@ export class WalletAttestationService {
                 e.services.map((s) => ({ certValue: s.certValue })),
             );
             const anchors = this.x509ValidationService.parseTrustAnchors([
-                ...signerCertValues,
+                ...signers.map((s) => ({ certValue: s.certValue })),
                 ...allCerts,
             ]);
 
@@ -478,31 +463,18 @@ export class WalletAttestationService {
             // Check if the status list is signed under a signer cert from the
             // same entity. CA: the path must terminate at this cert. Pinned
             // (non-CA): the leaf must match.
-            let statusMatchesSigner: boolean;
-            if (revocationServices.length > 0) {
-                // All of them have the same type, see getRevocationServices.
-                const revocationMatch =
-                    await this.x509ValidationService.pathMatchesTrustedEntities(
-                        path,
-                        [matchedEntity.entity],
-                        "leaf",
-                        [revocationServices[0].serviceTypeIdentifier],
-                    );
-                statusMatchesSigner = revocationMatch !== null;
-            } else {
-                const signerThumb = this.x509ValidationService.isCaCert(
-                    matchedEntity.issuanceCert,
-                )
-                    ? statusEndThumb
-                    : statusLeafThumb;
-                statusMatchesSigner =
-                    signerThumb === matchedEntity.issuanceThumbprint;
-            }
+            const statusMatchesSigner =
+                await this.x509ValidationService.matchesStatusListSigner(
+                    path,
+                    matchedEntity,
+                    "leaf",
+                );
 
             const kind =
-                revocationServices.length > 0
-                    ? "a revocation certificate"
-                    : "the wallet attestation certificate";
+                signers[0].serviceTypeIdentifier ===
+                matchedEntity.issuanceServiceType
+                    ? "the wallet attestation certificate"
+                    : "a revocation certificate";
             if (!statusMatchesSigner) {
                 this.logger.warn(
                     `Status list is NOT signed by ${kind} from the same TrustedEntity. ` +

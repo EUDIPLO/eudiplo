@@ -183,20 +183,10 @@ export class MdocverifierService {
 
             const issuerX5Chain =
                 mdocDocument?.issuerSigned?.issuerAuth?.x5chain;
-            const trustedCertBuffers =
-                await this.chainValidation.getTrustedCertificateBuffers(
+            const trustedEntries =
+                await this.chainValidation.getTrustedCertificateEntries(
                     options.trustListSource,
                 );
-            const trustedStatusCertBuffers =
-                await this.chainValidation.getTrustedStatusCertificateBuffers(
-                    options.trustListSource,
-                );
-            const trustedAnchors = trustedCertBuffers.map(
-                (buffer) => new Uint8Array(buffer),
-            );
-            const trustedStatusAnchors = trustedStatusCertBuffers.map(
-                (buffer) => new Uint8Array(buffer),
-            );
 
             const normalizeDer = (certificate: Uint8Array): Uint8Array => {
                 try {
@@ -207,36 +197,25 @@ export class MdocverifierService {
                 }
             };
 
-            const buildTrustedCertificates = (attachStatus: boolean) => {
-                const issuanceAnchorsRaw =
-                    trustedAnchors.length > 0
-                        ? trustedAnchors
-                        : (issuerX5Chain ?? []);
-                const issuanceAnchors = issuanceAnchorsRaw.map(normalizeDer);
-
-                const statusAnchorsForMdocRaw =
-                    trustedStatusAnchors.length > 0
-                        ? trustedStatusAnchors
-                        : issuanceAnchorsRaw;
-                const statusAnchorsForMdoc =
-                    statusAnchorsForMdocRaw.map(normalizeDer);
-
-                return issuanceAnchors.length > 0
-                    ? [
-                          {
-                              // @owf/mdoc maps status anchors back to the trusted
-                              // issuance entry that matched chain validation.
-                              // When LoTE issuance anchors are available, pass only
-                              // those here instead of mixing in the presented x5chain.
-                              issuance: issuanceAnchors,
-                              ...(attachStatus &&
-                              statusAnchorsForMdoc.length > 0
-                                  ? { status: statusAnchorsForMdoc }
-                                  : {}),
-                          },
-                      ]
-                    : [];
-            };
+            // @owf/mdoc checks a status list against the status anchors of
+            // the entry whose issuance anchor the credential chain ended at:
+            // one entry per trusted issuance service, with the status list
+            // signers paired with it. When LoTE issuance anchors are
+            // available, pass only those instead of the presented x5chain.
+            // Trust-list entries are DER already and share their status
+            // arrays, so they are passed on without parsing them again.
+            const presentedChain = (issuerX5Chain ?? []).map(normalizeDer);
+            const anchorEntries =
+                trustedEntries.length > 0
+                    ? trustedEntries
+                    : presentedChain.length > 0
+                      ? [{ issuance: presentedChain, status: presentedChain }]
+                      : [];
+            const buildTrustedCertificates = (attachStatus: boolean) =>
+                anchorEntries.map(({ issuance, status }) => ({
+                    issuance,
+                    ...(attachStatus && status.length > 0 ? { status } : {}),
+                }));
 
             // 5) Verify the device response (signature, device binding, etc.)
             // Certificate chain validation is disabled here - we do it separately via CredentialChainValidationService
@@ -276,8 +255,17 @@ export class MdocverifierService {
             try {
                 await this.logStatusValidationCertificates(
                     issuerX5Chain,
-                    trustedAnchors,
-                    trustedStatusAnchors,
+                    trustedEntries.flatMap((entry) => entry.issuance),
+                    // Entries of a service type share one status array.
+                    [
+                        ...new Set(
+                            [
+                                ...new Set(
+                                    trustedEntries.map((entry) => entry.status),
+                                ),
+                            ].flat(),
+                        ),
+                    ],
                     attachStatusAnchorsForMdoc,
                 );
             } catch (error: any) {
@@ -428,7 +416,6 @@ export class MdocverifierService {
             {
                 requireX5c: options.policy?.requireX5c,
                 pinnedCertMode: options.policy?.pinnedCertMode ?? "leaf",
-                serviceTypeFilter: "/Issuance",
             },
         );
     }
@@ -617,10 +604,11 @@ export class MdocverifierService {
     private async summarizeTrustedCerts(
         trustListSource: VerifierOptions["trustListSource"],
     ): Promise<string> {
-        const trustedCerts =
-            await this.chainValidation.getTrustedCertificateBuffers(
+        const trustedCerts = (
+            await this.chainValidation.getTrustedCertificateEntries(
                 trustListSource,
-            );
+            )
+        ).flatMap((entry) => entry.issuance);
 
         if (trustedCerts.length === 0) {
             return "none loaded";

@@ -110,6 +110,11 @@ export const credentialIssuerServiceTypes = [
     ServiceTypeIdentifiers.EaaIssuance,
 ] as const;
 
+/** Whether a service type identifies credential issuers, compared exactly. */
+export function isCredentialIssuerServiceType(serviceType: string): boolean {
+    return credentialIssuerServiceTypes.some((type) => type === serviceType);
+}
+
 export const walletSolutionServiceTypes = [
     ServiceTypeIdentifiers.WalletSolution,
     ServiceTypeIdentifiers.WalletSolutionIssuance,
@@ -154,75 +159,6 @@ export type TrustedEntity = {
     /** All services for this entity */
     services: TrustedEntityServiceCert[];
 };
-
-/**
- * Helper to find a specific service type within a TrustedEntity.
- */
-function findServiceByType(
-    entity: TrustedEntity,
-    serviceType: ServiceTypeIdentifier,
-): TrustedEntityServiceCert | undefined {
-    return entity.services.find((s) => s.serviceTypeIdentifier === serviceType);
-}
-
-/**
- * Get the issuance certificate from a TrustedEntity.
- */
-function _getIssuanceCert(
-    entity: TrustedEntity,
-): TrustedEntityServiceCert | undefined {
-    return findServiceByType(entity, ServiceTypeIdentifiers.EaaIssuance);
-}
-
-/**
- * The revocation service type that belongs to a matched issuance service:
- * `PID/Issuance` pairs with `PID/Revocation`, `PubEAA/Issuance` with
- * `PubEAA/Revocation`, and a wallet solution service with
- * `WalletSolution/Revocation`, as in the profiles of ETSI TS 119 602.
- */
-function pairedRevocationServiceType(
-    matchedServiceType: string | undefined,
-): string | undefined {
-    if (matchedServiceType === ServiceTypeIdentifiers.WalletSolution) {
-        return ServiceTypeIdentifiers.WalletSolutionRevocation;
-    }
-    return matchedServiceType?.endsWith("/Issuance")
-        ? `${matchedServiceType.slice(0, -"/Issuance".length)}/Revocation`
-        : undefined;
-}
-
-/**
- * The revocation services of a TrustedEntity paired with its matched service:
- * every service of the paired revocation type, or, when the entity has none,
- * its `EAA/Revocation` services, the only ones read before. All returned
- * services have the same type. Wallet attestation status lists must be signed
- * under one of them; the status lists of presented credentials may be signed
- * under any `/Revocation` service of the entity.
- */
-export function getRevocationServices(
-    entity: TrustedEntity,
-    matchedServiceType?: string,
-): TrustedEntityServiceCert[] {
-    const ofType = (type: string) =>
-        entity.services.filter((s) => s.serviceTypeIdentifier === type);
-    const pairedType = pairedRevocationServiceType(matchedServiceType);
-    const paired = pairedType ? ofType(pairedType) : [];
-    return paired.length > 0
-        ? paired
-        : ofType(ServiceTypeIdentifiers.EaaRevocation);
-}
-
-/**
- * The first revocation certificate of a TrustedEntity for a matched service,
- * see {@link getRevocationServices}. It names the revocation certificate in
- * the verification result; no trust decision depends on it.
- */
-export function getRevocationCert(
-    entity: TrustedEntity,
-    matchedServiceType?: string,
-): TrustedEntityServiceCert | undefined {
-    return getRevocationServices(entity, matchedServiceType)[0];
-}
 
 export type FederationTrustMode = "federation-only" | "lote-only" | "hybrid";
 
