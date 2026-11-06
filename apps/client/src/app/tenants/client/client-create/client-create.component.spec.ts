@@ -19,11 +19,20 @@ describe('ClientCreateComponent Save', () => {
   let changes: string[];
   /** Set to keep changing requests unanswered, as while a save runs. */
   let changesPending: boolean;
+  /** How often the stored record fails to load before it loads. */
+  let loadFailures: number;
+  /** Answers the pending load of the stored record, once set. */
+  let finishLoad: (() => void) | undefined;
+  /** Set to keep the load of the stored record unanswered until `finishLoad`. */
+  let loadPending: boolean;
 
   beforeEach(async () => {
     snackBar = { open: vi.fn() };
     changes = [];
     changesPending = false;
+    loadFailures = Infinity;
+    loadPending = false;
+    finishLoad = undefined;
     client.setConfig({
       fetch: vi.fn<typeof fetch>(async (input) => {
         const request = input as Request;
@@ -32,7 +41,17 @@ describe('ClientCreateComponent Save', () => {
           changes.push(`${request.method} ${path}`);
           if (changesPending) return new Promise<Response>(() => undefined);
         }
-        if (path === '/api/client/broken') {
+        if (path === '/api/client/stored') {
+          const answer = () =>
+            new Response(JSON.stringify({ clientId: 'stored', roles: ['issuance:offer'] }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          if (loadPending)
+            return new Promise<Response>((resolve) => (finishLoad = () => resolve(answer())));
+          if (loadFailures-- <= 0) return answer();
+        }
+        if (path === '/api/client/broken' || path === '/api/client/stored') {
           return new Response(JSON.stringify({ statusCode: 404, message: 'Client not found' }), {
             status: 404,
             headers: { 'Content-Type': 'application/json' },
@@ -179,5 +198,47 @@ describe('ClientCreateComponent Save', () => {
     expect([...page.querySelectorAll('button')].some((b) => b.textContent?.includes('Retry'))).toBe(
       true
     );
+  });
+
+  it('says it is loading the client and shows the form only once it has loaded', async () => {
+    loadPending = true;
+    const { harness, page } = await render('/clients/stored');
+    harness.detectChanges();
+
+    expect(page.querySelector('form')).toBeNull();
+    expect(page.querySelector('output')?.textContent).toContain('Loading client…');
+
+    finishLoad!();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector('form')).not.toBeNull();
+    });
+    const field = page.querySelector<HTMLInputElement>('input[formcontrolname="clientId"]')!;
+    expect(field.value).toBe('stored');
+    expect(field.disabled).toBe(true);
+  });
+
+  it('shows the client once a retry after a failed load succeeds, and focuses the heading', async () => {
+    loadFailures = 1;
+    const { harness, page } = await render('/clients/stored');
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector('[role="alert"]')).not.toBeNull();
+    });
+    const retry = [...page.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Retry')
+    )!;
+
+    retry.focus();
+    retry.click();
+
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector<HTMLInputElement>('input[formcontrolname="clientId"]')?.value).toBe(
+        'stored'
+      );
+    });
+    expect(page.querySelector('[role="alert"]')).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(page.querySelector('h2')));
   });
 });

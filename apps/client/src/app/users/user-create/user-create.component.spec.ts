@@ -16,11 +16,20 @@ describe('UserCreateComponent Save', () => {
   let changes: string[];
   /** Set to keep changing requests unanswered, as while a save runs. */
   let changesPending: boolean;
+  /** How often the stored record fails to load before it loads. */
+  let loadFailures: number;
+  /** Answers the pending load of the stored record, once set. */
+  let finishLoad: (() => void) | undefined;
+  /** Set to keep the load of the stored record unanswered until `finishLoad`. */
+  let loadPending: boolean;
 
   beforeEach(async () => {
     snackBar = { open: vi.fn() };
     changes = [];
     changesPending = false;
+    loadFailures = Infinity;
+    loadPending = false;
+    finishLoad = undefined;
     client.setConfig({
       fetch: vi.fn<typeof fetch>(async (input) => {
         const request = input as Request;
@@ -29,7 +38,25 @@ describe('UserCreateComponent Save', () => {
           changes.push(`${request.method} ${path}`);
           if (changesPending) return new Promise<Response>(() => undefined);
         }
-        if (path === '/api/user/broken') {
+        if (path === '/api/user/stored') {
+          const answer = () =>
+            new Response(
+              JSON.stringify({
+                id: 'stored',
+                username: 'stored',
+                enabled: true,
+                roles: ['issuance:offer'],
+              }),
+              {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }
+            );
+          if (loadPending)
+            return new Promise<Response>((resolve) => (finishLoad = () => resolve(answer())));
+          if (loadFailures-- <= 0) return answer();
+        }
+        if (path === '/api/user/broken' || path === '/api/user/stored') {
           return new Response(JSON.stringify({ statusCode: 404, message: 'User not found' }), {
             status: 404,
             headers: { 'Content-Type': 'application/json' },
@@ -163,5 +190,47 @@ describe('UserCreateComponent Save', () => {
     expect([...page.querySelectorAll('button')].some((b) => b.textContent?.includes('Retry'))).toBe(
       true
     );
+  });
+
+  it('says it is loading the user and shows the form only once it has loaded', async () => {
+    loadPending = true;
+    const { harness, page } = await render('/users/stored');
+    harness.detectChanges();
+
+    expect(page.querySelector('form')).toBeNull();
+    expect(page.querySelector('output')?.textContent).toContain('Loading user…');
+
+    finishLoad!();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector('form')).not.toBeNull();
+    });
+    const field = page.querySelector<HTMLInputElement>('input[formcontrolname="username"]')!;
+    expect(field.value).toBe('stored');
+    expect(field.disabled).toBe(true);
+  });
+
+  it('shows the user once a retry after a failed load succeeds, and focuses the heading', async () => {
+    loadFailures = 1;
+    const { harness, page } = await render('/users/stored');
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector('[role="alert"]')).not.toBeNull();
+    });
+    const retry = [...page.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Retry')
+    )!;
+
+    retry.focus();
+    retry.click();
+
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector<HTMLInputElement>('input[formcontrolname="username"]')?.value).toBe(
+        'stored'
+      );
+    });
+    expect(page.querySelector('[role="alert"]')).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(page.querySelector('h2')));
   });
 });

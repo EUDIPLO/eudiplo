@@ -1,7 +1,7 @@
 <div fxLayout="column" fxFlex fxLayoutGap="24px">
   <app-role-lock-notice subject="user" [roles]="unmanageableRoles" />
   <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2>{{ loaded ? 'Edit user' : 'Create user' }}</h2>
+    <h2 #pageHeading tabindex="-1">{{ loaded ? 'Edit user' : 'Create user' }}</h2>
     <button
       matIconButton
       [routerLink]="['../']"

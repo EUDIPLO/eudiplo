@@ -5,6 +5,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { client } from '@eudiplo/sdk-core';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -283,6 +284,65 @@ describe('TenantCreateComponent', () => {
           .find((element) => element.nativeElement === save)!
           .injector.get(MatTooltip).message
       ).toBe('Saving the tenant…');
+    });
+
+    it('says it is loading a tenant, and why it cannot be edited until a retry loads it', async () => {
+      let answer: (response: Response) => void = () => undefined;
+      let calls = 0;
+      client.setConfig({
+        fetch: vi.fn<typeof fetch>(() => {
+          calls++;
+          return new Promise<Response>((resolve) => (answer = resolve));
+        }),
+      });
+      const json = (status: number, body: unknown) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        providers: [
+          provideRouter([{ path: 'tenants/:id/edit', component: TenantCreateComponent }]),
+          { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        ],
+      }).compileComponents();
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl('/tenants/acme/edit', TenantCreateComponent);
+      const page = harness.routeNativeElement as HTMLElement;
+      harness.detectChanges();
+
+      expect(page.querySelector('form')).toBeNull();
+      expect(page.querySelector('output')?.textContent).toContain('Loading tenant…');
+
+      answer(json(404, { statusCode: 404, message: 'Tenant not found' }));
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(page.querySelector('[role="alert"]')?.textContent).toContain(
+          'Failed to load tenant: Tenant not found'
+        );
+      });
+      expect(page.querySelector('form')).toBeNull();
+
+      const retry = [...page.querySelectorAll('button')].find((b) =>
+        b.textContent?.includes('Retry')
+      )!;
+      retry.focus();
+      retry.click();
+      await vi.waitFor(() => expect(calls).toBe(2));
+      answer(json(200, { id: 'acme', name: 'Acme', description: null }));
+
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(page.querySelector<HTMLInputElement>('input[formcontrolname="id"]')?.value).toBe(
+          'acme'
+        );
+      });
+      expect(page.querySelector<HTMLInputElement>('input[formcontrolname="id"]')!.disabled).toBe(
+        true
+      );
+      expect(page.querySelector('[role="alert"]')).toBeNull();
+      await vi.waitFor(() => expect(document.activeElement).toBe(page.querySelector('h2')));
     });
   });
 });

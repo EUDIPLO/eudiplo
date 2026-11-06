@@ -1,6 +1,6 @@
 <div fxLayout="column" fxFlex fxLayoutGap="24px">
   <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2>{{ isEditMode ? 'Edit' : 'Create' }} tenant</h2>
+    <h2 #pageHeading tabindex="-1">{{ isEditMode ? 'Edit' : 'Create' }} tenant</h2>
     <button
       matIconButton
       [routerLink]="['../']"
@@ -11,7 +11,15 @@
     </button>
   </div>
 
-  @if (loading) {
+  @if (loadError) {
+    <app-load-error
+      [message]="loadError"
+      hint="The tenant can only be edited after it has been loaded."
+      (retry)="retryLoad()"
+    >
+      <a mat-button [routerLink]="['../..']">Back to the list</a>
+    </app-load-error>
+  } @else if (loading) {
     <p><output>Loading tenant…</output></p>
   } @else {
     <form #formElement [formGroup]="tenantForm" (ngSubmit)="onSubmit()">

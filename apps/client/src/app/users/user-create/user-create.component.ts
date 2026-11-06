@@ -33,6 +33,7 @@ import { LoadErrorComponent } from '../../common/load-error.component';
 import { UserTemporaryPasswordDialogComponent } from '../user-temporary-password-dialog/user-temporary-password-dialog.component';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
+import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 
 @Component({
   selector: 'app-user-create',
@@ -77,6 +78,8 @@ export class UserCreateComponent implements OnInit {
   loadError = '';
   id?: string | null;
 
+  /** Where focus goes after a successful retry removed the error card with its Retry button. */
+  @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
   /** Holds the fields; Save focuses the first invalid one. */
   @ViewChild('formElement', { read: ElementRef })
   private readonly formElement?: ElementRef<HTMLFormElement>;
@@ -113,6 +116,7 @@ export class UserCreateComponent implements OnInit {
   }
 
   private async load(id: string): Promise<void> {
+    const retrying = this.loadError !== '';
     this.loading = true;
     this.loadError = '';
     try {
@@ -135,6 +139,9 @@ export class UserCreateComponent implements OnInit {
       this.loadError = getApiErrorMessage(error, 'Failed to load user');
     } finally {
       this.loading = false;
+    }
+    if (retrying && !this.loadError) {
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
     }
   }
 
