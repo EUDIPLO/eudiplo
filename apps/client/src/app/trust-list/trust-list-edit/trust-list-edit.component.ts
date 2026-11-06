@@ -1,6 +1,5 @@
 import { CommonModule } from '@angular/common';
 import {
-  afterNextRender,
   Component,
   OnInit,
   ChangeDetectionStrategy,
@@ -34,7 +33,6 @@ import { MatExpansionModule, MatExpansionPanel } from '@angular/material/expansi
 import { MatDividerModule } from '@angular/material/divider';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
-import { map, merge, take } from 'rxjs';
 import {
   keyChainControllerGetAll,
   trustListControllerCreateTrustList,
@@ -49,11 +47,12 @@ import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { fieldErrorMessage, showIssuesAtFields } from '../../utils/form-errors';
+import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../common/focus-if-lost.util';
 import {
-  focusAfterRenderIfLost,
-  focusRowAfterRemoval,
-  focusWasLost,
-} from '../../common/focus-if-lost.util';
+  fieldsToFixMessage,
+  focusFieldToFix,
+  sectionsWithErrors,
+} from '../../common/field-to-fix.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
 
 /** Common info fields for both internal and external entities */
@@ -179,7 +178,6 @@ export class TrustListEditComponent implements OnInit {
   @ViewChild('trustListForm', { read: ElementRef })
   private readonly formElement?: ElementRef<HTMLFormElement>;
   @ViewChild(FormGroupDirective) private readonly formDirective?: FormGroupDirective;
-  @ViewChildren(EditorComponent) private readonly editors?: QueryList<EditorComponent>;
   @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
 
   constructor(
@@ -756,61 +754,27 @@ export class TrustListEditComponent implements OnInit {
   private showWhatBlocksSaving(): void {
     this.form.markAllAsTouched();
     const entities = this.entitiesArray.controls;
-    const sections = entities
-      .map((entity, index) => (entity.invalid ? this.entityLabel(index) : ''))
-      .filter(Boolean);
-    const basicInvalid = Object.entries(this.form.controls).some(
-      ([name, control]) => name !== 'entities' && control.invalid
-    );
-    if (basicInvalid) sections.unshift('Basic Information');
+    const sections = sectionsWithErrors([
+      {
+        name: 'Basic Information',
+        controls: Object.entries(this.form.controls)
+          .filter(([name]) => name !== 'entities')
+          .map(([, control]) => control),
+      },
+      ...entities.map((entity, index) => ({ name: this.entityLabel(index), controls: [entity] })),
+    ]);
     const problems: string[] = [];
-    if (sections.length) problems.push(`Check the highlighted fields in ${sections.join(', ')}.`);
+    if (sections.length) problems.push(fieldsToFixMessage(sections));
     if (entities.length === 0) problems.push('Add at least one trusted entity.');
     openErrorSnackBar(this.snackBar, problems.join(' '));
 
     const firstInvalidEntity = entities.findIndex((entity) => entity.invalid);
     const panel = firstInvalidEntity >= 0 ? this.entityPanels?.get(firstInvalidEntity) : undefined;
     panel?.open();
-    this.focusFieldToFix(panel);
-  }
-
-  /**
-   * Moves focus to the first field with an error once `panel`, just opened, is no longer inert.
-   * The panel hides its content for the first frame of its opening transition; a field it hides
-   * then takes the focus once the panel has expanded, unless the user has moved it meanwhile.
-   */
-  private focusFieldToFix(panel?: MatExpansionPanel): void {
-    afterNextRender(
-      () => {
-        const field = this.fieldToFix();
-        if (!field) return;
-        const from = document.activeElement;
-        this.focusField(field);
-        // A certificate editor puts the focus on an element inside it.
-        if (field.contains(document.activeElement) || !panel?.expanded) return;
-        merge(panel.afterExpand.pipe(map(() => true)), panel.closed.pipe(map(() => false)))
-          .pipe(take(1))
-          .subscribe((expanded) => {
-            if (expanded && focusWasLost(from)) this.focusField(field);
-          });
-      },
-      { injector: this.injector }
-    );
-  }
-
-  /** Focuses `field`; a certificate editor focuses Monaco's input inside it. */
-  private focusField(field: HTMLElement): void {
-    const editor = this.editors?.find((candidate) => candidate.element === field);
-    if (editor) editor.focus();
-    else field.focus();
-  }
-
-  /** The first field with an error, in the order of the page, else Add Internal Entity. */
-  private fieldToFix(): HTMLElement | undefined {
-    return (
-      this.formElement?.nativeElement.querySelector<HTMLElement>('[formcontrolname].ng-invalid') ??
-      this.addEntityButton?.nativeElement
-    );
+    focusFieldToFix(this.injector, () => this.formElement?.nativeElement, {
+      panel,
+      fallback: () => this.addEntityButton?.nativeElement,
+    });
   }
 
   /** Whether a field shows its error, by the same rule as the Material form fields. */

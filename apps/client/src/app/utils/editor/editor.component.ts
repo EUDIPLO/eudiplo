@@ -28,6 +28,7 @@ import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { Subscription } from 'rxjs';
 import { ThemeService } from '../../services/theme.service';
 import { focusWasLost } from '../../common/focus-if-lost.util';
+import { registerFieldFocus } from '../../common/field-to-fix.util';
 
 let editorInstanceCounter = 0;
 
@@ -77,8 +78,10 @@ export class EditorComponent implements ControlValueAccessor, Validator, OnChang
   private monacoEditor?: { focus(): void };
   /** Set by `focus()` before Monaco has loaded: the element that had the focus then. */
   private focusRequestedFrom?: Element | null;
-  /** The host element, by which a form finds the editor of a field to focus. */
-  readonly element: HTMLElement = inject(ElementRef).nativeElement;
+  /** A form that moves focus to this field focuses Monaco's input (see `focusField`). */
+  private readonly unregisterFieldFocus = registerFieldFocus(inject(ElementRef).nativeElement, () =>
+    this.focus()
+  );
   monacoSchemaError?: string;
 
   constructor(private readonly themeService: ThemeService) {
@@ -244,6 +247,7 @@ export class EditorComponent implements ControlValueAccessor, Validator, OnChang
   }
 
   ngOnDestroy(): void {
+    this.unregisterFieldFocus();
     this.themeSubscription.unsubscribe();
     this.markerListener?.dispose();
   }
