@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { ServiceTypeIdentifiers, type TrustedEntity } from "../types.js";
 import {
     getRevocationCert,
     getRevocationServices,
-    ServiceTypeIdentifiers,
-    TrustedEntity,
-} from "./types.js";
+    getStatusListSigners,
+} from "./status-list-signers.js";
 
 describe("getRevocationCert", () => {
     const walletRevocation = {
@@ -127,5 +127,38 @@ describe("getRevocationServices", () => {
                 ServiceTypeIdentifiers.PubEaaIssuance,
             ),
         ).toEqual([]);
+    });
+});
+
+describe("getStatusListSigners", () => {
+    const pidIssuance = {
+        serviceTypeIdentifier: ServiceTypeIdentifiers.PIDIssuance,
+        certValue: "pid-issuance",
+    };
+    const pidRevocation = {
+        serviceTypeIdentifier: ServiceTypeIdentifiers.PIDRevocation,
+        certValue: "pid-revocation",
+    };
+    const walletRevocation = {
+        serviceTypeIdentifier: ServiceTypeIdentifiers.WalletSolutionRevocation,
+        certValue: "wallet-revocation",
+    };
+
+    it("returns the revocation services paired with the matched service", () => {
+        expect(
+            getStatusListSigners(
+                { services: [pidIssuance, walletRevocation, pidRevocation] },
+                pidIssuance,
+            ),
+        ).toEqual([pidRevocation]);
+    });
+
+    it("returns the matched service when no revocation service is paired with it", () => {
+        expect(
+            getStatusListSigners(
+                { services: [pidIssuance, walletRevocation] },
+                pidIssuance,
+            ),
+        ).toEqual([pidIssuance]);
     });
 });
