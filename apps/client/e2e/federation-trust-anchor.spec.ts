@@ -289,7 +289,7 @@ test('registers a missing trust anchor in a new tab and returns to Issuer Settin
   await selectOption(
     page,
     section.getByRole('combobox', { name: 'Trust Anchor 2' }),
-    new RegExp(`\\(${otherEntityId.replaceAll('.', '\\.')}\\)`)
+    `${otherId} (${otherEntityId})`
   );
   await expect(section.getByRole('combobox', { name: 'Trust Anchor 2' })).toContainText(
     otherEntityId
