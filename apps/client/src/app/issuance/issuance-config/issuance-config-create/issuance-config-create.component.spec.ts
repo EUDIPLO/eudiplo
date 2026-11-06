@@ -339,6 +339,8 @@ describe('issuer settings guided setup', () => {
     component.authorizationServers.at(0).get('type')!.setValue('built-in');
     component.onAuthorizationServerTypeChange(0, 'built-in');
     expect(lifetime().value).toBe(300);
+    // The new group of the open panel stays open.
+    expect(component.expandedServers.has(component.authorizationServers.at(0))).toBe(true);
 
     component.authorizationServers.at(0).get('type')!.setValue('chained');
     component.onAuthorizationServerTypeChange(0, 'chained');

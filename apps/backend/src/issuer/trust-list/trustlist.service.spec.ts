@@ -3,6 +3,7 @@ import type { LoTEDocument } from "@owf/eudi-lote";
 import * as x509 from "@peculiar/x509";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { TrustListReferences } from "./application/trust-list-references.js";
+import { TrustListEntityKeyChainUsageError } from "./domain/trust-list-entity-key-chains.js";
 import {
     type ManagedTrustList,
     TrustListInUseError,
@@ -131,6 +132,7 @@ function createService(
         versions,
         manager,
         trustListRepo,
+        certService,
         generateJwt,
     };
 }
@@ -466,6 +468,76 @@ describe("TrustListService", () => {
             ).rejects.toBeInstanceOf(ConflictException);
             expect(store.get("list")!.jwt).toBe("list-jwt-3");
             expect(versions).toHaveLength(1);
+        });
+    });
+
+    describe("internal entity key chains", () => {
+        it("refuses a key chain of another usage type before it picks a trust list key chain", async () => {
+            const { service, certService, trustListRepo } = createService([]);
+            certService.getCertificateById.mockResolvedValue({
+                id: "status-key",
+                crt: [],
+                keyChain: { usageType: "statusList" },
+            });
+
+            const error = await service
+                .create(
+                    {
+                        id: "new",
+                        entities: [
+                            {
+                                type: "internal",
+                                issuerKeyChainId: "status-key",
+                                revocationKeyChainId: "status-key",
+                                info: { name: "Issuer" },
+                            },
+                        ],
+                    },
+                    { id: "tenant", name: "Tenant" },
+                )
+                .catch((caught: unknown) => caught);
+
+            expect(error).toBeInstanceOf(TrustListEntityKeyChainUsageError);
+            // The revocation field accepts the status list key chain.
+            expect((error as TrustListEntityKeyChainUsageError).issues).toEqual(
+                [
+                    {
+                        index: 0,
+                        field: "issuerKeyChainId",
+                        message: expect.stringContaining('"statusList"'),
+                    },
+                ],
+            );
+            // Each key chain is read once; a refused list creates no
+            // trust list key chain and is not saved.
+            expect(certService.getCertificateById).toHaveBeenCalledTimes(1);
+            expect(certService.findOrCreate).not.toHaveBeenCalled();
+            expect(trustListRepo.save).not.toHaveBeenCalled();
+        });
+
+        it("fails on a missing key chain before it picks a trust list key chain", async () => {
+            const { service, certService } = createService([]);
+            certService.getCertificateById.mockRejectedValue(
+                new Error("Key chain not found"),
+            );
+
+            await expect(
+                service.create(
+                    {
+                        id: "new",
+                        entities: [
+                            {
+                                type: "internal",
+                                issuerKeyChainId: "missing",
+                                revocationKeyChainId: "missing",
+                                info: { name: "Issuer" },
+                            },
+                        ],
+                    },
+                    { id: "tenant", name: "Tenant" },
+                ),
+            ).rejects.toThrow("Key chain not found");
+            expect(certService.findOrCreate).not.toHaveBeenCalled();
         });
     });
 

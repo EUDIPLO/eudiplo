@@ -4,7 +4,9 @@ import {
   ChangeDetectionStrategy,
   ElementRef,
   Injector,
+  QueryList,
   ViewChild,
+  ViewChildren,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import {
@@ -64,7 +66,7 @@ import { FrontendConfigService } from '../../../services/frontend-config.service
 import { JwtService } from '../../../services/jwt.service';
 import { ApiService } from '../../../core';
 import { entityIdUrl } from '../../../utils/public-url';
-import { focusAfterRenderIfLost } from '../../../common/focus-if-lost.util';
+import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../../common/focus-if-lost.util';
 import { fromFormQueryParams } from '../../../common/return-to-form';
 import { FederationTrustAnchorSelectComponent } from '../../../federation-trust-anchor/federation-trust-anchor-select/federation-trust-anchor-select.component';
 import {
@@ -459,6 +461,23 @@ export class IssuanceConfigCreateComponent implements OnInit {
 
   @ViewChild('entityIdInput', { read: ElementRef })
   private readonly entityIdInput?: ElementRef<HTMLInputElement>;
+  // Where focus goes when the row holding it is removed or moved, in the order of the rows.
+  @ViewChildren('displayName', { read: ElementRef })
+  private readonly displayNames?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChildren('serverHeader', { read: ElementRef })
+  private readonly serverHeaders?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChildren('serverType', { read: ElementRef })
+  private readonly serverTypes?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChildren('moveUpButton', { read: ElementRef })
+  private readonly moveUpButtons?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChildren('moveDownButton', { read: ElementRef })
+  private readonly moveDownButtons?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChild('addServerButton', { read: ElementRef })
+  private readonly addServerButton?: ElementRef<HTMLElement>;
+  @ViewChildren(FederationTrustAnchorSelectComponent)
+  private readonly trustAnchorSelects?: QueryList<FederationTrustAnchorSelectComponent>;
+  @ViewChild('addTrustAnchorButton', { read: ElementRef })
+  private readonly addTrustAnchorButton?: ElementRef<HTMLElement>;
   /** Trust anchors of the stored configuration, which the backend keeps even when unregistered. */
   private storedTrustAnchorIds = new Set<string>();
   private registrarRegistrationCertificateDefaults: Record<string, unknown> | null = null;
@@ -1225,6 +1244,12 @@ export class IssuanceConfigCreateComponent implements OnInit {
 
   removeDisplay(index: number): void {
     this.displays.removeAt(index);
+    // Remove is offered only while there are two or more languages, so one is always left.
+    focusRowAfterRemoval(
+      this.injector,
+      () => this.displayNames?.map((name) => name.nativeElement),
+      index
+    );
   }
 
   get authorizationServers(): FormArray {
@@ -1364,7 +1389,13 @@ export class IssuanceConfigCreateComponent implements OnInit {
       };
     }
 
-    this.authorizationServers.setControl(index, this.createAuthorizationServerGroup(nextValue));
+    // The panel is rendered anew for the new group: keep it open and give its Type back the focus.
+    const next = this.createAuthorizationServerGroup(nextValue);
+    if (this.expandedServers.delete(this.authorizationServers.at(index))) {
+      this.expandedServers.add(next);
+    }
+    this.authorizationServers.setControl(index, next);
+    focusAfterRenderIfLost(this.injector, () => this.serverTypes?.get(index)?.nativeElement);
   }
 
   /**
@@ -1407,6 +1438,12 @@ export class IssuanceConfigCreateComponent implements OnInit {
 
   removeAuthorizationServer(index: number): void {
     this.authorizationServers.removeAt(index);
+    focusRowAfterRemoval(
+      this.injector,
+      () => this.serverHeaders?.map((header) => header.nativeElement),
+      index,
+      () => this.addServerButton?.nativeElement
+    );
   }
 
   getAuthorizationServerWalletProviderTrustLists(index: number): FormArray {
@@ -1430,6 +1467,15 @@ export class IssuanceConfigCreateComponent implements OnInit {
     const target = this.authorizationServers.at(targetIndex);
     this.authorizationServers.setControl(index, target);
     this.authorizationServers.setControl(targetIndex, current);
+
+    // The panel moves with its server, which can take focus off the pressed button. At the first
+    // or last position that button stays focusable, with the reason in its tooltip.
+    focusAfterRenderIfLost(
+      this.injector,
+      () =>
+        (direction === 'up' ? this.moveUpButtons : this.moveDownButtons)?.get(targetIndex)
+          ?.nativeElement
+    );
   }
 
   get walletProviderTrustLists(): FormArray {
@@ -1502,6 +1548,12 @@ export class IssuanceConfigCreateComponent implements OnInit {
 
   removeTrustAnchor(index: number): void {
     this.trustAnchors.removeAt(index);
+    focusRowAfterRemoval(
+      this.injector,
+      () => this.trustAnchorSelects?.toArray().flatMap((picker) => picker.focusTarget ?? []),
+      index,
+      () => this.addTrustAnchorButton?.nativeElement
+    );
   }
 
   addWalletProviderTrustList(mode: WalletProviderTrustListMode): void {

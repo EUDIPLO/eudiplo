@@ -88,7 +88,8 @@
               </mat-card-header>
               <mat-card-content fxLayout="column" fxLayoutGap="16px">
                 <div formArrayName="display">
-                  @for (display of displays.controls; track $index; let i = $index) {
+                  <!-- Track by group: inputs bind to their control only once, so a row must not move to another group. -->
+                  @for (display of displays.controls; track display; let i = $index) {
                     <div [formGroupName]="i" class="mat-elevation-z2 display-entry">
                       <div
                         fxLayout="row"
@@ -114,6 +115,7 @@
                           <mat-form-field fxFlex>
                             <mat-label>Name</mat-label>
                             <input
+                              #displayName
                               (keydown.enter)="onInputEnter($event)"
                               matInput
                               formControlName="name"
@@ -187,14 +189,15 @@
 
                   <div formArrayName="authorizationServers">
                     <mat-accordion>
-                      @for (server of authorizationServers.controls; track $index; let i = $index) {
+                      <!-- Track by group: inputs bind to their control only once, so a panel must not move to another group. -->
+                      @for (server of authorizationServers.controls; track server; let i = $index) {
                         <mat-expansion-panel
                           [formGroupName]="i"
                           [expanded]="expandedServers.has(server)"
                           (opened)="expandedServers.add(server)"
                           (closed)="expandedServers.delete(server)"
                         >
-                          <mat-expansion-panel-header>
+                          <mat-expansion-panel-header #serverHeader>
                             <mat-panel-title>
                               @if (server.get('type')?.value === 'external') {
                                 {{
@@ -222,7 +225,6 @@
                                 <input
                                   (keydown.enter)="onInputEnter($event)"
                                   matInput
-                                  id="external-auth-server-id-{{ i }}"
                                   formControlName="id"
                                   placeholder="external-auth"
                                 />
@@ -232,6 +234,7 @@
                               <mat-form-field>
                                 <mat-label>Type</mat-label>
                                 <mat-select
+                                  #serverType
                                   formControlName="type"
                                   (selectionChange)="
                                     onAuthorizationServerTypeChange(i, $event.value)
@@ -278,41 +281,6 @@
                                   placeholder="Friendly name"
                                 />
                               </mat-form-field>
-
-                              <div fxLayout="row" fxLayoutAlign="end center">
-                                <button
-                                  matIconButton
-                                  type="button"
-                                  (click)="moveAuthorizationServer(i, 'up')"
-                                  [disabled]="i === 0"
-                                  [matTooltip]="'Move authorization server ' + (i + 1) + ' up'"
-                                  [attr.aria-label]="'Move authorization server ' + (i + 1) + ' up'"
-                                >
-                                  <mat-icon>arrow_upward</mat-icon>
-                                </button>
-                                <button
-                                  matIconButton
-                                  type="button"
-                                  (click)="moveAuthorizationServer(i, 'down')"
-                                  [disabled]="i === authorizationServers.length - 1"
-                                  [matTooltip]="'Move authorization server ' + (i + 1) + ' down'"
-                                  [attr.aria-label]="
-                                    'Move authorization server ' + (i + 1) + ' down'
-                                  "
-                                >
-                                  <mat-icon>arrow_downward</mat-icon>
-                                </button>
-                                <button
-                                  matIconButton
-                                  type="button"
-                                  color="warn"
-                                  (click)="removeAuthorizationServer(i)"
-                                  [matTooltip]="'Remove authorization server ' + (i + 1)"
-                                  [attr.aria-label]="'Remove authorization server ' + (i + 1)"
-                                >
-                                  <mat-icon>delete</mat-icon>
-                                </button>
-                              </div>
                             </div>
                           } @else {
                             <div fxLayout="column" fxLayoutGap="16px">
@@ -322,7 +290,6 @@
                                   <input
                                     (keydown.enter)="onInputEnter($event)"
                                     matInput
-                                    id="managed-auth-server-id-{{ i }}"
                                     formControlName="id"
                                     placeholder="auth-server-id"
                                   />
@@ -335,7 +302,6 @@
                                   <input
                                     (keydown.enter)="onInputEnter($event)"
                                     matInput
-                                    id="managed-auth-server-label-{{ i }}"
                                     formControlName="label"
                                     placeholder="Authorization Server"
                                   />
@@ -346,6 +312,7 @@
                                 <mat-form-field fxFlex>
                                   <mat-label>Type</mat-label>
                                   <mat-select
+                                    #serverType
                                     formControlName="type"
                                     (selectionChange)="
                                       onAuthorizationServerTypeChange(i, $event.value)
@@ -429,7 +396,6 @@
                                           $implicit: trustList,
                                           list: getAuthorizationServerWalletProviderTrustLists(i),
                                           index: j,
-                                          idPrefix: 'auth-server-' + i + '-wallet-trust-',
                                         }
                                       "
                                     />
@@ -551,7 +517,6 @@
                                   <input
                                     (keydown.enter)="onInputEnter($event)"
                                     matInput
-                                    id="managed-auth-server-lifetime-{{ i }}"
                                     type="number"
                                     formControlName="lifetimeSeconds"
                                     min="60"
@@ -567,10 +532,7 @@
                                 </mat-form-field>
                                 <mat-form-field fxFlex subscriptSizing="dynamic">
                                   <mat-label>Authorization Server Key</mat-label>
-                                  <mat-select
-                                    id="managed-auth-server-signing-key-{{ i }}"
-                                    formControlName="signingKeyId"
-                                  >
+                                  <mat-select formControlName="signingKeyId">
                                     <mat-option value=""
                                       >The tenant's authorization server key</mat-option
                                     >
@@ -697,43 +659,53 @@
                                   </mat-form-field>
                                 }
                               </div>
-
-                              <div fxLayout="row" fxLayoutAlign="end center">
-                                <button
-                                  matIconButton
-                                  type="button"
-                                  (click)="moveAuthorizationServer(i, 'up')"
-                                  [disabled]="i === 0"
-                                  [matTooltip]="'Move authorization server ' + (i + 1) + ' up'"
-                                  [attr.aria-label]="'Move authorization server ' + (i + 1) + ' up'"
-                                >
-                                  <mat-icon>arrow_upward</mat-icon>
-                                </button>
-                                <button
-                                  matIconButton
-                                  type="button"
-                                  (click)="moveAuthorizationServer(i, 'down')"
-                                  [disabled]="i === authorizationServers.length - 1"
-                                  [matTooltip]="'Move authorization server ' + (i + 1) + ' down'"
-                                  [attr.aria-label]="
-                                    'Move authorization server ' + (i + 1) + ' down'
-                                  "
-                                >
-                                  <mat-icon>arrow_downward</mat-icon>
-                                </button>
-                                <button
-                                  matIconButton
-                                  type="button"
-                                  color="warn"
-                                  (click)="removeAuthorizationServer(i)"
-                                  [matTooltip]="'Remove authorization server ' + (i + 1)"
-                                  [attr.aria-label]="'Remove authorization server ' + (i + 1)"
-                                >
-                                  <mat-icon>delete</mat-icon>
-                                </button>
-                              </div>
                             </div>
                           }
+                          <!-- One action row for every type, below the fields of the panel. -->
+                          <div class="server-actions" fxLayout="row" fxLayoutAlign="end center">
+                            <button
+                              #moveUpButton
+                              matIconButton
+                              type="button"
+                              (click)="moveAuthorizationServer(i, 'up')"
+                              [disabled]="i === 0"
+                              disabledInteractive
+                              [matTooltip]="
+                                i === 0
+                                  ? 'Authorization server 1 is already first'
+                                  : 'Move authorization server ' + (i + 1) + ' up'
+                              "
+                              [attr.aria-label]="'Move authorization server ' + (i + 1) + ' up'"
+                            >
+                              <mat-icon>arrow_upward</mat-icon>
+                            </button>
+                            <button
+                              #moveDownButton
+                              matIconButton
+                              type="button"
+                              (click)="moveAuthorizationServer(i, 'down')"
+                              [disabled]="i === authorizationServers.length - 1"
+                              disabledInteractive
+                              [matTooltip]="
+                                i === authorizationServers.length - 1
+                                  ? 'Authorization server ' + (i + 1) + ' is already last'
+                                  : 'Move authorization server ' + (i + 1) + ' down'
+                              "
+                              [attr.aria-label]="'Move authorization server ' + (i + 1) + ' down'"
+                            >
+                              <mat-icon>arrow_downward</mat-icon>
+                            </button>
+                            <button
+                              matIconButton
+                              type="button"
+                              color="warn"
+                              (click)="removeAuthorizationServer(i)"
+                              [matTooltip]="'Remove authorization server ' + (i + 1)"
+                              [attr.aria-label]="'Remove authorization server ' + (i + 1)"
+                            >
+                              <mat-icon>delete</mat-icon>
+                            </button>
+                          </div>
                         </mat-expansion-panel>
                       }
                     </mat-accordion>
@@ -741,6 +713,7 @@
 
                   <div fxLayout="row" fxLayoutGap="12px" fxLayoutAlign="start center">
                     <button
+                      #addServerButton
                       mat-raised-button
                       color="primary"
                       type="button"
@@ -962,7 +935,6 @@
                                 $implicit: trustList,
                                 list: walletProviderTrustLists,
                                 index: i,
-                                idPrefix: 'wallet-trust-',
                               }
                             "
                           />
@@ -1201,7 +1173,8 @@
                             <mat-icon>account_tree</mat-icon>
                             Federation Trust Anchors
                           </h4>
-                          @for (anchor of trustAnchors.controls; track $index; let i = $index) {
+                          <!-- Track by group: inputs bind to their control only once, so a row must not move to another group. -->
+                          @for (anchor of trustAnchors.controls; track anchor; let i = $index) {
                             <div
                               [formGroupName]="i"
                               fxLayout="column"
@@ -1242,7 +1215,12 @@
                           }
 
                           <div fxLayout="row" fxLayoutAlign="center center">
-                            <button mat-raised-button type="button" (click)="addTrustAnchor()">
+                            <button
+                              #addTrustAnchorButton
+                              mat-raised-button
+                              type="button"
+                              (click)="addTrustAnchor()"
+                            >
                               <mat-icon>add</mat-icon>
                               Add Trust Anchor
                             </button>
@@ -1437,22 +1415,13 @@
   }
 </div>
 
-<ng-template
-  #walletTrustListEntry
-  let-trustList
-  let-list="list"
-  let-index="index"
-  let-idPrefix="idPrefix"
->
+<ng-template #walletTrustListEntry let-trustList let-list="list" let-index="index">
   <div fxLayout="column" fxLayoutGap="8px" class="trust-list-entry">
     <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
       @if (trustList.get('mode')?.value === 'managed') {
         <mat-form-field fxFlex>
           <mat-label>Managed trust list {{ index + 1 }}</mat-label>
-          <mat-select
-            [id]="idPrefix + 'managed-' + index"
-            [formControl]="trustListControl(trustList, 'trustListId')"
-          >
+          <mat-select [formControl]="trustListControl(trustList, 'trustListId')">
             @if (managedTrustListNote(trustList.get('trustListId')?.value); as note) {
               <mat-option [value]="trustList.get('trustListId')?.value"
                 >{{ trustList.get('trustListId')?.value }} ({{ note }})</mat-option
@@ -1484,7 +1453,6 @@
           <input
             (keydown.enter)="onInputEnter($event)"
             matInput
-            [id]="idPrefix + 'url-' + index"
             [formControl]="trustListControl(trustList, 'url')"
             placeholder="https://trust-list.example.com/wallet-providers"
             type="url"
@@ -1531,7 +1499,6 @@
         <mat-label>Trust list signer certificate</mat-label>
         <textarea
           matInput
-          [id]="idPrefix + 'cert-' + index"
           [formControl]="trustListControl(trustList, 'verifierCertificate')"
           rows="4"
           placeholder="-----BEGIN CERTIFICATE-----&#10;MIIB...&#10;-----END CERTIFICATE-----"
