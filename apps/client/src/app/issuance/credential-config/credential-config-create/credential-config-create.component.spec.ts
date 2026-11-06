@@ -177,6 +177,78 @@ describe('CredentialConfigCreateComponent', () => {
     }
   });
 
+  it('keeps display entries without description or colors as they are', () => {
+    const display = [
+      { name: 'Membership', locale: 'en-US' },
+      { name: 'Mitgliedschaft', locale: 'de-DE', background_color: 'rgb(18, 16, 124)' },
+      { name: 'Adhésion', description: 'Carte de membre', locale: 'fr-FR', text_color: '#fff' },
+    ];
+    (component as any).patchFormFromConfig({
+      id: 'member',
+      description: 'Membership',
+      vct: 'urn:member',
+      config: { format: 'dc+sd-jwt', display },
+      fields: [],
+    });
+
+    // Valid in the API, so the Appearance step accepts them as loaded.
+    expect(component.form.get('displayConfigs')?.valid).toBe(true);
+    expect((component as any).buildConfigurationPayload().config.display).toEqual(display);
+
+    // A cleared color or description is left out, not sent as an empty string.
+    component.displayConfigs.at(2).patchValue({ description: ' ', text_color: '' });
+    expect((component as any).buildConfigurationPayload().config.display[2]).toEqual({
+      name: 'Adhésion',
+      locale: 'fr-FR',
+    });
+
+    // Set values are sent trimmed.
+    component.displayConfigs
+      .at(2)
+      .patchValue({ description: ' Carte ', background_color: ' #12107C ' });
+    expect((component as any).buildConfigurationPayload().config.display[2]).toEqual({
+      name: 'Adhésion',
+      description: 'Carte',
+      locale: 'fr-FR',
+      background_color: '#12107C',
+    });
+  });
+
+  it('opens the colors of loaded entries whose color wallets may not read', () => {
+    (component as any).patchFormFromConfig({
+      id: 'member',
+      description: 'Membership',
+      vct: 'urn:member',
+      config: {
+        format: 'dc+sd-jwt',
+        display: [
+          { name: 'Membership', locale: 'en-US', background_color: '#12107C' },
+          { name: 'Mitgliedschaft', locale: 'de-DE', text_color: 'navy' },
+        ],
+      },
+      fields: [],
+    });
+    expect(component.expandedAppearance.has(component.displayConfigs.at(0))).toBe(false);
+    expect(component.expandedAppearance.has(component.displayConfigs.at(1))).toBe(true);
+    // A warning, not an error: the entry stays valid and is saved as loaded.
+    expect(component.form.get('displayConfigs')?.valid).toBe(true);
+    expect((component as any).buildConfigurationPayload().config.display[1].text_color).toBe(
+      'navy'
+    );
+  });
+
+  it('starts new display entries without colors and with an optional description', () => {
+    component.addDisplayConfig();
+    const added = component.displayConfigs.at(1);
+    expect(added.value).toMatchObject({ description: '', background_color: '', text_color: '' });
+    added.patchValue({ name: 'Mitgliedschaft' });
+    expect(added.valid).toBe(true);
+    expect((component as any).buildConfigurationPayload().config.display[1]).toEqual({
+      name: 'Mitgliedschaft',
+      locale: 'en-US',
+    });
+  });
+
   it('returns to an invalid earlier step before review or save', () => {
     basics();
     component.displayConfigs.at(0).patchValue({ name: 'Membership', description: 'Member card' });

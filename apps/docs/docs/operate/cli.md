@@ -7,7 +7,9 @@ title: CLI
 The `eudiplo` command creates and runs Compose deployments, registers existing
 deployments, and checks any of them with `doctor`. This page shows how to install
 it and use it; every command and option is listed in the
-[CLI reference](../reference/cli.md).
+[CLI reference](../reference/cli.md). The
+[Manage an instance with the CLI](../cookbooks/manage-with-cli.md) cookbook
+walks through day-to-day work on a running instance.
 
 ## Install
 
@@ -99,7 +101,11 @@ and `init` replaces the `local` registration. Use `init --instance <name>` to
 keep both registrations.
 
 Both use the image tag `latest` unless you pass `--image-tag` or set
-`EUDIPLO_IMAGE_TAG` (a release such as `9.0.0`, `main`, or `sha-<commit>`).
+`EUDIPLO_IMAGE_TAG` (a release such as `10.0.0`, `main`, or `sha-<commit>`).
+Pick a release of the CLI's version or newer (`eudiplo --version`): the CLI
+writes `config/kms.json` and tenant files in its own configuration format
+versions, and format versions also rise in minor releases, so older images may
+refuse them.
 
 `init` asks for the directory, [preset](index.md#presets-and-profiles), public
 URL and auth client; in scripts pass them as flags with `--no-interactive`. It
@@ -131,7 +137,7 @@ service of the project. Options that `up`, `down`, `ps`, `logs`, `restart` and
 not the CLI:
 
 ```bash
-eudiplo upgrade --image-tag 9.0.0
+eudiplo upgrade --image-tag 10.0.1
 ```
 
 It changes only the `EUDIPLO_IMAGE` and `EUDIPLO_CLIENT_IMAGE` lines of the

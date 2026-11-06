@@ -112,6 +112,9 @@ Without the file, only the `db` provider exists. `defaultProvider` (default
 unset variable stops the startup. The schema is strict, so unknown fields are
 rejected.
 
+`eudiplo init` and `eudiplo demo` write it as a `KmsConfig` document with this
+content in `spec` ([file forms](../reference/kms-config.md)).
+
 **Checkpoint:** `GET /api/key-chain/providers` lists the providers and the
 default; `GET /api/key-chain/providers/health` reports `ok` for each, and
 `eudiplo doctor` includes the same check.

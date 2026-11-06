@@ -34,7 +34,7 @@ export class DisplayImage {
 }
 export class Display {
     name!: string;
-    description!: string;
+    description?: string;
     locale!: string;
     background_color?: string;
     text_color?: string;

@@ -150,6 +150,79 @@ test('edits every display entry and keeps all of them on save', async ({ page, r
   }
 });
 
+test('keeps optional display fields as loaded and only flags colors wallets may not read', async ({
+  page,
+  request,
+}) => {
+  test.skip(
+    !hasAuthCredentials,
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+  );
+  const id = `e2e-display-optional-${Date.now()}`;
+  const url = `${resolvedE2EConfig.apiBaseUrl}/api/issuer/credentials`;
+  const headers = { Authorization: `Bearer ${await tenantToken(request)}` };
+  // Only name and locale are required, and the API does not restrict the color format.
+  const display = [
+    { name: 'Membership', locale: 'en-US' },
+    {
+      name: 'Mitgliedschaft',
+      locale: 'de-DE',
+      background_color: 'rgb(18, 16, 124)',
+      text_color: '#fff',
+    },
+  ];
+  await writeConfig(
+    () =>
+      request.post(url, {
+        headers,
+        data: {
+          id,
+          description: 'Optional display fields',
+          vct: `urn:${id}`,
+          config: { format: 'dc+sd-jwt', display },
+          fields: [],
+        },
+      }),
+    `create ${id}`
+  );
+
+  try {
+    await page.goto(`/credential-config/${id}/edit`);
+    await page.getByRole('tab', { name: /Appearance/ }).click();
+    await expect(page.getByRole('textbox', { name: 'Display Name' })).toHaveCount(2);
+    const first = page.locator('.display-config-card').first();
+    await expect(first.getByRole('textbox', { name: 'Description' })).toHaveValue('');
+    await first.getByRole('button', { name: 'Colors and images (optional)' }).click();
+    await expect(first.getByRole('textbox', { name: 'Background Color' })).toHaveValue('');
+    await expect(first.getByRole('textbox', { name: 'Text Color' })).toHaveValue('');
+
+    // A color wallets may not read is flagged in either field but does not block saving.
+    const warning = 'Wallets may not read this. Use hex, rgb() or hsl().';
+    const background = first.getByRole('textbox', { name: 'Background Color' });
+    await background.fill('navy');
+    await expect(first.getByText(warning)).toBeVisible();
+    await background.fill('');
+    await expect(first.getByText(warning)).toHaveCount(0);
+    const text = first.getByRole('textbox', { name: 'Text Color' });
+    await text.fill('navy');
+    await text.blur();
+    await expect(first.getByText(warning)).toBeVisible();
+    await expect(text).toHaveAttribute('aria-invalid', 'false');
+
+    await page.getByRole('button', { name: 'Save Configuration' }).click();
+    await expect(page).toHaveURL(new RegExp(`/credential-config/${id}$`));
+
+    const response = await request.get(`${url}/${id}`, { headers });
+    expect(response.ok(), `GET ${id}`).toBe(true);
+    expect(((await response.json()) as { config: { display: unknown[] } }).config.display).toEqual([
+      { ...display[0], text_color: 'navy' },
+      display[1],
+    ]);
+  } finally {
+    await writeConfig(() => request.delete(`${url}/${id}`, { headers }), `delete ${id}`);
+  }
+});
+
 test('saves edited claim constraints and keeps untouched ones', async ({ page, request }) => {
   test.skip(
     !hasAuthCredentials,
