@@ -9,7 +9,10 @@ import {
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { TENANT_ID_PATTERN } from "@eudiplo/config-format/config-format.js";
+import {
+    schemaUrl,
+    TENANT_ID_PATTERN,
+} from "@eudiplo/config-format/config-format.js";
 import { readStringFlag } from "../../../options.js";
 import {
     configDirectoryName,
@@ -314,7 +317,7 @@ async function writeTenantInfo(
 ): Promise<void> {
     const info = description ? { name, description } : { name };
     const document = {
-        $schema: "https://eudiplo.dev/schemas/v1/TenantConfigFile.schema.json",
+        $schema: schemaUrl("Tenant"),
         metadata: { generation: 1 },
         spec: info,
     };

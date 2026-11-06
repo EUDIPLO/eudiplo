@@ -1624,6 +1624,96 @@ describe("startup configuration reconciliation", () => {
         }
     });
 
+    it("keeps the key and secret of unchanged files that 9.x applied", async () => {
+        const folder = app.get(ConfigFolderBundleService);
+        const dataSource = app.get(DataSource);
+        const clients = dataSource.getRepository(ClientEntity);
+        const keyChains = dataSource.getRepository(KeyChainEntity);
+        const ownership = dataSource.getRepository(
+            ConfigResourceMetadataEntity,
+        );
+        const tenantFolder = join(runtimeFolder, "config", "demo");
+        const clientId = "upgraded-generated-secret-client";
+        const keyChainId = "upgraded-regenerated";
+        // Files as 9.x wrote them: Client v1 and KeyChain v1.
+        const files = [
+            {
+                kind: "Client",
+                id: clientId,
+                path: join(tenantFolder, "clients", `${clientId}.json`),
+                document: {
+                    $schema: schemaUrl("Client", 1),
+                    metadata: { generation: 1 },
+                    spec: {
+                        clientId,
+                        secret: "!generate",
+                        roles: ["issuance:offer"],
+                    },
+                },
+            },
+            {
+                kind: "KeyChain",
+                id: keyChainId,
+                path: join(tenantFolder, "key-chains", `${keyChainId}.json`),
+                document: {
+                    $schema: schemaUrl("KeyChain", 1),
+                    metadata: { generation: 1 },
+                    spec: {
+                        id: keyChainId,
+                        usageType: "attestation",
+                        keySource: { type: "regenerate" },
+                    },
+                },
+            },
+        ];
+        for (const { path, document } of files)
+            writeFileSync(path, JSON.stringify(document));
+        const state = async () => ({
+            secret: (
+                await clients.findOneByOrFail({ tenantId: "demo", clientId })
+            ).secret,
+            key: (
+                await keyChains.findOneByOrFail({
+                    tenantId: "demo",
+                    id: keyChainId,
+                })
+            ).activeJwk.x,
+        });
+
+        try {
+            await folder.applyTenantFolder("demo", "upsert");
+            // 9.x stored the hash of each file migrated to its own current
+            // format, which was v1 for both kinds.
+            for (const { kind, id, document } of files) {
+                const where = { tenantId: "demo", kind, resourceId: id };
+                const sourceHash = createHash("sha256")
+                    .update(JSON.stringify(normalizeDocument(document)))
+                    .digest("hex");
+                expect(
+                    (await ownership.findOneByOrFail(where)).sourceHash,
+                ).not.toBe(sourceHash);
+                expect(
+                    (await ownership.update(where, { sourceHash })).affected,
+                ).toBe(1);
+            }
+            const applied = await state();
+
+            await folder.applyTenantFolder("demo", "upsert");
+            expect(await state()).toEqual(applied);
+        } finally {
+            for (const { kind, id, path } of files) {
+                rmSync(path, { force: true });
+                await ownership.delete({
+                    tenantId: "demo",
+                    kind,
+                    resourceId: id,
+                });
+            }
+            await clients.delete({ tenantId: "demo", clientId });
+            await keyChains.delete({ tenantId: "demo", id: keyChainId });
+        }
+    });
+
     it("returns a new secret for a file-managed !generate client through the reattach endpoints and audits only its ID", async () => {
         const appConfig = app.get(ConfigService);
         const http = app.getHttpServer();

@@ -8122,6 +8122,17 @@ export type TrustListControllerCreateTrustListData = {
     url: '/api/trust-list';
 };
 
+export type TrustListControllerCreateTrustListErrors = {
+    /**
+     * The body fails validation, or an internal entity names a key chain whose usage type cannot provide its certificate: issuerKeyChainId needs attestation, revocationKeyChainId statusList or attestation. errors[].path names the field
+     */
+    400: unknown;
+    /**
+     * The trust list cannot be created, for example because a key chain does not exist or keyChainId names no trustList key chain
+     */
+    409: unknown;
+};
+
 export type TrustListControllerCreateTrustListResponses = {
     201: TrustList;
 };
@@ -8177,6 +8188,17 @@ export type TrustListControllerUpdateTrustListData = {
     };
     query?: never;
     url: '/api/trust-list/{id}';
+};
+
+export type TrustListControllerUpdateTrustListErrors = {
+    /**
+     * The body fails validation, or an internal entity names a key chain whose usage type cannot provide its certificate: issuerKeyChainId needs attestation, revocationKeyChainId statusList or attestation. errors[].path names the field; a key chain the stored list already names in that field is accepted
+     */
+    400: unknown;
+    /**
+     * The trust list cannot be updated, for example because it or a key chain does not exist, keyChainId names no trustList key chain, or another update or a renewal was published since it was read
+     */
+    409: unknown;
 };
 
 export type TrustListControllerUpdateTrustListResponses = {

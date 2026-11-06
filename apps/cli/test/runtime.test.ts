@@ -1,6 +1,7 @@
 import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { schemaUrl } from "@eudiplo/config-format/config-format.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCli } from "../src/runtime.js";
 import {
@@ -595,9 +596,22 @@ describe("EUDIPLO CLI", () => {
         expect(env).toContain("STORAGE_DRIVER=local");
         expect(env).toContain("EUDIPLO_CONFIG_MOUNT=./config:/app/config");
         expect(env).not.toContain("AUTH_CLIENT_SECRET=root");
-        await expect(
-            readFile(join(cwd, "config", "kms.json"), "utf8"),
-        ).resolves.toContain('"defaultProvider": "db"');
+        expect(
+            JSON.parse(await readFile(join(cwd, "config", "kms.json"), "utf8")),
+        ).toEqual({
+            $schema: schemaUrl("KmsConfig"),
+            metadata: { generation: 1 },
+            spec: {
+                defaultProvider: "db",
+                providers: [
+                    {
+                        id: "db",
+                        type: "db",
+                        description: "Database-backed key provider",
+                    },
+                ],
+            },
+        });
         await expect(
             readFile(join(cwd, "config", "demo", "info.json"), "utf8"),
         ).rejects.toMatchObject({ code: "ENOENT" });
@@ -752,10 +766,57 @@ describe("EUDIPLO CLI", () => {
         const kmsConfig = JSON.parse(
             await readFile(join(cwd, "config", "kms.json"), "utf8"),
         );
-        expect(kmsConfig.defaultProvider).toBe("vault");
+        expect(kmsConfig.$schema).toBe(schemaUrl("KmsConfig"));
+        expect(kmsConfig.spec.defaultProvider).toBe("vault");
         expect(
-            kmsConfig.providers.map((provider: { id: string }) => provider.id),
+            kmsConfig.spec.providers.map(
+                (provider: { id: string }) => provider.id,
+            ),
         ).toEqual(["db", "vault"]);
+    });
+
+    // `config upgrade --check` is the CI gate the configuration-as-code docs
+    // recommend, so a fresh project must pass it. This fails when a format
+    // version is bumped without updating the CLI generators or the bundled
+    // demo tenant (assets/config/demo).
+    it("generates configuration that needs no upgrade", async () => {
+        const { context, output, cwd } = await createContext();
+        expect(
+            await runCli(
+                ["init", "--yes", "--demo-tenant", "--kms", "vault"],
+                context,
+            ),
+        ).toBe(0);
+        expect(
+            await runCli(["config", "tenant", "create", "acme"], context),
+        ).toBe(0);
+        expect(
+            await runCli(
+                ["config", "tenant", "create", "sample", "--template", "demo"],
+                context,
+            ),
+        ).toBe(0);
+        output.stdout = "";
+        output.stderr = "";
+
+        const code = await runCli(
+            ["config", "upgrade", join(cwd, "config"), "--check"],
+            context,
+        );
+
+        expect(output.stderr).toBe("");
+        expect(output.stdout).not.toContain("upgrade required");
+        for (const file of [
+            "kms.json",
+            "acme/info.json",
+            "demo/info.json",
+            "sample/info.json",
+            "sample/issuance/issuance.json",
+        ]) {
+            expect(output.stdout).toContain(`${file}: current\n`);
+        }
+        expect(output.stdout).toMatch(/^\d+ current, 0 require upgrading$/m);
+        expect(code).toBe(0);
     });
 
     it("collects missing init values with the interactive wizard", async () => {
@@ -1297,8 +1358,7 @@ describe("EUDIPLO CLI", () => {
         expect(
             JSON.parse(await readFile(join(tenantPath, "info.json"), "utf8")),
         ).toEqual({
-            $schema:
-                "https://eudiplo.dev/schemas/v1/TenantConfigFile.schema.json",
+            $schema: schemaUrl("Tenant"),
             metadata: {
                 generation: 1,
             },
