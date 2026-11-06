@@ -1,8 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ClaimFieldDefinitionDto } from '@eudiplo/sdk-core';
+import { TestBed } from '@angular/core/testing';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { ActivatedRoute, provideRouter } from '@angular/router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ClaimFieldDefinitionDto, client } from '@eudiplo/sdk-core';
 import { CredentialConfigCreateComponent } from './credential-config-create.component';
 import { configs } from './pre-config';
 import { claimSchemaError } from '../../../utils/claim-schema-check';
+import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
+import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
+import { PresentationManagementService } from '../../../presentation/presentation-config/presentation-management.service';
+import { FrontendConfigService } from '../../../services/frontend-config.service';
+import { JwtService } from '../../../services/jwt.service';
+import { EditorComponent } from '../../../utils/editor/editor.component';
+import { CredentialConfigService } from '../credential-config.service';
 
 describe('CredentialConfigCreateComponent', () => {
   let component: CredentialConfigCreateComponent;
@@ -584,5 +595,59 @@ describe('CredentialConfigCreateComponent editing', () => {
     expect(component.loadError).toBe('Failed to load credential configuration: Forbidden resource');
     component.onSubmit();
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe('CredentialConfigCreateComponent Save', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('waits while the configuration is saved: a second click sends nothing', async () => {
+    const save = vi.fn(() => new Promise(() => undefined));
+    vi.spyOn(client, 'get').mockResolvedValue({ data: [] } as any);
+    await TestBed.configureTestingModule({
+      imports: [CredentialConfigCreateComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { params: {} } } },
+        { provide: CredentialConfigService, useValue: { saveConfiguration: save } },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        { provide: MatDialog, useValue: { open: vi.fn() } },
+        {
+          provide: PresentationManagementService,
+          useValue: { loadConfigurations: vi.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: FrontendConfigService,
+          useValue: { getConfig: vi.fn().mockResolvedValue(null) },
+        },
+        { provide: JwtService, useValue: { getTenantId: () => 'tenant' } },
+        {
+          provide: ConfigOwnershipService,
+          useValue: { get: vi.fn().mockResolvedValue(undefined) },
+        },
+      ],
+    })
+      .overrideComponent(EditorComponent, { set: { template: '' } })
+      .compileComponents();
+    const fixture = TestBed.createComponent(CredentialConfigCreateComponent);
+    const component = fixture.componentInstance;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    component.toggleGuidedMode();
+    component.form.patchValue({ id: 'member', description: 'Membership', vctString: 'urn:member' });
+    component.displayConfigs.at(0).patchValue({ name: 'Membership', description: 'Member card' });
+    fixture.detectChanges();
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[type="submit"]'
+    )!;
+    expectAvailable(fixture, button);
+
+    button.click();
+    fixture.detectChanges();
+    button.click();
+    fixture.detectChanges();
+
+    expect(save).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, button, 'Saving the credential configuration…');
   });
 });

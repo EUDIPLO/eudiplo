@@ -204,7 +204,13 @@ export class CredentialConfigCreateComponent implements OnInit {
     this.submitCredential();
   }
 
+  /** Save stays focusable while a save runs, so its tooltip says why it waits. */
+  get saveTooltip(): string {
+    return this.loading ? 'Saving the credential configuration…' : '';
+  }
+
   submitCredential(): void {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
     if (this.loading) return;
     if (this.guidedMode && this.activeStep < 4) this.nextStep();
     else this.onSubmit();
