@@ -39,6 +39,7 @@ import { ConfigOwnershipDirective } from '../config-portability/config-ownership
 import { ConfigOwnershipNoticeComponent } from '../config-portability/config-ownership-notice.component';
 import { focusAfterRenderIfLost } from '../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../common/load-error.component';
+import { showFieldsToFix } from '../common/field-to-fix.util';
 import { WAIT_FOR_CHANGE } from '../common/reset-defaults';
 import {
   ConfigOwnershipService,
@@ -121,6 +122,15 @@ const CONTACT_PATTERN_MESSAGES: Record<string, string> = {
 /** URL fields, which also follow the registrar base URL rule. */
 const URL_FIELDS = ['registrarUrl', 'oidcUrl'] as const;
 
+/** The fields under Registrar Credentials, the first part of the form. */
+const CREDENTIAL_FIELDS = [
+  ...URL_FIELDS,
+  'clientId',
+  'clientSecret',
+  'username',
+  'password',
+] as const;
+
 /** What to do when the instance's outbound URL policy blocks a URL. */
 const POLICY_HINT =
   "Check the URL; if it is correct, ask the operator to allow it in this instance's outbound URL policy.";
@@ -192,9 +202,12 @@ export class RegistrarComponent implements OnInit {
   /** Where focus goes when a retry removes the error card with its focused Retry button. */
   @ViewChild('settingsTitle', { read: ElementRef })
   private readonly settingsTitle?: ElementRef<HTMLElement>;
-  /** Saving disables the focused Save button; focus returns to it afterwards. */
+  /** Takes the focus back after a save that ended with focus nowhere; Safari does not focus a clicked button. */
   @ViewChild('saveButton', { read: ElementRef })
   private readonly saveButton?: ElementRef<HTMLElement>;
+  /** Holds the fields; Save focuses the first invalid one. */
+  @ViewChild('formElement', { read: ElementRef })
+  private readonly formElement?: ElementRef<HTMLFormElement>;
   /** Delete cannot be used once deleted; focus moves from it to the card title. */
   @ViewChild('deleteButton', { read: ElementRef })
   private readonly deleteButton?: ElementRef<HTMLElement>;
@@ -352,10 +365,32 @@ export class RegistrarComponent implements OnInit {
     ];
   }
 
+  /** Save stays focusable while another change runs, so its tooltip says why it waits. */
+  get saveTooltip(): string {
+    return this.isSaving || this.isDeleting ? WAIT_FOR_CHANGE : '';
+  }
+
   async saveConfig(): Promise<void> {
+    // `disabledInteractive` keeps the button clickable while it looks disabled.
+    if (this.isSaving || this.isDeleting) return;
     if (this.hasInvalidInput) {
-      this.configForm.markAllAsTouched();
-      this.snackBar.open('Please correct the highlighted fields', 'Close', { duration: 3000 });
+      const form = this.configForm;
+      showFieldsToFix(form, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container: () => this.formElement?.nativeElement,
+        sections: [
+          {
+            name: 'Registrar Credentials',
+            controls: CREDENTIAL_FIELDS.map((field) => form.get(field)),
+          },
+          { name: 'Relying Party Contact', controls: [form.get('relyingPartyContact')] },
+          {
+            name: 'Registration Certificate Defaults',
+            controls: [form.get('registrationCertificateDefaults')],
+          },
+        ],
+      });
       return;
     }
     // Drop the previous backend rejections; the backend checks again.

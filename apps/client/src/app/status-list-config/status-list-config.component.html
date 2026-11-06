@@ -38,7 +38,7 @@
       </mat-card-header>
 
       <mat-card-content>
-        <form [formGroup]="configForm" fxLayout="column" fxLayoutGap="24px">
+        <form #formElement [formGroup]="configForm" fxLayout="column" fxLayoutGap="24px">
           <!-- Capacity Configuration -->
           <div class="config-section">
             <h3>
@@ -408,7 +408,9 @@
           mat-raised-button
           color="primary"
           (click)="onSave()"
-          [disabled]="configForm.invalid || isSaving"
+          [disabled]="isSaving"
+          disabledInteractive
+          [matTooltip]="saveTooltip"
           appConfigManaged
           managedKind="Tenant"
           managedResourceId="tenant"

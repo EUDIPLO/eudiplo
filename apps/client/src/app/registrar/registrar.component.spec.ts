@@ -1086,6 +1086,37 @@ describe('RegistrarComponent rendered', () => {
     )!;
   }
 
+  it('says which fields keep the configuration from saving and focuses the first one', async () => {
+    const fixture = await render(stored);
+    const snackBar = fixture.debugElement.injector.get(MatSnackBar);
+    enter(fixture, 'username', '');
+    enter(fixture, 'email', 'support');
+    const save = button(fixture, 'Update Configuration');
+    expect(save.disabled).toBe(false);
+    expect(save.getAttribute('aria-disabled')).toBeNull();
+
+    save.focus();
+    save.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement?.getAttribute('formcontrolname')).toBe('username');
+    });
+    expect(snackBar.open).toHaveBeenLastCalledWith(
+      'Check the highlighted fields in Registrar Credentials, Relying Party Contact.',
+      'Close',
+      expect.anything()
+    );
+    const errors = [...element(fixture).querySelectorAll('mat-error')].map((error) =>
+      error.textContent?.trim()
+    );
+    expect(errors).toEqual(
+      expect.arrayContaining([expect.stringContaining('Enter an email address')])
+    );
+    expect(registrarService.updateConfig).not.toHaveBeenCalled();
+    expect(registrarService.saveConfig).not.toHaveBeenCalled();
+  });
+
   it('keeps Save enabled when a field carries only a backend rejection', async () => {
     const fixture = await render(stored);
     registrarService.updateConfig.mockRejectedValueOnce(
@@ -1112,7 +1143,7 @@ describe('RegistrarComponent rendered', () => {
     expect(button(fixture, 'Update Configuration').disabled).toBe(false);
   });
 
-  it('disables Save and Delete while a delete runs, with the spinner on Delete', async () => {
+  it('makes Save and Delete wait while a delete runs, with the spinner on Delete', async () => {
     vi.stubGlobal('confirm', () => true);
     const fixture = await render(stored);
     let finish!: () => void;
@@ -1127,8 +1158,12 @@ describe('RegistrarComponent rendered', () => {
     expect(button(fixture, 'Delete').getAttribute('aria-disabled')).toBe('true');
     expect(buttonTooltip(fixture, 'Delete')).toBe(WAIT_FOR_CHANGE);
     expect(button(fixture, 'Delete').querySelector('.button-spinner')).not.toBeNull();
-    expect(button(fixture, 'Update Configuration').disabled).toBe(true);
+    expect(button(fixture, 'Update Configuration').disabled).toBe(false);
+    expect(button(fixture, 'Update Configuration').getAttribute('aria-disabled')).toBe('true');
+    expect(buttonTooltip(fixture, 'Update Configuration')).toBe(WAIT_FOR_CHANGE);
     expect(button(fixture, 'Update Configuration').querySelector('.button-spinner')).toBeNull();
+    // A click on Save while the delete runs sends nothing.
+    button(fixture, 'Update Configuration').click();
 
     finish();
     await vi.waitFor(() => expect(fixture.componentInstance.isDeleting).toBe(false));
@@ -1166,7 +1201,7 @@ describe('RegistrarComponent rendered', () => {
     expect(buttonTooltip(fixture, 'Delete')).toBe('Delete the registrar configuration');
   });
 
-  it('returns focus to Save once the save, which disabled it, has finished', async () => {
+  it('keeps Save focusable while saving and returns focus to it once the save has finished', async () => {
     const fixture = await render(stored);
     let finish!: () => void;
     registrarService.updateConfig.mockReturnValue(
@@ -1177,8 +1212,13 @@ describe('RegistrarComponent rendered', () => {
 
     save.click();
     fixture.detectChanges();
-    expect(save.disabled).toBe(true);
+    expect(save.disabled).toBe(false);
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    expect(buttonTooltip(fixture, 'Update Configuration')).toBe(WAIT_FOR_CHANGE);
     expect(buttonTooltip(fixture, 'Delete')).toBe(WAIT_FOR_CHANGE);
+    // A second click while the first save runs sends nothing.
+    save.click();
+    expect(registrarService.updateConfig).toHaveBeenCalledOnce();
     loseFocus();
     finish();
 

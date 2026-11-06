@@ -35,6 +35,14 @@ export function expectResetAvailable(fixture: ComponentFixture<unknown>): void {
   expect(buttonTooltip(fixture, 'Reset to Defaults')).toBe('Reset to global defaults');
 }
 
+/** Save looks disabled while a change runs, but stays focusable so that its tooltip says why. */
+export function expectSaveWaiting(fixture: ComponentFixture<unknown>, label: string): void {
+  const save = findButton(fixture.nativeElement as HTMLElement, label);
+  expect(save.disabled).toBe(false);
+  expect(save.getAttribute('aria-disabled')).toBe('true');
+  expect(buttonTooltip(fixture, label)).toBe(RESET_WHILE_SAVING);
+}
+
 export const NOTHING_TO_RESET = 'Nothing to reset: this tenant already follows the global defaults';
 export const RESET_WHILE_SAVING = 'Wait until the current change has finished';
 
