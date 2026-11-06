@@ -2,12 +2,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
   EventEmitter,
   HostListener,
   inject,
   Input,
   OnInit,
   Output,
+  ViewChild,
 } from '@angular/core';
 import {
   type ControlValueAccessor,
@@ -19,9 +21,10 @@ import { MatButtonModule } from '@angular/material/button';
 import type { ErrorStateMatcher } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
-import { MatSelectModule } from '@angular/material/select';
+import { MatSelect, MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { RouterModule } from '@angular/router';
+import { type Params, RouterModule } from '@angular/router';
+import { fromFormQueryParams } from '../../common/return-to-form';
 import { asSentence, getApiErrorMessage } from '../../utils/error-message';
 import {
   type FederationTrustAnchor,
@@ -55,6 +58,14 @@ export class FederationTrustAnchorSelectComponent implements ControlValueAccesso
     anchor: FederationTrustAnchor;
     previous: string;
   }>();
+
+  @ViewChild(MatSelect, { read: ElementRef })
+  private readonly select?: ElementRef<HTMLElement>;
+
+  /** The select of the picked trust anchor, for a parent that moves focus to this picker. */
+  get focusTarget(): HTMLElement | undefined {
+    return this.select?.nativeElement;
+  }
 
   private readonly service = inject(FederationTrustAnchorService);
   private readonly ngControl = inject(NgControl, { self: true, optional: true });
@@ -132,9 +143,12 @@ export class FederationTrustAnchorSelectComponent implements ControlValueAccesso
     return `${anchor.description || anchor.id} (${anchor.entityId})`;
   }
 
-  /** Query parameters of the registration link: an unregistered entity ID is filled in. */
-  get registerQueryParams(): Record<string, string> {
-    return this.unregistered ? { entityId: this.value } : {};
+  /**
+   * Query parameters of the registration link: an unregistered entity ID is
+   * filled in, and the page says to return here once the trust anchor exists.
+   */
+  get registerQueryParams(): Params {
+    return fromFormQueryParams(this.unregistered ? { entityId: this.value } : {});
   }
 
   openRegistration(): void {

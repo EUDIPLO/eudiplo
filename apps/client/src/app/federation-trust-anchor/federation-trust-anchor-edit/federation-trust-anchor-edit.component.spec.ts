@@ -1,6 +1,4 @@
-import { Component, forwardRef, Input } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { NG_VALUE_ACCESSOR, type ControlValueAccessor } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -10,25 +8,9 @@ import { IssuanceConfigService } from '../../issuance/issuance-config/issuance-c
 import { PresentationManagementService } from '../../presentation/presentation-config/presentation-management.service';
 import { JwtService } from '../../services/jwt.service';
 import { EditorComponent } from '../../utils/editor/editor.component';
+import { EditorStub } from '../../utils/editor/editor.testing';
 import { FederationTrustAnchorService } from '../federation-trust-anchor.service';
 import { FederationTrustAnchorEditComponent } from './federation-trust-anchor-edit.component';
-
-/** Stands in for the Monaco editor, which needs a browser. */
-@Component({
-  selector: 'app-editor',
-  template: '',
-  providers: [
-    { provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => EditorStub), multi: true },
-  ],
-})
-class EditorStub implements ControlValueAccessor {
-  @Input() schema: unknown;
-  @Input() editorOptions: unknown;
-  @Input() errors: unknown;
-  writeValue(): void {}
-  registerOnChange(): void {}
-  registerOnTouched(): void {}
-}
 
 const jwks = { keys: [{ kty: 'EC' as const, kid: 'ta-2026', crv: 'P-256', x: 'x', y: 'y' }] };
 const anchor = {
@@ -41,7 +23,7 @@ const anchor = {
 
 describe('FederationTrustAnchorEditComponent', () => {
   function render(
-    params: { id?: string; entityId?: string },
+    params: { id?: string; entityId?: string; from?: string },
     service: Record<string, unknown>,
     issuanceEntityIds = ['https://ta.example']
   ) {
@@ -72,9 +54,10 @@ describe('FederationTrustAnchorEditComponent', () => {
           useValue: {
             snapshot: {
               paramMap: convertToParamMap(params.id ? { id: params.id } : {}),
-              queryParamMap: convertToParamMap(
-                params.entityId ? { entityId: params.entityId } : {}
-              ),
+              queryParamMap: convertToParamMap({
+                ...(params.entityId ? { entityId: params.entityId } : {}),
+                ...(params.from ? { from: params.from } : {}),
+              }),
             },
           },
         },
@@ -121,6 +104,58 @@ describe('FederationTrustAnchorEditComponent', () => {
       jwks,
     });
     expect(navigate).toHaveBeenCalledWith(['/federation-trust-anchor', 'eu-federation']);
+  });
+
+  it('says to return to the form that opened the page instead of opening the trust anchor', async () => {
+    const create = vi.fn().mockResolvedValue(anchor);
+    const { component, fixture, navigate, snackBar } = render(
+      { entityId: 'https://ta.example', from: 'form' },
+      { create }
+    );
+    component.form.patchValue({ id: 'eu-federation', jwks: jwks as never });
+    const submit = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[type="submit"]'
+    )!;
+    submit.focus();
+
+    await component.onSubmit();
+    fixture.detectChanges();
+
+    expect(create).toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(snackBar.open).not.toHaveBeenCalled();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('form')).toBeNull();
+    const heading = element.querySelector('app-return-to-form h3');
+    expect(heading?.textContent?.trim()).toBe('Trust anchor "EU federation" registered');
+    expect(document.activeElement).toBe(heading);
+    expect(element.querySelector('app-return-to-form a')?.getAttribute('href')).toBe(
+      '/federation-trust-anchor/eu-federation'
+    );
+  });
+
+  it('reports the registration in a snackbar when the user left the page meanwhile', async () => {
+    let resolve!: (value: typeof anchor) => void;
+    const create = vi.fn().mockReturnValue(new Promise((r) => (resolve = r)));
+    const { component, fixture, navigate, snackBar } = render({ from: 'form' }, { create });
+    component.form.patchValue({
+      id: 'eu-federation',
+      entityId: 'https://ta.example',
+      jwks: jwks as never,
+    });
+
+    const registering = component.onSubmit();
+    fixture.destroy();
+    resolve({ ...anchor, description: null as never });
+    await registering;
+
+    expect(component.registeredForForm).toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Trust anchor "eu-federation" registered.',
+      'Close',
+      { duration: 5000 }
+    );
   });
 
   it('rejects an entity ID the backend would reject before sending', async () => {

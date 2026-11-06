@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   inject,
   Injector,
@@ -27,6 +28,8 @@ import type { CreateFederationTrustAnchorDto } from '@eudiplo/sdk-core';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
+import { type CreatedForForm, openedFromForm } from '../../common/return-to-form';
+import { ReturnToFormComponent } from '../../common/return-to-form.component';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-ownership-notice.component';
 import { EditorComponent } from '../../utils/editor/editor.component';
@@ -66,6 +69,7 @@ type JwksValue = CreateFederationTrustAnchorDto['jwks'];
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
     LoadErrorComponent,
+    ReturnToFormComponent,
   ],
   templateUrl: './federation-trust-anchor-edit.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -101,6 +105,7 @@ export class FederationTrustAnchorEditComponent implements OnInit {
 
   private readonly references = inject(FederationTrustAnchorReferences);
   private readonly injector = inject(Injector);
+  private readonly destroyRef = inject(DestroyRef);
   @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
   /** Entity ID of the trust anchor as stored, which configurations may name. */
   private storedEntityId = '';
@@ -112,6 +117,10 @@ export class FederationTrustAnchorEditComponent implements OnInit {
   loadError = '';
   /** While a save runs, so a second click does not send it again. */
   saving = false;
+  /** Set when a configuration screen in another tab opened this page to register a trust anchor. */
+  private openedFromForm = false;
+  /** The trust anchor registered for that screen; the page then says to return to its tab. */
+  registeredForForm: CreatedForForm | null = null;
 
   constructor(
     private readonly route: ActivatedRoute,
@@ -134,6 +143,7 @@ export class FederationTrustAnchorEditComponent implements OnInit {
     // The configuration screens link here with the entity ID they could not find.
     const entityId = this.route.snapshot.queryParamMap.get('entityId');
     if (entityId) this.form.controls.entityId.setValue(entityId);
+    this.openedFromForm = openedFromForm(this.route.snapshot.queryParamMap);
   }
 
   async load(): Promise<void> {
@@ -188,6 +198,17 @@ export class FederationTrustAnchorEditComponent implements OnInit {
       const saved = this.anchorId
         ? await this.service.update(this.anchorId, body)
         : await this.service.create({ id: value.id.trim(), ...body });
+      // The configuration screen waits in its own tab; this one does not move elsewhere.
+      if (this.openedFromForm) {
+        const heading = `Trust anchor "${saved.description || saved.id}" registered`;
+        // A user who left the page meanwhile gets the outcome where they are.
+        if (this.destroyRef.destroyed) {
+          this.snackBar.open(`${heading}.`, 'Close', { duration: 5000 });
+        } else {
+          this.registeredForForm = { id: saved.id, heading };
+        }
+        return;
+      }
       this.snackBar.open(
         this.anchorId ? 'Trust anchor updated' : 'Trust anchor registered',
         'Close',

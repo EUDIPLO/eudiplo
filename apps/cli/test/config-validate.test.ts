@@ -233,6 +233,59 @@ describe("eudiplo config validate tenant(s)", () => {
         expect(output.stdout).toContain("roles");
     });
 
+    it("refuses two display entries for one locale in a credential file without $schema", async () => {
+        const { context, output, cwd } = await createContext();
+        const tenantDir = join(cwd, "root");
+        await writeTenantInfo(tenantDir, { name: "Root Tenant" });
+        await writeResource(tenantDir, "issuance/credentials", "pid.json", {
+            id: "pid",
+            config: {
+                format: "dc+sd-jwt",
+                display: [
+                    { name: "PID", locale: "en-US" },
+                    { name: "PID", locale: "en-us" },
+                ],
+            },
+            fields: [],
+        });
+
+        const code = await runCli(
+            ["config", "validate", "tenant", tenantDir],
+            context,
+        );
+
+        expect(code).toBe(1);
+        expect(output.stdout).toContain("issuance/credentials/pid.json");
+        expect(output.stdout).toContain(
+            "Locale en-us is already used by display entry 1",
+        );
+    });
+
+    it("explains an unreadable display color in a credential file without $schema", async () => {
+        const { context, output, cwd } = await createContext();
+        const tenantDir = join(cwd, "root");
+        await writeTenantInfo(tenantDir, { name: "Root Tenant" });
+        await writeResource(tenantDir, "issuance/credentials", "pid.json", {
+            id: "pid",
+            config: {
+                format: "dc+sd-jwt",
+                display: [{ name: "PID", locale: "en-US", text_color: "navy" }],
+            },
+            fields: [],
+        });
+
+        const code = await runCli(
+            ["config", "validate", "tenant", tenantDir],
+            context,
+        );
+
+        expect(code).toBe(1);
+        expect(output.stdout).toContain(
+            "Use a CSS Color Level 3 numerical value",
+        );
+        expect(output.stdout).not.toContain("^(?:");
+    });
+
     it("reports invalid JSON with the tenant and filename", async () => {
         const { context, output, cwd } = await createContext();
         const tenantDir = join(cwd, "root");

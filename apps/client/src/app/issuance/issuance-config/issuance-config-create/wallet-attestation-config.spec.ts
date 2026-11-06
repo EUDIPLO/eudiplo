@@ -1,5 +1,7 @@
+import { ApplicationRef, ElementRef, Injector } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { AbstractControl, FormArray, FormBuilder, FormGroup } from '@angular/forms';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TrustList } from '@eudiplo/sdk-core';
 import { IssuanceConfigCreateComponent } from './issuance-config-create.component';
 import {
@@ -7,6 +9,7 @@ import {
   pemToBase64Der,
   TEST_ROOT_CERTIFICATE_PEM,
 } from '../../../utils/certificate-validator.testing';
+import { loseFocus } from '../../../common/settings-screen.testing';
 
 describe('wallet attestation configuration round trips', () => {
   const component = Object.assign(Object.create(IssuanceConfigCreateComponent.prototype), {
@@ -314,6 +317,120 @@ describe('wallet attestation configuration round trips', () => {
       await Promise.all([host.loadTrustLists(), host.loadTrustLists()]);
       await host.loadTrustLists();
       expect(fetch).toHaveBeenCalledOnce();
+    });
+
+    describe('focus after removing an entry', () => {
+      const added: HTMLElement[] = [];
+      afterEach(() => added.splice(0).forEach((element) => element.remove()));
+
+      /** A list on the page: its entry fields, then its Add managed trust list button. */
+      function listSection(count: number) {
+        const element = document.body.appendChild(document.createElement('div'));
+        added.push(element);
+        const fields = Array.from({ length: count }, () =>
+          element.appendChild(document.createElement('input'))
+        );
+        const add = element.appendChild(document.createElement('button'));
+        const list = new FormArray(
+          fields.map(() => component['createWalletProviderTrustListGroup']({ url }))
+        );
+        return { element, fields, add, list };
+      }
+
+      it('moves focus to the next entry or the Add button of the same list', () => {
+        const first = listSection(2);
+        const second = listSection(2);
+        // Like the view queries, the fields and buttons of every list on the page.
+        const fields = [...first.fields, ...second.fields].map((field) => new ElementRef(field));
+        const host = Object.assign(Object.create(IssuanceConfigCreateComponent.prototype), {
+          injector: TestBed.inject(Injector),
+          trustListFields: fields,
+          addManagedTrustListButtons: [first.add, second.add].map((add) => new ElementRef(add)),
+        }) as IssuanceConfigCreateComponent;
+        /** Removes entry `index` of `section` while it holds the focus, then renders. */
+        const remove = (section: ReturnType<typeof listSection>, index: number) => {
+          const [field] = section.fields.splice(index, 1);
+          field.focus();
+          host.removeTrustListEntry(section.list, index, section.element);
+          fields.splice(
+            fields.findIndex((ref) => ref.nativeElement === field),
+            1
+          );
+          field.remove();
+          loseFocus();
+          TestBed.inject(ApplicationRef).tick();
+        };
+
+        remove(second, 0);
+        expect(second.list).toHaveLength(1);
+        expect(document.activeElement).toBe(second.fields[0]);
+        remove(second, 0);
+        expect(document.activeElement).toBe(second.add);
+        remove(first, 1);
+        expect(first.list).toHaveLength(1);
+        expect(document.activeElement).toBe(first.fields[0]);
+      });
+    });
+
+    describe('focus after retrying the load', () => {
+      const added: HTMLElement[] = [];
+      afterEach(() => added.splice(0).forEach((element) => element.remove()));
+
+      /** A list on the page with a managed entry, which shows the load error. */
+      function listSection() {
+        const element = document.body.appendChild(document.createElement('div'));
+        added.push(element);
+        const field = element.appendChild(document.createElement('input'));
+        return { element, field };
+      }
+
+      it('moves focus to the new Retry of the same list, then to its managed entry', async () => {
+        const first = listSection();
+        const second = listSection();
+        const fetch = vi
+          .fn<() => Promise<TrustList[]>>()
+          .mockRejectedValueOnce(new Error('offline'))
+          .mockRejectedValueOnce(new Error('offline'))
+          .mockResolvedValue(lists);
+        // Like the view queries, the refs hold the elements of every list on the page.
+        const retryButtons: ElementRef<HTMLElement>[] = [];
+        const host = Object.assign(withLists(fetch), {
+          injector: TestBed.inject(Injector),
+          managedTrustListFields: [first.field, second.field].map((field) => new ElementRef(field)),
+          trustListRetryButtons: retryButtons,
+        }) as IssuanceConfigCreateComponent;
+        /** Renders the alerts: a Retry in every list while the load failed, none otherwise. */
+        const render = () => {
+          retryButtons.splice(0).forEach((ref) => ref.nativeElement.remove());
+          if (host.trustListsError) {
+            for (const section of [first, second]) {
+              const button = section.element.appendChild(document.createElement('button'));
+              retryButtons.push(new ElementRef(button));
+            }
+          }
+          TestBed.inject(ApplicationRef).tick();
+        };
+        /** Presses the Retry of the second list, which goes away with its alert while loading. */
+        const retrySecond = async () => {
+          retryButtons[1].nativeElement.focus();
+          const done = host.retryTrustLists(second.element);
+          retryButtons.splice(0).forEach((ref) => ref.nativeElement.remove());
+          loseFocus();
+          await done;
+          render();
+        };
+        await host.loadTrustLists();
+        render();
+
+        await retrySecond();
+        expect(host.trustListsError).not.toBe('');
+        expect(retryButtons).toHaveLength(2);
+        expect(document.activeElement).toBe(retryButtons[1].nativeElement);
+
+        await retrySecond();
+        expect(host.trustListsError).toBe('');
+        expect(document.activeElement).toBe(second.field);
+      });
     });
 
     it('asks for the tenant lists only where a managed entry exists', () => {

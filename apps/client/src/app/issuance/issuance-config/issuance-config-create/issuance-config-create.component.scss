@@ -196,3 +196,8 @@ form,
     flex-direction: column !important;
   }
 }
+
+/* The action row of an authorization server panel, below the fields of its type. */
+.server-actions {
+  margin-top: 16px;
+}

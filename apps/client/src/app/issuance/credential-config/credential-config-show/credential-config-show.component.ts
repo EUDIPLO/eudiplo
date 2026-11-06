@@ -27,6 +27,7 @@ import { JwtService } from '../../../services/jwt.service';
 import { getApiErrorMessage } from '../../../utils/error-message';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../../common/load-error.component';
+import { walletDisplayEntries } from '../../../utils/display-entries';
 
 interface ClaimFieldRow {
   key: string;
@@ -113,8 +114,20 @@ export class CredentialConfigShowComponent implements OnInit {
     return 'SD-JWT VC (dc+sd-jwt)';
   }
 
+  /** The display entries as wallets receive them, see {@link walletDisplayEntries}. */
+  get walletDisplay(): any[] {
+    return walletDisplayEntries(this.config?.config?.display ?? []);
+  }
+
   get primaryDisplay(): any {
-    return this.config?.config?.display?.[0];
+    return this.walletDisplay[0];
+  }
+
+  /** Whether the stored entries hold colors or repeated locales wallets do not receive. */
+  get displayDropsStoredValues(): boolean {
+    return (
+      JSON.stringify(this.walletDisplay) !== JSON.stringify(this.config?.config?.display ?? [])
+    );
   }
 
   get schemaMetadataId(): string | null {
