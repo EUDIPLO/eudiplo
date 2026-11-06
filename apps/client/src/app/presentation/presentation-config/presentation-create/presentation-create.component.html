@@ -348,6 +348,8 @@
                           mat-stroked-button
                           type="button"
                           [disabled]="reissuing"
+                          disabledInteractive
+                          [matTooltip]="reissuing ? 'Reissuing the registration certificate…' : ''"
                           (click)="reissueRegistrationCert()"
                         >
                           <mat-icon>refresh</mat-icon>
@@ -672,7 +674,14 @@
         </button>
         <span class="action-spacer"></span>
         @if (guided && activeStep > 0) {
-          <button mat-stroked-button type="button" (click)="activeStep = activeStep - 1">
+          <button
+            mat-stroked-button
+            type="button"
+            (click)="previousStep()"
+            [disabled]="saving"
+            disabledInteractive
+            [matTooltip]="saveTooltip"
+          >
             Back
           </button>
         }
@@ -683,6 +692,8 @@
             mat-flat-button
             type="submit"
             [disabled]="saving"
+            disabledInteractive
+            [matTooltip]="saveTooltip"
             appConfigManaged
             managedKind="PresentationConfig"
             [managedResourceId]="create ? '' : form.get('id')?.value || ''"

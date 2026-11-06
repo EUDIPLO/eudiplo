@@ -387,6 +387,8 @@ export class IssuanceConfigCreateComponent implements OnInit {
   }
 
   previousStep(): void {
+    // Back waits for a running save, like Save, and stays focusable while it does.
+    if (this.loading) return;
     this.activeStep = Math.max(0, this.activeStep - 1);
     this.stepError = '';
   }
@@ -1180,7 +1182,13 @@ export class IssuanceConfigCreateComponent implements OnInit {
     };
   }
 
+  /** Save and Back stay focusable while a save runs, so their tooltip says why they wait. */
+  get saveTooltip(): string {
+    return this.loading ? 'Saving the issuer settings…' : '';
+  }
+
   onSubmit(): void {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
     if (this.loading || this.loadingConfig || this.loadError) return;
     for (let step = 0; step < 3; step++) if (!this.validateStep(step)) return;
     let issuanceDto: UpdateIssuanceDto;

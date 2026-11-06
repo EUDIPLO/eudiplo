@@ -11,6 +11,7 @@ import { RegistrarService } from '../../../registrar/registrar.service';
 import { EditorComponent } from '../../../utils/editor/editor.component';
 import { ThemeService } from '../../../services/theme.service';
 import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
+import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
 
 const query = {
   credentials: [
@@ -29,6 +30,7 @@ describe('Presentation configuration flow', () => {
   let service: {
     createConfiguration: ReturnType<typeof vi.fn>;
     getPresentationById: ReturnType<typeof vi.fn>;
+    reissueRegistrationCertificate: ReturnType<typeof vi.fn>;
   };
   let route: { snapshot: { params: Record<string, string>; url: { path: string }[] } };
 
@@ -49,6 +51,7 @@ describe('Presentation configuration flow', () => {
     service = {
       createConfiguration: vi.fn().mockResolvedValue({ id: 'test' }),
       getPresentationById: vi.fn(),
+      reissueRegistrationCertificate: vi.fn(),
     };
     route = { snapshot: { params: {}, url: [] } };
     await TestBed.configureTestingModule({
@@ -166,6 +169,88 @@ describe('Presentation configuration flow', () => {
     expect(payload.statusCheckMode).toBe('best_effort');
     expect(payload).not.toHaveProperty('registrationCertImportJwt');
     await Promise.resolve();
+  });
+
+  it('waits while the configuration is saved: a second click sends nothing', async () => {
+    service.createConfiguration.mockReturnValue(new Promise(() => undefined));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fill();
+    component.guided = false;
+    fixture.detectChanges();
+    const save = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[type="submit"]'
+    )!;
+    expectAvailable(fixture, save);
+
+    save.click();
+    fixture.detectChanges();
+    save.click();
+    fixture.detectChanges();
+
+    expect(service.createConfiguration).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, save, 'Saving the presentation configuration…');
+  });
+
+  it('keeps Reissue now focusable while it runs: a second click sends one request', async () => {
+    route.snapshot.params = { id: 'test' };
+    service.getPresentationById.mockResolvedValue({
+      id: 'test',
+      dcql_query: query,
+      registration_cert: { jwt: 'ey.registration.cert' },
+    });
+    service.reissueRegistrationCertificate.mockReturnValue(new Promise(() => undefined));
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+    component.guided = false;
+    component.activeStep = 2;
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const reissue = await vi.waitFor(() => {
+      const button = [...element.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+        b.textContent?.includes('Reissue now')
+      );
+      expect(button).toBeDefined();
+      return button!;
+    });
+    expectAvailable(fixture, reissue);
+
+    reissue.click();
+    fixture.detectChanges();
+    reissue.click();
+    fixture.detectChanges();
+
+    expect(service.reissueRegistrationCertificate).toHaveBeenCalledExactlyOnceWith('test');
+    expectUnavailable(fixture, reissue, 'Reissuing the registration certificate…');
+  });
+
+  it('steps back while idle and keeps the guided Back focusable while the configuration is saved', async () => {
+    service.createConfiguration.mockReturnValue(new Promise(() => undefined));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fill();
+    component.guided = true;
+    component.activeStep = 3;
+    component.furthestStep = 3;
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const back = [...element.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Back'
+    )!;
+    expectAvailable(fixture, back);
+    back.click();
+    expect(component.activeStep).toBe(2);
+    component.activeStep = 3;
+    fixture.detectChanges();
+
+    element.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    fixture.detectChanges();
+    back.click();
+    fixture.detectChanges();
+
+    expect(service.createConfiguration).toHaveBeenCalledOnce();
+    expect(component.activeStep).toBe(3);
+    expectUnavailable(fixture, back, 'Saving the presentation configuration…');
   });
 
   it('does not save when Enter is pressed before review', () => {

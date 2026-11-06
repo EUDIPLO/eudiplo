@@ -191,6 +191,8 @@ export class CredentialConfigCreateComponent implements OnInit {
   }
 
   previousStep(): void {
+    // Back waits for a running save, like Save, and stays focusable while it does.
+    if (this.loading) return;
     this.activeStep = Math.max(0, this.activeStep - 1);
     this.stepError = '';
   }
@@ -210,7 +212,13 @@ export class CredentialConfigCreateComponent implements OnInit {
     this.submitCredential();
   }
 
+  /** Save and Back stay focusable while a save runs, so their tooltip says why they wait. */
+  get saveTooltip(): string {
+    return this.loading ? 'Saving the credential configuration…' : '';
+  }
+
   submitCredential(): void {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
     if (this.loading) return;
     if (this.guidedMode && this.activeStep < 4) this.nextStep();
     else this.onSubmit();

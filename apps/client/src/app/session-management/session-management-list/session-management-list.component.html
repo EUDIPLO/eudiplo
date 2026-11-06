@@ -1,7 +1,7 @@
 <div fxLayout="column" fxLayoutGap="24px">
   <!-- Header -->
   <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2>Sessions</h2>
+    <h2 #pageHeading tabindex="-1">Sessions</h2>
     <div fxLayout="row" fxLayoutGap="16px">
       @if (canOfferIssuance) {
         <button
@@ -196,8 +196,9 @@
             color="warn"
             type="button"
             (click)="cancelSelectedSessions()"
-            [disabled]="cancellingSelected || cancellableSelected.length === 0"
-            matTooltip="Cancel the selected offers a wallet has not redeemed yet, so it can no longer use them"
+            [disabled]="!!runningBulkAction || cancellableSelected.length === 0"
+            disabledInteractive
+            [matTooltip]="cancelSelectedTooltip"
           >
             <mat-icon>cancel</mat-icon>
             @if (cancellingSelected) {
@@ -211,8 +212,9 @@
             color="warn"
             type="button"
             (click)="deleteSelectedSessions()"
-            [disabled]="deletingSelected"
-            matTooltip="Delete selected sessions"
+            [disabled]="!!runningBulkAction"
+            disabledInteractive
+            [matTooltip]="runningBulkAction || 'Delete selected sessions'"
           >
             <mat-icon>delete</mat-icon>
             @if (deletingSelected) {
