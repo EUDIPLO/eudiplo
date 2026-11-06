@@ -239,3 +239,59 @@ test('refuses to change an entity ID that configurations name', async ({ page })
   const stored = await (await apiRequest('GET', `/federation-trust-anchor/${anchorId}`)).json();
   expect(stored.entityId).toBe(entityId);
 });
+
+test('registers a missing trust anchor in a new tab and returns to Issuer Settings', async ({
+  page,
+}) => {
+  const otherId = 'other-federation';
+  const otherEntityId = 'https://other-ta.example.org';
+  await loginWithClientCredentials(page, tenant.clientId, tenant.clientSecret);
+  await page.goto('/issuance-config/edit');
+  await page.getByRole('tab', { name: 'Trust' }).click();
+  const section = await federationSection(page);
+  await section.getByRole('button', { name: 'Add Trust Anchor' }).click();
+  const register = section.getByRole('link', {
+    name: 'Register trust anchor for Trust Anchor 2 (opens in a new tab)',
+  });
+  await expect(register).toHaveAttribute('href', '/federation-trust-anchor/create?from=form');
+
+  const [registration] = await Promise.all([page.context().waitForEvent('page'), register.click()]);
+  await registration.getByRole('textbox', { name: 'ID', exact: true }).fill(otherId);
+  await registration.getByRole('textbox', { name: 'Entity ID' }).fill(otherEntityId);
+  // Monaco loads lazily; type again until the editor shows the keys.
+  const editor = registration.locator('app-editor .monaco-editor');
+  await expect(async () => {
+    await editor.click();
+    await registration.keyboard.press('ControlOrMeta+A');
+    await registration.keyboard.insertText(JSON.stringify({ keys: [jwk] }));
+    await expect(editor.locator('.view-lines')).toContainText('ta-2026', { timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
+  await registration.getByRole('button', { name: 'Register Trust Anchor' }).click();
+
+  // The registration tab says to return to the form instead of opening the trust anchor.
+  const registered = registration.getByRole('heading', {
+    name: `Trust anchor "${otherId}" registered`,
+  });
+  await expect(registered).toBeVisible();
+  await expect(registered).toBeFocused();
+  await expect(
+    registration.getByText('Your form is still open in the tab you came from.')
+  ).toBeVisible();
+  await expect(registration).toHaveURL(/\/federation-trust-anchor\/create\?from=form$/);
+  await expect(registration.getByRole('link', { name: 'Open trust anchor' })).toHaveAttribute(
+    'href',
+    `/federation-trust-anchor/${otherId}`
+  );
+  await registration.close();
+
+  // The unsaved settings still have the new row, which offers the trust anchor after a reload.
+  await section.getByRole('button', { name: 'Reload trust anchors for Trust Anchor 2' }).click();
+  await selectOption(
+    page,
+    section.getByRole('combobox', { name: 'Trust Anchor 2' }),
+    new RegExp(`\\(${otherEntityId.replaceAll('.', '\\.')}\\)`)
+  );
+  await expect(section.getByRole('combobox', { name: 'Trust Anchor 2' })).toContainText(
+    otherEntityId
+  );
+});

@@ -21,7 +21,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { RouterModule } from '@angular/router';
+import { type Params, RouterModule } from '@angular/router';
+import { fromFormQueryParams } from '../../common/return-to-form';
 import { asSentence, getApiErrorMessage } from '../../utils/error-message';
 import {
   type FederationTrustAnchor,
@@ -132,9 +133,12 @@ export class FederationTrustAnchorSelectComponent implements ControlValueAccesso
     return `${anchor.description || anchor.id} (${anchor.entityId})`;
   }
 
-  /** Query parameters of the registration link: an unregistered entity ID is filled in. */
-  get registerQueryParams(): Record<string, string> {
-    return this.unregistered ? { entityId: this.value } : {};
+  /**
+   * Query parameters of the registration link: an unregistered entity ID is
+   * filled in, and the page says to return here once the trust anchor exists.
+   */
+  get registerQueryParams(): Params {
+    return fromFormQueryParams(this.unregistered ? { entityId: this.value } : {});
   }
 
   openRegistration(): void {
