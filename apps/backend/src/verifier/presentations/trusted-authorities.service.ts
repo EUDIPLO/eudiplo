@@ -165,24 +165,23 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
         tenantId: string,
         tenantHost: string,
     ): Promise<WalletTrustedAuthority[]> {
-        const akiValues = new Set<string>();
-        const unresolvedUrls: string[] = [];
-        const outdatedUrls: string[] = [];
+        const lists: Array<ListKeyIdentifiers & { ref: TrustListRef }> = [];
         for (const ref of refs) {
-            const { values, complete, outdated } =
-                await this.authorityKeyIdentifiers(ref, tenantId);
-            for (const value of values) akiValues.add(value);
-            if (complete && values.length > 0) continue;
-
-            const trustListId = ref.trustListId?.trim();
-            const url = trustListId
-                ? managedTrustListUrl(tenantHost, trustListId)
-                : ref.url;
-            if (url) (outdated ? outdatedUrls : unresolvedUrls).push(url);
+            // One list at a time, like verification (CollectTrustedEntities):
+            // bounds outbound requests and memory per request.
+            const keyIds = await this.authorityKeyIdentifiers(ref, tenantId); // NOSONAR: sequential on purpose, see above
+            lists.push({ ref, ...keyIds });
         }
-        if (outdatedUrls.length === refs.length) {
-            unresolvedUrls.push(...outdatedUrls);
-        }
+        const akiValues = new Set(lists.flatMap((list) => list.values));
+        const allOutdated = lists.every((list) => list.outdated);
+        const unresolvedUrls = lists
+            .filter(
+                (list) =>
+                    !(list.complete && list.values.length > 0) &&
+                    (!list.outdated || allOutdated),
+            )
+            .map(({ ref }) => trustListUrl(ref, tenantHost))
+            .filter((url): url is string => !!url);
 
         const authorities: WalletTrustedAuthority[] = [];
         if (akiValues.size > 0) {
@@ -205,7 +204,7 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
     private async authorityKeyIdentifiers(
         ref: TrustListRef,
         tenantId: string,
-    ): Promise<IssuerAuthorityKeyIdentifiers & { outdated?: boolean }> {
+    ): Promise<ListKeyIdentifiers> {
         try {
             return credentialIssuerAuthorityKeyIdentifiers(
                 await this.trustStore.getListedEntities(ref, tenantId),
@@ -221,6 +220,20 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
             return { values: [], complete: false, outdated };
         }
     }
+}
+
+/** Key identifiers of one list, and whether it was left out as outdated. */
+type ListKeyIdentifiers = IssuerAuthorityKeyIdentifiers & {
+    outdated?: boolean;
+};
+
+/** The URL a wallet can fetch a referenced trust list from, if any. */
+function trustListUrl(
+    ref: TrustListRef,
+    tenantHost: string,
+): string | undefined {
+    const trustListId = ref.trustListId?.trim();
+    return trustListId ? managedTrustListUrl(tenantHost, trustListId) : ref.url;
 }
 
 function managedTrustListUrl(tenantHost: string, trustListId: string): string {
