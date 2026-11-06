@@ -688,15 +688,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
         return;
       }
 
-      // Build the KeyChainCreateDto
-      const createDto: KeyChainCreateDto = {
-        usageType: usage,
-        type: usage === 'access' || !this.isInternalChain ? 'standalone' : 'internalChain',
-        description: description || this.getDefaultDescription(),
-        kmsProvider: this.configForm.value.kmsProvider || this.defaultKmsProvider || 'db',
-        alg: this.configForm.value.alg || undefined,
-        rotationPolicy: this.rotationPolicy(),
-      };
+      const createDto = this.createRequest(usage, description);
 
       const result = await this.keyChainService.create(createDto);
 
@@ -728,6 +720,18 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
     } finally {
       this.isSubmitting = false;
     }
+  }
+
+  /** The request that creates the key chain the wizard describes, without key material. */
+  private createRequest(usage: KeyUsageSelection, description?: string): KeyChainCreateDto {
+    return {
+      usageType: usage,
+      type: usage === 'access' || !this.isInternalChain ? 'standalone' : 'internalChain',
+      description: description || this.getDefaultDescription(),
+      kmsProvider: this.configForm.value.kmsProvider || this.defaultKmsProvider || 'db',
+      alg: this.configForm.value.alg || undefined,
+      rotationPolicy: this.rotationPolicy(),
+    };
   }
 
   /** Imports the pasted key and certificate chain and opens the imported key chain. */
