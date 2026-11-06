@@ -4,6 +4,7 @@ import {
   OnInit,
   ChangeDetectionStrategy,
   ElementRef,
+  HostListener,
   Injector,
   QueryList,
   ViewChild,
@@ -72,6 +73,16 @@ interface ExternalEntityForm extends EntityInfoForm {
   revocationCertPem: FormControl<string>;
 }
 
+/** The usage types the key chain selects of this page list. */
+type TrustListKeyChainUsage = 'attestation' | 'statusList' | 'trustList';
+
+/** How hints and options name a usage type, in the words of Key Management. */
+const KEY_CHAIN_USAGE_NAMES: Record<TrustListKeyChainUsage, string> = {
+  attestation: 'credential signing',
+  statusList: 'status list',
+  trustList: 'trust list',
+};
+
 @Component({
   selector: 'app-trust-list-edit',
   imports: [
@@ -122,6 +133,18 @@ export class TrustListEditComponent implements OnInit {
   loadingKeyChains = false;
   /** Set when the key chains could not be loaded; the key chain selects say so and offer a retry. */
   keyChainsLoadError = '';
+  /** Set once the key chains have loaded, so an empty list means the tenant has none of its kind. */
+  private keyChainsLoaded = false;
+
+  /**
+   * Whether the key chain lists say what the tenant has: they loaded, and the last load did not
+   * fail. After a failed reload the lists are stale, so nothing is said about missing key chains.
+   */
+  private get keyChainsKnown(): boolean {
+    return this.keyChainsLoaded && !this.keyChainsLoadError;
+  }
+  /** The key chain selects whose create link the user followed; their key chains reload on return. */
+  private creatingKeyChainFor?: HTMLElement;
 
   editorOptionsPem = {
     automaticLayout: true,
@@ -185,6 +208,7 @@ export class TrustListEditComponent implements OnInit {
         (kc) => kc.usageType === 'trustList'
       );
       this.keyChainsLoadError = '';
+      this.keyChainsLoaded = true;
     } catch (error) {
       console.error('Failed to load key chains:', error);
       this.keyChainsLoadError = getApiErrorMessage(error, 'Failed to load key chains');
@@ -195,8 +219,9 @@ export class TrustListEditComponent implements OnInit {
   }
 
   /**
-   * Loads the key chains again, keeping what the user entered. After a success the Retry button
-   * is gone, so focus moves to the first select in `fields`, the key chain selects it was next to.
+   * Loads the key chains again, keeping what the user entered. When a success removes the Retry or
+   * Reload button, focus moves to the first select in `fields`, the key chain selects it was next
+   * to; a reload that still finds a usage without key chains keeps the button, and the focus on it.
    */
   async retryKeyChains(fields: HTMLElement): Promise<void> {
     if (this.loadingKeyChains) return;
@@ -209,25 +234,131 @@ export class TrustListEditComponent implements OnInit {
     }
   }
 
+  /** A create link opened the key chain wizard in a new tab, next to the selects in `fields`. */
+  openKeyChainCreation(fields: HTMLElement): void {
+    this.creatingKeyChainFor = fields;
+  }
+
+  /** After creating a key chain in another tab, the user comes back to this one. */
+  @HostListener('window:focus')
+  onWindowFocus(): void {
+    const fields = this.creatingKeyChainFor;
+    if (!fields) return;
+    this.creatingKeyChainFor = undefined;
+    void this.retryKeyChains(fields);
+  }
+
+  /** The key chains a select for `usage` offers. */
+  private keyChainsOf(usage: TrustListKeyChainUsage): KeyChainResponseDto[] {
+    switch (usage) {
+      case 'attestation':
+        return this.attestationKeyChains;
+      case 'statusList':
+        return this.statusListKeyChains;
+      case 'trustList':
+        return this.trustListKeyChains;
+    }
+  }
+
   /**
-   * The selected key chain while the key chains are loading or could not be loaded and it is
-   * not among `options`, so its select shows the stored ID instead of looking empty; '' otherwise.
+   * The selected key chain when it is not among the options for `usage`, so its select shows the
+   * stored ID instead of looking empty, and says why it is not listed while the key chains are
+   * known: it has another usage type, or it does not exist. Undefined when it is listed.
    */
-  unlistedKeyChain(value: unknown, options: KeyChainResponseDto[]): string {
-    if (!this.loadingKeyChains && !this.keyChainsLoadError) return '';
-    if (typeof value !== 'string' || !value) return '';
-    return options.some((keyChain) => keyChain.id === value) ? '' : value;
+  unlistedKeyChain(
+    value: unknown,
+    usage: TrustListKeyChainUsage
+  ): { id: string; label: string } | undefined {
+    if (typeof value !== 'string' || !value) return undefined;
+    if (this.keyChainsOf(usage).some((keyChain) => keyChain.id === value)) return undefined;
+    switch (this.unlistedReason(value, usage)) {
+      case 'otherUsage':
+        return { id: value, label: `${value} (not a ${KEY_CHAIN_USAGE_NAMES[usage]} key chain)` };
+      case 'missing':
+        return { id: value, label: `${value} (does not exist)` };
+      default:
+        // Until the key chains have loaded, or after a failed reload, nothing is known about it.
+        return { id: value, label: value };
+    }
   }
 
-  /** The hint of a key chain select: `hint`, unless the key chains are loading or failed to load. */
-  keyChainHint(hint: string): string {
+  /**
+   * Why the loaded key chains do not offer `value` for `usage`: it has another usage type, or it
+   * does not exist. Undefined when it is offered, empty, or the key chains are not known.
+   */
+  private unlistedReason(
+    value: unknown,
+    usage: TrustListKeyChainUsage
+  ): 'otherUsage' | 'missing' | undefined {
+    if (!this.keyChainsKnown || typeof value !== 'string' || !value) return undefined;
+    if (this.keyChainsOf(usage).some((keyChain) => keyChain.id === value)) return undefined;
+    return this.availableKeyChains.some((keyChain) => keyChain.id === value)
+      ? 'otherUsage'
+      : 'missing';
+  }
+
+  /** What saving does with a selected key chain the select for `usage` does not offer; '' otherwise. */
+  private unlistedKeyChainWarning(value: unknown, usage: TrustListKeyChainUsage): string {
+    switch (this.unlistedReason(value, usage)) {
+      case 'missing':
+        return 'This key chain does not exist, so saving fails. Choose another.';
+      case 'otherUsage':
+        // The backend checks the usage of the signing key chain, not of an entity's key chains.
+        return usage === 'trustList'
+          ? 'This is not a trust list key chain, so saving fails. Choose another.'
+          : `This is not a ${KEY_CHAIN_USAGE_NAMES[usage]} key chain; saving still puts its certificate in the trust list. Choose another.`;
+      default:
+        return '';
+    }
+  }
+
+  /** Whether an internal entity selects a key chain its select does not offer, as its header says. */
+  entityKeyChainsToCheck(entity: AbstractControl): boolean {
+    return (
+      this.unlistedReason(entity.get('issuerKeyChainId')?.value, 'attestation') !== undefined ||
+      this.unlistedReason(entity.get('revocationKeyChainId')?.value, 'statusList') !== undefined
+    );
+  }
+
+  /** Whether the key chains are known and none of them has `usage`. */
+  noKeyChains(usage: TrustListKeyChainUsage): boolean {
+    return this.keyChainsKnown && this.keyChainsOf(usage).length === 0;
+  }
+
+  /** Whether the internal entities' key chain selects need a retry, or a key chain created first. */
+  get entityKeyChainsMissing(): boolean {
+    return (
+      this.keyChainsLoadError !== '' ||
+      this.noKeyChains('attestation') ||
+      this.noKeyChains('statusList')
+    );
+  }
+
+  /** Why a select for `usage` has no options, and where to create one. */
+  private noKeyChainsMessage(usage: TrustListKeyChainUsage): string {
+    return `No ${KEY_CHAIN_USAGE_NAMES[usage]} key chains. Create one in Key Management.`;
+  }
+
+  /**
+   * The hint of the key chain select for `usage` holding `value`: `hint`, unless the key chains
+   * are loading or failed to load, the select does not offer `value`, or, for a required select,
+   * no key chain has that usage.
+   */
+  keyChainHint(hint: string, value: unknown, usage: TrustListKeyChainUsage): string {
     if (this.loadingKeyChains) return 'Loading key chains…';
-    return this.keyChainsLoadError ? 'Could not load key chains.' : hint;
+    if (this.keyChainsLoadError) return 'Could not load key chains.';
+    const warning = this.unlistedKeyChainWarning(value, usage);
+    if (warning) return warning;
+    // The signing key chain select may stay empty (an update keeps the stored key chain, a create
+    // looks one up), so only the entities' selects say that none has their usage.
+    if (usage !== 'trustList' && this.noKeyChains(usage)) return this.noKeyChainsMessage(usage);
+    return hint;
   }
 
-  /** Under an empty required key chain select, which replaces its hint: why it may be empty. */
-  get keyChainRequiredMessage(): string {
-    return this.keyChainsLoadError ? 'The key chains could not be loaded.' : 'Select a key chain.';
+  /** Under an empty required key chain select of `usage`, which replaces its hint: why it may be empty. */
+  keyChainRequiredMessage(usage: TrustListKeyChainUsage): string {
+    if (this.keyChainsLoadError) return 'The key chains could not be loaded.';
+    return this.noKeyChains(usage) ? this.noKeyChainsMessage(usage) : 'Select a key chain.';
   }
 
   /** Loads the trust list to edit; on failure the form stays hidden behind a retry. */
