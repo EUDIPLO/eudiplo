@@ -387,30 +387,37 @@ export class RegistrarComponent implements OnInit {
     return this.isSaving || this.isDeleting ? WAIT_FOR_CHANGE : '';
   }
 
+  /**
+   * Says what keeps the configuration from saving and focuses the first field that does. Like
+   * `hasInvalidInput`, focus and the snackbar leave out fields with only a backend rejection.
+   */
+  private showWhatBlocksSaving(): void {
+    const blocking = this.fieldsBlockingSave();
+    const among = (fields: readonly string[]) =>
+      blocking.filter((field) => (fields as readonly string[]).includes(field));
+    const credentials = among(CREDENTIAL_FIELDS);
+    const contact = among(CONTACT_FIELDS);
+    const firstField = blocking[0];
+    showFieldsToFix(this.configForm, {
+      snackBar: this.snackBar,
+      injector: this.injector,
+      container: () => this.formElement?.nativeElement,
+      field: () =>
+        this.formElement?.nativeElement.querySelector<HTMLElement>(
+          `[formcontrolname="${firstField}"]`
+        ),
+      sections: [
+        { name: 'Registrar Credentials', controls: credentials.map((f) => this.fieldControl(f)) },
+        { name: 'Relying Party Contact', controls: contact.map((f) => this.fieldControl(f)) },
+      ],
+    });
+  }
+
   async saveConfig(): Promise<void> {
     // `disabledInteractive` keeps the button clickable while it looks disabled.
     if (this.isSaving || this.isDeleting) return;
     if (this.hasInvalidInput) {
-      // Like `hasInvalidInput`, focus and the snackbar leave out fields with only a rejection.
-      const blocking = this.fieldsBlockingSave();
-      const among = (fields: readonly string[]) =>
-        blocking.filter((field) => (fields as readonly string[]).includes(field));
-      const credentials = among(CREDENTIAL_FIELDS);
-      const contact = among(CONTACT_FIELDS);
-      const firstField = blocking[0];
-      showFieldsToFix(this.configForm, {
-        snackBar: this.snackBar,
-        injector: this.injector,
-        container: () => this.formElement?.nativeElement,
-        field: () =>
-          this.formElement?.nativeElement.querySelector<HTMLElement>(
-            `[formcontrolname="${firstField}"]`
-          ),
-        sections: [
-          { name: 'Registrar Credentials', controls: credentials.map((f) => this.fieldControl(f)) },
-          { name: 'Relying Party Contact', controls: contact.map((f) => this.fieldControl(f)) },
-        ],
-      });
+      this.showWhatBlocksSaving();
       return;
     }
     // Drop the previous backend rejections; the backend checks again.
