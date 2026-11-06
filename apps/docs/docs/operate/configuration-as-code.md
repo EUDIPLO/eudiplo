@@ -7,6 +7,8 @@ title: Configuration as Code
 Keep tenant configuration in files, validate it in CI, and move it between
 instances with reviewed plans. The file layout, envelope, versions and plan
 semantics are specified in the [config bundle format](../reference/config-bundle-format.md).
+The [Manage an instance with the CLI](../cookbooks/manage-with-cli.md) cookbook
+walks through a tenant folder from creation to CI.
 
 ## Configuration model
 
@@ -127,13 +129,18 @@ eudiplo config upgrade ./config --check                  # exit 1 if a file need
 The commands exit non-zero on any invalid document, which is enough for a CI
 gate. The backend runs a few checks on top that the schemas cannot express,
 such as the rule that registrar URLs have no query, fragment or credentials,
-so an import can still fail on a folder that passed validation. A workflow
-that validates every tenant folder and checks for pending upgrades:
+so an import can still fail on a folder that passed validation. Like the
+backend, the validator resolves `${VAR}` placeholders from its environment and
+fails on one without a value or default, so give the CI job a dummy value for
+each; the real secrets stay on the instance. A workflow that validates every
+tenant folder and checks for pending upgrades:
 
 ```yaml title=".github/workflows/config.yml"
 jobs:
   validate:
     runs-on: ubuntu-latest
+    env:
+      SHOP_BACKEND_SECRET: ci-placeholder   # one per ${…} placeholder
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

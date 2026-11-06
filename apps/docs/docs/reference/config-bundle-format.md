@@ -274,7 +274,9 @@ exception ([single resources](#single-resources)).
 A secret that is not set, such as the client secret of a registrar account without one, is left out of the export and adds no requirement.
 
 `regenerate` keeps the key chain ID but creates a new cryptographic identity:
-certificates and anything bound to the old key must be renewed.
+certificates and anything bound to the old key must be renewed. In `upsert` and
+`replace` mode it does so again whenever the document changed
+([which documents count as unchanged](#import-modes-and-plan-actions)).
 
 A `private-jwk` key source takes one of two forms:
 
