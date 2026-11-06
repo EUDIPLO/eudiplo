@@ -150,7 +150,7 @@ test('edits every display entry and keeps all of them on save', async ({ page, r
   }
 });
 
-test('keeps optional display fields as loaded and only flags colors wallets may not read', async ({
+test('keeps optional display fields as loaded and refuses colors and locales wallets cannot read', async ({
   page,
   request,
 }) => {
@@ -161,7 +161,7 @@ test('keeps optional display fields as loaded and only flags colors wallets may 
   const id = `e2e-display-optional-${Date.now()}`;
   const url = `${resolvedE2EConfig.apiBaseUrl}/api/issuer/credentials`;
   const headers = { Authorization: `Bearer ${await tenantToken(request)}` };
-  // Only name and locale are required, and the API does not restrict the color format.
+  // Only name and locale are required; colors are CSS Color Level 3 numerical values.
   const display = [
     { name: 'Membership', locale: 'en-US' },
     {
@@ -190,34 +190,85 @@ test('keeps optional display fields as loaded and only flags colors wallets may 
     await page.goto(`/credential-config/${id}/edit`);
     await page.getByRole('tab', { name: /Appearance/ }).click();
     await expect(page.getByRole('textbox', { name: 'Display Name' })).toHaveCount(2);
-    const first = page.locator('.display-config-card').first();
+    const [first, second] = [
+      page.locator('.display-config-card').first(),
+      page.locator('.display-config-card').nth(1),
+    ];
     await expect(first.getByRole('textbox', { name: 'Description' })).toHaveValue('');
     await first.getByRole('button', { name: 'Colors and images (optional)' }).click();
     await expect(first.getByRole('textbox', { name: 'Background Color' })).toHaveValue('');
-    await expect(first.getByRole('textbox', { name: 'Text Color' })).toHaveValue('');
 
-    // A color wallets may not read is flagged in either field but does not block saving.
-    const warning = 'Wallets may not read this. Use hex, rgb() or hsl().';
-    const background = first.getByRole('textbox', { name: 'Background Color' });
-    await background.fill('navy');
-    await expect(first.getByText(warning)).toBeVisible();
-    await background.fill('');
-    await expect(first.getByText(warning)).toHaveCount(0);
+    // A color wallets cannot read is refused with the accepted forms.
     const text = first.getByRole('textbox', { name: 'Text Color' });
+    await expect(text).toHaveValue('');
     await text.fill('navy');
     await text.blur();
-    await expect(first.getByText(warning)).toBeVisible();
-    await expect(text).toHaveAttribute('aria-invalid', 'false');
+    const colorError = first.getByText(
+      'Use #rgb, #rrggbb, transparent, or lowercase rgb(), rgba(), hsl() or hsla() with commas'
+    );
+    await expect(colorError).toBeVisible();
+    await expect(text).toHaveAttribute('aria-invalid', 'true');
+    await text.fill('');
+    await expect(colorError).toHaveCount(0);
+
+    // A locale the other entry uses cannot be chosen: wallets accept one entry per language.
+    await expect(second.getByRole('combobox', { name: 'Locale' })).toHaveText(/German/);
+    await first.getByRole('combobox', { name: 'Locale' }).click();
+    await expect(page.getByRole('option', { name: 'German (Germany)' })).toBeDisabled();
+    await expect(page.getByRole('option', { name: 'French (France)' })).toBeEnabled();
+    await page.keyboard.press('Escape');
 
     await page.getByRole('button', { name: 'Save Configuration' }).click();
     await expect(page).toHaveURL(new RegExp(`/credential-config/${id}$`));
 
     const response = await request.get(`${url}/${id}`, { headers });
     expect(response.ok(), `GET ${id}`).toBe(true);
-    expect(((await response.json()) as { config: { display: unknown[] } }).config.display).toEqual([
-      { ...display[0], text_color: 'navy' },
-      display[1],
-    ]);
+    expect(((await response.json()) as { config: { display: unknown[] } }).config.display).toEqual(
+      display
+    );
+  } finally {
+    await writeConfig(() => request.delete(`${url}/${id}`, { headers }), `delete ${id}`);
+  }
+});
+
+test('creates a configuration whose display has only a name', async ({ page, request }) => {
+  test.skip(
+    !hasAuthCredentials,
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+  );
+  const id = `e2e-display-minimal-${Date.now()}`;
+  const url = `${resolvedE2EConfig.apiBaseUrl}/api/issuer/credentials`;
+  const headers = { Authorization: `Bearer ${await tenantToken(request)}` };
+
+  await page.goto('/credential-config/create');
+  // Basics, without the optional description
+  await page.getByRole('textbox', { name: 'Configuration ID' }).fill(id);
+  await page.getByText('No (Custom URI)').click();
+  await page.getByRole('textbox', { name: 'VCT URI' }).fill(`urn:${id}`);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  // Claims
+  await page.getByRole('button', { name: 'Continue' }).click();
+  // Appearance: no description and no colors
+  await page.getByRole('textbox', { name: 'Display Name' }).fill('Membership');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  // Settings
+  await page.getByRole('button', { name: 'Continue' }).click();
+  // Review: no dash after the configuration or an entry without description
+  await expect(page.getByRole('definition').first()).toHaveText(id);
+  await expect(page.getByText('Membership (en-US)', { exact: true })).toBeVisible();
+
+  try {
+    await page.getByRole('button', { name: 'Create Configuration' }).click();
+    await expect(page).toHaveURL(/\/credential-config$/);
+
+    const response = await request.get(`${url}/${id}`, { headers });
+    expect(response.ok(), `GET ${id}`).toBe(true);
+    const saved = (await response.json()) as {
+      description?: string | null;
+      config: { display: unknown[] };
+    };
+    expect(saved.config.display).toEqual([{ name: 'Membership', locale: 'en-US' }]);
+    expect(saved.description ?? null).toBeNull();
   } finally {
     await writeConfig(() => request.delete(`${url}/${id}`, { headers }), `delete ${id}`);
   }

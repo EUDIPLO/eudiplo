@@ -53,7 +53,7 @@ rejects versions newer than its own.
 | `KeyChainDefaults`   | `KeyChainDefaultsConfigFile`  | 2               | yes       |
 | `RegistrarConfig`    | `RegistrarConfigFile`         | 2               | yes       |
 | `IssuanceConfig`     | `IssuanceConfigFile`          | 6               | yes       |
-| `CredentialConfig`   | `CredentialConfigFile`        | 3               |           |
+| `CredentialConfig`   | `CredentialConfigFile`        | 4               |           |
 | `PresentationConfig` | `PresentationConfigFile`      | 4               |           |
 | `AttributeProvider`  | `AttributeProviderConfigFile` | 1               |           |
 | `WebhookEndpoint`    | `WebhookEndpointConfigFile`   | 1               |           |
@@ -136,6 +136,18 @@ keywords whose value is not an object or boolean, each with the warning
 input `CLAIM_PATTERN_UNSUPPORTED` at its path, for example
 `/spec/fields/0/constraints/pattern`; the pattern is not rewritten, and nothing
 is written until you change it.
+
+**CredentialConfig v4** came with EUDIPLO 10.0 as well. `config.display[]`
+colors must be CSS Color Level 3 numerical values (`#rgb`, `#rrggbb`, lowercase
+`rgb()`, `rgba()`, `hsl()` or `hsla()` with comma-separated values, or
+`transparent`), and each locale may appear once, compared case-insensitively.
+The v3 to v4 step trims colors and lowercases their function names, removes an
+empty color, and removes any other color with the warning
+`DISPLAY_COLOR_REMOVED` at its path, for example
+`/spec/config/display/0/text_color`, so wallets use their own. A second entry for
+one locale stops the migration with the required input
+`DISPLAY_LOCALE_DUPLICATE` at `/spec/config/display/<index>/locale`, and nothing
+is written until you remove or change it. 9.x cannot read v4 files.
 
 **KeyChain v2** came with EUDIPLO 10.0. It adds the optional `type`
 (`standalone` or `internalChain`), which exports write. For a `private-jwk` key

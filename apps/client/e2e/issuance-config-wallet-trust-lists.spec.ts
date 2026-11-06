@@ -2,7 +2,7 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './support/test';
 import { hasRootCredentials, resolvedE2EConfig } from './support/e2e-config';
 import { loginWithClientCredentials } from './support/login';
-import { createTenant, type TestTenant } from './support/tenants';
+import { createTenant, tenantRequest, type TestTenant } from './support/tenants';
 import { certificatePem } from './support/key-chains';
 import { createTrustList } from './support/trust-lists';
 
@@ -97,6 +97,12 @@ async function savedConfig() {
   });
   expect(response.ok).toBe(true);
   return response.json();
+}
+
+/** Stores `config` as the tenant's issuer settings. */
+async function storeConfig(config: unknown) {
+  const response = await tenantRequest(tenant, 'POST', '/issuer/config', config);
+  expect(response.ok, await response.text()).toBe(true);
 }
 
 /** The built-in authorization server of stored issuer settings. */
@@ -194,4 +200,56 @@ test('shows a retryable alert when the trust lists do not load', async ({ page }
   await expect(server.getByRole('combobox', { name: 'Managed trust list 1' })).toHaveText(
     new RegExp(`\\(${trustListId}\\)`)
   );
+});
+
+test('removing a trust list entry moves focus within its own list', async ({ page }) => {
+  // Two authorization servers with their own lists share the Wallet access tab, so the focus
+  // targets of one list must not come from the other.
+  const external = { url: serverExternalUrl, verifierX509Der: certificateDer };
+  await storeConfig({
+    display: [{ name: 'Wallet Trust Lists', locale: 'en-US' }],
+    walletProviderTrustLists: [
+      { url: externalUrl, verifierX509Der: certificateDer },
+      { trustListId },
+    ],
+    authorizationServers: [
+      {
+        type: 'built-in',
+        id: 'issuer-built-in',
+        walletProviderTrustLists: [{ trustListId }, external],
+      },
+      {
+        type: 'chained',
+        id: 'upstream-login',
+        label: 'Chained AS',
+        upstream: { issuer: 'https://auth.example.com/realms/test', clientId: 'test-client' },
+        walletProviderTrustLists: [external, { trustListId }],
+      },
+    ],
+  });
+
+  await loginWithClientCredentials(page, tenant.clientId, tenant.clientSecret);
+  await page.goto('/issuance-config/edit');
+  await page.getByRole('tab', { name: 'Wallet access' }).click();
+  // The panels open one at a time; the closed one keeps its entries on the page.
+  await page.getByRole('button', { name: /^Chained AS/ }).click();
+  const chained = page.getByRole('region', { name: /^Chained AS/ });
+
+  // The entry now in the place of the removed one takes the focus, then the list's Add button.
+  await chained.getByRole('button', { name: 'Remove trust list 1' }).click();
+  await expect(chained.getByRole('combobox', { name: 'Managed trust list 1' })).toBeFocused();
+  await chained.getByRole('button', { name: 'Remove trust list 1' }).click();
+  await expect(chained.getByRole('button', { name: 'Add managed trust list' })).toBeFocused();
+
+  // After the last entry, the new last entry of the same list takes the focus.
+  const builtIn = await useOwnTrustLists(page);
+  await builtIn.getByRole('button', { name: 'Remove trust list 2' }).click();
+  await expect(builtIn.getByRole('combobox', { name: 'Managed trust list 1' })).toBeFocused();
+
+  await page.getByRole('tab', { name: 'Trust' }).click();
+  const shared = await sharedTrustLists(page);
+  await shared.getByRole('button', { name: 'Remove trust list 1' }).click();
+  await expect(shared.getByRole('combobox', { name: 'Managed trust list 1' })).toBeFocused();
+  await shared.getByRole('button', { name: 'Remove trust list 1' }).click();
+  await expect(shared.getByRole('button', { name: 'Add managed trust list' })).toBeFocused();
 });
