@@ -4,6 +4,7 @@ import {
     discardedTrustListsNote,
     isTrustListCurrent,
     OutdatedTrustListsError,
+    walletSafeTrustFailure,
 } from "./trust-list-freshness.js";
 
 describe("trust list freshness", () => {
@@ -63,5 +64,30 @@ describe("trust list freshness", () => {
             "No configured trust list is current: each has no valid NextUpdate or one that has passed",
         );
         expect(error.discarded).toHaveLength(1);
+    });
+
+    describe("walletSafeTrustFailure", () => {
+        it("keeps the message of outdated lists, behind the prefix", () => {
+            const error = new OutdatedTrustListsError([]);
+            expect(walletSafeTrustFailure(error, "fixed", "Failed: ")).toEqual({
+                message: `Failed: ${error.message}`,
+                cause: error,
+                outdated: true,
+            });
+        });
+
+        it("answers the fixed text for any other error and keeps it as cause", () => {
+            const error = new Error("Failed to fetch http://internal/list");
+            expect(walletSafeTrustFailure(error, "fixed", "Failed: ")).toEqual({
+                message: "fixed",
+                cause: error,
+                outdated: false,
+            });
+            expect(walletSafeTrustFailure("boom", "fixed")).toEqual({
+                message: "fixed",
+                cause: undefined,
+                outdated: false,
+            });
+        });
     });
 });
