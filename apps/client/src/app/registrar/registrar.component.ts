@@ -122,6 +122,11 @@ const CONTACT_PATTERN_MESSAGES: Record<string, string> = {
 /** URL fields, which also follow the registrar base URL rule. */
 const URL_FIELDS = ['registrarUrl', 'oidcUrl'] as const;
 
+/** Whether an error of the control keeps the configuration from saving; a backend rejection does not. */
+function blocksSaving(control: AbstractControl | null): boolean {
+  return Object.keys(control?.errors ?? {}).some((key) => key !== 'server');
+}
+
 /** The fields under Registrar Credentials, the first part of the form. */
 const CREDENTIAL_FIELDS = [
   ...URL_FIELDS,
@@ -352,9 +357,14 @@ export class RegistrarComponent implements OnInit {
    * outbound URL policy, so saving again is allowed and checks anew.
    */
   get hasInvalidInput(): boolean {
-    return this.fieldControls().some((control) =>
-      Object.keys(control.errors ?? {}).some((key) => key !== 'server')
-    );
+    return this.fieldControls().some(blocksSaving);
+  }
+
+  /** The control of a field under Registrar Credentials or Relying Party Contact. */
+  private fieldControl(name: string): AbstractControl | null {
+    return (CONTACT_FIELDS as readonly string[]).includes(name)
+      ? this.configForm.get(['relyingPartyContact', name])
+      : this.configForm.get(name);
   }
 
   /** The controls with own validation: top-level fields and contact fields. */
@@ -374,21 +384,23 @@ export class RegistrarComponent implements OnInit {
     // `disabledInteractive` keeps the button clickable while it looks disabled.
     if (this.isSaving || this.isDeleting) return;
     if (this.hasInvalidInput) {
-      const form = this.configForm;
-      showFieldsToFix(form, {
+      // Like `hasInvalidInput`, focus and the snackbar leave out fields with only a rejection.
+      const blocking = (fields: readonly string[]) =>
+        fields.filter((field) => blocksSaving(this.fieldControl(field)));
+      const credentials = blocking(CREDENTIAL_FIELDS);
+      const contact = blocking(CONTACT_FIELDS);
+      const firstField = [...credentials, ...contact][0];
+      showFieldsToFix(this.configForm, {
         snackBar: this.snackBar,
         injector: this.injector,
         container: () => this.formElement?.nativeElement,
+        field: () =>
+          this.formElement?.nativeElement.querySelector<HTMLElement>(
+            `[formcontrolname="${firstField}"]`
+          ),
         sections: [
-          {
-            name: 'Registrar Credentials',
-            controls: CREDENTIAL_FIELDS.map((field) => form.get(field)),
-          },
-          { name: 'Relying Party Contact', controls: [form.get('relyingPartyContact')] },
-          {
-            name: 'Registration Certificate Defaults',
-            controls: [form.get('registrationCertificateDefaults')],
-          },
+          { name: 'Registrar Credentials', controls: credentials.map((f) => this.fieldControl(f)) },
+          { name: 'Relying Party Contact', controls: contact.map((f) => this.fieldControl(f)) },
         ],
       });
       return;

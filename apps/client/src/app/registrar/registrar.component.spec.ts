@@ -1117,6 +1117,45 @@ describe('RegistrarComponent rendered', () => {
     expect(registrarService.saveConfig).not.toHaveBeenCalled();
   });
 
+  it('points Save at a field that blocks it, not at one with only a backend rejection', async () => {
+    const fixture = await render(stored);
+    const snackBar = fixture.debugElement.injector.get(MatSnackBar);
+    registrarService.updateConfig.mockRejectedValueOnce(
+      new HttpErrorResponse({
+        status: 400,
+        error: {
+          statusCode: 400,
+          message: 'Validation failed',
+          errors: [
+            {
+              path: ['oidcUrl'],
+              message: 'Outbound URL host is not in the allowlist',
+              code: 'outbound_url_policy',
+            },
+          ],
+        },
+      })
+    );
+    await fixture.componentInstance.saveConfig();
+    fixture.detectChanges();
+    enter(fixture, 'email', 'support');
+    const save = button(fixture, 'Update Configuration');
+
+    save.focus();
+    save.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement?.getAttribute('formcontrolname')).toBe('email');
+    });
+    expect(snackBar.open).toHaveBeenLastCalledWith(
+      'Check the highlighted fields in Relying Party Contact.',
+      'Close',
+      expect.anything()
+    );
+    expect(registrarService.updateConfig).toHaveBeenCalledOnce();
+  });
+
   it('keeps Save enabled when a field carries only a backend rejection', async () => {
     const fixture = await render(stored);
     registrarService.updateConfig.mockRejectedValueOnce(
@@ -1164,6 +1203,9 @@ describe('RegistrarComponent rendered', () => {
     expect(button(fixture, 'Update Configuration').querySelector('.button-spinner')).toBeNull();
     // A click on Save while the delete runs sends nothing.
     button(fixture, 'Update Configuration').click();
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(registrarService.updateConfig).not.toHaveBeenCalled();
+    expect(registrarService.saveConfig).not.toHaveBeenCalled();
 
     finish();
     await vi.waitFor(() => expect(fixture.componentInstance.isDeleting).toBe(false));

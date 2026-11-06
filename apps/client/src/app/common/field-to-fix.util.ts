@@ -9,7 +9,7 @@ import { focusWasLost } from './focus-if-lost.util';
 
 /**
  * Helpers for a Save that stays usable while fields are invalid and, when clicked then, says what
- * keeps the form from saving (see "Save validates on submit" in contributing/client.md).
+ * keeps the form from saving (see the paragraph on a form's Save in contributing/client.md).
  */
 
 /** How to focus a field whose host element is not focusable itself, by that element. */
@@ -61,23 +61,28 @@ export interface FocusFieldToFixOptions {
   readonly panel?: MatExpansionPanel;
   /** Takes the focus when no field is invalid, such as the Add button of a list that is empty. */
   readonly fallback?: () => HTMLElement | null | undefined;
+  /**
+   * The field to focus instead of the first invalid one, for a form in which some errors do not
+   * keep it from saving, such as a backend rejection that saving again checks anew.
+   */
+  readonly field?: () => HTMLElement | null | undefined;
 }
 
 /**
- * After the next render, moves focus to the first invalid field in `container` (see
- * `firstInvalidField`), else to `fallback`. When `panel` still hides the field, the field takes
+ * After the next render, moves focus to `field`, else to the first invalid field in `container`
+ * (see `firstInvalidField`), else to `fallback`. When `panel` still hides the field, the field takes
  * the focus once the panel has expanded, unless the panel closed first or the user has moved the
  * focus meanwhile. Nothing happens once the component behind `injector` is destroyed.
  */
 export function focusFieldToFix(
   injector: Injector,
   container: () => ParentNode | null | undefined,
-  { panel, fallback }: FocusFieldToFixOptions = {}
+  { panel, fallback, field: fieldToFocus }: FocusFieldToFixOptions = {}
 ): void {
   if (injector.get(DestroyRef).destroyed) return;
   afterNextRender(
     () => {
-      const field = firstInvalidField(container()) ?? fallback?.() ?? undefined;
+      const field = fieldToFocus?.() ?? firstInvalidField(container()) ?? fallback?.() ?? undefined;
       if (!field) return;
       const from = document.activeElement;
       focusField(field);
