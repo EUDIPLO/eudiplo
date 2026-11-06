@@ -5,6 +5,7 @@ import { hasRootCredentials, resolvedE2EConfig } from './support/e2e-config';
 import { certificatePem, createKeyChain } from './support/key-chains';
 import { loginWithClientCredentials } from './support/login';
 import { createTenant } from './support/tenants';
+import { createTrustList } from './support/trust-lists';
 
 function isTrustListRequest(response: Response): boolean {
   return response.url().endsWith('/api/trust-list') && response.request().method() === 'GET';
@@ -150,5 +151,82 @@ test.describe('entities', () => {
       .getByRole('button', { name: 'Remove Entity' })
       .click();
     await expect(page.getByRole('button', { name: 'Add Internal Entity' })).toBeFocused();
+  });
+});
+
+test.describe('edit page', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+  const id = 'load-check';
+
+  /** Signs in as the admin of a new tenant that has one trust list with an external entity. */
+  async function signInWithTrustList(page: Page): Promise<void> {
+    test.skip(
+      !hasRootCredentials,
+      'Set AUTH_CLIENT_ID and AUTH_CLIENT_SECRET of the backend to create a tenant.'
+    );
+    const tenant = await createTenant('trust-list-load', 'Trust List Load', ['issuance:manage']);
+    await createTrustList(tenant.token, id, 'Loaded on the edit page');
+    await loginWithClientCredentials(page, tenant.clientId, tenant.clientSecret);
+  }
+
+  test('a failed load says why and loads again on Retry', async ({ page }) => {
+    await signInWithTrustList(page);
+    let failLoading = true;
+    await page.route(`**/api/trust-list/${id}`, (route) =>
+      failLoading && route.request().method() === 'GET'
+        ? route.fulfill({ status: 500, json: { message: 'Internal server error' } })
+        : route.fallback()
+    );
+    await page.goto(`/trust-list/${id}/edit`);
+
+    const alert = page
+      .getByRole('alert')
+      .filter({ hasText: 'Failed to load trust list: Internal server error' });
+    await expect(alert).toBeVisible();
+    // Neither an empty form nor a redirect to the list.
+    await expect(page.getByRole('textbox', { name: 'ID', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Add Internal Entity' })).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`/trust-list/${id}/edit$`));
+
+    failLoading = false;
+    await page.getByRole('button', { name: 'Retry', exact: true }).click();
+
+    await expect(page.getByRole('textbox', { name: 'ID', exact: true })).toHaveValue(id);
+    await expect(
+      page.getByRole('button', { name: /^External Entity #1 · Example Wallet Provider/ })
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: /External Entity #2/ })).toHaveCount(0);
+    await expect(alert).toHaveCount(0);
+    // Retry left with the error card, so keyboard focus continues from the page heading.
+    await expect(page.getByRole('heading', { name: 'Edit Trust List', level: 2 })).toBeFocused();
+  });
+
+  test('a failed key chain load is shown at the key chain select and loads again on Retry', async ({
+    page,
+  }) => {
+    await signInWithTrustList(page);
+    let failLoading = true;
+    await page.route('**/api/key-chain', (route) =>
+      failLoading && route.request().method() === 'GET'
+        ? route.fulfill({ status: 500, json: { message: 'Internal server error' } })
+        : route.fallback()
+    );
+    await page.goto(`/trust-list/${id}/edit`);
+
+    const signingKeyChain = page.getByRole('combobox', { name: 'Signing Key Chain' });
+    await expect(signingKeyChain).toBeVisible();
+    await expect(page.getByText('Could not load key chains.')).toBeVisible();
+
+    failLoading = false;
+    await page.getByRole('button', { name: 'Retry loading key chains' }).click();
+
+    await expect(page.getByText('Could not load key chains.')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Retry loading key chains' })).toHaveCount(0);
+    // The Retry button is gone, so focus moves to the select it was for.
+    await expect(signingKeyChain).toBeFocused();
+    await signingKeyChain.click();
+    await expect(
+      page.getByRole('option', { name: /Loaded on the edit page signing/ })
+    ).toBeVisible();
   });
 });
