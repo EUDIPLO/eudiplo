@@ -1,6 +1,15 @@
 import '@angular/compiler';
+import { TestBed } from '@angular/core/testing';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { provideRouter } from '@angular/router';
+import { of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
+import { expectUnavailable, tooltipOf } from '../../common/unavailable-action.testing';
+import { JwtService } from '../../services/jwt.service';
+import { KeyChainService } from '../key-chain.service';
 import { KeyManagementProvidersComponent } from './key-management-providers.component';
 
 describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
@@ -124,5 +133,50 @@ describe('KeyManagementProvidersComponent tenant KMS configuration', () => {
     await component.refresh();
 
     expect(component.tenantConfig).toEqual({ providers: [] });
+  });
+
+  it('keeps the tenant config button focusable while the configuration saves', async () => {
+    roles = ['tenant:admin'];
+    keyChainService['updateTenantKmsConfig'].mockReturnValue(new Promise(() => undefined));
+    TestBed.configureTestingModule({
+      imports: [KeyManagementProvidersComponent],
+      providers: [
+        provideRouter([]),
+        { provide: KeyChainService, useValue: keyChainService },
+        { provide: MatSnackBar, useValue: snackBar },
+        {
+          provide: JwtService,
+          useValue: {
+            hasRole: (role: string[]) => role.some((r) => roles.includes(r)),
+            canUseConfigPortability: () => false,
+          },
+        },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+      ],
+    });
+    const fixture = TestBed.createComponent(KeyManagementProvidersComponent);
+    // MatDialogModule in the component's imports provides its own MatDialog.
+    const openDialog = vi
+      .spyOn(fixture.debugElement.injector.get(MatDialog), 'open')
+      .mockReturnValue({ afterClosed: () => of({ providers: [] }) } as never);
+    fixture.detectChanges();
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[aria-label="Show tenant config JSON"]'
+    )!;
+    // Clicks are held back until the ownership lookup of the managed resource has answered.
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(button.getAttribute('aria-busy')).toBeNull();
+    });
+    expect(tooltipOf(fixture, button)).toBe('Show tenant config JSON');
+
+    button.click();
+    fixture.detectChanges();
+    button.click();
+    fixture.detectChanges();
+
+    expect(openDialog).toHaveBeenCalledOnce();
+    expect(keyChainService['updateTenantKmsConfig']).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, button, 'Saving the tenant KMS configuration…');
   });
 });
