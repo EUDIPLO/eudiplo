@@ -297,11 +297,11 @@ describe('CredentialConfigCreateComponent', () => {
 
   it('adds entries only while a listed locale is unused', () => {
     for (let i = 1; i < component.localeOptions.length; i++) component.addDisplayConfig();
-    expect(component.displayConfigs.length).toBe(component.localeOptions.length);
+    expect(component.displayConfigs).toHaveLength(component.localeOptions.length);
     expect(component.unusedDisplayLocale).toBeUndefined();
 
     component.addDisplayConfig();
-    expect(component.displayConfigs.length).toBe(component.localeOptions.length);
+    expect(component.displayConfigs).toHaveLength(component.localeOptions.length);
   });
 
   it('offers a loaded locale that is not listed and previews only accepted colors', () => {

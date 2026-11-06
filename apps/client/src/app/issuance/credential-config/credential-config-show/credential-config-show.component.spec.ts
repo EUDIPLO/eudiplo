@@ -255,7 +255,7 @@ describe('CredentialConfigShowComponent claim fields', () => {
       { name: 'PID (copy)', locale: 'en-us' },
       { name: 'PID', locale: 'de-DE' },
     ]);
-    expect(page.querySelectorAll('.locale-chips mat-chip').length).toBe(2);
+    expect(page.querySelectorAll('.locale-chips mat-chip')).toHaveLength(2);
     expect(page.textContent).toContain('Wallets do not receive some stored colors');
   });
 
