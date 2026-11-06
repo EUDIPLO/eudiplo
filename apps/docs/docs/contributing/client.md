@@ -33,6 +33,8 @@ In a `@for` over the controls of a `FormArray`, track each row by its control (`
 
 When an action cannot be used right now, keep its button focusable and say why: `disabled` with `disabledInteractive` and the reason in `matTooltip`, as on the schema list and on Reset to Defaults in the settings screens. Material does not block clicks on such a `<button>` (only on links), so the click handler checks the same condition again. `appConfigManaged` locks a Material button through its `ariaDisabled` input and so keeps the button's own `aria-disabled`.
 
+A form's Save is not such an action while fields are missing or invalid: keep it enabled and let the submit handler mark every field touched, say in the snackbar which sections hold errors, open a collapsed section or panel that holds the first one and move focus to that field, as the trust list form does. Disable Save only while the save runs, with `disabledInteractive` and the reason in `matTooltip`.
+
 Give an icon-only button (`mat-icon-button`, `matIconButton`) an `aria-label`, usually its tooltip text; otherwise screen readers read the icon name ("delete"). A button repeated per row names its row, for example `[attr.aria-label]="'View tenant ' + tenant.id"`. Lint enforces the label, and it rejects `console.log`: debug output can carry tokens or wallet responses, so log only with `console.warn` or `console.error`, and never whole responses.
 
 When you add or change a backend endpoint, regenerate the SDK with the backend running and rebuild it:

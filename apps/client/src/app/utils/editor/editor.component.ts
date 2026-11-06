@@ -18,6 +18,8 @@ import {
   Input,
   SimpleChanges,
   ChangeDetectionStrategy,
+  ElementRef,
+  inject,
 } from '@angular/core';
 import { MatInputModule } from '@angular/material/input';
 import { SchemaValidation } from '../schemas';
@@ -25,6 +27,7 @@ import schemas from '../schemas.json';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { Subscription } from 'rxjs';
 import { ThemeService } from '../../services/theme.service';
+import { focusWasLost } from '../../common/focus-if-lost.util';
 
 let editorInstanceCounter = 0;
 
@@ -71,6 +74,11 @@ export class EditorComponent implements ControlValueAccessor, Validator, OnChang
   private editorInitialized = false;
   private themeSubscription: Subscription;
   private markerListener?: { dispose(): void };
+  private monacoEditor?: { focus(): void };
+  /** Set by `focus()` before Monaco has loaded: the element that had the focus then. */
+  private focusRequestedFrom?: Element | null;
+  /** The host element, by which a form finds the editor of a field to focus. */
+  readonly element: HTMLElement = inject(ElementRef).nativeElement;
   monacoSchemaError?: string;
 
   constructor(private readonly themeService: ThemeService) {
@@ -176,7 +184,22 @@ export class EditorComponent implements ControlValueAccessor, Validator, OnChang
     this._onTouched();
   }
 
+  /**
+   * Moves focus into the editor once Monaco has loaded, for example to a field with an error.
+   * Monaco's input is a different element in each browser, so only Monaco can focus it.
+   */
+  focus(): void {
+    if (this.monacoEditor) this.monacoEditor.focus();
+    // Monaco loads on first use; it takes the focus then, unless the user has moved it meanwhile.
+    else this.focusRequestedFrom = document.activeElement;
+  }
+
   onEditorInit(editor: any): void {
+    this.monacoEditor = editor;
+    if (this.focusRequestedFrom !== undefined) {
+      if (focusWasLost(this.focusRequestedFrom)) editor.focus();
+      this.focusRequestedFrom = undefined;
+    }
     this.editorInitialized = true;
     this.markerListener?.dispose();
     this.markerListener = editor.onDidChangeModelDecorations(() => {

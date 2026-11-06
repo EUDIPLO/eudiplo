@@ -37,7 +37,13 @@
       <a mat-button routerLink="/trust-list">Back to the list</a>
     </app-load-error>
   } @else {
-    <form [formGroup]="form" (ngSubmit)="onSubmit()" fxLayout="column" fxLayoutGap="24px">
+    <form
+      #trustListForm
+      [formGroup]="form"
+      (ngSubmit)="onSubmit()"
+      fxLayout="column"
+      fxLayoutGap="24px"
+    >
       <!-- Basic Information Card -->
       <mat-card>
         <mat-card-header>
@@ -178,19 +184,20 @@
                   <mat-panel-title>
                     @if (getEntityType(i) === 'internal') {
                       <mat-icon class="entity-icon internal">key</mat-icon>
-                      Internal Entity #{{ i + 1 }}
                     } @else {
                       <mat-icon class="entity-icon external">upload_file</mat-icon>
-                      External Entity #{{ i + 1 }}
                     }
+                    {{ entityLabel(i) }}
                     <!-- Names the entity, so the header that takes focus after a removal says which one it is. -->
                     @if (entity.get('infoName')?.value; as name) {
                       · {{ name }}
                     }
                   </mat-panel-title>
                   <mat-panel-description>
-                    <!-- A collapsed panel still says when its stored key chains need a look. -->
-                    @if (getEntityType(i) !== 'internal') {
+                    <!-- A collapsed panel still says when its fields or stored key chains need a look. -->
+                    @if (entityShowsErrors(entity)) {
+                      Check the highlighted fields
+                    } @else if (getEntityType(i) !== 'internal') {
                       Using external PEM certificates
                     } @else if (entityKeyChainsToCheck(entity)) {
                       Check the selected key chains
@@ -301,14 +308,16 @@
                   <h4>Entity Information</h4>
                   <div fxLayout="row" fxLayoutGap="16px">
                     <mat-form-field appearance="outline" fxFlex>
-                      <mat-label>Entity Name *</mat-label>
+                      <mat-label>Entity Name</mat-label>
                       <input
                         matInput
                         formControlName="infoName"
                         placeholder="e.g., Example Issuer GmbH"
                       />
                       <mat-icon matSuffix>business</mat-icon>
-                      <mat-error>{{ fieldError('entities.' + i + '.infoName') }}</mat-error>
+                      <mat-error>{{
+                        fieldError('entities.' + i + '.infoName', 'Entity name is required')
+                      }}</mat-error>
                     </mat-form-field>
                     <mat-form-field appearance="outline" fxFlex="120px">
                       <mat-label>Language</mat-label>
@@ -386,9 +395,15 @@
                         <p class="editor-label">Issuer Certificate (for credential signing) *</p>
                         <app-editor
                           formControlName="issuerCertPem"
-                          [editorOptions]="editorOptionsPem"
+                          [editorOptions]="issuerCertEditorOptions"
                         ></app-editor>
-                        @if (fieldError('entities.' + i + '.issuerCertPem'); as message) {
+                        @if (
+                          certificateError(
+                            'entities.' + i + '.issuerCertPem',
+                            'Paste the issuer certificate.'
+                          );
+                          as message
+                        ) {
                           <p class="editor-error" role="alert">{{ message }}</p>
                         }
                       </div>
@@ -397,9 +412,15 @@
                         <p class="editor-label">Revocation Certificate (for status list) *</p>
                         <app-editor
                           formControlName="revocationCertPem"
-                          [editorOptions]="editorOptionsPem"
+                          [editorOptions]="revocationCertEditorOptions"
                         ></app-editor>
-                        @if (fieldError('entities.' + i + '.revocationCertPem'); as message) {
+                        @if (
+                          certificateError(
+                            'entities.' + i + '.revocationCertPem',
+                            'Paste the revocation certificate.'
+                          );
+                          as message
+                        ) {
                           <p class="editor-error" role="alert">{{ message }}</p>
                         }
                       </div>
@@ -422,11 +443,14 @@
       <!-- Action Buttons -->
       <div fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="12px">
         <button mat-button type="button" routerLink="/trust-list">Cancel</button>
+        <!-- Usable with an incomplete form: a click shows what is missing (onSubmit). -->
         <button
           mat-raised-button
           color="primary"
           type="submit"
-          [disabled]="form.invalid || entitiesArray.length === 0 || saving"
+          [disabled]="saving"
+          disabledInteractive
+          [matTooltip]="saving ? 'Saving the trust list…' : ''"
           appConfigManaged
           managedKind="TrustList"
           [managedResourceId]="trustListId || ''"
