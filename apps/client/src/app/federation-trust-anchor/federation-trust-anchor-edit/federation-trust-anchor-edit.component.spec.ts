@@ -118,6 +118,49 @@ describe('FederationTrustAnchorEditComponent', () => {
     );
   });
 
+  it('says which fields keep a trust anchor from saving and focuses the first one', async () => {
+    const create = vi.fn();
+    const { fixture, component, snackBar } = render({}, { create });
+    component.form.patchValue({ id: 'ta', jwks });
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    const save = page.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    expect(save.getAttribute('aria-disabled')).toBeNull();
+
+    save.focus();
+    save.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement?.getAttribute('formcontrolname')).toBe('entityId');
+    });
+    expect(snackBar.open).toHaveBeenLastCalledWith(
+      'Check the highlighted fields in Trust Anchor.',
+      'Close',
+      expect.anything()
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('waits while the trust anchor is saved: a second click sends nothing', async () => {
+    const create = vi.fn(() => new Promise(() => undefined));
+    const { fixture, component } = render({}, { create });
+    component.form.patchValue({ id: 'ta', entityId: 'https://ta.example', jwks });
+    fixture.detectChanges();
+    const save = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[type="submit"]'
+    )!;
+
+    save.click();
+    fixture.detectChanges();
+    save.click();
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(create).toHaveBeenCalledOnce();
+    expect(save.disabled).toBe(false);
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+  });
+
   it('loads the trust anchor to edit, keeps its ID and sends the changes', async () => {
     const update = vi.fn().mockResolvedValue(anchor);
     const { component, fixture, navigate } = render(

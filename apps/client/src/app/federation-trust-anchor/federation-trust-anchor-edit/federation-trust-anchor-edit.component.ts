@@ -26,6 +26,7 @@ import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import type { CreateFederationTrustAnchorDto } from '@eudiplo/sdk-core';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
+import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-ownership-notice.component';
@@ -102,6 +103,9 @@ export class FederationTrustAnchorEditComponent implements OnInit {
   private readonly references = inject(FederationTrustAnchorReferences);
   private readonly injector = inject(Injector);
   @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
+  /** Holds the fields; Save focuses the first invalid one. */
+  @ViewChild('formElement', { read: ElementRef })
+  private readonly formElement?: ElementRef<HTMLFormElement>;
   /** Entity ID of the trust anchor as stored, which configurations may name. */
   private storedEntityId = '';
 
@@ -161,11 +165,25 @@ export class FederationTrustAnchorEditComponent implements OnInit {
       focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
   }
 
+  /** Save stays focusable while a save runs, so its tooltip says why it waits. */
+  get saveTooltip(): string {
+    return this.saving ? 'Saving the trust anchor…' : '';
+  }
+
   async onSubmit(): Promise<void> {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
     if (this.saving) return;
     if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      this.snackBar.open('Check the highlighted fields', 'Close', { duration: 3000 });
+      const { id, entityId, description, jwks } = this.form.controls;
+      showFieldsToFix(this.form, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container: () => this.formElement?.nativeElement,
+        sections: [
+          { name: 'Trust Anchor', controls: [id, entityId, description] },
+          { name: 'Federation Keys', controls: [jwks] },
+        ],
+      });
       return;
     }
     // The backend refuses an entity ID change while configurations name the stored one.
