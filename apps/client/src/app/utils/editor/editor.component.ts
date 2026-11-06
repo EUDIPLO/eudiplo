@@ -63,7 +63,8 @@ export class EditorComponent implements ControlValueAccessor, Validator, OnChang
   value = '';
   disabled = false;
 
-  private readonly ajv = new Ajv({ allowUnionTypes: true });
+  // verbose: errors carry their schema, so a pattern error can show its description.
+  private readonly ajv = new Ajv({ allowUnionTypes: true, verbose: true });
   private validateFn?: ValidateFunction;
   private schemaValidationError?: string;
   private readonly instanceId = ++editorInstanceCounter;
@@ -157,6 +158,15 @@ export class EditorComponent implements ControlValueAccessor, Validator, OnChang
           const extra = (error.params as { additionalProperty?: string })?.additionalProperty;
           const suffix = extra ? ` "${extra}"` : '';
           return `${path}: must NOT have additional property${suffix}`;
+        }
+        const pattern = (error.params as { pattern?: string } | undefined)?.pattern;
+        if (error.keyword === 'pattern' && pattern && pattern.length > 60) {
+          // A long pattern is unreadable; the field's description says what fits instead.
+          const description = (error.parentSchema as { description?: string } | undefined)
+            ?.description;
+          return description
+            ? `${path} has the wrong format. ${description}`
+            : `${path} has the wrong format`;
         }
         return `${path} ${error.message}`;
       })

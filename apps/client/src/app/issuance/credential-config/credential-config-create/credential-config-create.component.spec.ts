@@ -214,7 +214,7 @@ describe('CredentialConfigCreateComponent', () => {
     });
   });
 
-  it('opens the colors of loaded entries whose color wallets may not read', () => {
+  it('shows loaded entries the API would refuse with their errors, expanded', () => {
     (component as any).patchFormFromConfig({
       id: 'member',
       description: 'Membership',
@@ -224,29 +224,125 @@ describe('CredentialConfigCreateComponent', () => {
         display: [
           { name: 'Membership', locale: 'en-US', background_color: '#12107C' },
           { name: 'Mitgliedschaft', locale: 'de-DE', text_color: 'navy' },
+          { name: 'Membership (copy)', locale: 'en-us' },
         ],
       },
       fields: [],
     });
-    expect(component.expandedAppearance.has(component.displayConfigs.at(0))).toBe(false);
-    expect(component.expandedAppearance.has(component.displayConfigs.at(1))).toBe(true);
-    // A warning, not an error: the entry stays valid and is saved as loaded.
-    expect(component.form.get('displayConfigs')?.valid).toBe(true);
-    expect((component as any).buildConfigurationPayload().config.display[1].text_color).toBe(
-      'navy'
-    );
+    const [valid, badColor, duplicate] = component.displayConfigs.controls;
+
+    expect(valid.valid).toBe(true);
+    expect(component.expandedAppearance.has(valid)).toBe(false);
+    expect(badColor.get('text_color')?.errors).toEqual({ displayColor: true });
+    expect(duplicate.get('locale')?.errors).toEqual({ duplicateLocale: { firstIndex: 0 } });
+    for (const entry of [badColor, duplicate]) {
+      expect(component.expandedAppearance.has(entry)).toBe(true);
+      expect(entry.touched).toBe(true);
+    }
+
+    // Fixing the first entry's locale clears the error on the later one.
+    valid.patchValue({ locale: 'fr-FR' });
+    expect(duplicate.get('locale')?.errors).toBeNull();
   });
 
-  it('starts new display entries without colors and with an optional description', () => {
+  it('starts new display entries without colors, with an optional description and an unused locale', () => {
     component.addDisplayConfig();
     const added = component.displayConfigs.at(1);
-    expect(added.value).toMatchObject({ description: '', background_color: '', text_color: '' });
+    expect(added.value).toMatchObject({
+      description: '',
+      locale: 'en-GB',
+      background_color: '',
+      text_color: '',
+    });
     added.patchValue({ name: 'Mitgliedschaft' });
     expect(added.valid).toBe(true);
     expect((component as any).buildConfigurationPayload().config.display[1]).toEqual({
       name: 'Mitgliedschaft',
-      locale: 'en-US',
+      locale: 'en-GB',
     });
+
+    // Choosing a locale another entry uses marks the later entry, shown before it is touched.
+    added.patchValue({ locale: 'en-US' });
+    expect(added.get('locale')?.errors).toEqual({ duplicateLocale: { firstIndex: 0 } });
+    expect(added.get('locale')?.touched).toBe(false);
+    expect(component.localeErrorState.isErrorState(added.get('locale') as any, null)).toBe(true);
+    expect(
+      component.localeErrorState.isErrorState(
+        component.displayConfigs.at(0).get('locale') as any,
+        null
+      )
+    ).toBe(false);
+  });
+
+  it('recomputes repeated locales when an entry is removed', () => {
+    (component as any).patchFormFromConfig({
+      id: 'member',
+      vct: 'urn:member',
+      config: {
+        format: 'dc+sd-jwt',
+        display: [
+          { name: 'A', locale: 'en-US' },
+          { name: 'B', locale: 'de-DE' },
+          { name: 'C', locale: 'en-US' },
+        ],
+      },
+      fields: [],
+    });
+    const last = component.displayConfigs.at(2);
+    expect(last.get('locale')?.errors).toEqual({ duplicateLocale: { firstIndex: 0 } });
+
+    component.removeDisplayConfig(0);
+    expect(last.get('locale')?.errors).toBeNull();
+  });
+
+  it('adds entries only while a listed locale is unused', () => {
+    for (let i = 1; i < component.localeOptions.length; i++) component.addDisplayConfig();
+    expect(component.displayConfigs.length).toBe(component.localeOptions.length);
+    expect(component.unusedDisplayLocale).toBeUndefined();
+
+    component.addDisplayConfig();
+    expect(component.displayConfigs.length).toBe(component.localeOptions.length);
+  });
+
+  it('offers a loaded locale that is not listed and previews only accepted colors', () => {
+    (component as any).patchFormFromConfig({
+      id: 'member',
+      vct: 'urn:member',
+      config: {
+        format: 'dc+sd-jwt',
+        display: [{ name: 'Lid', locale: 'nl-NL', background_color: '#fff', text_color: 'navy' }],
+      },
+      fields: [],
+    });
+    const entry = component.displayConfigs.at(0);
+    expect(component.displayLocaleOptions(entry).at(-1)).toEqual({
+      value: 'nl-NL',
+      label: 'nl-NL',
+      disabled: false,
+    });
+    expect(component.swatchColor(entry.get('background_color'))).toBe('#fff');
+    expect(component.swatchColor(entry.get('text_color'))).toBeNull();
+  });
+
+  it('disables the locales other entries use in each select', () => {
+    component.addDisplayConfig();
+    const [first, second] = component.displayConfigs.controls;
+    const disabled = (entry: typeof first) =>
+      component
+        .displayLocaleOptions(entry)
+        .filter((option) => option.disabled)
+        .map((option) => option.value);
+
+    expect(disabled(first)).toEqual(['en-GB']);
+    expect(disabled(second)).toEqual(['en-US']);
+  });
+
+  it('saves a configuration without its optional description', () => {
+    basics();
+    component.form.patchValue({ description: ' ' });
+    component.displayConfigs.at(0).patchValue({ name: 'Membership' });
+    expect(component.form.get('description')?.valid).toBe(true);
+    expect((component as any).buildConfigurationPayload().description).toBeNull();
   });
 
   it('returns to an invalid earlier step before review or save', () => {
