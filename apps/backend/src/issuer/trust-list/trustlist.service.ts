@@ -573,14 +573,15 @@ export class TrustListService {
         const certificates = new Map<string, CertificateInfo>();
         const issues: EntityKeyChainUsageIssue[] = [];
         const isStored = storedEntityKeyChains(storedEntities);
+        const lookup = (keyChainId: string) =>
+            this.certService.getCertificateById(tenantId, keyChainId);
         for (const reference of entityKeyChainReferences(entities)) {
             const { index, field, keyChainId } = reference;
             let cert = certificates.get(keyChainId);
             if (!cert) {
-                cert = await this.certService.getCertificateById(
-                    tenantId,
-                    keyChainId,
-                );
+                // One lookup at a time: the request body decides how many key
+                // chains it names, and the first missing one ends the save.
+                cert = await lookup(keyChainId); // NOSONAR: sequential on purpose
                 certificates.set(keyChainId, cert);
             }
             const refusal = entityKeyChainUsageRefusal(

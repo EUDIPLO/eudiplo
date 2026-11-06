@@ -179,9 +179,15 @@ describe("Trust list entity key chain usage types (e2e)", () => {
     });
 
     test("still answers 409 for a key chain that does not exist", async () => {
-        await saveTrustList("post", "unknown-key-chain", [
+        const response = await saveTrustList("post", "unknown-key-chain", [
             internal("does-not-exist", statusListKeyChain),
-        ]).expect(409);
+        ]);
+
+        expect(response.status).toBe(409);
+        expect(response.body.message).toBe(
+            "Key chain does-not-exist not found",
+        );
+        expect(response.body.errors).toBeUndefined();
     });
 
     test("accepts the attestation key chain for revocation, as status lists fall back to it", async () => {
