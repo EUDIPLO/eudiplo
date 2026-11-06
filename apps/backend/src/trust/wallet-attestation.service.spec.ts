@@ -2,7 +2,7 @@ import { ES256 } from "@owf/crypto";
 import * as x509 from "@peculiar/x509";
 import { describe, expect, it, vi } from "vitest";
 import { RevocationListUnavailableError } from "./revocation-policy.util.js";
-import { RevocationCheckMode } from "./types.js";
+import { RevocationCheckMode, ServiceTypeIdentifiers } from "./types.js";
 import { WalletAttestationService } from "./wallet-attestation.service.js";
 import {
     MatchedTrustedEntity,
@@ -152,7 +152,7 @@ describe("WalletAttestationService status list signature", () => {
     });
 });
 
-describe("WalletAttestationService status list signer without revocation certificate", () => {
+describe("WalletAttestationService status list signer", () => {
     const algorithm = { name: "ECDSA", namedCurve: "P-256", hash: "SHA-256" };
     const b64url = (input: string | ArrayBuffer) =>
         Buffer.from(
@@ -226,6 +226,7 @@ describe("WalletAttestationService status list signer without revocation certifi
             issuanceCert: providerCa,
             issuanceThumbprint,
             issuanceIsCa: true,
+            issuanceServiceType: ServiceTypeIdentifiers.WalletSolutionIssuance,
             matchMode: "ca",
         };
         const service = Object.assign(
@@ -295,19 +296,27 @@ describe("WalletAttestationService status list signer without revocation certifi
                 Buffer.from(await cert.getThumbprint("SHA-256")).toString(
                     "hex",
                 );
+            const services = [
+                {
+                    serviceTypeIdentifier:
+                        ServiceTypeIdentifiers.WalletSolutionIssuance,
+                    certValue: der(attestationCa.cert),
+                },
+                {
+                    serviceTypeIdentifier:
+                        ServiceTypeIdentifiers.WalletSolutionRevocation,
+                    certValue: der(revocationCa.cert),
+                },
+            ];
             const matchedEntity: MatchedTrustedEntity = {
-                entity: { entityId: "provider", services: [] },
+                entity: { entityId: "provider", services },
                 issuanceCert: attestationCa.cert,
                 issuanceThumbprint: await thumb(attestationCa.cert),
                 issuanceIsCa: true,
+                issuanceServiceType:
+                    ServiceTypeIdentifiers.WalletSolutionIssuance,
                 matchMode: "ca",
-                revocationCert: revocationCa.cert,
-                revocationThumbprint: await thumb(revocationCa.cert),
             };
-            const services = [
-                { certValue: der(attestationCa.cert) },
-                { certValue: der(revocationCa.cert) },
-            ];
             const service = Object.assign(
                 Object.create(WalletAttestationService.prototype),
                 {
@@ -337,6 +346,76 @@ describe("WalletAttestationService status list signer without revocation certifi
             ).resolves.toBe(true);
         });
     }
+
+    /** Verify against a provider that lists `revocationCas` as revocation services. */
+    async function verifyWithRevocation(
+        jwt: string,
+        attestationCa: x509.X509Certificate,
+        revocationCas: x509.X509Certificate[],
+    ) {
+        const services = [
+            {
+                serviceTypeIdentifier:
+                    ServiceTypeIdentifiers.WalletSolutionIssuance,
+                certValue: der(attestationCa),
+            },
+            ...revocationCas.map((cert) => ({
+                serviceTypeIdentifier:
+                    ServiceTypeIdentifiers.WalletSolutionRevocation,
+                certValue: der(cert),
+            })),
+        ];
+        const matchedEntity: MatchedTrustedEntity = {
+            entity: { entityId: "provider", services },
+            issuanceCert: attestationCa,
+            issuanceThumbprint: Buffer.from(
+                await attestationCa.getThumbprint("SHA-256"),
+            ).toString("hex"),
+            issuanceIsCa: true,
+            issuanceServiceType: ServiceTypeIdentifiers.WalletSolutionIssuance,
+            matchMode: "ca",
+        };
+        const service = Object.assign(
+            Object.create(WalletAttestationService.prototype),
+            {
+                logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+                cryptoImplementationService: {
+                    getCryptoFromJwk: () => ES256,
+                },
+                x509ValidationService: new X509ValidationService(),
+            },
+        );
+        return service.verifyStatusListSignature(jwt, matchedEntity, {
+            entities: [matchedEntity.entity],
+        });
+    }
+
+    it("accepts a status list under any revocation CA of the provider", async () => {
+        const attestationCa = await ca("Provider CA");
+        const firstRevocationCa = await ca("Provider Status CA 1");
+        const secondRevocationCa = await ca("Provider Status CA 2");
+
+        await expect(
+            verifyWithRevocation(
+                await statusListUnder(secondRevocationCa),
+                attestationCa.cert,
+                [firstRevocationCa.cert, secondRevocationCa.cert],
+            ),
+        ).resolves.toBe(true);
+    });
+
+    it("rejects a status list under the attestation CA when the provider lists a revocation CA", async () => {
+        const attestationCa = await ca("Provider CA");
+        const revocationCa = await ca("Provider Status CA");
+
+        await expect(
+            verifyWithRevocation(
+                await statusListUnder(attestationCa),
+                attestationCa.cert,
+                [revocationCa.cert],
+            ),
+        ).resolves.toBe(false);
+    });
 
     it("rejects a status list chained to another CA in the trust store", async () => {
         const providerCa = await ca("Provider CA");
@@ -522,5 +601,127 @@ describe("WalletAttestationService status check mode", () => {
         expect(
             statusListVerifierService.getStatusListJwt,
         ).not.toHaveBeenCalled();
+    });
+});
+
+describe("WalletAttestationService wallet attestation signer", () => {
+    const algorithm = { name: "ECDSA", namedCurve: "P-256", hash: "SHA-256" };
+    const der = (cert: x509.X509Certificate) =>
+        Buffer.from(cert.rawData).toString("base64");
+
+    async function keys() {
+        return (await crypto.subtle.generateKey(algorithm, true, [
+            "sign",
+            "verify",
+        ])) as CryptoKeyPair;
+    }
+
+    function selfSignedCa(serialNumber: string, caKeys: CryptoKeyPair) {
+        return x509.X509CertificateGenerator.createSelfSigned({
+            serialNumber,
+            name: "CN=Wallet Provider Root CA",
+            notBefore: new Date(Date.now() - 60_000),
+            notAfter: new Date(Date.now() + 3_600_000),
+            keys: caKeys,
+            signingAlgorithm: algorithm,
+            extensions: [new x509.BasicConstraintsExtension(true, 0, true)],
+        });
+    }
+
+    /**
+     * A provider whose attestation CA and revocation CA share subject and
+     * key, and a wallet attestation signed below them. Only the header is
+     * read here; signatures are checked elsewhere.
+     */
+    async function provider() {
+        const caKeys = await keys();
+        const attestationCa = await selfSignedCa("01", caKeys);
+        const revocationCa = await selfSignedCa("02", caKeys);
+        const leafKeys = await keys();
+        const leaf = await x509.X509CertificateGenerator.create({
+            serialNumber: "03",
+            subject: "CN=Wallet Attestation Signer",
+            issuer: attestationCa.subject,
+            notBefore: new Date(Date.now() - 60_000),
+            notAfter: new Date(Date.now() + 3_600_000),
+            publicKey: leafKeys.publicKey,
+            signingKey: caKeys.privateKey,
+            signingAlgorithm: algorithm,
+        });
+        const header = Buffer.from(
+            JSON.stringify({ alg: "ES256", x5c: [der(leaf)] }),
+        ).toString("base64url");
+        return { attestationCa, revocationCa, jwt: `${header}.e30.c2ln` };
+    }
+
+    function validate(
+        jwt: string,
+        services: Array<{ serviceTypeIdentifier: string; certValue: string }>,
+    ) {
+        const service = Object.assign(
+            Object.create(WalletAttestationService.prototype),
+            {
+                logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+                trustStoreService: {
+                    getTrustStore: async () => ({
+                        entities: [{ entityId: "provider", services }],
+                    }),
+                },
+                x509ValidationService: new X509ValidationService(),
+            },
+        );
+        return service.validateWalletSolutionCertificate(
+            jwt,
+            [{ url: "https://trust.example/wallets", verifierX509Der: "MII" }],
+            "tenant",
+        );
+    }
+
+    for (const order of [
+        "attestation CA first",
+        "revocation CA first",
+    ] as const) {
+        it(`accepts an attestation under the attestation CA when a revocation CA shares subject and key (${order})`, async () => {
+            const { attestationCa, revocationCa, jwt } = await provider();
+            const services = [
+                {
+                    serviceTypeIdentifier:
+                        ServiceTypeIdentifiers.WalletSolutionIssuance,
+                    certValue: der(attestationCa),
+                },
+                {
+                    serviceTypeIdentifier:
+                        ServiceTypeIdentifiers.WalletSolutionRevocation,
+                    certValue: der(revocationCa),
+                },
+            ];
+
+            const { matchedEntity } = await validate(
+                jwt,
+                order === "attestation CA first"
+                    ? services
+                    : [...services].reverse(),
+            );
+
+            expect(matchedEntity?.issuanceThumbprint).toBe(
+                Buffer.from(
+                    await attestationCa.getThumbprint("SHA-256"),
+                ).toString("hex"),
+            );
+        });
+    }
+
+    it("rejects an attestation under a CA listed only as WalletSolution/Revocation", async () => {
+        const { attestationCa, jwt } = await provider();
+
+        await expect(
+            validate(jwt, [
+                {
+                    serviceTypeIdentifier:
+                        ServiceTypeIdentifiers.WalletSolutionRevocation,
+                    certValue: der(attestationCa),
+                },
+            ]),
+        ).rejects.toThrow("Wallet provider certificate is not trusted");
     });
 });

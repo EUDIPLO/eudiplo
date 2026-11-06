@@ -9,6 +9,7 @@ import {
 import { TrustedEntity, TrustListSource } from "../../../trust/types.js";
 import {
     MatchedTrustedEntity,
+    ServiceTypeFilter,
     X509ValidationService,
 } from "../../../trust/x509-validation.service.js";
 
@@ -38,7 +39,7 @@ export interface ChainValidationPolicy {
     /** How to match pinned certificates: "leaf" or "pathEnd" */
     pinnedCertMode?: "leaf" | "pathEnd";
     /** Service type filter for matching issuance certificates (default: "/Issuance") */
-    serviceTypeFilter?: string;
+    serviceTypeFilter?: ServiceTypeFilter;
     /** Whether to verify status list (revocation) */
     verifyStatusList?: boolean;
 }

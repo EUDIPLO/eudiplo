@@ -8,11 +8,11 @@ A trust list names the issuers you accept. EUDIPLO uses Lists of Trusted Entitie
 
 ## How a trust list is used
 
-Each trusted entity has an issuance certificate and a revocation certificate that signs its status lists. Lists you manage in EUDIPLO always include both; lists published by others may omit the revocation certificate. When a credential is presented, EUDIPLO:
+Each trusted entity has an issuance certificate and a revocation certificate that signs its status lists. Lists you manage in EUDIPLO always include both; lists published by others may omit the revocation certificate. A service whose `ServiceStatus` withdraws it (`http://uri.etsi.org/19602/PubEAAProvidersList/SvcStatus/withdrawn` or `http://uri.etsi.org/19602/commons/schemeApprovalWithdrawn`) is ignored in every list, also in wallet-provider lists. When a credential is presented, EUDIPLO:
 
 1. loads the lists referenced in the credential query and checks their signature and `NextUpdate`,
 2. builds a certificate path from the credential's `x5c` chain to a listed issuance certificate,
-3. requires the matching entity to be listed with a PID or EAA issuance service (`http://uri.etsi.org/19602/SvcType/PID/Issuance` or `.../EAA/Issuance`); other service types are ignored for credentials,
+3. requires the matching entity to be listed with a PID, Pub-EAA or EAA issuance service (`http://uri.etsi.org/19602/SvcType/PID/Issuance`, `.../PubEAA/Issuance` or `.../EAA/Issuance`); other service types are ignored for credentials,
 4. if status checks are enabled, requires the status list of an SD-JWT VC credential to carry an `x5c` chain to a revocation certificate (a `.../Revocation` service) of the **same** entity: below that certificate if it is a CA, or signed with it if it is an end-entity certificate. An entity listed without a revocation certificate must sign its status lists under the certificate the credential matched in the same way. A status list signed by any other key rejects the credential. The status list of an mDOC credential must be signed under a revocation certificate of any entity in the list, or under a listed issuance certificate if the list has no revocation certificates.
 
 A listed CA certificate accepts every credential issued below it; a listed end-entity certificate only accepts credentials signed with exactly that certificate. Wallet-provider lists, used to trust wallet and key attestations during issuance, are described in [Wallet and Key Attestation](attestation.md).
@@ -124,7 +124,7 @@ Every credential query needs `trusted_authorities`; EUDIPLO rejects a presentati
 
 ### What the wallet receives
 
-Wallets match credentials by key identifier, without fetching the list. EUDIPLO therefore replaces each `etsi_tl` entry in the request with an `aki` entry whose values are the base64url-encoded key identifiers of the listed PID and EAA issuance certificates: the Subject Key Identifier of every certificate, plus the Authority Key Identifier of end-entity certificates. If a list cannot be loaded, or an issuer certificate has no usable identifier (for example a self-signed certificate without Authority Key Identifier), the request additionally keeps an `etsi_tl` entry with the plain URL of that list. Verification always uses the stored configuration.
+Wallets match credentials by key identifier, without fetching the list. EUDIPLO therefore replaces each `etsi_tl` entry in the request with an `aki` entry whose values are the base64url-encoded key identifiers of the listed PID, Pub-EAA and EAA issuance certificates: the Subject Key Identifier of every certificate, plus the Authority Key Identifier of end-entity certificates. If a list cannot be loaded, or an issuer certificate has no usable identifier (for example a self-signed certificate without Authority Key Identifier), the request additionally keeps an `etsi_tl` entry with the plain URL of that list. Verification always uses the stored configuration.
 
 Some wallets do not handle `trusted_authorities` yet. `VP_REMOVE_TA=true` removes it from all requests sent to wallets; EUDIPLO still verifies against the configured lists.
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     getRevocationCert,
+    getRevocationServices,
     ServiceTypeIdentifiers,
     TrustedEntity,
 } from "./types.js";
@@ -44,5 +45,87 @@ describe("getRevocationCert", () => {
                 ServiceTypeIdentifiers.EaaIssuance,
             ),
         ).toBeUndefined();
+    });
+});
+
+describe("getRevocationServices", () => {
+    const service = (serviceTypeIdentifier: string, certValue: string) => ({
+        serviceTypeIdentifier,
+        certValue,
+    });
+    const eaaRevocation = service(
+        ServiceTypeIdentifiers.EaaRevocation,
+        "eaa-revocation",
+    );
+
+    it.each([
+        [
+            ServiceTypeIdentifiers.PIDIssuance,
+            ServiceTypeIdentifiers.PIDRevocation,
+        ],
+        [
+            ServiceTypeIdentifiers.PubEaaIssuance,
+            ServiceTypeIdentifiers.PubEaaRevocation,
+        ],
+        [
+            ServiceTypeIdentifiers.WalletSolutionIssuance,
+            ServiceTypeIdentifiers.WalletSolutionRevocation,
+        ],
+    ])("pairs %s with %s", (issuance, revocation) => {
+        const paired = service(revocation, "paired");
+        expect(
+            getRevocationServices(
+                { services: [eaaRevocation, paired] },
+                issuance,
+            ),
+        ).toEqual([paired]);
+    });
+
+    it("returns every revocation service of the paired type", () => {
+        const first = service(
+            ServiceTypeIdentifiers.WalletSolutionRevocation,
+            "first",
+        );
+        const second = service(
+            ServiceTypeIdentifiers.WalletSolutionRevocation,
+            "second",
+        );
+        expect(
+            getRevocationServices(
+                {
+                    services: [
+                        first,
+                        service(
+                            ServiceTypeIdentifiers.WalletSolutionIssuance,
+                            "issuance",
+                        ),
+                        second,
+                    ],
+                },
+                ServiceTypeIdentifiers.WalletSolutionIssuance,
+            ),
+        ).toEqual([first, second]);
+    });
+
+    it("falls back to EAA/Revocation when the paired type is not listed", () => {
+        expect(
+            getRevocationServices(
+                { services: [eaaRevocation] },
+                ServiceTypeIdentifiers.PubEaaIssuance,
+            ),
+        ).toEqual([eaaRevocation]);
+    });
+
+    it("does not use the revocation service of another profile", () => {
+        expect(
+            getRevocationServices(
+                {
+                    services: [
+                        service(ServiceTypeIdentifiers.PIDRevocation, "pid"),
+                    ],
+                },
+                ServiceTypeIdentifiers.PubEaaIssuance,
+            ),
+        ).toEqual([]);
     });
 });

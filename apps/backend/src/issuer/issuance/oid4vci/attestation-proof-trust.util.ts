@@ -2,7 +2,6 @@ import { decodeProtectedHeader } from "jose";
 import { TrustStoreService } from "../../../trust/trust-store.service.js";
 import {
     normalizeTrustListRefs,
-    ServiceTypeIdentifiers,
     TrustListSource,
     walletSolutionServiceTypes,
 } from "../../../trust/types.js";
@@ -59,32 +58,10 @@ export async function validateAttestationProofTrust(
             );
         }
 
-        const presentedChain = deps.x509ValidationService.parseX5c(x5c);
-        const leaf = presentedChain[0];
-        if (!leaf) {
-            throw new CredentialRequestException(
-                "invalid_proof",
-                "Attestation proof x5c chain is empty",
-            );
-        }
-
-        const anchors = deps.x509ValidationService.parseTrustAnchors(
-            trustStore.entities.flatMap((entity) => entity.services),
+        const matched = await deps.x509ValidationService.matchAttestationSigner(
+            x5c,
+            trustStore.entities,
         );
-
-        const path = await deps.x509ValidationService.buildPath(
-            leaf,
-            presentedChain,
-            anchors,
-        );
-
-        const matched =
-            await deps.x509ValidationService.pathMatchesTrustedEntities(
-                path,
-                trustStore.entities,
-                "leaf",
-                ServiceTypeIdentifiers.WalletSolution,
-            );
 
         if (!matched) {
             throw new CredentialRequestException(

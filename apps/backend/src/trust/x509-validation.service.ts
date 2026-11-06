@@ -2,25 +2,27 @@ import { Injectable, Logger } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import {
     getRevocationCert,
-    serviceTypeMatches,
     TrustedEntity,
+    walletAttestationSignerServiceTypes,
 } from "./types.js";
 
 type X5cInput = string[]; // base64 DER entries
 
 /**
- * Whether a trust-list service has the requested type. A filter starting
- * with "/" matches by suffix (e.g. "/Issuance" matches PID/Issuance and
- * EAA/Issuance); otherwise exact or base-role matching applies (e.g.
- * WalletSolution matches WalletSolution/Issuance).
+ * Service type filter of {@link X509ValidationService.pathMatchesTrustedEntities}:
+ * a suffix (e.g. "/Issuance" matches PID/Issuance and EAA/Issuance) or a list
+ * of service types matched exactly.
  */
+export type ServiceTypeFilter = `/${string}` | readonly string[];
+
+/** Whether a trust-list service has the requested type. */
 function serviceMatchesFilter(
     serviceTypeIdentifier: string,
-    serviceTypeFilter: string,
+    serviceTypeFilter: ServiceTypeFilter,
 ): boolean {
-    return serviceTypeFilter.startsWith("/")
+    return typeof serviceTypeFilter === "string"
         ? serviceTypeIdentifier.endsWith(serviceTypeFilter)
-        : serviceTypeMatches(serviceTypeIdentifier, serviceTypeFilter);
+        : serviceTypeFilter.includes(serviceTypeIdentifier);
 }
 
 function arrayBufferToHex(buffer: ArrayBuffer): string {
@@ -56,10 +58,10 @@ export type MatchedTrustedEntity = {
     issuanceThumbprint: string;
     /** Whether the issuance certificate is a CA certificate */
     issuanceIsCa: boolean;
+    /** The service type the issuance certificate is listed with */
+    issuanceServiceType: string;
     /** The mode that matched (ca, leaf-pinned, pathEnd-pinned) */
     matchMode: "ca" | "leaf-pinned" | "pathEnd-pinned";
-    /** The revocation certificate from the same entity (if available) */
-    revocationCert?: x509.X509Certificate;
     /** Thumbprint of the revocation certificate (if available) */
     revocationThumbprint?: string;
 };
@@ -114,7 +116,7 @@ export class X509ValidationService {
      */
     anchorCertValuesFor(
         entities: TrustedEntity[],
-        serviceTypeFilter: string,
+        serviceTypeFilter: ServiceTypeFilter,
     ): Array<{ certValue: string }> {
         const preferred: Array<{ certValue: string }> = [];
         const others: Array<{ certValue: string }> = [];
@@ -168,6 +170,36 @@ export class X509ValidationService {
     }
 
     /**
+     * Match the `x5c` chain of a wallet or key attestation against
+     * wallet-provider entities: the path must end at a certificate listed as
+     * a service that signs attestations
+     * ({@link walletAttestationSignerServiceTypes}), not at one that only
+     * signs status lists. Those certificates are tried first as anchors, so
+     * the path ends there when an issuance and a revocation anchor share
+     * subject and key.
+     * @throws if no certificate path to a listed certificate can be built
+     */
+    async matchAttestationSigner(
+        x5c: X5cInput,
+        entities: TrustedEntity[],
+    ): Promise<MatchedTrustedEntity | null> {
+        const chain = this.parseX5c(x5c);
+        const anchors = this.parseTrustAnchors(
+            this.anchorCertValuesFor(
+                entities,
+                walletAttestationSignerServiceTypes,
+            ),
+        );
+        const path = await this.buildPath(chain[0], chain, anchors);
+        return this.pathMatchesTrustedEntities(
+            path,
+            entities,
+            "leaf",
+            walletAttestationSignerServiceTypes,
+        );
+    }
+
+    /**
      * Match a certificate chain against TrustedEntities.
      * Returns the matched entity with its issuance and revocation certificates.
      *
@@ -178,17 +210,15 @@ export class X509ValidationService {
      *   - pinnedMode "leaf": leaf equals pinned cert
      *   - pinnedMode "pathEnd": path end equals pinned cert
      *
-     * @param serviceTypeFilter The service type filter to match. If it starts with "/", uses suffix matching
-     *                          (e.g., "/Issuance" matches both PID/Issuance and EAA/Issuance).
-     *                          Otherwise uses exact matching (e.g., full WalletProvider URI).
-     *                          Defaults to "/Issuance" to match both PID and EAA issuance.
+     * @param serviceTypeFilter The service types to match, see {@link ServiceTypeFilter}.
+     *                          Defaults to "/Issuance" to match every issuance service.
      * @returns The matched entity info, or null if no match
      */
     async pathMatchesTrustedEntities(
         path: x509.X509Certificate[],
         entities: TrustedEntity[],
         pinnedMode: "leaf" | "pathEnd" = "leaf",
-        serviceTypeFilter: string = "/Issuance",
+        serviceTypeFilter: ServiceTypeFilter = "/Issuance",
     ): Promise<MatchedTrustedEntity | null> {
         const leaf = path[0];
         const end = path.at(-1)!;
@@ -236,25 +266,21 @@ export class X509ValidationService {
                         entity,
                         svc.serviceTypeIdentifier,
                     );
-                    let revocationCert: x509.X509Certificate | undefined;
-                    let revocationThumbprint: string | undefined;
-
-                    if (revocationSvc) {
-                        revocationCert = certFromBase64Der(
-                            revocationSvc.certValue,
-                        );
-                        revocationThumbprint = arrayBufferToHex(
-                            await revocationCert.getThumbprint("SHA-256"),
-                        );
-                    }
+                    const revocationThumbprint = revocationSvc
+                        ? arrayBufferToHex(
+                              await certFromBase64Der(
+                                  revocationSvc.certValue,
+                              ).getThumbprint("SHA-256"),
+                          )
+                        : undefined;
 
                     return {
                         entity,
                         issuanceCert: matchCert,
                         issuanceThumbprint: matchThumb,
                         issuanceIsCa: matchIsCa,
+                        issuanceServiceType: svc.serviceTypeIdentifier,
                         matchMode,
-                        revocationCert,
                         revocationThumbprint,
                     };
                 }

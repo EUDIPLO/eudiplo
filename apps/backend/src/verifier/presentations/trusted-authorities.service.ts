@@ -40,9 +40,9 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
      * identifiers of the credential issuers listed in the referenced trust
      * lists, so the wallet can match credentials without fetching the lists.
      *
-     * The values come from the PID/EAA issuance certificates of the listed
-     * entities (see {@link credentialIssuerAuthorityKeyIdentifiers}), not from
-     * the certificate that signs the trust list. Managed lists are read from
+     * The values come from the PID, Pub-EAA and EAA issuance certificates of
+     * the listed entities (see {@link credentialIssuerAuthorityKeyIdentifiers}),
+     * not from the certificate that signs the trust list. Managed lists are read from
      * their stored content, external lists are fetched and signature-verified.
      *
      * A trust list that cannot be loaded, or whose issuers are not all covered

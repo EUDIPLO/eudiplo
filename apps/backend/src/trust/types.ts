@@ -89,6 +89,9 @@ export const ServiceTypeIdentifiers = {
     EaaIssuance: "http://uri.etsi.org/19602/SvcType/EAA/Issuance", // NOSONAR: ETSI identifier URI, not fetched
     EaaRevocation: "http://uri.etsi.org/19602/SvcType/EAA/Revocation", // NOSONAR: ETSI identifier URI, not fetched
     PIDIssuance: "http://uri.etsi.org/19602/SvcType/PID/Issuance", // NOSONAR: ETSI identifier URI, not fetched
+    PIDRevocation: "http://uri.etsi.org/19602/SvcType/PID/Revocation", // NOSONAR: ETSI identifier URI, not fetched
+    PubEaaIssuance: "http://uri.etsi.org/19602/SvcType/PubEAA/Issuance", // NOSONAR: ETSI identifier URI, not fetched
+    PubEaaRevocation: "http://uri.etsi.org/19602/SvcType/PubEAA/Revocation", // NOSONAR: ETSI identifier URI, not fetched
     WalletSolution: "http://uri.etsi.org/19602/SvcType/WalletSolution", // NOSONAR: ETSI identifier URI, not fetched
     WalletSolutionIssuance:
         "http://uri.etsi.org/19602/SvcType/WalletSolution/Issuance", // NOSONAR: ETSI identifier URI, not fetched
@@ -96,11 +99,44 @@ export const ServiceTypeIdentifiers = {
         "http://uri.etsi.org/19602/SvcType/WalletSolution/Revocation", // NOSONAR: ETSI identifier URI, not fetched
 } as const;
 
+/**
+ * Services whose certificates identify credential issuers: PID providers
+ * (ETSI TS 119 602 Annex D), public sector bodies issuing EAAs (Annex H) and
+ * the EAA providers of the lists EUDIPLO publishes.
+ */
+export const credentialIssuerServiceTypes = [
+    ServiceTypeIdentifiers.PIDIssuance,
+    ServiceTypeIdentifiers.PubEaaIssuance,
+    ServiceTypeIdentifiers.EaaIssuance,
+] as const;
+
 export const walletSolutionServiceTypes = [
     ServiceTypeIdentifiers.WalletSolution,
     ServiceTypeIdentifiers.WalletSolutionIssuance,
     ServiceTypeIdentifiers.WalletSolutionRevocation,
 ] as const;
+
+/**
+ * Services whose certificates sign wallet and key attestations, matched
+ * exactly. A `WalletSolution/Revocation` service only provides validity
+ * status information on a wallet solution (ETSI TS 119 602 Annex E,
+ * Table E.3), so a certificate listed there does not sign attestations.
+ */
+export const walletAttestationSignerServiceTypes = [
+    ServiceTypeIdentifiers.WalletSolution,
+    ServiceTypeIdentifiers.WalletSolutionIssuance,
+] as const;
+
+/**
+ * Service statuses saying that a listed service is no longer approved. Such a
+ * service is not read from a list: `PubEAAProvidersList/SvcStatus/withdrawn`
+ * (ETSI TS 119 602 Annex H, Table H.3) and the profile-independent
+ * `commons/schemeApprovalWithdrawn` (draft ETSI EN 319 602 V1.1.3, C.2.5).
+ */
+export const withdrawnServiceStatuses: readonly string[] = [
+    "http://uri.etsi.org/19602/PubEAAProvidersList/SvcStatus/withdrawn", // NOSONAR: ETSI identifier URI, not fetched
+    "http://uri.etsi.org/19602/commons/schemeApprovalWithdrawn", // NOSONAR: ETSI identifier URI, not fetched
+];
 
 export type TrustedEntityServiceCert = {
     serviceTypeIdentifier: ServiceTypeIdentifier;
@@ -139,28 +175,53 @@ function _getIssuanceCert(
 }
 
 /**
- * Get the revocation certificate from a TrustedEntity. For a matched wallet
- * solution service this is the entity's `WalletSolution/Revocation` service,
- * which managed wallet-provider lists publish, or else its `EAA/Revocation`
- * service, the only one read before. For other services it is the
- * `EAA/Revocation` service.
+ * The revocation service type that belongs to a matched issuance service:
+ * `PID/Issuance` pairs with `PID/Revocation`, `PubEAA/Issuance` with
+ * `PubEAA/Revocation`, and a wallet solution service with
+ * `WalletSolution/Revocation`, as in the profiles of ETSI TS 119 602.
+ */
+function pairedRevocationServiceType(
+    matchedServiceType: string | undefined,
+): string | undefined {
+    if (matchedServiceType === ServiceTypeIdentifiers.WalletSolution) {
+        return ServiceTypeIdentifiers.WalletSolutionRevocation;
+    }
+    return matchedServiceType?.endsWith("/Issuance")
+        ? `${matchedServiceType.slice(0, -"/Issuance".length)}/Revocation`
+        : undefined;
+}
+
+/**
+ * The revocation services of a TrustedEntity paired with its matched service:
+ * every service of the paired revocation type, or, when the entity has none,
+ * its `EAA/Revocation` services, the only ones read before. All returned
+ * services have the same type. Wallet attestation status lists must be signed
+ * under one of them; the status lists of presented credentials may be signed
+ * under any `/Revocation` service of the entity.
+ */
+export function getRevocationServices(
+    entity: TrustedEntity,
+    matchedServiceType?: string,
+): TrustedEntityServiceCert[] {
+    const ofType = (type: string) =>
+        entity.services.filter((s) => s.serviceTypeIdentifier === type);
+    const pairedType = pairedRevocationServiceType(matchedServiceType);
+    const paired = pairedType ? ofType(pairedType) : [];
+    return paired.length > 0
+        ? paired
+        : ofType(ServiceTypeIdentifiers.EaaRevocation);
+}
+
+/**
+ * The first revocation certificate of a TrustedEntity for a matched service,
+ * see {@link getRevocationServices}. It names the revocation certificate in
+ * the verification result; no trust decision depends on it.
  */
 export function getRevocationCert(
     entity: TrustedEntity,
     matchedServiceType?: string,
 ): TrustedEntityServiceCert | undefined {
-    const isWalletSolution = (
-        walletSolutionServiceTypes as readonly string[]
-    ).includes(matchedServiceType ?? "");
-    return (
-        (isWalletSolution
-            ? findServiceByType(
-                  entity,
-                  ServiceTypeIdentifiers.WalletSolutionRevocation,
-              )
-            : undefined) ??
-        findServiceByType(entity, ServiceTypeIdentifiers.EaaRevocation)
-    );
+    return getRevocationServices(entity, matchedServiceType)[0];
 }
 
 export type FederationTrustMode = "federation-only" | "lote-only" | "hybrid";
