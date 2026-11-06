@@ -245,7 +245,7 @@ describe('IssuanceOfferComponent', () => {
       ],
     } as any;
 
-    (component as any).syncAuthorizationServerControl('authorization_code');
+    (component as any).syncAuthorizationServerControl('authorization_code_external');
 
     expect(component.authCodeAuthorizationServerOptions).toEqual([
       { value: 'external-auth', label: 'external-auth' },
@@ -280,7 +280,7 @@ describe('IssuanceOfferComponent', () => {
     } as any;
     component.configStepForm.patchValue({ authorization_server: 'issuer-built-in' });
 
-    (component as any).syncAuthorizationServerControl('authorization_code');
+    (component as any).syncAuthorizationServerControl('authorization_code_external');
 
     expect(component.configStepForm.get('authorization_server')?.value).toBe('external-auth');
   });
@@ -533,5 +533,30 @@ describe('IssuanceOfferComponent', () => {
     // another check, so the offer page hung once a config was selected
     expect(formly.fields).toBe(fields);
     expect(fixture.nativeElement.querySelectorAll('formly-form input').length).toBe(2);
+  });
+
+  it('lets the IAE flow generate an offer when several authorization servers are configured', async () => {
+    component.issuanceConfig = {
+      authorizationServers: [
+        { type: 'external', id: 'first-auth', issuer: 'https://first.example.com' },
+        { type: 'oid4vp', id: 'second-auth' },
+      ],
+    } as any;
+    component.credentialConfigs = [{ id: 'login', iaeActions: [{}] } as any];
+    component.flowStepForm.patchValue({ flow: 'authorization_code_iae' });
+    component.credentialStepForm.patchValue({ credentialConfigurationIds: ['login'] });
+    await component.setClaimFormFields(['login']);
+
+    (component as any).syncAuthorizationServerControl('authorization_code_iae');
+    expect(component.configStepForm.get('authorization_server')?.valid).toBe(true);
+    await component.onSubmit();
+
+    const offerRequest = vi.mocked(TestBed.inject(IssuanceConfigService).getOffer).mock
+      .lastCall![0];
+    expect(offerRequest).toMatchObject({
+      flow: 'authorization_code',
+      credentialConfigurationIds: ['login'],
+    });
+    expect(offerRequest.authorization_server).toBeUndefined();
   });
 });

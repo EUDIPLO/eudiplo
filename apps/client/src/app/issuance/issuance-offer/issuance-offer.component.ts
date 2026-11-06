@@ -578,28 +578,25 @@ export class IssuanceOfferComponent implements OnInit {
   }
 
   /**
-   * Returns the first configured authorization server for auth-code flow.
+   * The authorization servers the user chooses from in `flow`. The IAE flow uses the built-in
+   * one, so it offers no choice.
+   */
+  private authorizationServerOptionsForFlow(flow: string): { value: string; label: string }[] {
+    if (flow === 'pre_authorized_code') return this.preAuthAuthorizationServerOptions;
+    if (flow === 'authorization_code_external') return this.authCodeAuthorizationServerOptions;
+    return [];
+  }
+
+  /**
+   * Returns the first configured authorization server for the flow.
    */
   private getDefaultAuthServerForFlow(flow: string): string {
-    let options: { value: string; label: string }[] = [];
-    if (flow === 'authorization_code_external') {
-      options = this.authCodeAuthorizationServerOptions;
-    } else if (flow === 'pre_authorized_code') {
-      options = this.preAuthAuthorizationServerOptions;
-    }
-
-    if (options.length === 0) {
-      return '';
-    }
-
-    return options[0]?.value || '';
+    return this.authorizationServerOptionsForFlow(flow)[0]?.value || '';
   }
 
   private syncAuthorizationServerControl(flow: string): void {
     const control = this.configStepForm.get('authorization_server');
-    const options = this.getAuthorizationServerOptions(
-      flow as 'authorization_code' | 'pre_authorized_code'
-    );
+    const options = this.authorizationServerOptionsForFlow(flow);
     const selected = control?.value;
 
     if (options.length === 1) {
