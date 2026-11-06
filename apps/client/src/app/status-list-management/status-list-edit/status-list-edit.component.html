@@ -288,12 +288,15 @@
           color="primary"
           type="submit"
           [disabled]="isSaving"
+          disabledInteractive
+          [matTooltip]="saveTooltip"
           appConfigManaged
           managedKind="StatusList"
           [managedResourceId]="listId || ''"
         >
           @if (isSaving) {
-            <mat-spinner diameter="20"></mat-spinner>
+            <mat-spinner diameter="20" class="button-spinner"></mat-spinner>
+            Saving…
           } @else {
             {{ isEditMode ? 'Save Changes' : 'Create Status List' }}
           }

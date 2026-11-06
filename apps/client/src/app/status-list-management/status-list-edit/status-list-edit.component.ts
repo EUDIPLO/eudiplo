@@ -222,7 +222,14 @@ export class StatusListEditComponent implements OnInit {
     );
   }
 
+  /** Save stays focusable while a save runs, so its tooltip says why it waits. */
+  get saveTooltip(): string {
+    return this.isSaving ? 'Saving the status list…' : '';
+  }
+
   async onSubmit(): Promise<void> {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
+    if (this.isSaving) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;

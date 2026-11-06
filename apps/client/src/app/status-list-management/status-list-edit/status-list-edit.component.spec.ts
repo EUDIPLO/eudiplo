@@ -1,9 +1,14 @@
 import { TestBed } from '@angular/core/testing';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { client } from '@eudiplo/sdk-core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
+import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
 import { CredentialConfigService } from '../../issuance/credential-config/credential-config.service';
 import { KeyChainService } from '../../key-management/key-chain.service';
+import { StatusListManagementService } from '../status-list-management.service';
 import { StatusListEditComponent } from './status-list-edit.component';
 
 describe('StatusListEditComponent', () => {
@@ -51,5 +56,54 @@ describe('StatusListEditComponent', () => {
 
     expect(component.loadState.credentialConfigs).toBe('loaded');
     expect(fetchStub).toHaveBeenCalledOnce();
+  });
+});
+
+describe('StatusListEditComponent Save', () => {
+  async function render(createList: ReturnType<typeof vi.fn>) {
+    TestBed.configureTestingModule({
+      imports: [StatusListEditComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => null } } } },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        { provide: StatusListManagementService, useValue: { createList } },
+        {
+          provide: CredentialConfigService,
+          useValue: { loadConfigurations: vi.fn().mockResolvedValue([]) },
+        },
+        { provide: KeyChainService, useValue: { getAll: vi.fn().mockResolvedValue([]) } },
+        {
+          provide: ConfigOwnershipService,
+          useValue: { get: vi.fn().mockResolvedValue(undefined) },
+        },
+      ],
+    });
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(StatusListEditComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.isLoading).toBe(false));
+    fixture.detectChanges();
+    const save = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[type="submit"]'
+    )!;
+    return { fixture, save };
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('waits while the status list is created: a second click sends nothing', async () => {
+    const createList = vi.fn(() => new Promise(() => undefined));
+    const { fixture, save } = await render(createList);
+    expectAvailable(fixture, save);
+
+    save.click();
+    fixture.detectChanges();
+    save.click();
+    fixture.detectChanges();
+
+    expect(createList).toHaveBeenCalledOnce();
+    expect(save.textContent).toContain('Saving…');
+    expectUnavailable(fixture, save, 'Saving the status list…');
   });
 });
