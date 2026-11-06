@@ -1420,6 +1420,8 @@
           mat-flat-button
           type="submit"
           [disabled]="loading"
+          disabledInteractive
+          [matTooltip]="saveTooltip"
           appConfigManaged
           managedKind="IssuanceConfig"
           managedResourceId="issuance"
