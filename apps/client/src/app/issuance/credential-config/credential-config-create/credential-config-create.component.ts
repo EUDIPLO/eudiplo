@@ -74,7 +74,7 @@ import { JwtService } from '../../../services/jwt.service';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { SourceLoadState, loadSource, reportSourceFailures } from '../../../common/load-source';
-import { focusAfterRenderIfLost } from '../../../common/focus-if-lost.util';
+import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../../common/focus-if-lost.util';
 
 /** The sources of the options of the form's selects. */
 type CredentialConfigSource =
@@ -954,23 +954,12 @@ export class CredentialConfigCreateComponent implements OnInit {
   removeDisplayConfig(index: number): void {
     if (this.displayConfigs.length > 1) {
       this.displayConfigs.removeAt(index);
-      this.focusRowAfterRemoval(() => this.displayTitles?.toArray(), index);
+      focusRowAfterRemoval(
+        this.injector,
+        () => this.displayTitles?.map((title) => title.nativeElement),
+        index
+      );
     }
-  }
-
-  /**
-   * After a row was removed with the control holding focus, focuses the row now at its index,
-   * the new last row when it was the last one, or `fallback` when no row is left.
-   */
-  private focusRowAfterRemoval(
-    rows: () => ElementRef<HTMLElement>[] | undefined,
-    index: number,
-    fallback?: () => ElementRef<HTMLElement> | undefined
-  ): void {
-    focusAfterRenderIfLost(this.injector, () => {
-      const remaining = rows() ?? [];
-      return (remaining[Math.min(index, remaining.length - 1)] ?? fallback?.())?.nativeElement;
-    });
   }
 
   // Field Definition Management
@@ -1101,10 +1090,11 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   removeField(index: number): void {
     this.fields.removeAt(index);
-    this.focusRowAfterRemoval(
-      () => this.claimHeaders?.toArray(),
+    focusRowAfterRemoval(
+      this.injector,
+      () => this.claimHeaders?.map((header) => header.nativeElement),
       index,
-      () => this.addFieldButton
+      () => this.addFieldButton?.nativeElement
     );
   }
 
@@ -1114,13 +1104,14 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   removeFieldDisplay(fieldIndex: number, displayIndex: number): void {
     this.getFieldDisplayArray(fieldIndex).removeAt(displayIndex);
-    this.focusRowAfterRemoval(
+    focusRowAfterRemoval(
+      this.injector,
       () =>
-        this.claimLabelNames?.filter(
-          (name) => name.nativeElement.dataset['claim'] === String(fieldIndex)
-        ),
+        this.claimLabelNames
+          ?.map((name) => name.nativeElement)
+          .filter((name) => name.dataset['claim'] === String(fieldIndex)),
       displayIndex,
-      () => this.addLabelButtons?.get(fieldIndex)
+      () => this.addLabelButtons?.get(fieldIndex)?.nativeElement
     );
   }
 
@@ -1169,10 +1160,11 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   removeIaeAction(index: number): void {
     this.iaeActions.removeAt(index);
-    this.focusRowAfterRemoval(
-      () => this.iaeStepTitles?.toArray(),
+    focusRowAfterRemoval(
+      this.injector,
+      () => this.iaeStepTitles?.map((title) => title.nativeElement),
       index,
-      () => this.addActionButton
+      () => this.addActionButton?.nativeElement
     );
   }
 

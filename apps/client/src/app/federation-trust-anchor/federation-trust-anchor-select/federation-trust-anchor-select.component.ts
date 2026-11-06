@@ -2,12 +2,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
   EventEmitter,
   HostListener,
   inject,
   Input,
   OnInit,
   Output,
+  ViewChild,
 } from '@angular/core';
 import {
   type ControlValueAccessor,
@@ -19,7 +21,7 @@ import { MatButtonModule } from '@angular/material/button';
 import type { ErrorStateMatcher } from '@angular/material/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
-import { MatSelectModule } from '@angular/material/select';
+import { MatSelect, MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterModule } from '@angular/router';
 import { asSentence, getApiErrorMessage } from '../../utils/error-message';
@@ -55,6 +57,14 @@ export class FederationTrustAnchorSelectComponent implements ControlValueAccesso
     anchor: FederationTrustAnchor;
     previous: string;
   }>();
+
+  @ViewChild(MatSelect, { read: ElementRef })
+  private readonly select?: ElementRef<HTMLElement>;
+
+  /** The select of the picked trust anchor, for a parent that moves focus to this picker. */
+  get focusTarget(): HTMLElement | undefined {
+    return this.select?.nativeElement;
+  }
 
   private readonly service = inject(FederationTrustAnchorService);
   private readonly ngControl = inject(NgControl, { self: true, optional: true });

@@ -64,7 +64,8 @@ describe('TrustListEditComponent save', () => {
     const component = new TrustListEditComponent(
       { snapshot: { paramMap: { get: () => null } } } as never,
       { navigate: vi.fn() } as never,
-      snackBar as never
+      snackBar as never,
+      { get: () => ({ destroyed: true }) } as never
     );
     component.ngOnInit();
     component.form.patchValue({ id: 'trust-list' });
