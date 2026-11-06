@@ -8,8 +8,9 @@ const WALLET_COLOR_PATTERNS = [
   /^#(?:[0-9a-f]{3}){1,2}$/i,
   // rgb(r, g, b) and rgba(r, g, b, a), as numbers or percentages
   /^rgba?\(\s*[\d.]+%?\s*(?:,\s*[\d.]+%?\s*){2,3}\)$/i,
-  // hsl(h, s%, l%) and hsla(h, s%, l%, a)
-  /^hsla?\(\s*-?[\d.]+\s*(?:,\s*[\d.]+%\s*){2}(?:,\s*[\d.]+\s*)?\)$/i,
+  // hsl(h, s%, l%) and hsla(h, s%, l%, a), one pattern each to keep them simple
+  /^hsl\(\s*-?[\d.]+\s*(?:,\s*[\d.]+%\s*){2}\)$/i,
+  /^hsla\(\s*-?[\d.]+\s*(?:,\s*[\d.]+%\s*){2},\s*[\d.]+\s*\)$/i,
   /^transparent$/i,
 ];
 
