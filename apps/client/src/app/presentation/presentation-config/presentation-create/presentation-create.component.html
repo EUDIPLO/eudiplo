@@ -346,6 +346,8 @@
                           mat-stroked-button
                           type="button"
                           [disabled]="reissuing"
+                          disabledInteractive
+                          [matTooltip]="reissuing ? 'Reissuing the registration certificate…' : ''"
                           (click)="reissueRegistrationCert()"
                         >
                           <mat-icon>refresh</mat-icon>
