@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatTooltip } from '@angular/material/tooltip';
 import { By } from '@angular/platform-browser';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { client } from '@eudiplo/sdk-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -232,5 +232,38 @@ describe('UserCreateComponent Save', () => {
     });
     expect(page.querySelector('[role="alert"]')).toBeNull();
     await vi.waitFor(() => expect(document.activeElement).toBe(page.querySelector('h2')));
+  });
+});
+
+describe('UserCreateComponent back button', () => {
+  async function backLabel(params: Record<string, string>): Promise<string | null> {
+    await TestBed.configureTestingModule({
+      imports: [UserCreateComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap(params) } },
+        },
+        {
+          provide: JwtService,
+          useValue: { getRoles: () => ['users:manage'], grantHint: () => '' },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(UserCreateComponent);
+    fixture.detectChanges();
+    const back = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(
+      (button) => button.querySelector('mat-icon')?.textContent?.trim() === 'arrow_back'
+    );
+    return back?.getAttribute('aria-label') ?? null;
+  }
+
+  it('names the users list it leads to when creating a user', async () => {
+    expect(await backLabel({})).toBe('Back to Users List');
+  });
+
+  it('names the user page it leads to when editing a user', async () => {
+    expect(await backLabel({ id: 'alice' })).toBe('Back to User Details');
   });
 });

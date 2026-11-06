@@ -8,8 +8,8 @@
     <button
       matIconButton
       [routerLink]="['../']"
-      matTooltip="Back to Client List"
-      aria-label="Back to Client List"
+      [matTooltip]="loaded ? 'Back to Client Details' : 'Back to Clients List'"
+      [attr.aria-label]="loaded ? 'Back to Client Details' : 'Back to Clients List'"
     >
       <mat-icon>arrow_back</mat-icon>
     </button>
@@ -77,29 +77,35 @@
             <mat-error>Select at least one role</mat-error>
           </mat-form-field>
 
-          <mat-form-field>
-            <mat-label>Allowed Presentation Configs</mat-label>
-            <mat-select formControlName="allowedPresentationConfigs" multiple>
-              @for (config of availablePresentationConfigs; track config) {
-                <mat-option [value]="config">
-                  {{ config }}
-                </mat-option>
-              }
-            </mat-select>
-            <mat-hint>Leave empty to allow all presentation configs</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field>
-            <mat-label>Allowed Issuance Configs</mat-label>
-            <mat-select formControlName="allowedIssuanceConfigs" multiple>
-              @for (config of availableIssuanceConfigs; track config) {
-                <mat-option [value]="config">
-                  {{ config }}
-                </mat-option>
-              }
-            </mat-select>
-            <mat-hint>Leave empty to allow all issuance configs</mat-hint>
-          </mat-form-field>
+          @for (source of configSourceIds; track source) {
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ configSources[source].title }}</mat-label>
+              <mat-select
+                [formControlName]="configSources[source].control"
+                multiple
+                [attr.data-source]="source"
+              >
+                @for (config of configOptions[source]; track config) {
+                  <mat-option [value]="config">{{
+                    config + (isMissingConfig(source, config) ? ' (not found)' : '')
+                  }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>{{ configHint(source) }}</mat-hint>
+            </mat-form-field>
+            @if (configStatus(source) === 'failed') {
+              <button
+                #retryButton
+                mat-button
+                type="button"
+                [attr.data-source]="source"
+                (click)="retryConfigs(source)"
+              >
+                <mat-icon>refresh</mat-icon>
+                Retry loading {{ configSources[source].label }}
+              </button>
+            }
+          }
         </mat-card-content>
 
         <mat-card-actions fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="8px">

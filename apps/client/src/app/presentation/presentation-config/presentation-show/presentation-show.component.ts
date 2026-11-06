@@ -14,7 +14,6 @@ import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { PresentationConfig } from '@eudiplo/sdk-core';
 import { PresentationManagementService } from '../presentation-management.service';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { presentationManagementControllerReissueRegistrationCertificate } from '@eudiplo/sdk-core';
 import { decodeJwt, decodeProtectedHeader } from 'jose';
 import {
   formatRegistrationCertExpiresIn,
@@ -154,14 +153,14 @@ export class PresentationShowComponent implements OnInit {
   }
 
   reissueRegistrationCert(): void {
-    if (!this.config) return;
+    // `disabledInteractive` keeps the button clickable while it looks disabled.
+    if (!this.config || this.reissuing) return;
     this.reissuing = true;
-    presentationManagementControllerReissueRegistrationCertificate({
-      path: { id: this.config.id },
-    })
-      .then((res: any) => {
-        if (res?.data) {
-          this.config = res.data;
+    this.presentationService
+      .reissueRegistrationCertificate(this.config.id)
+      .then((updated) => {
+        if (updated) {
+          this.config = updated;
         }
         this.snackBar.open('Registration certificate reissued', 'Close', {
           duration: 3000,

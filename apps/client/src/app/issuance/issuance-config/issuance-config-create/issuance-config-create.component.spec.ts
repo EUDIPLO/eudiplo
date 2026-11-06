@@ -1,10 +1,24 @@
 import { ApplicationRef, ElementRef, Injector } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { FormBuilder } from '@angular/forms';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { ActivatedRoute, provideRouter } from '@angular/router';
+import { client } from '@eudiplo/sdk-core';
 import { EMPTY } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IssuanceConfigCreateComponent } from './issuance-config-create.component';
+import { IssuanceConfigService } from '../issuance-config.service';
 import { loseFocus } from '../../../common/settings-screen.testing';
+import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
+import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
+import { ApiService } from '../../../core';
+import { FederationTrustAnchorService } from '../../../federation-trust-anchor/federation-trust-anchor.service';
+import { KeyChainService } from '../../../key-management/key-chain.service';
+import { PresentationManagementService } from '../../../presentation/presentation-config/presentation-management.service';
+import { RegistrarService } from '../../../registrar/registrar.service';
+import { FrontendConfigService } from '../../../services/frontend-config.service';
+import { JwtService } from '../../../services/jwt.service';
 import {
   pemToBase64Der,
   TEST_ROOT_CERTIFICATE_PEM,
@@ -658,5 +672,106 @@ describe('issuer settings guided setup', () => {
       component.onTrustAnchorSelected(0, { anchor, previous: 'https://other.example' });
       expect(uri.value).toBe('https://mirror.example/.well-known/openid-federation');
     });
+  });
+});
+
+describe('issuer settings Save', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Renders the issuer settings once they can be saved; the save never answers. */
+  async function render() {
+    const save = vi.fn(() => new Promise(() => undefined));
+    vi.spyOn(client, 'get').mockResolvedValue({ data: [] } as any);
+    await TestBed.configureTestingModule({
+      imports: [IssuanceConfigCreateComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: { get: () => null } } } },
+        {
+          provide: IssuanceConfigService,
+          useValue: { getConfig: vi.fn().mockResolvedValue(config), saveConfiguration: save },
+        },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        { provide: MatDialog, useValue: { open: vi.fn() } },
+        {
+          provide: PresentationManagementService,
+          useValue: { loadConfigurations: vi.fn().mockResolvedValue([]) },
+        },
+        { provide: RegistrarService, useValue: { getConfig: vi.fn().mockResolvedValue(null) } },
+        { provide: KeyChainService, useValue: { getAll: vi.fn().mockResolvedValue([]) } },
+        {
+          provide: FrontendConfigService,
+          useValue: { getConfig: vi.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: JwtService,
+          useValue: { getTenantId: () => 'acme', canUseConfigPortability: () => false },
+        },
+        { provide: ApiService, useValue: { getBaseUrl: () => 'http://localhost:3000' } },
+        {
+          provide: FederationTrustAnchorService,
+          useValue: {
+            registeredEntityIds: vi.fn().mockReturnValue(undefined),
+            registeredAnchors: vi.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: ConfigOwnershipService,
+          useValue: { get: vi.fn().mockResolvedValue(undefined) },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(IssuanceConfigCreateComponent);
+    const component = fixture.componentInstance;
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+    fixture.detectChanges();
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[type="submit"]'
+    )!;
+    // Clicks are held back until the ownership lookup of the managed resource has answered.
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(button.getAttribute('aria-busy')).toBeNull();
+    });
+    return { fixture, component, save, button };
+  }
+
+  it('waits while the settings are saved: a second click sends nothing', async () => {
+    const { fixture, save, button } = await render();
+    expectAvailable(fixture, button);
+
+    button.click();
+    fixture.detectChanges();
+    button.click();
+    fixture.detectChanges();
+
+    expect(save).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, button, 'Saving the issuer settings…');
+  });
+
+  it('steps back while idle and keeps Back focusable while the settings are saved', async () => {
+    const { fixture, component, save, button } = await render();
+    component.toggleGuidedMode();
+    component.activeStep = 3;
+    component.furthestStep = 3;
+    fixture.detectChanges();
+    const back = [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
+    ].find((candidate) => candidate.textContent?.trim() === 'Back')!;
+    expectAvailable(fixture, back);
+    back.click();
+    expect(component.activeStep).toBe(2);
+    component.activeStep = 3;
+    fixture.detectChanges();
+
+    button.click();
+    fixture.detectChanges();
+    back.click();
+    fixture.detectChanges();
+
+    expect(save).toHaveBeenCalledOnce();
+    expect(component.activeStep).toBe(3);
+    expectUnavailable(fixture, back, 'Saving the issuer settings…');
   });
 });

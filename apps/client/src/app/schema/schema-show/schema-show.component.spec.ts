@@ -10,6 +10,7 @@ import { JwtService } from '../../services/jwt.service';
 import { SchemaService } from '../schema.service';
 import { SchemaShowComponent } from './schema-show.component';
 import { errorSnackBarDuration } from '../../utils/error-snackbar';
+import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 
 /** The arguments of an error snackbar with this text. */
 const errorSnackBar = (text: string) =>
@@ -197,6 +198,7 @@ describe('SchemaShowComponent publishing a new version', () => {
       errors: [{ path: ['category'], message: 'Invalid option', code: 'invalid_value' }],
     });
     await load();
+    component.metadataForm.controls.category.markAsDirty();
 
     await component.saveMetadata();
 
@@ -370,6 +372,27 @@ describe('SchemaShowComponent publishing a new version', () => {
     expect(schemaService['updateMetadata']).toHaveBeenCalledOnce();
     expect(component.saving).toBe(false);
     expect(component.metadataForm.pristine).toBe(true);
+  });
+
+  it('keeps a change made while the catalog metadata is saved as unsaved', async () => {
+    let finish!: (entry: unknown) => void;
+    schemaService['updateMetadata'] = vi
+      .fn()
+      .mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    await load();
+    const { displayName, tags } = component.metadataForm.controls;
+    displayName.setValue('Renamed PID');
+    displayName.markAsDirty();
+
+    const saving = component.saveMetadata();
+    tags.setValue(['pid']);
+    tags.markAsDirty();
+    finish(currentVersion({ displayName: 'Renamed PID' }));
+    await saving;
+
+    expect(displayName.pristine).toBe(true);
+    expect(tags.dirty).toBe(true);
+    expect(component.metadataSaveTooltip).toBe('');
   });
 
   it('keeps a version opened while its predecessor was being saved', async () => {
@@ -1191,19 +1214,94 @@ describe('SchemaShowComponent page', () => {
     expect(text(fixture)).toContain('pid, legacy-tag, eudi');
   });
 
-  it('enables Save only for changed catalog metadata', async () => {
+  /** Save under Catalog Metadata, the button of the form that holds the name. */
+  function metadataSave(fixture: { nativeElement: HTMLElement }): HTMLButtonElement {
+    const form = fixture.nativeElement.querySelector('#schema-display-name')!.closest('form')!;
+    return [...form.querySelectorAll('button')].find((b) => b.textContent?.includes('Sav'))!;
+  }
+
+  it('offers Save only for changed catalog metadata, and says so while nothing changed', async () => {
+    schemaService['updateMetadata'] = vi.fn().mockResolvedValue(currentVersion());
     const fixture = await render();
-    const element = fixture.nativeElement as HTMLElement;
-    const save = () =>
-      [...element.querySelectorAll<HTMLButtonElement>('button')].find(
-        (b) => b.textContent?.trim() === 'Save'
-      )!;
-    expect(save().disabled).toBe(true);
+    const save = metadataSave(fixture);
+    expectUnavailable(fixture, save, 'No changes to save');
+
+    save.click();
+    expect(schemaService['updateMetadata']).not.toHaveBeenCalled();
 
     fixture.componentInstance.metadataForm.controls.displayName.setValue('Renamed PID');
     fixture.componentInstance.metadataForm.markAsDirty();
     fixture.detectChanges();
-    expect(save().disabled).toBe(false);
+    expectAvailable(fixture, save);
+  });
+
+  it('waits while the catalog metadata is saved: a second click sends nothing', async () => {
+    schemaService['updateMetadata'] = vi.fn().mockReturnValue(new Promise(() => undefined));
+    const fixture = await render();
+    const component = fixture.componentInstance;
+    component.metadataForm.controls.displayName.setValue('Renamed PID');
+    component.metadataForm.controls.displayName.markAsDirty();
+    fixture.detectChanges();
+    const save = metadataSave(fixture);
+
+    save.click();
+    fixture.detectChanges();
+    save.click();
+    fixture.detectChanges();
+
+    expect(schemaService['updateMetadata']).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, save, 'Saving the catalog metadata…');
+  });
+
+  it('keeps Deprecate focusable while the version is deprecated: a second click sends nothing', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    schemaService['deprecateVersion'].mockReturnValue(new Promise(() => undefined));
+    const fixture = await render();
+    const deprecate = button(fixture, 'Deprecate version 1.0.0') as HTMLButtonElement;
+    expectAvailable(fixture, deprecate, 'Deprecate this version');
+
+    deprecate.click();
+    fixture.detectChanges();
+    deprecate.click();
+    fixture.detectChanges();
+
+    expect(schemaService['deprecateVersion']).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, deprecate, 'Deprecating this version…');
+  });
+
+  it('moves the focus to the heading when Deprecate goes away with a finished deprecation', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    let finish!: (entry: unknown) => void;
+    schemaService['deprecateVersion'].mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    const fixture = await render();
+    const deprecate = button(fixture, 'Deprecate version 1.0.0');
+    deprecate.focus();
+
+    const deprecating = fixture.componentInstance.deprecate();
+    fixture.detectChanges();
+    finish(currentVersion({ deprecated: true }));
+    await deprecating;
+    fixture.detectChanges();
+
+    await vi.waitFor(() =>
+      expect(document.activeElement?.textContent?.trim()).toBe('Schema Details')
+    );
+  });
+
+  it('keeps Delete focusable while the version is deleted: a second click sends nothing', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    schemaService['delete'].mockReturnValue(new Promise(() => undefined));
+    const fixture = await render();
+    const remove = button(fixture, 'Delete version 1.0.0') as HTMLButtonElement;
+    expectAvailable(fixture, remove, 'Delete this version');
+
+    remove.click();
+    fixture.detectChanges();
+    remove.click();
+    fixture.detectChanges();
+
+    expect(schemaService['delete']).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, remove, 'Deleting this version…');
   });
 
   it('offers no Deprecate for a version that is deprecated already', async () => {

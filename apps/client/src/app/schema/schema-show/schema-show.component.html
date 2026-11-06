@@ -1,6 +1,6 @@
 <div fxLayout="column" fxLayoutGap="16px">
   <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2>Schema Details</h2>
+    <h2 #pageHeading tabindex="-1">Schema Details</h2>
     <div fxLayout="row" fxLayoutGap="4px">
       <button
         mat-icon-button
@@ -44,9 +44,10 @@
         @if (!item.deprecated) {
           <button
             mat-icon-button
-            matTooltip="Deprecate this version"
+            [matTooltip]="deprecating ? 'Deprecating this version…' : 'Deprecate this version'"
             [attr.aria-label]="'Deprecate version ' + item.version"
             [disabled]="deprecating"
+            disabledInteractive
             (click)="deprecate()"
           >
             <mat-icon>block</mat-icon>
@@ -55,9 +56,10 @@
         <button
           mat-icon-button
           color="warn"
-          matTooltip="Delete this version"
+          [matTooltip]="deleting ? 'Deleting this version…' : 'Delete this version'"
           [attr.aria-label]="'Delete version ' + item.version"
           [disabled]="deleting"
+          disabledInteractive
           (click)="delete()"
         >
           <mat-icon>delete</mat-icon>
@@ -408,6 +410,8 @@
               color="primary"
               type="button"
               [disabled]="saving || metadataForm.pristine"
+              disabledInteractive
+              [matTooltip]="metadataSaveTooltip"
               (click)="saveMetadata()"
             >
               @if (saving) {

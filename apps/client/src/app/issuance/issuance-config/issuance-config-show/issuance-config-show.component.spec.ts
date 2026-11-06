@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { provideRouter } from '@angular/router';
 
 import { IssuanceConfigShowComponent } from './issuance-config-show.component';
 import { renderDownloadButton } from '../../../config-portability/config-document.testing';
 import { IssuanceConfigService } from '../issuance-config.service';
+import { ConfigDocumentService } from '../../../config-portability/config-document.service';
+import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
 
 describe('IssuanceConfigShowComponent', () => {
   let component: IssuanceConfigShowComponent;
@@ -145,5 +149,56 @@ describe('IssuanceConfigShowComponent copy', () => {
       'Close',
       expect.objectContaining({ duration: expect.any(Number) })
     );
+  });
+});
+
+describe('IssuanceConfigShowComponent registration certificate', () => {
+  it('keeps Regenerate now focusable while it runs: a second click sends one request', async () => {
+    const reissueRegistrationCertificate = vi.fn().mockReturnValue(new Promise(() => undefined));
+    TestBed.configureTestingModule({
+      imports: [IssuanceConfigShowComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: IssuanceConfigService,
+          useValue: {
+            getConfig: async () => ({
+              registrationCertificate: { enabled: true, mode: 'generate' },
+            }),
+            reissueRegistrationCertificate,
+          },
+        },
+        {
+          provide: ConfigDocumentService,
+          useValue: { canDownload: () => false, isDownloading: () => false },
+        },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+      ],
+    });
+    const fixture = TestBed.createComponent(IssuanceConfigShowComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.config).toBeTruthy());
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    [...element.querySelectorAll<HTMLElement>('[role="tab"]')]
+      .find((tab) => tab.textContent?.includes('Registration Certificate'))!
+      .click();
+    fixture.detectChanges();
+    const regenerate = await vi.waitFor(() => {
+      const button = [...element.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+        b.textContent?.includes('Regenerate now')
+      );
+      expect(button).toBeDefined();
+      return button!;
+    });
+    expectAvailable(fixture, regenerate);
+
+    regenerate.click();
+    fixture.detectChanges();
+    regenerate.click();
+    fixture.detectChanges();
+
+    expect(reissueRegistrationCertificate).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, regenerate, 'Regenerating the registration certificate…');
   });
 });
