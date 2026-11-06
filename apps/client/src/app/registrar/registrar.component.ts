@@ -357,7 +357,14 @@ export class RegistrarComponent implements OnInit {
    * outbound URL policy, so saving again is allowed and checks anew.
    */
   get hasInvalidInput(): boolean {
-    return this.fieldControls().some(blocksSaving);
+    return this.fieldsBlockingSave().length > 0;
+  }
+
+  /** The fields whose own errors keep the configuration from saving, in the order of the page. */
+  private fieldsBlockingSave(): string[] {
+    return [...CREDENTIAL_FIELDS, ...CONTACT_FIELDS].filter((field) =>
+      blocksSaving(this.fieldControl(field))
+    );
   }
 
   /** The control of a field under Registrar Credentials or Relying Party Contact. */
@@ -385,11 +392,12 @@ export class RegistrarComponent implements OnInit {
     if (this.isSaving || this.isDeleting) return;
     if (this.hasInvalidInput) {
       // Like `hasInvalidInput`, focus and the snackbar leave out fields with only a rejection.
-      const blocking = (fields: readonly string[]) =>
-        fields.filter((field) => blocksSaving(this.fieldControl(field)));
-      const credentials = blocking(CREDENTIAL_FIELDS);
-      const contact = blocking(CONTACT_FIELDS);
-      const firstField = [...credentials, ...contact][0];
+      const blocking = this.fieldsBlockingSave();
+      const among = (fields: readonly string[]) =>
+        blocking.filter((field) => (fields as readonly string[]).includes(field));
+      const credentials = among(CREDENTIAL_FIELDS);
+      const contact = among(CONTACT_FIELDS);
+      const firstField = blocking[0];
       showFieldsToFix(this.configForm, {
         snackBar: this.snackBar,
         injector: this.injector,
