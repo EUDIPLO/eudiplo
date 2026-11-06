@@ -44,7 +44,7 @@ Create the list in the Web Client under **Cryptographic Assets → Trust Lists**
 
 - **Internal** entities reference key chains of this tenant. EUDIPLO lists the last certificate of each chain, the root CA for internal and external CA chains, so the entry survives key rotation.
 - **External** entities carry the certificates of issuers outside this tenant, as PEM or Base64 DER.
-- The list is signed with the `trustList` key chain in `keyChainId`, or with a `trustList` key chain of the tenant if omitted; create one first ([Keys and Certificates](keys-and-certificates.md)).
+- The list is signed with the `trustList` key chain in `keyChainId`. Without `keyChainId`, a new list uses a `trustList` key chain of the tenant, so create one first ([Keys and Certificates](keys-and-certificates.md)), and an update keeps the key chain the list is signed with. That key chain must still have usage type `trustList`: if a key chain import with its ID gave it another usage type, the update fails until it names a `trustList` key chain in `keyChainId`. The API answers `409`; a configuration bundle or config folder import stops with `CONFIG_APPLY_FAILED`.
 
 EUDIPLO publishes the signed JWT at `GET /issuers/{tenantId}/trust-list/{id}` without authentication, so others can use your list.
 
@@ -88,7 +88,7 @@ A [configuration bundle](../operate/configuration-as-code.md#plan-and-import) or
 
 ### Validity and renewal
 
-A managed list is valid for 30 days (`NextUpdate`). EUDIPLO renews it automatically in the last 10 days: it re-signs the unchanged entities with the next sequence number and a new `NextUpdate`, and keeps the previous version in the history. The check runs every hour and at startup, so lists that expired while EUDIPLO was stopped are renewed when it starts. Verifiers reject a list whose `NextUpdate` has passed (`trust_list_unavailable`).
+A managed list is valid for 30 days (`NextUpdate`). EUDIPLO renews it automatically in the last 10 days: it re-signs the unchanged entities with the next sequence number and a new `NextUpdate`, and keeps the previous version in the history. A renewal signs with the key chain the list is signed with, even one that no longer has usage type `trustList`; only an update refuses that key chain. The check runs every hour and at startup, so lists that expired while EUDIPLO was stopped are renewed when it starts. Verifiers reject a list whose `NextUpdate` has passed (`trust_list_unavailable`).
 
 Renewals and updates never publish the same sequence number twice. If a renewal or another update was published between reading and writing, `PUT` fails with `409`; read the list again and retry.
 

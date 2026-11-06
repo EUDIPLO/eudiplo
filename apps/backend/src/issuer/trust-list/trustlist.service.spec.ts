@@ -1,7 +1,8 @@
-import { ConflictException } from "@nestjs/common";
+import { BadRequestException, ConflictException } from "@nestjs/common";
 import type { LoTEDocument } from "@owf/eudi-lote";
 import * as x509 from "@peculiar/x509";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { KeyUsageType } from "../../crypto/key/types/key-usage-type.js";
 import { TrustListReferences } from "./application/trust-list-references.js";
 import {
     type ManagedTrustList,
@@ -45,6 +46,12 @@ function storedList(
         ...overrides,
     } as unknown as TrustList;
 }
+
+/** A key chain certificate with usage type `trustList`. */
+const trustListKey = (id: string) => ({
+    id,
+    keyChain: { usageType: KeyUsageType.TrustList },
+});
 
 /**
  * Service on an in-memory store whose `update` honours its WHERE criteria
@@ -102,8 +109,11 @@ function createService(
         },
     };
     const certService = {
-        getCertificateById: vi.fn().mockResolvedValue({ id: "trust-list-key" }),
-        findOrCreate: vi.fn().mockResolvedValue({ id: "trust-list-key" }),
+        getCertificateById: vi
+            .fn()
+            .mockResolvedValue(trustListKey("trust-list-key")),
+        // The tenant's pick, distinct from any key chain named by ID.
+        find: vi.fn().mockResolvedValue(trustListKey("tenant-trust-list-key")),
     };
     const service = new TrustListService(
         trustListRepo as any,
@@ -131,6 +141,7 @@ function createService(
         versions,
         manager,
         trustListRepo,
+        certService,
         generateJwt,
     };
 }
@@ -399,8 +410,11 @@ describe("TrustListService", () => {
             );
         });
 
-        it("rejects an external certificate that is neither PEM nor Base64 DER", async () => {
-            const { service } = createService([]);
+        it("rejects an external certificate that is neither PEM nor Base64 DER, before any key chain error", async () => {
+            const { service, certService } = createService([]);
+            certService.find.mockRejectedValue(
+                new Error("No key chain found with usage type 'trustList'"),
+            );
 
             await expect(
                 service.create(
@@ -416,6 +430,7 @@ describe("TrustListService", () => {
                     { id: "tenant", name: "Tenant" },
                 ),
             ).rejects.toThrow("issuerCertPem is not a valid X.509 certificate");
+            expect(certService.find).not.toHaveBeenCalled();
         });
 
         it("publishes updates with compare-and-set and keeps the previous version", async () => {
@@ -466,6 +481,88 @@ describe("TrustListService", () => {
             ).rejects.toBeInstanceOf(ConflictException);
             expect(store.get("list")!.jwt).toBe("list-jwt-3");
             expect(versions).toHaveLength(1);
+        });
+
+        describe("signing key chain", () => {
+            it("signs a new list without keyChainId with a trustList key chain of the tenant", async () => {
+                const { service, certService, trustListRepo } = createService(
+                    [],
+                );
+
+                await service.create(
+                    { id: "new", entities: [externalEntity] },
+                    { id: "tenant", name: "Tenant" },
+                );
+
+                expect(certService.find).toHaveBeenCalledWith({
+                    tenantId: "tenant",
+                    type: KeyUsageType.TrustList,
+                });
+                expect(certService.getCertificateById).not.toHaveBeenCalled();
+                expect(
+                    (trustListRepo.save.mock.calls[0][0] as TrustList)
+                        .keyChainId,
+                ).toBe("tenant-trust-list-key");
+            });
+
+            it("keeps the stored key chain on an update without keyChainId", async () => {
+                const { service, certService, store } = createService([
+                    storedList("list", inDays(20), {
+                        keyChainId: "stored-key",
+                    }),
+                ]);
+                certService.getCertificateById.mockResolvedValue(
+                    trustListKey("stored-key"),
+                );
+
+                await service.update("tenant", "list", {
+                    entities: [externalEntity],
+                });
+
+                expect(certService.getCertificateById).toHaveBeenCalledWith(
+                    "tenant",
+                    "stored-key",
+                );
+                expect(certService.find).not.toHaveBeenCalled();
+                expect(store.get("list")!.keyChainId).toBe("stored-key");
+            });
+
+            it.each([
+                ["names", { keyChainId: "other-key" }],
+                ["keeps", {}],
+            ])(
+                "refuses an update that %s a key chain without trustList usage",
+                async (_, keyChain) => {
+                    const { service, certService, store, manager } =
+                        createService([
+                            storedList("list", inDays(20), {
+                                keyChainId: "stored-key",
+                            }),
+                        ]);
+                    // For example after a key chain import reused its ID.
+                    certService.getCertificateById.mockImplementation(
+                        async (_tenantId: string, id: string) => ({
+                            id,
+                            keyChain: { usageType: KeyUsageType.Attestation },
+                        }),
+                    );
+
+                    await expect(
+                        service.update("tenant", "list", {
+                            entities: [externalEntity],
+                            ...keyChain,
+                        }),
+                    ).rejects.toThrow(
+                        new BadRequestException(
+                            "keyChainId" in keyChain
+                                ? "Key chain other-key is not valid for Trust List usage (key lacks TrustList usage)"
+                                : "Key chain stored-key of this trust list is not valid for Trust List usage (key lacks TrustList usage). Name a key chain with usage type trustList in keyChainId.",
+                        ),
+                    );
+                    expect(manager.update).not.toHaveBeenCalled();
+                    expect(store.get("list")!.sequenceNumber).toBe(2);
+                },
+            );
         });
     });
 
