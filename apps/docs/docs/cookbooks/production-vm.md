@@ -40,11 +40,11 @@ If the shell does not find `eudiplo`, add `~/.local/bin` to your `PATH`, as the 
 
 ## Step 2: Initialize the deployment
 
-Pin the image version you want to run (image tags have no `v` prefix, for example `9.0.0`). Without `--image-tag`, the deployment uses `latest`.
+Pin the image version you want to run, the CLI's version (`eudiplo --version`) or newer, because the CLI writes configuration files in its own format versions (image tags have no `v` prefix, for example `10.0.0`). Without `--image-tag`, the deployment uses `latest`.
 
 ```bash
 eudiplo init ~/eudiplo --instance production --preset standard \
-  --public-url https://eudiplo.example.com --image-tag 9.0.0
+  --public-url https://eudiplo.example.com --image-tag 10.0.0
 ```
 
 The wizard asks the remaining questions. Answer them like this:
@@ -137,7 +137,7 @@ Back up these items regularly and keep the copies off the VM:
 ## Step 8: Upgrade
 
 ```bash
-eudiplo upgrade --image-tag 9.0.1
+eudiplo upgrade --image-tag 10.0.1
 ```
 
 The command shows the image changes, points to the upgrade guide when a major version changes, and asks for confirmation. It then writes the new tags to `.eudiplo.env`, pulls the images and recreates the containers. Database migrations run when the backend starts, and downgrades are not supported, so back up first. Read the [upgrade guide](../upgrade/index.md) before every major upgrade.

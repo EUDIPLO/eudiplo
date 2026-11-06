@@ -43,6 +43,8 @@ git ls-tree -r --name-only origin/main schemas/v<N>/ | grep <Kind>
    pnpm --filter @eudiplo/cli assets:sync
    ```
 
+   If `assets/config/demo` has a file of this kind, upgrade it too with the commands in step 5 of the contributor guide (`pnpm --filter @eudiplo/cli dev config upgrade ../../assets/config/demo --output ../../tmp/demo-upgraded`, copy back, `assets:sync`): `init --demo-tenant` and `config tenant create --template demo` copy it, and the CLI test `generates configuration that needs no upgrade` fails while it is behind. The CLI writes `info.json` and the global `kms.json` with `schemaUrl()`, so those follow the bump on their own.
+
 6. Tests: the migration step in `packages/eudiplo-config-format` (transformation, source and target validation, required input, running it twice) and, for CLI behavior, `apps/cli/test/config-upgrade.test.ts`.
 7. Checks CI runs:
 
