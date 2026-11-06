@@ -146,9 +146,9 @@ export class ClientCreateComponent implements OnInit {
   private readonly listable: Record<ConfigSource, boolean>;
 
   @ViewChildren(MatSelect, { read: ElementRef })
-  private selectElements?: QueryList<ElementRef<HTMLElement>>;
+  private readonly selectElements?: QueryList<ElementRef<HTMLElement>>;
   @ViewChildren('retryButton', { read: ElementRef })
-  private retryButtons?: QueryList<ElementRef<HTMLElement>>;
+  private readonly retryButtons?: QueryList<ElementRef<HTMLElement>>;
 
   private readonly injector = inject(Injector);
 
