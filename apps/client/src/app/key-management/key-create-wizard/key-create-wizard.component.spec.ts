@@ -1177,16 +1177,19 @@ describe('KeyCreateWizardComponent opened from a form in another tab', () => {
 
   /** A wizard opened by a link of a form, such as /keys/create?usage=trustList&from=form. */
   function openedFromForm(usage: string, from: string | null = 'form'): KeyCreateWizardComponent {
-    const component = new KeyCreateWizardComponent(
-      new FormBuilder(),
-      keyChainService as never,
-      registrarService as never,
-      {
-        snapshot: { queryParamMap: convertToParamMap(from ? { usage, from } : { usage }) },
-      } as never,
-      router as never,
-      snackBar as never,
-      { hasRole: () => true } as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new KeyCreateWizardComponent(
+          new FormBuilder(),
+          keyChainService as never,
+          registrarService as never,
+          {
+            snapshot: { queryParamMap: convertToParamMap(from ? { usage, from } : { usage }) },
+          } as never,
+          router as never,
+          snackBar as never,
+          { hasRole: () => true } as never
+        )
     );
     component.ngOnInit();
     return component;
