@@ -22,6 +22,7 @@ function service(type: string, cert: string, status?: string) {
 function lote(...entities: Array<{ name: string; services: unknown[] }>): LoTE {
     return {
         ListAndSchemeInformation: {
+            LoTESequenceNumber: 7,
             NextUpdate: "2030-01-01T00:00:00Z",
             ListIssueDateTime: "2026-01-01T00:00:00Z",
             SchemeTerritory: "EU",
@@ -35,6 +36,13 @@ function lote(...entities: Array<{ name: string; services: unknown[] }>): LoTE {
 
 describe("LoteParserService.parse", () => {
     const parser = new LoteParserService();
+
+    it("reads the list's sequence number and NextUpdate as signed", () => {
+        expect(parser.parse(lote()).info).toMatchObject({
+            sequenceNumber: 7,
+            nextUpdate: "2030-01-01T00:00:00Z",
+        });
+    });
 
     it("leaves out services whose status withdraws them", () => {
         const { entities } = parser.parse(

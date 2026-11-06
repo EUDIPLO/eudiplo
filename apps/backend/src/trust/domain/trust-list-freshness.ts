@@ -6,9 +6,10 @@
  * replayed to undo a removal or a withdrawn service. A closed list has a null
  * `NextUpdate` and all its services expired, so it is discarded as well.
  *
- * This bounds a replay, it does not stop one: an older list whose
- * `NextUpdate` is still ahead is accepted, since no sequence number is
- * compared with one seen before.
+ * `NextUpdate` alone bounds a replay, it does not stop one: an older list
+ * whose `NextUpdate` is still ahead would be accepted. Its lower
+ * `LoTESequenceNumber` shows that it is older than a list already accepted
+ * (see trust-list-sequence.ts), so such a list is discarded too.
  */
 
 /** A list left out of a trust store because it is not current. */
@@ -17,6 +18,24 @@ export interface DiscardedTrustList {
     list: string;
     /** The list's `NextUpdate` as signed, if any. */
     nextUpdate: string | null | undefined;
+    /**
+     * Set when the list was discarded for its `LoTESequenceNumber`, although
+     * its `NextUpdate` is ahead; absent when its `NextUpdate` decided.
+     */
+    sequence?: {
+        /** The list's `LoTESequenceNumber` as signed. */
+        number: unknown;
+        /**
+         * The highest number accepted before from the list, which the list's
+         * number is lower than; absent when the list has no usable number.
+         */
+        highestAccepted?: number;
+        /**
+         * True when `highestAccepted` is the number a managed list of this
+         * instance has in storage rather than one remembered for the tenant.
+         */
+        stored?: boolean;
+    };
 }
 
 /**
@@ -32,15 +51,26 @@ export function isTrustListCurrent(
     return !Number.isNaN(expiresAt) && expiresAt > now.getTime();
 }
 
+/** Why one list was discarded, as operators read it. */
+function discardReason({ nextUpdate, sequence }: DiscardedTrustList): string {
+    if (!sequence) {
+        return `NextUpdate ${JSON.stringify(nextUpdate ?? null)}`;
+    }
+    const number = JSON.stringify(sequence.number ?? null);
+    if (sequence.highestAccepted === undefined) {
+        return `LoTESequenceNumber ${number} is not a whole number from 1`;
+    }
+    return sequence.stored
+        ? `LoTESequenceNumber ${number} is lower than ${sequence.highestAccepted} stored for this managed list`
+        : `LoTESequenceNumber ${number} is lower than ${sequence.highestAccepted} accepted before`;
+}
+
 /** Discarded lists as operators read them in logs and error details. */
 export function describeDiscardedTrustLists(
     discarded: DiscardedTrustList[],
 ): string {
     return discarded
-        .map(
-            ({ list, nextUpdate }) =>
-                `${list} (NextUpdate ${JSON.stringify(nextUpdate ?? null)})`,
-        )
+        .map((entry) => `${entry.list} (${discardReason(entry)})`)
         .join(", ");
 }
 
@@ -62,15 +92,15 @@ export function discardedTrustListsNote(
  * Raised when every list of a trust store was discarded, so nothing is left
  * to decide trust with.
  *
- * The message leaves out the lists and their `NextUpdate`: it can reach
- * wallets as an OAuth `error_description`, the URL of a managed list names an
- * internal address, and the signed `NextUpdate` text may hold characters that
- * field must not carry. Log {@link discarded} for operators.
+ * The message leaves out the lists, their `NextUpdate` and their sequence
+ * numbers: it can reach wallets as an OAuth `error_description`, the URL of a
+ * managed list names an internal address, and the signed values may hold
+ * characters that field must not carry. Log {@link discarded} for operators.
  */
 export class OutdatedTrustListsError extends Error {
     constructor(readonly discarded: DiscardedTrustList[]) {
         super(
-            "No configured trust list is current: each has no valid NextUpdate or one that has passed",
+            "No configured trust list is current: each has no valid NextUpdate or one that has passed, no valid LoTESequenceNumber, or a lower one than a list accepted before",
         );
         this.name = "OutdatedTrustListsError";
     }

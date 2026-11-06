@@ -15,7 +15,7 @@ import { TrustListRef } from "../../../verifier/presentations/entities/presentat
 import { CredentialRequestException } from "./exceptions/index.js";
 
 export interface AttestationProofTrustValidationDeps {
-    tenantId?: string;
+    tenantId: string;
     trustStoreService: TrustStoreService;
     x509ValidationService: X509ValidationService;
 }

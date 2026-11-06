@@ -551,13 +551,44 @@ export class TrustListService {
      * Returns base64 DER (without PEM headers) suitable for `verifierX509Der`.
      */
     async getVerifierX509Der(tenantId: string, id: string): Promise<string> {
+        return (await this.getVerifierAndSequenceNumber(tenantId, id))
+            .verifierX509Der;
+    }
+
+    /**
+     * The certificate that signs a managed trust list (base64 DER, see
+     * {@link getVerifierX509Der}) and the list's current sequence number,
+     * which the published list must not be lower than.
+     */
+    async getVerifierAndSequenceNumber(
+        tenantId: string,
+        id: string,
+    ): Promise<{ verifierX509Der: string; sequenceNumber: number }> {
         const trustList = await this.findOne(tenantId, id);
         const cert = await this.certService.getCertificateById(
             tenantId,
             trustList.keyChainId,
         );
         // Pin the certificate whose key signs the JWT, rather than its root CA.
-        return this.formatPem(cert.crt[0]);
+        return {
+            verifierX509Der: this.formatPem(cert.crt[0]),
+            sequenceNumber: trustList.sequenceNumber,
+        };
+    }
+
+    /**
+     * The current sequence number of a managed trust list, or undefined when
+     * the tenant has no list with this ID.
+     */
+    async getSequenceNumber(
+        tenantId: string,
+        id: string,
+    ): Promise<number | undefined> {
+        const trustList = await this.trustListRepo.findOne({
+            where: { tenantId, id },
+            select: { tenantId: true, id: true, sequenceNumber: true },
+        });
+        return trustList?.sequenceNumber;
     }
 
     /**

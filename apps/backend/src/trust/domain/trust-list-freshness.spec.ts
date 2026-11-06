@@ -32,6 +32,35 @@ describe("trust list freshness", () => {
         );
     });
 
+    it("names a list discarded for its sequence number with the number", () => {
+        expect(
+            describeDiscardedTrustLists([
+                {
+                    list: "https://a.example/list",
+                    nextUpdate: "2026-12-01",
+                    sequence: { number: 3, highestAccepted: 5 },
+                },
+                {
+                    list: "https://m.example/list",
+                    nextUpdate: "2026-12-01",
+                    sequence: { number: 3, highestAccepted: 4, stored: true },
+                },
+                {
+                    list: "https://b.example/list",
+                    nextUpdate: "2026-12-01",
+                    sequence: { number: undefined },
+                },
+                {
+                    list: "https://c.example/list",
+                    nextUpdate: "2026-12-01",
+                    sequence: { number: '1"\n' },
+                },
+            ]),
+        ).toBe(
+            'https://a.example/list (LoTESequenceNumber 3 is lower than 5 accepted before), https://m.example/list (LoTESequenceNumber 3 is lower than 4 stored for this managed list), https://b.example/list (LoTESequenceNumber null is not a whole number from 1), https://c.example/list (LoTESequenceNumber "1\\"\\n" is not a whole number from 1)',
+        );
+    });
+
     it("escapes a signed NextUpdate, so it cannot break log lines", () => {
         expect(
             describeDiscardedTrustLists([{ list: "x", nextUpdate: 'a"\nb' }]),
@@ -60,7 +89,7 @@ describe("trust list freshness", () => {
             { list: "https://a.example/list", nextUpdate: "2026-01-01" },
         ]);
         expect(error.message).toBe(
-            "No configured trust list is current: each has no valid NextUpdate or one that has passed",
+            "No configured trust list is current: each has no valid NextUpdate or one that has passed, no valid LoTESequenceNumber, or a lower one than a list accepted before",
         );
         expect(error.discarded).toHaveLength(1);
     });

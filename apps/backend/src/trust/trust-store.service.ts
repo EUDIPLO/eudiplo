@@ -1,9 +1,12 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { LoTE } from "@owf/eudi-lote";
+import { managedTrustListAt } from "../issuer/trust-list/domain/trust-list-reference.js";
 import { TrustListService } from "../issuer/trust-list/trustlist.service.js";
 import {
     type CollectedTrustedEntities,
     CollectTrustedEntities,
+    type LoadedTrustListRef,
+    type LoadedTrustListSource,
 } from "./application/collect-trusted-entities.js";
 import {
     type DiscardedTrustList,
@@ -12,6 +15,10 @@ import {
     OutdatedTrustListsError,
 } from "./domain/trust-list-freshness.js";
 import { LoteParserService } from "./lote-parser.service.js";
+import {
+    ACCEPTED_TRUST_LIST_SEQUENCE_NUMBERS,
+    type AcceptedTrustListSequenceNumbers,
+} from "./ports/accepted-trust-list-sequence-numbers.js";
 import {
     TRUST_STORE_SETTINGS,
     type TrustStoreSettings,
@@ -32,6 +39,10 @@ export type BuiltTrustStore = CollectedTrustedEntities & { fetchedAt: number };
  */
 const OUTDATED_RETRY_MS = 60 * 1000;
 
+/** Logged with lists numbered lower than one the tenant accepted before. */
+const supersededHint = (tenantId: string) =>
+    `. If the publisher of such a list numbered it from 1 again, DELETE /api/cache/trust-list/sequence-numbers as tenant ${JSON.stringify(tenantId)} forgets the numbers that tenant accepted`;
+
 @Injectable()
 export class TrustStoreService {
     private readonly logger = new Logger(TrustStoreService.name);
@@ -47,14 +58,17 @@ export class TrustStoreService {
         @Inject(TRUST_STORE_SETTINGS)
         private readonly settings: TrustStoreSettings,
         private readonly loteParser: LoteParserService,
+        @Inject(ACCEPTED_TRUST_LIST_SEQUENCE_NUMBERS)
+        private readonly sequenceNumbers: AcceptedTrustListSequenceNumbers,
     ) {}
 
     /**
      * Fetch, verify and filter the source's lists, or reuse the cached result
-     * for `cacheTtlMs` while its current lists stay current. Outdated lists
-     * are left out ({@link BuiltTrustStore.discarded}) and logged. A source
-     * whose lists are all outdated is rejected for one minute without
-     * fetching them again.
+     * for `cacheTtlMs` while its current lists stay current. Outdated lists,
+     * also those numbered lower than a list accepted before, are left out
+     * ({@link BuiltTrustStore.discarded}) and logged. A source whose lists
+     * are all outdated is rejected for one minute without fetching them
+     * again.
      * @throws when a list cannot be fetched or verified, or when every list
      * is outdated (`OutdatedTrustListsError`); callers must fail closed
      */
@@ -64,32 +78,15 @@ export class TrustStoreService {
     ): Promise<BuiltTrustStore> {
         // Resolve managed IDs at request time: configuration import may run before
         // trust-list import, and the selected signing certificate can rotate.
-        source = {
+        const loaded: LoadedTrustListSource = {
             ...source,
             lotes: await Promise.all(
-                source.lotes.map(async (ref) => {
-                    if (ref.trustListId === undefined) return ref;
-                    const id = ref.trustListId.trim();
-                    if (!source.tenantId || !id) {
-                        throw new Error(
-                            "Managed trust lists require a tenant and a non-empty trustListId",
-                        );
-                    }
-                    const verifierX509Der =
-                        await this.trustListService.getVerifierX509Der(
-                            source.tenantId,
-                            id,
-                        );
-                    const baseUrl =
-                        this.settings.internalUrl || this.settings.publicUrl;
-                    return {
-                        url: `${baseUrl.replace(/\/$/, "")}/issuers/${encodeURIComponent(source.tenantId)}/trust-list/${encodeURIComponent(id)}`,
-                        verifierX509Der,
-                    };
-                }),
+                source.lotes.map((ref) =>
+                    this.resolveReference(ref, source.tenantId),
+                ),
             ),
         };
-        const cacheKey = this.buildCacheKey(source);
+        const cacheKey = this.buildCacheKey(loaded);
         const cached = this.cache.get(cacheKey);
 
         // A cached store whose earliest current list has reached its
@@ -111,17 +108,25 @@ export class TrustStoreService {
 
         let result: CollectedTrustedEntities;
         try {
-            result = await this.collectTrustedEntities.execute(source);
+            result = await this.collectTrustedEntities.execute(loaded);
         } catch (error) {
             if (error instanceof OutdatedTrustListsError) {
-                this.warnDiscarded(error.discarded, "no current list is left");
+                this.warnDiscarded(
+                    loaded.tenantId,
+                    error.discarded,
+                    "no current list is left",
+                );
                 this.rememberOutdated(cacheKey, error);
             }
             throw error;
         }
         this.outdated.delete(cacheKey);
         if (result.discarded.length > 0) {
-            this.warnDiscarded(result.discarded, "using the current lists");
+            this.warnDiscarded(
+                loaded.tenantId,
+                result.discarded,
+                "using the current lists",
+            );
         }
         const store: BuiltTrustStore = { fetchedAt: Date.now(), ...result };
         this.cache.set(cacheKey, store);
@@ -130,6 +135,56 @@ export class TrustStoreService {
             `Built trust store with ${store.entities.length} trusted entit${store.entities.length === 1 ? "y" : "ies"}`,
         );
         return store;
+    }
+
+    /**
+     * The reference as {@link CollectTrustedEntities} loads it. A managed list
+     * of this instance, named by `trustListId` or by a URL below `PUBLIC_URL`
+     * or `INTERNAL_URL`, carries the sequence number it has in storage, read
+     * before the list is fetched: EUDIPLO numbers a list it creates again
+     * from 1, so it is compared with that number rather than with the
+     * numbers remembered for the tenant.
+     */
+    private async resolveReference(
+        ref: TrustListRef,
+        tenantId: string,
+    ): Promise<LoadedTrustListRef> {
+        if (ref.trustListId === undefined) {
+            const managed = managedTrustListAt(
+                ref.url,
+                [this.settings.publicUrl, this.settings.internalUrl].filter(
+                    (url): url is string => !!url,
+                ),
+            );
+            if (!managed) return ref;
+            // The list is public at its URL, so reading its number for
+            // another tenant of this instance reveals nothing new.
+            const storedSequenceNumber =
+                await this.trustListService.getSequenceNumber(
+                    managed.tenantId,
+                    managed.id,
+                );
+            return storedSequenceNumber === undefined
+                ? ref
+                : { ...ref, storedSequenceNumber };
+        }
+        const id = ref.trustListId.trim();
+        if (!tenantId || !id) {
+            throw new Error(
+                "Managed trust lists require a tenant and a non-empty trustListId",
+            );
+        }
+        const { verifierX509Der, sequenceNumber } =
+            await this.trustListService.getVerifierAndSequenceNumber(
+                tenantId,
+                id,
+            );
+        const baseUrl = this.settings.internalUrl || this.settings.publicUrl;
+        return {
+            url: `${baseUrl.replace(/\/$/, "")}/issuers/${encodeURIComponent(tenantId)}/trust-list/${encodeURIComponent(id)}`,
+            verifierX509Der,
+            storedSequenceNumber: sequenceNumber,
+        };
     }
 
     /**
@@ -165,9 +220,19 @@ export class TrustStoreService {
      * Name discarded lists for operators; the errors that reach wallets do
      * not, see {@link OutdatedTrustListsError}.
      */
-    private warnDiscarded(discarded: DiscardedTrustList[], effect: string) {
+    private warnDiscarded(
+        tenantId: string,
+        discarded: DiscardedTrustList[],
+        effect: string,
+    ) {
+        // Forgetting the remembered numbers only helps lists not managed here.
+        const superseded = discarded.some(
+            (entry) =>
+                entry.sequence?.highestAccepted !== undefined &&
+                !entry.sequence.stored,
+        );
         this.logger.warn(
-            `Discarded outdated trust list(s), ${effect}: ${describeDiscardedTrustLists(discarded)}`,
+            `Discarded outdated trust list(s), ${effect}: ${describeDiscardedTrustLists(discarded)}${superseded ? supersededHint(tenantId) : ""}`,
         );
     }
 
@@ -189,7 +254,18 @@ export class TrustStoreService {
         this.outdated.clear();
     }
 
-    private buildCacheKey(source: TrustListSource): string {
+    /**
+     * Forget the sequence numbers of the lists the tenant accepted, then
+     * clear the cache so the lists are fetched again: a list whose operator
+     * numbered it from 1 again is accepted. Until a list is accepted again,
+     * an older version of it is accepted too.
+     */
+    async forgetSequenceNumbers(tenantId: string): Promise<void> {
+        await this.sequenceNumbers.forgetTenant(tenantId);
+        this.clearCache();
+    }
+
+    private buildCacheKey(source: LoadedTrustListSource): string {
         return JSON.stringify({
             tenantId: source.tenantId,
             lotes: source.lotes.map((ref) => ({
@@ -197,6 +273,9 @@ export class TrustStoreService {
                 verifierKey: ref.verifierKey ?? null,
                 verifierKeyPem: ref.verifierKeyPem ?? null,
                 verifierX509Der: ref.verifierX509Der ?? null,
+                // A managed list stored with a higher number since the store
+                // was cached is fetched again, not answered from the cache.
+                storedSequenceNumber: ref.storedSequenceNumber ?? null,
             })),
             acceptedServiceTypes: source.acceptedServiceTypes ?? [],
         });

@@ -75,7 +75,7 @@ Without verification material, EUDIPLO cannot check the list's signature, and ve
 | ----------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
 | The trusted credential is rejected too                | The entity lists a different issuer key chain                            | Edit the list and select `Membership credential signing` as **Issuer Key Chain**.                      |
 | The wallet offers no credential at all                | The wallet cannot match the `aki` values                                 | Test with `VP_REMOVE_TA=true`; report the wallet's behavior to its vendor.                             |
-| `trust_list_unavailable`                              | The list URL is unreachable, the list has no valid `NextUpdate` or one that has passed, or the verification material is missing or wrong | Open the URL; for external lists, check `verifierX509Der` (the signer's certificate without the PEM header and footer lines) or `verifierKey`. |
+| `trust_list_unavailable`                              | The list URL is unreachable, the list has no valid `NextUpdate` or one that has passed, it is numbered lower than a list accepted before ([Older versions of a list](../trust/trust-lists.md#older-versions-of-a-list)), or the verification material is missing or wrong | Open the URL; for external lists, check `verifierX509Der` (the signer's certificate without the PEM header and footer lines) or `verifierKey`. |
 
 General problems are covered in [Troubleshooting](../troubleshooting.md).
 

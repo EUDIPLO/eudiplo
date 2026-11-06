@@ -2,6 +2,7 @@ import { type Logger, UnauthorizedException } from "@nestjs/common";
 import { ES256 } from "@owf/crypto";
 import * as x509 from "@peculiar/x509";
 import { describe, expect, it, vi } from "vitest";
+import { acceptedSequenceNumbersFake } from "../../test/trust/accepted-trust-list-sequence-numbers.fake.js";
 import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
 import { RevocationListUnavailableError } from "./revocation-policy.util.js";
 import { TrustStoreService } from "./trust-store.service.js";
@@ -768,13 +769,16 @@ describe("WalletAttestationService wallet attestation signer", () => {
                         list.withProvider ? providerEntity : otherEntity,
                     ],
                     nextUpdate: list.nextUpdate,
+                    sequenceNumber: 1,
                 });
             }
+            const noNumbers = acceptedSequenceNumbersFake();
             const trustStoreService = new TrustStoreService(
-                new CollectTrustedEntities({ loadVerified }),
+                new CollectTrustedEntities({ loadVerified }, noNumbers),
                 {} as never,
                 {} as never,
                 {} as never,
+                noNumbers,
             );
             vi.spyOn(
                 (trustStoreService as unknown as { logger: Logger }).logger,

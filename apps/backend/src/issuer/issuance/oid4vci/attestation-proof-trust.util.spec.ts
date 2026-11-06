@@ -1,6 +1,7 @@
 import type { Logger } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { acceptedSequenceNumbersFake } from "../../../../test/trust/accepted-trust-list-sequence-numbers.fake.js";
 import { CollectTrustedEntities } from "../../../trust/application/collect-trusted-entities.js";
 import { TrustStoreService } from "../../../trust/trust-store.service.js";
 import { ServiceTypeIdentifiers } from "../../../trust/types.js";
@@ -267,13 +268,16 @@ describe("credential proof attestation trust with real certificates", () => {
                         list.withProvider ? providerEntity : otherEntity,
                     ],
                     nextUpdate: list.nextUpdate,
+                    sequenceNumber: 1,
                 });
             }
+            const noNumbers = acceptedSequenceNumbersFake();
             const trustStoreService = new TrustStoreService(
-                new CollectTrustedEntities({ loadVerified }),
+                new CollectTrustedEntities({ loadVerified }, noNumbers),
                 {} as never,
                 {} as never,
                 {} as never,
+                noNumbers,
             );
             vi.spyOn(
                 (trustStoreService as unknown as { logger: Logger }).logger,
@@ -286,6 +290,7 @@ describe("credential proof attestation trust with real certificates", () => {
                     verifierX509Der: "MII",
                 })),
                 {
+                    tenantId: "tenant",
                     trustStoreService,
                     x509ValidationService: new X509ValidationService(),
                 },

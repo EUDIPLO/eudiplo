@@ -42,10 +42,10 @@ export function trustListAuthorities(
 export function verifierTrustOptions(input: {
     trustLists: TrustListRef[];
     /**
-     * Set for OID4VP, where managed trust-list ids are tenant scoped and
-     * federation trust anchors are looked up.
+     * The tenant of the presentation: managed trust-list IDs, the sequence
+     * numbers of accepted lists and federation trust anchors are its own.
      */
-    tenantId?: string;
+    tenantId: string;
     authorities: DcqlTrustedAuthority[] | undefined;
     statusCheckMode?: RevocationCheckMode;
     skewSeconds: number | undefined;
@@ -66,9 +66,7 @@ export function verifierTrustOptions(input: {
         trustListSource: {
             lotes: input.trustLists,
             acceptedServiceTypes: [...credentialIssuerServiceTypes],
-            ...(input.tenantId !== undefined
-                ? { tenantId: input.tenantId }
-                : {}),
+            tenantId: input.tenantId,
         },
         federationTrustSource: federationDecides
             ? {
