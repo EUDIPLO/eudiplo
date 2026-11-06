@@ -15,6 +15,7 @@ describe('KeyCreateWizardComponent', () => {
   let roles: string[];
   let getConfig: ReturnType<typeof vi.fn>;
   let snackBar: { open: ReturnType<typeof vi.fn> };
+  let keyChainImport: ReturnType<typeof vi.fn>;
 
   async function create(granted: string[]): Promise<KeyCreateWizardComponent> {
     roles = granted;
@@ -24,7 +25,10 @@ describe('KeyCreateWizardComponent', () => {
         provideRouter([]),
         {
           provide: KeyChainService,
-          useValue: { getProviders: vi.fn().mockResolvedValue({ providers: [], default: 'db' }) },
+          useValue: {
+            getProviders: vi.fn().mockResolvedValue({ providers: [], default: 'db' }),
+            import: keyChainImport,
+          },
         },
         { provide: RegistrarService, useValue: { getConfig } },
         {
@@ -43,6 +47,7 @@ describe('KeyCreateWizardComponent', () => {
   }
 
   beforeEach(() => {
+    keyChainImport = vi.fn();
     getConfig = vi.fn().mockResolvedValue({ registrarUrl: 'https://registrar.example' });
     snackBar = { open: vi.fn().mockReturnValue({ onAction: () => of() }) };
   });
@@ -133,6 +138,69 @@ describe('KeyCreateWizardComponent', () => {
     ]);
   });
 
+  it('says which fields keep a key from being imported, focuses the first one and sends nothing', async () => {
+    const component = await create(['keys:manage']);
+    component.usageForm.patchValue({ usage: 'access' });
+    component.accessSourceForm.patchValue({ accessSource: 'external' });
+    fixture.detectChanges();
+    component.stepper.selectedIndex = component.stepper.steps.length - 1;
+    fixture.detectChanges();
+    const element: HTMLElement = fixture.nativeElement;
+    const importButton = [...element.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.includes('Import Key & Certificate')
+    )!;
+    expect(importButton.disabled).toBe(false);
+    expect(importButton.getAttribute('aria-disabled')).toBeNull();
+
+    importButton.focus();
+    importButton.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement?.getAttribute('formcontrolname')).toBe('externalPrivateKey');
+    });
+    expect(
+      [...element.querySelectorAll('mat-error')].map((error) => error.textContent?.trim())
+    ).toEqual([
+      'Paste the private key or load a key file',
+      'Paste the certificate chain or load certificate files',
+    ]);
+    expect(snackBar.open).toHaveBeenLastCalledWith(
+      'Check the highlighted fields in Basic Settings.',
+      'Close',
+      expect.anything()
+    );
+    expect(keyChainImport).not.toHaveBeenCalled();
+  });
+
+  it('moves focus from Create & Enroll to a refused enrollment, but not from elsewhere', async () => {
+    const component = await create(['keys:manage', 'registrar:manage']);
+    component.usageForm.patchValue({ usage: 'access' });
+    component.accessSourceForm.patchValue({ accessSource: 'registrar' });
+    fixture.detectChanges();
+    component.stepper.selectedIndex = component.stepper.steps.length - 1;
+    fixture.detectChanges();
+    const element: HTMLElement = fixture.nativeElement;
+    const createAndEnroll = [...element.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.includes('Create & Enroll')
+    )!;
+
+    createAndEnroll.focus();
+    component.enrollmentError = { message: 'Refused.', offerRegistrar: false };
+    fixture.detectChanges();
+    expect(document.activeElement).toBe(element.querySelector('.enrollment-error'));
+
+    component.enrollmentError = null;
+    fixture.detectChanges();
+    const description = element.querySelector<HTMLInputElement>(
+      'input[formcontrolname="description"]'
+    )!;
+    description.focus();
+    component.enrollmentError = { message: 'Refused again.', offerRegistrar: false };
+    fixture.detectChanges();
+    expect(document.activeElement).toBe(description);
+  });
+
   it('shows a refused enrollment next to Create & Enroll', async () => {
     const component = await create(['keys:manage', 'registrar:manage']);
     component.usageForm.patchValue({ usage: 'access' });
@@ -171,14 +239,17 @@ describe('KeyCreateWizardComponent registrar enrollment', () => {
 
   /** A wizard on the last step of a registrar enrollment. */
   function create(): KeyCreateWizardComponent {
-    const component = new KeyCreateWizardComponent(
-      new FormBuilder(),
-      keyChainService as never,
-      registrarService as never,
-      {} as never,
-      router as never,
-      snackBar as never,
-      { hasRole: () => true } as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new KeyCreateWizardComponent(
+          new FormBuilder(),
+          keyChainService as never,
+          registrarService as never,
+          {} as never,
+          router as never,
+          snackBar as never,
+          { hasRole: () => true } as never
+        )
     );
     component.usageForm.patchValue({ usage: 'access' });
     component.accessSourceForm.patchValue({ accessSource: 'registrar' });
@@ -407,9 +478,10 @@ describe('KeyCreateWizardComponent registrar enrollment', () => {
     expect(snackBar.open.mock.lastCall?.[0]).toContain('If Keys lists a new access key');
   });
 
-  it('sends the default description and KMS provider when none is chosen', async () => {
+  it('sends the default description when none is entered, and the default KMS provider', async () => {
     const component = create();
-    component.configForm.patchValue({ description: '', kmsProvider: '' });
+    // The KMS provider select is required; it starts at the default provider.
+    component.configForm.patchValue({ description: '' });
 
     await component.createKey();
 
@@ -425,14 +497,17 @@ describe('KeyCreateWizardComponent errors', () => {
 
   /** A wizard on the external access certificate step with this key and certificate. */
   function create(externalCertificate: string): KeyCreateWizardComponent {
-    const component = new KeyCreateWizardComponent(
-      new FormBuilder(),
-      keyChainService as never,
-      {} as never,
-      {} as never,
-      { navigate: vi.fn() } as never,
-      snackBar as never,
-      { hasRole: () => false } as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new KeyCreateWizardComponent(
+          new FormBuilder(),
+          keyChainService as never,
+          {} as never,
+          {} as never,
+          { navigate: vi.fn() } as never,
+          snackBar as never,
+          { hasRole: () => false } as never
+        )
     );
     component.usageForm.patchValue({ usage: 'access' });
     component.accessSourceForm.patchValue({ accessSource: 'external' });
@@ -448,12 +523,16 @@ describe('KeyCreateWizardComponent errors', () => {
     snackBar = { open: vi.fn() };
   });
 
-  it('says what is wrong with the external certificate', async () => {
-    await create('').createKey();
+  it('asks for the certificate chain instead of importing without one', async () => {
+    const component = create('  ');
+
+    await component.createKey();
 
     expect(keyChainService.import).not.toHaveBeenCalled();
+    expect(component.configForm.get('externalCertificate')?.hasError('required')).toBe(true);
+    expect(component.configForm.get('externalCertificate')?.touched).toBe(true);
     expect(snackBar.open.mock.lastCall?.[0]).toBe(
-      'Failed to import key chain: At least one certificate is required.'
+      'Check the highlighted fields in Basic Settings.'
     );
   });
 
@@ -478,14 +557,17 @@ describe('KeyCreateWizardComponent imports', () => {
   let keyChainService: { import: ReturnType<typeof vi.fn> };
 
   function create(): KeyCreateWizardComponent {
-    const component = new KeyCreateWizardComponent(
-      new FormBuilder(),
-      keyChainService as never,
-      {} as never,
-      {} as never,
-      { navigate: vi.fn() } as never,
-      snackBar as never,
-      { hasRole: () => false } as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new KeyCreateWizardComponent(
+          new FormBuilder(),
+          keyChainService as never,
+          {} as never,
+          {} as never,
+          { navigate: vi.fn() } as never,
+          snackBar as never,
+          { hasRole: () => false } as never
+        )
     );
     component.configForm.patchValue({ externalPrivateKey: key, externalCertificate: certificate });
     return component;
@@ -595,14 +677,17 @@ describe('KeyCreateWizardComponent certificate from a CSR', () => {
   let snackBar: { open: ReturnType<typeof vi.fn> };
 
   function create(): KeyCreateWizardComponent {
-    return new KeyCreateWizardComponent(
-      new FormBuilder(),
-      keyChainService as never,
-      {} as never,
-      {} as never,
-      router as never,
-      snackBar as never,
-      { hasRole: () => false } as never
+    return TestBed.runInInjectionContext(
+      () =>
+        new KeyCreateWizardComponent(
+          new FormBuilder(),
+          keyChainService as never,
+          {} as never,
+          {} as never,
+          router as never,
+          snackBar as never,
+          { hasRole: () => false } as never
+        )
     );
   }
 
@@ -622,7 +707,8 @@ describe('KeyCreateWizardComponent certificate from a CSR', () => {
     component.configForm.patchValue({ externalCertificateSource: 'csr' });
 
     expect(component.importsExternalKey).toBe(false);
-    expect(component.externalCertificateFormValid).toBe(true);
+    // Without a key to import, the empty key and certificate fields do not block Create.
+    expect(component.configForm.valid).toBe(true);
     await component.createKey();
 
     expect(keyChainService.import).not.toHaveBeenCalled();
@@ -667,7 +753,8 @@ describe('KeyCreateWizardComponent certificate from a CSR', () => {
 
     expect(component.requestsCertificate).toBe(false);
     expect(component.importsExternalKey).toBe(true);
-    expect(component.externalCertificateFormValid).toBe(false);
+    expect(component.configForm.get('externalPrivateKey')?.hasError('required')).toBe(true);
+    expect(component.configForm.get('externalCertificate')?.hasError('required')).toBe(true);
   });
 });
 
@@ -676,14 +763,17 @@ describe('KeyCreateWizardComponent internal chains', () => {
   let snackBar: { open: ReturnType<typeof vi.fn> };
 
   function create(): KeyCreateWizardComponent {
-    const component = new KeyCreateWizardComponent(
-      new FormBuilder(),
-      keyChainService as never,
-      {} as never,
-      {} as never,
-      { navigate: vi.fn() } as never,
-      snackBar as never,
-      { hasRole: () => false } as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new KeyCreateWizardComponent(
+          new FormBuilder(),
+          keyChainService as never,
+          {} as never,
+          {} as never,
+          { navigate: vi.fn() } as never,
+          snackBar as never,
+          { hasRole: () => false } as never
+        )
     );
     component.usageForm.patchValue({ usage: 'attestation' });
     component.caSourceForm.patchValue({ keyChainType: 'internalChain' });
@@ -765,14 +855,17 @@ describe('KeyCreateWizardComponent internal chains', () => {
   it('offers to create the status list key next, with its usage preselected', async () => {
     const router = { navigate: vi.fn() };
     snackBar.open.mockReturnValue({ onAction: () => of(undefined) });
-    const component = new KeyCreateWizardComponent(
-      new FormBuilder(),
-      keyChainService as never,
-      {} as never,
-      {} as never,
-      router as never,
-      snackBar as never,
-      { hasRole: () => false } as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new KeyCreateWizardComponent(
+          new FormBuilder(),
+          keyChainService as never,
+          {} as never,
+          {} as never,
+          router as never,
+          snackBar as never,
+          { hasRole: () => false } as never
+        )
     );
     component.usageForm.patchValue({ usage: 'attestation' });
 
@@ -803,14 +896,17 @@ describe('KeyCreateWizardComponent internal chains', () => {
   });
 
   it('starts a status list key on Create Key Chain with rotation', () => {
-    const component = new KeyCreateWizardComponent(
-      new FormBuilder(),
-      keyChainService as never,
-      {} as never,
-      {} as never,
-      { navigate: vi.fn() } as never,
-      snackBar as never,
-      { hasRole: () => false } as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new KeyCreateWizardComponent(
+          new FormBuilder(),
+          keyChainService as never,
+          {} as never,
+          {} as never,
+          { navigate: vi.fn() } as never,
+          snackBar as never,
+          { hasRole: () => false } as never
+        )
     );
     component.usageForm.patchValue({ usage: 'statusList' });
 
@@ -904,14 +1000,17 @@ describe('KeyCreateWizardComponent signing algorithm', () => {
   ];
 
   async function create(): Promise<KeyCreateWizardComponent> {
-    const component = new KeyCreateWizardComponent(
-      new FormBuilder(),
-      keyChainService as never,
-      {} as never,
-      { snapshot: { queryParamMap: new Map() } } as never,
-      { navigate: vi.fn() } as never,
-      { open: vi.fn().mockReturnValue({ onAction: () => of() }) } as never,
-      { hasRole: () => false } as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new KeyCreateWizardComponent(
+          new FormBuilder(),
+          keyChainService as never,
+          {} as never,
+          { snapshot: { queryParamMap: new Map() } } as never,
+          { navigate: vi.fn() } as never,
+          { open: vi.fn().mockReturnValue({ onAction: () => of() }) } as never,
+          { hasRole: () => false } as never
+        )
     );
     await component.loadKmsProviders();
     component.usageForm.patchValue({ usage: 'attestation' });
@@ -996,14 +1095,17 @@ describe('KeyCreateWizardComponent signing algorithm', () => {
 
 describe('KeyCreateWizardComponent usage from the link', () => {
   function openedWith(usage: string | null): KeyCreateWizardComponent {
-    const component = new KeyCreateWizardComponent(
-      new FormBuilder(),
-      { getProviders: vi.fn().mockResolvedValue({ providers: [], default: 'db' }) } as never,
-      {} as never,
-      { snapshot: { queryParamMap: new Map(usage ? [['usage', usage]] : []) } } as never,
-      { navigate: vi.fn() } as never,
-      { open: vi.fn() } as never,
-      { hasRole: () => false } as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new KeyCreateWizardComponent(
+          new FormBuilder(),
+          { getProviders: vi.fn().mockResolvedValue({ providers: [], default: 'db' }) } as never,
+          {} as never,
+          { snapshot: { queryParamMap: new Map(usage ? [['usage', usage]] : []) } } as never,
+          { navigate: vi.fn() } as never,
+          { open: vi.fn() } as never,
+          { hasRole: () => false } as never
+        )
     );
     component.ngOnInit();
     return component;
