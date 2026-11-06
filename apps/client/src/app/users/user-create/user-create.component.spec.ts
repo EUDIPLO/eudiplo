@@ -14,15 +14,27 @@ describe('UserCreateComponent Save', () => {
   let snackBar: { open: ReturnType<typeof vi.fn> };
   /** Requests other than GET, which change something. */
   let changes: string[];
+  /** Set to keep changing requests unanswered, as while a save runs. */
+  let changesPending: boolean;
 
   beforeEach(async () => {
     snackBar = { open: vi.fn() };
     changes = [];
+    changesPending = false;
     client.setConfig({
       fetch: vi.fn<typeof fetch>(async (input) => {
         const request = input as Request;
         const path = new URL(request.url).pathname;
-        if (request.method !== 'GET') changes.push(`${request.method} ${path}`);
+        if (request.method !== 'GET') {
+          changes.push(`${request.method} ${path}`);
+          if (changesPending) return new Promise<Response>(() => undefined);
+        }
+        if (path === '/api/user/broken') {
+          return new Response(JSON.stringify({ statusCode: 404, message: 'User not found' }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
         const body =
           path === '/api/user/locked'
             ? { id: 'locked', username: 'locked', enabled: true, roles: ['tenants:manage'] }
@@ -108,5 +120,48 @@ describe('UserCreateComponent Save', () => {
     update.click();
     await new Promise((resolve) => setTimeout(resolve));
     expect(changes).toEqual([]);
+  });
+
+  it('waits while the user is saved: a second click sends nothing and the tooltip says why', async () => {
+    changesPending = true;
+    const { harness, page, save } = await render('/users/create');
+    const component = harness.routeDebugElement!.componentInstance;
+    component.userForm.patchValue({ username: 'new-user', roles: ['issuance:offer'] });
+    harness.detectChanges();
+    const create = save('Create User');
+
+    create.click();
+    harness.detectChanges();
+    create.click();
+    await vi.waitFor(() => expect(changes).toHaveLength(1));
+    harness.detectChanges();
+
+    const saving = [...page.querySelectorAll('button')].find(
+      (button) => button.getAttribute('type') === 'submit'
+    )!;
+    expect(saving.disabled).toBe(false);
+    expect(saving.getAttribute('aria-disabled')).toBe('true');
+    expect(
+      harness
+        .routeDebugElement!.queryAll(By.directive(MatTooltip))
+        .find((element) => element.nativeElement === saving)!
+        .injector.get(MatTooltip).message
+    ).toBe('Saving the user…');
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(changes).toHaveLength(1);
+  });
+
+  it('says why a user that failed to load cannot be edited, instead of an empty form', async () => {
+    const { harness, page } = await render('/users/broken');
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector('[role="alert"]')?.textContent).toContain(
+        'Failed to load user: User not found'
+      );
+    });
+    expect(page.querySelector('form')).toBeNull();
+    expect([...page.querySelectorAll('button')].some((b) => b.textContent?.includes('Retry'))).toBe(
+      true
+    );
   });
 });

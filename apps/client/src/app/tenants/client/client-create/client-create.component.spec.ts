@@ -17,15 +17,27 @@ describe('ClientCreateComponent Save', () => {
   let snackBar: { open: ReturnType<typeof vi.fn> };
   /** Requests other than GET, which change something. */
   let changes: string[];
+  /** Set to keep changing requests unanswered, as while a save runs. */
+  let changesPending: boolean;
 
   beforeEach(async () => {
     snackBar = { open: vi.fn() };
     changes = [];
+    changesPending = false;
     client.setConfig({
       fetch: vi.fn<typeof fetch>(async (input) => {
         const request = input as Request;
         const path = new URL(request.url).pathname;
-        if (request.method !== 'GET') changes.push(`${request.method} ${path}`);
+        if (request.method !== 'GET') {
+          changes.push(`${request.method} ${path}`);
+          if (changesPending) return new Promise<Response>(() => undefined);
+        }
+        if (path === '/api/client/broken') {
+          return new Response(JSON.stringify({ statusCode: 404, message: 'Client not found' }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
         const body =
           path === '/api/client/locked'
             ? { clientId: 'locked', roles: ['tenants:manage'] }
@@ -124,5 +136,48 @@ describe('ClientCreateComponent Save', () => {
     update.click();
     await new Promise((resolve) => setTimeout(resolve));
     expect(changes).toEqual([]);
+  });
+
+  it('waits while the client is saved: a second click sends nothing and the tooltip says why', async () => {
+    changesPending = true;
+    const { harness, page, save } = await render('/clients/create');
+    const component = harness.routeDebugElement!.componentInstance;
+    component.clientForm.patchValue({ clientId: 'new-client', roles: ['issuance:offer'] });
+    harness.detectChanges();
+    const create = save('Create Client');
+
+    create.click();
+    harness.detectChanges();
+    create.click();
+    await vi.waitFor(() => expect(changes).toHaveLength(1));
+    harness.detectChanges();
+
+    const saving = [...page.querySelectorAll('button')].find(
+      (button) => button.getAttribute('type') === 'submit'
+    )!;
+    expect(saving.disabled).toBe(false);
+    expect(saving.getAttribute('aria-disabled')).toBe('true');
+    expect(
+      harness
+        .routeDebugElement!.queryAll(By.directive(MatTooltip))
+        .find((element) => element.nativeElement === saving)!
+        .injector.get(MatTooltip).message
+    ).toBe('Saving the client…');
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(changes).toHaveLength(1);
+  });
+
+  it('says why a client that failed to load cannot be edited, instead of an empty form', async () => {
+    const { harness, page } = await render('/clients/broken');
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector('[role="alert"]')?.textContent).toContain(
+        'Failed to load client: Client not found'
+      );
+    });
+    expect(page.querySelector('form')).toBeNull();
+    expect([...page.querySelectorAll('button')].some((b) => b.textContent?.includes('Retry'))).toBe(
+      true
+    );
   });
 });

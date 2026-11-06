@@ -60,6 +60,8 @@ export class TenantCreateComponent implements OnInit {
   tenantForm: FormGroup;
   isSubmitting = false;
   isEditMode = false;
+  /** While the tenant to edit loads; the form waits for it. */
+  loading = false;
 
   roles = roles;
 
@@ -94,6 +96,7 @@ export class TenantCreateComponent implements OnInit {
   }
 
   private async loadTenant(id: string): Promise<void> {
+    this.loading = true;
     try {
       const tenant = await tenantControllerGetTenant<true>({ path: { id } });
       this.tenantForm.patchValue({
@@ -107,6 +110,8 @@ export class TenantCreateComponent implements OnInit {
     } catch (error) {
       openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to load tenant'));
       this.router.navigate(['../'], { relativeTo: this.route });
+    } finally {
+      this.loading = false;
     }
   }
 

@@ -36,6 +36,7 @@ import { SecretDialogComponent } from '../secret-dialog/secret-dialog.component'
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../../config-portability/config-ownership-notice.component';
 import { RoleLockNoticeComponent } from '../../../common/role-lock-notice.component';
+import { LoadErrorComponent } from '../../../common/load-error.component';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { showFieldsToFix } from '../../../common/field-to-fix.util';
 
@@ -56,6 +57,7 @@ import { showFieldsToFix } from '../../../common/field-to-fix.util';
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
     RoleLockNoticeComponent,
+    LoadErrorComponent,
   ],
   templateUrl: './client-create.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -77,6 +79,10 @@ export class ClientCreateComponent implements OnInit {
   /** Roles of the edited client that the caller neither holds nor may grant */
   unmanageableRoles: string[] = [];
   loaded = false;
+  /** While the client to edit loads; the form waits for it. */
+  loading = false;
+  /** Set when the client to edit could not be loaded; the form stays hidden. */
+  loadError = '';
   id?: string | null;
 
   /** Holds the fields; Save focuses the first invalid one. */
@@ -116,30 +122,46 @@ export class ClientCreateComponent implements OnInit {
     this.id = this.route.snapshot.paramMap.get('id');
     if (this.id) {
       this.loaded = true;
-      clientControllerGetClient({ path: { id: this.id } }).then((res) => {
-        if (!res.data) {
-          this.snackBar.open('Client not found', 'Close', { duration: 3000 });
-          this.router.navigate(['../..'], { relativeTo: this.route });
-          return;
-        }
-        // Type assertion needed until SDK is regenerated with new fields
-        const clientData = res.data as typeof res.data & {
-          allowedPresentationConfigs?: string[];
-          allowedIssuanceConfigs?: string[];
-        };
-        this.clientForm.patchValue({
-          ...clientData,
-          allowedPresentationConfigs: clientData.allowedPresentationConfigs ?? [],
-          allowedIssuanceConfigs: clientData.allowedIssuanceConfigs ?? [],
-        });
-        this.clientForm.get('clientId')?.disable();
-        const choices = roleChoices(this.jwtService.getRoles(), clientData.roles ?? []);
-        this.roleOptions = choices.options;
-        this.unmanageableRoles = choices.unmanageable;
-        if (this.unmanageableRoles.length > 0) {
-          this.clientForm.disable();
-        }
+      void this.load(this.id);
+    }
+  }
+
+  /** Loads the client again after a failed load. */
+  retryLoad(): void {
+    void this.load(this.id!);
+  }
+
+  private async load(id: string): Promise<void> {
+    this.loading = true;
+    this.loadError = '';
+    try {
+      const res = await clientControllerGetClient({ path: { id } });
+      if (!res.data) {
+        this.snackBar.open('Client not found', 'Close', { duration: 3000 });
+        this.router.navigate(['../..'], { relativeTo: this.route });
+        return;
+      }
+      // Type assertion needed until SDK is regenerated with new fields
+      const clientData = res.data as typeof res.data & {
+        allowedPresentationConfigs?: string[];
+        allowedIssuanceConfigs?: string[];
+      };
+      this.clientForm.patchValue({
+        ...clientData,
+        allowedPresentationConfigs: clientData.allowedPresentationConfigs ?? [],
+        allowedIssuanceConfigs: clientData.allowedIssuanceConfigs ?? [],
       });
+      this.clientForm.get('clientId')?.disable();
+      const choices = roleChoices(this.jwtService.getRoles(), clientData.roles ?? []);
+      this.roleOptions = choices.options;
+      this.unmanageableRoles = choices.unmanageable;
+      if (this.unmanageableRoles.length > 0) {
+        this.clientForm.disable();
+      }
+    } catch (error) {
+      this.loadError = getApiErrorMessage(error, 'Failed to load client');
+    } finally {
+      this.loading = false;
     }
   }
 

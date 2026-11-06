@@ -29,6 +29,7 @@ import { JwtService } from '../../services/jwt.service';
 import { type RoleOption, roleChoices } from '../../services/role-grants';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { RoleLockNoticeComponent } from '../../common/role-lock-notice.component';
+import { LoadErrorComponent } from '../../common/load-error.component';
 import { UserTemporaryPasswordDialogComponent } from '../user-temporary-password-dialog/user-temporary-password-dialog.component';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { showFieldsToFix } from '../../common/field-to-fix.util';
@@ -49,6 +50,7 @@ import { showFieldsToFix } from '../../common/field-to-fix.util';
     MatTooltipModule,
     MatCheckboxModule,
     RoleLockNoticeComponent,
+    LoadErrorComponent,
   ],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './user-create.component.html',
@@ -69,6 +71,10 @@ export class UserCreateComponent implements OnInit {
   /** Roles of the edited user that the caller neither holds nor may grant */
   unmanageableRoles: string[] = [];
   loaded = false;
+  /** While the user to edit loads; the form waits for it. */
+  loading = false;
+  /** Set when the user to edit could not be loaded; the form stays hidden. */
+  loadError = '';
   id?: string | null;
 
   /** Holds the fields; Save focuses the first invalid one. */
@@ -97,22 +103,38 @@ export class UserCreateComponent implements OnInit {
     this.id = this.route.snapshot.paramMap.get('id');
     if (this.id) {
       this.loaded = true;
-      userControllerGetUser({ path: { id: this.id } }).then((res) => {
-        if (!res.data) {
-          this.snackBar.open('User not found', 'Close', { duration: 3000 });
-          this.router.navigate(['../..'], { relativeTo: this.route });
-          return;
-        }
+      void this.load(this.id);
+    }
+  }
 
-        this.userForm.patchValue(res.data);
-        this.userForm.get('username')?.disable();
-        const choices = roleChoices(this.jwtService.getRoles(), res.data.roles ?? []);
-        this.roleOptions = choices.options;
-        this.unmanageableRoles = choices.unmanageable;
-        if (this.unmanageableRoles.length > 0) {
-          this.userForm.disable();
-        }
-      });
+  /** Loads the user again after a failed load. */
+  retryLoad(): void {
+    void this.load(this.id!);
+  }
+
+  private async load(id: string): Promise<void> {
+    this.loading = true;
+    this.loadError = '';
+    try {
+      const res = await userControllerGetUser({ path: { id } });
+      if (!res.data) {
+        this.snackBar.open('User not found', 'Close', { duration: 3000 });
+        this.router.navigate(['../..'], { relativeTo: this.route });
+        return;
+      }
+
+      this.userForm.patchValue(res.data);
+      this.userForm.get('username')?.disable();
+      const choices = roleChoices(this.jwtService.getRoles(), res.data.roles ?? []);
+      this.roleOptions = choices.options;
+      this.unmanageableRoles = choices.unmanageable;
+      if (this.unmanageableRoles.length > 0) {
+        this.userForm.disable();
+      }
+    } catch (error) {
+      this.loadError = getApiErrorMessage(error, 'Failed to load user');
+    } finally {
+      this.loading = false;
     }
   }
 

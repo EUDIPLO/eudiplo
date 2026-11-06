@@ -2,6 +2,8 @@ import '@angular/compiler';
 import { TestBed } from '@angular/core/testing';
 import { FormBuilder } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTooltip } from '@angular/material/tooltip';
+import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { client } from '@eudiplo/sdk-core';
 import { of } from 'rxjs';
@@ -250,6 +252,37 @@ describe('TenantCreateComponent', () => {
         expect.anything()
       );
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('waits while the tenant is saved: a second click sends nothing and the tooltip says why', async () => {
+      const pending = vi.fn<typeof fetch>(() => new Promise<Response>(() => undefined));
+      client.setConfig({ fetch: pending });
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [TenantCreateComponent],
+        providers: [provideRouter([]), { provide: MatSnackBar, useValue: { open: vi.fn() } }],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(TenantCreateComponent);
+      fixture.detectChanges();
+      fixture.componentInstance.tenantForm.patchValue({ id: 'acme', name: 'Acme' });
+      fixture.detectChanges();
+      const page = fixture.nativeElement as HTMLElement;
+      const save = page.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+
+      save.click();
+      fixture.detectChanges();
+      save.click();
+      await new Promise((resolve) => setTimeout(resolve));
+
+      expect(pending).toHaveBeenCalledOnce();
+      expect(save.disabled).toBe(false);
+      expect(save.getAttribute('aria-disabled')).toBe('true');
+      expect(
+        fixture.debugElement
+          .queryAll(By.directive(MatTooltip))
+          .find((element) => element.nativeElement === save)!
+          .injector.get(MatTooltip).message
+      ).toBe('Saving the tenant…');
     });
   });
 });
