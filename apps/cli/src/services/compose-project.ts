@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { schemaUrl } from "@eudiplo/config-format/config-format.js";
 import {
     readCliBinaryAsset,
     readCliTextAsset,
@@ -68,6 +69,12 @@ export function createComposeEnv(options: ComposeEnvOptions): string {
     return `${lines.join("\n")}\n`;
 }
 
+/**
+ * The global `config/kms.json` as a KmsConfig document at the current format
+ * version. `config upgrade --check` reports every bare file as "upgrade
+ * required", because the upgrade adds the envelope, so a bare file would fail
+ * that check right after `init`.
+ */
 export function createGlobalKmsConfig(kms: ComposeKms): string {
     const providers: Array<Record<string, string>> = [
         {
@@ -89,8 +96,12 @@ export function createGlobalKmsConfig(kms: ComposeKms): string {
 
     return `${JSON.stringify(
         {
-            defaultProvider: kms,
-            providers,
+            $schema: schemaUrl("KmsConfig"),
+            metadata: { generation: 1 },
+            spec: {
+                defaultProvider: kms,
+                providers,
+            },
         },
         null,
         4,

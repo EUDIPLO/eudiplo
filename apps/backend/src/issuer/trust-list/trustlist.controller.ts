@@ -13,7 +13,11 @@ import { ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Role } from "../../auth/roles/role.enum.js";
 import { Secured } from "../../auth/secure.decorator.js";
 import { Token, TokenPayload } from "../../auth/token.decorator.js";
-import { createConfigBodyPipe } from "../../shared/common/zod/zod-schema.util.js";
+import {
+    createConfigBodyPipe,
+    createValidationException,
+} from "../../shared/common/zod/zod-schema.util.js";
+import { TrustListEntityKeyChainUsageError } from "./domain/trust-list-entity-key-chains.js";
 import {
     referencesVisibleTo,
     TrustListInUseError,
@@ -46,6 +50,24 @@ const readRoles: Record<TrustListReferenceKind, Role[]> = {
 };
 
 /**
+ * The error a failed create or update answers with: a key chain of another
+ * usage type in an internal entity as `400` with an issue at each field
+ * (`entities.<index>.<field>`), any other failure as `409`.
+ */
+function saveError(error: Error): Error {
+    if (error instanceof TrustListEntityKeyChainUsageError) {
+        return createValidationException(
+            error.issues.map(({ index, field, message }) => ({
+                path: ["entities", index, field],
+                message,
+                code: "key_chain_usage_mismatch",
+            })),
+        );
+    }
+    return new ConflictException(error.message);
+}
+
+/**
  * Controller for managing trust lists.
  */
 @Secured([Role.Issuances, Role.Presentations])
@@ -60,6 +82,16 @@ export class TrustListController {
      * @returns
      */
     @Post()
+    @ApiResponse({
+        status: 400,
+        description:
+            "The body fails validation, or an internal entity names a key chain whose usage type cannot provide its certificate: issuerKeyChainId needs attestation, revocationKeyChainId statusList or attestation. errors[].path names the field",
+    })
+    @ApiResponse({
+        status: 409,
+        description:
+            "The trust list cannot be created, for example because a key chain does not exist or keyChainId names no trustList key chain",
+    })
     createTrustList(
         @Body(createConfigBodyPipe(TrustListCreateSchema, { readOnly }))
         body: TrustListCreateDto,
@@ -68,7 +100,7 @@ export class TrustListController {
         return this.trustListService
             .create(body, token.entity!)
             .catch((err) => {
-                throw new ConflictException(err.message);
+                throw saveError(err);
             });
     }
 
@@ -157,6 +189,16 @@ export class TrustListController {
      * @returns
      */
     @Put(":id")
+    @ApiResponse({
+        status: 400,
+        description:
+            "The body fails validation, or an internal entity names a key chain whose usage type cannot provide its certificate: issuerKeyChainId needs attestation, revocationKeyChainId statusList or attestation. errors[].path names the field; a key chain the stored list already names in that field is accepted",
+    })
+    @ApiResponse({
+        status: 409,
+        description:
+            "The trust list cannot be updated, for example because it or a key chain does not exist, keyChainId names no trustList key chain, or another update or a renewal was published since it was read",
+    })
     updateTrustList(
         @Param("id") id: string,
         @Body(createConfigBodyPipe(TrustListCreateSchema, { readOnly }))
@@ -166,7 +208,7 @@ export class TrustListController {
         return this.trustListService
             .update(token.entity!.id, id, body)
             .catch((err) => {
-                throw new ConflictException(err.message);
+                throw saveError(err);
             });
     }
 

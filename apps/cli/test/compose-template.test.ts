@@ -1,3 +1,8 @@
+import {
+    migrateDocument,
+    schemaUrl,
+} from "@eudiplo/config-format/config-format.js";
+import { validateConfigDocument } from "@eudiplo/config-format/config-validator.js";
 import { describe, expect, it } from "vitest";
 import {
     createComposeEnv,
@@ -37,8 +42,9 @@ describe("compose template helpers", () => {
     it("generates a global db KMS configuration", () => {
         const config = JSON.parse(createGlobalKmsConfig("db"));
 
-        expect(config.defaultProvider).toBe("db");
-        expect(config.providers).toEqual([
+        expect(config.$schema).toBe(schemaUrl("KmsConfig"));
+        expect(config.spec.defaultProvider).toBe("db");
+        expect(config.spec.providers).toEqual([
             {
                 id: "db",
                 type: "db",
@@ -50,13 +56,29 @@ describe("compose template helpers", () => {
     it("keeps db available when Vault is the default KMS provider", () => {
         const config = JSON.parse(createGlobalKmsConfig("vault"));
 
-        expect(config.defaultProvider).toBe("vault");
+        expect(config.spec.defaultProvider).toBe("vault");
         expect(
-            config.providers.map((provider: { id: string }) => provider.id),
+            config.spec.providers.map(
+                (provider: { id: string }) => provider.id,
+            ),
         ).toEqual(["db", "vault"]);
-        expect(config.providers[1].vaultUrl).toBe("${VAULT_ADDR}");
-        expect(config.providers[1].vaultToken).toBe("${VAULT_TOKEN}");
+        expect(config.spec.providers[1].vaultUrl).toBe("${VAULT_ADDR}");
+        expect(config.spec.providers[1].vaultToken).toBe("${VAULT_TOKEN}");
     });
+
+    it.each(["db", "vault"] as const)(
+        "writes a valid current KmsConfig document for %s",
+        (kms) => {
+            const result = migrateDocument(
+                JSON.parse(createGlobalKmsConfig(kms)),
+                validateConfigDocument,
+            );
+
+            expect(result.document.kind).toBe("KmsConfig");
+            expect(result.migrations).toEqual([]);
+            expect(result.issues).toEqual([]);
+        },
+    );
 
     it("generates environment variables for selected compose components", () => {
         const env = createComposeEnv({
