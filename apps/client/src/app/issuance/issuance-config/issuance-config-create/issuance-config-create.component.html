@@ -281,53 +281,6 @@
                                   placeholder="Friendly name"
                                 />
                               </mat-form-field>
-
-                              <div fxLayout="row" fxLayoutAlign="end center">
-                                <button
-                                  #moveUpButton
-                                  matIconButton
-                                  type="button"
-                                  (click)="moveAuthorizationServer(i, 'up')"
-                                  [disabled]="i === 0"
-                                  disabledInteractive
-                                  [matTooltip]="
-                                    i === 0
-                                      ? 'Authorization server 1 is already first'
-                                      : 'Move authorization server ' + (i + 1) + ' up'
-                                  "
-                                  [attr.aria-label]="'Move authorization server ' + (i + 1) + ' up'"
-                                >
-                                  <mat-icon>arrow_upward</mat-icon>
-                                </button>
-                                <button
-                                  #moveDownButton
-                                  matIconButton
-                                  type="button"
-                                  (click)="moveAuthorizationServer(i, 'down')"
-                                  [disabled]="i === authorizationServers.length - 1"
-                                  disabledInteractive
-                                  [matTooltip]="
-                                    i === authorizationServers.length - 1
-                                      ? 'Authorization server ' + (i + 1) + ' is already last'
-                                      : 'Move authorization server ' + (i + 1) + ' down'
-                                  "
-                                  [attr.aria-label]="
-                                    'Move authorization server ' + (i + 1) + ' down'
-                                  "
-                                >
-                                  <mat-icon>arrow_downward</mat-icon>
-                                </button>
-                                <button
-                                  matIconButton
-                                  type="button"
-                                  color="warn"
-                                  (click)="removeAuthorizationServer(i)"
-                                  [matTooltip]="'Remove authorization server ' + (i + 1)"
-                                  [attr.aria-label]="'Remove authorization server ' + (i + 1)"
-                                >
-                                  <mat-icon>delete</mat-icon>
-                                </button>
-                              </div>
                             </div>
                           } @else {
                             <div fxLayout="column" fxLayoutGap="16px">
@@ -706,55 +659,53 @@
                                   </mat-form-field>
                                 }
                               </div>
-
-                              <div fxLayout="row" fxLayoutAlign="end center">
-                                <button
-                                  #moveUpButton
-                                  matIconButton
-                                  type="button"
-                                  (click)="moveAuthorizationServer(i, 'up')"
-                                  [disabled]="i === 0"
-                                  disabledInteractive
-                                  [matTooltip]="
-                                    i === 0
-                                      ? 'Authorization server 1 is already first'
-                                      : 'Move authorization server ' + (i + 1) + ' up'
-                                  "
-                                  [attr.aria-label]="'Move authorization server ' + (i + 1) + ' up'"
-                                >
-                                  <mat-icon>arrow_upward</mat-icon>
-                                </button>
-                                <button
-                                  #moveDownButton
-                                  matIconButton
-                                  type="button"
-                                  (click)="moveAuthorizationServer(i, 'down')"
-                                  [disabled]="i === authorizationServers.length - 1"
-                                  disabledInteractive
-                                  [matTooltip]="
-                                    i === authorizationServers.length - 1
-                                      ? 'Authorization server ' + (i + 1) + ' is already last'
-                                      : 'Move authorization server ' + (i + 1) + ' down'
-                                  "
-                                  [attr.aria-label]="
-                                    'Move authorization server ' + (i + 1) + ' down'
-                                  "
-                                >
-                                  <mat-icon>arrow_downward</mat-icon>
-                                </button>
-                                <button
-                                  matIconButton
-                                  type="button"
-                                  color="warn"
-                                  (click)="removeAuthorizationServer(i)"
-                                  [matTooltip]="'Remove authorization server ' + (i + 1)"
-                                  [attr.aria-label]="'Remove authorization server ' + (i + 1)"
-                                >
-                                  <mat-icon>delete</mat-icon>
-                                </button>
-                              </div>
                             </div>
                           }
+                          <!-- One action row for every type, below the fields of the panel. -->
+                          <div class="server-actions" fxLayout="row" fxLayoutAlign="end center">
+                            <button
+                              #moveUpButton
+                              matIconButton
+                              type="button"
+                              (click)="moveAuthorizationServer(i, 'up')"
+                              [disabled]="i === 0"
+                              disabledInteractive
+                              [matTooltip]="
+                                i === 0
+                                  ? 'Authorization server 1 is already first'
+                                  : 'Move authorization server ' + (i + 1) + ' up'
+                              "
+                              [attr.aria-label]="'Move authorization server ' + (i + 1) + ' up'"
+                            >
+                              <mat-icon>arrow_upward</mat-icon>
+                            </button>
+                            <button
+                              #moveDownButton
+                              matIconButton
+                              type="button"
+                              (click)="moveAuthorizationServer(i, 'down')"
+                              [disabled]="i === authorizationServers.length - 1"
+                              disabledInteractive
+                              [matTooltip]="
+                                i === authorizationServers.length - 1
+                                  ? 'Authorization server ' + (i + 1) + ' is already last'
+                                  : 'Move authorization server ' + (i + 1) + ' down'
+                              "
+                              [attr.aria-label]="'Move authorization server ' + (i + 1) + ' down'"
+                            >
+                              <mat-icon>arrow_downward</mat-icon>
+                            </button>
+                            <button
+                              matIconButton
+                              type="button"
+                              color="warn"
+                              (click)="removeAuthorizationServer(i)"
+                              [matTooltip]="'Remove authorization server ' + (i + 1)"
+                              [attr.aria-label]="'Remove authorization server ' + (i + 1)"
+                            >
+                              <mat-icon>delete</mat-icon>
+                            </button>
+                          </div>
                         </mat-expansion-panel>
                       }
                     </mat-accordion>
