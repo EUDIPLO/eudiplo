@@ -372,6 +372,67 @@ describe('wallet attestation configuration round trips', () => {
       });
     });
 
+    describe('focus after retrying the load', () => {
+      const added: HTMLElement[] = [];
+      afterEach(() => added.splice(0).forEach((element) => element.remove()));
+
+      /** A list on the page with a managed entry, which shows the load error. */
+      function listSection() {
+        const element = document.body.appendChild(document.createElement('div'));
+        added.push(element);
+        const field = element.appendChild(document.createElement('input'));
+        return { element, field };
+      }
+
+      it('moves focus to the new Retry of the same list, then to its managed entry', async () => {
+        const first = listSection();
+        const second = listSection();
+        const fetch = vi
+          .fn<() => Promise<TrustList[]>>()
+          .mockRejectedValueOnce(new Error('offline'))
+          .mockRejectedValueOnce(new Error('offline'))
+          .mockResolvedValue(lists);
+        // Like the view queries, the refs hold the elements of every list on the page.
+        const retryButtons: ElementRef<HTMLElement>[] = [];
+        const host = Object.assign(withLists(fetch), {
+          injector: TestBed.inject(Injector),
+          managedTrustListFields: [first.field, second.field].map((field) => new ElementRef(field)),
+          trustListRetryButtons: retryButtons,
+        }) as IssuanceConfigCreateComponent;
+        /** Renders the alerts: a Retry in every list while the load failed, none otherwise. */
+        const render = () => {
+          retryButtons.splice(0).forEach((ref) => ref.nativeElement.remove());
+          if (host.trustListsError) {
+            for (const section of [first, second]) {
+              const button = section.element.appendChild(document.createElement('button'));
+              retryButtons.push(new ElementRef(button));
+            }
+          }
+          TestBed.inject(ApplicationRef).tick();
+        };
+        /** Presses the Retry of the second list, which goes away with its alert while loading. */
+        const retrySecond = async () => {
+          retryButtons[1].nativeElement.focus();
+          const done = host.retryTrustLists(second.element);
+          retryButtons.splice(0).forEach((ref) => ref.nativeElement.remove());
+          loseFocus();
+          await done;
+          render();
+        };
+        await host.loadTrustLists();
+        render();
+
+        await retrySecond();
+        expect(host.trustListsError).not.toBe('');
+        expect(retryButtons).toHaveLength(2);
+        expect(document.activeElement).toBe(retryButtons[1].nativeElement);
+
+        await retrySecond();
+        expect(host.trustListsError).toBe('');
+        expect(document.activeElement).toBe(second.field);
+      });
+    });
+
     it('asks for the tenant lists only where a managed entry exists', () => {
       const external = new FormArray([component['createWalletProviderTrustListGroup']({ url })]);
       expect(component.hasManagedEntry(external)).toBe(false);

@@ -480,10 +480,15 @@ export class IssuanceConfigCreateComponent implements OnInit {
   private readonly trustAnchorSelects?: QueryList<FederationTrustAnchorSelectComponent>;
   @ViewChild('addTrustAnchorButton', { read: ElementRef })
   private readonly addTrustAnchorButton?: ElementRef<HTMLElement>;
-  // The select or URL field and the Add managed trust list buttons of every wallet provider
-  // trust list on the page; removeTrustListEntry picks those of one list.
+  // The select or URL field, the managed list select, the Retry of the load error and the Add
+  // managed trust list buttons of every wallet provider trust list on the page;
+  // removeTrustListEntry and retryTrustLists pick those of one list with entriesIn.
   @ViewChildren('trustListField', { read: ElementRef })
   private readonly trustListFields?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChildren('managedTrustListField', { read: ElementRef })
+  private readonly managedTrustListFields?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChildren('trustListRetryButton', { read: ElementRef })
+  private readonly trustListRetryButtons?: QueryList<ElementRef<HTMLElement>>;
   @ViewChildren('addManagedTrustListButton', { read: ElementRef })
   private readonly addManagedTrustListButtons?: QueryList<ElementRef<HTMLElement>>;
   @ViewChild('pageHeading', { read: ElementRef })
@@ -1591,13 +1596,39 @@ export class IssuanceConfigCreateComponent implements OnInit {
    */
   removeTrustListEntry(trustLists: FormArray, index: number, section: HTMLElement): void {
     trustLists.removeAt(index);
-    const inSection = (refs?: QueryList<ElementRef<HTMLElement>>) =>
-      refs?.map((ref) => ref.nativeElement).filter((element) => section.contains(element)) ?? [];
     focusRowAfterRemoval(
       this.injector,
-      () => inSection(this.trustListFields),
+      () => this.entriesIn(section, this.trustListFields),
       index,
-      () => inSection(this.addManagedTrustListButtons)[0]
+      () => this.entriesIn(section, this.addManagedTrustListButtons)[0]
+    );
+  }
+
+  /**
+   * Loads the tenant's trust lists again for the Retry in `section`, the element holding one
+   * list's entries. The retry removes the alert with its focused Retry button, so focus moves
+   * within that list: to its first managed entry, which the alert is shown for, once the lists
+   * are loaded, or to the list's new Retry when they fail again.
+   */
+  async retryTrustLists(section: HTMLElement): Promise<void> {
+    await this.loadTrustLists();
+    focusAfterRenderIfLost(
+      this.injector,
+      () =>
+        this.entriesIn(
+          section,
+          this.trustListsError ? this.trustListRetryButtons : this.managedTrustListFields
+        )[0]
+    );
+  }
+
+  /** The elements of `refs` within `section`, since every list on the page shares the queries. */
+  private entriesIn(
+    section: HTMLElement,
+    refs?: QueryList<ElementRef<HTMLElement>>
+  ): HTMLElement[] {
+    return (
+      refs?.map((ref) => ref.nativeElement).filter((element) => section.contains(element)) ?? []
     );
   }
 
@@ -1652,9 +1683,21 @@ export class IssuanceConfigCreateComponent implements OnInit {
   }
 
   /**
+   * Why JSON View cannot be opened right now, or '' when it can. It edits the loaded settings,
+   * so it waits for them; the button stays focusable and shows this as its tooltip.
+   */
+  get jsonViewUnavailableReason(): string {
+    if (this.loadingConfig) return 'Wait until the issuer settings have loaded';
+    if (this.loadError) return 'Retry loading the issuer settings before opening JSON View';
+    return '';
+  }
+
+  /**
    * Open JSON view dialog to show/edit the complete configuration
    */
   viewAsJson(): void {
+    // The button stays clickable while it cannot be used (disabledInteractive).
+    if (this.jsonViewUnavailableReason) return;
     let currentConfig: UpdateIssuanceDto;
     try {
       currentConfig = this.buildConfigurationPayload();
