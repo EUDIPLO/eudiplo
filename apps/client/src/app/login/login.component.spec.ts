@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, type Mock, type MockInstance, vi } fr
 
 import { ApiService, type EndedSession } from '../core';
 import { OidcService } from '../core/oidc.service';
+import { expectAvailable, expectUnavailable } from '../common/unavailable-action.testing';
 import { EnvironmentService } from '../services/environment.service';
 import { LoginComponent } from './login.component';
 
@@ -26,6 +27,12 @@ describe('LoginComponent with a kept session', () => {
     loginWithClientCredentials: Mock<() => Promise<void>>;
     logout: Mock<() => void>;
     discovery: Record<string, string>;
+    /** Answers discovery in place of `discovery`, for example never. */
+    discoveryAnswer?: Promise<Record<string, string>>;
+    /** Answers discovery for one instance URL, before `discoveryAnswer`. */
+    discoveryAnswers?: Record<string, Promise<Record<string, string>>>;
+    /** The instance URLs discovery was asked for, in order. */
+    discoveryRequests: string[];
   };
   let queryParams: Record<string, string>;
   let snackBar: { open: Mock };
@@ -69,6 +76,7 @@ describe('LoginComponent with a kept session', () => {
       // Like the real service, logout forgets the credentials and says so.
       logout: vi.fn(() => api.sessionEnded$.next()),
       discovery: {},
+      discoveryRequests: [],
     };
     queryParams = {};
     snackBar = { open: vi.fn() };
@@ -94,7 +102,12 @@ describe('LoginComponent with a kept session', () => {
             refreshAccessToken: api.refreshAccessToken,
             loginWithClientCredentials: api.loginWithClientCredentials,
             logout: api.logout,
-            fetchDiscovery: () => Promise.resolve(api.discovery),
+            fetchDiscovery: (url: string) => {
+              api.discoveryRequests.push(url);
+              return (
+                api.discoveryAnswers?.[url] ?? api.discoveryAnswer ?? Promise.resolve(api.discovery)
+              );
+            },
           },
         },
         { provide: ActivatedRoute, useValue: { snapshot: { queryParams } } },
@@ -398,5 +411,251 @@ describe('LoginComponent with a kept session', () => {
     await submitForm('client-a', 'http://backend.test');
 
     expect(navigateByUrl).toHaveBeenCalledWith('/settings/connection');
+  });
+
+  describe('login button', () => {
+    const loginButton = () => page().querySelector<HTMLButtonElement>('button[type="submit"]')!;
+
+    beforeEach(() => {
+      api.kept = false;
+    });
+
+    it('says on the SSO tab that the instance is missing and focuses it', async () => {
+      render();
+      const login = loginButton();
+      expectAvailable(fixture, login);
+
+      login.focus();
+      login.click();
+
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(document.activeElement).toBe(input('apiUrl'));
+      });
+      expect(snackTexts()).toEqual(['Check the highlighted fields.']);
+      expect(page().querySelector('mat-error')?.textContent).toContain(
+        'EUDIPLO Instance is required'
+      );
+      expect(api.loginWithClientCredentials).not.toHaveBeenCalled();
+    });
+
+    it('focuses the missing client ID on the Client ID and Secret tab', async () => {
+      queryParams['apiUrl'] = 'http://backend.test';
+      render();
+      await vi.waitFor(() => expect(fixture.componentInstance.detectedMode).toBe('local'));
+      fixture.detectChanges();
+      const login = loginButton();
+      expectAvailable(fixture, login);
+
+      login.click();
+
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(document.activeElement).toBe(input('clientId'));
+      });
+      expect(snackTexts()).toEqual(['Check the highlighted fields.']);
+      expect(api.loginWithClientCredentials).not.toHaveBeenCalled();
+    });
+
+    it('says while the instance is checked for SSO that the SSO login waits for it', async () => {
+      queryParams['apiUrl'] = 'http://backend.test';
+      api.discoveryAnswer = new Promise<Record<string, string>>(() => undefined);
+      render();
+      const login = loginButton();
+
+      expectUnavailable(fixture, login, 'Checking whether this instance offers SSO…');
+      login.click();
+      await fixture.whenStable();
+
+      expect(snackTexts()).toEqual([]);
+    });
+
+    it('checks an instance entered without leaving its field, then signs in with SSO', async () => {
+      api.discovery = { issuer: 'http://idp.test', ui_client_id: 'ui' };
+      const redirectToLogin = vi.fn(() => Promise.resolve());
+      Object.assign(TestBed.inject(OidcService), { redirectToLogin });
+      render();
+      fixture.componentInstance.loginForm.patchValue({ apiUrl: 'http://backend.test' });
+      fixture.detectChanges();
+      expectAvailable(fixture, loginButton());
+
+      // Enter in the instance field submits the form.
+      await fixture.componentInstance.onSubmit();
+
+      expect(redirectToLogin).toHaveBeenCalledWith({
+        issuerUrl: 'http://idp.test',
+        uiClientId: 'ui',
+        apiUrl: 'http://backend.test',
+      });
+    });
+
+    it('checks an instance entered without leaving its field and asks for its client', async () => {
+      render();
+      fixture.componentInstance.loginForm.patchValue({ apiUrl: 'http://backend.test' });
+
+      await fixture.componentInstance.onSubmit();
+
+      expect(fixture.componentInstance.selectedLoginMode).toBe('client');
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(document.activeElement).toBe(input('clientId'));
+      });
+      expect(snackTexts()).toEqual([
+        'SSO is not available for this instance. Sign in with a client ID and secret.',
+      ]);
+      expect(api.loginWithClientCredentials).not.toHaveBeenCalled();
+    });
+
+    it('does not sign in with filled-in client credentials after a Login with SSO', async () => {
+      render();
+      fixture.componentInstance.loginForm.patchValue({
+        apiUrl: 'http://backend.test',
+        clientId: 'client-a',
+        clientSecret: 'secret',
+      });
+
+      await fixture.componentInstance.onSubmit();
+
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(document.activeElement).toBe(input('clientId'));
+      });
+      expect(snackTexts()).toEqual([
+        'SSO is not available for this instance. Sign in with a client ID and secret.',
+      ]);
+      expect(api.loginWithClientCredentials).not.toHaveBeenCalled();
+    });
+
+    it('waits for the check that leaving the instance field started, then signs in once', async () => {
+      let answer!: (discovery: Record<string, string>) => void;
+      api.discoveryAnswer = new Promise((resolve) => (answer = resolve));
+      const redirectToLogin = vi.fn(() => Promise.resolve());
+      Object.assign(TestBed.inject(OidcService), { redirectToLogin });
+      render();
+      const component = fixture.componentInstance;
+      component.loginForm.patchValue({ apiUrl: 'http://backend.test' });
+      component.onApiUrlBlur();
+      fixture.detectChanges();
+      expectUnavailable(fixture, loginButton(), 'Checking whether this instance offers SSO…');
+
+      const submitted = component.onSubmit();
+      const again = component.onSubmit();
+      answer({ issuer: 'http://idp.test', ui_client_id: 'ui' });
+      await Promise.all([submitted, again]);
+
+      expect(api.discoveryRequests).toEqual(['http://backend.test']);
+      expect(redirectToLogin).toHaveBeenCalledOnce();
+      expect(snackTexts()).toEqual([]);
+    });
+
+    /** A discovery answer the test gives when it chooses. */
+    function laterAnswer() {
+      let answer!: (discovery: Record<string, string>) => void;
+      let fail!: (error: unknown) => void;
+      const promise = new Promise<Record<string, string>>((resolve, reject) => {
+        answer = resolve;
+        fail = reject;
+      });
+      return { promise, answer, fail };
+    }
+
+    it('ignores a late answer for the instance the field held before', async () => {
+      const before = laterAnswer();
+      const now = laterAnswer();
+      api.discoveryAnswers = { 'http://old.test': before.promise, 'http://new.test': now.promise };
+      const redirectToLogin = vi.fn(() => Promise.resolve());
+      Object.assign(TestBed.inject(OidcService), { redirectToLogin });
+      render();
+      const component = fixture.componentInstance;
+      component.loginForm.patchValue({ apiUrl: 'http://old.test' });
+      component.onApiUrlBlur();
+      component.loginForm.patchValue({ apiUrl: 'http://new.test' });
+
+      const submitted = component.onSubmit();
+      now.answer({});
+      await vi.waitFor(() => expect(component.detectedMode).toBe('local'));
+      before.answer({ issuer: 'http://idp.test', ui_client_id: 'ui' });
+      await submitted;
+
+      expect(component.detectedMode).toBe('local');
+      expect(component.selectedLoginMode).toBe('client');
+      expect(redirectToLogin).not.toHaveBeenCalled();
+    });
+
+    it('signs in with SSO at the instance the field holds when an earlier check fails late', async () => {
+      const before = laterAnswer();
+      const now = laterAnswer();
+      api.discoveryAnswers = { 'http://old.test': before.promise, 'http://new.test': now.promise };
+      const redirectToLogin = vi.fn(() => new Promise<void>(() => undefined));
+      Object.assign(TestBed.inject(OidcService), { redirectToLogin });
+      render();
+      const component = fixture.componentInstance;
+      component.loginForm.patchValue({ apiUrl: 'http://old.test' });
+      component.onApiUrlBlur();
+      component.loginForm.patchValue({ apiUrl: 'http://new.test' });
+
+      void component.onSubmit();
+      now.answer({ issuer: 'http://idp.test', ui_client_id: 'ui' });
+      before.fail(new Error('offline'));
+      await vi.waitFor(() => expect(redirectToLogin).toHaveBeenCalledOnce());
+      fixture.detectChanges();
+
+      expect(component.detectedMode).toBe('oidc');
+      expect(redirectToLogin).toHaveBeenCalledWith({
+        issuerUrl: 'http://idp.test',
+        uiClientId: 'ui',
+        apiUrl: 'http://new.test',
+      });
+      expectUnavailable(fixture, loginButton(), 'Redirecting to the identity provider…');
+    });
+
+    it('gives no reason while an instance URL that is not valid is checked', () => {
+      api.discoveryAnswer = new Promise<Record<string, string>>(() => undefined);
+      render();
+      const component = fixture.componentInstance;
+      component.loginForm.patchValue({ apiUrl: 'backend.test' });
+      component.onApiUrlBlur();
+      fixture.detectChanges();
+
+      expect(component.detectedMode).toBe('loading');
+      expectAvailable(fixture, loginButton());
+    });
+
+    it('checks an instance URL changed since its check before signing in with SSO', async () => {
+      queryParams['apiUrl'] = 'http://sso.test';
+      api.discovery = { issuer: 'http://idp.test', ui_client_id: 'ui' };
+      const redirectToLogin = vi.fn(() => Promise.resolve());
+      Object.assign(TestBed.inject(OidcService), { redirectToLogin });
+      render();
+      const component = fixture.componentInstance;
+      await vi.waitFor(() => expect(component.detectedMode).toBe('oidc'));
+
+      api.discovery = {};
+      component.loginForm.patchValue({ apiUrl: 'http://plain.test/' });
+      await component.onSubmit();
+
+      expect(api.discoveryRequests).toEqual(['http://sso.test', 'http://plain.test']);
+      expect(component.selectedLoginMode).toBe('client');
+      expect(redirectToLogin).not.toHaveBeenCalled();
+    });
+
+    it('waits while it signs in: a second click signs in only once', async () => {
+      queryParams['apiUrl'] = 'http://backend.test';
+      api.loginWithClientCredentials.mockReturnValue(new Promise<void>(() => undefined));
+      render();
+      await vi.waitFor(() => expect(fixture.componentInstance.detectedMode).toBe('local'));
+      fixture.componentInstance.loginForm.patchValue({ clientId: 'client-a', clientSecret: 's' });
+      fixture.detectChanges();
+      const login = loginButton();
+
+      login.click();
+      fixture.detectChanges();
+      login.click();
+      fixture.detectChanges();
+
+      expect(api.loginWithClientCredentials).toHaveBeenCalledOnce();
+      expectUnavailable(fixture, login, 'Signing in…');
+      expect(snackTexts()).toEqual([]);
+    });
   });
 });

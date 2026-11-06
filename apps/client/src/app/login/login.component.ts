@@ -9,7 +9,13 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import {
+  type AbstractControl,
+  FormBuilder,
+  FormGroup,
+  ReactiveFormsModule,
+  Validators,
+} from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 
 // Angular Material imports
@@ -21,6 +27,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { ActivatedRoute, Router } from '@angular/router';
 import { OAuth2HttpError } from '@badgateway/oauth2-client';
 import { map, merge, Subscription, take } from 'rxjs';
@@ -29,11 +36,26 @@ import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { EnvironmentService } from '../services/environment.service';
 import { ApiService } from '../core';
 import { OidcService } from '../core/oidc.service';
+import { focusFieldToFix, showFieldsToFix } from '../common/field-to-fix.util';
+import { openErrorSnackBar } from '../utils/error-snackbar';
 
 /** The client and instance of a session the login page resumes or reports as ended. */
 interface PreviousSession {
   clientId?: string;
   baseUrl?: string;
+}
+
+/** `url` without the slashes it ends with, as the instance URL is kept. */
+function withoutTrailingSlashes(url: string): string {
+  let trimmed = url;
+  while (trimmed.endsWith('/')) trimmed = trimmed.slice(0, -1);
+  return trimmed;
+}
+
+/** A check of whether the instance at `url` offers SSO. */
+interface InstanceCheck {
+  readonly url: string;
+  done?: Promise<void>;
 }
 
 /** The return path if it stays inside the client and does not lead back to the login page. */
@@ -60,6 +82,7 @@ function appPath(returnUrl: unknown): string | undefined {
     MatIconModule,
     MatSnackBarModule,
     MatTabsModule,
+    MatTooltipModule,
     FlexLayoutModule,
   ],
   templateUrl: './login.component.html',
@@ -86,10 +109,15 @@ export class LoginComponent implements OnInit, OnDestroy {
   private returnUrl?: string;
   readonly retryingKeptSession = signal(false);
   private keptSessionEvents?: Subscription;
+  private readonly formElement = viewChild<ElementRef<HTMLFormElement>>('formElement');
   private readonly apiUrlInput = viewChild<ElementRef<HTMLInputElement>>('apiUrlInput');
   private readonly clientSecretInput = viewChild<ElementRef<HTMLInputElement>>('clientSecretInput');
   /** An ended session signed in with client credentials, so the form stays on that tab even where SSO is offered. */
   private keepClientCredentialsTab = false;
+  /** The last check of whether an instance offers SSO; an earlier one that answers late is ignored. */
+  private instanceCheck?: InstanceCheck;
+  /** A submit on the SSO tab waits for the instance check. */
+  private waitingForInstanceCheck = false;
 
   constructor(
     private readonly formBuilder: FormBuilder,
@@ -327,13 +355,36 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.setClientCredentialValidators(requiresClientCredentials);
   }
 
-  private async detectMode(apiUrl: string): Promise<void> {
-    let normalizedUrl = apiUrl;
-    while (normalizedUrl.endsWith('/')) normalizedUrl = normalizedUrl.slice(0, -1);
+  /** Checks whether the instance at `apiUrl` offers SSO and opens the tab to sign in with. */
+  private detectMode(apiUrl: string): Promise<void> {
+    const check: InstanceCheck = { url: withoutTrailingSlashes(apiUrl) };
+    this.instanceCheck = check;
+    check.done = this.checkInstance(check);
+    return check.done;
+  }
+
+  /**
+   * Waits until the instance URL the field holds is checked: by the check running or done for
+   * it, else a new one, and again when the URL changes meanwhile.
+   */
+  private async instanceInFieldChecked(): Promise<void> {
+    let check: InstanceCheck | undefined;
+    do {
+      const url = withoutTrailingSlashes(this.apiUrlControl.value);
+      if (this.instanceCheck?.url !== url) void this.detectMode(url);
+      check = this.instanceCheck;
+      await check?.done;
+    } while (check !== this.instanceCheck);
+  }
+
+  private async checkInstance(check: InstanceCheck): Promise<void> {
+    const normalizedUrl = check.url;
     this.detectedMode = 'loading';
 
     try {
       const discovery = await this.apiService.fetchDiscovery(normalizedUrl);
+      // A check started since then decides.
+      if (this.instanceCheck !== check) return;
 
       if (discovery?.ui_client_id) {
         this.detectedMode = 'oidc';
@@ -349,6 +400,7 @@ export class LoginComponent implements OnInit, OnDestroy {
         this.discoveredUiClientId = undefined;
       }
     } catch {
+      if (this.instanceCheck !== check) return;
       this.detectedMode = 'local';
       this.selectedLoginMode = 'client';
       this.discoveredIssuer = undefined;
@@ -374,91 +426,153 @@ export class LoginComponent implements OnInit, OnDestroy {
     return this.selectedLoginMode === 'sso' ? 'Redirecting to SSO...' : 'Authenticating...';
   }
 
+  /**
+   * Why the login button cannot be used now, for its tooltip; empty while it can. Missing or
+   * invalid fields are no such reason: submitting says which ones to fix.
+   */
+  get loginUnavailableReason(): string {
+    if (this.isLoading) {
+      return this.selectedLoginMode === 'sso'
+        ? 'Redirecting to the identity provider…'
+        : 'Signing in…';
+    }
+    // Without a valid instance URL, the URL is what to fix. A submit waits for the check.
+    return this.selectedLoginMode === 'sso' &&
+      this.apiUrlControl.valid &&
+      this.detectedMode === 'loading'
+      ? 'Checking whether this instance offers SSO…'
+      : '';
+  }
+
+  private get apiUrlControl(): AbstractControl {
+    return this.loginForm.get('apiUrl')!;
+  }
+
   async onSubmit(): Promise<void> {
-    if (this.loginForm.valid) {
-      // Signing in with the form replaces a kept session.
-      this.stopWaitingForKeptSession();
-      this.isLoading = true;
-
-      try {
-        const formValue = this.loginForm.value;
-
-        // Normalize the URL: remove trailing slashes
-        let normalizedUrl = formValue.apiUrl;
-        while (normalizedUrl.endsWith('/')) normalizedUrl = normalizedUrl.slice(0, -1);
-
-        if (this.selectedLoginMode === 'sso') {
-          const issuerUrl = this.discoveredIssuer;
-          const uiClientId = this.discoveredUiClientId;
-
-          if (!issuerUrl || !uiClientId) {
-            throw new Error('OIDC mode detected but discovery metadata is incomplete.');
-          }
-
-          await this.oidcService.redirectToLogin({
-            issuerUrl,
-            uiClientId,
-            apiUrl: normalizedUrl,
-          });
-          return;
-        }
-
-        await this.apiService.loginWithClientCredentials(
-          formValue.clientId,
-          formValue.clientSecret,
-          normalizedUrl,
-          this.discoveredIssuer
-        );
-
-        // Attempt to refresh/get access token
-        await this.apiService.refreshAccessToken();
-
-        this.snackBar.open('Login successful!', 'Close', {
-          duration: 3000,
-          panelClass: ['success-snackbar'],
-        });
-
-        // Only the previous session's client returns to its page; another one may lack it.
-        const previous = this.previousSession;
-        if (
-          previous &&
-          (formValue.clientId !== previous.clientId || normalizedUrl !== previous.baseUrl)
-        ) {
-          this.returnUrl = undefined;
-        }
-        this.continueToApp();
-      } catch (error: any) {
-        console.error('Login failed:', error);
-
-        // Provide specific error messages based on the error type
-        let errorMessage = 'Login failed. ';
-        if (error?.message?.includes('fetch') || error?.name === 'TypeError') {
-          errorMessage +=
-            'Could not connect to EUDIPLO. Check if the instance URL is correct and the server is running.';
-        } else if (error?.status === 401 || error?.message?.includes('401')) {
-          errorMessage += 'Invalid credentials. Please check your Client ID and Client Secret.';
-        } else if (error?.status === 404 || error?.message?.includes('404')) {
-          errorMessage += 'Endpoint not found. Please verify the EUDIPLO instance URL.';
-        } else {
-          errorMessage += 'Please check your credentials and instance URL.';
-        }
-
-        this.snackBar.open(errorMessage, 'Close', {
-          duration: 8000,
-          panelClass: ['error-snackbar'],
-        });
-      } finally {
-        this.isLoading = false;
+    // `disabledInteractive` keeps the button clickable while it looks disabled.
+    if (this.isLoading || this.waitingForInstanceCheck) return;
+    if (this.selectedLoginMode === 'sso') {
+      // SSO needs only the instance URL; the client credentials are on the other tab.
+      if (this.apiUrlControl.invalid) {
+        this.showFieldsToFix(this.apiUrlControl);
+        return;
       }
-    } else {
-      this.markFormGroupTouched();
+      // A click right after leaving the instance field comes while its check runs, and Enter in
+      // the field comes before the URL it holds was checked.
+      this.waitingForInstanceCheck = true;
+      try {
+        await this.instanceInFieldChecked();
+      } finally {
+        this.waitingForInstanceCheck = false;
+      }
+      if (this.apiUrlControl.invalid) {
+        this.showFieldsToFix(this.apiUrlControl);
+        return;
+      }
+      if (this.selectedLoginMode !== 'sso') {
+        this.askForClientCredentials();
+        return;
+      }
+    } else if (this.loginForm.invalid) {
+      this.showFieldsToFix(this.loginForm);
+      return;
+    }
+
+    // Signing in with the form replaces a kept session.
+    this.stopWaitingForKeptSession();
+    this.isLoading = true;
+
+    try {
+      const formValue = this.loginForm.value;
+
+      const normalizedUrl = withoutTrailingSlashes(formValue.apiUrl);
+
+      if (this.selectedLoginMode === 'sso') {
+        const issuerUrl = this.discoveredIssuer;
+        const uiClientId = this.discoveredUiClientId;
+
+        if (!issuerUrl || !uiClientId) {
+          throw new Error('OIDC mode detected but discovery metadata is incomplete.');
+        }
+
+        await this.oidcService.redirectToLogin({
+          issuerUrl,
+          uiClientId,
+          apiUrl: normalizedUrl,
+        });
+        return;
+      }
+
+      await this.apiService.loginWithClientCredentials(
+        formValue.clientId,
+        formValue.clientSecret,
+        normalizedUrl,
+        this.discoveredIssuer
+      );
+
+      // Attempt to refresh/get access token
+      await this.apiService.refreshAccessToken();
+
+      this.snackBar.open('Login successful!', 'Close', {
+        duration: 3000,
+        panelClass: ['success-snackbar'],
+      });
+
+      // Only the previous session's client returns to its page; another one may lack it.
+      const previous = this.previousSession;
+      if (
+        previous &&
+        (formValue.clientId !== previous.clientId || normalizedUrl !== previous.baseUrl)
+      ) {
+        this.returnUrl = undefined;
+      }
+      this.continueToApp();
+    } catch (error: any) {
+      console.error('Login failed:', error);
+
+      // Provide specific error messages based on the error type
+      let errorMessage = 'Login failed. ';
+      if (error?.message?.includes('fetch') || error?.name === 'TypeError') {
+        errorMessage +=
+          'Could not connect to EUDIPLO. Check if the instance URL is correct and the server is running.';
+      } else if (error?.status === 401 || error?.message?.includes('401')) {
+        errorMessage += 'Invalid credentials. Please check your Client ID and Client Secret.';
+      } else if (error?.status === 404 || error?.message?.includes('404')) {
+        errorMessage += 'Endpoint not found. Please verify the EUDIPLO instance URL.';
+      } else {
+        errorMessage += 'Please check your credentials and instance URL.';
+      }
+
+      this.snackBar.open(errorMessage, 'Close', {
+        duration: 8000,
+        panelClass: ['error-snackbar'],
+      });
+    } finally {
+      this.isLoading = false;
     }
   }
 
-  private markFormGroupTouched(): void {
-    Object.keys(this.loginForm.controls).forEach((field) => {
-      const control = this.loginForm.get(field);
-      control?.markAsTouched({ onlySelf: true });
+  private showFieldsToFix(fields: AbstractControl): void {
+    showFieldsToFix(fields, {
+      snackBar: this.snackBar,
+      injector: this.injector,
+      container: () => this.formElement()?.nativeElement,
+    });
+  }
+
+  /**
+   * After a submit on the SSO tab opened the Client ID and Secret tab, says so and focuses the
+   * client ID, or the first field to fix, instead of signing in a way the user did not choose.
+   */
+  private askForClientCredentials(): void {
+    this.loginForm.markAllAsTouched();
+    openErrorSnackBar(
+      this.snackBar,
+      'SSO is not available for this instance. Sign in with a client ID and secret.'
+    );
+    const container = () => this.formElement()?.nativeElement;
+    focusFieldToFix(this.injector, container, {
+      fallback: () => container()?.querySelector<HTMLElement>('[formcontrolname="clientId"]'),
     });
   }
 
@@ -486,7 +600,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       oidcUrl: 'OIDC Discovery URL',
       clientId: 'Client ID',
       clientSecret: 'Client Secret',
-      apiUrl: 'API URL',
+      apiUrl: 'EUDIPLO Instance',
     };
     return displayNames[fieldName] || fieldName;
   }
