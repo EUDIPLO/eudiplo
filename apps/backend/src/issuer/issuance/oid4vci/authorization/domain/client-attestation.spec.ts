@@ -1,7 +1,10 @@
 import { HttpStatus, UnauthorizedException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { toOAuthHttpError } from "../../exceptions/token-error.exception.js";
-import { verifyClientAttestation } from "./client-attestation.js";
+import {
+    clientAttestationLogDetail,
+    verifyClientAttestation,
+} from "./client-attestation.js";
 import { OAuthError } from "./oauth-error.js";
 
 describe("verifyClientAttestation", () => {
@@ -66,9 +69,75 @@ describe("verifyClientAttestation", () => {
         });
     });
 
+    it("logs the reason that a fixed message keeps as cause", async () => {
+        const reason =
+            "Failed to fetch trust list from http://eudiplo-internal:3000/issuers/t/trust-list/w: connect ECONNREFUSED";
+        const error = await verifyClientAttestation(
+            "par",
+            () =>
+                Promise.reject(
+                    new UnauthorizedException(
+                        "Wallet provider trust lists could not be loaded",
+                        { cause: new Error(reason) },
+                    ),
+                ),
+            "tenant t",
+        ).catch((e) => e);
+
+        expect(error.logDetail).toBe(
+            `Client attestation validation failed for tenant t: Wallet provider trust lists could not be loaded: ${reason}`,
+        );
+    });
+
     it("resolves when the attestation is accepted", async () => {
         await expect(
             verifyClientAttestation("par", async () => undefined, "tenant t"),
         ).resolves.toBeUndefined();
+    });
+});
+
+describe("clientAttestationLogDetail", () => {
+    const prefix = "Client attestation validation failed for tenant t: ";
+
+    it("adds a cause that the message hides", () => {
+        expect(
+            clientAttestationLogDetail(
+                "tenant t",
+                new Error("Wallet attestation verification failed", {
+                    cause: new Error("list at http://internal unreachable"),
+                }),
+            ),
+        ).toBe(
+            `${prefix}Wallet attestation verification failed: list at http://internal unreachable`,
+        );
+    });
+
+    it("does not repeat a cause that the message already names", () => {
+        expect(
+            clientAttestationLogDetail(
+                "tenant t",
+                new Error(
+                    "Wallet attestation verification failed: jwt has expired",
+                    { cause: new Error("jwt has expired") },
+                ),
+            ),
+        ).toBe(
+            `${prefix}Wallet attestation verification failed: jwt has expired`,
+        );
+    });
+
+    it("gives the message of an error without cause", () => {
+        expect(
+            clientAttestationLogDetail(
+                "tenant t",
+                new Error("Wallet provider certificate is not trusted"),
+            ),
+        ).toBe(`${prefix}Wallet provider certificate is not trusted`);
+    });
+
+    it("says Unknown error for a value that is not an Error", () => {
+        expect(clientAttestationLogDetail("tenant t", "x")).toBe(
+            `${prefix}Unknown error`,
+        );
     });
 });

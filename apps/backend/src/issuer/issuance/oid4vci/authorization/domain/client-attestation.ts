@@ -1,6 +1,29 @@
 import { OAuthError } from "./oauth-error.js";
 
 /**
+ * Log entry for a rejected wallet attestation, the same at every endpoint:
+ * the error's message, followed by its cause when the message does not
+ * include it. A server-side failure keeps its reason only as cause (see the
+ * `ClientAttestationVerifier` port).
+ * @param context Names the endpoint, tenant and server
+ */
+export function clientAttestationLogDetail(
+    context: string,
+    error: unknown,
+): string {
+    let reason = "Unknown error";
+    if (error instanceof Error) {
+        const cause =
+            error.cause instanceof Error ? error.cause.message : undefined;
+        reason =
+            cause && !error.message.includes(cause)
+                ? `${error.message}: ${cause}`
+                : error.message;
+    }
+    return `Client attestation validation failed for ${context}: ${reason}`;
+}
+
+/**
  * Run the wallet attestation check of an authorization server and turn a
  * rejected attestation into an `invalid_client` {@link OAuthError}
  * (RFC 6749 Section 5.2, RFC 9126 Section 2.3): every error of the check
@@ -29,7 +52,7 @@ export async function verifyClientAttestation(
             "Client attestation validation failed",
             {
                 clientAuthenticationFailed: endpoint === "token",
-                logDetail: `Client attestation validation failed for ${context}: ${error instanceof Error ? error.message : "Unknown error"}`,
+                logDetail: clientAttestationLogDetail(context, error),
             },
         );
     }
