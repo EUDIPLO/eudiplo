@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -393,5 +394,55 @@ describe("Trust list entity key chain usage types (e2e)", () => {
                 (issue) => issue.code === "KEY_CHAIN_USAGE_MISMATCH",
             ),
         ).toEqual([]);
+    });
+
+    test("ignores the usage type of a key chain document the plan skips", async () => {
+        // Create mode skips the stored status list key chain, so a bundle
+        // that gives it attestation usage does not make it an issuer.
+        const { spec } = JSON.parse(
+            readFileSync(
+                join(
+                    resolve(__dirname, "../fixtures/haip"),
+                    "key-chains/status-list.json",
+                ),
+                "utf8",
+            ),
+        ) as { spec: Record<string, unknown> };
+        const result = await plan(
+            documentsBundle(tenant, [
+                {
+                    kind: "KeyChain",
+                    id: statusListKeyChain,
+                    path: `key-chains/${statusListKeyChain}.json`,
+                    spec: {
+                        ...spec,
+                        id: statusListKeyChain,
+                        usageType: "attestation",
+                    },
+                    // Above the stored generation, so only create mode skips it.
+                    generation: 100,
+                },
+                trustListDocument("skipped-key-chain", [
+                    internal(statusListKeyChain, statusListKeyChain),
+                ]),
+            ]),
+            "create",
+        );
+
+        expect(
+            result.items.find(
+                (item) =>
+                    item.kind === "KeyChain" && item.id === statusListKeyChain,
+            )?.action,
+        ).toBe("skip");
+        expect(result.applicable).toBe(false);
+        expect(result.issues).toContainEqual(
+            expect.objectContaining({
+                severity: "error",
+                code: "KEY_CHAIN_USAGE_MISMATCH",
+                path: "/spec/entities/0/issuerKeyChainId",
+                resource: { kind: "TrustList", id: "skipped-key-chain" },
+            }),
+        );
     });
 });
