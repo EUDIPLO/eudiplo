@@ -1,12 +1,13 @@
 import {
-  Component,
-  OnInit,
   ChangeDetectionStrategy,
+  Component,
   ElementRef,
-  Injector,
-  QueryList,
-  ViewChildren,
   inject,
+  Injector,
+  OnInit,
+  QueryList,
+  ViewChild,
+  ViewChildren,
 } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators, type FormGroup } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -37,7 +38,9 @@ import { SecretDialogComponent } from '../secret-dialog/secret-dialog.component'
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../../config-portability/config-ownership-notice.component';
 import { RoleLockNoticeComponent } from '../../../common/role-lock-notice.component';
+import { LoadErrorComponent } from '../../../common/load-error.component';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
+import { showFieldsToFix } from '../../../common/field-to-fix.util';
 import {
   type SourceLoadState,
   loadSource,
@@ -92,6 +95,7 @@ export const configSources: Record<ConfigSource, ConfigSourceInfo> = {
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
     RoleLockNoticeComponent,
+    LoadErrorComponent,
   ],
   templateUrl: './client-create.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -113,7 +117,17 @@ export class ClientCreateComponent implements OnInit {
   /** Roles of the edited client that the caller neither holds nor may grant */
   unmanageableRoles: string[] = [];
   loaded = false;
+  /** While the client to edit loads; the form waits for it. */
+  loading = false;
+  /** Set when the client to edit could not be loaded; the form stays hidden. */
+  loadError = '';
   id?: string | null;
+
+  /** Where focus goes after a successful retry removed the error card with its Retry button. */
+  @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
+  /** Holds the fields; Save focuses the first invalid one. */
+  @ViewChild('formElement', { read: ElementRef })
+  private readonly formElement?: ElementRef<HTMLFormElement>;
 
   readonly configSources = configSources;
   readonly configSourceIds = Object.keys(configSources) as ConfigSource[];
@@ -185,30 +199,50 @@ export class ClientCreateComponent implements OnInit {
     this.id = this.route.snapshot.paramMap.get('id');
     if (this.id) {
       this.loaded = true;
-      clientControllerGetClient({ path: { id: this.id } }).then((res) => {
-        if (!res.data) {
-          this.snackBar.open('Client not found', 'Close', { duration: 3000 });
-          this.router.navigate(['../..'], { relativeTo: this.route });
-          return;
-        }
-        const clientData = res.data;
-        this.clientForm.patchValue({
-          ...clientData,
-          allowedPresentationConfigs: clientData.allowedPresentationConfigs ?? [],
-          allowedIssuanceConfigs: clientData.allowedIssuanceConfigs ?? [],
-        });
-        this.clientForm.get('clientId')?.disable();
-        const choices = roleChoices(this.jwtService.getRoles(), clientData.roles ?? []);
-        this.roleOptions = choices.options;
-        this.unmanageableRoles = choices.unmanageable;
-        this.storedConfigs.presentationConfigs = clientData.allowedPresentationConfigs ?? [];
-        this.storedConfigs.issuanceConfigs = clientData.allowedIssuanceConfigs ?? [];
-        this.updateConfigOptions();
-        if (this.unmanageableRoles.length > 0) {
-          this.clientForm.disable();
-        }
-        this.syncConfigLocks();
+      void this.load(this.id);
+    }
+  }
+
+  /** Loads the client again after a failed load. */
+  retryLoad(): void {
+    void this.load(this.id!);
+  }
+
+  private async load(id: string): Promise<void> {
+    const retrying = this.loadError !== '';
+    this.loading = true;
+    this.loadError = '';
+    try {
+      const res = await clientControllerGetClient({ path: { id } });
+      if (!res.data) {
+        this.snackBar.open('Client not found', 'Close', { duration: 3000 });
+        this.router.navigate(['../..'], { relativeTo: this.route });
+        return;
+      }
+      const clientData = res.data;
+      this.clientForm.patchValue({
+        ...clientData,
+        allowedPresentationConfigs: clientData.allowedPresentationConfigs ?? [],
+        allowedIssuanceConfigs: clientData.allowedIssuanceConfigs ?? [],
       });
+      this.clientForm.get('clientId')?.disable();
+      const choices = roleChoices(this.jwtService.getRoles(), clientData.roles ?? []);
+      this.roleOptions = choices.options;
+      this.unmanageableRoles = choices.unmanageable;
+      this.storedConfigs.presentationConfigs = clientData.allowedPresentationConfigs ?? [];
+      this.storedConfigs.issuanceConfigs = clientData.allowedIssuanceConfigs ?? [];
+      this.updateConfigOptions();
+      if (this.unmanageableRoles.length > 0) {
+        this.clientForm.disable();
+      }
+      this.syncConfigLocks();
+    } catch (error) {
+      this.loadError = getApiErrorMessage(error, 'Failed to load client');
+    } finally {
+      this.loading = false;
+    }
+    if (retrying && !this.loadError) {
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
     }
   }
 
@@ -405,7 +439,26 @@ export class ClientCreateComponent implements OnInit {
     return [];
   }
 
+  /** Save stays focusable while it cannot be used, so its tooltip says why. */
+  get saveTooltip(): string {
+    if (this.isSubmitting) return 'Saving the client…';
+    if (this.unmanageableRoles.length > 0) {
+      return 'You cannot change this client: it has roles you neither hold nor may grant';
+    }
+    return '';
+  }
+
   async onSubmit(): Promise<void> {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
+    if (this.isSubmitting || this.unmanageableRoles.length > 0) return;
+    if (this.clientForm.invalid) {
+      showFieldsToFix(this.clientForm, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container: () => this.formElement?.nativeElement,
+      });
+      return;
+    }
     this.isSubmitting = true;
 
     try {

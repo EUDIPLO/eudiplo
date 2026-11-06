@@ -4,10 +4,10 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  inject,
   Injector,
   OnInit,
   ViewChild,
-  inject,
 } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -39,6 +39,7 @@ import { LabelledFailure, getApiErrorMessage } from '../../utils/error-message';
 import { SourceLoadState, loadSource, reportSourceFailures } from '../../common/load-source';
 import { SEMVER_REGEX, compareVersionsDesc, proposeNextVersion } from '../schema-version';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 
@@ -81,6 +82,9 @@ export class SchemaShowComponent implements OnInit {
   private readonly credentialConfigService = inject(CredentialConfigService);
   private readonly jwtService = inject(JwtService);
   private readonly snackBar = inject(MatSnackBar);
+  /** Holds the fields of Publish New Version; Publish focuses the first invalid one. */
+  @ViewChild('publishFormElement', { read: ElementRef })
+  private readonly publishFormElement?: ElementRef<HTMLFormElement>;
 
   id = '';
   item?: SchemaMetadata;
@@ -569,8 +573,22 @@ export class SchemaShowComponent implements OnInit {
     return '';
   }
 
+  /** Publish stays focusable while it cannot be used, so its tooltip says why. */
+  get publishTooltip(): string {
+    return this.publishing ? 'Publishing the new version…' : this.publishBlockedReason;
+  }
+
   async publishNewVersion(): Promise<void> {
-    if (!this.item || this.publishForm.invalid || this.publishBlockedReason) return;
+    // `disabledInteractive` keeps Publish clickable while it looks disabled.
+    if (!this.item || this.publishing || this.publishBlockedReason) return;
+    if (this.publishForm.invalid) {
+      showFieldsToFix(this.publishForm, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container: () => this.publishFormElement?.nativeElement,
+      });
+      return;
+    }
 
     const newVersion = this.publishForm.get('newVersion')!.value!;
     const rulebookURI = this.publishForm.get('rulebookURI')!.value || this.item.rulebookURI;

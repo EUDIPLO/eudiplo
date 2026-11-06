@@ -39,6 +39,7 @@ import { ConfigOwnershipDirective } from '../config-portability/config-ownership
 import { ConfigOwnershipNoticeComponent } from '../config-portability/config-ownership-notice.component';
 import { focusAfterRenderIfLost } from '../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../common/load-error.component';
+import { showFieldsToFix } from '../common/field-to-fix.util';
 import { WAIT_FOR_CHANGE } from '../common/reset-defaults';
 import {
   ConfigOwnershipService,
@@ -121,6 +122,20 @@ const CONTACT_PATTERN_MESSAGES: Record<string, string> = {
 /** URL fields, which also follow the registrar base URL rule. */
 const URL_FIELDS = ['registrarUrl', 'oidcUrl'] as const;
 
+/** Whether an error of the control keeps the configuration from saving; a backend rejection does not. */
+function blocksSaving(control: AbstractControl | null): boolean {
+  return Object.keys(control?.errors ?? {}).some((key) => key !== 'server');
+}
+
+/** The fields under Registrar Credentials, the first part of the form. */
+const CREDENTIAL_FIELDS = [
+  ...URL_FIELDS,
+  'clientId',
+  'clientSecret',
+  'username',
+  'password',
+] as const;
+
 /** What to do when the instance's outbound URL policy blocks a URL. */
 const POLICY_HINT =
   "Check the URL; if it is correct, ask the operator to allow it in this instance's outbound URL policy.";
@@ -192,9 +207,12 @@ export class RegistrarComponent implements OnInit {
   /** Where focus goes when a retry removes the error card with its focused Retry button. */
   @ViewChild('settingsTitle', { read: ElementRef })
   private readonly settingsTitle?: ElementRef<HTMLElement>;
-  /** Saving disables the focused Save button; focus returns to it afterwards. */
+  /** Takes the focus back after a save that ended with focus nowhere; Safari does not focus a clicked button. */
   @ViewChild('saveButton', { read: ElementRef })
   private readonly saveButton?: ElementRef<HTMLElement>;
+  /** Holds the fields; Save focuses the first invalid one. */
+  @ViewChild('formElement', { read: ElementRef })
+  private readonly formElement?: ElementRef<HTMLFormElement>;
   /** Delete cannot be used once deleted; focus moves from it to the card title. */
   @ViewChild('deleteButton', { read: ElementRef })
   private readonly deleteButton?: ElementRef<HTMLElement>;
@@ -339,9 +357,21 @@ export class RegistrarComponent implements OnInit {
    * outbound URL policy, so saving again is allowed and checks anew.
    */
   get hasInvalidInput(): boolean {
-    return this.fieldControls().some((control) =>
-      Object.keys(control.errors ?? {}).some((key) => key !== 'server')
+    return this.fieldsBlockingSave().length > 0;
+  }
+
+  /** The fields whose own errors keep the configuration from saving, in the order of the page. */
+  private fieldsBlockingSave(): string[] {
+    return [...CREDENTIAL_FIELDS, ...CONTACT_FIELDS].filter((field) =>
+      blocksSaving(this.fieldControl(field))
     );
+  }
+
+  /** The control of a field under Registrar Credentials or Relying Party Contact. */
+  private fieldControl(name: string): AbstractControl | null {
+    return (CONTACT_FIELDS as readonly string[]).includes(name)
+      ? this.configForm.get(['relyingPartyContact', name])
+      : this.configForm.get(name);
   }
 
   /** The controls with own validation: top-level fields and contact fields. */
@@ -352,16 +382,52 @@ export class RegistrarComponent implements OnInit {
     ];
   }
 
-  async saveConfig(): Promise<void> {
-    if (this.hasInvalidInput) {
-      this.configForm.markAllAsTouched();
-      this.snackBar.open('Please correct the highlighted fields', 'Close', { duration: 3000 });
-      return;
-    }
-    // Drop the previous backend rejections; the backend checks again.
+  /** Save stays focusable while another change runs, so its tooltip says why it waits. */
+  get saveTooltip(): string {
+    return this.isSaving || this.isDeleting ? WAIT_FOR_CHANGE : '';
+  }
+
+  /**
+   * Says what keeps the configuration from saving and focuses the first field that does. Like
+   * `hasInvalidInput`, focus and the snackbar leave out fields with only a backend rejection.
+   */
+  private showWhatBlocksSaving(): void {
+    const blocking = this.fieldsBlockingSave();
+    const among = (fields: readonly string[]) =>
+      blocking.filter((field) => (fields as readonly string[]).includes(field));
+    const credentials = among(CREDENTIAL_FIELDS);
+    const contact = among(CONTACT_FIELDS);
+    const firstField = blocking[0];
+    showFieldsToFix(this.configForm, {
+      snackBar: this.snackBar,
+      injector: this.injector,
+      container: () => this.formElement?.nativeElement,
+      field: () =>
+        this.formElement?.nativeElement.querySelector<HTMLElement>(
+          `[formcontrolname="${firstField}"]`
+        ),
+      sections: [
+        { name: 'Registrar Credentials', controls: credentials.map((f) => this.fieldControl(f)) },
+        { name: 'Relying Party Contact', controls: contact.map((f) => this.fieldControl(f)) },
+      ],
+    });
+  }
+
+  /** Drops the previous backend rejections before a save; the backend checks again. */
+  private dropBackendRejections(): void {
     for (const control of this.fieldControls()) {
       if (control.hasError('server')) control.updateValueAndValidity({ emitEvent: false });
     }
+  }
+
+  async saveConfig(): Promise<void> {
+    // `disabledInteractive` keeps the button clickable while it looks disabled.
+    if (this.isSaving || this.isDeleting) return;
+    if (this.hasInvalidInput) {
+      this.showWhatBlocksSaving();
+      return;
+    }
+    this.dropBackendRejections();
 
     const formValue = this.configForm.value;
     const isUpdate = this.config !== null;

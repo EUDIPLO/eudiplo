@@ -259,12 +259,17 @@ test.describe('edit page', () => {
     await expect(
       page.getByRole('link', { name: 'Create status list key chain (opens in a new tab)' })
     ).toHaveAttribute('href', '/keys/create?usage=statusList');
-    // With the entity named, the empty key chain selects are what keeps Save disabled.
+    // With the entity named, Save points at the empty key chain selects.
     await page
       .getByRole('region', { name: /Internal Entity #2/ })
       .getByRole('textbox', { name: 'Entity Name' })
       .fill('Own Issuer');
-    await expect(page.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+    const save = page.getByRole('button', { name: 'Save Changes' });
+    await expect(save).not.toHaveAttribute('aria-busy', 'true');
+    await save.click();
+    const issuer = page.getByRole('combobox', { name: /^Issuer Key Chain/ });
+    await expect(issuer).toBeFocused();
+    await expect(page).toHaveURL(new RegExp(`/trust-list/${id}/edit$`));
 
     // Created in the other tab.
     await createKeyChain(token, 'attestation', 'Own issuer');
@@ -274,7 +279,6 @@ test.describe('edit page', () => {
     await expect(noIssuer).toHaveCount(0);
     await expect(page.getByRole('link', { name: /^Create .* key chain/ })).toHaveCount(0);
     // The Reload button is gone, so focus moves to the first select it was for.
-    const issuer = page.getByRole('combobox', { name: /^Issuer Key Chain/ });
     await expect(issuer).toBeFocused();
     await issuer.click();
     await expect(page.getByRole('option', { name: /^Own issuer/ })).toBeVisible();
@@ -320,5 +324,67 @@ test.describe('edit page', () => {
       issuerKeyChainId: keyChainId,
       revocationKeyChainId: keyChainId,
     });
+  });
+
+  test('Save opens the collapsed entity whose field keeps the trust list from saving', async ({
+    page,
+  }) => {
+    await signInWithTrustList(page);
+    let updates = 0;
+    page.on('request', (request) => {
+      if (request.method() === 'PUT' && request.url().endsWith(`/api/trust-list/${id}`)) updates++;
+    });
+    await page.goto(`/trust-list/${id}/edit`);
+    const first = page.getByRole('region', { name: /External Entity #1/ });
+    const name = first.getByRole('textbox', { name: 'Entity Name' });
+    await name.fill('');
+    // The new entity opens, which collapses the first one with its empty name.
+    await page.getByRole('button', { name: 'Add Internal Entity' }).click();
+    const firstHeader = page.getByRole('button', { name: /^External Entity #1/ });
+    await expect(firstHeader).toHaveAttribute('aria-expanded', 'false');
+
+    // Save is not disabled for an incomplete form: a click says what is missing, and where.
+    const save = page.getByRole('button', { name: 'Save Changes' });
+    await expect(save).toBeEnabled();
+    await expect(save).not.toHaveAttribute('aria-busy', 'true');
+    await save.click();
+
+    await expect(name).toBeFocused();
+    await expect(firstHeader).toHaveAttribute('aria-expanded', 'true');
+    await expect(first.getByText('Entity name is required')).toBeVisible();
+    await expect(
+      page.getByText('Check the highlighted fields in External Entity #1, Internal Entity #2.')
+    ).toBeVisible();
+    // The new entity, collapsed now, says in its header that it needs a look too.
+    await expect(page.getByRole('button', { name: /^Internal Entity #2/ })).toHaveAccessibleName(
+      /Check the highlighted fields/
+    );
+    await expect(page).toHaveURL(new RegExp(`/trust-list/${id}/edit$`));
+    expect(updates).toBe(0);
+  });
+
+  test('Enter moves focus into an empty certificate editor, where a paste goes', async ({
+    page,
+  }) => {
+    await signInWithTrustList(page);
+    await page.goto(`/trust-list/${id}/edit`);
+    await page.getByRole('button', { name: 'Add External Entity' }).click();
+    const second = page.getByRole('region', { name: /External Entity #2/ });
+    const entityName = second.getByRole('textbox', { name: 'Entity Name' });
+    await entityName.fill('Other Issuer');
+    await expect(page.getByRole('button', { name: 'Save Changes' })).not.toHaveAttribute(
+      'aria-busy',
+      'true'
+    );
+    // Enter submits the form as a click on Save does.
+    await entityName.press('Enter');
+
+    // Monaco's input, named after its certificate, takes the focus.
+    const issuerCertificate = second.getByRole('textbox', { name: /Issuer certificate \(PEM\)/ });
+    await expect(issuerCertificate).toBeFocused();
+    await expect(issuerCertificate).toHaveAttribute('aria-required', 'true');
+    await expect(second.getByText('Paste the issuer certificate.')).toBeVisible();
+    await page.keyboard.type('-----BEGIN CERTIFICATE-----');
+    await expect(second.locator('app-editor').first()).toContainText('-----BEGIN CERTIFICATE-----');
   });
 });

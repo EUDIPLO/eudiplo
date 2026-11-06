@@ -25,7 +25,8 @@ import { ConfigOwnershipDirective } from '../config-portability/config-ownership
 import { ConfigOwnershipNoticeComponent } from '../config-portability/config-ownership-notice.component';
 import { focusAfterRenderIfLost } from '../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../common/load-error.component';
-import { resetDefaultsTooltip } from '../common/reset-defaults';
+import { showFieldsToFix } from '../common/field-to-fix.util';
+import { resetDefaultsTooltip, WAIT_FOR_CHANGE } from '../common/reset-defaults';
 import { getApiErrorMessage } from '../utils/error-message';
 import { openErrorSnackBar } from '../utils/error-snackbar';
 import { wholeNumberValidator } from '../utils/whole-number-validator';
@@ -81,10 +82,13 @@ export class StatusListConfigComponent implements OnInit {
    */
   @ViewChild('settingsTitle', { read: ElementRef })
   private readonly settingsTitle?: ElementRef<HTMLElement>;
-  /** Natively disabled while saving, so it loses focus to `<body>` until it is back. */
+  /** Takes the focus back after a save that ended with focus nowhere; Safari does not focus a clicked button. */
   @ViewChild('saveButton', { read: ElementRef })
   private readonly saveButton?: ElementRef<HTMLButtonElement>;
   private readonly injector = inject(Injector);
+  /** Holds the fields; Save focuses the first invalid one. */
+  @ViewChild('formElement', { read: ElementRef })
+  private readonly formElement?: ElementRef<HTMLFormElement>;
 
   bitsOptions = bitsOptions;
   Math = Math;
@@ -136,8 +140,28 @@ export class StatusListConfigComponent implements OnInit {
     return resetDefaultsTooltip(this.isSaving, this.hasStoredOverride);
   }
 
+  /** Save stays focusable while another change runs, so its tooltip says why it waits. */
+  get saveTooltip(): string {
+    return this.isSaving ? WAIT_FOR_CHANGE : '';
+  }
+
   async onSave(): Promise<void> {
-    if (this.configForm.invalid || this.loadError) {
+    // `disabledInteractive` keeps the button clickable while it looks disabled.
+    if (this.isSaving || this.loadError) return;
+    if (this.configForm.invalid) {
+      const control = (name: string) => [this.configForm.get(name)];
+      showFieldsToFix(this.configForm, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container: () => this.formElement?.nativeElement,
+        sections: [
+          { name: 'Status List Capacity', controls: control('capacity') },
+          { name: 'Bits per Status', controls: control('bits') },
+          { name: 'JWT Time-to-Live (TTL)', controls: control('ttl') },
+          { name: 'JWT Regeneration Mode', controls: control('immediateUpdate') },
+          { name: 'Status List Aggregation', controls: control('enableAggregation') },
+        ],
+      });
       return;
     }
 
