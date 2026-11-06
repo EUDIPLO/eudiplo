@@ -53,6 +53,10 @@ import {
     isTrustListReferenceKind,
     trustListReferenceId,
 } from "../../issuer/trust-list/domain/trust-list-reference.js";
+import {
+    trustListKeyChainUsageRefusal,
+    trustListSigningKeyChain,
+} from "../../issuer/trust-list/domain/trust-list-signing-key-chain.js";
 import { trustListConfig } from "../../issuer/trust-list/trust-list-config.js";
 import { FileEntity } from "../../storage/entities/files.entity.js";
 import { FilesService } from "../../storage/files.service.js";
@@ -782,6 +786,7 @@ export class ConfigBundleService {
             upgradedDocuments,
             mode,
             ownershipSource,
+            items,
         );
         for (const issue of referenceIssues) {
             const item = issue.resource
@@ -1464,6 +1469,58 @@ export class ConfigBundleService {
         );
     }
 
+    /**
+     * The key chain that signs a trust list the import writes, the one in
+     * `keyChainId` or else the one the stored list is signed with, must have
+     * usage type `trustList`, else applying the document fails. A document
+     * the plan leaves unchanged is not applied, so it only warns: the list
+     * stays signed with that key chain, renewals go on using it, and its next
+     * update fails. A missing `keyChainId` is reported as a missing
+     * reference; a kept key chain exists, and `replace` cannot delete it while
+     * the list uses it (`KEY_CHAIN_IN_USE`).
+     */
+    private async checkTrustListKeyChains(
+        tenantId: string,
+        documents: ConfigDocument[],
+        availableKeyChains: Set<string> | undefined,
+        actions: ReturnType<typeof planActions>,
+    ): Promise<ConfigMigrationIssue[]> {
+        const issues: ConfigMigrationIssue[] = [];
+        for (const document of documents) {
+            if (document.kind !== "TrustList") continue;
+            const id = resourceId(document);
+            const action = actions.get(`TrustList/${id}`)?.action;
+            if (!action || action === "skip") continue;
+            const named = (document.spec as { keyChainId?: unknown })
+                .keyChainId;
+            const keyChainId = typeof named === "string" ? named : undefined;
+            const stored = keyChainId
+                ? undefined
+                : await this.trustLists.findOne({
+                      where: { tenantId, id },
+                      select: { id: true, keyChainId: true },
+                  });
+            const signing = trustListSigningKeyChain(
+                keyChainId,
+                stored?.keyChainId,
+            );
+            if (!signing || !availableKeyChains?.has(signing.id)) continue;
+            const refusal = trustListKeyChainUsageRefusal(
+                signing,
+                await this.keyChainUsageType(tenantId, documents, signing.id),
+            );
+            if (!refusal) continue;
+            issues.push({
+                severity: action === "unchanged" ? "warning" : "error",
+                code: "KEY_CHAIN_USAGE_MISMATCH",
+                path: "/spec/keyChainId",
+                message: refusal,
+                resource: { kind: "TrustList", id },
+            });
+        }
+        return issues;
+    }
+
     /** Usage type of a key chain of the bundle, else of the tenant. */
     private async keyChainUsageType(
         tenantId: string,
@@ -1489,6 +1546,7 @@ export class ConfigBundleService {
         documents: ConfigDocument[],
         mode: ConfigImportMode,
         ownershipSource: string,
+        items: ConfigImportPlanItem[],
     ): Promise<ConfigMigrationIssue[]> {
         const available = new Map<ConfigResourceKind, Set<string>>();
         const load = (kind: ConfigResourceKind, ids: string[]) =>
@@ -1645,16 +1703,31 @@ export class ConfigBundleService {
         };
         for (const document of documents)
             visit(document, document.spec, "/spec");
+        // A key chain document the plan skips is not written, so the usage
+        // checks take the stored key chain's usage type instead.
+        const actions = planActions(items);
+        const written = documents.filter(
+            (document) =>
+                document.kind !== "KeyChain" ||
+                actions.get(`KeyChain/${resourceId(document)}`)?.action !==
+                    "skip",
+        );
         issues.push(
             ...(await this.checkDefaultKeyChains(
                 tenantId,
-                documents,
+                written,
                 available.get("KeyChain"),
             )),
             ...(await this.checkAuthorizationServerKeyChains(
                 tenantId,
-                documents,
+                written,
                 available.get("KeyChain"),
+            )),
+            ...(await this.checkTrustListKeyChains(
+                tenantId,
+                written,
+                available.get("KeyChain"),
+                actions,
             )),
         );
 

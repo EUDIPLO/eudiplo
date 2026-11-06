@@ -33,6 +33,10 @@ import { loadConfigDto } from "../../shared/utils/config-file-loader.util.js";
 import { TrustListReferences } from "./application/trust-list-references.js";
 import { TrustListInUseError } from "./domain/trust-list-reference.js";
 import {
+    trustListKeyChainUsageRefusal,
+    trustListSigningKeyChain,
+} from "./domain/trust-list-signing-key-chain.js";
+import {
     isTrustListRenewalDue,
     trustListNextUpdate,
 } from "./domain/trust-list-validity.js";
@@ -297,21 +301,22 @@ export class TrustListService {
         keyChainId: string | undefined,
         storedKeyChainId: string | undefined,
     ): Promise<CertificateInfo> {
-        const id = keyChainId ?? storedKeyChainId;
-        if (!id) {
+        const signing = trustListSigningKeyChain(keyChainId, storedKeyChainId);
+        if (!signing) {
             return this.certService.find({
                 tenantId,
                 type: KeyUsageType.TrustList,
             });
         }
-        const cert = await this.certService.getCertificateById(tenantId, id);
-        if (cert.keyChain?.usageType !== KeyUsageType.TrustList) {
-            throw new BadRequestException(
-                keyChainId
-                    ? `Key chain ${id} is not valid for Trust List usage (key lacks TrustList usage)`
-                    : `Key chain ${id} of this trust list is not valid for Trust List usage (key lacks TrustList usage). Name a key chain with usage type trustList in keyChainId.`,
-            );
-        }
+        const cert = await this.certService.getCertificateById(
+            tenantId,
+            signing.id,
+        );
+        const refusal = trustListKeyChainUsageRefusal(
+            signing,
+            cert.keyChain?.usageType,
+        );
+        if (refusal) throw new BadRequestException(refusal);
         return cert;
     }
 
