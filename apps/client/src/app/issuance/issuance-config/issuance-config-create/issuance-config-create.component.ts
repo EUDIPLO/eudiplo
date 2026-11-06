@@ -68,6 +68,7 @@ import { ApiService } from '../../../core';
 import { entityIdUrl } from '../../../utils/public-url';
 import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../../../common/load-error.component';
+import { fromFormQueryParams } from '../../../common/return-to-form';
 import { FederationTrustAnchorSelectComponent } from '../../../federation-trust-anchor/federation-trust-anchor-select/federation-trust-anchor-select.component';
 import {
   entityConfigurationUri,
@@ -446,6 +447,13 @@ export class IssuanceConfigCreateComponent implements OnInit {
 
   /** True when the last request for the key chains failed. */
   authorizationServerKeyChainsLoadFailed = false;
+
+  /**
+   * Query parameters of the links that create a missing key in a new tab: the
+   * wizard preselects its usage and, once the key exists, says to return here.
+   */
+  readonly authorizationServerKeyLinkParams = fromFormQueryParams({ usage: 'authorizationServer' });
+  readonly federationKeyLinkParams = fromFormQueryParams({ usage: 'federation' });
 
   /** True while loadFederationSetup runs. */
   checkingFederationKey = false;
