@@ -11,6 +11,14 @@ import {
     findDuplicateDisplayLocales,
     readableDisplayColor,
 } from "./display-entries.js";
+import {
+    isTrustListEntityUri,
+    TRUST_LIST_COUNTRY_MESSAGE,
+    TRUST_LIST_LANGUAGE_MESSAGE,
+    TRUST_LIST_URI_MESSAGE,
+    trustListCountryCode,
+    trustListLanguageTag,
+} from "./trust-list-entity-info.js";
 
 export const CONFIG_FORMATS = {
     Tenant: { slug: "tenant", file: "TenantConfigFile", version: 4 },
@@ -52,7 +60,7 @@ export const CONFIG_FORMATS = {
         file: "WebhookEndpointConfigFile",
         version: 1,
     },
-    TrustList: { slug: "trust-list", file: "TrustListConfigFile", version: 1 },
+    TrustList: { slug: "trust-list", file: "TrustListConfigFile", version: 2 },
     FederationTrustAnchor: {
         slug: "federation-trust-anchor",
         file: "FederationTrustAnchorConfigFile",
@@ -488,6 +496,95 @@ const credentialConfigV3ToV4: ConfigMigration = {
     },
 };
 
+/**
+ * TrustList v2 holds entity info to ETSI TS 119 602 V1.1.1: `country` is an
+ * ISO 3166-1 alpha-2 code in capital letters with the exceptions of clause
+ * 6.1.5, `lang` a lower-case RFC 5646 language tag (clause 6.1.4) and `uri`
+ * an absolute URI. Case and surrounding spaces are fixed and "GB"/"GR" become
+ * "UK"/"EL" (with a warning); a value that still does not fit, such as
+ * "Germany", is the author's decision. v1 could not apply such a value
+ * either: the LoTE builder refused it.
+ */
+const trustListV1ToV2: ConfigMigration = {
+    id: "trust-list-v2-etsi-entity-info",
+    kind: "TrustList",
+    from: 1,
+    to: 2,
+    migrate(spec) {
+        if (!Array.isArray(spec.entities)) return { spec };
+        const issues: ConfigMigrationIssue[] = [];
+        let changed = false;
+        const entities = spec.entities.map((entity, index) => {
+            if (!object(entity) || !object(entity.info)) return entity;
+            const info: Record<string, unknown> = { ...entity.info };
+            const path = `/spec/entities/${index}/info`;
+            let fixedEntity = false;
+            const fixes = [
+                {
+                    key: "country",
+                    fix: trustListCountryCode,
+                    message: TRUST_LIST_COUNTRY_MESSAGE,
+                    invalid: "TRUST_LIST_COUNTRY_INVALID",
+                    replaced: "TRUST_LIST_COUNTRY_REPLACED",
+                },
+                {
+                    key: "lang",
+                    fix: trustListLanguageTag,
+                    message: TRUST_LIST_LANGUAGE_MESSAGE,
+                    invalid: "TRUST_LIST_LANGUAGE_INVALID",
+                    // Only the case changes, which needs no warning.
+                    replaced: undefined,
+                },
+            ] as const;
+            for (const { key, fix, message, invalid, replaced } of fixes) {
+                const value = info[key];
+                if (value === undefined) continue;
+                const fixed = fix(value);
+                if (fixed === undefined) {
+                    issues.push({
+                        severity: "required-input",
+                        code: invalid,
+                        path: `${path}/${key}`,
+                        message: `${JSON.stringify(value)} cannot be published. ${message}`,
+                    });
+                    continue;
+                }
+                if (fixed === value) continue;
+                info[key] = fixed;
+                fixedEntity = true;
+                if (
+                    replaced &&
+                    typeof value === "string" &&
+                    value.trim().toUpperCase() !== fixed.toUpperCase()
+                ) {
+                    issues.push({
+                        severity: "warning",
+                        code: replaced,
+                        path: `${path}/${key}`,
+                        message: `Replaced ${JSON.stringify(value)} with ${JSON.stringify(fixed)}. ${message}`,
+                    });
+                }
+            }
+            if (
+                info.uri !== undefined &&
+                !(typeof info.uri === "string" && isTrustListEntityUri(info.uri))
+            ) {
+                issues.push({
+                    severity: "required-input",
+                    code: "TRUST_LIST_URI_INVALID",
+                    path: `${path}/uri`,
+                    message: `${JSON.stringify(info.uri)} cannot be published. ${TRUST_LIST_URI_MESSAGE} Or remove uri.`,
+                });
+            }
+            if (!fixedEntity) return entity;
+            changed = true;
+            return { ...entity, info };
+        });
+        if (!changed && issues.length === 0) return { spec };
+        return { spec: changed ? { ...spec, entities } : spec, issues };
+    },
+};
+
 // The first published format is v1. Register one step per later version.
 const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
     {
@@ -652,6 +749,7 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         // and without the field any expected_origin is accepted as before.
         migrate: (spec) => ({ spec }),
     },
+    trustListV1ToV2,
 ];
 export function schemaUrl(
     kind: ConfigResourceKind,

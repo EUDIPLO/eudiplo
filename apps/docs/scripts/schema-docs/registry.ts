@@ -62,16 +62,7 @@ export const schemaDocs: SchemaDoc[] = [
                 "Access key chain that signs the request, determines the `client_id` and signs `readerAuth`; without it, an access key chain of the tenant is used.",
         },
     },
-    {
-        name: "trust-list",
-        schema: TrustListCreateSchema,
-        descriptions: {
-            "entities.type":
-                "`internal` references key chains of this tenant; `external` carries the certificates directly, as PEM or Base64 DER.",
-            "entities.issuerCertPem": "Issuer certificate as PEM or Base64 DER.",
-            "entities.revocationCertPem": "Revocation/status certificate as PEM or Base64 DER.",
-        },
-    },
+    { name: "trust-list", schema: TrustListCreateSchema },
     { name: "schema-metadata-publish", schema: SignSchemaMetaConfigSchema },
     { name: "kms-config", schema: KmsConfigSchema },
     { name: "kms-provider-db", schema: DbKmsConfigSchema, descriptions: kmsProviderDescriptions },

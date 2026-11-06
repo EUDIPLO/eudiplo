@@ -1,7 +1,13 @@
 import "reflect-metadata";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { schemaUrl } from "@eudiplo/config-format/config-format.js";
+import {
+    TRUST_LIST_COUNTRY_MESSAGE,
+    TRUST_LIST_LANGUAGE_MESSAGE,
+    TRUST_LIST_URI_MESSAGE,
+} from "@eudiplo/config-format/trust-list-entity-info.js";
 import { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
@@ -784,6 +790,174 @@ describe("Trust List e2e Tests", () => {
         });
     });
 
+    describe("Entity info per ETSI TS 119 602", () => {
+        const tenant = "trust-list-etsi-entity-info";
+        const keyChainId = randomUUID();
+        let auth: string;
+
+        const body = (id: string, info: Record<string, unknown>) =>
+            ({
+                id,
+                keyChainId,
+                entities: [
+                    {
+                        type: "internal",
+                        issuerKeyChainId:
+                            "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                        revocationKeyChainId:
+                            "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
+                        info: { name: "Example Provider", ...info },
+                    },
+                ],
+            }) as TrustListCreateDto;
+        const create = (id: string, info: Record<string, unknown>) =>
+            request(ctx.app.getHttpServer())
+                .post("/trust-list")
+                .set("Authorization", auth)
+                .send(body(id, info));
+        const plan = async (bundle: ConfigBundle): Promise<ConfigImportPlan> =>
+            (
+                await request(ctx.app.getHttpServer())
+                    .post("/config-bundles/plan?mode=upsert")
+                    .set("Authorization", auth)
+                    .send(bundle)
+                    .expect(201)
+            ).body;
+        const listBundle = (id: string, info: Record<string, unknown>) =>
+            documentsBundle(tenant, [
+                {
+                    kind: "TrustList",
+                    id,
+                    path: `trust-lists/${id}.json`,
+                    spec: body(id, info) as unknown as Record<string, unknown>,
+                },
+            ]);
+
+        beforeAll(async () => {
+            const token = await getTenantAdminToken(
+                ctx.app,
+                ctx.clientId,
+                ctx.clientSecret,
+                tenant,
+                [Role.Issuances, Role.Keys],
+            );
+            auth = `Bearer ${token}`;
+            await importEntityKeyChains(ctx.app, token, ctx.configFolder);
+            await importKeyChain(ctx.app, token, {
+                id: keyChainId,
+                key: await newPrivateKey(),
+                usageType: KeyUsageType.TrustList,
+            });
+        });
+
+        test.each([
+            ["country", "de"],
+            ["country", "Germany"],
+            ["country", "GB"],
+            ["lang", "EN"],
+            ["lang", "en_US"],
+            ["uri", "example.com"],
+            ["uri", "https://example.com/a b"],
+        ])("refuses info.%s %j at its field", async (field, value) => {
+            const response = await create(`etsi-${field}`, {
+                [field]: value,
+            }).expect(400);
+
+            expect(response.body.errors).toEqual([
+                expect.objectContaining({
+                    path: ["entities", 0, "info", field],
+                }),
+            ]);
+        });
+
+        test("publishes conforming info and date-times in whole seconds", async () => {
+            await create("etsi-conforming", {
+                country: "EL",
+                lang: "de-at",
+                uri: "https://example.com/about",
+            }).expect(201);
+
+            const stored = await request(ctx.app.getHttpServer())
+                .get("/trust-list/etsi-conforming")
+                .set("Authorization", auth)
+                .expect(200);
+            const { LoTE } = decodeJwt<{
+                LoTE: {
+                    ListAndSchemeInformation: {
+                        ListIssueDateTime: string;
+                        NextUpdate: string;
+                    };
+                    TrustedEntitiesList: Array<{
+                        TrustedEntityInformation: {
+                            TEAddress: {
+                                TEPostalAddress: Array<{
+                                    Country: string;
+                                    lang: string;
+                                }>;
+                            };
+                            TEName: Array<{ lang: string }>;
+                        };
+                    }>;
+                };
+            }>(stored.body.jwt);
+            const seconds = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+            expect(LoTE.ListAndSchemeInformation.ListIssueDateTime).toMatch(
+                seconds,
+            );
+            expect(LoTE.ListAndSchemeInformation.NextUpdate).toMatch(seconds);
+            const info = LoTE.TrustedEntitiesList[0].TrustedEntityInformation;
+            expect(info.TEAddress.TEPostalAddress[0].Country).toBe("EL");
+            expect(info.TEName[0].lang).toBe("de-at");
+            // The postal address carries the full tag, not only "de".
+            expect(info.TEAddress.TEPostalAddress[0].lang).toBe("de-at");
+        });
+
+        test.each([
+            ["country", "Germany", TRUST_LIST_COUNTRY_MESSAGE],
+            ["lang", "EN", TRUST_LIST_LANGUAGE_MESSAGE],
+            ["uri", "https://example.com/a b", TRUST_LIST_URI_MESSAGE],
+        ])("the plan blocks info.%s %j", async (field, value, message) => {
+            const planned = await plan(
+                listBundle(`etsi-plan-${field}`, { [field]: value }),
+            );
+
+            expect(planned.applicable).toBe(false);
+            expect(
+                planned.items.find((item) => item.kind === "TrustList")
+                    ?.issues,
+            ).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        severity: "error",
+                        code: "CURRENT_SCHEMA_VALIDATION_FAILED",
+                        path: `/spec/entities/0/info/${field}`,
+                        message,
+                    }),
+                ]),
+            );
+        });
+
+        test("the plan upgrades a 9.x file with a lower-case country", async () => {
+            const bundle = listBundle("etsi-plan-v1", { country: "de" });
+            const document = bundle.documents[0];
+            document.$schema = schemaUrl("TrustList", 1);
+            bundle.manifest.resources[0].$schema = document.$schema;
+            bundle.manifest.resources[0].sha256 = createHash("sha256")
+                .update(JSON.stringify(document))
+                .digest("hex");
+
+            const planned = await plan(bundle);
+
+            expect(planned.applicable, JSON.stringify(planned)).toBe(true);
+            // Only the case changed, so the upgrade has nothing to report.
+            const item = planned.items.find(
+                (entry) => entry.kind === "TrustList",
+            );
+            expect(item?.issues ?? []).toEqual([]);
+            expect(item?.migrations).toEqual(["trust-list-v2-etsi-entity-info"]);
+        });
+    });
+
     describe("Deleting a referenced trust list", () => {
         const listId = "referenced-trust-list";
         const credentialConfigId = "references-trust-list";
@@ -1435,9 +1609,10 @@ describe("Trust List e2e Tests", () => {
             );
             expect(payload.LoTE.ListAndSchemeInformation).toMatchObject({
                 LoTESequenceNumber: 2,
-                NextUpdate: new Date(
-                    later.getTime() + 30 * 24 * 60 * 60 * 1000,
-                ).toISOString(),
+                // Whole seconds, as ETSI TS 119 602 clause 6.1.3 requires.
+                NextUpdate: new Date(later.getTime() + 30 * 24 * 60 * 60 * 1000)
+                    .toISOString()
+                    .replace(/\.\d{3}Z$/, "Z"),
             });
 
             const versions = await request(ctx.app.getHttpServer())

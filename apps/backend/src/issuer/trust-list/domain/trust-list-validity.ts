@@ -15,6 +15,14 @@ export function trustListNextUpdate(issuedAt: Date): Date {
 }
 
 /**
+ * A date-time as ETSI TS 119 602 clause 6.1.3 publishes it: UTC with whole
+ * seconds and the designator "Z", for example 2026-11-06T12:00:00Z.
+ */
+export function trustListDateTime(date: Date): string {
+    return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+/**
  * Whether a list with this `NextUpdate` must be re-issued: inside the renewal
  * window, already expired, or without a readable `NextUpdate`.
  */

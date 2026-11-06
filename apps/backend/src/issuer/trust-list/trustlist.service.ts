@@ -45,6 +45,7 @@ import {
 } from "./domain/trust-list-signing-key-chain.js";
 import {
     isTrustListRenewalDue,
+    trustListDateTime,
     trustListNextUpdate,
 } from "./domain/trust-list-validity.js";
 import {
@@ -496,8 +497,8 @@ export class TrustListService {
                 ListAndSchemeInformation: {
                     ...lote.ListAndSchemeInformation,
                     LoTESequenceNumber: sequenceNumber,
-                    ListIssueDateTime: now.toISOString(),
-                    NextUpdate: trustListNextUpdate(now).toISOString(),
+                    ListIssueDateTime: trustListDateTime(now),
+                    NextUpdate: trustListDateTime(trustListNextUpdate(now)),
                 },
             },
         };
@@ -776,7 +777,7 @@ export class TrustListService {
                 PostalCode: info.postalCode || "",
                 StreetAddress: info.streetAddress || "",
             },
-            lang.split("-")[0], // Use short lang code for postal
+            lang,
         );
 
         // Only add email if a valid URI is provided
@@ -822,8 +823,8 @@ export class TrustListService {
                     },
                 ],
                 SchemeTerritory: "EU",
-                ListIssueDateTime: issuedAt.toISOString(),
-                NextUpdate: nextUpdate.toISOString(),
+                ListIssueDateTime: trustListDateTime(issuedAt),
+                NextUpdate: trustListDateTime(nextUpdate),
                 LoTESequenceNumber: sequenceNumber,
             },
             entities,

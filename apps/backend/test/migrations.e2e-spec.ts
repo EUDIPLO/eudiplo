@@ -6,7 +6,7 @@ import {
     StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
 import { DataSource, MigrationInterface } from "typeorm";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { AddKeyUsageEntity1743000000000 } from "../src/database/migrations/1743000000000-AddKeyUsageEntity.js";
 import { FlattenKeyUsageType1746000000000 } from "../src/database/migrations/1746000000000-FlattenKeyUsageType.js";
 import { MigrateKeysToKeyChain1747000000000 } from "../src/database/migrations/1747000000000-MigrateKeysToKeyChain.js";
@@ -27,6 +27,7 @@ import { AddStatusUpdatedAtToStatusMapping1785700000000 } from "../src/database/
 import { MoveDefaultAccessKeyChainIntoDefaultKeyChains1785800000000 } from "../src/database/migrations/1785800000000-MoveDefaultAccessKeyChainIntoDefaultKeyChains.js";
 import { DropIssuanceSigningKeyId1785900000000 } from "../src/database/migrations/1785900000000-DropIssuanceSigningKeyId.js";
 import { AddAllowedOriginsToPresentationConfig1786000000000 } from "../src/database/migrations/1786000000000-AddAllowedOriginsToPresentationConfig.js";
+import { NormalizeTrustListEntityInfo1786100000000 } from "../src/database/migrations/1786100000000-NormalizeTrustListEntityInfo.js";
 import { describeWithContainers } from "./container-runtime.js";
 import {
     addTokensValidAfterContract,
@@ -1191,6 +1192,124 @@ describe("Migration tests", () => {
             row: `"id" = 'pid'`,
         },
     );
+
+    describe("NormalizeTrustListEntityInfo1786100000000", () => {
+        const entity = (info: Record<string, unknown>) => ({
+            type: "internal",
+            issuerKeyChainId: "issuer",
+            revocationKeyChainId: "status",
+            info: { name: "Example", ...info },
+        });
+
+        /** `trust_list` as 9.x stored it: `entityConfig` is `json` on PostgreSQL. */
+        async function seed(dataSource: DataSource, jsonType: string) {
+            await dataSource.query(
+                `CREATE TABLE "trust_list" ("id" varchar NOT NULL, "tenantId" varchar NOT NULL, "entityConfig" ${jsonType}, PRIMARY KEY ("id", "tenantId"))`,
+            );
+            const param = (n: number) =>
+                dataSource.options.type === "postgres" ? `$${n}` : "?";
+            const rows: Array<[string, unknown]> = [
+                [
+                    "legacy",
+                    [
+                        entity({ country: "gb", lang: "DE-AT" }),
+                        entity({ country: "Germany" }),
+                    ],
+                ],
+                ["empty", null],
+            ];
+            for (const [id, entities] of rows) {
+                await dataSource.query(
+                    `INSERT INTO "trust_list" ("id", "tenantId", "entityConfig") VALUES (${param(1)}, 't', ${param(2)})`,
+                    [id, entities === null ? null : JSON.stringify(entities)],
+                );
+            }
+        }
+
+        async function expectNormalized(dataSource: DataSource) {
+            const log = vi.spyOn(console, "log").mockImplementation(() => {});
+            const warn = vi
+                .spyOn(console, "warn")
+                .mockImplementation(() => {});
+            const queryRunner = dataSource.createQueryRunner();
+            const migration = new NormalizeTrustListEntityInfo1786100000000();
+            try {
+                await migration.up(queryRunner);
+                await migration.up(queryRunner);
+            } finally {
+                await queryRunner.release();
+                log.mockRestore();
+                warn.mockRestore();
+            }
+
+            const stored: Array<{ id: string; entityConfig: unknown }> =
+                await dataSource.query(
+                    `SELECT "id", "entityConfig" FROM "trust_list" ORDER BY "id"`,
+                );
+            const read = (value: unknown) =>
+                typeof value === "string" ? JSON.parse(value) : value;
+            expect(
+                stored.map((row) => [row.id, read(row.entityConfig)]),
+            ).toEqual([
+                ["empty", null],
+                [
+                    "legacy",
+                    [
+                        entity({ country: "UK", lang: "de-at" }),
+                        entity({ country: "Germany" }),
+                    ],
+                ],
+            ]);
+        }
+
+        describe("SQLite", () => {
+            let dataSource: DataSource;
+            let tmpDir: string;
+
+            beforeAll(async () => {
+                tmpDir = mkdtempSync(join(tmpdir(), "eudiplo-migration-test-"));
+                dataSource = await new DataSource({
+                    type: "better-sqlite3",
+                    database: join(tmpDir, "test.db"),
+                }).initialize();
+                await seed(dataSource, "text");
+            }, 30_000);
+
+            afterAll(async () => {
+                await dataSource?.destroy();
+                if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
+            });
+
+            test("fixes country and lang, keeps the rest and is idempotent", async () => {
+                await expectNormalized(dataSource);
+            });
+        });
+
+        describeWithContainers("PostgreSQL", () => {
+            let dataSource: DataSource;
+            let postgresContainer: StartedPostgreSqlContainer;
+
+            beforeAll(async () => {
+                postgresContainer = await new PostgreSqlContainer(
+                    "postgres:alpine",
+                ).start();
+                dataSource = await new DataSource({
+                    type: "postgres",
+                    url: postgresContainer.getConnectionUri(),
+                }).initialize();
+                await seed(dataSource, "json");
+            }, 60_000);
+
+            afterAll(async () => {
+                await dataSource?.destroy();
+                await postgresContainer?.stop();
+            });
+
+            test("fixes country and lang in a json column and is idempotent", async () => {
+                await expectNormalized(dataSource);
+            });
+        });
+    });
 
     describeNullableSessionColumn(
         "AddAccessKeyChainIdToSession1784900000000",

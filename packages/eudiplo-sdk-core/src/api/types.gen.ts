@@ -3747,10 +3747,19 @@ export type PresentationConfigUpdateDto = {
 };
 
 export type TrustListEntityInfo = {
-    name: string;
+    /**
+     * Optional language of every text the entity publishes (name, service names, postal address, contact, information URI): an IETF RFC 5646 language tag in lower case, for example en or de-at (ETSI TS 119 602 clause 6.1.4). Defaults to en.
+     */
     lang?: string;
+    /**
+     * Optional absolute URI where relying parties find information about the entity, published as TEInformationURI. Write it as a URL parser serializes it, for example https://example.com/about with spaces percent-encoded.
+     */
     uri?: string;
+    /**
+     * Optional country of the postal address: an ISO 3166-1 alpha-2 code in capital letters, with "UK" for the United Kingdom, "EL" for Greece and "EU" for the European Union (ETSI TS 119 602 clause 6.1.5). Defaults to EU.
+     */
     country?: string;
+    name: string;
     locality?: string;
     postalCode?: string;
     streetAddress?: string;

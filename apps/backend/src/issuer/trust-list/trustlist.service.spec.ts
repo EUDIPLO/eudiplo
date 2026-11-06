@@ -19,6 +19,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const now = new Date("2026-10-02T12:00:00.000Z");
 const inDays = (days: number) =>
     new Date(now.getTime() + days * DAY_MS).toISOString();
+/** As a re-issued list publishes it: whole seconds (ETSI TS 119 602 6.1.3). */
+const publishedInDays = (days: number) => inDays(days).replace(".000Z", "Z");
 
 const entities = [{ TrustedEntityInformation: { TEName: [] } }];
 
@@ -168,8 +170,8 @@ describe("TrustListService", () => {
                     LoTE: {
                         ListAndSchemeInformation: {
                             LoTESequenceNumber: 3,
-                            ListIssueDateTime: now.toISOString(),
-                            NextUpdate: inDays(30),
+                            ListIssueDateTime: publishedInDays(0),
+                            NextUpdate: publishedInDays(30),
                         },
                         TrustedEntitiesList: entities,
                     },
@@ -202,7 +204,7 @@ describe("TrustListService", () => {
             for (const id of ["expired", "legacy"]) {
                 const data = store.get(id)!.data as LoTEDocument;
                 expect(data.LoTE.ListAndSchemeInformation.NextUpdate).toBe(
-                    inDays(30),
+                    publishedInDays(30),
                 );
                 expect(data.LoTE.TrustedEntitiesList).toEqual(entities);
             }
