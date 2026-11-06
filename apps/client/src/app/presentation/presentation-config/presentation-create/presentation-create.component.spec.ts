@@ -11,6 +11,7 @@ import { RegistrarService } from '../../../registrar/registrar.service';
 import { EditorComponent } from '../../../utils/editor/editor.component';
 import { ThemeService } from '../../../services/theme.service';
 import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
+import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
 
 const query = {
   credentials: [
@@ -166,6 +167,27 @@ describe('Presentation configuration flow', () => {
     expect(payload.statusCheckMode).toBe('best_effort');
     expect(payload).not.toHaveProperty('registrationCertImportJwt');
     await Promise.resolve();
+  });
+
+  it('waits while the configuration is saved: a second click sends nothing', async () => {
+    service.createConfiguration.mockReturnValue(new Promise(() => undefined));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fill();
+    component.guided = false;
+    fixture.detectChanges();
+    const save = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[type="submit"]'
+    )!;
+    expectAvailable(fixture, save);
+
+    save.click();
+    fixture.detectChanges();
+    save.click();
+    fixture.detectChanges();
+
+    expect(service.createConfiguration).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, save, 'Saving the presentation configuration…');
   });
 
   it('does not save when Enter is pressed before review', () => {

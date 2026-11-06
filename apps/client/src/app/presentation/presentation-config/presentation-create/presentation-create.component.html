@@ -681,6 +681,8 @@
             mat-flat-button
             type="submit"
             [disabled]="saving"
+            disabledInteractive
+            [matTooltip]="saveTooltip"
             appConfigManaged
             managedKind="PresentationConfig"
             [managedResourceId]="create ? '' : form.get('id')?.value || ''"
