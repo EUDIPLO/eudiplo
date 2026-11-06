@@ -611,6 +611,12 @@ describe("replace imports and key chains that configurations name", () => {
             "replace",
         );
 
+        // A replace plan that keeps the entity key chains reports no mismatch.
+        expect(
+            result.issues.filter(
+                (issue) => issue.code === "KEY_CHAIN_USAGE_MISMATCH",
+            ),
+        ).toEqual([]);
         const item = result.items.find(
             (candidate) =>
                 candidate.kind === "KeyChain" &&

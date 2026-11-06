@@ -52,8 +52,16 @@ Bump the version whenever the accepted content of a resource changes, including 
     pnpm --filter @eudiplo/cli assets:sync    # copies schemas and templates into the CLI
     ```
 
-5. Add tests for the migration step (valid transformation, source and target validation, required input, running the upgrade twice) in `packages/eudiplo-config-format` and, for CLI behavior, `apps/cli/test/config-upgrade.test.ts`.
-6. Run the checks CI runs:
+5. Bring the bundled demo tenant to the new version. `eudiplo init --demo-tenant` and `eudiplo config tenant create --template demo` copy `assets/config/demo`, so a file there that is behind fails `eudiplo config upgrade --check` in a fresh project. The CLI test `generates configuration that needs no upgrade` (`apps/cli/test/runtime.test.ts`) fails until you upgrade it from the repository root (`dev` runs in `apps/cli`, and the `--output` folder must not exist yet):
+
+    ```bash
+    pnpm --filter @eudiplo/cli dev config upgrade ../../assets/config/demo --output ../../tmp/demo-upgraded
+    cp -R tmp/demo-upgraded/. assets/config/demo/ && rm -rf tmp/demo-upgraded
+    pnpm --filter @eudiplo/cli assets:sync
+    ```
+
+6. Add tests for the migration step (valid transformation, source and target validation, required input, running the upgrade twice) in `packages/eudiplo-config-format` and, for CLI behavior, `apps/cli/test/config-upgrade.test.ts`.
+7. Run the checks CI runs:
 
     ```bash
     pnpm schemas:check-contract        # current DTOs match the committed schemas and snapshots
@@ -62,7 +70,7 @@ Bump the version whenever the accepted content of a resource changes, including 
     pnpm --filter @eudiplo/website build
     ```
 
-7. Commit schema, snapshot, generated files, tests and documentation together, and describe the change in the [upgrade guide](../upgrade/index.md) of the next major: files exported by the new release cannot be imported into older ones. A migration step that rewrites the `spec` or `metadata` of a `KeyChain` document, or of a `Client` document with `"secret": "!generate"`, makes such a document differ from the one last applied, so the next `upsert` or `replace` import applies it once more: CA keys get a new signing key, `regenerate` creates new key material and the client gets a new secret, which a startup import does not show. Say so in that guide too. A step that returns `spec` and `metadata` unchanged keeps them as they are.
+8. Commit schema, snapshot, generated files, tests and documentation together, and describe the change in the [upgrade guide](../upgrade/index.md) of the next major: files exported by the new release cannot be imported into older ones. A migration step that rewrites the `spec` or `metadata` of a `KeyChain` document, or of a `Client` document with `"secret": "!generate"`, makes such a document differ from the one last applied, so the next `upsert` or `replace` import applies it once more: CA keys get a new signing key, `regenerate` creates new key material and the client gets a new secret, which a startup import does not show. Say so in that guide too. A step that returns `spec` and `metadata` unchanged keeps them as they are.
 
 `schemas:snapshot` without a resource name checks and snapshots every current resource. Running `schemas:snapshot` alone is not enough: `schemas:check-contract` fails when a DTO changed but the version was not bumped.
 

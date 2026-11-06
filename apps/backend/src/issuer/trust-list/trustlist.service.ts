@@ -31,6 +31,13 @@ import {
 } from "../../platform/config-import/config-import-orchestrator.service.js";
 import { loadConfigDto } from "../../shared/utils/config-file-loader.util.js";
 import { TrustListReferences } from "./application/trust-list-references.js";
+import {
+    type EntityKeyChainUsageIssue,
+    entityKeyChainReferences,
+    entityKeyChainUsageRefusal,
+    storedEntityKeyChains,
+    TrustListEntityKeyChainUsageError,
+} from "./domain/trust-list-entity-key-chains.js";
 import { TrustListInUseError } from "./domain/trust-list-reference.js";
 import {
     trustListKeyChainUsageRefusal,
@@ -67,6 +74,23 @@ type TrustListVersionChanges = Pick<
     "sequenceNumber" | "data" | "jwt"
 > &
     Partial<Pick<TrustList, "description" | "keyChainId" | "entityConfig">>;
+
+/**
+ * The certificate of a key chain whose usage type was checked for this list.
+ * Only these may be published, so a missing one is a programming error.
+ */
+function checkedCertificate(
+    certificates: ReadonlyMap<string, CertificateInfo>,
+    keyChainId: string,
+): CertificateInfo {
+    const certificate = certificates.get(keyChainId);
+    if (!certificate) {
+        throw new Error(
+            `Key chain ${JSON.stringify(keyChainId)} was not checked for this trust list`,
+        );
+    }
+    return certificate;
+}
 
 /** Stored list content; lists created by older releases lack the `LoTE` wrapper. */
 function storedLoTE(data: object | undefined): LoTE | undefined {
@@ -342,6 +366,11 @@ export class TrustListService {
                 );
             }
         }
+        const entityCertificates = await this.internalEntityCertificates(
+            tenant.id,
+            config.entities,
+            existing?.entityConfig,
+        );
 
         const cert = await this.signingCertificate(
             tenant.id,
@@ -376,16 +405,15 @@ export class TrustListService {
         const entries: LoTETrustedEntity[] = [];
         for (const entity of config.entities || []) {
             if (entity.type === "internal") {
-                // Internal: fetch certificates from database by ID
-                const issuerCert = await this.certService.getCertificateById(
-                    tenant.id,
+                // Internal: certificates of the key chains resolved above
+                const issuerCert = checkedCertificate(
+                    entityCertificates,
                     entity.issuerKeyChainId,
                 );
-                const revocationCert =
-                    await this.certService.getCertificateById(
-                        tenant.id,
-                        entity.revocationKeyChainId,
-                    );
+                const revocationCert = checkedCertificate(
+                    entityCertificates,
+                    entity.revocationKeyChainId,
+                );
                 try {
                     const leaf = new X509Certificate(issuerCert.crt[0]);
                     // X509Certificate.fingerprint returns SHA-1 by default; compute SHA-256 for parity with verifier logs.
@@ -548,6 +576,46 @@ export class TrustListService {
                 `${fieldName} is not a valid X.509 certificate`,
             );
         }
+    }
+
+    /**
+     * The certificates of the key chains that internal entities name, by key
+     * chain ID. A key chain whose usage type cannot provide the certificate of
+     * its field is refused, unless the stored list already names it there.
+     * @throws TrustListEntityKeyChainUsageError with an issue per such field
+     */
+    private async internalEntityCertificates(
+        tenantId: string,
+        entities: TrustListCreateDto["entities"],
+        storedEntities: TrustList["entityConfig"] | undefined,
+    ): Promise<Map<string, CertificateInfo>> {
+        const certificates = new Map<string, CertificateInfo>();
+        const issues: EntityKeyChainUsageIssue[] = [];
+        const isStored = storedEntityKeyChains(storedEntities);
+        const lookup = (keyChainId: string) =>
+            this.certService.getCertificateById(tenantId, keyChainId);
+        for (const reference of entityKeyChainReferences(entities)) {
+            const { index, field, keyChainId } = reference;
+            let cert = certificates.get(keyChainId);
+            if (!cert) {
+                // One lookup at a time: the request body decides how many key
+                // chains it names, and the first missing one ends the save.
+                cert = await lookup(keyChainId); // NOSONAR: sequential on purpose
+                certificates.set(keyChainId, cert);
+            }
+            const refusal = entityKeyChainUsageRefusal(
+                field,
+                keyChainId,
+                cert.keyChain?.usageType,
+            );
+            if (refusal && !isStored(reference)) {
+                issues.push({ index, field, message: refusal });
+            }
+        }
+        if (issues.length > 0) {
+            throw new TrustListEntityKeyChainUsageError(issues);
+        }
+        return certificates;
     }
 
     /**

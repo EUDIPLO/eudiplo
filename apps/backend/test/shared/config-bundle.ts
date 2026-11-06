@@ -5,7 +5,7 @@ import type {
     ConfigResourceKind,
 } from "../../src/platform/config-portability/config-resource.types.js";
 
-/** A document of {@link documentsBundle}. */
+/** A document of a bundle built by {@link documentsBundle}. */
 export interface BundleDocument {
     kind: ConfigResourceKind;
     id: string;
@@ -34,19 +34,17 @@ export function documentsBundle(
             sourceVersion: "e2e",
             exportedAt: new Date(0).toISOString(),
             tenant,
-            resources: entries.map(
-                ({ kind, id, path, generation = 1 }, index) => ({
-                    kind,
-                    id,
-                    $schema: documents[index].$schema,
-                    path,
-                    sha256: createHash("sha256")
-                        .update(JSON.stringify(documents[index]))
-                        .digest("hex"),
-                    ownership: "unmanaged",
-                    generation,
-                }),
-            ),
+            resources: entries.map(({ kind, id, path }, index) => ({
+                kind,
+                id,
+                $schema: documents[index].$schema,
+                path,
+                sha256: createHash("sha256")
+                    .update(JSON.stringify(documents[index]))
+                    .digest("hex"),
+                ownership: "unmanaged",
+                generation: documents[index].metadata.generation,
+            })),
             assets: [],
             requirements: [],
             warnings: [],

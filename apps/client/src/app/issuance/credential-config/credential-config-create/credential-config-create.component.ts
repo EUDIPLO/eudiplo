@@ -69,12 +69,13 @@ import { schemaFormValidator } from '../../../utils/schema-form-validator';
 import { claimSchemaError, unsupportedConstraintsError } from '../../../utils/claim-schema-check';
 import { LabelledFailure, getApiErrorMessage } from '../../../utils/error-message';
 import { hostedVctUrl } from '../../../utils/public-url';
+import { isWalletColor } from '../../../utils/wallet-color';
 import { FrontendConfigService } from '../../../services/frontend-config.service';
 import { JwtService } from '../../../services/jwt.service';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { SourceLoadState, loadSource, reportSourceFailures } from '../../../common/load-source';
-import { focusAfterRenderIfLost } from '../../../common/focus-if-lost.util';
+import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../../common/focus-if-lost.util';
 
 /** The sources of the options of the form's selects. */
 type CredentialConfigSource =
@@ -912,13 +913,17 @@ export class CredentialConfigCreateComponent implements OnInit {
   }
 
   // Display Configuration Management
+  /**
+   * Description and colors are optional, as in the API: an empty color lets the wallet use
+   * its own default, so neither new nor loaded entries get a color the user did not set.
+   */
   createDisplayConfigGroup(): FormGroup {
     return new FormGroup({
       name: new FormControl('', [Validators.required]),
-      description: new FormControl('', [Validators.required]),
+      description: new FormControl(''),
       locale: new FormControl('en-US', [Validators.required]),
-      background_color: new FormControl('#FFFFFF'),
-      text_color: new FormControl('#000000'),
+      background_color: new FormControl(''),
+      text_color: new FormControl(''),
       // Handle both nested (from API/JSON) and flattened (from form) formats
       background_image: new FormGroup({
         uri: new FormControl(''),
@@ -933,9 +938,13 @@ export class CredentialConfigCreateComponent implements OnInit {
     return this.form.get('displayConfigs') as FormArray;
   }
 
+  /** Whether a display color is empty or in a form wallets read; the template warns otherwise. */
+  readonly isWalletColor = isWalletColor;
+
   /**
    * Replaces the display entries with one group per loaded display. `patchValue` on the
-   * FormArray would only fill the groups that already exist and drop the rest.
+   * FormArray would only fill the groups that already exist and drop the rest. Entries with a
+   * color wallets may not read start expanded, so the warning is not hidden in the panel.
    */
   private setDisplayConfigs(displays: CredentialConfigCreate['config']['display']): void {
     this.displayConfigs.clear();
@@ -944,6 +953,9 @@ export class CredentialConfigCreateComponent implements OnInit {
       const group = this.createDisplayConfigGroup();
       group.patchValue(display ?? {});
       this.displayConfigs.push(group);
+      if (!isWalletColor(display?.background_color) || !isWalletColor(display?.text_color)) {
+        this.expandedAppearance.add(group);
+      }
     }
   }
 
@@ -954,23 +966,12 @@ export class CredentialConfigCreateComponent implements OnInit {
   removeDisplayConfig(index: number): void {
     if (this.displayConfigs.length > 1) {
       this.displayConfigs.removeAt(index);
-      this.focusRowAfterRemoval(() => this.displayTitles?.toArray(), index);
+      focusRowAfterRemoval(
+        this.injector,
+        () => this.displayTitles?.map((title) => title.nativeElement),
+        index
+      );
     }
-  }
-
-  /**
-   * After a row was removed with the control holding focus, focuses the row now at its index,
-   * the new last row when it was the last one, or `fallback` when no row is left.
-   */
-  private focusRowAfterRemoval(
-    rows: () => ElementRef<HTMLElement>[] | undefined,
-    index: number,
-    fallback?: () => ElementRef<HTMLElement> | undefined
-  ): void {
-    focusAfterRenderIfLost(this.injector, () => {
-      const remaining = rows() ?? [];
-      return (remaining[Math.min(index, remaining.length - 1)] ?? fallback?.())?.nativeElement;
-    });
   }
 
   // Field Definition Management
@@ -1101,10 +1102,11 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   removeField(index: number): void {
     this.fields.removeAt(index);
-    this.focusRowAfterRemoval(
-      () => this.claimHeaders?.toArray(),
+    focusRowAfterRemoval(
+      this.injector,
+      () => this.claimHeaders?.map((header) => header.nativeElement),
       index,
-      () => this.addFieldButton
+      () => this.addFieldButton?.nativeElement
     );
   }
 
@@ -1114,13 +1116,14 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   removeFieldDisplay(fieldIndex: number, displayIndex: number): void {
     this.getFieldDisplayArray(fieldIndex).removeAt(displayIndex);
-    this.focusRowAfterRemoval(
+    focusRowAfterRemoval(
+      this.injector,
       () =>
-        this.claimLabelNames?.filter(
-          (name) => name.nativeElement.dataset['claim'] === String(fieldIndex)
-        ),
+        this.claimLabelNames
+          ?.map((name) => name.nativeElement)
+          .filter((name) => name.dataset['claim'] === String(fieldIndex)),
       displayIndex,
-      () => this.addLabelButtons?.get(fieldIndex)
+      () => this.addLabelButtons?.get(fieldIndex)?.nativeElement
     );
   }
 
@@ -1169,10 +1172,11 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   removeIaeAction(index: number): void {
     this.iaeActions.removeAt(index);
-    this.focusRowAfterRemoval(
-      () => this.iaeStepTitles?.toArray(),
+    focusRowAfterRemoval(
+      this.injector,
+      () => this.iaeStepTitles?.map((title) => title.nativeElement),
       index,
-      () => this.addActionButton
+      () => this.addActionButton?.nativeElement
     );
   }
 
@@ -1409,13 +1413,26 @@ export class CredentialConfigCreateComponent implements OnInit {
     return mode === 'extract' ? extractSchema(value) : parsed;
   }
 
-  /** Drops display images without a URI: the API requires `uri` when an image is set. */
+  /**
+   * Trims the optional description and colors and leaves out what is empty: an empty description or color is not sent (the wallet then uses its own
+   * default), and an image needs a `uri` in the API.
+   */
   private buildDisplayPayload(displays: any[] | undefined): any[] {
-    return (displays ?? []).map(({ background_image, logo, ...display }: any) => ({
-      ...display,
-      ...(background_image?.uri ? { background_image } : {}),
-      ...(logo?.uri ? { logo } : {}),
-    }));
+    return (displays ?? []).map(({ background_image, logo, ...display }: any) => {
+      for (const key of ['description', 'background_color', 'text_color']) {
+        const value = display[key]?.trim();
+        if (value) {
+          display[key] = value;
+        } else {
+          delete display[key];
+        }
+      }
+      return {
+        ...display,
+        ...(background_image?.uri ? { background_image } : {}),
+        ...(logo?.uri ? { logo } : {}),
+      };
+    });
   }
 
   private buildFieldsPayload(rawFields: any[]): ClaimFieldDefinitionDto[] {

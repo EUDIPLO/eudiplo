@@ -1,5 +1,5 @@
 {
-  "$schema": "https://eudiplo.dev/schemas/v1/KeyChainConfigFile.schema.json",
+  "$schema": "https://eudiplo.dev/schemas/v4/KeyChainConfigFile.schema.json",
   "metadata": {
     "generation": 1
   },
