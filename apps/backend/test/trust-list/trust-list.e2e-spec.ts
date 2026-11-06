@@ -1,20 +1,30 @@
 import "reflect-metadata";
+import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
-import { decodeJwt, decodeProtectedHeader, importX509, jwtVerify } from "jose";
+import {
+    decodeJwt,
+    decodeProtectedHeader,
+    exportJWK,
+    generateKeyPair,
+    importX509,
+    jwtVerify,
+} from "jose";
 import request from "supertest";
 import { App } from "supertest/types";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { AppModule } from "../../src/app.module.js";
+import { Role } from "../../src/auth/roles/role.enum.js";
 import { KeyChainImportDto } from "../../src/crypto/key/dto/key-chain-import.dto.js";
 import { KeyUsageType } from "../../src/crypto/key/types/key-usage-type.js";
 import { TrustListCreateDto } from "../../src/issuer/trust-list/dto/trust-list-create.dto.js";
 import { TrustListService } from "../../src/issuer/trust-list/trustlist.service.js";
 import { createAppValidationPipe } from "../../src/shared/common/zod/zod-schema.util.js";
-import { getToken, readConfig } from "../utils.js";
+import { documentBundle } from "../shared/config-bundle.js";
+import { getTenantAdminToken, getToken, readConfig } from "../utils.js";
 import {
     createKeyChain,
     deleteKeyChain,
@@ -27,6 +37,52 @@ interface TestContext {
     configFolder: string;
     clientId: string;
     clientSecret: string;
+}
+
+/** A new P-256 private key for `POST /key-chain/import`. */
+async function newPrivateKey(): Promise<KeyChainImportDto["key"]> {
+    const { privateKey } = await generateKeyPair("ES256", {
+        extractable: true,
+    });
+    return {
+        ...(await exportJWK(privateKey)),
+        alg: "ES256",
+    } as KeyChainImportDto["key"];
+}
+
+/** Imports `key` as key chain `id`, replacing a key chain with that id. */
+function importKeyChain(
+    app: INestApplication<App>,
+    token: string,
+    body: Pick<KeyChainImportDto, "id" | "key" | "usageType">,
+) {
+    return request(app.getHttpServer())
+        .post("/key-chain/import")
+        .set("Authorization", `Bearer ${token}`)
+        .send(body satisfies KeyChainImportDto)
+        .expect(201);
+}
+
+/**
+ * Imports the attestation and status list key chains of the HAIP fixtures,
+ * which internal entities need as issuer and revocation key chains.
+ */
+async function importEntityKeyChains(
+    app: INestApplication<App>,
+    token: string,
+    configFolder: string,
+): Promise<void> {
+    for (const file of ["attestation", "status-list"]) {
+        await request(app.getHttpServer())
+            .post("/key-chain/import")
+            .set("Authorization", `Bearer ${token}`)
+            .send(
+                readConfig<KeyChainImportDto>(
+                    join(configFolder, `haip/key-chains/${file}.json`),
+                ),
+            )
+            .expect(201);
+    }
 }
 
 describe("Trust List e2e Tests", () => {
@@ -174,6 +230,10 @@ describe("Trust List e2e Tests", () => {
 
             expect(response.body.description).toBe("Updated Test Trust List");
             expect(response.body.sequenceNumber).toBe(2);
+            // The update names no keyChainId; the list stays on its key chain.
+            expect(response.body.keyChainId).toBe(
+                "570852d7-7e7f-40af-a0e3-a6ebffd75ed0",
+            );
         });
 
         test("should export a trust list in the create format", async () => {
@@ -252,6 +312,233 @@ describe("Trust List e2e Tests", () => {
                 .get(`/trust-list/${testTrustListId}`)
                 .set("Authorization", `Bearer ${ctx.authToken}`)
                 .expect(409);
+        });
+    });
+
+    describe("Updates without keyChainId", () => {
+        const listId = "kept-key-chain-trust-list";
+        const keyChainId = randomUUID();
+        const entities: TrustListCreateDto["entities"] = [
+            {
+                type: "internal",
+                issuerKeyChainId: "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                revocationKeyChainId: "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
+                info: { name: "Kept Key Chain Provider", lang: "en" },
+            },
+        ];
+        let key: KeyChainImportDto["key"];
+
+        const sequenceNumber = async () =>
+            (
+                await request(ctx.app.getHttpServer())
+                    .get(`/trust-list/${listId}`)
+                    .set("Authorization", `Bearer ${ctx.authToken}`)
+                    .expect(200)
+            ).body.sequenceNumber;
+
+        beforeAll(async () => {
+            key = await newPrivateKey();
+            // The list's own trust list key chain, besides the tenant's
+            // default one.
+            await importKeyChain(ctx.app, ctx.authToken, {
+                id: keyChainId,
+                key,
+                usageType: KeyUsageType.TrustList,
+            });
+            await request(ctx.app.getHttpServer())
+                .post("/trust-list")
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .send({ id: listId, keyChainId, entities })
+                .expect(201);
+        });
+
+        afterAll(async () => {
+            // Later tests rely on the default trust list key chain.
+            await request(ctx.app.getHttpServer())
+                .delete(`/trust-list/${listId}`)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .expect(204);
+            await deleteKeyChain(ctx.app, ctx.authToken, keyChainId);
+        });
+
+        test("keep the key chain the list is signed with", async () => {
+            const before = await sequenceNumber();
+
+            const response = await request(ctx.app.getHttpServer())
+                .put(`/trust-list/${listId}`)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .send({ entities })
+                .expect(200);
+
+            expect(response.body.keyChainId).toBe(keyChainId);
+            expect(response.body.sequenceNumber).toBe(before + 1);
+        });
+
+        test("refuse a kept key chain that an import gave another usage type", async () => {
+            const before = await sequenceNumber();
+            await importKeyChain(ctx.app, ctx.authToken, {
+                id: keyChainId,
+                key,
+                usageType: KeyUsageType.Attestation,
+            });
+
+            const refused = await request(ctx.app.getHttpServer())
+                .put(`/trust-list/${listId}`)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .send({ entities })
+                .expect(409);
+            expect(refused.body.message).toBe(
+                `Key chain ${keyChainId} of this trust list is not valid for Trust List usage (key lacks TrustList usage). Name a key chain with usage type trustList in keyChainId.`,
+            );
+            const stored = await request(ctx.app.getHttpServer())
+                .get(`/trust-list/${listId}`)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .expect(200);
+            expect(stored.body.sequenceNumber).toBe(before);
+            expect(stored.body.keyChainId).toBe(keyChainId);
+
+            // The scheduled renewal still signs with the kept key chain.
+            await ctx.app
+                .get(TrustListService)
+                .renewDueTrustLists(
+                    new Date(Date.now() + 25 * 24 * 60 * 60 * 1000),
+                );
+            const renewed = await request(ctx.app.getHttpServer())
+                .get(`/trust-list/${listId}`)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .expect(200);
+            expect(renewed.body.sequenceNumber).toBe(before + 1);
+            expect(renewed.body.keyChainId).toBe(keyChainId);
+
+            // Naming a trust list key chain moves the list to it.
+            const moved = await request(ctx.app.getHttpServer())
+                .put(`/trust-list/${listId}`)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .send({
+                    keyChainId: "570852d7-7e7f-40af-a0e3-a6ebffd75ed0",
+                    entities,
+                })
+                .expect(200);
+            expect(moved.body.keyChainId).toBe(
+                "570852d7-7e7f-40af-a0e3-a6ebffd75ed0",
+            );
+            expect(moved.body.sequenceNumber).toBe(before + 2);
+        });
+    });
+
+    describe("Bundle import of a list without keyChainId", () => {
+        const tenant = "trust-list-bundle-key-chain";
+        const listId = "bundle-trust-list";
+        const keyChainId = randomUUID();
+        let token: string;
+        let auth: string;
+        let key: KeyChainImportDto["key"];
+
+        beforeAll(async () => {
+            token = await getTenantAdminToken(
+                ctx.app,
+                ctx.clientId,
+                ctx.clientSecret,
+                tenant,
+                [Role.Issuances, Role.Keys],
+            );
+            auth = `Bearer ${token}`;
+            await importEntityKeyChains(ctx.app, token, ctx.configFolder);
+            key = await newPrivateKey();
+            await importKeyChain(ctx.app, token, {
+                id: keyChainId,
+                key,
+                usageType: KeyUsageType.TrustList,
+            });
+            await request(ctx.app.getHttpServer())
+                .post("/trust-list")
+                .set("Authorization", auth)
+                .send({
+                    id: listId,
+                    description: "Before the bundle",
+                    keyChainId,
+                    entities: [
+                        {
+                            type: "internal",
+                            issuerKeyChainId:
+                                "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                            revocationKeyChainId:
+                                "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
+                            info: { name: "Bundle Provider" },
+                        },
+                    ],
+                } satisfies TrustListCreateDto)
+                .expect(201);
+            await importKeyChain(ctx.app, token, {
+                id: keyChainId,
+                key,
+                usageType: KeyUsageType.Attestation,
+            });
+        });
+
+        test("stops with CONFIG_APPLY_FAILED once the kept key chain lost trustList usage", async () => {
+            const exported = await request(ctx.app.getHttpServer())
+                .get(`/trust-list/${listId}/export`)
+                .set("Authorization", auth)
+                .expect(200);
+            const { keyChainId: _signing, ...spec } = exported.body;
+            const bundle = documentBundle(
+                tenant,
+                "TrustList",
+                listId,
+                `trust-lists/${listId}.json`,
+                { ...spec, description: "Changed by a bundle" },
+            );
+            const planImport = async (status: number) => {
+                const plan = await request(ctx.app.getHttpServer())
+                    .post("/config-bundles/plan?mode=upsert")
+                    .set("Authorization", auth)
+                    .send(bundle)
+                    .expect(201);
+                expect(plan.body.applicable, JSON.stringify(plan.body)).toBe(
+                    true,
+                );
+                return request(ctx.app.getHttpServer())
+                    .post(
+                        `/config-bundles/import?mode=upsert&planFingerprint=${plan.body.planFingerprint}`,
+                    )
+                    .set("Authorization", auth)
+                    .send(bundle)
+                    .expect(status);
+            };
+
+            const response = await planImport(500);
+
+            expect(response.body).toMatchObject({
+                code: "CONFIG_APPLY_FAILED",
+                failedOperation: { kind: "TrustList", id: listId },
+            });
+            const stored = await request(ctx.app.getHttpServer())
+                .get(`/trust-list/${listId}`)
+                .set("Authorization", auth)
+                .expect(200);
+            expect(stored.body).toMatchObject({
+                description: "Before the bundle",
+                keyChainId,
+                sequenceNumber: 1,
+            });
+
+            // With trustList usage back, the same bundle applies.
+            await importKeyChain(ctx.app, token, {
+                id: keyChainId,
+                key,
+                usageType: KeyUsageType.TrustList,
+            });
+            await planImport(201);
+            const applied = await request(ctx.app.getHttpServer())
+                .get(`/trust-list/${listId}`)
+                .set("Authorization", auth)
+                .expect(200);
+            expect(applied.body).toMatchObject({
+                description: "Changed by a bundle",
+                keyChainId,
+                sequenceNumber: 2,
+            });
         });
     });
 
@@ -984,6 +1271,42 @@ describe("Trust List e2e Tests", () => {
                 .post("/trust-list")
                 .set("Authorization", `Bearer ${ctx.authToken}`)
                 .send(createDto)
+                .expect(409);
+        });
+
+        test("should reject a trust list without keyChainId on a tenant without trust list key chain", async () => {
+            const token = await getToken(
+                ctx.app,
+                ctx.clientId,
+                ctx.clientSecret,
+                "trust-list-without-key-chain",
+            );
+            await importEntityKeyChains(ctx.app, token, ctx.configFolder);
+
+            const response = await request(ctx.app.getHttpServer())
+                .post("/trust-list")
+                .set("Authorization", `Bearer ${token}`)
+                .send({
+                    id: "no-key-chain-test",
+                    entities: [
+                        {
+                            type: "internal",
+                            issuerKeyChainId:
+                                "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                            revocationKeyChainId:
+                                "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
+                            info: { name: "Test Provider" },
+                        },
+                    ],
+                } satisfies TrustListCreateDto)
+                .expect(409);
+
+            expect(response.body.message).toBe(
+                "No key chain found with usage type 'trustList' for tenant trust-list-without-key-chain",
+            );
+            await request(ctx.app.getHttpServer())
+                .get("/trust-list/no-key-chain-test")
+                .set("Authorization", `Bearer ${token}`)
                 .expect(409);
         });
 

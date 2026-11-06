@@ -1,6 +1,9 @@
+import { ApplicationRef, ElementRef, Injector } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { FormBuilder } from '@angular/forms';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { IssuanceConfigCreateComponent } from './issuance-config-create.component';
+import { loseFocus } from '../../../common/settings-screen.testing';
 import {
   pemToBase64Der,
   TEST_ROOT_CERTIFICATE_PEM,
@@ -123,13 +126,43 @@ describe('issuer settings guided setup', () => {
   it('blocks saving on loading failure and supports retry', async () => {
     service.getConfig.mockRejectedValueOnce({ statusCode: 403, message: 'Forbidden resource' });
     await component.loadConfigForEdit();
-    expect(component.loadError).toBe(
-      'Could not load issuer settings: Forbidden resource. Retry before making changes.'
-    );
+    expect(component.loadError).toBe('Could not load issuer settings: Forbidden resource.');
     component.onSubmit();
     expect(service.saveConfiguration).not.toHaveBeenCalled();
     await component.loadConfigForEdit();
     expect(component.loadError).toBe('');
+  });
+
+  it('moves focus to the heading only after a retry loads the settings', async () => {
+    const heading = document.body.appendChild(document.createElement('h2'));
+    heading.tabIndex = -1;
+    Object.assign(component, {
+      injector: TestBed.inject(Injector),
+      pageHeading: new ElementRef(heading),
+    });
+    /** Loads the settings while focus is lost, as after the Retry button was removed. */
+    const load = async () => {
+      loseFocus();
+      await component.loadConfigForEdit();
+      TestBed.inject(ApplicationRef).tick();
+    };
+    try {
+      await load();
+      expect(document.activeElement).not.toBe(heading);
+
+      service.getConfig.mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' });
+      await load();
+      service.getConfig.mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' });
+      await load();
+      expect(component.loadError).not.toBe('');
+      expect(document.activeElement).not.toBe(heading);
+
+      await load();
+      expect(component.loadError).toBe('');
+      expect(document.activeElement).toBe(heading);
+    } finally {
+      heading.remove();
+    }
   });
 
   it("shows the backend's reason when saving is rejected", async () => {
