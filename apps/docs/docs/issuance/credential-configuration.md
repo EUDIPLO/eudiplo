@@ -78,6 +78,8 @@ Each entry of `fields[]` describes one claim: its `path`, `type`, whether it is 
 }
 ```
 
+Only `name` and `locale` are required. Without `background_color` or `text_color`, wallets use their own colors. OID4VCI expects colors as CSS Color Level 3 numerical values (hex, `rgb()`, `hsl()`). EUDIPLO does not check the format, but the Web Client warns about other values.
+
 Images use `uri`. To host them in EUDIPLO, see [Object storage](../operate/object-storage.md).
 
 ## 4. Choose key binding and proofs

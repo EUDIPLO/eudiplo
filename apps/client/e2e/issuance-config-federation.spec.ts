@@ -1,7 +1,6 @@
-import { generateKeyPairSync } from 'node:crypto';
-import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './support/test';
 import { hasRootCredentials, resolvedE2EConfig } from './support/e2e-config';
+import { federationSection, registerTrustAnchor } from './support/federation';
 import { loginWithClientCredentials } from './support/login';
 import { createTenant, type TestTenant } from './support/tenants';
 
@@ -35,36 +34,8 @@ test.beforeAll(async () => {
   entityId = `${publicUrl}/issuers/${tenant.id}`;
 
   // Issuer Settings only offer registered trust anchors (with pinned keys).
-  const anchor = await fetch(`${api}/api/federation-trust-anchor`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${tenant.token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      id: 'example-ta',
-      entityId: trustAnchor,
-      jwks: {
-        keys: [
-          {
-            ...generateKeyPairSync('ec', { namedCurve: 'P-256' }).publicKey.export({
-              format: 'jwk',
-            }),
-            kid: 'ta-2026',
-          },
-        ],
-      },
-    }),
-  });
-  expect(anchor.status, await anchor.text()).toBe(201);
+  await registerTrustAnchor(tenant.token, 'example-ta', trustAnchor);
 });
-
-/** The OpenID Federation section on the Trust tab, opened. */
-async function federationSection(page: Page): Promise<Locator> {
-  const section = page
-    .locator('mat-expansion-panel')
-    .filter({ has: page.getByText('OpenID Federation', { exact: true }).first() });
-  const header = section.locator('mat-expansion-panel-header');
-  if ((await header.getAttribute('aria-expanded')) !== 'true') await header.click();
-  return section;
-}
 
 async function savedFederation(): Promise<Record<string, unknown> | undefined> {
   const response = await fetch(`${api}/api/issuer/config`, {
