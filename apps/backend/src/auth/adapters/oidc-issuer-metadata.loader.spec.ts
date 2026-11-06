@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { Logger } from "@nestjs/common";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OutboundUrlPolicyService } from "../../webhook/outbound-url-policy.service.js";
 import { OidcIssuerMetadataLoader } from "./oidc-issuer-metadata.loader.js";
 
@@ -205,5 +206,43 @@ describe("OidcIssuerMetadataLoader", () => {
             "http://authentik:9000/application/o/eudiplo/.well-known/openid-configuration",
             "http://authentik:9000/application/o/eudiplo/.well-known/openid-configuration",
         ]);
+    });
+
+    describe("token endpoint at the internal address", () => {
+        afterEach(() => vi.restoreAllMocks());
+
+        it("warns, because clients outside cannot reach what EUDIPLO advertises", async () => {
+            const warn = vi
+                .spyOn(Logger.prototype, "warn")
+                .mockImplementation(() => undefined);
+
+            const metadata = await new OidcIssuerMetadataLoader(
+                policy({
+                    ...DOCUMENT,
+                    token_endpoint:
+                        "http://authentik:9000/application/o/token/",
+                }),
+            ).load({ issuer: ISSUER, internalIssuer: INTERNAL });
+
+            expect(metadata.token_endpoint).toBe(
+                "http://authentik:9000/application/o/token/",
+            );
+            expect(warn).toHaveBeenCalledWith(
+                "The discovery document names the token endpoint http://authentik:9000/application/o/token/ at the internal address. Check the identity provider's host name settings",
+            );
+        });
+
+        it("does not warn when the internal and public address are the same", async () => {
+            const warn = vi
+                .spyOn(Logger.prototype, "warn")
+                .mockImplementation(() => undefined);
+
+            await new OidcIssuerMetadataLoader(policy(DOCUMENT)).load({
+                issuer: ISSUER,
+                internalIssuer: ISSUER,
+            });
+
+            expect(warn).not.toHaveBeenCalled();
+        });
     });
 });

@@ -74,6 +74,13 @@ of the realm (**Client scopes**, type **Default**), so that `eudiplo-ui`, the
 clients EUDIPLO creates and the `AUTH_CLIENT_ID` client all get it. Then set
 `OIDC_AUDIENCE` to that value.
 
+Keycloak adds a realm default client scope only to clients created after it
+became a default, and EUDIPLO assigns no scopes when it creates or updates a
+client. On an existing installation, also add the scope to `eudiplo-ui`, the
+`AUTH_CLIENT_ID` client and every tenant client created before: open the
+client under **Clients**, then **Client scopes > Add client scope**, type
+**Default**. Otherwise their tokens get `401` once `OIDC_AUDIENCE` is set.
+
 On every start, EUDIPLO:
 
 - creates the missing realm roles (the [EUDIPLO roles](../reference/roles.md)),
@@ -85,7 +92,7 @@ On every start, EUDIPLO:
 Restrictive redirect URIs that you set on `eudiplo-ui` are overwritten at the next
 start, so restrict access to the web client at the network level if needed.
 
-**Checkpoint:** the backend log shows `Mode: External OIDC`, and the web client's
+**Checkpoint:** the backend log shows `Mode: External OIDC (keycloak)`, and the web client's
 login page offers single sign-on after you enter the backend URL.
 
 ## 3. Put the tenant into user tokens
@@ -142,7 +149,7 @@ and shows only that tenant's data.
 | ---------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | Startup fails with `reading 'split'`                 | Refresh tokens for client credentials disabled on `eudiplo-admin` | Enable **Use refresh tokens for client credentials grant**                     |
 | API calls return 401 after login                     | Token `iss` differs from `OIDC_INTERNAL_ISSUER_URL`/`OIDC`, or wrong `OIDC_ALGORITHM` | Compare the `iss` and `alg` of a token with the configuration |
-| API calls return 401 since `OIDC_AUDIENCE` was set   | The token's `aud` lacks the value                           | Add the audience mapper to a realm default client scope, as in [step 2](#2-configure-eudiplo) |
+| API calls return 401 since `OIDC_AUDIENCE` was set   | The token's `aud` lacks the value                           | Add the audience mapper to a realm default client scope, as in [step 2](#2-configure-eudiplo). Clients that existed before the scope became a default need it added in each client's **Client scopes** tab |
 | `This endpoint requires a tenant context`            | User token has no `tenant_id` claim                         | Add the mapper from [step 3](#3-put-the-tenant-into-user-tokens)                       |
 | `403` on an endpoint                                 | Missing realm role                                          | Assign the role listed for the endpoint in the [roles reference](../reference/roles.md#endpoints) |
 | `403` "Cannot grant …" or "Cannot manage …"          | The roles involved go beyond the caller's own               | Assign the realm role to the caller in Keycloak ([granting roles](../reference/roles.md#granting-roles)). A target with a `realm-management` role or another client role can only be managed in Keycloak |

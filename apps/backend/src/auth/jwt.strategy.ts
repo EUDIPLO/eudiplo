@@ -3,6 +3,8 @@ import { ConfigService } from "@nestjs/config";
 import { PassportStrategy } from "@nestjs/passport";
 import { passportJwtSecret } from "jwks-rsa";
 import { ExtractJwt, Strategy } from "passport-jwt";
+import { OutboundUrlPolicyService } from "../webhook/outbound-url-policy.service.js";
+import { jwksFetcher } from "./adapters/jwks-fetcher.js";
 import {
     AUTH_SETTINGS,
     type AuthSettings,
@@ -28,6 +30,8 @@ export interface ExternalTokenChecks {
     /** Checked only when set. */
     audience?: string;
     algorithms: string[];
+    /** Origins the operator configured, which skip the outbound URL policy. */
+    trustedOrigins: string[];
 }
 
 /**
@@ -41,12 +45,20 @@ export function externalTokenChecks(
     issuerMetadata: OidcIssuerMetadata | null,
 ): ExternalTokenChecks {
     const algorithms = [settings.algorithm];
+    const trustedOrigins = [
+        ...new Set(
+            [settings.issuer, settings.internalIssuer, settings.jwksUri]
+                .filter((url) => url !== undefined)
+                .map((url) => new URL(url).origin),
+        ),
+    ];
     if (settings.mode === "keycloak") {
         return {
             issuer: settings.internalIssuer,
             jwksUri: `${settings.internalIssuer}/protocol/openid-connect/certs`,
             audience: settings.audience,
             algorithms,
+            trustedOrigins,
         };
     }
     if (!issuerMetadata) {
@@ -59,6 +71,7 @@ export function externalTokenChecks(
         jwksUri: settings.jwksUri ?? issuerMetadata.jwks_uri,
         audience: settings.audience,
         algorithms,
+        trustedOrigins,
     };
 }
 
@@ -75,12 +88,14 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
         @Inject(AUTH_SETTINGS) settings: AuthSettings,
         @Inject(OIDC_ISSUER_METADATA)
         issuerMetadata: OidcIssuerMetadata | null,
+        outboundUrlPolicy: OutboundUrlPolicyService,
     ) {
         super(
             settings.mode === "builtin"
                 ? JwtStrategy.getIntegratedOAuth2Config(configService)
                 : JwtStrategy.getExternalOIDCConfig(
                       externalTokenChecks(settings, issuerMetadata),
+                      outboundUrlPolicy,
                   ),
         );
         if (settings.mode !== "builtin") {
@@ -96,13 +111,17 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
         });
     }
 
-    private static getExternalOIDCConfig(checks: ExternalTokenChecks) {
+    private static getExternalOIDCConfig(
+        checks: ExternalTokenChecks,
+        outboundUrlPolicy: OutboundUrlPolicyService,
+    ) {
         return {
             secretOrKeyProvider: passportJwtSecret({
                 cache: true,
                 rateLimit: true,
                 jwksRequestsPerMinute: 5,
                 jwksUri: checks.jwksUri,
+                fetcher: jwksFetcher(outboundUrlPolicy, checks.trustedOrigins),
                 handleSigningKeyError: (err, cb) => {
                     console.error(
                         "❌ JWKS error of the identity provider:",
@@ -205,7 +224,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
      * sign in through the web client's public client and the bootstrap client
      * has no record here, so a token whose client is unknown keeps the roles
      * of its claims and gets no resource limits. With `OIDC_PROVIDER=generic`
-     * no client has a record. Deleting a client removes it from Keycloak,
+     * only records left from an earlier mode exist, matched by `azp`,
+     * `client_id` or `sub`. Deleting a client removes it from Keycloak,
      * which issues no new tokens to it; tokens it already has stay valid
      * until they expire.
      */

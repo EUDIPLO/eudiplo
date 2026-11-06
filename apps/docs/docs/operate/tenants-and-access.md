@@ -211,11 +211,22 @@ works with `OIDC_PROVIDER=generic` for signing in only. EUDIPLO then loads the
 provider's discovery document at startup, checks the issuer, the signing keys
 and the required `OIDC_AUDIENCE`, and accepts only JWT access tokens. The
 provider manages clients and people: `/api/client`, `/api/user` and creating a
-tenant with `roles` answer `501`, and the web client signs in with client
-credentials only. Tokens get no client limits (`allowedIssuanceConfigs`,
-`allowedPresentationConfigs`), except those of clients created before in
-Keycloak mode, which keep their stored limits and tenant. The settings are listed in the
+tenant with `roles` answer `501` (in the web client, turn off **Create an admin
+client**), and the web client signs in with client credentials only. The
+settings are listed in the
 [environment variable reference](../reference/environment-variables.md#authentication).
+
+Tokens get no client limits (`allowedIssuanceConfigs`,
+`allowedPresentationConfigs`), except where a client record is left from an
+earlier mode: Keycloak clients, the built-in `AUTH_CLIENT_ID` root client and
+`<tenant>-admin` clients alike. A token whose `azp`, `client_id` or, without
+those, `sub` names such a record gets the record's limits; if the record
+belongs to another tenant than the token's, the token gets `401`.
+
+The web client does not read `OIDC_ROLES_CLAIM` or `OIDC_SUB` yet: it takes the
+roles from `roles` or `realm_access.roles` and the tenant from `tenant_id`.
+With other claims, its menu stays empty and its pages say "Access denied",
+although the API accepts the token; call the API directly until then.
 
 The variables and the Keycloak setup are described in [Keycloak SSO](keycloak.md).
 `MASTER_SECRET` is optional in OIDC mode, but the default encryption key is

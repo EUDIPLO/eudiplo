@@ -11,6 +11,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
@@ -38,6 +39,7 @@ import { openErrorSnackBar } from '../../utils/error-snackbar';
     MatButtonModule,
     FlexLayoutModule,
     MatSelectModule,
+    MatSlideToggleModule,
     RouterModule,
     MatIconModule,
     MatTooltipModule,
@@ -67,7 +69,18 @@ export class TenantCreateComponent implements OnInit {
       id: ['', [Validators.required, Validators.pattern(/^\s*[a-z0-9][a-z0-9_-]{0,62}\s*$/)]],
       name: ['', [Validators.required]],
       description: [''],
+      // Off when the identity provider manages the clients (OIDC_PROVIDER=generic).
+      createAdminClient: [true],
       roles: new FormControl<Role[]>(['clients:manage'], [Validators.required]),
+    });
+    // A disabled control is not validated, so no roles are needed without the client.
+    this.tenantForm.get('createAdminClient')!.valueChanges.subscribe((create: boolean) => {
+      const roles = this.tenantForm.get('roles')!;
+      if (create) {
+        roles.enable();
+      } else {
+        roles.disable();
+      }
     });
   }
 
@@ -127,7 +140,7 @@ export class TenantCreateComponent implements OnInit {
         const body = {
           id: value.id.trim(),
           name: value.name.trim(),
-          roles: value.roles,
+          ...(value.createAdminClient ? { roles: value.roles } : {}),
           ...(description ? { description } : {}),
         };
         const result = await tenantControllerInitTenant<true>({ body });

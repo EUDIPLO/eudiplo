@@ -35,6 +35,7 @@ describe("JwtStrategy", () => {
             clients as never,
             readAuthSettings(configService(values)),
             issuerMetadata,
+            {} as never,
         );
     }
 
@@ -357,6 +358,10 @@ describe("JwtStrategy", () => {
                     "http://keycloak:8080/realms/eudiplo/protocol/openid-connect/certs",
                 audience: undefined,
                 algorithms: ["RS256"],
+                trustedOrigins: [
+                    "https://keycloak.example.com",
+                    "http://keycloak:8080",
+                ],
             });
             expect(
                 externalTokenChecks(
@@ -428,7 +433,7 @@ describe("JwtStrategy", () => {
             const strategy = strategyFor(
                 settings,
                 metadata,
-                new IdpManagedClientsProvider(configService({}), {
+                new IdpManagedClientsProvider({
                     findOne: async () => null,
                 } as never),
             );
@@ -447,6 +452,61 @@ describe("JwtStrategy", () => {
             expect(user.entity?.id).toBe("acme");
             expect(user.subject).toBe("person");
             expect(user.client).toBeUndefined();
+        });
+
+        describe("client records left from an earlier mode", () => {
+            /** A record the built-in server or Keycloak mode created. */
+            const leftover = (tenantId: string | null) =>
+                new IdpManagedClientsProvider({
+                    findOne: async ({
+                        where,
+                    }: {
+                        where: { clientId: string };
+                    }) =>
+                        where.clientId === "shop"
+                            ? {
+                                  clientId: "shop",
+                                  tenantId,
+                                  roles: [Role.Clients],
+                                  allowedIssuanceConfigs: ["loyalty-card"],
+                              }
+                            : null,
+                } as never);
+            const shopToken = {
+                tenant_id: "acme",
+                sub: "service-account-shop",
+                azp: "shop",
+                exp: NOW + 300,
+                "urn:zitadel:iam:org:project:roles": {
+                    [Role.IssuanceOffer]: {},
+                },
+            };
+
+            test("apply their limits to the client's tokens of the same tenant", async () => {
+                const user = await strategyFor(
+                    settings,
+                    metadata,
+                    leftover("acme"),
+                ).validate(shopToken as never);
+
+                expect(user.client?.allowedIssuanceConfigs).toEqual([
+                    "loyalty-card",
+                ]);
+                // The roles still come from the token.
+                expect(user.roles).toEqual([Role.IssuanceOffer]);
+            });
+
+            test("refuse the client's tokens for another tenant", async () => {
+                await expect(
+                    strategyFor(settings, metadata, leftover("other")).validate(
+                        shopToken as never,
+                    ),
+                ).rejects.toThrow(
+                    new UnauthorizedException(
+                        "The client of this token does not exist",
+                    ),
+                );
+            });
         });
 
         test("refuses a token without expiry, which would never expire", async () => {
@@ -471,6 +531,11 @@ describe("JwtStrategy", () => {
                 jwksUri: metadata.jwks_uri,
                 audience: "eudiplo-api",
                 algorithms: ["RS256"],
+                // Not the origin of a key set only the document names.
+                trustedOrigins: [
+                    "https://auth.example.com",
+                    "http://authentik:9000",
+                ],
             });
         });
 
@@ -486,6 +551,23 @@ describe("JwtStrategy", () => {
             );
 
             expect(checks.jwksUri).toBe("http://authentik:9000/jwks/");
+            expect(checks.trustedOrigins).toContain("http://authentik:9000");
+        });
+
+        test("trusts the origin of OIDC_JWKS_URI, which the operator set", () => {
+            const checks = externalTokenChecks(
+                readAuthSettings(
+                    configService({
+                        ...settings,
+                        OIDC_JWKS_URI: "http://keys.internal:8080/jwks",
+                    }),
+                ) as never,
+                metadata,
+            );
+
+            expect(checks.trustedOrigins).toContain(
+                "http://keys.internal:8080",
+            );
         });
 
         test("cannot start without the discovery document", () => {

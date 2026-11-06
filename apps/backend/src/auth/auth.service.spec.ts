@@ -70,4 +70,31 @@ describe("AuthService discovery", () => {
         });
         expect(discovery).not.toHaveProperty("ui_client_id");
     });
+
+    it("never falls back to Keycloak's endpoints for another provider", () => {
+        expect(() =>
+            serviceFor({
+                PUBLIC_URL,
+                OIDC: "https://auth.example.com/",
+                OIDC_PROVIDER: "generic",
+            }).getOidcDiscovery(),
+        ).toThrow("The OIDC discovery document was not loaded");
+    });
+});
+
+describe("AuthService token endpoint", () => {
+    it.each([
+        ["Keycloak", {}],
+        ["another provider", { OIDC_PROVIDER: "generic" }],
+    ])("is not available with %s", async (_, values) => {
+        await expect(
+            serviceFor({
+                PUBLIC_URL,
+                OIDC: "https://auth.example.com/",
+                ...values,
+            }).getOAuth2Token({}, {}),
+        ).rejects.toThrow(
+            "OAuth2 token endpoint is not available when using external OIDC provider",
+        );
+    });
 });

@@ -4,13 +4,22 @@ import type { CreateUser, UpdateUser } from "./schemas/create-user.schema.js";
 
 export const USERS_PROVIDER = "USERS_PROVIDER";
 
-/** With `OIDC_PROVIDER=generic`, the identity provider manages the people. */
-export class UsersManagedByIdentityProvider extends NotSupportedError {
-    constructor() {
-        super(
+/**
+ * EUDIPLO manages people only through Keycloak's admin API. The built-in
+ * server has none, and with `OIDC_PROVIDER=generic` the identity provider
+ * manages them.
+ */
+export class UserManagementNotSupported extends NotSupportedError {
+    private static readonly reasons = {
+        builtin:
+            "Human user management is only available when EUDIPLO is configured with Keycloak as its external OIDC provider.",
+        generic:
             "Users are managed in the identity provider (OIDC_PROVIDER=generic).",
-        );
-        this.name = "UsersManagedByIdentityProvider";
+    };
+
+    constructor(mode: "builtin" | "generic") {
+        super(UserManagementNotSupported.reasons[mode]);
+        this.name = "UserManagementNotSupported";
     }
 }
 

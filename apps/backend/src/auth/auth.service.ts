@@ -40,7 +40,7 @@ export class AuthService {
      * @returns
      */
     async getOAuth2Token(body: any, headers: any): Promise<TokenResponse> {
-        if (this.jwtService.isUsingExternalOIDC()) {
+        if (this.settings.mode !== "builtin") {
             throw new UnauthorizedException(
                 "OAuth2 token endpoint is not available when using external OIDC provider. Use your external OIDC provider for authentication.",
             );
@@ -126,27 +126,11 @@ export class AuthService {
      */
     getOidcDiscovery(): OidcDiscoveryDto {
         const publicUrl = this.configService.getOrThrow<string>("PUBLIC_URL");
-        const settings = this.settings;
-        const builtin = settings.mode === "builtin";
-        // Another provider's endpoints come from its discovery document.
-        const provider = this.issuerMetadata;
-        const tokenEndpoint = builtin
-            ? `${publicUrl}/api/oauth2/token`
-            : (provider?.token_endpoint ??
-              `${settings.issuer}/protocol/openid-connect/token`);
 
         return {
-            issuer: builtin ? publicUrl : settings.issuer,
-            token_endpoint: tokenEndpoint,
-            jwks_uri:
-                provider?.jwks_uri ?? `${publicUrl}/.well-known/jwks.json`,
+            ...this.authorizationServer(publicUrl),
             response_types_supported: ["token"],
             grant_types_supported: ["client_credentials"],
-            // The Web Client signs in to other providers with client
-            // credentials only, so it offers single sign-on just for Keycloak.
-            ...(settings.mode === "keycloak" && {
-                ui_client_id: settings.uiClientId,
-            }),
             token_endpoint_auth_methods_supported: [
                 "client_secret_basic",
                 "client_secret_post",
@@ -157,5 +141,47 @@ export class AuthService {
             claims_supported: ["iss", "sub", "aud", "exp", "iat"],
             service_documentation: "https://docs.eudiplo.dev/",
         };
+    }
+
+    /** The issuer and endpoints of the server that issues the access tokens. */
+    private authorizationServer(
+        publicUrl: string,
+    ): Pick<
+        OidcDiscoveryDto,
+        "issuer" | "token_endpoint" | "jwks_uri" | "ui_client_id"
+    > {
+        const settings = this.settings;
+        switch (settings.mode) {
+            case "builtin":
+                return {
+                    issuer: publicUrl,
+                    token_endpoint: `${publicUrl}/api/oauth2/token`,
+                    jwks_uri: `${publicUrl}/.well-known/jwks.json`,
+                };
+            case "keycloak":
+                // The key set is EUDIPLO's own, as before.
+                return {
+                    issuer: settings.issuer,
+                    token_endpoint: `${settings.issuer}/protocol/openid-connect/token`,
+                    jwks_uri: `${publicUrl}/.well-known/jwks.json`,
+                    ui_client_id: settings.uiClientId,
+                };
+            case "generic": {
+                // From the provider's discovery document. The Web Client signs
+                // in to other providers with client credentials only, so it
+                // gets no client for single sign-on.
+                const provider = this.issuerMetadata;
+                if (!provider) {
+                    throw new Error(
+                        "The OIDC discovery document was not loaded for OIDC_PROVIDER=generic",
+                    );
+                }
+                return {
+                    issuer: settings.issuer,
+                    token_endpoint: provider.token_endpoint,
+                    jwks_uri: provider.jwks_uri,
+                };
+            }
+        }
     }
 }

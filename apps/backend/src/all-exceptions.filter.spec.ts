@@ -67,9 +67,12 @@ describe("AllExceptionsFilter", () => {
                 new ClientsManagedByIdentityProvider(),
             );
             expect(status).toBe(501);
-            expect(body.message).toBe(
-                "Clients are managed in the identity provider (OIDC_PROVIDER=generic).",
-            );
+            expect(body).toMatchObject({
+                statusCode: 501,
+                error: "Not Implemented",
+                message:
+                    "Clients are managed in the identity provider (OIDC_PROVIDER=generic).",
+            });
         } finally {
             vi.unstubAllEnvs();
         }

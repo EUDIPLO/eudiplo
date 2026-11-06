@@ -3,12 +3,14 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
+import { getRepositoryToken } from "@nestjs/typeorm";
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from "jose";
 import request from "supertest";
 import { App } from "supertest/types";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { AllExceptionsFilter } from "../../src/all-exceptions.filter.js";
 import { NOT_A_JWT_MESSAGE } from "../../src/auth/auth.guard.js";
+import { ClientEntity } from "../../src/auth/client/entities/client.entity.js";
 import { Role } from "../../src/auth/roles/role.enum.js";
 import { createAppValidationPipe } from "../../src/shared/common/zod/zod-schema.util.js";
 
@@ -191,6 +193,40 @@ describe("Generic OIDC provider (e2e)", () => {
         expect((await as(token).get("/user")).status).toBe(501);
     });
 
+    test("refuses to create a client even when a record of an earlier mode has its ID", async () => {
+        await app.get(getRepositoryToken(ClientEntity)).save({
+            clientId: "generic-leftover",
+            tenantId: TENANT,
+            roles: [Role.IssuanceOffer],
+        });
+
+        const response = await as(await personToken([Role.Clients])).post(
+            "/client",
+            { clientId: "generic-leftover", roles: [Role.Clients] },
+        );
+
+        // Not 409 "already in use": the record cannot be replaced anyway.
+        expect(response.status).toBe(501);
+        expect(response.body).toMatchObject({
+            error: "Not Implemented",
+            message:
+                "Clients are managed in the identity provider (OIDC_PROVIDER=generic).",
+        });
+    });
+
+    test("creates a tenant with an empty roles list, without an admin client", async () => {
+        const operator = await sign({
+            sub: "operator",
+            eudiplo: { roles: [Role.Tenants] },
+        });
+
+        const response = await as(operator)
+            .post("/tenant", { id: "generic-empty", name: "Empty", roles: [] })
+            .expect(201);
+
+        expect(response.body.client).toBeUndefined();
+    });
+
     test("refuses a tenant with an admin client before it creates the tenant", async () => {
         const operator = await sign({
             sub: "operator",
@@ -224,7 +260,7 @@ describe("Generic OIDC provider (e2e)", () => {
     });
 
     test("has no built-in token endpoint", async () => {
-        await request(app.getHttpServer())
+        const response = await request(app.getHttpServer())
             .post("/api/oauth2/token")
             .send({
                 grant_type: "client_credentials",
@@ -232,5 +268,10 @@ describe("Generic OIDC provider (e2e)", () => {
                 client_secret: "root",
             })
             .expect(401);
+
+        // Not the 401 for wrong credentials, which root/root also are.
+        expect(response.body.message).toBe(
+            "OAuth2 token endpoint is not available when using external OIDC provider. Use your external OIDC provider for authentication.",
+        );
     });
 });

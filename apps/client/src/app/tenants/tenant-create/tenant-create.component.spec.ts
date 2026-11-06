@@ -56,6 +56,7 @@ describe('TenantCreateComponent', () => {
       id: ' tenant ',
       name: ' Tenant ',
       description: '   ',
+      createAdminClient: true,
       roles: ['clients:manage'],
     });
 
@@ -72,6 +73,31 @@ describe('TenantCreateComponent', () => {
     });
   });
 
+  it('creates a tenant without an admin client and sends no roles', async () => {
+    component.tenantForm.setValue({
+      id: 'acme',
+      name: 'Acme',
+      description: '',
+      createAdminClient: true,
+      roles: [],
+    });
+    expect(component.tenantForm.valid).toBe(false);
+
+    component.tenantForm.get('createAdminClient')!.setValue(false);
+    expect(component.tenantForm.valid).toBe(true);
+    await component.onSubmit();
+
+    expect((await lastRequest()).body).toEqual({ id: 'acme', name: 'Acme' });
+  });
+
+  it('asks for roles again when the admin client is turned back on', () => {
+    component.tenantForm.patchValue({ id: 'acme', name: 'Acme', roles: [] });
+    component.tenantForm.get('createAdminClient')!.setValue(false);
+    component.tenantForm.get('createAdminClient')!.setValue(true);
+
+    expect(component.tenantForm.get('roles')!.hasError('required')).toBe(true);
+  });
+
   it.each(['x/../victim', '..', '-tenant', 'tenant a', 'Acme', 'kms.json'])(
     'refuses the tenant ID %j without sending a request',
     async (id) => {
@@ -79,6 +105,7 @@ describe('TenantCreateComponent', () => {
         id,
         name: 'Tenant',
         description: '',
+        createAdminClient: true,
         roles: ['clients:manage'],
       });
 
@@ -93,6 +120,7 @@ describe('TenantCreateComponent', () => {
       id: ' acme-1 ',
       name: 'Acme',
       description: '',
+      createAdminClient: true,
       roles: ['clients:manage'],
     });
 
@@ -106,6 +134,7 @@ describe('TenantCreateComponent', () => {
       id: 'tenant',
       name: 'Tenant',
       description: '  Example tenant  ',
+      createAdminClient: true,
       roles: ['clients:manage'],
     });
 

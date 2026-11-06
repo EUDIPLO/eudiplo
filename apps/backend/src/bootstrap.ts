@@ -8,7 +8,7 @@ import { Logger } from "nestjs-pino";
 import { cleanupOpenApiDoc } from "nestjs-zod";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 import { AppModule } from "./app.module.js";
-import { readAuthSettings } from "./auth/auth-settings.js";
+import { AUTH_SETTINGS, type AuthSettings } from "./auth/auth-settings.js";
 import {
     configureCors,
     filterOpenApiPaths,
@@ -78,7 +78,7 @@ async function bootstrap() {
     );
     configureCors(app, corsOrigins);
 
-    const authSettings = readAuthSettings(configService);
+    const authSettings = app.get<AuthSettings>(AUTH_SETTINGS);
 
     // ── Management API OpenAPI config ────────────────────────────────
     const managementConfigBuilder = new DocumentBuilder()

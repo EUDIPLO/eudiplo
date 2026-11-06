@@ -19,7 +19,7 @@ export const AUTH_VALIDATION_SCHEMA: Joi.ObjectSchema = Joi.object({
             }),
         })
         .description(
-            "Identity provider in OIDC mode. `keycloak` manages clients and people through the Keycloak admin API. `generic` accepts access tokens of any OpenID Connect provider and leaves clients and people to that provider: the client and user endpoints answer `501`, and the Web Client offers no single sign-on yet",
+            "Identity provider in OIDC mode. Refused without `OIDC`. `keycloak` manages clients and people through the Keycloak admin API. `generic` accepts access tokens of any OpenID Connect provider and leaves clients and people to that provider: the client and user endpoints answer `501`, and the Web Client offers no single sign-on yet",
         )
         .meta({
             group: "auth",

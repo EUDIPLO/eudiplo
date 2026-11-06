@@ -1,10 +1,6 @@
-import { existsSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import { Injectable } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
-import { tenantConfigFolder } from "../../../shared/utils/tenant-config-folder.util.js";
 import { ClientsProvider } from "../client.provider.js";
 import {
     type ClientData,
@@ -24,7 +20,6 @@ import type { CreateClient, UpdateClient } from "../schemas/client.schema.js";
 @Injectable()
 export class IdpManagedClientsProvider extends ClientsProvider {
     constructor(
-        private readonly configService: ConfigService,
         @InjectRepository(ClientEntity)
         private readonly clientRepo: Repository<ClientEntity>,
     ) {
@@ -100,27 +95,10 @@ export class IdpManagedClientsProvider extends ClientsProvider {
     }
 
     /**
-     * Client files in a tenant's configuration folder would have no effect,
-     * so the import fails instead of letting the operator assume the clients
-     * exist.
+     * Nothing to import: a configuration folder is imported through the
+     * config bundle plan, which never calls this.
      */
-    importForTenant(tenantId: string): Promise<void> {
-        const folder = tenantConfigFolder(
-            this.configService.getOrThrow<string>("CONFIG_FOLDER"),
-            tenantId,
-        );
-        const clients = folder ? join(folder, "clients") : undefined;
-        if (
-            clients &&
-            existsSync(clients) &&
-            readdirSync(clients).some((file) => file.endsWith(".json"))
-        ) {
-            return Promise.reject(
-                new Error(
-                    `${clients} contains client files, but with OIDC_PROVIDER=generic clients are managed in the identity provider. Delete the folder, or set OIDC_PROVIDER=keycloak.`,
-                ),
-            );
-        }
+    importForTenant(_tenantId: string): Promise<void> {
         return Promise.resolve();
     }
 }

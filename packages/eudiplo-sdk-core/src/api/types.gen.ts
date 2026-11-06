@@ -288,7 +288,7 @@ export type CreateTenantDto = {
      */
     description?: string;
     /**
-     * Roles of the tenant's admin client `<id>-admin`, which also gets clients:manage. They are all that client can grant, unless they include tenant:admin. Without roles, no admin client is created.
+     * Roles of the tenant's admin client `<id>-admin`, which also gets clients:manage. They are all that client can grant, unless they include tenant:admin. Without roles, or with an empty list, no admin client is created.
      */
     roles?: Array<'tenants:manage' | 'issuance:offer' | 'issuance:manage' | 'presentation:request' | 'presentation:manage' | 'clients:manage' | 'users:manage' | 'registrar:manage' | 'tenant:admin' | 'audit:read' | 'sessions:read' | 'credentials:status' | 'keys:manage'>;
     /**

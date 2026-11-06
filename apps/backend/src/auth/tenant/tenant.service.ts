@@ -302,10 +302,12 @@ export class TenantService implements OnApplicationBootstrap {
         requestMeta?: AuditLogRequestMeta,
     ) {
         const adminClientId = `${data.id}-admin`;
-        if (data.roles) {
+        // An empty list asks for no admin client, like no list.
+        const adminRoles = data.roles?.length ? data.roles : undefined;
+        if (adminRoles) {
             this.clients.assertCanCreateClients();
         }
-        const existingAdmin = data.roles
+        const existingAdmin = adminRoles
             ? await this.clients.getClientById(adminClientId)
             : null;
         // Client IDs are unique across tenants: never take over another
@@ -323,12 +325,12 @@ export class TenantService implements OnApplicationBootstrap {
             | { clientId: string; clientSecret: string }
             | undefined;
 
-        if ((data as CreateTenant).roles) {
+        if (adminRoles) {
             // Creating an existing tenant again updates its admin client.
             const client = await this.clients.addClient(tenant.id, {
                 clientId: adminClientId,
                 description: `auto generated admin client for tenant ${tenant.id}`,
-                roles: [Role.Clients, ...((data as CreateTenant).roles || [])],
+                roles: [Role.Clients, ...adminRoles],
             });
             // Return the client credentials for one-time display
             clientCredentials = {

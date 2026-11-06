@@ -56,14 +56,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
             } else {
                 message = httpResponse;
             }
+        } else if (exception instanceof NotSupportedError) {
+            // The body of Nest's NotImplementedException, which /api/user
+            // answered with before. The message names the setting behind it.
+            responseBody = { error: "Not Implemented" };
+            message = exception.message;
         } else if (
             exception instanceof Error &&
-            (!isProduction ||
-                exception instanceof ConflictError ||
-                exception instanceof NotSupportedError)
+            (!isProduction || exception instanceof ConflictError)
         ) {
-            // Conflict messages name the taken resource and not-supported
-            // messages the setting behind them, never internals.
+            // Conflict messages name the taken resource, never internals.
             message = exception.message;
         } else {
             message = "Internal Server Error";
