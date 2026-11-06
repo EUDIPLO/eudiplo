@@ -145,6 +145,18 @@ describe('focusFieldToFix', () => {
     expect(document.activeElement).toBe(byName('email'));
   });
 
+  it('focuses the first invalid field when the given field is not found', () => {
+    const container = render(`
+      <input formcontrolname="url" class="ng-invalid" />
+      <input formcontrolname="email" class="ng-invalid" />
+    `);
+
+    focusFieldToFix(TestBed.inject(Injector), () => container, { field: () => null });
+    render$();
+
+    expect(document.activeElement).toBe(byName('url'));
+  });
+
   it('focuses a field its opening panel still hides once the panel has expanded', () => {
     const container = render(`
       <button type="submit">Save</button>
