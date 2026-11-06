@@ -154,9 +154,7 @@ reports `KEY_CHAIN_TYPE_MISMATCH`. A v1 document is migrated unchanged;
 for the key chains that sign access tokens
 ([Authorization server key chain](../trust/keys-and-certificates.md#authorization-server-key-chain)).
 A v3 document is migrated unchanged; a bare key chain file with usage type
-`authorizationServer` is read as v4. Like every `KeyChain` version, the upgrade changes
-the hash stored for each applied key chain, so the next `upsert` or `replace`
-import applies every file-managed key chain once more.
+`authorizationServer` is read as v4.
 
 **KeyChainDefaults v1** came with EUDIPLO 10.0. The singleton
 `KeyChainDefaults/defaults` (`key-chain-defaults.json`) holds the tenant's key
@@ -337,7 +335,7 @@ A `KmsConfig`, `RegistrarConfig` or `KeyChainDefaults` document replaces the sto
 
 The plan lists these values as they will be stored. For the other kinds, a top-level field the document leaves out keeps its stored value.
 
-A `KeyChain` document that is identical to the one last applied from the same source (the same config folder, or bundles whose manifest names the same tenant) plans `unchanged` while the key chain is `file-managed`, without comparing it with the stored key chain: importers add key IDs, EUDIPLO creates the signing key of a CA key, and rotation or registrar enrollment replace keys and certificates later. These changes stay, so certificates EUDIPLO created during the import are only renewed by rotation. Reattaching always applies the folder version. To apply an unchanged document again, for example to regenerate a key, raise `metadata.generation`; in a bundle, also update the document's `sha256` in `manifest.json`.
+A `KeyChain` document that is identical to the one last applied from the same source (the same config folder, or bundles whose manifest names the same tenant) plans `unchanged` while the key chain is `file-managed`, without comparing it with the stored key chain: importers add key IDs, EUDIPLO creates the signing key of a CA key, and rotation or registrar enrollment replace keys and certificates later. These changes stay, so certificates EUDIPLO created during the import are only renewed by rotation. A document applied under an earlier format version, for example a KeyChain v1 file that 9.x applied, is still identical when its migration to the current format changes only `$schema`; a migration that rewrites `spec` or `metadata` makes it a changed document. Reattaching always applies the folder version. To apply an unchanged document again, for example to regenerate a key, raise `metadata.generation`; in a bundle, also update the document's `sha256` in `manifest.json`.
 
 The same rule covers a `Client` document with `"secret": "!generate"`, since applying it generates a new secret: once this source applied it, the client keeps its secret while the document stays the same. A changed document, a raised `metadata.generation`, another source or reattaching generates a new secret, returned once in `generatedSecrets`. Other `Client` documents are compared field by field. With Keycloak (`OIDC` set), every `Client` document is applied on every import, because the plan cannot see changes made in Keycloak; a `!generate` client applied as it is keeps its secret.
 

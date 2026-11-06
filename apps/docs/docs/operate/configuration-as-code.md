@@ -96,7 +96,7 @@ Restart the backend to apply changed files. The folder layout is listed in the
 ### Clients with generated secrets
 
 A client file with `"secret": "!generate"` gets a random secret when it is first
-imported from this folder or its file changes, but a startup import cannot return it. The backend
+imported from this folder or the content of its file changes, but a startup import cannot return it. The backend
 writes a warning to its application log (not to the audit log) that names the
 client, never the secret:
 
@@ -108,8 +108,9 @@ To get a secret you can use, apply the client from the file again: choose
 **Apply from file** in its row under **Settings > Config Portability**, or
 reattach it through the API as above, with `Client/shop-backend` in the path.
 The client stays `file-managed`, its old secret stops working, and the new one
-is shown once in the result. Later startups keep the secret while the file does
-not change. To skip this step, give the secret in the file as an environment
+is shown once in the result. Later startups keep the secret while the content of the
+file does not change; a newer `$schema` alone, as `eudiplo config upgrade`
+writes it, keeps it too. To skip this step, give the secret in the file as an environment
 variable, for example `"secret": "${SHOP_BACKEND_SECRET}"`.
 
 ## Validate in CI
