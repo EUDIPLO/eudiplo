@@ -13,7 +13,7 @@ Bump whenever the accepted content of a resource changes, including a changed de
 
 Skipping a bump is the user's call, not yours. TrustList stayed v1 for Base64 DER certificates only because the user decided so, and the waiver text went into the PR body. Ask before waiving.
 
-Avoid a `KeyChain` bump when another kind can carry the change: it changes the hash of every applied document, so the next `upsert`/`replace` startup applies every file-managed key chain again, with new keys for CA keys. (KmsConfig v2 added curves without a KeyChain bump for this reason.) If you do bump it, say so in the upgrade guide.
+A `KeyChain` or `Client` bump whose migration step returns `spec` and `metadata` unchanged keeps applied documents as they are (`documentAppliedAsIs` also accepts the hash under earlier versions). A step that rewrites `spec` or `metadata` makes the next `upsert`/`replace` startup apply every affected file-managed key chain again (new keys for CA keys and `regenerate`) and every `!generate` client (a new secret the startup import never shows). Avoid such a step when you can; if you need one, say so in the upgrade guide.
 
 ## 2. Which version number?
 
