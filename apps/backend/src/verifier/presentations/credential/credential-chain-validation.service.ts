@@ -377,57 +377,63 @@ export class CredentialChainValidationService {
             return [];
         }
 
-        const entries: MdocTrustedCertificates[] = [];
-
-        for (const entity of store.entities) {
-            // A list may repeat certificates and services: parse each
-            // certificate once, and share one status array between the
-            // entries of a service type, whose paired revocation services
-            // are the same. Otherwise the work grows with issuance times
-            // revocation services.
-            const parsed = new Map<string, Uint8Array | undefined>();
-            const parse = (certValue: string) => {
-                if (!parsed.has(certValue)) {
-                    parsed.set(
-                        certValue,
-                        this.parseCertificate(certValue, entity),
-                    );
-                }
-                return parsed.get(certValue);
-            };
-            // Per service type: the paired revocation certificates, or null
-            // when the entity lists none (see getStatusListSigners).
-            const revocationByType = new Map<string, Uint8Array[] | null>();
-
-            for (const svc of entity.services) {
-                const type = svc.serviceTypeIdentifier;
-                if (!isCredentialIssuerServiceType(type)) continue;
-                const issuance = parse(svc.certValue);
-                if (!issuance) continue;
-
-                if (!revocationByType.has(type)) {
-                    const services = getRevocationServices(entity, type);
-                    revocationByType.set(
-                        type,
-                        services.length > 0
-                            ? services
-                                  .map((signer) => parse(signer.certValue))
-                                  .filter((cert) => cert !== undefined)
-                            : null,
-                    );
-                }
-                // An entity without paired revocation services signs status
-                // lists under the matched certificate. Paired ones that do
-                // not parse leave no signer: the status check then fails.
-                const status = revocationByType.get(type) ?? [issuance];
-                entries.push({ issuance: [issuance], status });
-            }
-        }
+        const entries = store.entities.flatMap((entity) =>
+            this.mdocEntriesOf(entity),
+        );
 
         this.logger.debug(
             `Loaded ${entries.length} trusted issuance certificate(s) for verification`,
         );
 
+        return entries;
+    }
+
+    /**
+     * The mdoc trust anchor entries of one entity, see
+     * {@link getTrustedCertificateEntries}. A list may repeat certificates
+     * and services: each certificate is parsed once, and the entries of a
+     * service type share one status array, since their paired revocation
+     * services are the same. Otherwise the work grows with issuance times
+     * revocation services.
+     */
+    private mdocEntriesOf(entity: TrustedEntity): MdocTrustedCertificates[] {
+        const parsed = new Map<string, Uint8Array | undefined>();
+        const parse = (certValue: string) => {
+            if (!parsed.has(certValue)) {
+                parsed.set(certValue, this.parseCertificate(certValue, entity));
+            }
+            return parsed.get(certValue);
+        };
+        // Per service type: the paired revocation certificates, or null
+        // when the entity lists none (see getStatusListSigners).
+        const revocationByType = new Map<string, Uint8Array[] | null>();
+        const revocationOf = (type: string) => {
+            if (!revocationByType.has(type)) {
+                const services = getRevocationServices(entity, type);
+                revocationByType.set(
+                    type,
+                    services.length > 0
+                        ? services
+                              .map((signer) => parse(signer.certValue))
+                              .filter((cert) => cert !== undefined)
+                        : null,
+                );
+            }
+            return revocationByType.get(type) ?? null;
+        };
+
+        const entries: MdocTrustedCertificates[] = [];
+        for (const svc of entity.services) {
+            const type = svc.serviceTypeIdentifier;
+            if (!isCredentialIssuerServiceType(type)) continue;
+            const issuance = parse(svc.certValue);
+            if (!issuance) continue;
+            // An entity without paired revocation services signs status
+            // lists under the matched certificate. Paired ones that do not
+            // parse leave no signer: the status check then fails.
+            const status = revocationOf(type) ?? [issuance];
+            entries.push({ issuance: [issuance], status });
+        }
         return entries;
     }
 

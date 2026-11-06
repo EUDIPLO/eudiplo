@@ -206,11 +206,9 @@ export class MdocverifierService {
             // arrays, so they are passed on without parsing them again.
             const presentedChain = (issuerX5Chain ?? []).map(normalizeDer);
             const anchorEntries =
-                trustedEntries.length > 0
+                trustedEntries.length > 0 || presentedChain.length === 0
                     ? trustedEntries
-                    : presentedChain.length > 0
-                      ? [{ issuance: presentedChain, status: presentedChain }]
-                      : [];
+                    : [{ issuance: presentedChain, status: presentedChain }];
             const buildTrustedCertificates = (attachStatus: boolean) =>
                 anchorEntries.map(({ issuance, status }) => ({
                     issuance,

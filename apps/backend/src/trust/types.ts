@@ -112,7 +112,9 @@ export const credentialIssuerServiceTypes = [
 
 /** Whether a service type identifies credential issuers, compared exactly. */
 export function isCredentialIssuerServiceType(serviceType: string): boolean {
-    return credentialIssuerServiceTypes.some((type) => type === serviceType);
+    return (credentialIssuerServiceTypes as readonly string[]).includes(
+        serviceType,
+    );
 }
 
 export const walletSolutionServiceTypes = [
