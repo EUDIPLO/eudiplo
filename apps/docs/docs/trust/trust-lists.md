@@ -42,7 +42,7 @@ Create the list in the Web Client under **Cryptographic Assets → Trust Lists**
 }
 ```
 
-- **Internal** entities reference key chains of this tenant. EUDIPLO lists the last certificate of each chain, the root CA for internal and external CA chains, so the entry survives key rotation.
+- **Internal** entities reference key chains of this tenant. EUDIPLO lists the last certificate of each chain, the root CA for internal and external CA chains, so the entry survives key rotation. It does not check their usage types, so reference an `attestation` key chain as issuer and a `statusList` key chain for revocation; the Web Client marks a stored key chain of another usage type.
 - **External** entities carry the certificates of issuers outside this tenant, as PEM or Base64 DER.
 - The list is signed with the `trustList` key chain in `keyChainId`, or with a `trustList` key chain of the tenant if omitted; create one first ([Keys and Certificates](keys-and-certificates.md)).
 
