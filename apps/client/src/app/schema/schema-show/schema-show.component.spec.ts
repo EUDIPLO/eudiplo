@@ -372,6 +372,27 @@ describe('SchemaShowComponent publishing a new version', () => {
     expect(component.metadataForm.pristine).toBe(true);
   });
 
+  it('keeps a change made while the catalog metadata is saved as unsaved', async () => {
+    let finish!: (entry: unknown) => void;
+    schemaService['updateMetadata'] = vi
+      .fn()
+      .mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    await load();
+    const { displayName, tags } = component.metadataForm.controls;
+    displayName.setValue('Renamed PID');
+    displayName.markAsDirty();
+
+    const saving = component.saveMetadata();
+    tags.setValue(['pid']);
+    tags.markAsDirty();
+    finish(currentVersion({ displayName: 'Renamed PID' }));
+    await saving;
+
+    expect(displayName.pristine).toBe(true);
+    expect(tags.dirty).toBe(true);
+    expect(component.metadataSaveTooltip).toBe('');
+  });
+
   it('keeps a version opened while its predecessor was being saved', async () => {
     let finish!: (entry: unknown) => void;
     schemaService['updateMetadata'] = vi

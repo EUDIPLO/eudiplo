@@ -337,6 +337,10 @@ export class SchemaShowComponent implements OnInit {
       // the registrar vocabulary has no option in the selects, and sending it
       // back unchanged would fail validation.
       const { displayName, category, tags } = this.metadataForm.controls;
+      // A field changed while the save runs keeps its unsaved change afterwards.
+      const sent = [displayName, category, tags].map(
+        (control) => [control, JSON.stringify(control.value)] as const
+      );
       const updated = await this.schemaService.updateMetadata(entry.id, entry.version, {
         ...(displayName.dirty ? { displayName: displayName.value?.trim() || undefined } : {}),
         ...(category.dirty
@@ -351,7 +355,9 @@ export class SchemaShowComponent implements OnInit {
       // Another version may have been opened meanwhile; its form stays as it is.
       if (this.item === entry) {
         this.item = updated;
-        this.metadataForm.markAsPristine();
+        for (const [control, value] of sent) {
+          if (JSON.stringify(control.value) === value) control.markAsPristine();
+        }
       }
     } catch (error) {
       console.error('Failed to update metadata:', error);
