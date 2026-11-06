@@ -1,6 +1,10 @@
+import { ApplicationRef, ElementRef, Injector } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { FormBuilder } from '@angular/forms';
+import { EMPTY } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { IssuanceConfigCreateComponent } from './issuance-config-create.component';
+import { loseFocus } from '../../../common/settings-screen.testing';
 import {
   pemToBase64Der,
   TEST_ROOT_CERTIFICATE_PEM,
@@ -123,13 +127,64 @@ describe('issuer settings guided setup', () => {
   it('blocks saving on loading failure and supports retry', async () => {
     service.getConfig.mockRejectedValueOnce({ statusCode: 403, message: 'Forbidden resource' });
     await component.loadConfigForEdit();
-    expect(component.loadError).toBe(
-      'Could not load issuer settings: Forbidden resource. Retry before making changes.'
-    );
+    expect(component.loadError).toBe('Could not load issuer settings: Forbidden resource.');
     component.onSubmit();
     expect(service.saveConfiguration).not.toHaveBeenCalled();
     await component.loadConfigForEdit();
     expect(component.loadError).toBe('');
+  });
+
+  it('moves focus to the heading only after a retry loads the settings', async () => {
+    const heading = document.body.appendChild(document.createElement('h2'));
+    heading.tabIndex = -1;
+    Object.assign(component, {
+      injector: TestBed.inject(Injector),
+      pageHeading: new ElementRef(heading),
+    });
+    /** Loads the settings while focus is lost, as after the Retry button was removed. */
+    const load = async () => {
+      loseFocus();
+      await component.loadConfigForEdit();
+      TestBed.inject(ApplicationRef).tick();
+    };
+    try {
+      await load();
+      expect(document.activeElement).not.toBe(heading);
+
+      service.getConfig.mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' });
+      await load();
+      service.getConfig.mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' });
+      await load();
+      expect(component.loadError).not.toBe('');
+      expect(document.activeElement).not.toBe(heading);
+
+      await load();
+      expect(component.loadError).toBe('');
+      expect(document.activeElement).toBe(heading);
+    } finally {
+      heading.remove();
+    }
+  });
+
+  it('opens JSON View only with loaded settings and says why it waits', async () => {
+    const open = vi.fn(() => ({ afterClosed: () => EMPTY }));
+    Object.assign(component, { dialog: { open } });
+    await component.loadConfigForEdit();
+    expect(component.jsonViewUnavailableReason).toBe('');
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
+
+    // The button stays clickable while it cannot be used, so the handler checks again.
+    service.getConfig.mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' });
+    const reload = component.loadConfigForEdit();
+    expect(component.jsonViewUnavailableReason).toBe('Wait until the issuer settings have loaded');
+    component.viewAsJson();
+    await reload;
+    expect(component.jsonViewUnavailableReason).toBe(
+      'Retry loading the issuer settings before opening JSON View'
+    );
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
   });
 
   it("shows the backend's reason when saving is rejected", async () => {
@@ -339,6 +394,8 @@ describe('issuer settings guided setup', () => {
     component.authorizationServers.at(0).get('type')!.setValue('built-in');
     component.onAuthorizationServerTypeChange(0, 'built-in');
     expect(lifetime().value).toBe(300);
+    // The new group of the open panel stays open.
+    expect(component.expandedServers.has(component.authorizationServers.at(0))).toBe(true);
 
     component.authorizationServers.at(0).get('type')!.setValue('chained');
     component.onAuthorizationServerTypeChange(0, 'chained');

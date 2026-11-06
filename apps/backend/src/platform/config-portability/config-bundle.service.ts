@@ -12,6 +12,7 @@ import {
     configChanges,
     stableConfigJson,
 } from "@eudiplo/config-format/config-values.js";
+import { publishableDisplayEntries } from "@eudiplo/config-format/display-entries.js";
 import {
     BadRequestException,
     ConflictException,
@@ -21,7 +22,7 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { compare as compareSecret } from "bcrypt";
-import { Not, Repository } from "typeorm";
+import { In, Not, Repository } from "typeorm";
 import {
     DEFAULT_KEY_CHAIN_ENTRIES,
     type DefaultKeyChains,
@@ -49,10 +50,19 @@ import {
     TrustListReferences,
 } from "../../issuer/trust-list/application/trust-list-references.js";
 import {
+    entityKeyChainReferences,
+    entityKeyChainUsageRefusal,
+    storedEntityKeyChains,
+} from "../../issuer/trust-list/domain/trust-list-entity-key-chains.js";
+import {
     describeTrustListReferences,
     isTrustListReferenceKind,
     trustListReferenceId,
 } from "../../issuer/trust-list/domain/trust-list-reference.js";
+import {
+    trustListKeyChainUsageRefusal,
+    trustListSigningKeyChain,
+} from "../../issuer/trust-list/domain/trust-list-signing-key-chain.js";
 import { trustListConfig } from "../../issuer/trust-list/trust-list-config.js";
 import { FileEntity } from "../../storage/entities/files.entity.js";
 import { FilesService } from "../../storage/files.service.js";
@@ -782,6 +792,7 @@ export class ConfigBundleService {
             upgradedDocuments,
             mode,
             ownershipSource,
+            items,
         );
         for (const issue of referenceIssues) {
             const item = issue.resource
@@ -1464,6 +1475,167 @@ export class ConfigBundleService {
         );
     }
 
+    /**
+     * The key chain that signs a trust list the import writes, the one in
+     * `keyChainId` or else the one the stored list is signed with, must have
+     * usage type `trustList`, else applying the document fails. A document
+     * the plan leaves unchanged is not applied, so it only warns: the list
+     * stays signed with that key chain, renewals go on using it, and its next
+     * update fails. A missing `keyChainId` is reported as a missing
+     * reference; a kept key chain exists, and `replace` cannot delete it while
+     * the list uses it (`KEY_CHAIN_IN_USE`).
+     */
+    private async checkTrustListKeyChains(
+        tenantId: string,
+        documents: ConfigDocument[],
+        availableKeyChains: Set<string> | undefined,
+        actions: ReturnType<typeof planActions>,
+    ): Promise<ConfigMigrationIssue[]> {
+        const issues = await Promise.all(
+            documents
+                .filter((document) => document.kind === "TrustList")
+                .map(
+                    async (
+                        document,
+                    ): Promise<ConfigMigrationIssue | undefined> => {
+                        const id = resourceId(document);
+                        const action = actions.get(`TrustList/${id}`)?.action;
+                        if (!action || action === "skip") return undefined;
+                        const named = (
+                            document.spec as { keyChainId?: unknown }
+                        ).keyChainId;
+                        const keyChainId =
+                            typeof named === "string" ? named : undefined;
+                        const stored = keyChainId
+                            ? undefined
+                            : await this.trustLists.findOne({
+                                  where: { tenantId, id },
+                                  select: { id: true, keyChainId: true },
+                              });
+                        const signing = trustListSigningKeyChain(
+                            keyChainId,
+                            stored?.keyChainId,
+                        );
+                        if (!signing || !availableKeyChains?.has(signing.id))
+                            return undefined;
+                        const refusal = trustListKeyChainUsageRefusal(
+                            signing,
+                            await this.keyChainUsageType(
+                                tenantId,
+                                documents,
+                                signing.id,
+                            ),
+                        );
+                        if (!refusal) return undefined;
+                        return {
+                            severity:
+                                action === "unchanged" ? "warning" : "error",
+                            code: "KEY_CHAIN_USAGE_MISMATCH",
+                            path: "/spec/keyChainId",
+                            message: refusal,
+                            resource: { kind: "TrustList", id },
+                        };
+                    },
+                ),
+        );
+        return issues.filter(
+            (issue): issue is ConfigMigrationIssue => issue !== undefined,
+        );
+    }
+
+    /**
+     * The key chains that internal entities of a trust list name must have a
+     * usage type that provides their certificate (`attestation` for
+     * `issuerKeyChainId`, `statusList` or `attestation` for
+     * `revocationKeyChainId`), else the trust list service refuses them when
+     * the import applies the list. A missing key chain is reported as a
+     * missing reference. Like the API, the plan does not refuse a value the
+     * stored list already has in that field; it warns instead. It only warns
+     * for a list the import skips as well (for example a detached one), as
+     * that document is not applied.
+     */
+    private async checkTrustListEntityKeyChains(
+        tenantId: string,
+        documents: ConfigDocument[],
+        availableKeyChains: Set<string> | undefined,
+        actions: ReturnType<typeof planActions>,
+    ): Promise<ConfigMigrationIssue[]> {
+        const named = documents
+            .filter((document) => document.kind === "TrustList")
+            .flatMap((document) =>
+                entityKeyChainReferences(
+                    (document.spec as { entities?: unknown } | undefined)
+                        ?.entities,
+                ).map((reference) => ({ document, ...reference })),
+            )
+            .filter(({ keyChainId }) => availableKeyChains?.has(keyChainId));
+        if (named.length === 0) return [];
+        const listIds = [
+            ...new Set(named.map(({ document }) => resourceId(document))),
+        ];
+        // Each list and key chain is read once, however many entities name it.
+        const keyChainIds = [
+            ...new Set(named.map(({ keyChainId }) => keyChainId)),
+        ];
+        const [stored, usageTypes] = await Promise.all([
+            this.trustLists
+                .find({
+                    where: { tenantId, id: In(listIds) },
+                    select: { tenantId: true, id: true, entityConfig: true },
+                })
+                .then(
+                    (lists) =>
+                        new Map(
+                            lists.map((list) => [
+                                list.id,
+                                storedEntityKeyChains(list.entityConfig),
+                            ]),
+                        ),
+                ),
+            Promise.all(
+                keyChainIds.map(
+                    async (keyChainId) =>
+                        [
+                            keyChainId,
+                            await this.keyChainUsageType(
+                                tenantId,
+                                documents,
+                                keyChainId,
+                            ),
+                        ] as const,
+                ),
+            ).then((entries) => new Map(entries)),
+        ]);
+        return named.flatMap((reference): ConfigMigrationIssue[] => {
+            const { document, index, field, keyChainId } = reference;
+            const refusal = entityKeyChainUsageRefusal(
+                field,
+                keyChainId,
+                usageTypes.get(keyChainId),
+            );
+            if (!refusal) return [];
+            // A skipped list is not applied, and a stored value is kept when
+            // the list is applied, but its certificate still does not
+            // certify what the field says.
+            const warnOnly =
+                actions.get(`${document.kind}/${resourceId(document)}`)
+                    ?.action === "skip" ||
+                (stored.get(resourceId(document))?.(reference) ?? false);
+            return [
+                {
+                    severity: warnOnly ? "warning" : "error",
+                    code: "KEY_CHAIN_USAGE_MISMATCH",
+                    path: `/spec/entities/${index}/${field}`,
+                    message: refusal,
+                    resource: {
+                        kind: document.kind,
+                        id: resourceId(document),
+                    },
+                },
+            ];
+        });
+    }
+
     /** Usage type of a key chain of the bundle, else of the tenant. */
     private async keyChainUsageType(
         tenantId: string,
@@ -1489,6 +1661,7 @@ export class ConfigBundleService {
         documents: ConfigDocument[],
         mode: ConfigImportMode,
         ownershipSource: string,
+        items: ConfigImportPlanItem[],
     ): Promise<ConfigMigrationIssue[]> {
         const available = new Map<ConfigResourceKind, Set<string>>();
         const load = (kind: ConfigResourceKind, ids: string[]) =>
@@ -1645,16 +1818,37 @@ export class ConfigBundleService {
         };
         for (const document of documents)
             visit(document, document.spec, "/spec");
+        // A key chain document the plan skips is not written, so the usage
+        // checks take the stored key chain's usage type instead.
+        const actions = planActions(items);
+        const written = documents.filter(
+            (document) =>
+                document.kind !== "KeyChain" ||
+                actions.get(`KeyChain/${resourceId(document)}`)?.action !==
+                    "skip",
+        );
         issues.push(
             ...(await this.checkDefaultKeyChains(
                 tenantId,
-                documents,
+                written,
                 available.get("KeyChain"),
             )),
             ...(await this.checkAuthorizationServerKeyChains(
                 tenantId,
-                documents,
+                written,
                 available.get("KeyChain"),
+            )),
+            ...(await this.checkTrustListKeyChains(
+                tenantId,
+                written,
+                available.get("KeyChain"),
+                actions,
+            )),
+            ...(await this.checkTrustListEntityKeyChains(
+                tenantId,
+                written,
+                available.get("KeyChain"),
+                actions,
             )),
         );
 
@@ -1795,7 +1989,17 @@ export class ConfigBundleService {
                 return {
                     id: entity.id,
                     description: entity.description,
-                    config: entity.config,
+                    // Stored before CredentialConfig v4, display entries may hold colors
+                    // or repeated locales v4 refuses; the export leaves them out as the
+                    // issuer metadata does
+                    config: entity.config.display
+                        ? {
+                              ...entity.config,
+                              display: publishableDisplayEntries(
+                                  entity.config.display,
+                              ),
+                          }
+                        : entity.config,
                     // Stored before CredentialConfig v3, constraints may carry
                     // keys that v3 refuses; the export leaves them out
                     fields: sanitizeClaimFields(entity.fields ?? []).fields,

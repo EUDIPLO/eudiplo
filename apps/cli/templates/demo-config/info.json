@@ -1,5 +1,5 @@
 {
-  "$schema": "https://eudiplo.dev/schemas/v1/TenantConfigFile.schema.json",
+  "$schema": "https://eudiplo.dev/schemas/v4/TenantConfigFile.schema.json",
   "metadata": {
     "generation": 1
   },

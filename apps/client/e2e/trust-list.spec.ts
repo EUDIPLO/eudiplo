@@ -1,8 +1,11 @@
 import type { Page, Response } from '@playwright/test';
 import { expect, test } from './support/test';
 import { useTenantClient } from './support/clients';
-import { resolvedE2EConfig } from './support/e2e-config';
+import { hasRootCredentials, resolvedE2EConfig } from './support/e2e-config';
+import { certificatePem, createKeyChain } from './support/key-chains';
 import { loginWithClientCredentials } from './support/login';
+import { createTenant } from './support/tenants';
+import { createTrustList } from './support/trust-lists';
 
 function isTrustListRequest(response: Response): boolean {
   return response.url().endsWith('/api/trust-list') && response.request().method() === 'GET';
@@ -64,5 +67,258 @@ test.describe('verifier admin', () => {
       .filter({ has: page.getByText('Referenced by Presentation Configs', { exact: true }) });
     await expect(card.locator('a[href="/presentation-config/pid"]')).toBeVisible();
     await expect(card.locator('a[href="/presentation-config/age-over-18"]')).toBeVisible();
+  });
+});
+
+test.describe('entities', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('removing an entity leaves the next one in its place with its own values', async ({
+    page,
+  }) => {
+    test.skip(
+      !hasRootCredentials,
+      'Set AUTH_CLIENT_ID and AUTH_CLIENT_SECRET of the backend to create a tenant.'
+    );
+    const tenant = await createTenant('trust-list-rows', 'Trust List Rows', ['issuance:manage']);
+    const api = `${resolvedE2EConfig.apiBaseUrl}/api/trust-list`;
+    const headers = { Authorization: `Bearer ${tenant.token}`, 'Content-Type': 'application/json' };
+    const keyChainId = await createKeyChain(tenant.token, 'trustList', 'Trust list rows signing');
+    const created = await fetch(api, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        id: 'rows',
+        description: 'Three entities',
+        keyChainId,
+        entities: ['A', 'B', 'C'].map((name) => ({
+          type: 'external',
+          providerType: 'attestation-provider',
+          issuerCertPem: certificatePem,
+          revocationCertPem: certificatePem,
+          info: { name: `Entity ${name}`, country: name === 'C' ? 'FR' : 'DE' },
+        })),
+      }),
+    });
+    expect(created.status, await created.clone().text()).toBe(201);
+
+    await loginWithClientCredentials(page, tenant.clientId, tenant.clientSecret);
+    await page.goto('/trust-list/rows/edit');
+    await page.getByRole('button', { name: /External Entity #2/ }).click();
+    await page
+      .getByRole('region', { name: /External Entity #2/ })
+      .getByRole('button', { name: 'Remove Entity' })
+      .click();
+
+    // The next entity takes the place and the focus of the removed one, with its own values.
+    await expect(page.getByRole('button', { name: /External Entity #3/ })).toHaveCount(0);
+    const header = page.getByRole('button', { name: /External Entity #2/ });
+    await expect(header).toBeFocused();
+    // The header names the entity, so it does not read like the one just removed.
+    await expect(header).toHaveAccessibleName(/^External Entity #2 · Entity C/);
+    // Opening entity 2 closed the last one: only one panel is open at a time.
+    await expect(header).toHaveAttribute('aria-expanded', 'false');
+    await page.keyboard.press('Enter');
+    const second = page.getByRole('region', { name: /External Entity #2/ });
+    await expect(second.getByRole('textbox', { name: 'Entity Name' })).toHaveValue('Entity C');
+    await expect(second.getByRole('textbox', { name: 'Country' })).toHaveValue('FR');
+    await second.getByRole('textbox', { name: 'Entity Name' }).fill('Entity C edited');
+
+    const save = page.getByRole('button', { name: 'Save Changes' });
+    await expect(save).not.toHaveAttribute('aria-busy', 'true');
+    await save.click();
+    await expect(page).toHaveURL(/\/trust-list$/);
+
+    const stored = await fetch(`${api}/rows`, { headers });
+    expect(stored.ok).toBe(true);
+    const { entityConfig } = (await stored.json()) as {
+      entityConfig: { info: { name: string; country?: string } }[];
+    };
+    expect(entityConfig.map(({ info }) => [info.name, info.country])).toEqual([
+      ['Entity A', 'DE'],
+      ['Entity C edited', 'FR'],
+    ]);
+
+    // Removing the last entity moves focus to the new last one, the only one to Add Internal Entity.
+    await page.goto('/trust-list/rows/edit');
+    await page
+      .getByRole('region', { name: /External Entity #2/ })
+      .getByRole('button', { name: 'Remove Entity' })
+      .click();
+    await expect(page.getByRole('button', { name: /External Entity #1 · Entity A/ })).toBeFocused();
+    await page
+      .getByRole('region', { name: /External Entity #1/ })
+      .getByRole('button', { name: 'Remove Entity' })
+      .click();
+    await expect(page.getByRole('button', { name: 'Add Internal Entity' })).toBeFocused();
+  });
+});
+
+test.describe('edit page', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+  const id = 'load-check';
+
+  /**
+   * Signs in as the admin of a new tenant that has one trust list with an external entity, and
+   * no key chains besides the one that signs it. Returns the admin's access token.
+   */
+  async function signInWithTrustList(page: Page): Promise<string> {
+    test.skip(
+      !hasRootCredentials,
+      'Set AUTH_CLIENT_ID and AUTH_CLIENT_SECRET of the backend to create a tenant.'
+    );
+    const tenant = await createTenant('trust-list-load', 'Trust List Load', ['issuance:manage']);
+    await createTrustList(tenant.token, id, 'Loaded on the edit page');
+    await loginWithClientCredentials(page, tenant.clientId, tenant.clientSecret);
+    return tenant.token;
+  }
+
+  test('a failed load says why and loads again on Retry', async ({ page }) => {
+    await signInWithTrustList(page);
+    let failLoading = true;
+    await page.route(`**/api/trust-list/${id}`, (route) =>
+      failLoading && route.request().method() === 'GET'
+        ? route.fulfill({ status: 500, json: { message: 'Internal server error' } })
+        : route.fallback()
+    );
+    await page.goto(`/trust-list/${id}/edit`);
+
+    const alert = page
+      .getByRole('alert')
+      .filter({ hasText: 'Failed to load trust list: Internal server error' });
+    await expect(alert).toBeVisible();
+    // Neither an empty form nor a redirect to the list.
+    await expect(page.getByRole('textbox', { name: 'ID', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Add Internal Entity' })).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`/trust-list/${id}/edit$`));
+
+    failLoading = false;
+    await page.getByRole('button', { name: 'Retry', exact: true }).click();
+
+    await expect(page.getByRole('textbox', { name: 'ID', exact: true })).toHaveValue(id);
+    await expect(
+      page.getByRole('button', { name: /^External Entity #1 · Example Wallet Provider/ })
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: /External Entity #2/ })).toHaveCount(0);
+    await expect(alert).toHaveCount(0);
+    // Retry left with the error card, so keyboard focus continues from the page heading.
+    await expect(page.getByRole('heading', { name: 'Edit Trust List', level: 2 })).toBeFocused();
+  });
+
+  test('a failed key chain load is shown at the key chain select and loads again on Retry', async ({
+    page,
+  }) => {
+    await signInWithTrustList(page);
+    let failLoading = true;
+    await page.route('**/api/key-chain', (route) =>
+      failLoading && route.request().method() === 'GET'
+        ? route.fulfill({ status: 500, json: { message: 'Internal server error' } })
+        : route.fallback()
+    );
+    await page.goto(`/trust-list/${id}/edit`);
+
+    const signingKeyChain = page.getByRole('combobox', { name: 'Signing Key Chain' });
+    await expect(signingKeyChain).toBeVisible();
+    await expect(page.getByText('Could not load key chains.')).toBeVisible();
+
+    failLoading = false;
+    await page.getByRole('button', { name: 'Retry loading key chains' }).click();
+
+    await expect(page.getByText('Could not load key chains.')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Retry loading key chains' })).toHaveCount(0);
+    // The Retry button is gone, so focus moves to the select it was for.
+    await expect(signingKeyChain).toBeFocused();
+    await signingKeyChain.click();
+    await expect(
+      page.getByRole('option', { name: /Loaded on the edit page signing/ })
+    ).toBeVisible();
+  });
+
+  test('an internal entity without key chains links to create them and loads them on Reload', async ({
+    page,
+  }) => {
+    const token = await signInWithTrustList(page);
+    await page.goto(`/trust-list/${id}/edit`);
+    await page.getByRole('button', { name: 'Add Internal Entity' }).click();
+
+    const noIssuer = page.getByText(
+      'No credential signing key chains. Create one in Key Management.'
+    );
+    await expect(noIssuer).toBeVisible();
+    await expect(
+      page.getByText(
+        'No status list or credential signing key chains. Create one in Key Management.'
+      )
+    ).toBeVisible();
+    // A new tab, so the form keeps what was entered.
+    const createIssuer = page.getByRole('link', {
+      name: 'Create credential signing key chain (opens in a new tab)',
+    });
+    await expect(createIssuer).toHaveAttribute('href', '/keys/create?usage=attestation');
+    await expect(createIssuer).toHaveAttribute('target', '_blank');
+    await expect(
+      page.getByRole('link', { name: 'Create status list key chain (opens in a new tab)' })
+    ).toHaveAttribute('href', '/keys/create?usage=statusList');
+    // With the entity named, the empty key chain selects are what keeps Save disabled.
+    await page
+      .getByRole('region', { name: /Internal Entity #2/ })
+      .getByRole('textbox', { name: 'Entity Name' })
+      .fill('Own Issuer');
+    await expect(page.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+
+    // Created in the other tab.
+    await createKeyChain(token, 'attestation', 'Own issuer');
+    await createKeyChain(token, 'statusList', 'Own status list');
+    await page.getByRole('button', { name: 'Reload key chains' }).click();
+
+    await expect(noIssuer).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /^Create .* key chain/ })).toHaveCount(0);
+    // The Reload button is gone, so focus moves to the first select it was for.
+    const issuer = page.getByRole('combobox', { name: /^Issuer Key Chain/ });
+    await expect(issuer).toBeFocused();
+    await issuer.click();
+    await expect(page.getByRole('option', { name: /^Own issuer/ })).toBeVisible();
+  });
+
+  test('without status list key chains, the credential signing key chain also signs revocation', async ({
+    page,
+  }) => {
+    const token = await signInWithTrustList(page);
+    const keyChainId = await createKeyChain(token, 'attestation', 'Own issuer');
+    await page.goto(`/trust-list/${id}/edit`);
+    await page.getByRole('button', { name: 'Add Internal Entity' }).click();
+    const entity = page.getByRole('region', { name: /Internal Entity #2/ });
+
+    await entity.getByRole('combobox', { name: /^Issuer Key Chain/ }).click();
+    await page.getByRole('option', { name: /^Own issuer/ }).click();
+    // A click while the panel still closes would reopen it or hit its backdrop.
+    await expect(page.getByRole('listbox')).toBeHidden();
+    await expect(
+      entity.getByText(
+        'No status list key chains, so a credential signing key chain signs the status lists.'
+      )
+    ).toBeVisible();
+    await entity.getByRole('combobox', { name: /^Revocation Key Chain/ }).click();
+    await expect(page.getByRole('group', { name: 'Credential signing key chains' })).toBeVisible();
+    await page.getByRole('option', { name: /^Own issuer/ }).click();
+    await entity.getByRole('textbox', { name: 'Entity Name' }).fill('Own Issuer');
+
+    const save = page.getByRole('button', { name: 'Save Changes' });
+    await expect(save).not.toHaveAttribute('aria-busy', 'true');
+    await save.click();
+    await expect(page).toHaveURL(/\/trust-list$/);
+
+    // The backend accepted it for revocation, and the stored list names it there.
+    const stored = await fetch(`${resolvedE2EConfig.apiBaseUrl}/api/trust-list/${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(stored.ok).toBe(true);
+    const { entityConfig } = (await stored.json()) as {
+      entityConfig: { type: string; issuerKeyChainId?: string; revocationKeyChainId?: string }[];
+    };
+    expect(entityConfig.find((entry) => entry.type === 'internal')).toMatchObject({
+      issuerKeyChainId: keyChainId,
+      revocationKeyChainId: keyChainId,
+    });
   });
 });

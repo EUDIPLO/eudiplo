@@ -1,4 +1,7 @@
+import { DISPLAY_COLOR_MESSAGE } from "@eudiplo/config-format/display-entries.js";
+import { BadRequestException } from "@nestjs/common";
 import { describe, expect, test } from "vitest";
+import { createConfigBodyPipe } from "../../../../shared/common/zod/zod-schema.util.js";
 import {
     AttestationLoS,
     SchemaMetaBindingType,
@@ -366,6 +369,86 @@ describe("CredentialConfigCreateSchema claim patterns", () => {
             0,
             "constraints",
             ...path,
+        ]);
+    });
+});
+
+describe("CredentialConfigCreateSchema display entries", () => {
+    const withDisplay = (display: unknown[]) =>
+        CredentialConfigCreateSchema.safeParse({
+            ...credentialConfig,
+            config: { format: "dc+sd-jwt", display },
+        });
+
+    test("accepts entries with only name and locale and numerical colors", () => {
+        const result = withDisplay([
+            { name: "PID", locale: "en-US" },
+            {
+                name: "PID",
+                locale: "de-DE",
+                background_color: "rgb(18, 16, 124)",
+                text_color: "#fff",
+            },
+        ]);
+
+        expect(result.success).toBe(true);
+    });
+
+    test("refuses a color wallets cannot read", () => {
+        const result = withDisplay([
+            { name: "PID", locale: "en-US", text_color: "navy" },
+        ]);
+
+        expect(result.error?.issues).toEqual([
+            expect.objectContaining({
+                path: ["config", "display", 0, "text_color"],
+                message: DISPLAY_COLOR_MESSAGE,
+            }),
+        ]);
+    });
+
+    test("refuses both on a partial update (PATCH) as well", async () => {
+        const pipe = createConfigBodyPipe(CredentialConfigCreateSchema, {
+            readOnly: [],
+            partial: true,
+        });
+        const transform = (display: unknown[]) =>
+            pipe.transform(
+                { config: { format: "dc+sd-jwt", display } },
+                { type: "body" },
+            );
+
+        await expect(
+            transform([{ name: "PID", locale: "en-US", text_color: "navy" }]),
+        ).rejects.toThrow(BadRequestException);
+        await expect(
+            transform([
+                { name: "PID", locale: "en-US" },
+                { name: "PID", locale: "en-us" },
+            ]),
+        ).rejects.toThrow(BadRequestException);
+        await expect(
+            transform([{ name: "PID", locale: "en-US", text_color: "#fff" }]),
+        ).resolves.toEqual({
+            config: {
+                format: "dc+sd-jwt",
+                display: [{ name: "PID", locale: "en-US", text_color: "#fff" }],
+            },
+        });
+    });
+
+    test("refuses a second entry for the same locale", () => {
+        const result = withDisplay([
+            { name: "PID", locale: "en-US" },
+            { name: "PID (copy)", locale: "EN-us" },
+        ]);
+
+        expect(result.error?.issues).toEqual([
+            expect.objectContaining({
+                path: ["config", "display", 1, "locale"],
+                message:
+                    "Locale EN-us is already used by display entry 1. OID4VCI allows one display entry per language.",
+            }),
         ]);
     });
 });

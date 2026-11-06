@@ -27,3 +27,20 @@ export function focusAfterRenderIfLost(
   if (injector.get(DestroyRef).destroyed) return;
   afterNextRender(() => focusIfFocusWasLost(element(), from?.()), { injector });
 }
+
+/**
+ * After a row of a list was removed, focuses the row now at its `index`, the new last row when
+ * the removed row was the last one, or `fallback` when no row is left. Like
+ * `focusAfterRenderIfLost`, it leaves focus the user has moved elsewhere.
+ */
+export function focusRowAfterRemoval(
+  injector: Injector,
+  rows: () => readonly HTMLElement[] | undefined,
+  index: number,
+  fallback?: () => HTMLElement | undefined
+): void {
+  focusAfterRenderIfLost(injector, () => {
+    const remaining = rows() ?? [];
+    return remaining[Math.min(index, remaining.length - 1)] ?? fallback?.();
+  });
+}
