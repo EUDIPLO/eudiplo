@@ -195,6 +195,24 @@ describe("generated client secrets", () => {
         expect(result.generatedSecrets).toBeUndefined();
     });
 
+    // 9.x stored the hash of the same document as Client v1.
+    it("keeps the secret of a client 9.x applied as it is", async () => {
+        const { service, bundle } = setupClientApply(
+            documentSourceHash(
+                normalizeDocument({
+                    ...document,
+                    $schema: schemaUrl("Client", 1),
+                }),
+            ),
+        );
+        const result = await service.apply("tenant-a", bundle, "upsert");
+        expect(service.clientsProvider.updateClient).toHaveBeenCalled();
+        expect(
+            service.clientsProvider.rotateClientSecret,
+        ).not.toHaveBeenCalled();
+        expect(result.generatedSecrets).toBeUndefined();
+    });
+
     it("generates a new secret for a changed document or on reattach", async () => {
         const changed = setupClientApply("other");
         const reattached = setupClientApply(appliedHash);
