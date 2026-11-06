@@ -1,6 +1,7 @@
 import { ApplicationRef, ElementRef, Injector } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { FormBuilder } from '@angular/forms';
+import { EMPTY } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { IssuanceConfigCreateComponent } from './issuance-config-create.component';
 import { loseFocus } from '../../../common/settings-screen.testing';
@@ -163,6 +164,27 @@ describe('issuer settings guided setup', () => {
     } finally {
       heading.remove();
     }
+  });
+
+  it('opens JSON View only with loaded settings and says why it waits', async () => {
+    const open = vi.fn(() => ({ afterClosed: () => EMPTY }));
+    Object.assign(component, { dialog: { open } });
+    await component.loadConfigForEdit();
+    expect(component.jsonViewUnavailableReason).toBe('');
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
+
+    // The button stays clickable while it cannot be used, so the handler checks again.
+    service.getConfig.mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' });
+    const reload = component.loadConfigForEdit();
+    expect(component.jsonViewUnavailableReason).toBe('Wait until the issuer settings have loaded');
+    component.viewAsJson();
+    await reload;
+    expect(component.jsonViewUnavailableReason).toBe(
+      'Retry loading the issuer settings before opening JSON View'
+    );
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
   });
 
   it("shows the backend's reason when saving is rejected", async () => {

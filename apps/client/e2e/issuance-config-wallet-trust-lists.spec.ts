@@ -105,6 +105,42 @@ async function storeConfig(config: unknown) {
   expect(response.ok, await response.text()).toBe(true);
 }
 
+/** The external entry the authorization servers of `twoServerConfig` share. */
+const serverExternal = { url: serverExternalUrl, verifierX509Der: certificateDer };
+
+/**
+ * Issuer settings with two authorization servers that have their own lists, both with a managed
+ * entry, so the Wallet access tab holds two lists whose focus targets must not mix.
+ */
+const twoServerConfig = {
+  display: [{ name: 'Wallet Trust Lists', locale: 'en-US' }],
+  walletProviderTrustLists: [
+    { url: externalUrl, verifierX509Der: certificateDer },
+    { trustListId },
+  ],
+  authorizationServers: [
+    {
+      type: 'built-in',
+      id: 'issuer-built-in',
+      walletProviderTrustLists: [{ trustListId }, serverExternal],
+    },
+    {
+      type: 'chained',
+      id: 'upstream-login',
+      label: 'Chained AS',
+      upstream: { issuer: 'https://auth.example.com/realms/test', clientId: 'test-client' },
+      walletProviderTrustLists: [serverExternal, { trustListId }],
+    },
+  ],
+};
+
+/** Opens the panel of the chained authorization server of `twoServerConfig`. */
+async function chainedServer(page: Page): Promise<Locator> {
+  // The panels open one at a time; the closed one keeps its entries on the page.
+  await page.getByRole('button', { name: /^Chained AS/ }).click();
+  return page.getByRole('region', { name: /^Chained AS/ });
+}
+
 /** The built-in authorization server of stored issuer settings. */
 function storedBuiltInServer(config: { authorizationServers: { type: string }[] }): any {
   return config.authorizationServers.find((entry) => entry.type === 'built-in');
@@ -152,15 +188,16 @@ test('keeps managed and external wallet provider trust lists after a reload', as
 });
 
 test('shows a retryable alert when the trust lists do not load', async ({ page }) => {
-  let failing = true;
+  // The reason the trust lists fail with, which tells the alerts apart; without one they load.
+  let failure: string | undefined = 'Trust lists unavailable';
   await page.route(
     (url) => url.pathname === '/api/trust-list',
     (route) =>
-      failing && route.request().method() === 'GET'
+      failure && route.request().method() === 'GET'
         ? route.fulfill({
             status: 500,
             contentType: 'application/json',
-            body: JSON.stringify({ statusCode: 500, message: 'Trust lists unavailable' }),
+            body: JSON.stringify({ statusCode: 500, message: failure }),
           })
         : route.fallback()
   );
@@ -168,13 +205,13 @@ test('shows a retryable alert when the trust lists do not load', async ({ page }
   await loginWithClientCredentials(page, tenant.clientId, tenant.clientSecret);
   await page.goto('/issuance-config/edit');
   await page.getByRole('tab', { name: 'Wallet access' }).click();
-  let server = await useOwnTrustLists(page);
+  const server = await useOwnTrustLists(page);
 
   // The stored entry stays visible with a note while the lists are missing.
   await expect(server.getByRole('combobox', { name: 'Managed trust list 1' })).toHaveText(
     `${trustListId} (lists not loaded)`
   );
-  let alert = server.getByRole('alert');
+  const alert = server.getByRole('alert');
   await expect(alert).toContainText('Trust lists unavailable.');
   await expect(alert).toContainText(
     'Selected lists are kept; retry or add an external trust list.'
@@ -188,52 +225,51 @@ test('shows a retryable alert when the trust lists do not load', async ({ page }
     { url: serverExternalUrl, verifierX509Der: certificateDer },
   ]);
 
+  // Every list with a managed entry shows the alert. A retry removes the pressed Retry, so focus
+  // moves within its own list: on the Trust tab to the shared lists' managed entry once the
+  // lists load.
+  await storeConfig(twoServerConfig);
+  await page.goto('/issuance-config/edit');
+  await page.getByRole('tab', { name: 'Trust' }).click();
+  const shared = await sharedTrustLists(page);
+  const sharedRetry = shared.getByRole('alert').getByRole('button', { name: 'Retry' });
+  await expect(sharedRetry).toBeVisible();
+  failure = undefined;
+  await sharedRetry.click();
+  await expect(shared.getByRole('alert')).toHaveCount(0);
+  await expect(shared.getByRole('combobox', { name: 'Managed trust list 2' })).toBeFocused();
+
+  // Two servers share the Wallet access tab, so there the targets come from the chained server's
+  // own list: its new Retry when the load fails again, its managed entry when the lists load.
+  failure = 'Trust lists unavailable';
   await page.goto('/issuance-config/edit');
   await page.getByRole('tab', { name: 'Wallet access' }).click();
-  server = await useOwnTrustLists(page);
-  alert = server.getByRole('alert');
-  await expect(alert).toBeVisible();
+  const chained = await chainedServer(page);
+  const retry = chained.getByRole('alert').getByRole('button', { name: 'Retry' });
+  await expect(retry).toBeVisible();
 
-  failing = false;
-  await alert.getByRole('button', { name: 'Retry' }).click();
-  await expect(server.getByRole('alert')).toHaveCount(0);
-  await expect(server.getByRole('combobox', { name: 'Managed trust list 1' })).toHaveText(
-    new RegExp(`\\(${trustListId}\\)`)
-  );
+  failure = 'Still unavailable';
+  await retry.click();
+  await expect(chained.getByRole('alert')).toContainText('Still unavailable.');
+  await expect(retry).toBeFocused();
+
+  failure = undefined;
+  await retry.click();
+  await expect(chained.getByRole('alert')).toHaveCount(0);
+  const managed = chained.getByRole('combobox', { name: 'Managed trust list 2' });
+  await expect(managed).toHaveText(new RegExp(`\\(${trustListId}\\)`));
+  await expect(managed).toBeFocused();
 });
 
 test('removing a trust list entry moves focus within its own list', async ({ page }) => {
   // Two authorization servers with their own lists share the Wallet access tab, so the focus
   // targets of one list must not come from the other.
-  const external = { url: serverExternalUrl, verifierX509Der: certificateDer };
-  await storeConfig({
-    display: [{ name: 'Wallet Trust Lists', locale: 'en-US' }],
-    walletProviderTrustLists: [
-      { url: externalUrl, verifierX509Der: certificateDer },
-      { trustListId },
-    ],
-    authorizationServers: [
-      {
-        type: 'built-in',
-        id: 'issuer-built-in',
-        walletProviderTrustLists: [{ trustListId }, external],
-      },
-      {
-        type: 'chained',
-        id: 'upstream-login',
-        label: 'Chained AS',
-        upstream: { issuer: 'https://auth.example.com/realms/test', clientId: 'test-client' },
-        walletProviderTrustLists: [external, { trustListId }],
-      },
-    ],
-  });
+  await storeConfig(twoServerConfig);
 
   await loginWithClientCredentials(page, tenant.clientId, tenant.clientSecret);
   await page.goto('/issuance-config/edit');
   await page.getByRole('tab', { name: 'Wallet access' }).click();
-  // The panels open one at a time; the closed one keeps its entries on the page.
-  await page.getByRole('button', { name: /^Chained AS/ }).click();
-  const chained = page.getByRole('region', { name: /^Chained AS/ });
+  const chained = await chainedServer(page);
 
   // The entry now in the place of the removed one takes the focus, then the list's Add button.
   await chained.getByRole('button', { name: 'Remove trust list 1' }).click();

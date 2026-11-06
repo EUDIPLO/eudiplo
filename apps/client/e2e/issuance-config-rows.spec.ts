@@ -8,9 +8,9 @@ import { createTenant, tenantRequest, type TestTenant } from './support/tenants'
 // Rows of Issuer Settings (languages, authorization servers, trust anchors) stay bound to
 // their own values when a row is removed, moved or changes its type: the screen shows them,
 // edits reach them and the saved settings have them. Focus moves to the row in the place of
-// a removed one, or to the Add button, and to the page heading after a retried load. The demo
-// tenant's settings are read-only, so the spec creates a tenant; each test stores the same
-// settings with three rows in each list first.
+// a removed one, or to the Add button, and to the page heading after a retried load; JSON View
+// waits for the loaded settings. The demo tenant's settings are read-only, so the spec creates
+// a tenant; each test stores the same settings with three rows in each list first.
 
 test.use({ storageState: { cookies: [], origins: [] } });
 // The tests share the tenant's settings, so they run one after another.
@@ -277,6 +277,20 @@ test('a retry after a failed load shows the settings and moves focus to the head
   await expect(page.getByRole('alert').filter({ hasText: 'Settings unavailable.' })).toBeVisible();
   await expect(page.getByText('Retry before making changes.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Language 1' })).toHaveCount(0);
+
+  // JSON View edits the loaded settings: it stays focusable, says why it does nothing and opens
+  // nothing until they are loaded.
+  const jsonView = page.getByRole('button', { name: 'JSON View' });
+  await expect(jsonView).toHaveAttribute('aria-disabled', 'true');
+  await expect(jsonView).toHaveAccessibleDescription(
+    'Retry loading the issuer settings before opening JSON View'
+  );
+  await jsonView.focus();
+  await expect(jsonView).toBeFocused();
+  await page.keyboard.press('Enter');
+  // MatDialog attaches its container while the click runs, before the dialog role is rendered.
+  await expect(page.locator('mat-dialog-container')).toHaveCount(0);
+
   const retry = page.getByRole('button', { name: 'Retry', exact: true });
 
   // A retry that fails again puts the focus on the new card's Retry; one that loads moves it to
@@ -289,4 +303,6 @@ test('a retry after a failed load shows the settings and moves focus to the head
   await expect(page.getByRole('heading', { name: 'Language 3' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Issuer Settings' })).toBeFocused();
   await expect(failedAgain).toHaveCount(0);
+  await expect(jsonView).not.toHaveAttribute('aria-disabled', 'true');
+  await expect(jsonView).toHaveAccessibleDescription('View/Edit as JSON');
 });

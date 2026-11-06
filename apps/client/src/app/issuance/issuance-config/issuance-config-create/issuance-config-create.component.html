@@ -7,9 +7,11 @@
       <!-- JSON View Button -->
       <button
         mat-stroked-button
+        type="button"
         (click)="viewAsJson()"
-        [disabled]="loadingConfig || !!loadError"
-        matTooltip="View/Edit as JSON"
+        [disabled]="!!jsonViewUnavailableReason"
+        disabledInteractive
+        [matTooltip]="jsonViewUnavailableReason || 'View/Edit as JSON'"
       >
         <mat-icon>code</mat-icon>
         JSON View
@@ -410,7 +412,12 @@
                                       getAuthorizationServerWalletProviderTrustLists(i)
                                     )
                                   ) {
-                                    <ng-container *ngTemplateOutlet="walletTrustListLoadError" />
+                                    <ng-container
+                                      *ngTemplateOutlet="
+                                        walletTrustListLoadError;
+                                        context: { section: serverTrustLists }
+                                      "
+                                    />
                                   }
                                   <div
                                     fxLayout="row"
@@ -952,7 +959,12 @@
                           />
                         }
                         @if (hasManagedEntry(walletProviderTrustLists)) {
-                          <ng-container *ngTemplateOutlet="walletTrustListLoadError" />
+                          <ng-container
+                            *ngTemplateOutlet="
+                              walletTrustListLoadError;
+                              context: { section: sharedTrustLists }
+                            "
+                          />
                         }
                         <div fxLayout="row" fxLayoutAlign="center center" fxLayoutGap="8px">
                           <button
@@ -1440,7 +1452,11 @@
       @if (trustList.get('mode')?.value === 'managed') {
         <mat-form-field fxFlex>
           <mat-label>Managed trust list {{ index + 1 }}</mat-label>
-          <mat-select #trustListField [formControl]="trustListControl(trustList, 'trustListId')">
+          <mat-select
+            #trustListField
+            #managedTrustListField
+            [formControl]="trustListControl(trustList, 'trustListId')"
+          >
             @if (managedTrustListNote(trustList.get('trustListId')?.value); as note) {
               <mat-option [value]="trustList.get('trustListId')?.value"
                 >{{ trustList.get('trustListId')?.value }} ({{ note }})</mat-option
@@ -1548,11 +1564,13 @@
   </div>
 </ng-template>
 
-<ng-template #walletTrustListLoadError>
+<ng-template #walletTrustListLoadError let-section="section">
   @if (trustListsError) {
     <p class="trust-list-error" role="alert">
       {{ trustListsError }}
-      <button mat-button type="button" (click)="loadTrustLists()">Retry</button>
+      <button #trustListRetryButton mat-button type="button" (click)="retryTrustLists(section)">
+        Retry
+      </button>
     </p>
   }
 </ng-template>
