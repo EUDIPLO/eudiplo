@@ -321,8 +321,15 @@ export class SchemaShowComponent implements OnInit {
     return `${entry.label} (${entry.code})`;
   }
 
+  /** Save under Catalog Metadata stays focusable while it cannot be used, so its tooltip says why. */
+  get metadataSaveTooltip(): string {
+    if (this.saving) return 'Saving the catalog metadata…';
+    return this.metadataForm.pristine ? 'No changes to save' : '';
+  }
+
   async saveMetadata(): Promise<void> {
-    if (!this.item || this.saving) return;
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
+    if (!this.item || this.saving || this.metadataForm.pristine) return;
     const entry = this.item;
     this.saving = true;
     try {

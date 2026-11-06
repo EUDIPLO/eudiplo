@@ -8,6 +8,7 @@ import { JwtService } from '../../services/jwt.service';
 import { SchemaService } from '../schema.service';
 import { SchemaShowComponent } from './schema-show.component';
 import { errorSnackBarDuration } from '../../utils/error-snackbar';
+import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 
 /** The arguments of an error snackbar with this text. */
 const errorSnackBar = (text: string) =>
@@ -195,6 +196,7 @@ describe('SchemaShowComponent publishing a new version', () => {
       errors: [{ path: ['category'], message: 'Invalid option', code: 'invalid_value' }],
     });
     await load();
+    component.metadataForm.controls.category.markAsDirty();
 
     await component.saveMetadata();
 
@@ -1189,19 +1191,43 @@ describe('SchemaShowComponent page', () => {
     expect(text(fixture)).toContain('pid, legacy-tag, eudi');
   });
 
-  it('enables Save only for changed catalog metadata', async () => {
+  /** Save under Catalog Metadata, the button of the form that holds the name. */
+  function metadataSave(fixture: { nativeElement: HTMLElement }): HTMLButtonElement {
+    const form = fixture.nativeElement.querySelector('#schema-display-name')!.closest('form')!;
+    return [...form.querySelectorAll('button')].find((b) => b.textContent?.includes('Sav'))!;
+  }
+
+  it('offers Save only for changed catalog metadata, and says so while nothing changed', async () => {
+    schemaService['updateMetadata'] = vi.fn().mockResolvedValue(currentVersion());
     const fixture = await render();
-    const element = fixture.nativeElement as HTMLElement;
-    const save = () =>
-      [...element.querySelectorAll<HTMLButtonElement>('button')].find(
-        (b) => b.textContent?.trim() === 'Save'
-      )!;
-    expect(save().disabled).toBe(true);
+    const save = metadataSave(fixture);
+    expectUnavailable(fixture, save, 'No changes to save');
+
+    save.click();
+    expect(schemaService['updateMetadata']).not.toHaveBeenCalled();
 
     fixture.componentInstance.metadataForm.controls.displayName.setValue('Renamed PID');
     fixture.componentInstance.metadataForm.markAsDirty();
     fixture.detectChanges();
-    expect(save().disabled).toBe(false);
+    expectAvailable(fixture, save);
+  });
+
+  it('waits while the catalog metadata is saved: a second click sends nothing', async () => {
+    schemaService['updateMetadata'] = vi.fn().mockReturnValue(new Promise(() => undefined));
+    const fixture = await render();
+    const component = fixture.componentInstance;
+    component.metadataForm.controls.displayName.setValue('Renamed PID');
+    component.metadataForm.controls.displayName.markAsDirty();
+    fixture.detectChanges();
+    const save = metadataSave(fixture);
+
+    save.click();
+    fixture.detectChanges();
+    save.click();
+    fixture.detectChanges();
+
+    expect(schemaService['updateMetadata']).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, save, 'Saving the catalog metadata…');
   });
 
   it('offers no Deprecate for a version that is deprecated already', async () => {

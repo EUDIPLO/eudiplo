@@ -400,6 +400,8 @@
               color="primary"
               type="button"
               [disabled]="saving || metadataForm.pristine"
+              disabledInteractive
+              [matTooltip]="metadataSaveTooltip"
               (click)="saveMetadata()"
             >
               @if (saving) {
