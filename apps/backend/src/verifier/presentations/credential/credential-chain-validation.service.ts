@@ -1,10 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { PinoLogger } from "nestjs-pino";
-import {
-    getRevocationServices,
-    getStatusListSigners,
-} from "../../../trust/domain/status-list-signers.js";
+import { getRevocationServices } from "../../../trust/domain/status-list-signers.js";
 import { StatusListVerifierService } from "../../../trust/status-list-verifier.service.js";
 import {
     BuiltTrustStore,
@@ -279,7 +276,7 @@ export class CredentialChainValidationService {
      * Verify a status list JWT signature against the revocation certificates
      * paired with the matched issuance service, or the matched issuance
      * certificate if the entity lists no such revocation service
-     * ({@link getStatusListSigners}).
+     * (`getStatusListSigners` in `trust/domain/status-list-signers.ts`).
      *
      * @param statusListJwt The status list JWT
      * @param matchedEntity The matched trusted entity (may be null)
@@ -364,7 +361,7 @@ export class CredentialChainValidationService {
      * Trust anchors for the mdoc library, one per credential issuer service
      * ({@link credentialIssuerServiceTypes}) of the trust list: its
      * certificate as `issuance`, and the certificates its status lists must
-     * be signed under ({@link getStatusListSigners}) as `status`. The mdoc
+     * be signed under (`getStatusListSigners`) as `status`. The mdoc
      * library checks a status list against the `status` certificates of the
      * entry whose `issuance` certificate the credential chain ended at, so a
      * status list signer of another service or entity is not accepted.
