@@ -1180,7 +1180,13 @@ export class IssuanceConfigCreateComponent implements OnInit {
     };
   }
 
+  /** Save stays focusable while a save runs, so its tooltip says why it waits. */
+  get saveTooltip(): string {
+    return this.loading ? 'Saving the issuer settings…' : '';
+  }
+
   onSubmit(): void {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
     if (this.loading || this.loadingConfig || this.loadError) return;
     for (let step = 0; step < 3; step++) if (!this.validateStep(step)) return;
     let issuanceDto: UpdateIssuanceDto;

@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
-import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
+import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -24,6 +24,7 @@ import { LabelledFailure, getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { SourceLoadState, loadSource, reportSourceFailures } from '../../common/load-source';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
+import { wholeNumberValidator } from '../../utils/whole-number-validator';
 
 /** The sources of the options of the form's selects. */
 type StatusListEditSource = 'credentialConfigs' | 'keyChains';
@@ -102,7 +103,12 @@ export class StatusListEditComponent implements OnInit {
       keyChainId: new FormControl(null),
       // Only used in create mode
       bits: new FormControl(null),
-      capacity: new FormControl(null),
+      // The backend accepts whole numbers from 1,000 to 1,000,000.
+      capacity: new FormControl(null, [
+        Validators.min(1000),
+        Validators.max(1_000_000),
+        wholeNumberValidator,
+      ]),
     });
 
     void this.loadData();
@@ -222,7 +228,14 @@ export class StatusListEditComponent implements OnInit {
     );
   }
 
+  /** Save stays focusable while a save runs, so its tooltip says why it waits. */
+  get saveTooltip(): string {
+    return this.isSaving ? 'Saving the status list…' : '';
+  }
+
   async onSubmit(): Promise<void> {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
+    if (this.isSaving) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;

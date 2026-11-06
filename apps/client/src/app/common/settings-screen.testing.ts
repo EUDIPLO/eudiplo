@@ -1,7 +1,6 @@
 import type { ComponentFixture } from '@angular/core/testing';
-import { MatTooltip } from '@angular/material/tooltip';
-import { By } from '@angular/platform-browser';
 import { expect } from 'vitest';
+import { expectUnavailable, tooltipOf } from './unavailable-action.testing';
 
 /** Test helpers for the tenant settings screens with Save and Reset to Defaults. */
 
@@ -13,19 +12,13 @@ export function findButton(element: HTMLElement, label: string): HTMLButtonEleme
 
 /** The tooltip of a button, which screen readers also read as its description. */
 export function buttonTooltip(fixture: ComponentFixture<unknown>, label: string): string {
-  const host = fixture.debugElement
-    .queryAll(By.css('button'))
-    .find((b) => (b.nativeElement as HTMLElement).textContent?.includes(label));
-  if (!host) throw new Error(`No button "${label}"`);
-  return host.injector.get(MatTooltip).message;
+  return tooltipOf(fixture, findButton(fixture.nativeElement as HTMLElement, label));
 }
 
 /** Reset to Defaults looks disabled but stays focusable, so its tooltip can say why. */
 export function expectResetUnavailable(fixture: ComponentFixture<unknown>, reason: string): void {
   const reset = findButton(fixture.nativeElement as HTMLElement, 'Reset to Defaults');
-  expect(reset.disabled).toBe(false);
-  expect(reset.getAttribute('aria-disabled')).toBe('true');
-  expect(buttonTooltip(fixture, 'Reset to Defaults')).toBe(reason);
+  expectUnavailable(fixture, reset, reason);
 }
 
 export function expectResetAvailable(fixture: ComponentFixture<unknown>): void {

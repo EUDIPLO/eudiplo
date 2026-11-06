@@ -321,8 +321,15 @@ export class SchemaShowComponent implements OnInit {
     return `${entry.label} (${entry.code})`;
   }
 
+  /** Save under Catalog Metadata stays focusable while it cannot be used, so its tooltip says why. */
+  get metadataSaveTooltip(): string {
+    if (this.saving) return 'Saving the catalog metadata…';
+    return this.metadataForm.pristine ? 'No changes to save' : '';
+  }
+
   async saveMetadata(): Promise<void> {
-    if (!this.item || this.saving) return;
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
+    if (!this.item || this.saving || this.metadataForm.pristine) return;
     const entry = this.item;
     this.saving = true;
     try {
@@ -330,6 +337,10 @@ export class SchemaShowComponent implements OnInit {
       // the registrar vocabulary has no option in the selects, and sending it
       // back unchanged would fail validation.
       const { displayName, category, tags } = this.metadataForm.controls;
+      // A field changed while the save runs keeps its unsaved change afterwards.
+      const sent = [displayName, category, tags].map(
+        (control) => [control, JSON.stringify(control.value)] as const
+      );
       const updated = await this.schemaService.updateMetadata(entry.id, entry.version, {
         ...(displayName.dirty ? { displayName: displayName.value?.trim() || undefined } : {}),
         ...(category.dirty
@@ -344,7 +355,9 @@ export class SchemaShowComponent implements OnInit {
       // Another version may have been opened meanwhile; its form stays as it is.
       if (this.item === entry) {
         this.item = updated;
-        this.metadataForm.markAsPristine();
+        for (const [control, value] of sent) {
+          if (JSON.stringify(control.value) === value) control.markAsPristine();
+        }
       }
     } catch (error) {
       console.error('Failed to update metadata:', error);

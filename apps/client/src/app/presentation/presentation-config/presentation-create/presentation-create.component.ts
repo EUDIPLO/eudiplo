@@ -597,7 +597,13 @@ export class PresentationCreateComponent implements OnInit {
     return value as FormGroup;
   }
 
+  /** Save stays focusable while a save runs, so its tooltip says why it waits. */
+  get saveTooltip(): string {
+    return this.saving ? 'Saving the presentation configuration…' : '';
+  }
+
   createOrUpdatePresentation(): void {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
     if (this.saving) return;
     for (let step = 0; step < 3; step++) {
       if (!this.validateStep(step)) {
