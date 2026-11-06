@@ -15,7 +15,7 @@
     </button>
   </div>
 
-  <form [formGroup]="clientForm" (ngSubmit)="onSubmit()">
+  <form #formElement [formGroup]="clientForm" (ngSubmit)="onSubmit()">
     <mat-card>
       <mat-card-content fxLayout="column" fxLayoutGap="16px">
         <mat-form-field appearance="outline">
@@ -63,6 +63,7 @@
               >Learn about roles</a
             >
           </mat-hint>
+          <mat-error>Select at least one role</mat-error>
         </mat-form-field>
 
         <mat-form-field>
@@ -98,7 +99,9 @@
           mat-flat-button
           color="primary"
           type="submit"
-          [disabled]="clientForm.invalid || isSubmitting || unmanageableRoles.length > 0"
+          [disabled]="isSubmitting || unmanageableRoles.length > 0"
+          disabledInteractive
+          [matTooltip]="saveTooltip"
           appConfigManaged
           managedKind="Client"
           [managedResourceId]="id || ''"

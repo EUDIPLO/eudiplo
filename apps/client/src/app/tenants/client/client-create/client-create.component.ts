@@ -1,4 +1,12 @@
-import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  inject,
+  Injector,
+  OnInit,
+  ViewChild,
+} from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators, type FormGroup } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -29,6 +37,7 @@ import { ConfigOwnershipDirective } from '../../../config-portability/config-own
 import { ConfigOwnershipNoticeComponent } from '../../../config-portability/config-ownership-notice.component';
 import { RoleLockNoticeComponent } from '../../../common/role-lock-notice.component';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
+import { showFieldsToFix } from '../../../common/field-to-fix.util';
 
 @Component({
   selector: 'app-client-create',
@@ -69,6 +78,11 @@ export class ClientCreateComponent implements OnInit {
   unmanageableRoles: string[] = [];
   loaded = false;
   id?: string | null;
+
+  /** Holds the fields; Save focuses the first invalid one. */
+  @ViewChild('formElement', { read: ElementRef })
+  private readonly formElement?: ElementRef<HTMLFormElement>;
+  private readonly injector = inject(Injector);
 
   // Available configs for selection
   availablePresentationConfigs: string[] = [];
@@ -207,7 +221,26 @@ export class ClientCreateComponent implements OnInit {
     return [];
   }
 
+  /** Save stays focusable while it cannot be used, so its tooltip says why. */
+  get saveTooltip(): string {
+    if (this.isSubmitting) return 'Saving the client…';
+    if (this.unmanageableRoles.length > 0) {
+      return 'You cannot change this client: it has roles you neither hold nor may grant';
+    }
+    return '';
+  }
+
   async onSubmit(): Promise<void> {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
+    if (this.isSubmitting || this.unmanageableRoles.length > 0) return;
+    if (this.clientForm.invalid) {
+      showFieldsToFix(this.clientForm, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container: () => this.formElement?.nativeElement,
+      });
+      return;
+    }
     this.isSubmitting = true;
 
     try {

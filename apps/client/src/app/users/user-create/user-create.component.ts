@@ -1,4 +1,12 @@
-import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  inject,
+  Injector,
+  OnInit,
+  ViewChild,
+} from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators, type FormGroup } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -23,6 +31,7 @@ import { getApiErrorMessage } from '../../utils/error-message';
 import { RoleLockNoticeComponent } from '../../common/role-lock-notice.component';
 import { UserTemporaryPasswordDialogComponent } from '../user-temporary-password-dialog/user-temporary-password-dialog.component';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { showFieldsToFix } from '../../common/field-to-fix.util';
 
 @Component({
   selector: 'app-user-create',
@@ -61,6 +70,11 @@ export class UserCreateComponent implements OnInit {
   unmanageableRoles: string[] = [];
   loaded = false;
   id?: string | null;
+
+  /** Holds the fields; Save focuses the first invalid one. */
+  @ViewChild('formElement', { read: ElementRef })
+  private readonly formElement?: ElementRef<HTMLFormElement>;
+  private readonly injector = inject(Injector);
 
   constructor(
     private readonly fb: FormBuilder,
@@ -102,7 +116,26 @@ export class UserCreateComponent implements OnInit {
     }
   }
 
+  /** Save stays focusable while it cannot be used, so its tooltip says why. */
+  get saveTooltip(): string {
+    if (this.isSubmitting) return 'Saving the user…';
+    if (this.unmanageableRoles.length > 0) {
+      return 'You cannot change this user: it has roles you neither hold nor may grant';
+    }
+    return '';
+  }
+
   async onSubmit(): Promise<void> {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
+    if (this.isSubmitting || this.unmanageableRoles.length > 0) return;
+    if (this.userForm.invalid) {
+      showFieldsToFix(this.userForm, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container: () => this.formElement?.nativeElement,
+      });
+      return;
+    }
     this.isSubmitting = true;
 
     try {

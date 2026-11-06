@@ -11,7 +11,7 @@
     </button>
   </div>
 
-  <form [formGroup]="tenantForm" (ngSubmit)="onSubmit()">
+  <form #formElement [formGroup]="tenantForm" (ngSubmit)="onSubmit()">
     <mat-card>
       <mat-card-content fxLayout="column" fxLayoutGap="16px">
         <mat-form-field appearance="outline">
@@ -78,6 +78,7 @@
                 }
               </mat-select>
               <mat-hint>Roles assigned to the auto-generated admin client</mat-hint>
+              <mat-error>Select at least one role</mat-error>
             </mat-form-field>
           </div>
         }
@@ -91,7 +92,9 @@
           mat-flat-button
           color="primary"
           type="submit"
-          [disabled]="tenantForm.invalid || isSubmitting"
+          [disabled]="isSubmitting"
+          disabledInteractive
+          [matTooltip]="saveTooltip"
         >
           @if (isSubmitting) {
             {{ isEditMode ? 'Updating...' : 'Creating...' }}

@@ -1,4 +1,12 @@
-import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  inject,
+  Injector,
+  OnInit,
+  ViewChild,
+} from '@angular/core';
 import {
   FormBuilder,
   FormControl,
@@ -27,6 +35,7 @@ import { SecretDialogComponent } from '../client/secret-dialog/secret-dialog.com
 import { ApiService } from '../../core';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { showFieldsToFix } from '../../common/field-to-fix.util';
 
 @Component({
   selector: 'app-tenant-create',
@@ -53,6 +62,11 @@ export class TenantCreateComponent implements OnInit {
   isEditMode = false;
 
   roles = roles;
+
+  /** Holds the fields; Save focuses the first invalid one. */
+  @ViewChild('formElement', { read: ElementRef })
+  private readonly formElement?: ElementRef<HTMLFormElement>;
+  private readonly injector = inject(Injector);
 
   constructor(
     private readonly fb: FormBuilder,
@@ -96,8 +110,20 @@ export class TenantCreateComponent implements OnInit {
     }
   }
 
+  /** Save stays focusable while a save runs, so its tooltip says why it waits. */
+  get saveTooltip(): string {
+    return this.isSubmitting ? 'Saving the tenant…' : '';
+  }
+
   async onSubmit(): Promise<void> {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
+    if (this.isSubmitting) return;
     if (this.tenantForm.invalid) {
+      showFieldsToFix(this.tenantForm, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container: () => this.formElement?.nativeElement,
+      });
       return;
     }
 

@@ -12,12 +12,13 @@
     </button>
   </div>
 
-  <form [formGroup]="userForm" (ngSubmit)="onSubmit()">
+  <form #formElement [formGroup]="userForm" (ngSubmit)="onSubmit()">
     <mat-card>
       <mat-card-content fxLayout="column" fxLayoutGap="16px">
         <mat-form-field appearance="outline">
           <mat-label>Username</mat-label>
           <input matInput formControlName="username" placeholder="Enter unique username" required />
+          <mat-error>Username is required</mat-error>
         </mat-form-field>
 
         <mat-checkbox formControlName="enabled">User enabled</mat-checkbox>
@@ -37,6 +38,7 @@
               >Learn about roles</a
             >
           </mat-hint>
+          <mat-error>Select at least one role</mat-error>
         </mat-form-field>
       </mat-card-content>
 
@@ -48,7 +50,9 @@
           mat-flat-button
           color="primary"
           type="submit"
-          [disabled]="userForm.invalid || isSubmitting || unmanageableRoles.length > 0"
+          [disabled]="isSubmitting || unmanageableRoles.length > 0"
+          disabledInteractive
+          [matTooltip]="saveTooltip"
         >
           @if (loaded) {
             {{ isSubmitting ? 'Updating...' : 'Update User' }}

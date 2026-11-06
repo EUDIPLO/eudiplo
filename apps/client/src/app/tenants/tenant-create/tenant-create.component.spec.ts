@@ -1,8 +1,11 @@
 import '@angular/compiler';
+import { TestBed } from '@angular/core/testing';
 import { FormBuilder } from '@angular/forms';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { provideRouter } from '@angular/router';
 import { client } from '@eudiplo/sdk-core';
 import { of } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TenantCreateComponent } from './tenant-create.component';
 
@@ -39,15 +42,18 @@ describe('TenantCreateComponent', () => {
     );
     client.setConfig({ fetch: fetchMock });
 
-    component = new TenantCreateComponent(
-      new FormBuilder(),
-      { open: vi.fn() } as never,
-      router as never,
-      {
-        snapshot: { paramMap: { get: vi.fn(() => routeId) } },
-      } as never,
-      { open: vi.fn(() => ({ afterClosed: () => of(undefined) })) } as never,
-      { getBaseUrl: vi.fn(() => 'http://localhost:3000') } as never
+    component = TestBed.runInInjectionContext(
+      () =>
+        new TenantCreateComponent(
+          new FormBuilder(),
+          { open: vi.fn() } as never,
+          router as never,
+          {
+            snapshot: { paramMap: { get: vi.fn(() => routeId) } },
+          } as never,
+          { open: vi.fn(() => ({ afterClosed: () => of(undefined) })) } as never,
+          { getBaseUrl: vi.fn(() => 'http://localhost:3000') } as never
+        )
     );
   });
 
@@ -203,6 +209,47 @@ describe('TenantCreateComponent', () => {
       method: 'PATCH',
       path: '/api/tenant/Acme',
       body: { name: 'Renamed' },
+    });
+  });
+
+  describe('rendered', () => {
+    afterEach(() => TestBed.resetTestingModule());
+
+    it('says which fields keep it from saving, focuses the first one and sends nothing', async () => {
+      const snackBar = { open: vi.fn() };
+      // The component of the other tests was built with this test module.
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [TenantCreateComponent],
+        providers: [provideRouter([]), { provide: MatSnackBar, useValue: snackBar }],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(TenantCreateComponent);
+      fixture.detectChanges();
+      const page = fixture.nativeElement as HTMLElement;
+      fixture.componentInstance.tenantForm.patchValue({ name: 'Acme', roles: [] });
+      fixture.detectChanges();
+      const save = [...page.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === 'Create tenant'
+      )!;
+      expect(save.disabled).toBe(false);
+      expect(save.getAttribute('aria-disabled')).toBeNull();
+
+      save.focus();
+      save.click();
+
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(document.activeElement?.getAttribute('formcontrolname')).toBe('id');
+      });
+      expect(
+        [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim())
+      ).toEqual(['tenant ID is required', 'Select at least one role']);
+      expect(snackBar.open).toHaveBeenLastCalledWith(
+        'Check the highlighted fields.',
+        'Close',
+        expect.anything()
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 });
