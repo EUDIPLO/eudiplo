@@ -2,7 +2,6 @@ import * as x509 from "@peculiar/x509";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
     certificateBase64,
-    entityInfoIssues,
     externalEntityCertificates,
     TrustListInputError,
 } from "./trust-list-input.js";
@@ -63,39 +62,6 @@ describe("externalEntityCertificates", () => {
                 message:
                     "issuerCertPem must be an X.509 certificate in PEM or Base64 DER.",
             },
-        ]);
-    });
-});
-
-describe("entityInfoIssues", () => {
-    it("accepts unset values and values a LoTE document can hold", () => {
-        expect(
-            entityInfoIssues([
-                { info: {} },
-                { info: { country: "DE", uri: "https://issuer.example" } },
-                { info: { country: "", uri: "" } },
-            ]),
-        ).toEqual([]);
-    });
-
-    it("refuses a country of other than two characters and a relative uri", () => {
-        expect(
-            entityInfoIssues([
-                { info: { country: "DEU", uri: "issuer.example" } },
-                { info: { country: "D" } },
-            ]),
-        ).toEqual([
-            expect.objectContaining({
-                path: ["entities", 0, "info", "country"],
-                code: "invalid_entity_info",
-            }),
-            expect.objectContaining({
-                path: ["entities", 0, "info", "uri"],
-                code: "invalid_entity_info",
-            }),
-            expect.objectContaining({
-                path: ["entities", 1, "info", "country"],
-            }),
         ]);
     });
 });

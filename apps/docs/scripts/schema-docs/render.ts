@@ -1,5 +1,15 @@
 import type { SchemaField } from "./model.js";
 
+/**
+ * Longer value lists (such as the country codes of a trust list entity) are
+ * left to the field description instead of filling the row.
+ */
+const MAX_LISTED_VALUES = 20;
+
+function listedValues(values: unknown[] | undefined): unknown[] | undefined {
+    return values && values.length <= MAX_LISTED_VALUES ? values : undefined;
+}
+
 function orderedVariants(field: SchemaField): SchemaField[] {
     return [...(field.variants ?? [])].sort(
         (a, b) => JSON.stringify(example(b)).length - JSON.stringify(example(a)).length,
@@ -32,7 +42,8 @@ export function renderSchemaBody(field: SchemaField, depth = 0): string {
                 child.required ? "required" : "optional",
                 child.nullable ? `${child.type} or null` : child.type,
             ];
-            if (child.enum) notes.push(`allowed: ${child.enum.join(" | ")}`);
+            const listed = listedValues(child.enum);
+            if (listed) notes.push(`allowed: ${listed.join(" | ")}`);
             if (child.minimum !== undefined) notes.push(`minimum: ${child.minimum}`);
             if (child.description) notes.push(child.description);
             const alternatives = child.variants && orderedVariants(child).slice(1).map(
@@ -139,7 +150,7 @@ function childRows(field: SchemaField, path: string, depth: number, variant?: st
     return Object.entries(field.properties ?? {}).flatMap(([name, child]) => {
         const childPath = path ? `${path}.${name}` : name;
         // For arrays of enum values, list the values allowed in the array.
-        const allowed = child.enum ?? (child.type === "array" ? child.items?.enum : undefined);
+        const allowed = listedValues(child.enum ?? (child.type === "array" ? child.items?.enum : undefined));
         const row: SchemaTableRow = {
             path: childPath,
             depth,

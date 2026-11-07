@@ -57,7 +57,7 @@ rejects versions newer than its own.
 | `PresentationConfig` | `PresentationConfigFile`      | 4               |           |
 | `AttributeProvider`  | `AttributeProviderConfigFile` | 1               |           |
 | `WebhookEndpoint`    | `WebhookEndpointConfigFile`   | 1               |           |
-| `TrustList`          | `TrustListConfigFile`         | 1               |           |
+| `TrustList`          | `TrustListConfigFile`         | 2               |           |
 | `FederationTrustAnchor` | `FederationTrustAnchorConfigFile` | 1         |           |
 | `StatusList`         | `StatusListConfigFile`        | 1               |           |
 

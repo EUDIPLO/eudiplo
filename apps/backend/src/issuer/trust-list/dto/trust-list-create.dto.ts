@@ -1,4 +1,11 @@
 import {
+    TRUST_LIST_COUNTRY_DESCRIPTION,
+    TRUST_LIST_COUNTRY_PATTERN,
+    TRUST_LIST_LANGUAGE_DESCRIPTION,
+    TRUST_LIST_LANGUAGE_TAG_PATTERN,
+    TRUST_LIST_URI_DESCRIPTION,
+} from "@eudiplo/config-format/trust-list-entity-info.js";
+import {
     ApiExtraModels,
     ApiProperty,
     getSchemaPath,
@@ -12,10 +19,25 @@ import { TrustList } from "../entities/trust-list.entity.js";
 export class TrustListEntityInfo {
     name!: string;
 
+    @ApiProperty({
+        required: false,
+        pattern: TRUST_LIST_LANGUAGE_TAG_PATTERN,
+        description: TRUST_LIST_LANGUAGE_DESCRIPTION,
+    })
     lang?: string;
 
+    @ApiProperty({
+        required: false,
+        format: "uri",
+        description: TRUST_LIST_URI_DESCRIPTION,
+    })
     uri?: string;
 
+    @ApiProperty({
+        required: false,
+        pattern: TRUST_LIST_COUNTRY_PATTERN,
+        description: TRUST_LIST_COUNTRY_DESCRIPTION,
+    })
     country?: string;
 
     locality?: string;
