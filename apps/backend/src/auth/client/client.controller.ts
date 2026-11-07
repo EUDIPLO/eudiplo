@@ -35,6 +35,11 @@ const MANAGE_DENIED = manageDeniedDescription("client");
  * Controller to manage clients.
  */
 @ApiTags("Client")
+@ApiResponse({
+    status: 501,
+    description:
+        "With `OIDC_PROVIDER=generic`, the identity provider manages the clients",
+})
 @Controller("client")
 export class ClientController {
     constructor(
@@ -159,6 +164,8 @@ export class ClientController {
     ) {
         const tenantId = requireTenantContext(user);
         assertMayGrantRoles(user.roles, createClientDto.roles);
+        // Before the lookup, which also finds records left from an earlier mode.
+        this.clients.assertCanCreateClients();
         // Creating must never replace a client, not even one of this tenant.
         if (await this.clients.getClientById(createClientDto.clientId)) {
             throw new ClientIdTaken(createClientDto.clientId);

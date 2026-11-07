@@ -8,9 +8,6 @@
     "auth/client/adapters/keycloak-clients.service.ts": [
         "http-exception"
     ],
-    "auth/user/adapters/internal-users.service.ts": [
-        "http-exception"
-    ],
     "auth/user/adapters/keycloak-users.service.ts": [
         "http-exception"
     ],
