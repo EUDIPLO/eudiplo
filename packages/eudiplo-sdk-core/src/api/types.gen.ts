@@ -8333,6 +8333,22 @@ export type CacheControllerClearTrustListCacheResponses = {
 
 export type CacheControllerClearTrustListCacheResponse = CacheControllerClearTrustListCacheResponses[keyof CacheControllerClearTrustListCacheResponses];
 
+export type CacheControllerForgetTrustListSequenceNumbersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/cache/trust-list/sequence-numbers';
+};
+
+export type CacheControllerForgetTrustListSequenceNumbersResponses = {
+    /**
+     * Sequence numbers forgotten
+     */
+    204: void;
+};
+
+export type CacheControllerForgetTrustListSequenceNumbersResponse = CacheControllerForgetTrustListSequenceNumbersResponses[keyof CacheControllerForgetTrustListSequenceNumbersResponses];
+
 export type CacheControllerClearStatusListCacheData = {
     body?: never;
     path?: never;

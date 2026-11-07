@@ -77,6 +77,33 @@ export function urlNamesTrustList(
     );
 }
 
+/**
+ * The managed trust list that `url` names on this instance: below one of
+ * `baseUrls` (its `PUBLIC_URL` and `INTERNAL_URL`, compared by origin and
+ * path), `/issuers/<tenant>/trust-list/<id>`, where a trailing slash, a query
+ * or a fragment is ignored. Undefined for any other URL.
+ */
+export function managedTrustListAt(
+    url: string,
+    baseUrls: readonly string[],
+): ManagedTrustList | undefined {
+    const target = URL.parse(url);
+    if (!target) return undefined;
+    for (const baseUrl of baseUrls) {
+        const base = URL.parse(baseUrl);
+        if (!base || base.origin !== target.origin) continue;
+        const prefix = `${base.pathname.replace(/\/$/, "")}/issuers/`;
+        if (!target.pathname.startsWith(prefix)) continue;
+        const segments = target.pathname.slice(prefix.length).split("/");
+        if (segments.at(-1) === "") segments.pop();
+        const [tenant, kind, id] = segments;
+        if (segments.length === 3 && kind === "trust-list" && tenant && id) {
+            return { tenantId: decoded(tenant), id: decoded(id) };
+        }
+    }
+    return undefined;
+}
+
 /** True when a `trustListId` value names the list, ignoring surrounding spaces. */
 export function trustListIdNamesList(
     trustListId: unknown,

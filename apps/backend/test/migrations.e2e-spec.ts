@@ -27,6 +27,7 @@ import { AddStatusUpdatedAtToStatusMapping1785700000000 } from "../src/database/
 import { MoveDefaultAccessKeyChainIntoDefaultKeyChains1785800000000 } from "../src/database/migrations/1785800000000-MoveDefaultAccessKeyChainIntoDefaultKeyChains.js";
 import { DropIssuanceSigningKeyId1785900000000 } from "../src/database/migrations/1785900000000-DropIssuanceSigningKeyId.js";
 import { AddAllowedOriginsToPresentationConfig1786000000000 } from "../src/database/migrations/1786000000000-AddAllowedOriginsToPresentationConfig.js";
+import { AddTrustListSequenceNumber1786100000000 } from "../src/database/migrations/1786100000000-AddTrustListSequenceNumber.js";
 import { describeWithContainers } from "./container-runtime.js";
 import {
     addTokensValidAfterContract,
@@ -2095,6 +2096,192 @@ describe("Migration tests", () => {
                     `SELECT "tenantId", "id", "description" FROM "${table}"`,
                 ),
             ).resolves.toEqual([{ tenantId: "t", id: "a", description: null }]);
+
+            await migration.down(queryRunner);
+            expect(await queryRunner.hasTable(table)).toBe(false);
+            await queryRunner.release();
+        }
+
+        describe("SQLite", () => {
+            let dataSource: DataSource;
+            let driftAfterSynchronize: string[];
+            let tmpDir: string;
+
+            beforeAll(async () => {
+                tmpDir = mkdtempSync(join(tmpdir(), "eudiplo-migration-test-"));
+                ({ dataSource, driftAfterSynchronize } = await schemaBefore({
+                    type: "better-sqlite3",
+                    database: join(tmpDir, "test.db"),
+                }));
+                // SQLite enforces ON DELETE CASCADE only with foreign keys on.
+                await dataSource.query("PRAGMA foreign_keys = ON");
+            }, 30_000);
+
+            afterAll(async () => {
+                await dataSource?.destroy();
+                if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
+            });
+
+            test("creates the table idempotently and reversibly", async () => {
+                await expectCreatedAndReversible(
+                    dataSource,
+                    driftAfterSynchronize,
+                );
+            });
+        });
+
+        describeWithContainers("PostgreSQL", () => {
+            let dataSource: DataSource;
+            let driftAfterSynchronize: string[];
+            let postgresContainer: StartedPostgreSqlContainer;
+
+            beforeAll(async () => {
+                postgresContainer = await new PostgreSqlContainer(
+                    "postgres:alpine",
+                ).start();
+                ({ dataSource, driftAfterSynchronize } = await schemaBefore({
+                    type: "postgres",
+                    url: postgresContainer.getConnectionUri(),
+                }));
+            }, 60_000);
+
+            afterAll(async () => {
+                await dataSource?.destroy();
+                await postgresContainer?.stop();
+            });
+
+            test("creates the table idempotently and reversibly", async () => {
+                await expectCreatedAndReversible(
+                    dataSource,
+                    driftAfterSynchronize,
+                );
+            });
+        });
+    });
+
+    describe("AddTrustListSequenceNumber1786100000000", () => {
+        const migration = new AddTrustListSequenceNumber1786100000000();
+        const table = "trust_list_sequence_number";
+
+        /** Schema from the entities, then the new table dropped again. */
+        async function schemaBefore(
+            options:
+                | { type: "better-sqlite3"; database: string }
+                | { type: "postgres"; url: string },
+        ): Promise<{
+            dataSource: DataSource;
+            driftAfterSynchronize: string[];
+        }> {
+            const [
+                { TenantEntity },
+                { ClientEntity },
+                { TrustListSequenceNumberEntity },
+            ] = await Promise.all([
+                import("../src/auth/tenant/entities/tenant.entity.js"),
+                import("../src/auth/client/entities/client.entity.js"),
+                import(
+                    "../src/trust/entities/trust-list-sequence-number.entity.js"
+                ),
+            ]);
+            const dataSource = new DataSource({
+                ...options,
+                entities: [
+                    TenantEntity,
+                    ClientEntity,
+                    TrustListSequenceNumberEntity,
+                ],
+                synchronize: true,
+                logging: false,
+            });
+            await dataSource.initialize();
+            const driftAfterSynchronize = await drift(dataSource);
+
+            const queryRunner = dataSource.createQueryRunner();
+            await migration.down(queryRunner);
+            await queryRunner.release();
+            await dataSource.query(
+                `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't'), ('u', 'u')`,
+            );
+            return { dataSource, driftAfterSynchronize };
+        }
+
+        const drift = async (dataSource: DataSource) =>
+            (await dataSource.driver.createSchemaBuilder().log()).upQueries
+                .map((query) => query.query)
+                .sort();
+
+        async function expectCreatedAndReversible(
+            dataSource: DataSource,
+            driftAfterSynchronize: string[],
+        ) {
+            const queryRunner = dataSource.createQueryRunner();
+            expect(await queryRunner.hasTable(table)).toBe(false);
+
+            await migration.up(queryRunner);
+            await migration.up(queryRunner);
+
+            // The table matches the entity, on PostgreSQL and SQLite.
+            expect(await drift(dataSource)).toEqual(driftAfterSynchronize);
+            const insert = (tenantId: string, sequenceNumber: number) =>
+                dataSource.query(
+                    `INSERT INTO "${table}" ("tenantId", "url", "sequenceNumber") VALUES ('${tenantId}', 'https://trust.example/list', ${sequenceNumber})`,
+                );
+            // Numbers beyond 32 bits fit.
+            await insert("t", 2 ** 40);
+            // One number per tenant and URL; another tenant has its own.
+            await expect(insert("t", 1)).rejects.toThrow();
+            await insert("u", 1);
+            // Deleting a tenant deletes its numbers.
+            await dataSource.query(
+                `DELETE FROM "tenant_entity" WHERE "id" = 'u'`,
+            );
+            const rows = await dataSource.query(
+                `SELECT "tenantId", "sequenceNumber" FROM "${table}"`,
+            );
+            expect(
+                rows.map(
+                    (row: { tenantId: string; sequenceNumber: unknown }) => [
+                        row.tenantId,
+                        Number(row.sequenceNumber),
+                    ],
+                ),
+            ).toEqual([["t", 2 ** 40]]);
+
+            // The adapter on this database: only raises numbers, reads them
+            // back as numbers, and forgets one tenant only.
+            const [
+                { TrustListSequenceNumberEntity },
+                { TypeOrmAcceptedTrustListSequenceNumbers },
+            ] = await Promise.all([
+                import(
+                    "../src/trust/entities/trust-list-sequence-number.entity.js"
+                ),
+                import(
+                    "../src/trust/adapters/typeorm-accepted-trust-list-sequence-numbers.js"
+                ),
+            ]);
+            await dataSource.query(
+                `INSERT INTO "tenant_entity" ("id", "name") VALUES ('u', 'u')`,
+            );
+            const numbers = new TypeOrmAcceptedTrustListSequenceNumbers(
+                dataSource.getRepository(TrustListSequenceNumberEntity),
+            );
+            const other = "https://trust.example/other";
+            await numbers.record("u", other, 5);
+            await numbers.record("u", other, 4);
+            await Promise.all([
+                numbers.record("u", other, 6),
+                numbers.record("u", other, 7),
+            ]);
+            await expect(numbers.highest("u", other)).resolves.toBe(7);
+            await expect(
+                numbers.highest("t", "https://trust.example/list"),
+            ).resolves.toBe(2 ** 40);
+            await numbers.forgetTenant("u");
+            await expect(numbers.highest("u", other)).resolves.toBeUndefined();
+            await expect(
+                numbers.highest("t", "https://trust.example/list"),
+            ).resolves.toBe(2 ** 40);
 
             await migration.down(queryRunner);
             expect(await queryRunner.hasTable(table)).toBe(false);

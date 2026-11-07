@@ -16,7 +16,7 @@ import { TrustListRef } from "../../../verifier/presentations/entities/presentat
 import { CredentialRequestException } from "./exceptions/index.js";
 
 export interface AttestationProofTrustValidationDeps {
-    tenantId?: string;
+    tenantId: string;
     trustStoreService: TrustStoreService;
     x509ValidationService: X509ValidationService;
     /** Where a rejected key attestation's reason is logged. */
@@ -105,7 +105,7 @@ export async function validateAttestationProofTrust(
             ? message
             : `${message}: ${cause?.message || "Unknown error"}`;
         (deps.logger ?? defaultLogger).warn(
-            `Key attestation validation failed for tenant ${deps.tenantId ?? "unknown"}: ${reason}`,
+            `Key attestation validation failed for tenant ${deps.tenantId}: ${reason}`,
         );
         throw new CredentialRequestException("invalid_proof", message);
     }

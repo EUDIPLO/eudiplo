@@ -10,6 +10,8 @@ import {
 
 type LoteInfo = {
     nextUpdate?: string;
+    /** `LoTESequenceNumber` as signed; not checked here. */
+    sequenceNumber?: unknown;
     listIssueDateTime?: string;
     schemeTerritory?: string;
 };
@@ -39,6 +41,7 @@ export class LoteParserService {
 
         const info: LoteInfo = {
             nextUpdate: schemeInfo.NextUpdate,
+            sequenceNumber: schemeInfo.LoTESequenceNumber,
             listIssueDateTime: schemeInfo.ListIssueDateTime,
             schemeTerritory: schemeInfo.SchemeTerritory,
         };

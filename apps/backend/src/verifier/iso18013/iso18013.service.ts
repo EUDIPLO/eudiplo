@@ -540,6 +540,7 @@ export class Iso18013Service {
 
         const verifyOptions: VerifierOptions = verifierTrustOptions({
             trustLists: resolvedLoteAuthorities,
+            tenantId: session.tenantId,
             authorities: mdocCred.trusted_authorities,
             statusCheckMode:
                 config.statusCheckMode ?? RevocationCheckMode.Strict,

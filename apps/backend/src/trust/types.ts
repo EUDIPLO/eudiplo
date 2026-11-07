@@ -226,8 +226,12 @@ export type VerifierOptions = {
 };
 
 export type TrustListSource = {
-    /** Required when resolving managed trust-list IDs. */
-    tenantId?: string;
+    /**
+     * The tenant whose lists these are: resolves managed trust-list IDs and
+     * keeps the sequence numbers of lists it accepted apart from other
+     * tenants'.
+     */
+    tenantId: string;
     lotes: TrustListRef[];
     // which service types from LoTE you want to accept as issuer identities
     acceptedServiceTypes?: ServiceTypeIdentifier[];

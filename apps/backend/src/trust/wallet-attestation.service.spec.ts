@@ -2,6 +2,7 @@ import { type Logger, UnauthorizedException } from "@nestjs/common";
 import { ES256 } from "@owf/crypto";
 import * as x509 from "@peculiar/x509";
 import { describe, expect, it, vi } from "vitest";
+import { acceptedSequenceNumbersFake } from "../../test/trust/accepted-trust-list-sequence-numbers.fake.js";
 import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
 import { OutdatedTrustListsError } from "./domain/trust-list-freshness.js";
 import { RevocationListUnavailableError } from "./revocation-policy.util.js";
@@ -189,7 +190,7 @@ describe("WalletAttestationService error messages for the wallet", () => {
 
         expect(error).toBeInstanceOf(UnauthorizedException);
         expect(error?.message).toBe(
-            "Wallet attestation verification failed: No configured trust list is current: each has no valid NextUpdate or one that has passed",
+            "Wallet attestation verification failed: No configured trust list is current: each has no valid NextUpdate or one that has passed, no valid LoTESequenceNumber, or a lower one than a list accepted before",
         );
     });
 });
@@ -893,13 +894,16 @@ describe("WalletAttestationService wallet attestation signer", () => {
                         list.withProvider ? providerEntity : otherEntity,
                     ],
                     nextUpdate: list.nextUpdate,
+                    sequenceNumber: 1,
                 });
             }
+            const noNumbers = acceptedSequenceNumbersFake();
             const trustStoreService = new TrustStoreService(
-                new CollectTrustedEntities({ loadVerified }),
+                new CollectTrustedEntities({ loadVerified }, noNumbers),
                 {} as never,
                 {} as never,
                 {} as never,
+                noNumbers,
             );
             vi.spyOn(
                 (trustStoreService as unknown as { logger: Logger }).logger,

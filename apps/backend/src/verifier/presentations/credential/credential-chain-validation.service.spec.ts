@@ -1,6 +1,7 @@
 import type { Logger } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { acceptedSequenceNumbersFake } from "../../../../test/trust/accepted-trust-list-sequence-numbers.fake.js";
 import { CollectTrustedEntities } from "../../../trust/application/collect-trusted-entities.js";
 import { TrustStoreService } from "../../../trust/trust-store.service.js";
 import type { TrustListSource } from "../../../trust/types.js";
@@ -20,6 +21,7 @@ import {
  * whenever the list was unreachable, unparseable, or stale. Verification must
  * instead fail closed.
  */
+
 describe("CredentialChainValidationService — trust list availability", () => {
     const LOTE_SOURCE: TrustListSource = {
         lotes: [{ url: "https://trust.example/lote.jwt" }],
@@ -67,10 +69,14 @@ describe("CredentialChainValidationService — trust list availability", () => {
             nextUpdate: new Date(Date.now() - 86_400_000).toISOString(),
         });
         const store = new TrustStoreService(
-            new CollectTrustedEntities({ loadVerified }),
+            new CollectTrustedEntities(
+                { loadVerified },
+                acceptedSequenceNumbersFake(),
+            ),
             {} as never,
             {} as never,
             {} as never,
+            acceptedSequenceNumbersFake(),
         );
         vi.spyOn(
             (store as unknown as { logger: Logger }).logger,
@@ -241,16 +247,22 @@ describe("CredentialChainValidationService — status list signer", () => {
                 .mockResolvedValueOnce({
                     entities: [entity("current", currentCa)],
                     nextUpdate: new Date(Date.now() + day).toISOString(),
+                    sequenceNumber: 1,
                 })
                 .mockResolvedValueOnce({
                     entities: [entity("outdated", outdatedCa)],
                     nextUpdate: new Date(Date.now() - day).toISOString(),
+                    sequenceNumber: 1,
                 });
             const store = new TrustStoreService(
-                new CollectTrustedEntities({ loadVerified }),
+                new CollectTrustedEntities(
+                    { loadVerified },
+                    acceptedSequenceNumbersFake(),
+                ),
                 {} as never,
                 {} as never,
                 {} as never,
+                acceptedSequenceNumbersFake(),
             );
             vi.spyOn(
                 (store as unknown as { logger: Logger }).logger,
@@ -268,6 +280,7 @@ describe("CredentialChainValidationService — status list signer", () => {
                 } as any,
             );
             const source = {
+                tenantId: "t",
                 lotes: [
                     { url: "https://trust.example/current.jwt" },
                     { url: OUTDATED_URL },

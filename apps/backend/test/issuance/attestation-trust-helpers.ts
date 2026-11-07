@@ -94,6 +94,7 @@ export async function createMockTrustListJwt(
     signingCert: { certificate: X509Certificate; privateKey: CryptoKey },
     walletProviderCert: X509Certificate,
     serviceTypeIdentifier = "http://uri.etsi.org/19602/SvcType/WalletSolution",
+    sequenceNumber = 1,
 ): Promise<string> {
     const privateKeyArrayBuffer = await globalThis.crypto.subtle.exportKey(
         "pkcs8",
@@ -112,7 +113,7 @@ export async function createMockTrustListJwt(
         LoTE: {
             ListAndSchemeInformation: {
                 LoTEVersionIdentifier: 1,
-                LoTESequenceNumber: 1,
+                LoTESequenceNumber: sequenceNumber,
                 LoTEType:
                     "http://uri.etsi.org/19602/LoTEType/EUEAAProvidersList",
                 StatusDeterminationApproach:
