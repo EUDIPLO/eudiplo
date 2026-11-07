@@ -1,6 +1,11 @@
+import { TestBed } from '@angular/core/testing';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { provideRouter } from '@angular/router';
 import { EMPTY } from 'rxjs';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
+import { WebhookEndpointService } from '../webhook-endpoint.service';
 import { WebhookEndpointCreateComponent } from './webhook-endpoint-create.component';
 
 describe('WebhookEndpointCreateComponent save', () => {
@@ -14,12 +19,15 @@ describe('WebhookEndpointCreateComponent save', () => {
       ],
     });
     const snackBar = { open: vi.fn() };
-    const component = new WebhookEndpointCreateComponent(
-      { create } as never,
-      { navigate: vi.fn() } as never,
-      { snapshot: { paramMap: { get: () => null } } } as never,
-      snackBar as never,
-      {} as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new WebhookEndpointCreateComponent(
+          { create } as never,
+          { navigate: vi.fn() } as never,
+          { snapshot: { paramMap: { get: () => null } } } as never,
+          snackBar as never,
+          {} as never
+        )
     );
     component.form.patchValue({
       id: 'example',
@@ -40,6 +48,13 @@ describe('WebhookEndpointCreateComponent save', () => {
     );
     expect(component.fieldError('url', 'URL is required')).toBe('Must be an https URL');
     expect(component.fieldError('authHeaderName')).toBe('Invalid header name');
+
+    // Until a rejected field is edited, Save points at it instead of sending the same again.
+    component.onSubmit();
+    expect(create).toHaveBeenCalledOnce();
+    expect(snackBar.open.mock.lastCall?.[0]).toBe(
+      'Check the highlighted fields in Endpoint Details, Authentication.'
+    );
   });
 
   it('shows rejected fields when an update is rejected', async () => {
@@ -48,15 +63,20 @@ describe('WebhookEndpointCreateComponent save', () => {
       message: 'Validation failed',
       errors: [{ path: ['url'], message: 'Must be an https URL' }],
     });
-    const component = new WebhookEndpointCreateComponent(
-      {
-        update,
-        getById: vi.fn().mockResolvedValue({ id: 'example', name: 'Example', url: 'https://a' }),
-      } as never,
-      { navigate: vi.fn() } as never,
-      { snapshot: { paramMap: { get: () => 'example' } } } as never,
-      { open: vi.fn() } as never,
-      {} as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new WebhookEndpointCreateComponent(
+          {
+            update,
+            getById: vi
+              .fn()
+              .mockResolvedValue({ id: 'example', name: 'Example', url: 'https://a' }),
+          } as never,
+          { navigate: vi.fn() } as never,
+          { snapshot: { paramMap: { get: () => 'example' } } } as never,
+          { open: vi.fn() } as never,
+          {} as never
+        )
     );
     component.ngOnInit();
     await vi.waitFor(() => expect(component.loading).toBe(false));
@@ -70,12 +90,15 @@ describe('WebhookEndpointCreateComponent save', () => {
   });
 
   it('lets Save go again when a rejected header field is hidden by choosing no auth', () => {
-    const component = new WebhookEndpointCreateComponent(
-      {} as never,
-      { navigate: vi.fn() } as never,
-      { snapshot: { paramMap: { get: () => null } } } as never,
-      { open: vi.fn() } as never,
-      {} as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new WebhookEndpointCreateComponent(
+          {} as never,
+          { navigate: vi.fn() } as never,
+          { snapshot: { paramMap: { get: () => null } } } as never,
+          { open: vi.fn() } as never,
+          {} as never
+        )
     );
     component.form.patchValue({
       id: 'example',
@@ -93,15 +116,18 @@ describe('WebhookEndpointCreateComponent save', () => {
 
   it('does not save while the webhook endpoint to edit loads, nor after its load failed', async () => {
     const update = vi.fn();
-    const component = new WebhookEndpointCreateComponent(
-      {
-        update,
-        getById: vi.fn().mockRejectedValue({ statusCode: 404, message: 'Not found' }),
-      } as never,
-      { navigate: vi.fn() } as never,
-      { snapshot: { paramMap: { get: () => 'example' } } } as never,
-      { open: vi.fn() } as never,
-      {} as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new WebhookEndpointCreateComponent(
+          {
+            update,
+            getById: vi.fn().mockRejectedValue({ statusCode: 404, message: 'Not found' }),
+          } as never,
+          { navigate: vi.fn() } as never,
+          { snapshot: { paramMap: { get: () => 'example' } } } as never,
+          { open: vi.fn() } as never,
+          {} as never
+        )
     );
 
     component.ngOnInit();
@@ -115,6 +141,53 @@ describe('WebhookEndpointCreateComponent save', () => {
     expect(component.loadError).toBe('Failed to load webhook endpoint: Not found');
     expect(update).not.toHaveBeenCalled();
   });
+
+  describe('rendered', () => {
+    afterEach(() => TestBed.resetTestingModule());
+
+    it('says which fields keep it from saving, focuses the first one and sends nothing', async () => {
+      const create = vi.fn();
+      const snackBar = { open: vi.fn() };
+      await TestBed.configureTestingModule({
+        imports: [WebhookEndpointCreateComponent],
+        providers: [
+          provideRouter([]),
+          { provide: WebhookEndpointService, useValue: { create } },
+          { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+        ],
+      })
+        // The component imports MatSnackBarModule, whose provider wins over a root provider.
+        .overrideProvider(MatSnackBar, { useValue: snackBar })
+        .compileComponents();
+      const fixture = TestBed.createComponent(WebhookEndpointCreateComponent);
+      fixture.detectChanges();
+      const page = fixture.nativeElement as HTMLElement;
+      fixture.componentInstance.form.patchValue({ id: 'example' });
+      fixture.detectChanges();
+      const save = [...page.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === 'Create'
+      )!;
+      expect(save.disabled).toBe(false);
+      expect(save.getAttribute('aria-disabled')).toBeNull();
+
+      save.focus();
+      save.click();
+
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(document.activeElement?.getAttribute('formcontrolname')).toBe('name');
+      });
+      expect(
+        [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim())
+      ).toEqual(['Name is required', 'URL is required']);
+      expect(snackBar.open).toHaveBeenLastCalledWith(
+        'Check the highlighted fields in Endpoint Details.',
+        'Close',
+        expect.anything()
+      );
+      expect(create).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('WebhookEndpointCreateComponent JSON View', () => {
@@ -124,12 +197,15 @@ describe('WebhookEndpointCreateComponent JSON View', () => {
       .fn()
       .mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' })
       .mockResolvedValue({ id: 'example', name: 'Example', url: 'https://a' });
-    const component = new WebhookEndpointCreateComponent(
-      { getById } as never,
-      { navigate: vi.fn() } as never,
-      { snapshot: { paramMap: { get: () => 'example' } } } as never,
-      { open: vi.fn() } as never,
-      { open } as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new WebhookEndpointCreateComponent(
+          { getById } as never,
+          { navigate: vi.fn() } as never,
+          { snapshot: { paramMap: { get: () => 'example' } } } as never,
+          { open: vi.fn() } as never,
+          { open } as never
+        )
     );
 
     component.ngOnInit();
@@ -154,12 +230,15 @@ describe('WebhookEndpointCreateComponent JSON View', () => {
     const open = vi.fn(() => ({ afterClosed: () => EMPTY }));
     let rejectSave!: (error: unknown) => void;
     const create = vi.fn(() => new Promise((_, reject) => (rejectSave = reject)));
-    const component = new WebhookEndpointCreateComponent(
-      { create } as never,
-      { navigate: vi.fn() } as never,
-      { snapshot: { paramMap: { get: () => null } } } as never,
-      { open: vi.fn() } as never,
-      { open } as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new WebhookEndpointCreateComponent(
+          { create } as never,
+          { navigate: vi.fn() } as never,
+          { snapshot: { paramMap: { get: () => null } } } as never,
+          { open: vi.fn() } as never,
+          { open } as never
+        )
     );
 
     component.ngOnInit();

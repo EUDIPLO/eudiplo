@@ -38,7 +38,7 @@
     <p><output>Loading attribute provider…</output></p>
   } @else {
     <!-- Form -->
-    <form [formGroup]="form" (ngSubmit)="onSubmit()">
+    <form #formElement [formGroup]="form" (ngSubmit)="onSubmit()">
       <mat-card>
         <mat-card-header>
           <mat-card-title>
@@ -129,7 +129,9 @@
           mat-flat-button
           color="primary"
           type="submit"
-          [disabled]="form.invalid || saving || loading"
+          [disabled]="saving"
+          disabledInteractive
+          [matTooltip]="saveTooltip"
           appConfigManaged
           managedKind="AttributeProvider"
           [managedResourceId]="create ? '' : form.get('id')?.value || ''"

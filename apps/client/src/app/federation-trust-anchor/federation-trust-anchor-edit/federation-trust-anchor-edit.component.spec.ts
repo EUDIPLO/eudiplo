@@ -1,8 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTooltip } from '@angular/material/tooltip';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { registerFieldFocus } from '../../common/field-to-fix.util';
 import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
 import { IssuanceConfigService } from '../../issuance/issuance-config/issuance-config.service';
 import { PresentationManagementService } from '../../presentation/presentation-config/presentation-management.service';
@@ -169,6 +172,79 @@ describe('FederationTrustAnchorEditComponent', () => {
     expect(component.entityIdError).toBe(
       'Enter an https URL with a host and without query or fragment'
     );
+  });
+
+  it('says which fields keep a trust anchor from saving and focuses the first one', async () => {
+    const create = vi.fn();
+    const { fixture, component, snackBar } = render({}, { create });
+    component.form.patchValue({ id: 'ta', jwks });
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    const save = page.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    expect(save.getAttribute('aria-disabled')).toBeNull();
+
+    save.focus();
+    save.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement?.getAttribute('formcontrolname')).toBe('entityId');
+    });
+    expect(snackBar.open).toHaveBeenLastCalledWith(
+      'Check the highlighted fields in Trust Anchor.',
+      'Close',
+      expect.anything()
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('waits while the trust anchor is saved: a second click sends nothing', async () => {
+    const create = vi.fn(() => new Promise(() => undefined));
+    const { fixture, component } = render({}, { create });
+    component.form.patchValue({ id: 'ta', entityId: 'https://ta.example', jwks });
+    fixture.detectChanges();
+    const save = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[type="submit"]'
+    )!;
+
+    save.click();
+    fixture.detectChanges();
+    save.click();
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(create).toHaveBeenCalledOnce();
+    expect(save.disabled).toBe(false);
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    expect(
+      fixture.debugElement
+        .queryAll(By.directive(MatTooltip))
+        .find((tooltip) => tooltip.nativeElement === save)!
+        .injector.get(MatTooltip).message
+    ).toBe('Saving the trust anchor…');
+  });
+
+  it('names Federation Keys and focuses the key editor when only the key set is missing', async () => {
+    const create = vi.fn();
+    const { fixture, component, snackBar } = render({}, { create });
+    component.form.patchValue({ id: 'ta', entityId: 'https://ta.example', jwks: null });
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    // Stands in for the editor's own focus, which puts the focus on Monaco's input.
+    const focusEditor = vi.fn();
+    registerFieldFocus(page.querySelector('app-editor')!, focusEditor);
+
+    page.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(focusEditor).toHaveBeenCalledOnce();
+    });
+    expect(snackBar.open).toHaveBeenLastCalledWith(
+      'Check the highlighted fields in Federation Keys.',
+      'Close',
+      expect.anything()
+    );
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('loads the trust anchor to edit, keeps its ID and sends the changes', async () => {

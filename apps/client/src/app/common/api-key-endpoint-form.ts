@@ -1,4 +1,4 @@
-import { Directive, type OnInit } from '@angular/core';
+import { Directive, ElementRef, inject, Injector, type OnInit, ViewChild } from '@angular/core';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
 import type { MatDialog } from '@angular/material/dialog';
 import type { MatSnackBar } from '@angular/material/snack-bar';
@@ -9,6 +9,7 @@ import { getApiErrorMessage } from '../utils/error-message';
 import { openErrorSnackBar } from '../utils/error-snackbar';
 import { fieldErrorMessage, showIssuesAtFields } from '../utils/form-errors';
 import { webhookSchema } from '../utils/schemas';
+import { showFieldsToFix } from './field-to-fix.util';
 import {
   type AuthFormValue,
   authControlPath,
@@ -64,8 +65,15 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
 
   /** The endpoint in messages, such as "webhook endpoint". */
   protected abstract readonly noun: string;
+  /** Title of the card with the ID, name, description and URL. */
+  protected abstract readonly detailsTitle: string;
   /** Title of the JSON view. */
   protected abstract readonly jsonTitle: string;
+
+  /** Holds the fields; Save focuses the first invalid one. */
+  @ViewChild('formElement', { read: ElementRef })
+  private readonly formElement?: ElementRef<HTMLFormElement>;
+  private readonly injector = inject(Injector);
 
   constructor(
     private readonly service: ApiKeyEndpointService,
@@ -113,8 +121,28 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
       .finally(() => (this.loading = false));
   }
 
+  /** Save stays focusable while a save runs, so its tooltip says why it waits. */
+  get saveTooltip(): string {
+    return this.saving ? `Saving the ${this.noun}…` : '';
+  }
+
   onSubmit(): void {
-    if (this.form.invalid || this.saving || this.loading || this.loadError) return;
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
+    if (this.saving || this.loading || this.loadError) return;
+    if (this.form.invalid) {
+      const { id, name, description, url, authType, authHeaderName, authHeaderValue } =
+        this.form.controls;
+      showFieldsToFix(this.form, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container: () => this.formElement?.nativeElement,
+        sections: [
+          { name: this.detailsTitle, controls: [id, name, description, url] },
+          { name: 'Authentication', controls: [authType, authHeaderName, authHeaderValue] },
+        ],
+      });
+      return;
+    }
     this.saving = true;
 
     const { id, ...body } = this.buildPayload();
