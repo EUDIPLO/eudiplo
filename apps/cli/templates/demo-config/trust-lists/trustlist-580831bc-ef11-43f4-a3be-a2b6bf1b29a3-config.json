@@ -14,7 +14,9 @@
         "revocationKeyChainId": "dbb65456-c358-46c1-bb5b-c777ef72c1d4",
         "info": {
           "name": "PID Provider",
-          "locale": "en"
+          "locale": "en",
+          "contactUri": "info@example.com",
+          "website": "https://example.com/"
         }
       }
     ]

@@ -26,7 +26,11 @@ export async function createTrustList(
           providerType: 'wallet-provider',
           issuerCertPem: certificatePem,
           revocationCertPem: certificatePem,
-          info: { name: 'Example Wallet Provider' },
+          info: {
+            name: 'Example Wallet Provider',
+            contactUri: 'info@example.com',
+            website: 'https://example.com/',
+          },
         },
       ],
     }),

@@ -35,7 +35,12 @@ export async function configureWalletProviderTrust(
                 issuerCertPem: pem,
                 // The test provider uses the same CA for issuance and status.
                 revocationCertPem: pem,
-                info: { name, lang: "en" },
+                info: {
+                    name,
+                    contactUri: "info@example.com",
+                    website: "https://example.com/",
+                    lang: "en",
+                },
             };
         }),
     };

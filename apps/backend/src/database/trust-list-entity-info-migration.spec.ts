@@ -36,7 +36,12 @@ describe("NormalizeTrustListEntityInfo1786100000000", () => {
         type: "internal",
         issuerKeyChainId: "issuer",
         revocationKeyChainId: "status",
-        info: { name: "Example", ...info },
+        info: {
+            name: "Example",
+            contactUri: "info@example.com",
+            website: "https://example.com/",
+            ...info,
+        },
     });
     const run = async () => {
         const queryRunner = dataSource.createQueryRunner();
@@ -73,6 +78,29 @@ describe("NormalizeTrustListEntityInfo1786100000000", () => {
                 "a/list entities.1.info.uri, a/list entities.2.info.country, a/list entities.2.info.lang",
             ),
         );
+    });
+
+    test("logs a missing or invalid e-mail address and web site", async () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const value = [
+            entity({ contactUri: undefined, website: undefined }),
+            entity({ contactUri: "https://example.com/contact" }),
+            entity({ website: "example.com" }),
+            entity({ contactUri: "mailto:info@example.com" }),
+        ];
+        await insert("list", "a", value);
+
+        await run();
+
+        await expect(stored("list", "a")).resolves.toEqual(
+            JSON.parse(JSON.stringify(value)),
+        );
+        expect(warn).toHaveBeenCalledWith(
+            expect.stringContaining(
+                "a/list entities.0.info.contactUri, a/list entities.0.info.website, a/list entities.1.info.contactUri, a/list entities.2.info.website",
+            ),
+        );
+        expect(warn.mock.calls.flat().join()).not.toContain("entities.3");
     });
 
     test("skips databases without the trust_list table", async () => {

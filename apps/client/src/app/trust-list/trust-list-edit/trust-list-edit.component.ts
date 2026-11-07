@@ -47,6 +47,13 @@ import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { fieldErrorMessage, showIssuesAtFields } from '../../utils/form-errors';
 import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../common/focus-if-lost.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
+import {
+  ELECTRONIC_ADDRESS_MESSAGES,
+  emailValidators,
+  phoneValidators,
+  readElectronicAddress,
+  websiteValidators,
+} from './trust-list-electronic-address';
 
 /** Common info fields for both internal and external entities */
 interface EntityInfoForm {
@@ -59,6 +66,8 @@ interface EntityInfoForm {
   infoPostalCode: FormControl<string>;
   infoStreetAddress: FormControl<string>;
   infoContactUri: FormControl<string>;
+  infoWebsite: FormControl<string>;
+  infoPhone: FormControl<string>;
 }
 
 interface InternalEntityForm extends EntityInfoForm {
@@ -342,6 +351,41 @@ export class TrustListEditComponent implements OnInit {
   }
 
   /**
+   * What of the entity's electronic address keeps Save disabled, for its collapsed panel, for
+   * example "Check the e-mail address and website"; '' when nothing does. Lists stored before
+   * 10.0 lack the website and sometimes hold a URL as e-mail address (ETSI TS 119 602 clause
+   * 6.5.3.2).
+   */
+  entityAddressToCheck(entity: AbstractControl): string {
+    const fields = [
+      ['infoContactUri', 'e-mail address'],
+      ['infoWebsite', 'website'],
+      ['infoPhone', 'telephone number'],
+    ]
+      .filter(([name]) => entity.get(name)?.invalid)
+      .map(([, label]) => label);
+    if (fields.length === 0) return '';
+    const last = fields.pop();
+    return `Check the ${fields.length ? `${fields.join(', ')} and ${last}` : last}`;
+  }
+
+  /**
+   * Lists stored before 10.0 load without a website and sometimes with a URL as e-mail address.
+   * Their fields show the error right away and their panels open, so the user sees what keeps
+   * Save disabled.
+   */
+  private showStoredAddressGaps(): void {
+    for (const entity of this.entitiesArray.controls) {
+      if (!this.entityAddressToCheck(entity)) continue;
+      for (const name of ['infoContactUri', 'infoWebsite', 'infoPhone']) {
+        const control = entity.get(name);
+        if (control?.invalid) control.markAsTouched();
+      }
+      this.rejectedEntities.add(entity);
+    }
+  }
+
+  /**
    * Whether an internal entity selects a key chain that is of another usage type or does not
    * exist, as its header says, since its panel may be collapsed.
    */
@@ -442,6 +486,7 @@ export class TrustListEditComponent implements OnInit {
       } else if (this.trustList.data) {
         this.loadEntitiesFromData(this.trustList.data);
       }
+      this.showStoredAddressGaps();
     } catch (error) {
       console.error('Failed to load trust list:', error);
       this.loadError = getApiErrorMessage(error, 'Failed to load trust list');
@@ -485,7 +530,18 @@ export class TrustListEditComponent implements OnInit {
           infoStreetAddress: new FormControl(entity.info?.streetAddress || '', {
             nonNullable: true,
           }),
-          infoContactUri: new FormControl(entity.info?.contactUri || '', { nonNullable: true }),
+          infoContactUri: new FormControl(entity.info?.contactUri || '', {
+            nonNullable: true,
+            validators: emailValidators,
+          }),
+          infoWebsite: new FormControl(entity.info?.website || '', {
+            nonNullable: true,
+            validators: websiteValidators,
+          }),
+          infoPhone: new FormControl(entity.info?.phone || '', {
+            nonNullable: true,
+            validators: phoneValidators,
+          }),
         });
         this.entitiesArray.push(entityGroup);
       } else {
@@ -514,7 +570,18 @@ export class TrustListEditComponent implements OnInit {
           infoStreetAddress: new FormControl(entity.info?.streetAddress || '', {
             nonNullable: true,
           }),
-          infoContactUri: new FormControl(entity.info?.contactUri || '', { nonNullable: true }),
+          infoContactUri: new FormControl(entity.info?.contactUri || '', {
+            nonNullable: true,
+            validators: emailValidators,
+          }),
+          infoWebsite: new FormControl(entity.info?.website || '', {
+            nonNullable: true,
+            validators: websiteValidators,
+          }),
+          infoPhone: new FormControl(entity.info?.phone || '', {
+            nonNullable: true,
+            validators: phoneValidators,
+          }),
         });
         this.entitiesArray.push(entityGroup);
       }
@@ -546,7 +613,7 @@ export class TrustListEditComponent implements OnInit {
 
       // Extract entity info
       const postalAddress = info?.TEAddress?.TEPostalAddress?.[0];
-      const electronicAddress = info?.TEAddress?.TEElectronicAddress?.[0];
+      const electronicAddress = readElectronicAddress(info?.TEAddress?.TEElectronicAddress);
       const lang = info?.TEName?.[0]?.lang || 'en';
 
       // Create external entity form with loaded data
@@ -580,10 +647,18 @@ export class TrustListEditComponent implements OnInit {
         infoStreetAddress: new FormControl(postalAddress?.StreetAddress || '', {
           nonNullable: true,
         }),
-        infoContactUri: new FormControl(
-          this.getLocalizedUriValue(electronicAddress ? [electronicAddress] : undefined),
-          { nonNullable: true }
-        ),
+        infoContactUri: new FormControl(electronicAddress.contactUri, {
+          nonNullable: true,
+          validators: emailValidators,
+        }),
+        infoWebsite: new FormControl(electronicAddress.website, {
+          nonNullable: true,
+          validators: websiteValidators,
+        }),
+        infoPhone: new FormControl(electronicAddress.phone, {
+          nonNullable: true,
+          validators: phoneValidators,
+        }),
       });
       this.entitiesArray.push(entityGroup);
     }
@@ -637,7 +712,9 @@ export class TrustListEditComponent implements OnInit {
       infoLocality: new FormControl('', { nonNullable: true }),
       infoPostalCode: new FormControl('', { nonNullable: true }),
       infoStreetAddress: new FormControl('', { nonNullable: true }),
-      infoContactUri: new FormControl('', { nonNullable: true }),
+      infoContactUri: new FormControl('', { nonNullable: true, validators: emailValidators }),
+      infoWebsite: new FormControl('', { nonNullable: true, validators: websiteValidators }),
+      infoPhone: new FormControl('', { nonNullable: true, validators: phoneValidators }),
     });
     this.entitiesArray.push(entityGroup);
   }
@@ -661,7 +738,9 @@ export class TrustListEditComponent implements OnInit {
       infoLocality: new FormControl('', { nonNullable: true }),
       infoPostalCode: new FormControl('', { nonNullable: true }),
       infoStreetAddress: new FormControl('', { nonNullable: true }),
-      infoContactUri: new FormControl('', { nonNullable: true }),
+      infoContactUri: new FormControl('', { nonNullable: true, validators: emailValidators }),
+      infoWebsite: new FormControl('', { nonNullable: true, validators: websiteValidators }),
+      infoPhone: new FormControl('', { nonNullable: true, validators: phoneValidators }),
     });
     this.entitiesArray.push(entityGroup);
   }
@@ -713,7 +792,9 @@ export class TrustListEditComponent implements OnInit {
         locality: entity.infoLocality || undefined,
         postalCode: entity.infoPostalCode || undefined,
         streetAddress: entity.infoStreetAddress || undefined,
-        contactUri: entity.infoContactUri || undefined,
+        contactUri: entity.infoContactUri,
+        website: entity.infoWebsite,
+        phone: entity.infoPhone || undefined,
       };
 
       if (entity.type === 'internal') {
@@ -782,6 +863,21 @@ export class TrustListEditComponent implements OnInit {
     } finally {
       this.saving = false;
     }
+  }
+
+  /** Message under an electronic address field: the backend's issue, else the failed validator's. */
+  electronicAddressError(
+    index: number,
+    control: 'infoContactUri' | 'infoWebsite' | 'infoPhone'
+  ): string {
+    const path = `entities.${index}.${control}`;
+    const errors = this.form.get(path)?.errors ?? {};
+    const messages: Partial<Record<string, string>> =
+      ELECTRONIC_ADDRESS_MESSAGES[
+        control === 'infoContactUri' ? 'email' : control === 'infoWebsite' ? 'website' : 'phone'
+      ];
+    const failed = ['required', 'pattern', 'serializedUrl'].find((key) => errors[key]);
+    return this.fieldError(path, (failed && messages[failed]) || '');
   }
 
   /** Message under a field: the backend's issue, else the local validator's message. */

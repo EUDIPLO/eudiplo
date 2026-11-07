@@ -276,7 +276,7 @@
                       }
                       @if (entity.info.uri) {
                         <div class="info-item">
-                          <span class="label">URI</span>
+                          <span class="label">Information URI</span>
                           <a [href]="entity.info.uri" target="_blank" class="value link">{{
                             entity.info.uri
                           }}</a>
@@ -284,10 +284,31 @@
                       }
                       @if (entity.info.contactUri) {
                         <div class="info-item">
-                          <span class="label">Contact URI</span>
-                          <a [href]="entity.info.contactUri" target="_blank" class="value link">{{
-                            entity.info.contactUri
+                          <span class="label">E-mail Address</span>
+                          @if (isEmail(entity.info.contactUri)) {
+                            <a [href]="mailtoUri(entity.info.contactUri)" class="value link">{{
+                              entity.info.contactUri
+                            }}</a>
+                          } @else {
+                            <span class="value"
+                              >{{ entity.info.contactUri }} (not an e-mail address; edit the trust
+                              list to fix it)</span
+                            >
+                          }
+                        </div>
+                      }
+                      @if (entity.info.website) {
+                        <div class="info-item">
+                          <span class="label">Website</span>
+                          <a [href]="entity.info.website" target="_blank" class="value link">{{
+                            entity.info.website
                           }}</a>
+                        </div>
+                      }
+                      @if (entity.info.phone) {
+                        <div class="info-item">
+                          <span class="label">Telephone</span>
+                          <span class="value">{{ entity.info.phone }}</span>
                         </div>
                       }
                     </div>

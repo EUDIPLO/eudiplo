@@ -246,6 +246,8 @@ test('issue and verify cookbook', async ({ page }) => {
     await selectOption(page, 'Issuer Key Chain', /Membership credential signing/);
     await selectOption(page, 'Revocation Key Chain', /Membership status list signing/);
     await page.getByRole('textbox', { name: 'Entity Name' }).fill('Membership Demo');
+    await page.getByRole('textbox', { name: 'E-mail Address' }).fill('info@membership.example');
+    await page.getByRole('textbox', { name: 'Website' }).fill('https://membership.example/');
     await page.getByRole('button', { name: 'Create Trust List' }).click();
     await expect(page).toHaveURL(/\/trust-list$/);
 

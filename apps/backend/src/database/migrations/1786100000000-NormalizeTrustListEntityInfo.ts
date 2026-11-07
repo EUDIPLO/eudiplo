@@ -1,5 +1,7 @@
 import {
+    isTrustListEmail,
     isTrustListEntityUri,
+    isTrustListWebsite,
     trustListCountryCode,
     trustListLanguageTag,
 } from "@eudiplo/config-format/trust-list-entity-info.js";
@@ -12,8 +14,9 @@ const COLUMN = "entityConfig";
  * Brings the stored entity info of managed trust lists to ETSI TS 119 602
  * clauses 6.1.5 and 6.1.4, as the TrustList v1 -> v2 config-file migration
  * does: `country` in capital letters ("GB"/"GR" become "UK"/"EL") and `lang`
- * in lower case. Values that cannot be fixed, and a `uri` the API now
- * refuses, stay and are logged, so the
+ * in lower case. Values that cannot be fixed, a `uri` the API now refuses
+ * and a missing or invalid e-mail address (`contactUri`) or web site
+ * (`website`, clause 6.5.3.2) stay and are logged, so the
  * operator corrects them with the next update. Exports and the Web Client edit
  * page then show values that the API accepts. The signed list keeps its
  * published values until the next update.
@@ -83,6 +86,28 @@ export class NormalizeTrustListEntityInfo1786100000000
                         `${row.tenantId}/${row.id} entities.${index}.info.uri`,
                     );
                 }
+                // TEElectronicAddress (clause 6.5.3.2) needs an e-mail
+                // address and a web site, which no stored value supplies.
+                if (
+                    !(
+                        typeof fields.contactUri === "string" &&
+                        isTrustListEmail(fields.contactUri)
+                    )
+                ) {
+                    unfixable.push(
+                        `${row.tenantId}/${row.id} entities.${index}.info.contactUri`,
+                    );
+                }
+                if (
+                    !(
+                        typeof fields.website === "string" &&
+                        isTrustListWebsite(fields.website)
+                    )
+                ) {
+                    unfixable.push(
+                        `${row.tenantId}/${row.id} entities.${index}.info.website`,
+                    );
+                }
             });
             if (!changed) continue;
             await queryRunner.query(
@@ -99,7 +124,7 @@ export class NormalizeTrustListEntityInfo1786100000000
         }
         if (unfixable.length > 0) {
             console.warn(
-                `[Migration] Trust list entity info the API now refuses, fix it with the next update: ${unfixable.join(", ")}`,
+                `[Migration] Trust list entity info the API now refuses or requires, fix it with the next update: ${unfixable.join(", ")}`,
             );
         }
     }

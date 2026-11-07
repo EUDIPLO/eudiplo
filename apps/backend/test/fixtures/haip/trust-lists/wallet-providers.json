@@ -1,5 +1,5 @@
 {
-  "$schema": "https://eudiplo.dev/schemas/v1/TrustListConfigFile.schema.json",
+  "$schema": "https://eudiplo.dev/schemas/v2/TrustListConfigFile.schema.json",
   "metadata": {
     "generation": 1
   },
@@ -15,7 +15,9 @@
         "revocationCertPem": "-----BEGIN CERTIFICATE-----\nMIIBPzCB5qADAgECAgEBMAoGCCqGSM49BAMCMBcxFTATBgNVBAMTDE9JREYgVGVz\ndCBDQTAeFw0yNTAxMDEwMDAwMDBaFw0zNjAxMDEwMDAwMDBaMBcxFTATBgNVBAMT\nDE9JREYgVGVzdCBDQTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABPihgoMldZcq\nr9/8C9ZznddJuTVK1hrGSHDsJ+uVwYqZpizPcm+8NFB+FzyswO4kzTELHLiG6q+G\nB6kojbl1+byjIzAhMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMAoG\nCCqGSM49BAMCA0gAMEUCIQCvUPH4htX9DmPMuNhFyE6SjRdYvTIWPDiH+EfjBf+1\neQIgQ+2yD4madv7UpbqcXwvWav3JZJHNfH5zIY8hq7VsR3M=\n-----END CERTIFICATE-----",
         "info": {
           "name": "OIDF Test Wallet Attester",
-          "lang": "en"
+          "lang": "en",
+          "contactUri": "info@example.com",
+          "website": "https://example.com/"
         }
       },
       {
@@ -25,7 +27,9 @@
         "revocationCertPem": "-----BEGIN CERTIFICATE-----\nMIIBPzCB5qADAgECAgEBMAoGCCqGSM49BAMCMBcxFTATBgNVBAMTDE9JREYgVGVz\ndCBDQTAeFw0yNTAxMDEwMDAwMDBaFw0zNjAxMDEwMDAwMDBaMBcxFTATBgNVBAMT\nDE9JREYgVGVzdCBDQTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABCB6tu6Rh760\nb7SmgzH7TVFWiLOIbkp1UgWnMecdhUQwD+reBUHPoJ7B344J4C8kWf8HXEPDgUtS\nZKFVJTDr6VejIzAhMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMAoG\nCCqGSM49BAMCA0gAMEUCIEfM5UKfSHlM5cax6Jtf5dliprWCX+B+GDQ3PNE4XV8H\nAiEA5nCdR5ZLQ247SF8LvbFPZ32DV84Xpt7LnwFfBLwjiQY=\n-----END CERTIFICATE-----",
         "info": {
           "name": "OIDF Test Key Attester",
-          "lang": "en"
+          "lang": "en",
+          "contactUri": "info@example.com",
+          "website": "https://example.com/"
         }
       }
     ]

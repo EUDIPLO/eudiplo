@@ -5,8 +5,8 @@ import {
     TrustListInUseError,
     type TrustListReference,
     trustListInUseMessage,
-    trustListRefNamesList,
     trustListReferenceId,
+    trustListRefNamesList,
     urlNamesTrustList,
 } from "./trust-list-reference.js";
 

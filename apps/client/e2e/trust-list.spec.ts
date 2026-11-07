@@ -96,7 +96,12 @@ test.describe('entities', () => {
           providerType: 'attestation-provider',
           issuerCertPem: certificatePem,
           revocationCertPem: certificatePem,
-          info: { name: `Entity ${name}`, country: name === 'C' ? 'FR' : 'DE' },
+          info: {
+            name: `Entity ${name}`,
+            contactUri: 'info@example.com',
+            website: 'https://example.com/',
+            country: name === 'C' ? 'FR' : 'DE',
+          },
         })),
       }),
     });
@@ -259,11 +264,12 @@ test.describe('edit page', () => {
     await expect(
       page.getByRole('link', { name: 'Create status list key chain (opens in a new tab)' })
     ).toHaveAttribute('href', '/keys/create?usage=statusList');
-    // With the entity named, the empty key chain selects are what keeps Save disabled.
-    await page
-      .getByRole('region', { name: /Internal Entity #2/ })
-      .getByRole('textbox', { name: 'Entity Name' })
-      .fill('Own Issuer');
+    // With the entity named and addressed, the empty key chain selects are what keeps Save
+    // disabled.
+    const ownIssuer = page.getByRole('region', { name: /Internal Entity #2/ });
+    await ownIssuer.getByRole('textbox', { name: 'Entity Name' }).fill('Own Issuer');
+    await ownIssuer.getByRole('textbox', { name: 'E-mail Address' }).fill('info@example.com');
+    await ownIssuer.getByRole('textbox', { name: 'Website' }).fill('https://example.com/');
     await expect(page.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
 
     // Created in the other tab.
@@ -302,6 +308,8 @@ test.describe('edit page', () => {
     await expect(page.getByRole('group', { name: 'Credential signing key chains' })).toBeVisible();
     await page.getByRole('option', { name: /^Own issuer/ }).click();
     await entity.getByRole('textbox', { name: 'Entity Name' }).fill('Own Issuer');
+    await entity.getByRole('textbox', { name: 'E-mail Address' }).fill('info@example.com');
+    await entity.getByRole('textbox', { name: 'Website' }).fill('https://example.com/');
 
     const save = page.getByRole('button', { name: 'Save Changes' });
     await expect(save).not.toHaveAttribute('aria-busy', 'true');

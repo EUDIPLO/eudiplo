@@ -80,6 +80,14 @@ IssuanceConfig v2 and PresentationConfig v2 and v3 were introduced with EUDIPLO
 document is migrated unchanged; releases that only know v2, such as 9.0, cannot
 read v3 files.
 
+**TrustList v2** came with EUDIPLO 10.0. Entity info follows ETSI TS 119 602:
+`country` and `lang` codes, an absolute `uri`, and the required e-mail address
+(`contactUri`) and web site (`website`), with an optional `phone`
+([Trust lists](../trust/trust-lists.md#publish-a-managed-trust-list)). v1 has no
+`website`, so the v1 step only reports: it stops with the required input
+`TRUST_LIST_WEBSITE_MISSING` at `/spec/entities/<index>/info/website` and names
+the other values to change; rewrite the file as v2. 9.x cannot read v2 files.
+
 **PresentationConfig v4** came with EUDIPLO 10.0. It adds the optional
 `allowedOrigins`, the web origins that may request the presentation over the
 Digital Credentials API ([Allowed origins](../presentation/configure-verification.md#allowed-origins-digital-credentials-api)).
