@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiRefusalService, ApiService } from '../core';
+import { ApiRefusalService, ApiService, OidcService } from '../core';
 import { respondWithCaller } from '../guards/role-guard.testing';
 import { JwtService } from './jwt.service';
 import { RoleChangeService } from './role-change.service';
@@ -35,14 +35,15 @@ describe('RoleChangeService', () => {
   let callerRequests: number;
   let tokens: number;
   let rolesRefused: Subject<void>;
+  let oidcRefreshed: Subject<void>;
+  let oidc: { mode: 'local' | 'oidc'; tokenRefreshed$: Subject<void> };
   let router: {
     url: string;
     navigate: ReturnType<typeof vi.fn>;
+    currentNavigation: () => null;
     routerState: { snapshot: { root: RouteStub } };
   };
   let action: Subject<void>;
-  /** The `afterDismissed` of each opened snack bar, in order. */
-  let dismissals: Subject<{ dismissedByAction: boolean }>[];
   let snackBar: { open: ReturnType<typeof vi.fn> };
   let service: RoleChangeService;
 
@@ -82,23 +83,20 @@ describe('RoleChangeService', () => {
       return caller;
     });
     rolesRefused = new Subject<void>();
+    oidcRefreshed = new Subject<void>();
+    oidc = { mode: 'local', tokenRefreshed$: oidcRefreshed };
     router = {
       url: '/dashboard',
       navigate: vi.fn(),
+      currentNavigation: () => null,
       routerState: { snapshot: { root: routeWithRoles() } },
     };
     action = new Subject<void>();
-    dismissals = [];
-    snackBar = {
-      open: vi.fn(() => {
-        const dismissed = new Subject<{ dismissedByAction: boolean }>();
-        dismissals.push(dismissed);
-        return { onAction: () => action, afterDismissed: () => dismissed };
-      }),
-    };
+    snackBar = { open: vi.fn(() => ({ onAction: () => action })) };
     TestBed.configureTestingModule({
       providers: [
         { provide: ApiService, useValue: api },
+        { provide: OidcService, useValue: oidc },
         {
           provide: ApiRefusalService,
           useValue: { rolesRefusedWithoutRenewal$: rolesRefused.asObservable() },
@@ -188,6 +186,22 @@ describe('RoleChangeService', () => {
     expect(snackBar.open).not.toHaveBeenCalled();
   });
 
+  it('compares the caller of each token keycloak-js renews, and names the account', async () => {
+    oidc.mode = 'oidc';
+    await signIn(['presentation:manage', 'issuance:manage'], 'alice');
+
+    api.accessToken = `token-${++tokens}`;
+    caller = { subject: 'alice', roles: ['presentation:manage'] };
+    oidcRefreshed.next();
+    await settle();
+
+    expect(callerRequests).toBe(2);
+    expect(TestBed.inject(JwtService).hasRole('issuance:manage')).toBe(false);
+    expect(texts()).toEqual([
+      'Your account no longer has the role issuance:manage; the pages that need it are hidden.',
+    ]);
+  });
+
   it('loads the caller of each renewed token itself', async () => {
     await signIn(['presentation:manage']);
 
@@ -239,11 +253,40 @@ describe('RoleChangeService', () => {
       rolesRefused.next();
       await settle();
 
+      expect(callerRequests).toBe(2);
       expect(texts()).toEqual([
         'Your API client no longer has the role issuance:manage, which this page needs. Copy unsaved changes before you leave it.',
         'Your API client lacks a role this page needs. Copy unsaved changes before you leave it.',
       ]);
       expect(snackBar.open.mock.calls[1][1]).toBe('Leave page');
+    });
+
+    it('loads the roles again at most once a minute while the page keeps being refused', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        router.routerState.snapshot.root = routeWithRoles(undefined, 'issuance:manage');
+        await signIn(['issuance:manage']);
+
+        for (let refusal = 0; refusal < 5; refusal++) {
+          rolesRefused.next();
+          await settle();
+        }
+        expect(callerRequests).toBe(2);
+
+        vi.setSystemTime(Date.now() + 60_000);
+        rolesRefused.next();
+        await settle();
+        expect(callerRequests).toBe(3);
+        expect(snackBar.open).not.toHaveBeenCalled();
+
+        // A token another tab renewed is loaded at once.
+        api.accessToken = `token-${++tokens}`;
+        rolesRefused.next();
+        await settle();
+        expect(callerRequests).toBe(4);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('stays quiet when the roles did not change, as a new login would not change them', async () => {

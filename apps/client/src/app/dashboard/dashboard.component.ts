@@ -1,4 +1,5 @@
 import { Component, type OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe, PercentPipe } from '@angular/common';
 import type { Session } from '@eudiplo/sdk-core';
 
@@ -77,6 +78,12 @@ export class DashboardComponent implements OnInit {
     private readonly dashboardPreferencesService: DashboardPreferencesService
   ) {
     this.sections = this.dashboardPreferencesService.load();
+    // The page may open before the caller's roles are loaded, for example
+    // when loading them failed; once they are, its data and sections follow them.
+    this.jwtService.callerChanged$.pipe(takeUntilDestroyed()).subscribe(() => {
+      this.sections = this.dashboardPreferencesService.load();
+      void this.dashboardService.getCounters();
+    });
   }
 
   ngOnInit(): void {
@@ -238,7 +245,18 @@ export class DashboardComponent implements OnInit {
     }
   }
 
+  /** Whether the caller's roles could not be loaded, so the page has nothing to show for them. */
+  get rolesMissing(): boolean {
+    return this.jwtService.getCaller() === undefined;
+  }
+
+  /** Loads the caller's roles again; the page loads its figures once they are there. */
+  retryRoles(): void {
+    void this.jwtService.loadCaller({ reload: true });
+  }
+
   get readinessTitle(): string {
+    if (this.rolesMissing) return 'Your roles could not be loaded';
     if (this.dashboardService.isLoading) return 'Checking system readiness…';
     if (this.dashboardService.hasWarnings) {
       const count = this.dashboardService.warnings.length;

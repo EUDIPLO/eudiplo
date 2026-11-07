@@ -159,6 +159,33 @@ describe("Generic OIDC provider (e2e)", () => {
         expect(response.body.roles).toEqual([]);
     });
 
+    test("tells the Web Client no tenant for a token whose tenant does not exist", async () => {
+        const token = await sign({
+            sub: "person-1",
+            tenant_id: "no-such-tenant",
+            eudiplo: { roles: [Role.SessionsRead] },
+        });
+
+        const response = await as(token).get("/auth/me").expect(200);
+
+        expect(response.body).toEqual({
+            subject: "person-1",
+            tenantId: null,
+            roles: [Role.SessionsRead],
+        });
+    });
+
+    test("tells the Web Client no subject for a token without sub", async () => {
+        const token = await sign({
+            tenant_id: TENANT,
+            eudiplo: { roles: [Role.SessionsRead] },
+        });
+
+        const response = await as(token).get("/auth/me").expect(200);
+
+        expect(response.body.subject).toBeNull();
+    });
+
     test("refuses a token for another audience", async () => {
         const token = await sign(
             {

@@ -37,6 +37,8 @@ import { EnvironmentService } from '../services/environment.service';
 import { ApiService, withoutTrailingSlashes } from '../core';
 import { OidcService } from '../core/oidc.service';
 import { focusFieldToFix, showFieldsToFix } from '../common/field-to-fix.util';
+import { apiErrorDetail, asSentence } from '../utils/error-message';
+import { KEEP_CALLER_FAILURE } from '../services/jwt.service';
 import { openErrorSnackBar } from '../utils/error-snackbar';
 
 /** The client and instance of a session the login page resumes or reports as ended. */
@@ -261,10 +263,57 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   /**
    * Opens the page the guard sent the user away from, or the dashboard. Resolves
-   * when the guards, which wait for the caller's roles, have decided.
+   * when the guards, which wait for the caller's roles, have decided. When that
+   * page is refused, for example because the roles could not be loaded, or does
+   * not exist, the dashboard opens instead, whose toolbar offers Logout. A failed
+   * navigation, for example a page whose code the browser could not load after
+   * an update, is no failed sign-in, but the user learns what to do.
    */
-  private continueToApp(): Promise<boolean> {
-    return this.router.navigateByUrl(this.returnUrl ?? '/dashboard');
+  private async continueToApp(): Promise<void> {
+    const target = this.returnUrl ?? '/dashboard';
+    let failure: unknown;
+    try {
+      if (await this.router.navigateByUrl(target)) return;
+    } catch (error) {
+      console.error('Opening the page after sign-in failed:', error);
+      failure = error;
+    }
+    if (target !== '/dashboard' && this.router.url.startsWith('/login')) {
+      try {
+        // Its guards reuse a failure to load the roles, whose Retry opens the page asked for.
+        if (await this.router.navigateByUrl('/dashboard', { state: KEEP_CALLER_FAILURE })) {
+          if (failure !== undefined) {
+            this.reportFailedNavigation(
+              failure,
+              `${target} could not be opened`,
+              'The dashboard opened instead.'
+            );
+          }
+          return;
+        }
+      } catch (error) {
+        console.error('Opening the dashboard after sign-in failed:', error);
+        failure = error;
+      }
+    }
+    if (failure !== undefined) {
+      this.reportFailedNavigation(
+        failure,
+        'Signed in, but the page could not be opened',
+        'Reload the page.'
+      );
+    }
+  }
+
+  private reportFailedNavigation(error: unknown, failure: string, next: string): void {
+    // The router's own error for an address without a page (NG04002) means nothing to users.
+    const reason = apiErrorDetail(error)?.startsWith('NG04002')
+      ? 'no page has this address'
+      : apiErrorDetail(error);
+    openErrorSnackBar(
+      this.snackBar,
+      `${asSentence(reason ? `${failure}: ${reason}` : failure)} ${next}`
+    );
   }
 
   private autoLoginIfParamsProvided(): void {
@@ -559,11 +608,8 @@ export class LoginComponent implements OnInit, OnDestroy {
       });
     }
     if (signedIn) {
-      // The form stays busy until the next page opens; a failed navigation is
-      // no failed sign-in.
-      await this.continueToApp().catch((error) =>
-        console.error('Opening the page after sign-in failed:', error)
-      );
+      // The form stays busy until the next page opens.
+      await this.continueToApp();
     }
     this.isLoading = false;
   }

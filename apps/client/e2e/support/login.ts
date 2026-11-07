@@ -8,7 +8,21 @@ export async function loginWithClientCredentials(
   clientId: string,
   clientSecret: string
 ): Promise<void> {
-  await page.goto('/login');
+  await submitClientCredentials(page, clientId, clientSecret);
+  await expect(page).toHaveURL(/\/dashboard$/);
+}
+
+/**
+ * Submits the login page's "Client ID and Secret" tab, without waiting for the
+ * next page; `loginPath` may carry a `returnUrl`.
+ */
+export async function submitClientCredentials(
+  page: Page,
+  clientId: string,
+  clientSecret: string,
+  loginPath = '/login'
+): Promise<void> {
+  await page.goto(loginPath);
   await page.getByRole('tab', { name: 'Client ID and Secret' }).click();
 
   await page.getByLabel('EUDIPLO Instance').fill(resolvedE2EConfig.apiBaseUrl);
@@ -18,5 +32,4 @@ export async function loginWithClientCredentials(
   await page.getByRole('textbox', { name: 'Client Secret' }).fill(clientSecret);
 
   await page.getByRole('button', { name: 'Login with Client Credentials' }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
 }

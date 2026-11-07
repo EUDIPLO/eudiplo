@@ -15,7 +15,10 @@ export class AuthGuard implements CanActivate {
 
   /**
    * Waits for the caller of the current token, so pages and menus see the
-   * roles and tenant the backend resolved from it.
+   * roles and tenant the backend resolved from it. Without a caller, loading
+   * it failed and a notice offers to try again; the page still opens, so the
+   * toolbar keeps its Logout and the version check runs. Pages that need a
+   * role are refused by RoleGuard.
    */
   async canActivate(_route: ActivatedRouteSnapshot, state: RouterStateSnapshot): Promise<boolean> {
     if (this.apiService.getAuthenticationStatus()) {

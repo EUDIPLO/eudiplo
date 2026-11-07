@@ -1,8 +1,8 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRouteSnapshot, Router } from '@angular/router';
-import { Subscription } from 'rxjs';
-import { ApiRefusalService, ApiService } from '../core';
+import { merge, Subscription } from 'rxjs';
+import { ApiRefusalService, ApiService, OidcService, ROLE_RENEWAL_INTERVAL_MS } from '../core';
 import { JwtService, type Role } from './jwt.service';
 
 interface SeenCaller {
@@ -16,15 +16,18 @@ interface SeenCaller {
  * new token of the same client is compared with the one the menu showed. A page that needs
  * a lost role is left only on request, so unsaved changes can be copied first.
  * A tab without the client secret cannot get a new token; when the backend's
- * role check refuses a request, it loads the caller of its token again, which
- * with the built-in server carries the client's current roles.
+ * role check refuses a request, it loads the caller of its token again, at most
+ * once a minute, which with the built-in server carries the client's current roles.
  */
 @Injectable({ providedIn: 'root' })
 export class RoleChangeService implements OnDestroy {
   private subscription?: Subscription;
+  /** When a refusal last loaded the caller of `token` again. */
+  private reloaded?: { token: string; at: number };
 
   constructor(
     private readonly apiService: ApiService,
+    private readonly oidcService: OidcService,
     private readonly refusals: ApiRefusalService,
     private readonly jwtService: JwtService,
     private readonly router: Router,
@@ -33,7 +36,10 @@ export class RoleChangeService implements OnDestroy {
 
   start(): void {
     if (this.subscription) return;
-    this.subscription = this.apiService.tokenRenewed$.subscribe(() => void this.recheck());
+    this.subscription = merge(
+      this.apiService.tokenRenewed$,
+      this.oidcService.tokenRefreshed$
+    ).subscribe(() => void this.recheck());
     this.subscription.add(
       this.refusals.rolesRefusedWithoutRenewal$.subscribe(() => void this.recheck(true))
     );
@@ -51,21 +57,42 @@ export class RoleChangeService implements OnDestroy {
   /**
    * Loads the caller of the current token, again with `reload`, and compares
    * it with the one the menu showed before. Callers that only the route guards
-   * load, as with OIDC after keycloak-js renewed the token, are not compared:
-   * a notice would refer to the page the navigation is leaving. After a
-   * refusal on a page whose role was lost before, the page's own error may
-   * have replaced the notice, so it comes back.
+   * load are not compared: a notice would refer to the page the navigation is
+   * leaving. After a refusal on a page whose role was lost before, the page's
+   * own error may have replaced the notice, so it comes back without a request.
    */
   private async recheck(reload = false): Promise<void> {
     if (reload && this.router.url.startsWith('/login')) return;
+    if (reload && this.current() && this.pageNeedsMissingRole()) {
+      this.offerToLeaveForMissingRole();
+      return;
+    }
+    if (reload) {
+      // A page that keeps sending refused requests reloads the caller once a minute.
+      const token = this.apiService.accessToken;
+      const at = Date.now();
+      if (this.reloaded?.token === token && at - this.reloaded.at < ROLE_RENEWAL_INTERVAL_MS) {
+        return;
+      }
+      this.reloaded = { token, at };
+    }
     const before = this.current();
     await this.jwtService.loadCaller({ reload });
     if (!this.subscription || this.compare(before) || !reload) return;
     if (this.current() && this.pageNeedsMissingRole()) {
-      this.offerToLeave(
-        'Your API client lacks a role this page needs. Copy unsaved changes before you leave it.'
-      );
+      this.offerToLeaveForMissingRole();
     }
+  }
+
+  private offerToLeaveForMissingRole(): void {
+    this.offerToLeave(
+      `${this.holder()} lacks a role this page needs. Copy unsaved changes before you leave it.`
+    );
+  }
+
+  /** Who holds the roles: a person with single sign-on, otherwise the API client. */
+  private holder(): string {
+    return this.oidcService.mode === 'oidc' ? 'Your account' : 'Your API client';
   }
 
   /** Names the roles the client lost since `before`; true when it opened a notice. */
@@ -81,12 +108,12 @@ export class RoleChangeService implements OnDestroy {
     const named = lost.length === 1 ? `the role ${lost[0]}` : `the roles ${lost.join(', ')}`;
     if (this.pageNeedsMissingRole()) {
       this.offerToLeave(
-        `Your API client no longer has ${named}, which this page needs. Copy unsaved changes before you leave it.`
+        `${this.holder()} no longer has ${named}, which this page needs. Copy unsaved changes before you leave it.`
       );
       return true;
     }
     this.snackBar.open(
-      `Your API client no longer has ${named}; the pages that need ${lost.length === 1 ? 'it' : 'them'} are hidden.`,
+      `${this.holder()} no longer has ${named}; the pages that need ${lost.length === 1 ? 'it' : 'them'} are hidden.`,
       'OK',
       { duration: 10_000, panelClass: ['warning-snackbar'] }
     );

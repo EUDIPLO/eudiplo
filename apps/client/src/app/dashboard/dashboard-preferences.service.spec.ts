@@ -6,7 +6,7 @@ import {
 } from './dashboard-preferences.service';
 
 describe('DashboardPreferencesService', () => {
-  let caller: Caller;
+  let caller: Caller | undefined;
   let service: DashboardPreferencesService;
 
   beforeEach(() => {
@@ -78,6 +78,14 @@ describe('DashboardPreferencesService', () => {
       quickActions: false,
     });
     service.reset();
+    expect(service.load()).toEqual(DEFAULT_DASHBOARD_SECTIONS);
+  });
+
+  it('keeps nothing before the caller is loaded, so callers never share one entry', () => {
+    caller = undefined;
+    service.save({ ...DEFAULT_DASHBOARD_SECTIONS, activity: false });
+
+    expect(localStorage.length).toBe(0);
     expect(service.load()).toEqual(DEFAULT_DASHBOARD_SECTIONS);
   });
 });

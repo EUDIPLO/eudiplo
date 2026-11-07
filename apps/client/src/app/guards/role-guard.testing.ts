@@ -54,7 +54,7 @@ export function roleGuardHarness() {
           sessionEnded$: new Subject<void>(),
         },
       },
-      { provide: Router, useValue: { navigate } },
+      { provide: Router, useValue: { navigate, currentNavigation: () => null } },
       { provide: MatSnackBar, useValue: { open: openSnackBar } },
     ],
   });

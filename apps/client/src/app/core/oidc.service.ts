@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import Keycloak from 'keycloak-js';
+import { Subject } from 'rxjs';
 
 export interface OidcConfig {
   /** Keycloak issuer URL, e.g. http://localhost:8080/realms/eudiplo */
@@ -18,6 +19,9 @@ export class OidcService {
   private keycloak?: Keycloak;
   private _mode: 'local' | 'oidc' = 'local';
   private _config?: OidcConfig;
+  private readonly refreshed = new Subject<void>();
+  /** Emits when keycloak-js got a new token, for example before the previous one expired. */
+  readonly tokenRefreshed$ = this.refreshed.asObservable();
 
   get mode(): 'local' | 'oidc' {
     return this._mode;
@@ -83,7 +87,10 @@ export class OidcService {
     this.keycloak = keycloak;
 
     keycloak.onAuthSuccess = () => this.persistTokens();
-    keycloak.onAuthRefreshSuccess = () => this.persistTokens();
+    keycloak.onAuthRefreshSuccess = () => {
+      this.persistTokens();
+      this.refreshed.next();
+    };
     keycloak.onAuthLogout = () => this.clearStorage();
     keycloak.onTokenExpired = () => {
       keycloak

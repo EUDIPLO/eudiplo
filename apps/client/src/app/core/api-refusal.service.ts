@@ -4,8 +4,8 @@ import { Subject } from 'rxjs';
 import { ApiService } from './api.service';
 import { OidcService } from './oidc.service';
 
-/** Shortest time between two token renewals after a `403`. */
-const roleRenewalIntervalMs = 60_000;
+/** Shortest time between two token renewals, or two reloads of the caller, after a `403`. */
+export const ROLE_RENEWAL_INTERVAL_MS = 60_000;
 
 /**
  * Reason of a `403` from the backend's role check, which the backend answers
@@ -116,7 +116,7 @@ export class ApiRefusalService implements OnDestroy {
   /** With a new token, the client's current roles are loaded, so the menu follows them. */
   private async renewForRoles(): Promise<void> {
     const now = Date.now();
-    if (now - this.rolesRenewedAt < roleRenewalIntervalMs) return;
+    if (now - this.rolesRenewedAt < ROLE_RENEWAL_INTERVAL_MS) return;
     this.rolesRenewedAt = now;
     // A failed refresh is reported like any other.
     await this.apiService.refreshAccessToken().catch(() => undefined);

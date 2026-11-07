@@ -17,6 +17,7 @@ describe('AuthGuard', () => {
   const state = { url: '/issuance/offers?page=2' } as RouterStateSnapshot;
   let navigate: MockInstance<Router['navigate']>;
   let loadCaller: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  let caller: { roles: string[] } | undefined;
   let guard: AuthGuard;
 
   beforeEach(() => {
@@ -24,6 +25,7 @@ describe('AuthGuard', () => {
     api.kept = false;
     api.ended = false;
     loadCaller = vi.fn(() => Promise.resolve());
+    caller = { roles: [] };
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
@@ -35,7 +37,7 @@ describe('AuthGuard', () => {
             hasEndedSession: () => api.ended,
           },
         },
-        { provide: JwtService, useValue: { loadCaller } },
+        { provide: JwtService, useValue: { loadCaller, getCaller: () => caller } },
       ],
     });
     navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
@@ -58,6 +60,14 @@ describe('AuthGuard', () => {
     loaded();
 
     expect(await result).toBe(true);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('opens the page when the caller cannot be loaded, so its toolbar offers Logout', async () => {
+    api.authenticated = true;
+    caller = undefined;
+
+    expect(await guard.canActivate(route, state)).toBe(true);
     expect(navigate).not.toHaveBeenCalled();
   });
 
