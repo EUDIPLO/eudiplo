@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
-import { Subject } from 'rxjs';
+import { EMPTY, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { client } from '@eudiplo/sdk-core';
 import { PresentationCreateComponent } from './presentation-create.component';
@@ -500,5 +500,77 @@ describe('Presentation configuration flow', () => {
     expect(element.querySelector('form')).toBeNull();
     component.submitPresentation();
     expect(service.createConfiguration).not.toHaveBeenCalled();
+  });
+
+  describe('JSON View', () => {
+    let open: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      open = TestBed.inject(MatDialog).open as ReturnType<typeof vi.fn>;
+      open.mockReturnValue({ afterClosed: () => EMPTY });
+    });
+
+    function jsonViewButton(): HTMLButtonElement {
+      const buttons = (fixture.nativeElement as HTMLElement).querySelectorAll('button');
+      return [...buttons].find((button) => button.textContent?.includes('JSON View'))!;
+    }
+
+    it('opens only with the loaded configuration, stays focusable and says why it waits', async () => {
+      route.snapshot.params = { id: 'age-check' };
+      route.snapshot.url = [{ path: 'age-check' }, { path: 'edit' }];
+      service.getPresentationById
+        .mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' })
+        .mockResolvedValue({ id: 'age-check', description: 'Age check', dcql_query: query });
+
+      fixture.detectChanges();
+      expect(component.jsonViewUnavailableReason).toBe(
+        'Wait until the presentation configuration has loaded'
+      );
+      // The button stays clickable while it cannot be used, so the handler checks again.
+      component.viewAsJson();
+      await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+      fixture.detectChanges();
+      expect(component.jsonViewUnavailableReason).toBe(
+        'Retry loading the presentation configuration before opening JSON View'
+      );
+      expect(jsonViewButton().getAttribute('aria-disabled')).toBe('true');
+      expect(jsonViewButton().disabled).toBe(false);
+      component.viewAsJson();
+      expect(open).not.toHaveBeenCalled();
+
+      component.loadConfigForEdit();
+      await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+      fixture.detectChanges();
+      expect(component.jsonViewUnavailableReason).toBe('');
+      expect(jsonViewButton().getAttribute('aria-disabled')).not.toBe('true');
+      component.viewAsJson();
+      expect(open).toHaveBeenCalledOnce();
+    });
+
+    it('opens right away when creating a configuration, but not while it saves', async () => {
+      let rejectSave!: (error: unknown) => void;
+      service.createConfiguration.mockReturnValue(
+        new Promise((_, reject) => (rejectSave = reject))
+      );
+      fixture.detectChanges();
+      expect(service.getPresentationById).not.toHaveBeenCalled();
+      expect(component.loadingConfig).toBe(false);
+      expect(component.jsonViewUnavailableReason).toBe('');
+      component.viewAsJson();
+      expect(open).toHaveBeenCalledOnce();
+
+      // A successful save leaves the screen, so the dialog would stay open over the next one.
+      fill();
+      component.createOrUpdatePresentation();
+      expect(service.createConfiguration).toHaveBeenCalledOnce();
+      expect(component.jsonViewUnavailableReason).toBe(
+        'Wait until the presentation configuration has been saved'
+      );
+      component.viewAsJson();
+      expect(open).toHaveBeenCalledOnce();
+      rejectSave({ statusCode: 500, message: 'Unavailable' });
+      await vi.waitFor(() => expect(component.saving).toBe(false));
+      expect(component.jsonViewUnavailableReason).toBe('');
+    });
   });
 });

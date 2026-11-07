@@ -16,6 +16,7 @@
   </mat-card-header>
   <mat-card-content>
     <form
+      #formElement
       [formGroup]="composeForm"
       (ngSubmit)="$event.preventDefault()"
       fxLayout="column"
@@ -268,7 +269,13 @@
             </div>
           }
         </div>
-        <button mat-stroked-button type="button" (click)="addX509TrustAnchor()" class="no-shrink">
+        <button
+          #addRootCertificate
+          mat-stroked-button
+          type="button"
+          (click)="addX509TrustAnchor()"
+          class="no-shrink"
+        >
           <mat-icon>add</mat-icon>
           Add Root Certificate
         </button>
@@ -276,11 +283,6 @@
     </form>
   </mat-card-content>
   <mat-card-actions align="end">
-    @if (submitAttempted && composeForm.invalid) {
-      <span class="form-errors-hint" role="alert">
-        Some required fields are missing or invalid. They are marked above.
-      </span>
-    }
     <button mat-stroked-button type="button" [routerLink]="['../']" class="no-shrink">
       Cancel
     </button>

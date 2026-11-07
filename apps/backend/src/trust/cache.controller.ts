@@ -2,6 +2,7 @@ import { Controller, Delete, Get, HttpCode, HttpStatus } from "@nestjs/common";
 import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Role } from "../auth/roles/role.enum.js";
 import { Secured } from "../auth/secure.decorator.js";
+import { Token, type TokenPayload } from "../auth/token.decorator.js";
 import { CacheStatsResponseDto } from "./dto/cache-stats-response.dto.js";
 import { FederationTrustService } from "./federation-trust.service.js";
 import { StatusListVerifierService } from "./status-list-verifier.service.js";
@@ -12,6 +13,9 @@ import { TrustStoreService } from "./trust-store.service.js";
  * Useful for forcing a refresh when trust lists or status lists are known to have changed.
  *
  * Note: Caches are stored in RAM only - a server restart will also clear them.
+ * The trust list sequence numbers a tenant accepted are no cache: they are
+ * kept in the database until `DELETE /cache/trust-list/sequence-numbers` or
+ * deleting the tenant removes them.
  */
 @ApiTags("Cache Management")
 @Controller("cache")
@@ -89,6 +93,24 @@ export class CacheController {
     clearTrustListCache() {
         this.trustStoreService.clearCache();
         this.federationTrustService.clearTrustCache();
+    }
+
+    /**
+     * Forget the trust list sequence numbers the caller's tenant accepted.
+     */
+    @Delete("trust-list/sequence-numbers")
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @ApiOperation({
+        summary: "Forget accepted trust list sequence numbers",
+        description:
+            "EUDIPLO remembers, per tenant and trust list URL, the highest LoTESequenceNumber it accepted, and discards a list numbered lower as an older version. This forgets the numbers of the caller's tenant and clears the trust list cache, so a list whose publisher numbered it from 1 again is accepted. Until a list is fetched again, an older version of it is accepted too. Lists managed by this EUDIPLO instance are compared with their stored number and are not affected.",
+    })
+    @ApiResponse({
+        status: 204,
+        description: "Sequence numbers forgotten",
+    })
+    async forgetTrustListSequenceNumbers(@Token() token: TokenPayload) {
+        await this.trustStoreService.forgetSequenceNumbers(token.entity!.id);
     }
 
     /**

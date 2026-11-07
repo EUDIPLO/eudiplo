@@ -19,6 +19,7 @@ export class VerifiedLoteProvider implements TrustListProvider {
         const parsed = this.parser.parse(decodeJwt<{ LoTE: LoTE }>(token).LoTE);
         return {
             nextUpdate: parsed.info.nextUpdate,
+            sequenceNumber: parsed.info.sequenceNumber,
             entities: parsed.entities,
         };
     }

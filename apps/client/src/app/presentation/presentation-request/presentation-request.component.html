@@ -16,7 +16,7 @@
   @if (!loading) {
     <div fxLayout="column" fxLayoutGap="24px">
       <!-- Form Section -->
-      <form [formGroup]="form" (ngSubmit)="onSubmit()">
+      <form #formElement [formGroup]="form" (ngSubmit)="onSubmit()">
         <!-- Configuration Selection Card -->
         <mat-card class="form-card">
           <mat-card-header>
@@ -138,13 +138,9 @@
               mat-flat-button
               color="primary"
               type="submit"
-              [disabled]="
-                form.invalid ||
-                generatingOffer ||
-                checkingReadiness ||
-                !isReadyToGenerate ||
-                !!dcApiOriginProblem
-              "
+              [disabled]="!!generateUnavailableReason"
+              disabledInteractive
+              [matTooltip]="generateUnavailableReason"
             >
               Generate Request
             </button>

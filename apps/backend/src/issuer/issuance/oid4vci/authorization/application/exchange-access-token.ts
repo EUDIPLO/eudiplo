@@ -16,6 +16,7 @@ import type { SessionStore } from "../../../../../session/application/session-st
 import type { SessionData } from "../../../../../session/domain/session-data.js";
 import type { Oid4vciSettings } from "../../oid4vci-settings.js";
 import type { DpopProofReplayRegistry } from "../../ports/dpop-proof-replay-registry.js";
+import { clientAttestationLogDetail } from "../domain/client-attestation.js";
 import { OAuthError } from "../domain/oauth-error.js";
 import { assertOfferRedeemable } from "../domain/offer-redemption.js";
 import { checkS256Pkce } from "../domain/pkce.js";
@@ -187,12 +188,19 @@ export class ExchangeAccessToken {
                 walletAttestationPolicy.walletAttestationStatusCheckMode,
             )
             .catch((err) => {
+                // The message may reach the wallet, see the port.
                 throw new OAuthError(
                     "invalid_client",
                     err instanceof Error
                         ? err.message
                         : "Client attestation validation failed",
-                    { clientAuthenticationFailed: true },
+                    {
+                        clientAuthenticationFailed: true,
+                        logDetail: clientAttestationLogDetail(
+                            `the token endpoint of tenant ${tenantId}`,
+                            err,
+                        ),
+                    },
                 );
             });
 

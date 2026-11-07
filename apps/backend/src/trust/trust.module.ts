@@ -1,6 +1,8 @@
 import { HttpModule, HttpService } from "@nestjs/axios";
 import { Module, type Provider } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
+import type { Repository } from "typeorm";
 import { CryptoModule } from "../crypto/crypto.module.js";
 import { KeyChainService } from "../crypto/key/key-chain.service.js";
 import { TrustListModule } from "../issuer/trust-list/trustlist.module.js";
@@ -19,9 +21,11 @@ import {
 } from "./adapters/http-federation-resolver.js";
 import { LocalFederationEntityProvider } from "./adapters/local-federation-entity-provider.js";
 import { LocalFederationResolver } from "./adapters/local-federation-resolver.js";
+import { TypeOrmAcceptedTrustListSequenceNumbers } from "./adapters/typeorm-accepted-trust-list-sequence-numbers.js";
 import { VerifiedLoteProvider } from "./adapters/verified-lote-provider.js";
 import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
 import { CacheController } from "./cache.controller.js";
+import { TrustListSequenceNumberEntity } from "./entities/trust-list-sequence-number.entity.js";
 import {
     FEDERATION_ENTITY_PROVIDER_SETTINGS,
     type FederationEntityProviderSettings,
@@ -33,6 +37,10 @@ import {
 import { FederationTrustService } from "./federation-trust.service.js";
 import { FederationTrustAnchorModule } from "./federation-trust-anchor/federation-trust-anchor.module.js";
 import { LoteParserService } from "./lote-parser.service.js";
+import {
+    ACCEPTED_TRUST_LIST_SEQUENCE_NUMBERS,
+    type AcceptedTrustListSequenceNumbers,
+} from "./ports/accepted-trust-list-sequence-numbers.js";
 import {
     FEDERATION_ENTITY_PROVIDER,
     type FederationEntityProvider,
@@ -119,6 +127,7 @@ export const federationEntityProvider: Provider = {
 
 @Module({
     imports: [
+        TypeOrmModule.forFeature([TrustListSequenceNumberEntity]),
         CryptoModule,
         TrustListModule,
         FederationTrustAnchorModule,
@@ -138,10 +147,20 @@ export const federationEntityProvider: Provider = {
                 new VerifiedLoteProvider(jwt, parser),
         },
         {
+            provide: ACCEPTED_TRUST_LIST_SEQUENCE_NUMBERS,
+            inject: [getRepositoryToken(TrustListSequenceNumberEntity)],
+            useFactory: (
+                repository: Repository<TrustListSequenceNumberEntity>,
+            ): AcceptedTrustListSequenceNumbers =>
+                new TypeOrmAcceptedTrustListSequenceNumbers(repository),
+        },
+        {
             provide: CollectTrustedEntities,
-            inject: [TRUST_LIST_PROVIDER],
-            useFactory: (lists: TrustListProvider) =>
-                new CollectTrustedEntities(lists),
+            inject: [TRUST_LIST_PROVIDER, ACCEPTED_TRUST_LIST_SEQUENCE_NUMBERS],
+            useFactory: (
+                lists: TrustListProvider,
+                sequenceNumbers: AcceptedTrustListSequenceNumbers,
+            ) => new CollectTrustedEntities(lists, sequenceNumbers),
         },
         {
             provide: TRUST_STORE_SETTINGS,

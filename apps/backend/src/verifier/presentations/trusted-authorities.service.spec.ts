@@ -1,5 +1,6 @@
 import * as x509 from "@peculiar/x509";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { OutdatedTrustListsError } from "../../trust/domain/trust-list-freshness.js";
 import {
     ServiceTypeIdentifiers,
     type TrustedEntity,
@@ -238,6 +239,138 @@ describe("TrustedAuthoritiesService", () => {
                 },
             ]);
             expect(logger.warn).toHaveBeenCalledTimes(2);
+        });
+
+        // Verification discards outdated lists (ETSI TS 119 602 §6.3.15), so
+        // the request does not name them while another list is current.
+        it("leaves outdated lists out while another list of the entry is current", async () => {
+            const { service, logger } = createService(
+                vi.fn(),
+                vi.fn(async (ref) => {
+                    if (ref.trustListId === "outdated") {
+                        throw new OutdatedTrustListsError([
+                            { list: "outdated", nextUpdate: null },
+                        ]);
+                    }
+                    return issuer(
+                        ServiceTypeIdentifiers.EaaIssuance,
+                        eaaCa.der,
+                    );
+                }),
+            );
+
+            const result = await service.transformDcqlTrustedAuthoritiesToAki(
+                {
+                    credentials: [
+                        {
+                            id: "pid",
+                            trusted_authorities: [
+                                {
+                                    type: "etsi_tl",
+                                    values: [
+                                        { trustListId: "outdated" },
+                                        { trustListId: "current" },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+                "tenant",
+                host,
+            );
+
+            expect(result.credentials[0].trusted_authorities).toEqual([
+                { type: "aki", values: [eaaCa.ski] },
+            ]);
+            expect(logger.warn).toHaveBeenCalledWith(
+                expect.objectContaining({ trustListId: "outdated" }),
+                expect.stringContaining("outdated"),
+            );
+        });
+
+        it("keeps the URL of a list that cannot be loaded but leaves out an outdated one", async () => {
+            const { service } = createService(
+                vi.fn(),
+                vi.fn(async (ref) => {
+                    if (ref.trustListId === "outdated") {
+                        throw new OutdatedTrustListsError([
+                            { list: "outdated", nextUpdate: null },
+                        ]);
+                    }
+                    throw new Error("unreachable");
+                }),
+            );
+
+            const result = await service.transformDcqlTrustedAuthoritiesToAki(
+                {
+                    credentials: [
+                        {
+                            id: "pid",
+                            trusted_authorities: [
+                                {
+                                    type: "etsi_tl",
+                                    values: [
+                                        { trustListId: "outdated" },
+                                        { trustListId: "unreachable" },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+                "tenant",
+                host,
+            );
+
+            expect(result.credentials[0].trusted_authorities).toEqual([
+                {
+                    type: "etsi_tl",
+                    values: [`${host}/trust-list/unreachable`],
+                },
+            ]);
+        });
+
+        it("sends the URLs of outdated lists when every list of the entry is outdated", async () => {
+            const { service } = createService(
+                vi.fn(),
+                vi.fn(async (ref) => {
+                    throw new OutdatedTrustListsError([
+                        { list: ref.trustListId, nextUpdate: null },
+                    ]);
+                }),
+            );
+
+            const result = await service.transformDcqlTrustedAuthoritiesToAki(
+                {
+                    credentials: [
+                        {
+                            id: "pid",
+                            trusted_authorities: [
+                                {
+                                    type: "etsi_tl",
+                                    values: [
+                                        { trustListId: "one" },
+                                        { trustListId: "two" },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+                "tenant",
+                host,
+            );
+
+            expect(result.credentials[0].trusted_authorities).toEqual([
+                {
+                    type: "etsi_tl",
+                    values: [
+                        `${host}/trust-list/one`,
+                        `${host}/trust-list/two`,
+                    ],
+                },
+            ]);
         });
 
         it("only sends string values to the wallet", async () => {

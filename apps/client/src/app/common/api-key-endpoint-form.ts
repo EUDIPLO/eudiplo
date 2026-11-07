@@ -17,6 +17,7 @@ import {
   clearAuthFieldIssuesOnTypeChange,
   toAuthFormValue,
 } from './auth-display.util';
+import { jsonViewUnavailableReason } from './json-view';
 
 /** The fields of an endpoint that is called with an optional API key. */
 interface ApiKeyEndpointBody {
@@ -172,7 +173,17 @@ export abstract class ApiKeyEndpointFormComponent implements OnInit {
     return fieldErrorMessage(this.form.get(name), localMessage);
   }
 
+  /** Why JSON View cannot be opened right now, or '' when it can; its tooltip. */
+  get jsonViewUnavailableReason(): string {
+    return jsonViewUnavailableReason(
+      { loading: this.loading, loadError: this.loadError, saving: this.saving },
+      `the ${this.noun}`
+    );
+  }
+
   viewAsJson(): void {
+    // The button stays clickable while it cannot be used (disabledInteractive).
+    if (this.jsonViewUnavailableReason) return;
     const dialogRef = this.dialog.open(JsonViewDialogComponent, {
       data: {
         title: this.jsonTitle,

@@ -15,7 +15,13 @@
       <mat-spinner diameter="40"></mat-spinner>
     </div>
   } @else {
-    <form [formGroup]="form" (ngSubmit)="onSubmit()" fxLayout="column" fxLayoutGap="24px">
+    <form
+      #formElement
+      [formGroup]="form"
+      (ngSubmit)="onSubmit()"
+      fxLayout="column"
+      fxLayoutGap="24px"
+    >
       <!-- Status List Info Card (Edit mode only) -->
       @if (isEditMode && statusList) {
         <mat-card>
