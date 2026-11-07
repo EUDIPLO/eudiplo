@@ -333,6 +333,7 @@ describe("MdocverifierService status list fetch", () => {
             validateChain: vi
                 .fn()
                 .mockResolvedValue({ verified: true, matchedEntity: null }),
+            discardedTrustListsDetail: vi.fn().mockResolvedValue(undefined),
         };
         const statusLists = new StatusListVerifierService(
             new TrustFetchService(outboundUrlPolicy, { publicUrl }),

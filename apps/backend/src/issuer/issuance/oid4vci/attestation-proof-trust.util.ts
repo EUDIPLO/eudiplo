@@ -1,4 +1,9 @@
 import { decodeProtectedHeader } from "jose";
+import {
+    type DiscardedTrustList,
+    discardedTrustListsNote,
+    OutdatedTrustListsError,
+} from "../../../trust/domain/trust-list-freshness.js";
 import { TrustStoreService } from "../../../trust/trust-store.service.js";
 import {
     normalizeTrustListRefs,
@@ -33,6 +38,9 @@ export async function validateAttestationProofTrust(
         );
     }
 
+    // Outdated lists left out of the store, named by count in the answer so a
+    // missing provider is not mistaken for one that is not listed at all.
+    let discarded: DiscardedTrustList[] = [];
     try {
         const header = decodeProtectedHeader(keyAttestationJwt);
         const x5c = header.x5c;
@@ -51,10 +59,11 @@ export async function validateAttestationProofTrust(
 
         const trustStore =
             await deps.trustStoreService.getTrustStore(trustListSource);
+        discarded = trustStore.discarded;
         if (trustStore.entities.length === 0) {
             throw new CredentialRequestException(
                 "invalid_proof",
-                "No trusted wallet providers found in configured trust lists",
+                `No trusted wallet providers found in configured trust lists${discardedTrustListsNote(discarded)}`,
             );
         }
 
@@ -66,16 +75,23 @@ export async function validateAttestationProofTrust(
         if (!matched) {
             throw new CredentialRequestException(
                 "invalid_proof",
-                "Attestation proof signer is not trusted by configured wallet provider trust lists",
+                `Attestation proof signer is not trusted by configured wallet provider trust lists${discardedTrustListsNote(discarded)}`,
             );
         }
     } catch (error) {
         if (error instanceof CredentialRequestException) {
             throw error;
         }
+        // Its message is safe for wallets and says why no provider is trusted.
+        if (error instanceof OutdatedTrustListsError) {
+            throw new CredentialRequestException(
+                "invalid_proof",
+                error.message,
+            );
+        }
         throw new CredentialRequestException(
             "invalid_proof",
-            "Attestation proof x5c chain could not be validated",
+            `Attestation proof x5c chain could not be validated${discardedTrustListsNote(discarded)}`,
         );
     }
 }

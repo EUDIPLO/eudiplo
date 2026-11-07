@@ -1,3 +1,5 @@
+import { isTrustListCurrent } from "../../../trust/domain/trust-list-freshness.js";
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Time from issuing a managed trust list to its `NextUpdate`. */
@@ -16,15 +18,15 @@ export function trustListNextUpdate(issuedAt: Date): Date {
 
 /**
  * Whether a list with this `NextUpdate` must be re-issued: inside the renewal
- * window, already expired, or without a readable `NextUpdate`.
+ * window, already expired, or without a readable `NextUpdate`, read the way
+ * verifiers read it, so a list is renewed before any verifier discards it.
  */
 export function isTrustListRenewalDue(
     nextUpdate: string | undefined,
     now: Date,
 ): boolean {
-    const expiresAt = nextUpdate ? Date.parse(nextUpdate) : Number.NaN;
-    return (
-        Number.isNaN(expiresAt) ||
-        expiresAt - now.getTime() <= TRUST_LIST_RENEWAL_WINDOW_MS
+    return !isTrustListCurrent(
+        nextUpdate,
+        new Date(now.getTime() + TRUST_LIST_RENEWAL_WINDOW_MS),
     );
 }

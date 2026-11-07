@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { PinoLogger } from "nestjs-pino";
 import { getRevocationServices } from "../../../trust/domain/status-list-signers.js";
+import { describeDiscardedTrustLists } from "../../../trust/domain/trust-list-freshness.js";
 import { StatusListVerifierService } from "../../../trust/status-list-verifier.service.js";
 import {
     BuiltTrustStore,
@@ -22,7 +23,7 @@ import {
 /**
  * Raised when a trust list WAS configured for a credential but could not be
  * turned into a usable trust store — the fetch/parse/signature check failed, or
- * the list is stale (its `NextUpdate` is in the past).
+ * every one of its lists is past its `NextUpdate`.
  *
  * This is deliberately distinct from "no trust list configured": the latter is a
  * legitimate opt-out (trust validation is opt-in per credential), whereas this
@@ -34,6 +35,18 @@ class TrustListUnavailableError extends Error {
         super(message);
         this.name = "TrustListUnavailableError";
     }
+}
+
+/**
+ * Error-detail line naming the lists left out of the store as outdated, so an
+ * operator can tell a lapsed list from an issuer that is not listed.
+ */
+function discardedDetail(store: BuiltTrustStore): string[] {
+    return store.discarded.length > 0
+        ? [
+              `Discarded outdated trust lists (their issuers are not trusted): ${describeDiscardedTrustLists(store.discarded)}`,
+          ]
+        : [];
 }
 
 /**
@@ -168,9 +181,10 @@ export class CredentialChainValidationService {
         const leaf = presented[0];
 
         // 3) Load trust store for LoTE-based validation.
-        // A configured-but-unavailable trust list (fetch/parse/signature failure
-        // or stale list) MUST fail closed — never accept a credential when a
-        // requested trust list cannot be evaluated.
+        // A configured-but-unavailable trust list (fetch/parse/signature failure,
+        // or every list outdated) MUST fail closed — never accept a credential
+        // when a requested trust list cannot be evaluated. Outdated lists next
+        // to current ones are left out of the store and add no trust.
         let store: BuiltTrustStore | null;
         try {
             store = await this.getTrustStoreIfConfigured(trustListSource);
@@ -451,23 +465,26 @@ export class CredentialChainValidationService {
     }
 
     /**
-     * Load the configured trust store.
-     *
-     * Returns `null` ONLY when no trust list is configured for the credential
-     * (legitimate opt-out). When a trust list IS configured but cannot be turned
-     * into a usable store — the fetch/parse/signature check fails, or the list is
-     * stale ({@link BuiltTrustStore.nextUpdate} in the past) — it throws
-     * {@link TrustListUnavailableError} so callers can fail closed instead of
-     * silently accepting the credential.
+     * Names the configured lists left out as outdated, for verifiers whose
+     * trust failure does not go through {@link validateChain} (mDOC checks
+     * its anchors itself). Undefined when none was left out.
      */
+    async discardedTrustListsDetail(
+        trustListSource?: TrustListSource,
+    ): Promise<string | undefined> {
+        const store = await this.getTrustStoreForAugmentation(trustListSource);
+        return store ? discardedDetail(store)[0] : undefined;
+    }
+
     /**
      * Best-effort trust store load for NON-authoritative anchor augmentation
      * (supplying extra certificates to the mDOC signature check).
      *
-     * Unlike {@link getTrustStoreIfConfigured}, an unavailable/stale trust list is
-     * swallowed to `null` here: the authoritative trust decision is made by
-     * {@link validateChain}, which fails closed on {@link TrustListUnavailableError}.
-     * Returning no extra anchors from this path is therefore safe.
+     * Unlike {@link getTrustStoreIfConfigured}, an unavailable trust list, or
+     * one whose lists are all outdated, is swallowed to `null` here: the
+     * authoritative trust decision is made by {@link validateChain}, which
+     * fails closed on {@link TrustListUnavailableError}. Returning no extra
+     * anchors from this path is therefore safe.
      */
     private async getTrustStoreForAugmentation(
         trustListSource?: TrustListSource,
@@ -482,6 +499,16 @@ export class CredentialChainValidationService {
         }
     }
 
+    /**
+     * Load the configured trust store.
+     *
+     * Returns `null` ONLY when no trust list is configured for the credential
+     * (legitimate opt-out). When a trust list IS configured but cannot be turned
+     * into a usable store — the fetch/parse/signature check fails, or every
+     * one of its lists is past its `NextUpdate` — it throws
+     * {@link TrustListUnavailableError} so callers can fail closed instead of
+     * silently accepting the credential.
+     */
     private async getTrustStoreIfConfigured(
         trustListSource?: TrustListSource,
     ): Promise<BuiltTrustStore | null> {
@@ -489,25 +516,13 @@ export class CredentialChainValidationService {
             return null;
         }
 
-        let store: BuiltTrustStore;
         try {
-            store = await this.trustStore.getTrustStore(trustListSource);
+            return await this.trustStore.getTrustStore(trustListSource);
         } catch (error: any) {
             const message = `Failed to load configured trust store: ${error?.message ?? error}`;
             this.logger.error(message);
             throw new TrustListUnavailableError(message);
         }
-
-        if (store.nextUpdate) {
-            const nu = new Date(store.nextUpdate);
-            if (!Number.isNaN(nu.getTime()) && nu.getTime() < Date.now()) {
-                const message = `Configured trust list is stale (NextUpdate in the past: ${store.nextUpdate})`;
-                this.logger.warn(message);
-                throw new TrustListUnavailableError(message);
-            }
-        }
-
-        return store;
     }
 
     /**
@@ -535,6 +550,7 @@ export class CredentialChainValidationService {
             `Presented leaf: subject="${leaf.subject}", issuer="${leaf.issuer}", thumbprint=${leafThumb}`,
             `Presented chain length: ${presented.length}`,
             `Configured trust lists: ${configuredTrustLists}`,
+            ...discardedDetail(store),
             `Trusted entities (${store.entities.length}): ${trustedCertsSummary}`,
         ].join(" | ");
     }
@@ -588,6 +604,7 @@ export class CredentialChainValidationService {
             `Pinned mode: ${pinnedMode}`,
             `Path length: ${path.length}`,
             `Configured trust lists: ${configuredTrustLists}`,
+            ...discardedDetail(store),
             `Loaded entities (${store.entities.length}): ${trustedCertsSummary}`,
             `Allowed cert thumbprints: ${allowedThumbprints.length > 0 ? allowedThumbprints.join("; ") : "none"}`,
         ].join(" | ");

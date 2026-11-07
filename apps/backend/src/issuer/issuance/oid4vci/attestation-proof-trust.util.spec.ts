@@ -1,6 +1,8 @@
+import type { Logger } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { TrustStoreService } from "../../../trust/trust-store.service.js";
+import { CollectTrustedEntities } from "../../../trust/application/collect-trusted-entities.js";
+import { TrustStoreService } from "../../../trust/trust-store.service.js";
 import { ServiceTypeIdentifiers } from "../../../trust/types.js";
 import { X509ValidationService } from "../../../trust/x509-validation.service.js";
 import {
@@ -30,7 +32,7 @@ describe("credential proof attestation trust", () => {
 
     beforeEach(() => {
         vi.resetAllMocks();
-        getTrustStore.mockResolvedValue({ entities });
+        getTrustStore.mockResolvedValue({ entities, discarded: [] });
         matchAttestationSigner.mockResolvedValue({ entity: {} });
     });
 
@@ -187,6 +189,7 @@ describe("credential proof attestation trust with real certificates", () => {
                                 ],
                             },
                         ],
+                        discarded: [],
                     }),
                 } as unknown as TrustStoreService,
                 x509ValidationService: new X509ValidationService(),
@@ -222,6 +225,111 @@ describe("credential proof attestation trust with real certificates", () => {
                     "signer is not trusted",
                 ),
             },
+        });
+    });
+
+    // A replayed older provider list keeps its valid signature; its passed
+    // NextUpdate discards it (ETSI TS 119 602 §6.3.15), the other lists count.
+    describe("with an outdated wallet-provider list", () => {
+        const day = 86_400_000;
+        const current = () => new Date(Date.now() + day).toISOString();
+        const outdated = () => new Date(Date.now() - day).toISOString();
+
+        async function validateWith(
+            lists: Array<{ withProvider: boolean; nextUpdate: string }>,
+        ) {
+            const { ca, attestation } = await provider();
+            const providerEntity = {
+                entityId: "provider",
+                services: [
+                    {
+                        serviceTypeIdentifier:
+                            ServiceTypeIdentifiers.WalletSolutionIssuance,
+                        certValue: der(ca),
+                    },
+                ],
+            };
+            const otherEntity = {
+                entityId: "other provider",
+                services: [
+                    {
+                        serviceTypeIdentifier:
+                            ServiceTypeIdentifiers.WalletSolutionIssuance,
+                        certValue: der((await provider()).ca),
+                    },
+                ],
+            };
+            const loadVerified = vi.fn();
+            for (const list of lists) {
+                loadVerified.mockResolvedValueOnce({
+                    // Without the provider, the list names another one.
+                    entities: [
+                        list.withProvider ? providerEntity : otherEntity,
+                    ],
+                    nextUpdate: list.nextUpdate,
+                });
+            }
+            const trustStoreService = new TrustStoreService(
+                new CollectTrustedEntities({ loadVerified }),
+                {} as never,
+                {} as never,
+                {} as never,
+            );
+            vi.spyOn(
+                (trustStoreService as unknown as { logger: Logger }).logger,
+                "warn",
+            ).mockImplementation(() => {});
+            return validateAttestationProofTrust(
+                attestation,
+                lists.map((_, i) => ({
+                    url: `https://trust.example/list-${i}`,
+                    verifierX509Der: "MII",
+                })),
+                {
+                    trustStoreService,
+                    x509ValidationService: new X509ValidationService(),
+                },
+            );
+        }
+
+        it("accepts a provider in a current list next to an outdated one", async () => {
+            await expect(
+                validateWith([
+                    { withProvider: true, nextUpdate: current() },
+                    { withProvider: true, nextUpdate: outdated() },
+                ]),
+            ).resolves.toBeUndefined();
+        });
+
+        it("rejects with invalid_proof a provider listed only in the outdated list, and says lists were left out", async () => {
+            await expect(
+                validateWith([
+                    { withProvider: false, nextUpdate: current() },
+                    { withProvider: true, nextUpdate: outdated() },
+                ]),
+            ).rejects.toMatchObject({
+                response: {
+                    error: "invalid_proof",
+                    error_description:
+                        "Attestation proof signer is not trusted by configured wallet provider trust lists (1 outdated trust list(s) left out; the server log names them)",
+                },
+            });
+        });
+
+        it("rejects with invalid_proof when every list is outdated, and says so", async () => {
+            await expect(
+                validateWith([
+                    { withProvider: true, nextUpdate: outdated() },
+                    { withProvider: true, nextUpdate: outdated() },
+                ]),
+            ).rejects.toMatchObject({
+                response: {
+                    error: "invalid_proof",
+                    error_description: expect.stringContaining(
+                        "No configured trust list is current",
+                    ),
+                },
+            });
         });
     });
 });

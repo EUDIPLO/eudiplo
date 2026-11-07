@@ -484,6 +484,22 @@ export class MdocverifierService {
             }
         }
 
+        // An issuer listed only in a list discarded as outdated is not
+        // trusted; name those lists so the session log tells it apart from an
+        // issuer that is not listed at all.
+        if (
+            failureType === "trust_chain_not_trusted" ||
+            failureType === "no_trust_chain_to_root"
+        ) {
+            const discarded =
+                await this.chainValidation.discardedTrustListsDetail(
+                    options.trustListSource,
+                );
+            if (discarded && !failureReason.includes(discarded)) {
+                failureReason = `${failureReason} | ${discarded}`;
+            }
+        }
+
         return {
             verified: false,
             claims: {},
