@@ -1,9 +1,5 @@
 import * as x509 from "@peculiar/x509";
-import {
-    credentialIssuerServiceTypes,
-    serviceTypeMatches,
-    type TrustedEntity,
-} from "../types.js";
+import { isCredentialIssuerServiceType, type TrustedEntity } from "../types.js";
 
 /** DCQL `aki` values for the credential issuers of a trust list. */
 export interface IssuerAuthorityKeyIdentifiers {
@@ -35,10 +31,8 @@ export function credentialIssuerAuthorityKeyIdentifiers(
     let complete = true;
     for (const entity of entities) {
         for (const service of entity.services) {
-            const isIssuance = credentialIssuerServiceTypes.some((type) =>
-                serviceTypeMatches(service.serviceTypeIdentifier, type),
-            );
-            if (!isIssuance) continue;
+            if (!isCredentialIssuerServiceType(service.serviceTypeIdentifier))
+                continue;
 
             const cert = parseCertificate(service.certValue);
             if (!cert) {

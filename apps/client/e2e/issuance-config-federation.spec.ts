@@ -1,7 +1,6 @@
-import { generateKeyPairSync } from 'node:crypto';
-import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './support/test';
 import { hasRootCredentials, resolvedE2EConfig } from './support/e2e-config';
+import { federationSection, registerTrustAnchor } from './support/federation';
 import { loginWithClientCredentials } from './support/login';
 import { createTenant, type TestTenant } from './support/tenants';
 
@@ -35,36 +34,8 @@ test.beforeAll(async () => {
   entityId = `${publicUrl}/issuers/${tenant.id}`;
 
   // Issuer Settings only offer registered trust anchors (with pinned keys).
-  const anchor = await fetch(`${api}/api/federation-trust-anchor`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${tenant.token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      id: 'example-ta',
-      entityId: trustAnchor,
-      jwks: {
-        keys: [
-          {
-            ...generateKeyPairSync('ec', { namedCurve: 'P-256' }).publicKey.export({
-              format: 'jwk',
-            }),
-            kid: 'ta-2026',
-          },
-        ],
-      },
-    }),
-  });
-  expect(anchor.status, await anchor.text()).toBe(201);
+  await registerTrustAnchor(tenant.token, 'example-ta', trustAnchor);
 });
-
-/** The OpenID Federation section on the Trust tab, opened. */
-async function federationSection(page: Page): Promise<Locator> {
-  const section = page
-    .locator('mat-expansion-panel')
-    .filter({ has: page.getByText('OpenID Federation', { exact: true }).first() });
-  const header = section.locator('mat-expansion-panel-header');
-  if ((await header.getAttribute('aria-expanded')) !== 'true') await header.click();
-  return section;
-}
 
 async function savedFederation(): Promise<Record<string, unknown> | undefined> {
   const response = await fetch(`${api}/api/issuer/config`, {
@@ -83,6 +54,21 @@ test('names the entity ID to use and says the federation key is missing', async 
   await page.getByRole('textbox', { name: 'Name' }).fill('Federation Entity');
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('· Wallet access')).toBeVisible();
+
+  // The tenant has no authorization server key; the link creates one for this form in a new tab.
+  const server = page
+    .locator('mat-expansion-panel')
+    .filter({ has: page.locator('mat-panel-description', { hasText: 'built-in' }) });
+  const serverHeader = server.locator('mat-expansion-panel-header');
+  if ((await serverHeader.getAttribute('aria-expanded')) !== 'true') await serverHeader.click();
+  await expect(server.getByText(/No Authorization Server key exists yet/)).toBeVisible();
+  const createServerKey = server.getByRole('link', { name: 'create one (opens in a new tab)' });
+  await expect(createServerKey).toHaveAttribute(
+    'href',
+    '/keys/create?usage=authorizationServer&from=form'
+  );
+  await expect(createServerKey).toHaveAttribute('target', '_blank');
+
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText('· Trust')).toBeVisible();
 
@@ -105,7 +91,7 @@ test('names the entity ID to use and says the federation key is missing', async 
   await expect(federation.getByRole('button', { name: 'Use this URL' })).toHaveCount(0);
   await expect(missingKey).toBeVisible();
   const createKey = federation.getByRole('link', { name: /Create a federation key/ });
-  await expect(createKey).toHaveAttribute('href', '/keys/create?usage=federation');
+  await expect(createKey).toHaveAttribute('href', '/keys/create?usage=federation&from=form');
   await expect(createKey).toHaveAttribute('target', '_blank');
 
   await federation.getByRole('button', { name: 'Add Trust Anchor' }).click();
@@ -143,7 +129,18 @@ test('creates the federation key in a new tab and checks again', async ({ page }
   const description = 'E2E federation key';
   await wizard.getByRole('textbox', { name: 'Description' }).fill(description);
   await wizard.getByRole('button', { name: 'Create Key Chain' }).click();
-  await expect(wizard.getByRole('heading', { name: `Key Chain: ${description}` })).toBeVisible();
+
+  // The wizard tab says to return to the form instead of moving on to another page.
+  const created = wizard.getByRole('heading', { name: `Key chain "${description}" created` });
+  await expect(created).toBeVisible();
+  await expect(created).toBeFocused();
+  await expect(wizard.getByText('Your form is still open in the tab you came from.')).toBeVisible();
+  await expect(wizard).toHaveURL(/\/keys\/create\?usage=federation&from=form$/);
+  await expect(wizard.getByRole('button', { name: 'Create Key Chain' })).toHaveCount(0);
+  await expect(wizard.getByRole('link', { name: 'Open key chain' })).toHaveAttribute(
+    'href',
+    /^\/keys\/[^/?]+$/
+  );
   await wizard.close();
 
   // The unsaved Issuer Settings tab is still there and finds the key on request.

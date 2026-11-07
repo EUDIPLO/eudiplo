@@ -1,6 +1,24 @@
+import { ApplicationRef, ElementRef, Injector } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 import { FormBuilder } from '@angular/forms';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { ActivatedRoute, provideRouter } from '@angular/router';
+import { client } from '@eudiplo/sdk-core';
+import { EMPTY } from 'rxjs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IssuanceConfigCreateComponent } from './issuance-config-create.component';
+import { IssuanceConfigService } from '../issuance-config.service';
+import { loseFocus } from '../../../common/settings-screen.testing';
+import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
+import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
+import { ApiService } from '../../../core';
+import { FederationTrustAnchorService } from '../../../federation-trust-anchor/federation-trust-anchor.service';
+import { KeyChainService } from '../../../key-management/key-chain.service';
+import { PresentationManagementService } from '../../../presentation/presentation-config/presentation-management.service';
+import { RegistrarService } from '../../../registrar/registrar.service';
+import { FrontendConfigService } from '../../../services/frontend-config.service';
+import { JwtService } from '../../../services/jwt.service';
 import {
   pemToBase64Der,
   TEST_ROOT_CERTIFICATE_PEM,
@@ -123,13 +141,64 @@ describe('issuer settings guided setup', () => {
   it('blocks saving on loading failure and supports retry', async () => {
     service.getConfig.mockRejectedValueOnce({ statusCode: 403, message: 'Forbidden resource' });
     await component.loadConfigForEdit();
-    expect(component.loadError).toBe(
-      'Could not load issuer settings: Forbidden resource. Retry before making changes.'
-    );
+    expect(component.loadError).toBe('Could not load issuer settings: Forbidden resource.');
     component.onSubmit();
     expect(service.saveConfiguration).not.toHaveBeenCalled();
     await component.loadConfigForEdit();
     expect(component.loadError).toBe('');
+  });
+
+  it('moves focus to the heading only after a retry loads the settings', async () => {
+    const heading = document.body.appendChild(document.createElement('h2'));
+    heading.tabIndex = -1;
+    Object.assign(component, {
+      injector: TestBed.inject(Injector),
+      pageHeading: new ElementRef(heading),
+    });
+    /** Loads the settings while focus is lost, as after the Retry button was removed. */
+    const load = async () => {
+      loseFocus();
+      await component.loadConfigForEdit();
+      TestBed.inject(ApplicationRef).tick();
+    };
+    try {
+      await load();
+      expect(document.activeElement).not.toBe(heading);
+
+      service.getConfig.mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' });
+      await load();
+      service.getConfig.mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' });
+      await load();
+      expect(component.loadError).not.toBe('');
+      expect(document.activeElement).not.toBe(heading);
+
+      await load();
+      expect(component.loadError).toBe('');
+      expect(document.activeElement).toBe(heading);
+    } finally {
+      heading.remove();
+    }
+  });
+
+  it('opens JSON View only with loaded settings and says why it waits', async () => {
+    const open = vi.fn(() => ({ afterClosed: () => EMPTY }));
+    Object.assign(component, { dialog: { open } });
+    await component.loadConfigForEdit();
+    expect(component.jsonViewUnavailableReason).toBe('');
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
+
+    // The button stays clickable while it cannot be used, so the handler checks again.
+    service.getConfig.mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' });
+    const reload = component.loadConfigForEdit();
+    expect(component.jsonViewUnavailableReason).toBe('Wait until the issuer settings have loaded');
+    component.viewAsJson();
+    await reload;
+    expect(component.jsonViewUnavailableReason).toBe(
+      'Retry loading the issuer settings before opening JSON View'
+    );
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
   });
 
   it("shows the backend's reason when saving is rejected", async () => {
@@ -339,6 +408,8 @@ describe('issuer settings guided setup', () => {
     component.authorizationServers.at(0).get('type')!.setValue('built-in');
     component.onAuthorizationServerTypeChange(0, 'built-in');
     expect(lifetime().value).toBe(300);
+    // The new group of the open panel stays open.
+    expect(component.expandedServers.has(component.authorizationServers.at(0))).toBe(true);
 
     component.authorizationServers.at(0).get('type')!.setValue('chained');
     component.onAuthorizationServerTypeChange(0, 'chained');
@@ -601,5 +672,106 @@ describe('issuer settings guided setup', () => {
       component.onTrustAnchorSelected(0, { anchor, previous: 'https://other.example' });
       expect(uri.value).toBe('https://mirror.example/.well-known/openid-federation');
     });
+  });
+});
+
+describe('issuer settings Save', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Renders the issuer settings once they can be saved; the save never answers. */
+  async function render() {
+    const save = vi.fn(() => new Promise(() => undefined));
+    vi.spyOn(client, 'get').mockResolvedValue({ data: [] } as any);
+    await TestBed.configureTestingModule({
+      imports: [IssuanceConfigCreateComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: { get: () => null } } } },
+        {
+          provide: IssuanceConfigService,
+          useValue: { getConfig: vi.fn().mockResolvedValue(config), saveConfiguration: save },
+        },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        { provide: MatDialog, useValue: { open: vi.fn() } },
+        {
+          provide: PresentationManagementService,
+          useValue: { loadConfigurations: vi.fn().mockResolvedValue([]) },
+        },
+        { provide: RegistrarService, useValue: { getConfig: vi.fn().mockResolvedValue(null) } },
+        { provide: KeyChainService, useValue: { getAll: vi.fn().mockResolvedValue([]) } },
+        {
+          provide: FrontendConfigService,
+          useValue: { getConfig: vi.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: JwtService,
+          useValue: { getTenantId: () => 'acme', canUseConfigPortability: () => false },
+        },
+        { provide: ApiService, useValue: { getBaseUrl: () => 'http://localhost:3000' } },
+        {
+          provide: FederationTrustAnchorService,
+          useValue: {
+            registeredEntityIds: vi.fn().mockReturnValue(undefined),
+            registeredAnchors: vi.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: ConfigOwnershipService,
+          useValue: { get: vi.fn().mockResolvedValue(undefined) },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(IssuanceConfigCreateComponent);
+    const component = fixture.componentInstance;
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+    fixture.detectChanges();
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[type="submit"]'
+    )!;
+    // Clicks are held back until the ownership lookup of the managed resource has answered.
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(button.getAttribute('aria-busy')).toBeNull();
+    });
+    return { fixture, component, save, button };
+  }
+
+  it('waits while the settings are saved: a second click sends nothing', async () => {
+    const { fixture, save, button } = await render();
+    expectAvailable(fixture, button);
+
+    button.click();
+    fixture.detectChanges();
+    button.click();
+    fixture.detectChanges();
+
+    expect(save).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, button, 'Saving the issuer settings…');
+  });
+
+  it('steps back while idle and keeps Back focusable while the settings are saved', async () => {
+    const { fixture, component, save, button } = await render();
+    component.toggleGuidedMode();
+    component.activeStep = 3;
+    component.furthestStep = 3;
+    fixture.detectChanges();
+    const back = [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
+    ].find((candidate) => candidate.textContent?.trim() === 'Back')!;
+    expectAvailable(fixture, back);
+    back.click();
+    expect(component.activeStep).toBe(2);
+    component.activeStep = 3;
+    fixture.detectChanges();
+
+    button.click();
+    fixture.detectChanges();
+    back.click();
+    fixture.detectChanges();
+
+    expect(save).toHaveBeenCalledOnce();
+    expect(component.activeStep).toBe(3);
+    expectUnavailable(fixture, back, 'Saving the issuer settings…');
   });
 });

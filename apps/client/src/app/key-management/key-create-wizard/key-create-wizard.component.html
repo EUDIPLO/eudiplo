@@ -12,95 +12,49 @@
         <mat-icon>open_in_new</mat-icon>
         Documentation
       </a>
-      <button
-        mat-icon-button
-        [routerLink]="['../']"
-        matTooltip="Cancel"
-        aria-label="Cancel"
-        [disabled]="isSubmitting"
-      >
-        <mat-icon>close</mat-icon>
-      </button>
+      @if (!createdForForm) {
+        <button
+          mat-icon-button
+          [routerLink]="['../']"
+          matTooltip="Cancel"
+          aria-label="Cancel"
+          [disabled]="isSubmitting"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
+      }
     </div>
   </div>
 
-  <mat-stepper #stepper linear fxFlex>
-    <!-- Step 1: Usage Selection -->
-    <mat-step [stepControl]="usageForm" label="Select Usage" [editable]="!isSubmitting">
-      <form [formGroup]="usageForm" fxLayout="column" fxLayoutGap="24px">
-        <div class="step-description">
-          <h3>What will this key be used for?</h3>
-          <p class="hint">
-            Choose the primary purpose of this key. This determines the setup workflow.
-          </p>
-        </div>
-
-        <mat-radio-group
-          formControlName="usage"
-          fxLayout="column"
-          fxLayoutGap="16px"
-          class="usage-options"
-        >
-          @for (option of usageOptions; track option.value) {
-            <mat-card
-              class="option-card"
-              [class.selected]="selectedUsage === option.value"
-              (click)="usageForm.get('usage')?.setValue(option.value)"
-            >
-              <mat-card-content fxLayout="row" fxLayoutGap="16px" fxLayoutAlign="start center">
-                <mat-radio-button [value]="option.value" class="option-radio">
-                  <div fxLayout="row" fxLayoutGap="16px" fxLayoutAlign="start center">
-                    <mat-icon class="option-icon">{{ option.icon }}</mat-icon>
-                    <div fxLayout="column">
-                      <span class="option-label">{{ option.label }}</span>
-                      <span class="option-description">{{ option.description }}</span>
-                      <span class="option-hint">{{ option.hint }}</span>
-                    </div>
-                  </div>
-                </mat-radio-button>
-              </mat-card-content>
-            </mat-card>
-          }
-        </mat-radio-group>
-
-        <div fxLayout="row" fxLayoutAlign="end" class="step-actions">
-          <button
-            mat-flat-button
-            type="button"
-            color="primary"
-            [disabled]="!usageForm.valid"
-            (click)="onUsageNext()"
-          >
-            {{ getNextStepLabel() }}
-            <mat-icon iconPositionEnd>arrow_forward</mat-icon>
-          </button>
-        </div>
-      </form>
-    </mat-step>
-
-    <!-- Step 2: Key Chain Type Selection (only for attestation and status lists) -->
-    @if (showKeyChainTypeStep) {
-      <mat-step [stepControl]="caSourceForm" label="Key Chain Type" [editable]="!isSubmitting">
-        <form [formGroup]="caSourceForm" fxLayout="column" fxLayoutGap="24px">
+  @if (createdForForm) {
+    <app-return-to-form
+      [heading]="createdForForm.heading"
+      [link]="['/keys', createdForForm.id]"
+      linkLabel="Open key chain"
+    />
+  } @else {
+    <mat-stepper #stepper linear fxFlex>
+      <!-- Step 1: Usage Selection -->
+      <mat-step [stepControl]="usageForm" label="Select Usage" [editable]="!isSubmitting">
+        <form [formGroup]="usageForm" fxLayout="column" fxLayoutGap="24px">
           <div class="step-description">
-            <h3>What type of key chain do you need?</h3>
+            <h3>What will this key be used for?</h3>
             <p class="hint">
-              Choose a key chain with its own root CA (recommended), a standalone self-signed key,
-              or a signing key under your own CA.
+              Choose the primary purpose of this key. This determines the setup workflow.
             </p>
           </div>
 
           <mat-radio-group
-            formControlName="keyChainType"
+            formControlName="usage"
             fxLayout="column"
             fxLayoutGap="16px"
-            class="ca-source-options"
+            class="usage-options"
           >
-            @for (option of keyChainTypeOptions; track option.value) {
+            @for (option of usageOptions; track option.value) {
               <mat-card
                 class="option-card"
-                [class.selected]="selectedKeyChainType === option.value"
-                (click)="caSourceForm.get('keyChainType')?.setValue(option.value)"
+                [class.selected]="selectedUsage === option.value"
+                (click)="usageForm.get('usage')?.setValue(option.value)"
               >
                 <mat-card-content fxLayout="row" fxLayoutGap="16px" fxLayoutAlign="start center">
                   <mat-radio-button [value]="option.value" class="option-radio">
@@ -110,13 +64,6 @@
                         <span class="option-label">{{ option.label }}</span>
                         <span class="option-description">{{ option.description }}</span>
                         <span class="option-hint">{{ option.hint }}</span>
-                        @if (option.features) {
-                          <div class="option-features">
-                            @for (feature of option.features; track feature) {
-                              <span class="feature-item">{{ feature }}</span>
-                            }
-                          </div>
-                        }
                       </div>
                     </div>
                   </mat-radio-button>
@@ -125,582 +72,650 @@
             }
           </mat-radio-group>
 
-          <div fxLayout="row" fxLayoutAlign="space-between" class="step-actions">
-            <button mat-button type="button" matStepperPrevious>
-              <mat-icon>arrow_back</mat-icon>
-              Back
-            </button>
+          <div fxLayout="row" fxLayoutAlign="end" class="step-actions">
             <button
               mat-flat-button
               type="button"
               color="primary"
-              matStepperNext
-              [disabled]="!caSourceForm.valid"
+              [disabled]="!usageForm.valid"
+              (click)="onUsageNext()"
             >
-              Next
+              {{ getNextStepLabel() }}
               <mat-icon iconPositionEnd>arrow_forward</mat-icon>
             </button>
           </div>
         </form>
       </mat-step>
-    }
 
-    <!-- Step 2b: Access Source Selection (only for access) -->
-    @if (showAccessSourceStep) {
-      <mat-step
-        [stepControl]="accessSourceForm"
-        label="Certificate Source"
-        [editable]="!isSubmitting"
-      >
-        <form [formGroup]="accessSourceForm" fxLayout="column" fxLayoutGap="24px">
-          <div class="step-description">
-            <h3>How do you want to get your access certificate?</h3>
-            <p class="hint">
-              Choose a self-signed certificate, registrar enrollment, or an externally issued
-              certificate.
-            </p>
-          </div>
-
-          <mat-radio-group
-            formControlName="accessSource"
-            fxLayout="column"
-            fxLayoutGap="16px"
-            class="ca-source-options"
-          >
-            @for (option of accessSourceOptions; track option.value) {
-              <mat-card
-                class="option-card"
-                [class.selected]="selectedAccessSource === option.value"
-                (click)="
-                  isAccessSourceAvailable(option.value) &&
-                    accessSourceForm.get('accessSource')?.setValue(option.value)
-                "
-              >
-                <mat-card-content fxLayout="row" fxLayoutGap="16px" fxLayoutAlign="start center">
-                  <mat-radio-button
-                    [value]="option.value"
-                    [disabled]="!isAccessSourceAvailable(option.value)"
-                    class="option-radio"
-                  >
-                    <div fxLayout="row" fxLayoutGap="16px" fxLayoutAlign="start center">
-                      <mat-icon class="option-icon">{{ option.icon }}</mat-icon>
-                      <div fxLayout="column">
-                        <span class="option-label">{{ option.label }}</span>
-                        <span class="option-description">{{ option.description }}</span>
-                        <span class="option-hint">{{ option.hint }}</span>
-                        @if (option.value === 'registrar') {
-                          <div class="registrar-status">
-                            @if (!canUseRegistrar) {
-                              <mat-icon class="status-warning">lock</mat-icon>
-                              <span class="status-warning">
-                                Enrolling through the registrar needs the registrar:manage role.
-                              </span>
-                            } @else if (registrarConfigError) {
-                              <mat-icon class="status-warning">error</mat-icon>
-                              <span class="status-warning">{{ registrarConfigError }}</span>
-                            } @else if (isCheckingRegistrar) {
-                              <mat-spinner diameter="16"></mat-spinner>
-                              <span>Checking registrar configuration...</span>
-                            } @else if (hasRegistrarConfig) {
-                              <mat-icon class="status-ok">check_circle</mat-icon>
-                              <span class="status-ok">
-                                Registrar configured. Its credentials are checked when you enroll.
-                              </span>
-                            } @else {
-                              <mat-icon class="status-warning">warning</mat-icon>
-                              <span class="status-warning">
-                                Registrar credentials not configured.
-                                <a [routerLink]="['/registrar']">Configure now</a>
-                              </span>
-                            }
-                          </div>
-                        }
-                      </div>
-                    </div>
-                  </mat-radio-button>
-                </mat-card-content>
-                @if (option.value === 'registrar' && canUseRegistrar && registrarConfigError) {
-                  <mat-card-actions class="registrar-retry">
-                    <!-- Outside the radio's label; the click must not select the option. -->
-                    <button
-                      #registrarRetry
-                      mat-stroked-button
-                      type="button"
-                      (click)="$event.stopPropagation(); retryRegistrarCheck()"
-                    >
-                      <mat-icon>refresh</mat-icon>
-                      {{ isCheckingRegistrar ? 'Checking...' : 'Retry' }}
-                    </button>
-                  </mat-card-actions>
-                }
-              </mat-card>
-            }
-          </mat-radio-group>
-
-          <div fxLayout="row" fxLayoutAlign="space-between" class="step-actions">
-            <button mat-button type="button" matStepperPrevious>
-              <mat-icon>arrow_back</mat-icon>
-              Back
-            </button>
-            <button
-              mat-flat-button
-              type="button"
-              color="primary"
-              [disabled]="
-                !accessSourceForm.valid ||
-                (selectedAccessSource === 'registrar' && !hasRegistrarConfig)
-              "
-              (click)="onAccessSourceNext()"
-            >
-              {{ selectedAccessSource === 'registrar' ? 'Enroll Certificate' : 'Configure Key' }}
-              <mat-icon iconPositionEnd>arrow_forward</mat-icon>
-            </button>
-          </div>
-        </form>
-      </mat-step>
-    }
-
-    <!-- Step 3: Configuration -->
-    @if (showConfigStep) {
-      <mat-step [stepControl]="configForm" label="Configure">
-        <form [formGroup]="configForm" fxLayout="column" fxLayoutGap="24px">
-          <div class="step-description">
-            <h3>Configure your key chain</h3>
-            @if (isExternalCaChain) {
+      <!-- Step 2: Key Chain Type Selection (only for attestation and status lists) -->
+      @if (showKeyChainTypeStep) {
+        <mat-step [stepControl]="caSourceForm" label="Key Chain Type" [editable]="!isSubmitting">
+          <form [formGroup]="caSourceForm" fxLayout="column" fxLayoutGap="24px">
+            <div class="step-description">
+              <h3>What type of key chain do you need?</h3>
               <p class="hint">
-                This will import your CA key and certificate and create a signing key with a
-                certificate issued by your CA.
+                Choose a key chain with its own root CA (recommended), a standalone self-signed key,
+                or a signing key under your own CA.
               </p>
-            } @else if (isInternalChain) {
-              <p class="hint">
-                This will create a root CA and a signing key managed as a single key chain.
-              </p>
-            } @else if (selectedUsage === 'access' && selectedAccessSource === 'registrar') {
-              <p class="hint">
-                This will create a key and enroll it with the registrar to obtain a trusted
-                certificate.
-              </p>
-            } @else if (requestsCertificate) {
-              <p class="hint">
-                This will create a key in EUDIPLO. On the key's page, you then create a certificate
-                signing request (CSR) for it and store the certificate your CA issues.
-              </p>
-            } @else if (selectedUsage === 'access' && isExternalCertificate) {
-              <p class="hint">
-                This will import your externally issued access certificate and matching key.
-              </p>
-            } @else if (selectedUsage === 'access') {
-              <p class="hint">
-                This will create a self-signed access certificate for wallet communication.
-              </p>
-            } @else if (isExternalCertificate) {
-              <p class="hint">
-                This will import your externally issued certificate and matching key.
-              </p>
-            } @else if (showKeyChainTypeStep && !isInternalChain) {
-              <p class="hint">This will create a standalone self-signed key.</p>
-            } @else {
-              <p class="hint">Add a description and select where to store the key.</p>
-            }
-          </div>
-
-          <!-- Basic Configuration (for all types) -->
-          <mat-card>
-            <mat-card-header>
-              <mat-card-title>Basic Settings</mat-card-title>
-            </mat-card-header>
-            <mat-card-content fxLayout="column" fxLayoutGap="16px">
-              <mat-form-field appearance="outline">
-                <mat-label>Description</mat-label>
-                <input
-                  matInput
-                  formControlName="description"
-                  placeholder="Enter a description for this key chain"
-                  title="Key chain description"
-                />
-                <mat-hint>Optional description for this key chain</mat-hint>
-              </mat-form-field>
-
-              <mat-form-field appearance="outline">
-                <mat-label>KMS Provider</mat-label>
-                <mat-select formControlName="kmsProvider" [disabled]="isLoadingKmsProviders">
-                  @if (availableKmsProviders.length > 0) {
-                    @for (provider of availableKmsProviders; track provider.name) {
-                      <mat-option [value]="provider.name">
-                        {{ provider.name }} ({{ provider.type }})
-                      </mat-option>
-                    }
-                  } @else {
-                    <mat-option value="db">db (fallback)</mat-option>
-                  }
-                </mat-select>
-                @if (isLoadingKmsProviders) {
-                  <mat-hint>Loading configured providers...</mat-hint>
-                } @else {
-                  <mat-hint> Selected provider stores and signs with this key chain. </mat-hint>
-                }
-              </mat-form-field>
-
-              @if (showAlgorithm) {
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                  <mat-label>Signing Algorithm</mat-label>
-                  <mat-select formControlName="alg" [disabled]="isLoadingKmsProviders">
-                    @for (option of algorithmOptions; track option.value) {
-                      <mat-option [value]="option.value">{{ option.label }}</mat-option>
-                    }
-                  </mat-select>
-                  <mat-hint>
-                    @if (selectedUsage === 'access' && configForm.value.alg !== 'ES256') {
-                      Wallets must validate request objects signed with this key, but only have to
-                      support ES256.
-                    } @else {
-                      Also selects the curve. Wallets only have to support ES256.
-                    }
-                    @if (rotationEnabled) {
-                      Rotation keeps the algorithm.
-                    }
-                  </mat-hint>
-                </mat-form-field>
-              }
-
-              @if (
-                !isInternalChain &&
-                selectedUsage !== 'access' &&
-                selectedUsage !== 'federation' &&
-                selectedUsage !== 'authorizationServer'
-              ) {
-                <mat-checkbox formControlName="useExternalCertificate">
-                  Use a certificate from an external CA
-                </mat-checkbox>
-              }
-
-              @if (isExternalCertificate && !isExternalCaChain) {
-                <div class="certificate-source">
-                  <span id="external-certificate-source-label" class="certificate-source-label">
-                    Where does the key come from?
-                  </span>
-                  <mat-radio-group
-                    formControlName="externalCertificateSource"
-                    aria-labelledby="external-certificate-source-label"
-                    fxLayout="column"
-                    fxLayoutGap="8px"
-                  >
-                    <mat-radio-button value="import">
-                      Import a key and the certificate chain issued for it
-                    </mat-radio-button>
-                    <mat-radio-button value="csr">
-                      Create the key in EUDIPLO and request its certificate with a CSR
-                    </mat-radio-button>
-                  </mat-radio-group>
-                </div>
-              }
-
-              @if (importsExternalKey) {
-                <mat-form-field appearance="outline">
-                  <mat-label for="external-private-key">
-                    {{
-                      isExternalCaChain
-                        ? 'External CA Private Key (JWK or PKCS#8 PEM)'
-                        : 'External Private Key (JWK or PKCS#8 PEM)'
-                    }}
-                  </mat-label>
-                  <textarea
-                    matInput
-                    id="external-private-key"
-                    aria-label="External private key in JWK or PKCS#8 PEM format"
-                    formControlName="externalPrivateKey"
-                    rows="6"
-                    placeholder="Paste an EC private JWK or -----BEGIN PRIVATE KEY----- PEM"
-                  ></textarea>
-                  <mat-hint>
-                    Must match the public key in the supplied
-                    {{ isExternalCaChain ? 'CA certificate.' : 'leaf certificate.' }}
-                  </mat-hint>
-                  <input
-                    #privateKeyFile
-                    id="external-private-key-file"
-                    aria-label="Upload external private key JWK or PEM file"
-                    type="file"
-                    accept=".json,.jwk,.pem,.key,application/json,application/x-pem-file"
-                    hidden
-                    (change)="onPrivateKeyFileSelected($event)"
-                  />
-                </mat-form-field>
-                <button mat-button type="button" (click)="privateKeyFile.click()">
-                  <mat-icon>upload_file</mat-icon>
-                  Load Key File
-                </button>
-
-                <mat-form-field appearance="outline">
-                  <mat-label for="external-certificate-chain">
-                    {{
-                      isExternalCaChain
-                        ? 'External CA Certificate Chain (PEM)'
-                        : 'Certificate Chain (PEM)'
-                    }}
-                  </mat-label>
-                  <textarea
-                    matInput
-                    id="external-certificate-chain"
-                    aria-label="External certificate chain"
-                    formControlName="externalCertificate"
-                    rows="8"
-                    placeholder="-----BEGIN CERTIFICATE-----"
-                  ></textarea>
-                  <mat-hint>
-                    {{
-                      isExternalCaChain
-                        ? 'The last certificate must be the CA certificate matching the supplied key.'
-                        : 'Paste the leaf certificate first, followed by any issuing certificates.'
-                    }}
-                    Or load certificate files.
-                  </mat-hint>
-                  <input
-                    #certificateFiles
-                    id="external-certificate-chain-file"
-                    aria-label="Upload certificate chain files"
-                    type="file"
-                    accept=".pem,.crt,.cer,.der,application/x-pem-file,application/pkix-cert"
-                    multiple
-                    hidden
-                    (change)="onCertificateFilesSelected($event)"
-                  />
-                </mat-form-field>
-                <button mat-button type="button" (click)="certificateFiles.click()">
-                  <mat-icon>upload_file</mat-icon>
-                  Load Certificate Files
-                </button>
-              }
-            </mat-card-content>
-          </mat-card>
-
-          <!-- Signing key settings (only for internal and external CA chains) -->
-          @if (isInternalChain) {
-            <mat-card>
-              <mat-card-header>
-                <mat-card-title>
-                  <mat-icon>{{ rotationEnabled ? 'autorenew' : 'key' }}</mat-icon>
-                  Rotation Policy
-                </mat-card-title>
-              </mat-card-header>
-              <mat-card-content fxLayout="column" fxLayoutGap="16px">
-                <div>
-                  <mat-slide-toggle
-                    formControlName="rotationEnabled"
-                    color="primary"
-                    aria-describedby="rotation-hint"
-                  >
-                    Enable automatic key rotation
-                  </mat-slide-toggle>
-                  <p id="rotation-hint" class="rotation-hint">
-                    {{
-                      rotationEnabled
-                        ? 'EUDIPLO creates a new signing key and certificate on each interval.'
-                        : 'The signing certificate expires after the validity below and is not renewed. To renew it, turn rotation on by editing the key chain.'
-                    }}
-                  </p>
-                </div>
-                <div fxLayout="row" fxLayoutGap="16px" fxLayout.lt-md="column">
-                  @if (rotationEnabled) {
-                    <mat-form-field appearance="outline" fxFlex>
-                      <mat-label>Rotation Interval (days)</mat-label>
-                      <input
-                        matInput
-                        type="number"
-                        formControlName="rotationIntervalDays"
-                        min="1"
-                        placeholder="30"
-                        title="Rotation interval in days"
-                      />
-                      <mat-hint>How often the key will be rotated</mat-hint>
-                      <mat-error>Enter 1 to 3650 days</mat-error>
-                    </mat-form-field>
-                  }
-
-                  <mat-form-field appearance="outline" fxFlex>
-                    <mat-label>Certificate Validity (days)</mat-label>
-                    <input
-                      matInput
-                      type="number"
-                      formControlName="certValidityDays"
-                      min="1"
-                      placeholder="365"
-                      title="Certificate validity in days"
-                    />
-                    <mat-hint>Validity period for generated signing certificates</mat-hint>
-                    <mat-error>Enter 1 to 3650 days</mat-error>
-                  </mat-form-field>
-                </div>
-              </mat-card-content>
-            </mat-card>
-          }
-
-          <!-- Summary -->
-          <mat-card class="summary-card">
-            <mat-card-header>
-              <mat-card-title>
-                <mat-icon>summarize</mat-icon>
-                Summary
-              </mat-card-title>
-            </mat-card-header>
-            <mat-card-content>
-              <div fxLayout="column" fxLayoutGap="8px">
-                @for (item of getSummary(); track item.label) {
-                  <div fxLayout="row" fxLayoutGap="8px">
-                    <strong>{{ item.label }}:</strong>
-                    <span>{{ item.value }}</span>
-                  </div>
-                }
-              </div>
-
-              @if (isExternalCaChain) {
-                <div class="next-steps-hint">
-                  <mat-icon>{{ rotationEnabled ? 'autorenew' : 'info' }}</mat-icon>
-                  <span>
-                    EUDIPLO will use the external CA to issue the active signing certificate{{
-                      rotationEnabled
-                        ? ' and rotate that signing key on the configured interval'
-                        : ''
-                    }}.
-                  </span>
-                </div>
-              } @else if (selectedUsage === 'attestation' && isInternalChain) {
-                <div class="next-steps-hint">
-                  <mat-icon>info</mat-icon>
-                  <span>
-                    <strong>Next step:</strong> Create a status list key for this credential type to
-                    manage credential revocation.
-                  </span>
-                </div>
-              }
-              @if (showKeyChainTypeStep && !isInternalChain && !isExternalCertificate) {
-                <div class="next-steps-hint">
-                  <mat-icon>info</mat-icon>
-                  <span>
-                    This key gets a self-signed certificate. To use a certificate signed by your CA,
-                    check the external CA option above: import the key with its certificate, or
-                    request the certificate with a CSR.
-                  </span>
-                </div>
-              }
-              @if (requestsCertificate) {
-                <div class="next-steps-hint">
-                  <mat-icon>info</mat-icon>
-                  <span>
-                    <strong>Next step:</strong> On the key's page, create a CSR, send it to your CA
-                    and store the certificate it issues. Until then, the key has a self-signed
-                    certificate.
-                  </span>
-                </div>
-              }
-              @if (selectedUsage === 'statusList') {
-                <div class="next-steps-hint success">
-                  <mat-icon>check_circle</mat-icon>
-                  <span>
-                    <strong>Complete!</strong> This is the final key in your credential type setup.
-                  </span>
-                </div>
-              }
-              @if (selectedUsage === 'trustList') {
-                <div class="next-steps-hint">
-                  <mat-icon>info</mat-icon>
-                  <span>
-                    <strong>Next step:</strong> Configure your trust list and add trusted root keys.
-                  </span>
-                </div>
-              }
-              @if (selectedUsage === 'federation') {
-                <div class="next-steps-hint">
-                  <mat-icon>info</mat-icon>
-                  <span>
-                    <strong>Next step:</strong> Set the federation entity ID and trust anchors in
-                    the issuance configuration, and give your trust anchor this key's public key.
-                  </span>
-                </div>
-              }
-              @if (selectedUsage === 'authorizationServer') {
-                <div class="next-steps-hint">
-                  <mat-icon>info</mat-icon>
-                  <span>
-                    <strong>Next step:</strong> Choose it as the Authorization Server Key of an
-                    authorization server in the issuance configuration. Servers without a chosen key
-                    keep using the tenant's oldest authorization server key, which is this one only
-                    if the tenant had none.
-                  </span>
-                </div>
-              }
-              @if (selectedUsage === 'access' && selectedAccessSource === 'registrar') {
-                <div class="next-steps-hint">
-                  <mat-icon>info</mat-icon>
-                  <span>
-                    The key will be created and automatically enrolled with the registrar to obtain
-                    a trusted certificate. If the enrollment is refused, for example because of
-                    wrong registrar credentials, no key is kept.
-                  </span>
-                </div>
-              }
-            </mat-card-content>
-          </mat-card>
-
-          @if (enrollmentError) {
-            <div #enrollmentErrorBox class="enrollment-error" role="alert" tabindex="-1">
-              <mat-icon>error</mat-icon>
-              <span>{{ enrollmentError.message }}</span>
-              @if (enrollmentError.offerRegistrar) {
-                <a mat-stroked-button [routerLink]="['/registrar']">Go to Registrar</a>
-              }
-              @if (enrollmentError.keptKeyId) {
-                <a mat-stroked-button [routerLink]="['/keys', enrollmentError.keptKeyId]">
-                  Open Key
-                </a>
-              }
-              @if (enrollmentError.offerKeys) {
-                <a mat-stroked-button [routerLink]="['/keys']">Go to Keys</a>
-              }
             </div>
-          }
 
-          <div fxLayout="row" fxLayoutAlign="space-between" class="step-actions">
-            <button mat-button type="button" matStepperPrevious [disabled]="isSubmitting">
-              <mat-icon>arrow_back</mat-icon>
-              Back
-            </button>
-            @if (isSubmitting) {
-              <button mat-flat-button type="button" color="primary" disabled>
-                <mat-icon class="spinning">sync</mat-icon>
-                @if (selectedUsage === 'access' && selectedAccessSource === 'registrar') {
-                  <ng-container>Enrolling...</ng-container>
-                } @else if (importsExternalKey) {
-                  <ng-container>Importing...</ng-container>
-                } @else {
-                  <ng-container>Creating...</ng-container>
-                }
+            <mat-radio-group
+              formControlName="keyChainType"
+              fxLayout="column"
+              fxLayoutGap="16px"
+              class="ca-source-options"
+            >
+              @for (option of keyChainTypeOptions; track option.value) {
+                <mat-card
+                  class="option-card"
+                  [class.selected]="selectedKeyChainType === option.value"
+                  (click)="caSourceForm.get('keyChainType')?.setValue(option.value)"
+                >
+                  <mat-card-content fxLayout="row" fxLayoutGap="16px" fxLayoutAlign="start center">
+                    <mat-radio-button [value]="option.value" class="option-radio">
+                      <div fxLayout="row" fxLayoutGap="16px" fxLayoutAlign="start center">
+                        <mat-icon class="option-icon">{{ option.icon }}</mat-icon>
+                        <div fxLayout="column">
+                          <span class="option-label">{{ option.label }}</span>
+                          <span class="option-description">{{ option.description }}</span>
+                          <span class="option-hint">{{ option.hint }}</span>
+                          @if (option.features) {
+                            <div class="option-features">
+                              @for (feature of option.features; track feature) {
+                                <span class="feature-item">{{ feature }}</span>
+                              }
+                            </div>
+                          }
+                        </div>
+                      </div>
+                    </mat-radio-button>
+                  </mat-card-content>
+                </mat-card>
+              }
+            </mat-radio-group>
+
+            <div fxLayout="row" fxLayoutAlign="space-between" class="step-actions">
+              <button mat-button type="button" matStepperPrevious>
+                <mat-icon>arrow_back</mat-icon>
+                Back
               </button>
-            } @else {
               <button
                 mat-flat-button
                 type="button"
                 color="primary"
-                [disabled]="!configForm.valid || !externalCertificateFormValid"
+                matStepperNext
+                [disabled]="!caSourceForm.valid"
+              >
+                Next
+                <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+              </button>
+            </div>
+          </form>
+        </mat-step>
+      }
+
+      <!-- Step 2b: Access Source Selection (only for access) -->
+      @if (showAccessSourceStep) {
+        <mat-step
+          [stepControl]="accessSourceForm"
+          label="Certificate Source"
+          [editable]="!isSubmitting"
+        >
+          <form [formGroup]="accessSourceForm" fxLayout="column" fxLayoutGap="24px">
+            <div class="step-description">
+              <h3>How do you want to get your access certificate?</h3>
+              <p class="hint">
+                Choose a self-signed certificate, registrar enrollment, or an externally issued
+                certificate.
+              </p>
+            </div>
+
+            <mat-radio-group
+              formControlName="accessSource"
+              fxLayout="column"
+              fxLayoutGap="16px"
+              class="ca-source-options"
+            >
+              @for (option of accessSourceOptions; track option.value) {
+                <mat-card
+                  class="option-card"
+                  [class.selected]="selectedAccessSource === option.value"
+                  (click)="
+                    isAccessSourceAvailable(option.value) &&
+                      accessSourceForm.get('accessSource')?.setValue(option.value)
+                  "
+                >
+                  <mat-card-content fxLayout="row" fxLayoutGap="16px" fxLayoutAlign="start center">
+                    <mat-radio-button
+                      [value]="option.value"
+                      [disabled]="!isAccessSourceAvailable(option.value)"
+                      class="option-radio"
+                    >
+                      <div fxLayout="row" fxLayoutGap="16px" fxLayoutAlign="start center">
+                        <mat-icon class="option-icon">{{ option.icon }}</mat-icon>
+                        <div fxLayout="column">
+                          <span class="option-label">{{ option.label }}</span>
+                          <span class="option-description">{{ option.description }}</span>
+                          <span class="option-hint">{{ option.hint }}</span>
+                          @if (option.value === 'registrar') {
+                            <div class="registrar-status">
+                              @if (!canUseRegistrar) {
+                                <mat-icon class="status-warning">lock</mat-icon>
+                                <span class="status-warning">
+                                  Enrolling through the registrar needs the registrar:manage role.
+                                </span>
+                              } @else if (registrarConfigError) {
+                                <mat-icon class="status-warning">error</mat-icon>
+                                <span class="status-warning">{{ registrarConfigError }}</span>
+                              } @else if (isCheckingRegistrar) {
+                                <mat-spinner diameter="16"></mat-spinner>
+                                <span>Checking registrar configuration...</span>
+                              } @else if (hasRegistrarConfig) {
+                                <mat-icon class="status-ok">check_circle</mat-icon>
+                                <span class="status-ok">
+                                  Registrar configured. Its credentials are checked when you enroll.
+                                </span>
+                              } @else {
+                                <mat-icon class="status-warning">warning</mat-icon>
+                                <span class="status-warning">
+                                  Registrar credentials not configured.
+                                  <a [routerLink]="['/registrar']">Configure now</a>
+                                </span>
+                              }
+                            </div>
+                          }
+                        </div>
+                      </div>
+                    </mat-radio-button>
+                  </mat-card-content>
+                  @if (option.value === 'registrar' && canUseRegistrar && registrarConfigError) {
+                    <mat-card-actions class="registrar-retry">
+                      <!-- Outside the radio's label; the click must not select the option. -->
+                      <button
+                        #registrarRetry
+                        mat-stroked-button
+                        type="button"
+                        (click)="$event.stopPropagation(); retryRegistrarCheck()"
+                      >
+                        <mat-icon>refresh</mat-icon>
+                        {{ isCheckingRegistrar ? 'Checking...' : 'Retry' }}
+                      </button>
+                    </mat-card-actions>
+                  }
+                </mat-card>
+              }
+            </mat-radio-group>
+
+            <div fxLayout="row" fxLayoutAlign="space-between" class="step-actions">
+              <button mat-button type="button" matStepperPrevious>
+                <mat-icon>arrow_back</mat-icon>
+                Back
+              </button>
+              <button
+                mat-flat-button
+                type="button"
+                color="primary"
+                [disabled]="
+                  !accessSourceForm.valid ||
+                  (selectedAccessSource === 'registrar' && !hasRegistrarConfig)
+                "
+                (click)="onAccessSourceNext()"
+              >
+                {{ selectedAccessSource === 'registrar' ? 'Enroll Certificate' : 'Configure Key' }}
+                <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+              </button>
+            </div>
+          </form>
+        </mat-step>
+      }
+
+      <!-- Step 3: Configuration -->
+      @if (showConfigStep) {
+        <mat-step [stepControl]="configForm" label="Configure">
+          <form #configFormElement [formGroup]="configForm" fxLayout="column" fxLayoutGap="24px">
+            <div class="step-description">
+              <h3>Configure your key chain</h3>
+              @if (isExternalCaChain) {
+                <p class="hint">
+                  This will import your CA key and certificate and create a signing key with a
+                  certificate issued by your CA.
+                </p>
+              } @else if (isInternalChain) {
+                <p class="hint">
+                  This will create a root CA and a signing key managed as a single key chain.
+                </p>
+              } @else if (selectedUsage === 'access' && selectedAccessSource === 'registrar') {
+                <p class="hint">
+                  This will create a key and enroll it with the registrar to obtain a trusted
+                  certificate.
+                </p>
+              } @else if (requestsCertificate) {
+                <p class="hint">
+                  This will create a key in EUDIPLO. On the key's page, you then create a
+                  certificate signing request (CSR) for it and store the certificate your CA issues.
+                </p>
+              } @else if (selectedUsage === 'access' && isExternalCertificate) {
+                <p class="hint">
+                  This will import your externally issued access certificate and matching key.
+                </p>
+              } @else if (selectedUsage === 'access') {
+                <p class="hint">
+                  This will create a self-signed access certificate for wallet communication.
+                </p>
+              } @else if (isExternalCertificate) {
+                <p class="hint">
+                  This will import your externally issued certificate and matching key.
+                </p>
+              } @else if (showKeyChainTypeStep && !isInternalChain) {
+                <p class="hint">This will create a standalone self-signed key.</p>
+              } @else {
+                <p class="hint">Add a description and select where to store the key.</p>
+              }
+            </div>
+
+            <!-- Basic Configuration (for all types) -->
+            <mat-card>
+              <mat-card-header>
+                <mat-card-title>Basic Settings</mat-card-title>
+              </mat-card-header>
+              <mat-card-content fxLayout="column" fxLayoutGap="16px">
+                <mat-form-field appearance="outline">
+                  <mat-label>Description</mat-label>
+                  <input
+                    matInput
+                    formControlName="description"
+                    placeholder="Enter a description for this key chain"
+                    title="Key chain description"
+                  />
+                  <mat-hint>Optional description for this key chain</mat-hint>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline">
+                  <mat-label>KMS Provider</mat-label>
+                  <mat-select formControlName="kmsProvider" [disabled]="isLoadingKmsProviders">
+                    @if (availableKmsProviders.length > 0) {
+                      @for (provider of availableKmsProviders; track provider.name) {
+                        <mat-option [value]="provider.name">
+                          {{ provider.name }} ({{ provider.type }})
+                        </mat-option>
+                      }
+                    } @else {
+                      <mat-option value="db">db (fallback)</mat-option>
+                    }
+                  </mat-select>
+                  @if (isLoadingKmsProviders) {
+                    <mat-hint>Loading configured providers...</mat-hint>
+                  } @else {
+                    <mat-hint> Selected provider stores and signs with this key chain. </mat-hint>
+                  }
+                </mat-form-field>
+
+                @if (showAlgorithm) {
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                    <mat-label>Signing Algorithm</mat-label>
+                    <mat-select formControlName="alg" [disabled]="isLoadingKmsProviders">
+                      @for (option of algorithmOptions; track option.value) {
+                        <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                      }
+                    </mat-select>
+                    <mat-hint>
+                      @if (selectedUsage === 'access' && configForm.value.alg !== 'ES256') {
+                        Wallets must validate request objects signed with this key, but only have to
+                        support ES256.
+                      } @else {
+                        Also selects the curve. Wallets only have to support ES256.
+                      }
+                      @if (rotationEnabled) {
+                        Rotation keeps the algorithm.
+                      }
+                    </mat-hint>
+                  </mat-form-field>
+                }
+
+                @if (
+                  !isInternalChain &&
+                  selectedUsage !== 'access' &&
+                  selectedUsage !== 'federation' &&
+                  selectedUsage !== 'authorizationServer'
+                ) {
+                  <mat-checkbox formControlName="useExternalCertificate">
+                    Use a certificate from an external CA
+                  </mat-checkbox>
+                }
+
+                @if (isExternalCertificate && !isExternalCaChain) {
+                  <div class="certificate-source">
+                    <span id="external-certificate-source-label" class="certificate-source-label">
+                      Where does the key come from?
+                    </span>
+                    <mat-radio-group
+                      formControlName="externalCertificateSource"
+                      aria-labelledby="external-certificate-source-label"
+                      fxLayout="column"
+                      fxLayoutGap="8px"
+                    >
+                      <mat-radio-button value="import">
+                        Import a key and the certificate chain issued for it
+                      </mat-radio-button>
+                      <mat-radio-button value="csr">
+                        Create the key in EUDIPLO and request its certificate with a CSR
+                      </mat-radio-button>
+                    </mat-radio-group>
+                  </div>
+                }
+
+                @if (importsExternalKey) {
+                  <mat-form-field appearance="outline">
+                    <mat-label for="external-private-key">
+                      {{
+                        isExternalCaChain
+                          ? 'External CA Private Key (JWK or PKCS#8 PEM)'
+                          : 'External Private Key (JWK or PKCS#8 PEM)'
+                      }}
+                    </mat-label>
+                    <textarea
+                      matInput
+                      id="external-private-key"
+                      aria-label="External private key in JWK or PKCS#8 PEM format"
+                      formControlName="externalPrivateKey"
+                      rows="6"
+                      placeholder="Paste an EC private JWK or -----BEGIN PRIVATE KEY----- PEM"
+                    ></textarea>
+                    <mat-hint>
+                      Must match the public key in the supplied
+                      {{ isExternalCaChain ? 'CA certificate.' : 'leaf certificate.' }}
+                    </mat-hint>
+                    <mat-error>Paste the private key or load a key file</mat-error>
+                    <input
+                      #privateKeyFile
+                      id="external-private-key-file"
+                      aria-label="Upload external private key JWK or PEM file"
+                      type="file"
+                      accept=".json,.jwk,.pem,.key,application/json,application/x-pem-file"
+                      hidden
+                      (change)="onPrivateKeyFileSelected($event)"
+                    />
+                  </mat-form-field>
+                  <button mat-button type="button" (click)="privateKeyFile.click()">
+                    <mat-icon>upload_file</mat-icon>
+                    Load Key File
+                  </button>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label for="external-certificate-chain">
+                      {{
+                        isExternalCaChain
+                          ? 'External CA Certificate Chain (PEM)'
+                          : 'Certificate Chain (PEM)'
+                      }}
+                    </mat-label>
+                    <textarea
+                      matInput
+                      id="external-certificate-chain"
+                      aria-label="External certificate chain"
+                      formControlName="externalCertificate"
+                      rows="8"
+                      placeholder="-----BEGIN CERTIFICATE-----"
+                    ></textarea>
+                    <mat-hint>
+                      {{
+                        isExternalCaChain
+                          ? 'The last certificate must be the CA certificate matching the supplied key.'
+                          : 'Paste the leaf certificate first, followed by any issuing certificates.'
+                      }}
+                      Or load certificate files.
+                    </mat-hint>
+                    <mat-error>Paste the certificate chain or load certificate files</mat-error>
+                    <input
+                      #certificateFiles
+                      id="external-certificate-chain-file"
+                      aria-label="Upload certificate chain files"
+                      type="file"
+                      accept=".pem,.crt,.cer,.der,application/x-pem-file,application/pkix-cert"
+                      multiple
+                      hidden
+                      (change)="onCertificateFilesSelected($event)"
+                    />
+                  </mat-form-field>
+                  <button mat-button type="button" (click)="certificateFiles.click()">
+                    <mat-icon>upload_file</mat-icon>
+                    Load Certificate Files
+                  </button>
+                }
+              </mat-card-content>
+            </mat-card>
+
+            <!-- Signing key settings (only for internal and external CA chains) -->
+            @if (isInternalChain) {
+              <mat-card>
+                <mat-card-header>
+                  <mat-card-title>
+                    <mat-icon>{{ rotationEnabled ? 'autorenew' : 'key' }}</mat-icon>
+                    Rotation Policy
+                  </mat-card-title>
+                </mat-card-header>
+                <mat-card-content fxLayout="column" fxLayoutGap="16px">
+                  <div>
+                    <mat-slide-toggle
+                      formControlName="rotationEnabled"
+                      color="primary"
+                      aria-describedby="rotation-hint"
+                    >
+                      Enable automatic key rotation
+                    </mat-slide-toggle>
+                    <p id="rotation-hint" class="rotation-hint">
+                      {{
+                        rotationEnabled
+                          ? 'EUDIPLO creates a new signing key and certificate on each interval.'
+                          : 'The signing certificate expires after the validity below and is not renewed. To renew it, turn rotation on by editing the key chain.'
+                      }}
+                    </p>
+                  </div>
+                  <div fxLayout="row" fxLayoutGap="16px" fxLayout.lt-md="column">
+                    @if (rotationEnabled) {
+                      <mat-form-field appearance="outline" fxFlex>
+                        <mat-label>Rotation Interval (days)</mat-label>
+                        <input
+                          matInput
+                          type="number"
+                          formControlName="rotationIntervalDays"
+                          min="1"
+                          placeholder="30"
+                          title="Rotation interval in days"
+                        />
+                        <mat-hint>How often the key will be rotated</mat-hint>
+                        <mat-error>Enter 1 to 3650 days</mat-error>
+                      </mat-form-field>
+                    }
+
+                    <mat-form-field appearance="outline" fxFlex>
+                      <mat-label>Certificate Validity (days)</mat-label>
+                      <input
+                        matInput
+                        type="number"
+                        formControlName="certValidityDays"
+                        min="1"
+                        placeholder="365"
+                        title="Certificate validity in days"
+                      />
+                      <mat-hint>Validity period for generated signing certificates</mat-hint>
+                      <mat-error>Enter 1 to 3650 days</mat-error>
+                    </mat-form-field>
+                  </div>
+                </mat-card-content>
+              </mat-card>
+            }
+
+            <!-- Summary -->
+            <mat-card class="summary-card">
+              <mat-card-header>
+                <mat-card-title>
+                  <mat-icon>summarize</mat-icon>
+                  Summary
+                </mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div fxLayout="column" fxLayoutGap="8px">
+                  @for (item of getSummary(); track item.label) {
+                    <div fxLayout="row" fxLayoutGap="8px">
+                      <strong>{{ item.label }}:</strong>
+                      <span>{{ item.value }}</span>
+                    </div>
+                  }
+                </div>
+
+                @if (isExternalCaChain) {
+                  <div class="next-steps-hint">
+                    <mat-icon>{{ rotationEnabled ? 'autorenew' : 'info' }}</mat-icon>
+                    <span>
+                      EUDIPLO will use the external CA to issue the active signing certificate{{
+                        rotationEnabled
+                          ? ' and rotate that signing key on the configured interval'
+                          : ''
+                      }}.
+                    </span>
+                  </div>
+                } @else if (selectedUsage === 'attestation' && isInternalChain) {
+                  <div class="next-steps-hint">
+                    <mat-icon>info</mat-icon>
+                    <span>
+                      <strong>Next step:</strong> Create a status list key for this credential type
+                      to manage credential revocation.
+                    </span>
+                  </div>
+                }
+                @if (showKeyChainTypeStep && !isInternalChain && !isExternalCertificate) {
+                  <div class="next-steps-hint">
+                    <mat-icon>info</mat-icon>
+                    <span>
+                      This key gets a self-signed certificate. To use a certificate signed by your
+                      CA, check the external CA option above: import the key with its certificate,
+                      or request the certificate with a CSR.
+                    </span>
+                  </div>
+                }
+                @if (requestsCertificate) {
+                  <div class="next-steps-hint">
+                    <mat-icon>info</mat-icon>
+                    <span>
+                      <strong>Next step:</strong> On the key's page, create a CSR, send it to your
+                      CA and store the certificate it issues. Until then, the key has a self-signed
+                      certificate.
+                    </span>
+                  </div>
+                }
+                @if (selectedUsage === 'statusList') {
+                  <div class="next-steps-hint success">
+                    <mat-icon>check_circle</mat-icon>
+                    <span>
+                      <strong>Complete!</strong> This is the final key in your credential type
+                      setup.
+                    </span>
+                  </div>
+                }
+                @if (selectedUsage === 'trustList') {
+                  <div class="next-steps-hint">
+                    <mat-icon>info</mat-icon>
+                    <span>
+                      <strong>Next step:</strong> Configure your trust list and add trusted root
+                      keys.
+                    </span>
+                  </div>
+                }
+                @if (selectedUsage === 'federation') {
+                  <div class="next-steps-hint">
+                    <mat-icon>info</mat-icon>
+                    <span>
+                      <strong>Next step:</strong> Set the federation entity ID and trust anchors in
+                      the issuance configuration, and give your trust anchor this key's public key.
+                    </span>
+                  </div>
+                }
+                @if (selectedUsage === 'authorizationServer') {
+                  <div class="next-steps-hint">
+                    <mat-icon>info</mat-icon>
+                    <span>
+                      <strong>Next step:</strong> Choose it as the Authorization Server Key of an
+                      authorization server in the issuance configuration. Servers without a chosen
+                      key keep using the tenant's oldest authorization server key, which is this one
+                      only if the tenant had none.
+                    </span>
+                  </div>
+                }
+                @if (selectedUsage === 'access' && selectedAccessSource === 'registrar') {
+                  <div class="next-steps-hint">
+                    <mat-icon>info</mat-icon>
+                    <span>
+                      The key will be created and automatically enrolled with the registrar to
+                      obtain a trusted certificate. If the enrollment is refused, for example
+                      because of wrong registrar credentials, no key is kept.
+                    </span>
+                  </div>
+                }
+              </mat-card-content>
+            </mat-card>
+
+            @if (enrollmentError) {
+              <div #enrollmentErrorBox class="enrollment-error" role="alert" tabindex="-1">
+                <mat-icon>error</mat-icon>
+                <span>{{ enrollmentError.message }}</span>
+                @if (enrollmentError.offerRegistrar) {
+                  <a mat-stroked-button [routerLink]="['/registrar']">Go to Registrar</a>
+                }
+                @if (enrollmentError.keptKeyId) {
+                  <a mat-stroked-button [routerLink]="['/keys', enrollmentError.keptKeyId]">
+                    Open Key
+                  </a>
+                }
+                @if (enrollmentError.offerKeys) {
+                  <a mat-stroked-button [routerLink]="['/keys']">Go to Keys</a>
+                }
+              </div>
+            }
+
+            <div fxLayout="row" fxLayoutAlign="space-between" class="step-actions">
+              <button mat-button type="button" matStepperPrevious [disabled]="isSubmitting">
+                <mat-icon>arrow_back</mat-icon>
+                Back
+              </button>
+              <button
+                #createButton
+                mat-flat-button
+                type="button"
+                color="primary"
+                [disabled]="isSubmitting"
+                disabledInteractive
+                [matTooltip]="createTooltip"
                 (click)="createKey()"
               >
-                <mat-icon>vpn_key</mat-icon>
-                @if (selectedUsage === 'access' && selectedAccessSource === 'registrar') {
-                  <ng-container>Create & Enroll</ng-container>
-                } @else if (importsExternalKey) {
-                  <ng-container>
-                    {{
-                      isExternalCaChain ? 'Import CA & Create Chain' : 'Import Key & Certificate'
-                    }}
-                  </ng-container>
+                @if (isSubmitting) {
+                  <mat-icon class="spinning">sync</mat-icon>
+                  @if (selectedUsage === 'access' && selectedAccessSource === 'registrar') {
+                    <ng-container>Enrolling...</ng-container>
+                  } @else if (importsExternalKey) {
+                    <ng-container>Importing...</ng-container>
+                  } @else {
+                    <ng-container>Creating...</ng-container>
+                  }
                 } @else {
-                  <ng-container>Create Key Chain</ng-container>
+                  <mat-icon>vpn_key</mat-icon>
+                  @if (selectedUsage === 'access' && selectedAccessSource === 'registrar') {
+                    <ng-container>Create & Enroll</ng-container>
+                  } @else if (importsExternalKey) {
+                    <ng-container>
+                      {{
+                        isExternalCaChain ? 'Import CA & Create Chain' : 'Import Key & Certificate'
+                      }}
+                    </ng-container>
+                  } @else {
+                    <ng-container>Create Key Chain</ng-container>
+                  }
                 }
               </button>
-            }
-          </div>
-        </form>
-      </mat-step>
-    }
-  </mat-stepper>
+            </div>
+          </form>
+        </mat-step>
+      }
+    </mat-stepper>
+  }
 </div>

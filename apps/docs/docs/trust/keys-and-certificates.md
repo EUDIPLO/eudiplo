@@ -126,7 +126,7 @@ An authorization server uses, in this order:
 A named key chain that does not exist or has another usage type is never replaced by another one:
 
 - Saving an issuance configuration whose `token.signingKeyId` names one answers `400`.
-- A configuration bundle or config folder reports `MISSING_RESOURCE_REFERENCE` for a missing key chain and `KEY_CHAIN_USAGE_MISMATCH` for another usage type, for `token.signingKeyId` and for the `authorizationServer` entry of the key chain defaults. A `token.signingKeyId` of another usage type that the stored issuance configuration already has gets only a warning, so an unchanged folder still imports; a missing key chain is still reported.
+- A configuration bundle or config folder reports `MISSING_RESOURCE_REFERENCE` for a missing key chain and `KEY_CHAIN_USAGE_MISMATCH` for another usage type, for `token.signingKeyId` and for the `authorizationServer` entry of the key chain defaults. A `token.signingKeyId` of another usage type that the stored issuance configuration already has gets only a warning, so an unchanged folder still imports; a missing key chain is still reported. A key chain file of the same bundle or folder sets the usage type only if the import writes it ([plan actions](../reference/config-bundle-format.md#import-modes-and-plan-actions)).
 - A configuration stored before 10.0, which can only name another usage type, fails the token requests of that authorization server with `500` while the backend log names the key chain. Remove the value or choose an authorization server key chain.
 
 If a key chain with ID `authorization-server` and another usage type exists, EUDIPLO cannot create its key chain; token requests then fail and the log says so until you create an authorization server key chain.

@@ -1,13 +1,19 @@
 import { Injectable } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { PinoLogger } from "nestjs-pino";
+import { getRevocationServices } from "../../../trust/domain/status-list-signers.js";
 import { describeDiscardedTrustLists } from "../../../trust/domain/trust-list-freshness.js";
 import { StatusListVerifierService } from "../../../trust/status-list-verifier.service.js";
 import {
     BuiltTrustStore,
     TrustStoreService,
 } from "../../../trust/trust-store.service.js";
-import { TrustedEntity, TrustListSource } from "../../../trust/types.js";
+import {
+    credentialIssuerServiceTypes,
+    isCredentialIssuerServiceType,
+    TrustedEntity,
+    TrustListSource,
+} from "../../../trust/types.js";
 import {
     MatchedTrustedEntity,
     ServiceTypeFilter,
@@ -51,10 +57,18 @@ export interface ChainValidationPolicy {
     requireX5c?: boolean;
     /** How to match pinned certificates: "leaf" or "pathEnd" */
     pinnedCertMode?: "leaf" | "pathEnd";
-    /** Service type filter for matching issuance certificates (default: "/Issuance") */
-    serviceTypeFilter?: ServiceTypeFilter;
     /** Whether to verify status list (revocation) */
     verifyStatusList?: boolean;
+}
+
+/**
+ * A trust anchor entry of the mdoc library: issuance certificates and the
+ * certificates the status lists of credentials issued under them must be
+ * signed under.
+ */
+export interface MdocTrustedCertificates {
+    issuance: Uint8Array[];
+    status: Uint8Array[];
 }
 
 /**
@@ -98,7 +112,10 @@ export class CredentialChainValidationService {
     }
 
     /**
-     * Validate a certificate chain against the trust store.
+     * Validate a certificate chain against the trust store. The chain must
+     * match a service of {@link credentialIssuerServiceTypes}, compared
+     * exactly: a PID, Pub-EAA or EAA issuance service, never, for example,
+     * the `WalletSolution/Issuance` service of the same entity.
      *
      * @param x5c The x5c chain from the credential (base64 DER encoded)
      * @param trustListSource The trust list source configuration
@@ -110,25 +127,29 @@ export class CredentialChainValidationService {
         trustListSource: TrustListSource | undefined,
         policy: ChainValidationPolicy = {},
     ): Promise<ChainValidationResult> {
-        return this.validateChainPreferring(x5c, trustListSource, policy, []);
+        return this.validateChainPreferring(
+            x5c,
+            trustListSource,
+            policy,
+            credentialIssuerServiceTypes,
+            [],
+        );
     }
 
     /**
-     * {@link validateChain}, trying `preferredAnchors` as path anchors before
-     * all other trust-list certificates. Only the status list check uses it,
-     * with the services of the entity the status list must belong to.
+     * {@link validateChain} against the services of `serviceTypeFilter`,
+     * trying `preferredAnchors` as path anchors before all other trust-list
+     * certificates. The status list check uses it with the status list
+     * signers of the entity the status list must belong to.
      */
     private async validateChainPreferring(
         x5c: string[],
         trustListSource: TrustListSource | undefined,
         policy: ChainValidationPolicy,
+        serviceTypeFilter: ServiceTypeFilter,
         preferredAnchors: Array<{ certValue: string }>,
     ): Promise<ChainValidationResult> {
-        const {
-            requireX5c = false,
-            pinnedCertMode = "leaf",
-            serviceTypeFilter = "/Issuance",
-        } = policy;
+        const { requireX5c = false, pinnedCertMode = "leaf" } = policy;
 
         // 1) Check x5c requirement
         if (!x5c || x5c.length === 0) {
@@ -247,6 +268,7 @@ export class CredentialChainValidationService {
                 store,
                 trustListSource,
                 pinnedCertMode,
+                serviceTypeFilter,
             );
 
             return {
@@ -265,9 +287,10 @@ export class CredentialChainValidationService {
     }
 
     /**
-     * Verify a status list JWT signature against the matched entity's
-     * revocation certificate, or its matched issuance certificate if the
-     * entity lists no revocation service.
+     * Verify a status list JWT signature against the revocation certificates
+     * paired with the matched issuance service, or the matched issuance
+     * certificate if the entity lists no such revocation service
+     * (`getStatusListSigners` in `trust/domain/status-list-signers.ts`).
      *
      * @param statusListJwt The status list JWT
      * @param matchedEntity The matched trusted entity (may be null)
@@ -294,30 +317,24 @@ export class CredentialChainValidationService {
         }
 
         // The status list must be signed under a revocation certificate of
-        // the entity that issued the credential, or, if the entity lists no
-        // revocation service, under the certificate the credential matched.
-        // Any other signer could serve a list in which a revoked credential
-        // is valid. Entities are told apart by certificate, not by entityId,
-        // which is an optional and not necessarily unique name.
+        // the entity that issued the credential, of the type paired with the
+        // matched issuance service (PID/Revocation for PID/Issuance), or, if
+        // the entity lists none, under the certificate the credential
+        // matched. Any other signer could serve a list in which a revoked
+        // credential is valid.
         const entityId = matchedEntity.entity.entityId ?? "unknown";
-        const revocationServices = matchedEntity.entity.services.filter((s) =>
-            s.serviceTypeIdentifier.endsWith("/Revocation"),
-        );
-        const serviceTypeFilter =
-            revocationServices.length > 0 ? "/Revocation" : "/Issuance";
-        const signerServices =
-            revocationServices.length > 0
-                ? revocationServices
-                : matchedEntity.entity.services.filter((s) =>
-                      s.serviceTypeIdentifier.endsWith("/Issuance"),
-                  );
-        // The status list must chain to this entity's certificates; try
-        // them before same-subject anchors of other entities.
+        const signers = this.x509v.statusListSigners(matchedEntity);
+        const signerTypes = [
+            ...new Set(signers.map((s) => s.serviceTypeIdentifier)),
+        ];
+        // The status list must chain to these certificates; try them before
+        // same-subject anchors of other entities.
         const result = await this.validateChainPreferring(
             x5c,
             trustListSource,
-            { ...policy, serviceTypeFilter },
-            signerServices.map((s) => ({ certValue: s.certValue })),
+            policy,
+            signerTypes,
+            signers.map((s) => ({ certValue: s.certValue })),
         );
         if (!result.verified || !result.path) {
             this.logger.warn(
@@ -326,39 +343,22 @@ export class CredentialChainValidationService {
             return false;
         }
 
+        // Same rule as for credentials: a CA certificate must be the path
+        // end, a pinned one the leaf or path end per pinnedCertMode.
+        if (
+            await this.x509v.matchesStatusListSigner(
+                result.path,
+                matchedEntity,
+                policy.pinnedCertMode ?? "leaf",
+            )
+        ) {
+            return true;
+        }
+
         const leafThumb = await this.getThumbprint(result.path[0]);
         const endThumb = await this.getThumbprint(result.path.at(-1)!);
-
-        if (revocationServices.length === 0) {
-            // CA or path end match: the path ends at the issuance
-            // certificate. Leaf pin: the leaf is that certificate.
-            const signerThumb =
-                matchedEntity.matchMode === "leaf-pinned"
-                    ? leafThumb
-                    : endThumb;
-            if (signerThumb !== matchedEntity.issuanceThumbprint) {
-                this.logger.warn(
-                    `Status list is not signed under the issuance certificate of TrustedEntity ${entityId}, which has no revocation certificate. Expected: ${matchedEntity.issuanceThumbprint}, status list: ${signerThumb}`,
-                );
-                return false;
-            }
-            return true;
-        }
-
-        // Same rule as for credentials: a CA revocation certificate must be
-        // the path end, a pinned one the leaf or path end per pinnedCertMode.
-        const revocationMatch = await this.x509v.pathMatchesTrustedEntities(
-            result.path,
-            [matchedEntity.entity],
-            policy.pinnedCertMode ?? "leaf",
-            "/Revocation",
-        );
-        if (revocationMatch) {
-            return true;
-        }
-
         this.logger.warn(
-            `Status list is not signed under a revocation certificate of TrustedEntity ${entityId}. Status list leaf: ${leafThumb}, path end: ${endThumb}`,
+            `Status list is not signed under a ${signerTypes.join(" or ")} certificate of TrustedEntity ${entityId} matched with ${matchedEntity.issuanceServiceType}. Status list leaf: ${leafThumb}, path end: ${endThumb}`,
         );
         return false;
     }
@@ -372,79 +372,96 @@ export class CredentialChainValidationService {
     }
 
     /**
-     * Get trusted certificate buffers for mDOC verification.
-     * Returns certificates as Uint8Array[] for the mdoc library.
+     * Trust anchors for the mdoc library, one per credential issuer service
+     * ({@link credentialIssuerServiceTypes}) of the trust list: its
+     * certificate as `issuance`, and the certificates its status lists must
+     * be signed under (`getStatusListSigners`) as `status`. The mdoc
+     * library checks a status list against the `status` certificates of the
+     * entry whose `issuance` certificate the credential chain ended at, so a
+     * status list signer of another service or entity is not accepted.
      */
-    async getTrustedCertificateBuffers(
+    async getTrustedCertificateEntries(
         trustListSource?: TrustListSource,
-    ): Promise<Uint8Array[]> {
+    ): Promise<MdocTrustedCertificates[]> {
         const store = await this.getTrustStoreForAugmentation(trustListSource);
         if (!store) {
             return [];
         }
 
-        const trustedCertificates: Uint8Array[] = [];
-
-        for (const entity of store.entities) {
-            const issuanceServices = entity.services.filter((s) =>
-                s.serviceTypeIdentifier.endsWith("/Issuance"),
-            );
-
-            for (const svc of issuanceServices) {
-                try {
-                    const cert = new x509.X509Certificate(svc.certValue as any);
-                    trustedCertificates.push(new Uint8Array(cert.rawData));
-                } catch (e: any) {
-                    this.logger.warn(
-                        `Failed to parse certificate from entity ${entity.entityId}: ${e?.message ?? e}`,
-                    );
-                }
-            }
-        }
-
-        this.logger.debug(
-            `Loaded ${trustedCertificates.length} trusted certificate(s) for verification`,
+        const entries = store.entities.flatMap((entity) =>
+            this.mdocEntriesOf(entity),
         );
 
-        return trustedCertificates;
+        this.logger.debug(
+            `Loaded ${entries.length} trusted issuance certificate(s) for verification`,
+        );
+
+        return entries;
     }
 
     /**
-     * Get trusted revocation certificate buffers for mDOC status validation.
-     * Returns certificates as Uint8Array[] for the mdoc library.
+     * The mdoc trust anchor entries of one entity, see
+     * {@link getTrustedCertificateEntries}. A list may repeat certificates
+     * and services: each certificate is parsed once, and the entries of a
+     * service type share one status array, since their paired revocation
+     * services are the same. Otherwise the work grows with issuance times
+     * revocation services.
      */
-    async getTrustedStatusCertificateBuffers(
-        trustListSource?: TrustListSource,
-    ): Promise<Uint8Array[]> {
-        const store = await this.getTrustStoreForAugmentation(trustListSource);
-        if (!store) {
-            return [];
-        }
-
-        const trustedCertificates: Uint8Array[] = [];
-
-        for (const entity of store.entities) {
-            const revocationServices = entity.services.filter((s) =>
-                s.serviceTypeIdentifier.endsWith("/Revocation"),
-            );
-
-            for (const svc of revocationServices) {
-                try {
-                    const cert = new x509.X509Certificate(svc.certValue as any);
-                    trustedCertificates.push(new Uint8Array(cert.rawData));
-                } catch (e: any) {
-                    this.logger.warn(
-                        `Failed to parse revocation certificate from entity ${entity.entityId}: ${e?.message ?? e}`,
-                    );
-                }
+    private mdocEntriesOf(entity: TrustedEntity): MdocTrustedCertificates[] {
+        const parsed = new Map<string, Uint8Array | undefined>();
+        const parse = (certValue: string) => {
+            if (!parsed.has(certValue)) {
+                parsed.set(certValue, this.parseCertificate(certValue, entity));
             }
+            return parsed.get(certValue);
+        };
+        // Per service type: the paired revocation certificates, or null
+        // when the entity lists none (see getStatusListSigners).
+        const revocationByType = new Map<string, Uint8Array[] | null>();
+        const revocationOf = (type: string) => {
+            if (!revocationByType.has(type)) {
+                const services = getRevocationServices(entity, type);
+                revocationByType.set(
+                    type,
+                    services.length > 0
+                        ? services
+                              .map((signer) => parse(signer.certValue))
+                              .filter((cert) => cert !== undefined)
+                        : null,
+                );
+            }
+            return revocationByType.get(type) ?? null;
+        };
+
+        const entries: MdocTrustedCertificates[] = [];
+        for (const svc of entity.services) {
+            const type = svc.serviceTypeIdentifier;
+            if (!isCredentialIssuerServiceType(type)) continue;
+            const issuance = parse(svc.certValue);
+            if (!issuance) continue;
+            // An entity without paired revocation services signs status
+            // lists under the matched certificate. Paired ones that do not
+            // parse leave no signer: the status check then fails.
+            const status = revocationOf(type) ?? [issuance];
+            entries.push({ issuance: [issuance], status });
         }
+        return entries;
+    }
 
-        this.logger.debug(
-            `Loaded ${trustedCertificates.length} trusted status certificate(s) for verification`,
-        );
-
-        return trustedCertificates;
+    /** DER bytes of a trust-list certificate, or nothing if it does not parse. */
+    private parseCertificate(
+        certValue: string,
+        entity: TrustedEntity,
+    ): Uint8Array | undefined {
+        try {
+            const cert = new x509.X509Certificate(certValue as any);
+            return new Uint8Array(cert.rawData);
+        } catch (e: any) {
+            this.logger.warn(
+                `Failed to parse certificate from entity ${entity.entityId}: ${e?.message ?? e}`,
+            );
+            return undefined;
+        }
     }
 
     /**
@@ -546,6 +563,7 @@ export class CredentialChainValidationService {
         store: BuiltTrustStore,
         trustListSource: TrustListSource | undefined,
         pinnedMode: string,
+        serviceTypeFilter: ServiceTypeFilter,
     ): Promise<string> {
         const leaf = path[0];
         const end = path.at(-1)!;
@@ -564,7 +582,7 @@ export class CredentialChainValidationService {
         const allowedThumbprints: string[] = [];
         for (const entity of store.entities) {
             for (const svc of entity.services) {
-                if (svc.serviceTypeIdentifier.endsWith("/Issuance")) {
+                if (serviceTypeFilter.includes(svc.serviceTypeIdentifier)) {
                     try {
                         const cert = new x509.X509Certificate(
                             svc.certValue as any,
@@ -601,7 +619,7 @@ export class CredentialChainValidationService {
         const summaries: string[] = [];
         for (const entity of entities.slice(0, 5)) {
             const issuanceSvcs = entity.services.filter((s) =>
-                s.serviceTypeIdentifier.endsWith("/Issuance"),
+                isCredentialIssuerServiceType(s.serviceTypeIdentifier),
             );
             summaries.push(
                 `${entity.entityId ?? "unknown"} (${issuanceSvcs.length} issuance cert(s))`,

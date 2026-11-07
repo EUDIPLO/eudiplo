@@ -74,7 +74,11 @@ export class CollectTrustedEntities {
         const discarded: DiscardedTrustList[] = [];
         let nextUpdate: string | undefined;
         for (const ref of source.lotes) {
-            const list: VerifiedTrustList = await this.lists.loadVerified(ref);
+            // One list at a time: a source's lists come from tenant
+            // configuration without a count limit, so this bounds the
+            // outbound requests and list bodies in memory per request, and
+            // the first failing list in source order decides the error.
+            const list: VerifiedTrustList = await this.lists.loadVerified(ref); // NOSONAR: sequential on purpose, see above
             if (!isTrustListCurrent(list.nextUpdate, this.now())) {
                 discarded.push({ list: ref.url, nextUpdate: list.nextUpdate });
                 continue;

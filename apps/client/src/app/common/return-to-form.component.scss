@@ -1,0 +1,25 @@
+.return-to-form mat-card-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.return-to-form mat-icon {
+  color: var(--mat-sys-primary);
+  flex-shrink: 0;
+}
+
+.text {
+  flex: 1 1 240px;
+  overflow-wrap: anywhere;
+}
+
+.text h3 {
+  margin: 0;
+}
+
+.text p {
+  margin: 4px 0 0 0;
+  color: var(--mat-sys-on-surface-variant);
+}

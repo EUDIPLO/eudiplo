@@ -65,3 +65,25 @@ describe('CredentialConfigListComponent schema badge', () => {
     expect(badge?.tagName).toBe('SPAN');
   });
 });
+
+describe('CredentialConfigListComponent description', () => {
+  it('falls back to the configuration description when the display has none', () => {
+    TestBed.configureTestingModule({
+      imports: [CredentialConfigListComponent],
+      providers: [
+        provideRouter([]),
+        { provide: CredentialConfigService, useValue: { loadConfigurations: async () => [] } },
+        { provide: JwtService, useValue: { hasRole: () => true } },
+      ],
+    });
+    const component = TestBed.createComponent(CredentialConfigListComponent).componentInstance;
+    const config = (display: object[], description?: string) =>
+      ({ id: 'pid', description, config: { format: 'dc+sd-jwt', display } }) as CredentialConfig;
+
+    expect(component.getDescription(config([{ name: 'PID', description: 'Wallet' }], 'Own'))).toBe(
+      'Wallet'
+    );
+    expect(component.getDescription(config([{ name: 'PID' }], 'Own'))).toBe('Own');
+    expect(component.getDescription(config([{ name: 'PID' }]))).toBe('No description available');
+  });
+});

@@ -1,62 +1,83 @@
 <div fxLayout="column" fxFlex fxLayoutGap="24px">
   <app-role-lock-notice subject="user" [roles]="unmanageableRoles" />
   <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2>{{ loaded ? 'Edit user' : 'Create user' }}</h2>
+    <h2 #pageHeading tabindex="-1">{{ loaded ? 'Edit user' : 'Create user' }}</h2>
     <button
       matIconButton
       [routerLink]="['../']"
-      matTooltip="Back to Users List"
-      aria-label="Back to Users List"
+      [matTooltip]="loaded ? 'Back to User Details' : 'Back to Users List'"
+      [attr.aria-label]="loaded ? 'Back to User Details' : 'Back to Users List'"
     >
       <mat-icon>arrow_back</mat-icon>
     </button>
   </div>
 
-  <form [formGroup]="userForm" (ngSubmit)="onSubmit()">
-    <mat-card>
-      <mat-card-content fxLayout="column" fxLayoutGap="16px">
-        <mat-form-field appearance="outline">
-          <mat-label>Username</mat-label>
-          <input matInput formControlName="username" placeholder="Enter unique username" required />
-        </mat-form-field>
+  @if (loadError) {
+    <app-load-error
+      [message]="loadError"
+      hint="The user can only be edited after it has been loaded."
+      (retry)="retryLoad()"
+    >
+      <a mat-button [routerLink]="['../..']">Back to the list</a>
+    </app-load-error>
+  } @else if (loading) {
+    <p><output>Loading user…</output></p>
+  } @else {
+    <form #formElement [formGroup]="userForm" (ngSubmit)="onSubmit()">
+      <mat-card>
+        <mat-card-content fxLayout="column" fxLayoutGap="16px">
+          <mat-form-field appearance="outline">
+            <mat-label>Username</mat-label>
+            <input
+              matInput
+              formControlName="username"
+              placeholder="Enter unique username"
+              required
+            />
+            <mat-error>Username is required</mat-error>
+          </mat-form-field>
 
-        <mat-checkbox formControlName="enabled">User enabled</mat-checkbox>
+          <mat-checkbox formControlName="enabled">User enabled</mat-checkbox>
 
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>Roles</mat-label>
-          <mat-select formControlName="roles" multiple>
-            @for (option of roleOptions; track option.role) {
-              <mat-option [value]="option.role" [disabled]="option.locked">
-                {{ option.role }}
-              </mat-option>
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>Roles</mat-label>
+            <mat-select formControlName="roles" multiple>
+              @for (option of roleOptions; track option.role) {
+                <mat-option [value]="option.role" [disabled]="option.locked">
+                  {{ option.role }}
+                </mat-option>
+              }
+            </mat-select>
+            <mat-hint>
+              {{ grantHint }}
+              <a href="https://docs.eudiplo.dev/reference/roles" target="_blank" rel="noopener"
+                >Learn about roles</a
+              >
+            </mat-hint>
+            <mat-error>Select at least one role</mat-error>
+          </mat-form-field>
+        </mat-card-content>
+
+        <mat-card-actions fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="8px">
+          <button mat-button type="button" (click)="onCancel()" [disabled]="isSubmitting">
+            Cancel
+          </button>
+          <button
+            mat-flat-button
+            color="primary"
+            type="submit"
+            [disabled]="isSubmitting || unmanageableRoles.length > 0"
+            disabledInteractive
+            [matTooltip]="saveTooltip"
+          >
+            @if (loaded) {
+              {{ isSubmitting ? 'Updating...' : 'Update User' }}
+            } @else {
+              {{ isSubmitting ? 'Creating...' : 'Create User' }}
             }
-          </mat-select>
-          <mat-hint>
-            {{ grantHint }}
-            <a href="https://docs.eudiplo.dev/reference/roles" target="_blank" rel="noopener"
-              >Learn about roles</a
-            >
-          </mat-hint>
-        </mat-form-field>
-      </mat-card-content>
-
-      <mat-card-actions fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="8px">
-        <button mat-button type="button" (click)="onCancel()" [disabled]="isSubmitting">
-          Cancel
-        </button>
-        <button
-          mat-flat-button
-          color="primary"
-          type="submit"
-          [disabled]="userForm.invalid || isSubmitting || unmanageableRoles.length > 0"
-        >
-          @if (loaded) {
-            {{ isSubmitting ? 'Updating...' : 'Update User' }}
-          } @else {
-            {{ isSubmitting ? 'Creating...' : 'Create User' }}
-          }
-        </button>
-      </mat-card-actions>
-    </mat-card>
-  </form>
+          </button>
+        </mat-card-actions>
+      </mat-card>
+    </form>
+  }
 </div>

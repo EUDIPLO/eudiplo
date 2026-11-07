@@ -1,4 +1,11 @@
 import {
+    DISPLAY_COLOR_PATTERN,
+    DISPLAY_DESCRIPTION_DESCRIPTION,
+    DISPLAY_LOCALE_DESCRIPTION,
+    DISPLAY_NAME_DESCRIPTION,
+    displayColorDescription,
+} from "@eudiplo/config-format/display-entries.js";
+import {
     ApiExtraModels,
     ApiHideProperty,
     ApiProperty,
@@ -30,15 +37,44 @@ import {
 } from "./policies.dto.js";
 
 export class DisplayImage {
+    @ApiProperty({ description: "Image URI." })
     uri!: string;
 }
+
+/**
+ * How wallets show the credential in one language, published as
+ * `credential_metadata.display` in the issuer metadata (OID4VCI 1.0 Section
+ * 12.2.4).
+ */
 export class Display {
+    @ApiProperty({ description: DISPLAY_NAME_DESCRIPTION })
     name!: string;
-    description!: string;
+
+    @ApiPropertyOptional({ description: DISPLAY_DESCRIPTION_DESCRIPTION })
+    description?: string;
+
+    @ApiProperty({ description: DISPLAY_LOCALE_DESCRIPTION })
     locale!: string;
+
+    @ApiPropertyOptional({
+        description: displayColorDescription("background"),
+        pattern: DISPLAY_COLOR_PATTERN,
+    })
     background_color?: string;
+
+    @ApiPropertyOptional({
+        description: displayColorDescription("text"),
+        pattern: DISPLAY_COLOR_PATTERN,
+    })
     text_color?: string;
+
+    @ApiPropertyOptional({
+        type: () => DisplayImage,
+        description: "Background image.",
+    })
     background_image?: DisplayImage;
+
+    @ApiPropertyOptional({ type: () => DisplayImage, description: "Logo." })
     logo?: DisplayImage;
 }
 
@@ -71,6 +107,11 @@ export type CredentialProofType =
 
 export class IssuerMetadataCredentialConfig {
     format!: CredentialFormat;
+
+    @ApiProperty({
+        type: () => [Display],
+        description: "Display metadata shown by wallets, one entry per locale.",
+    })
     display!: Display[];
     scope?: string;
 
@@ -135,6 +176,7 @@ export class CredentialConfig {
     @ManyToOne(() => TenantEntity, { cascade: true, onDelete: "CASCADE" })
     tenant!: TenantEntity;
 
+    @ApiProperty({ type: () => IssuerMetadataCredentialConfig })
     @Column("json")
     config!: IssuerMetadataCredentialConfig;
 

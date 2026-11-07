@@ -14,6 +14,7 @@ import {
     serializeDocument,
 } from "./config-format.js";
 import { validateConfigDocument } from "./config-validator.js";
+import { DISPLAY_COLOR_MESSAGE } from "./display-entries.js";
 
 const file = {
     $schema: schemaUrl("Tenant", 1),
@@ -374,7 +375,7 @@ describe("portable schema identity and migrations", () => {
         expect(bareFileVersion(kind, spec)).toBe(version);
     });
 
-    it("upgrades a v1 credential configuration to v3 unchanged", () => {
+    it("upgrades a v1 credential configuration to v4 unchanged", () => {
         const v1 = {
             $schema: schemaUrl("CredentialConfig", 1),
             metadata: { generation: 2 },
@@ -389,8 +390,9 @@ describe("portable schema identity and migrations", () => {
         expect(result.migrations).toEqual([
             "credential-config-v2-x509-trusted-authority",
             "credential-config-v3-claim-constraint-keywords",
+            "credential-config-v4-display-colors-locales",
         ]);
-        expect(result.document.$schema).toBe(schemaUrl("CredentialConfig", 3));
+        expect(result.document.$schema).toBe(schemaUrl("CredentialConfig", 4));
         expect(result.document.spec).toEqual(v1.spec);
         expect(result.document.metadata).toEqual({ generation: 2 });
         // Repeating the upgrade on the result is a no-op.
@@ -443,9 +445,10 @@ describe("portable schema identity and migrations", () => {
 
             expect(result.migrations).toEqual([
                 "credential-config-v3-claim-constraint-keywords",
+                "credential-config-v4-display-colors-locales",
             ]);
             expect(result.document.$schema).toBe(
-                schemaUrl("CredentialConfig", 3),
+                schemaUrl("CredentialConfig", 4),
             );
             expect(result.document.spec.fields).toEqual([
                 {
@@ -565,6 +568,183 @@ describe("portable schema identity and migrations", () => {
 
             expect(withVersion(2)).toEqual([]);
             expect(withVersion(3)).toContain("/spec/fields/0/constraints");
+        });
+    });
+
+    describe("CredentialConfig v4 display entries", () => {
+        const v3 = (display: unknown[]) => ({
+            $schema: schemaUrl("CredentialConfig", 3),
+            spec: {
+                id: "pid",
+                config: { format: "dc+sd-jwt", display },
+                fields: [],
+            },
+        });
+
+        it("upgrades readable colors and distinct locales unchanged", () => {
+            const display = [
+                {
+                    name: "PID",
+                    locale: "en-US",
+                    background_color: "#12107C",
+                    text_color: "rgb(255, 255, 255)",
+                },
+                { name: "PID", locale: "de-DE", text_color: "hsl(0, 0%, 0%)" },
+            ];
+            const result = migrateDocument(v3(display), validateConfigDocument);
+
+            expect(result.issues).toEqual([]);
+            expect(result.migrations).toEqual([
+                "credential-config-v4-display-colors-locales",
+            ]);
+            expect(result.document.spec.config).toEqual({
+                format: "dc+sd-jwt",
+                display,
+            });
+        });
+
+        it("trims colors and removes the ones wallets cannot read with a warning", () => {
+            const result = migrateDocument(
+                v3([
+                    {
+                        name: "PID",
+                        locale: "en-US",
+                        background_color: " #fff ",
+                        text_color: "navy",
+                    },
+                ]),
+                validateConfigDocument,
+            );
+
+            expect(result.document.$schema).toBe(
+                schemaUrl("CredentialConfig", 4),
+            );
+            expect(result.document.spec.config).toEqual({
+                format: "dc+sd-jwt",
+                display: [
+                    { name: "PID", locale: "en-US", background_color: "#fff" },
+                ],
+            });
+            expect(
+                result.issues.map(({ severity, code, path }) => ({
+                    severity,
+                    code,
+                    path,
+                })),
+            ).toEqual([
+                {
+                    severity: "warning",
+                    code: "DISPLAY_COLOR_REMOVED",
+                    path: "/spec/config/display/0/text_color",
+                },
+            ]);
+            expect(validateConfigDocument(result.document)).toEqual([]);
+            // Repeating the upgrade on the result is a no-op.
+            expect(
+                migrateDocument(result.document, validateConfigDocument)
+                    .migrations,
+            ).toEqual([]);
+        });
+
+        it("repairs what it can and removes empty colors without a warning", () => {
+            const result = migrateDocument(
+                v3([
+                    {
+                        name: "PID",
+                        locale: "en-US",
+                        background_color: "",
+                        text_color: "RGB(255, 255, 255)",
+                    },
+                    { name: "PID", locale: "de-DE", background_color: " " },
+                ]),
+                validateConfigDocument,
+            );
+
+            expect(result.document.spec.config).toEqual({
+                format: "dc+sd-jwt",
+                display: [
+                    { name: "PID", locale: "en-US", text_color: "rgb(255, 255, 255)" },
+                    { name: "PID", locale: "de-DE" },
+                ],
+            });
+            expect(result.issues).toEqual([]);
+            expect(result.document.$schema).toBe(
+                schemaUrl("CredentialConfig", 4),
+            );
+        });
+
+        it("reports a removed color and a repeated locale of one entry together", () => {
+            const result = migrateDocument(
+                v3([
+                    { name: "PID", locale: "en-US" },
+                    { name: "PID", locale: "en-US", text_color: "navy" },
+                ]),
+                validateConfigDocument,
+            );
+
+            expect(result.issues.map(({ severity, code }) => ({ severity, code }))).toEqual([
+                { severity: "warning", code: "DISPLAY_COLOR_REMOVED" },
+                { severity: "required-input", code: "DISPLAY_LOCALE_DUPLICATE" },
+            ]);
+            expect(result.document.$schema).toBe(
+                schemaUrl("CredentialConfig", 3),
+            );
+        });
+
+        it("stops at a repeated locale and leaves the choice to the author", () => {
+            const result = migrateDocument(
+                v3([
+                    { name: "PID", locale: "en-US" },
+                    { name: "PID (copy)", locale: "en-us" },
+                ]),
+                validateConfigDocument,
+            );
+
+            expect(
+                result.issues.map(({ severity, code, path }) => ({
+                    severity,
+                    code,
+                    path,
+                })),
+            ).toEqual([
+                {
+                    severity: "required-input",
+                    code: "DISPLAY_LOCALE_DUPLICATE",
+                    path: "/spec/config/display/1/locale",
+                },
+            ]);
+            expect(result.document.$schema).toBe(
+                schemaUrl("CredentialConfig", 3),
+            );
+        });
+
+        it("validates colors and locales only from v4 on", () => {
+            const spec = v3([
+                { name: "PID", locale: "en-US", text_color: "navy" },
+                { name: "PID", locale: "en-US" },
+            ]).spec;
+            const withVersion = (version: number) =>
+                validateConfigDocument(
+                    normalizeDocument({
+                        $schema: schemaUrl("CredentialConfig", version),
+                        spec,
+                    }),
+                ).map(({ code, path, message }) => ({ code, path, message }));
+
+            expect(withVersion(3)).toEqual([]);
+            expect(withVersion(4)).toEqual([
+                {
+                    code: "CONFIG_SCHEMA_VALIDATION_FAILED",
+                    path: "/spec/config/display/0/text_color",
+                    message: DISPLAY_COLOR_MESSAGE,
+                },
+                {
+                    code: "DISPLAY_LOCALE_DUPLICATE",
+                    path: "/spec/config/display/1/locale",
+                    message:
+                        "Locale en-US is already used by display entry 1. OID4VCI allows one display entry per language.",
+                },
+            ]);
         });
     });
 

@@ -1,20 +1,21 @@
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import type { ErrorObject, ValidateFunction } from "ajv";
-import Ajv2020Module from "ajv/dist/2020.js";
-import addFormatsModule from "ajv-formats";
 import {
     CONFIG_FORMATS,
     CONFIG_RESOURCE_KINDS,
     CONFIG_SINGLETON_IDS,
     isConfigDocument,
     migrateDocument,
+    normalizeDocument,
     schemaUrl,
     serializeDocument,
 } from "@eudiplo/config-format/config-format.js";
 import { validateConfigDocument } from "@eudiplo/config-format/config-validator.js";
 import { resolveConfigVariables } from "@eudiplo/config-format/config-values.js";
+import type { ErrorObject, ValidateFunction } from "ajv";
+import Ajv2020Module from "ajv/dist/2020.js";
+import addFormatsModule from "ajv-formats";
 import { CLI_VALIDATED_REGISTRY } from "./registry.js";
 import type {
     DirectoryResourceDefinition,
@@ -291,6 +292,29 @@ async function validateResourceFile(
                 metadata: { generation: 1 },
                 spec,
             };
+            // Checked as the current version, so its rules beyond JSON Schema (one
+            // display entry per locale) and readable display color messages apply too.
+            if (kind === "CredentialConfig") {
+                let issues: ReturnType<typeof validateConfigDocument>;
+                try {
+                    issues = validateConfigDocument(
+                        normalizeDocument(resolved),
+                    );
+                } catch (error) {
+                    errors.push({
+                        file: relativeFile,
+                        message: (error as Error).message,
+                    });
+                    return false;
+                }
+                for (const issue of issues)
+                    errors.push({
+                        file: relativeFile,
+                        path: issue.path,
+                        message: issue.message,
+                    });
+                if (issues.length) return false;
+            }
         }
     }
     const validate = getValidator(schemaFile);

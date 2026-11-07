@@ -1,20 +1,34 @@
 import "reflect-metadata";
+import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
-import { decodeJwt, decodeProtectedHeader, importX509, jwtVerify } from "jose";
+import {
+    decodeJwt,
+    decodeProtectedHeader,
+    exportJWK,
+    generateKeyPair,
+    importX509,
+    jwtVerify,
+} from "jose";
 import request from "supertest";
 import { App } from "supertest/types";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { AppModule } from "../../src/app.module.js";
+import { Role } from "../../src/auth/roles/role.enum.js";
 import { KeyChainImportDto } from "../../src/crypto/key/dto/key-chain-import.dto.js";
 import { KeyUsageType } from "../../src/crypto/key/types/key-usage-type.js";
 import { TrustListCreateDto } from "../../src/issuer/trust-list/dto/trust-list-create.dto.js";
 import { TrustListService } from "../../src/issuer/trust-list/trustlist.service.js";
+import type {
+    ConfigBundle,
+    ConfigImportPlan,
+} from "../../src/platform/config-portability/config-resource.types.js";
 import { createAppValidationPipe } from "../../src/shared/common/zod/zod-schema.util.js";
-import { getToken, readConfig } from "../utils.js";
+import { documentsBundle } from "../shared/config-bundle.js";
+import { getTenantAdminToken, getToken, readConfig } from "../utils.js";
 import {
     createKeyChain,
     deleteKeyChain,
@@ -27,6 +41,52 @@ interface TestContext {
     configFolder: string;
     clientId: string;
     clientSecret: string;
+}
+
+/** A new P-256 private key for `POST /key-chain/import`. */
+async function newPrivateKey(): Promise<KeyChainImportDto["key"]> {
+    const { privateKey } = await generateKeyPair("ES256", {
+        extractable: true,
+    });
+    return {
+        ...(await exportJWK(privateKey)),
+        alg: "ES256",
+    } as KeyChainImportDto["key"];
+}
+
+/** Imports `key` as key chain `id`, replacing a key chain with that id. */
+function importKeyChain(
+    app: INestApplication<App>,
+    token: string,
+    body: Pick<KeyChainImportDto, "id" | "key" | "usageType">,
+) {
+    return request(app.getHttpServer())
+        .post("/key-chain/import")
+        .set("Authorization", `Bearer ${token}`)
+        .send(body satisfies KeyChainImportDto)
+        .expect(201);
+}
+
+/**
+ * Imports the attestation and status list key chains of the HAIP fixtures,
+ * which internal entities need as issuer and revocation key chains.
+ */
+async function importEntityKeyChains(
+    app: INestApplication<App>,
+    token: string,
+    configFolder: string,
+): Promise<void> {
+    for (const file of ["attestation", "status-list"]) {
+        await request(app.getHttpServer())
+            .post("/key-chain/import")
+            .set("Authorization", `Bearer ${token}`)
+            .send(
+                readConfig<KeyChainImportDto>(
+                    join(configFolder, `haip/key-chains/${file}.json`),
+                ),
+            )
+            .expect(201);
+    }
 }
 
 describe("Trust List e2e Tests", () => {
@@ -174,6 +234,10 @@ describe("Trust List e2e Tests", () => {
 
             expect(response.body.description).toBe("Updated Test Trust List");
             expect(response.body.sequenceNumber).toBe(2);
+            // The update names no keyChainId; the list stays on its key chain.
+            expect(response.body.keyChainId).toBe(
+                "570852d7-7e7f-40af-a0e3-a6ebffd75ed0",
+            );
         });
 
         test("should export a trust list in the create format", async () => {
@@ -252,6 +316,471 @@ describe("Trust List e2e Tests", () => {
                 .get(`/trust-list/${testTrustListId}`)
                 .set("Authorization", `Bearer ${ctx.authToken}`)
                 .expect(409);
+        });
+    });
+
+    describe("Updates without keyChainId", () => {
+        const listId = "kept-key-chain-trust-list";
+        const keyChainId = randomUUID();
+        const entities: TrustListCreateDto["entities"] = [
+            {
+                type: "internal",
+                issuerKeyChainId: "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                revocationKeyChainId: "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
+                info: { name: "Kept Key Chain Provider", lang: "en" },
+            },
+        ];
+        let key: KeyChainImportDto["key"];
+
+        const sequenceNumber = async () =>
+            (
+                await request(ctx.app.getHttpServer())
+                    .get(`/trust-list/${listId}`)
+                    .set("Authorization", `Bearer ${ctx.authToken}`)
+                    .expect(200)
+            ).body.sequenceNumber;
+
+        beforeAll(async () => {
+            key = await newPrivateKey();
+            // The list's own trust list key chain, besides the tenant's
+            // default one.
+            await importKeyChain(ctx.app, ctx.authToken, {
+                id: keyChainId,
+                key,
+                usageType: KeyUsageType.TrustList,
+            });
+            await request(ctx.app.getHttpServer())
+                .post("/trust-list")
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .send({ id: listId, keyChainId, entities })
+                .expect(201);
+        });
+
+        afterAll(async () => {
+            // Later tests rely on the default trust list key chain.
+            await request(ctx.app.getHttpServer())
+                .delete(`/trust-list/${listId}`)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .expect(204);
+            await deleteKeyChain(ctx.app, ctx.authToken, keyChainId);
+        });
+
+        test("keep the key chain the list is signed with", async () => {
+            const before = await sequenceNumber();
+
+            const response = await request(ctx.app.getHttpServer())
+                .put(`/trust-list/${listId}`)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .send({ entities })
+                .expect(200);
+
+            expect(response.body.keyChainId).toBe(keyChainId);
+            expect(response.body.sequenceNumber).toBe(before + 1);
+        });
+
+        test("refuse a kept key chain that an import gave another usage type", async () => {
+            const before = await sequenceNumber();
+            await importKeyChain(ctx.app, ctx.authToken, {
+                id: keyChainId,
+                key,
+                usageType: KeyUsageType.Attestation,
+            });
+
+            const refused = await request(ctx.app.getHttpServer())
+                .put(`/trust-list/${listId}`)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .send({ entities })
+                .expect(409);
+            expect(refused.body.message).toBe(
+                `Key chain ${keyChainId} of this trust list is not valid for Trust List usage (key lacks TrustList usage). Name a key chain with usage type trustList in keyChainId.`,
+            );
+            const stored = await request(ctx.app.getHttpServer())
+                .get(`/trust-list/${listId}`)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .expect(200);
+            expect(stored.body.sequenceNumber).toBe(before);
+            expect(stored.body.keyChainId).toBe(keyChainId);
+
+            // The scheduled renewal still signs with the kept key chain.
+            await ctx.app
+                .get(TrustListService)
+                .renewDueTrustLists(
+                    new Date(Date.now() + 25 * 24 * 60 * 60 * 1000),
+                );
+            const renewed = await request(ctx.app.getHttpServer())
+                .get(`/trust-list/${listId}`)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .expect(200);
+            expect(renewed.body.sequenceNumber).toBe(before + 1);
+            expect(renewed.body.keyChainId).toBe(keyChainId);
+
+            // Naming a trust list key chain moves the list to it.
+            const moved = await request(ctx.app.getHttpServer())
+                .put(`/trust-list/${listId}`)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .send({
+                    keyChainId: "570852d7-7e7f-40af-a0e3-a6ebffd75ed0",
+                    entities,
+                })
+                .expect(200);
+            expect(moved.body.keyChainId).toBe(
+                "570852d7-7e7f-40af-a0e3-a6ebffd75ed0",
+            );
+            expect(moved.body.sequenceNumber).toBe(before + 2);
+        });
+    });
+
+    describe("Bundle import of a list without keyChainId", () => {
+        const tenant = "trust-list-bundle-key-chain";
+        const listId = "bundle-trust-list";
+        const keyChainId = randomUUID();
+        const keptRefusal = `Key chain ${keyChainId} of this trust list is not valid for Trust List usage (key lacks TrustList usage). Name a key chain with usage type trustList in keyChainId.`;
+        let token: string;
+        let auth: string;
+        let key: KeyChainImportDto["key"];
+        /** The exported list without `keyChainId`. */
+        let spec: Record<string, unknown>;
+
+        /**
+         * A bundle with list `id`, the exported list changed by `changes`,
+         * and, with `usageType`, the list's key chain with that usage type.
+         */
+        const listBundle = (
+            changes: Record<string, unknown> = {},
+            usageType?: KeyUsageType,
+            id = listId,
+        ) =>
+            documentsBundle(tenant, [
+                ...(usageType
+                    ? [
+                          {
+                              kind: "KeyChain" as const,
+                              id: keyChainId,
+                              path: `key-chains/${keyChainId}.json`,
+                              spec: {
+                                  id: keyChainId,
+                                  usageType,
+                                  keySource: { type: "private-jwk", jwk: key },
+                              },
+                              // Above the generations the API imports gave it.
+                              generation: 100,
+                          },
+                      ]
+                    : []),
+                {
+                    kind: "TrustList",
+                    id,
+                    path: `trust-lists/${id}.json`,
+                    spec: { ...spec, ...changes, id },
+                },
+            ]);
+        const plan = async (
+            bundle: ConfigBundle,
+            mode: "upsert" | "create" = "upsert",
+        ): Promise<ConfigImportPlan> =>
+            (
+                await request(ctx.app.getHttpServer())
+                    .post(`/config-bundles/plan?mode=${mode}`)
+                    .set("Authorization", auth)
+                    .send(bundle)
+                    .expect(201)
+            ).body;
+        const importBundle = (
+            bundle: ConfigBundle,
+            planned: ConfigImportPlan,
+            status: number,
+        ) =>
+            request(ctx.app.getHttpServer())
+                .post(
+                    `/config-bundles/import?mode=upsert&planFingerprint=${planned.planFingerprint}`,
+                )
+                .set("Authorization", auth)
+                .send(bundle)
+                .expect(status);
+        const listItem = (planned: ConfigImportPlan, id = listId) =>
+            planned.items.find(
+                (item) => item.kind === "TrustList" && item.id === id,
+            );
+        const keyChainItem = (planned: ConfigImportPlan) =>
+            planned.items.find(
+                (item) => item.kind === "KeyChain" && item.id === keyChainId,
+            );
+        const storedList = async () =>
+            (
+                await request(ctx.app.getHttpServer())
+                    .get(`/trust-list/${listId}`)
+                    .set("Authorization", auth)
+                    .expect(200)
+            ).body;
+        const storedUsageType = async () =>
+            (
+                await request(ctx.app.getHttpServer())
+                    .get(`/key-chain/${keyChainId}`)
+                    .set("Authorization", auth)
+                    .expect(200)
+            ).body.usageType;
+
+        beforeAll(async () => {
+            token = await getTenantAdminToken(
+                ctx.app,
+                ctx.clientId,
+                ctx.clientSecret,
+                tenant,
+                [Role.Issuances, Role.Keys],
+            );
+            auth = `Bearer ${token}`;
+            await importEntityKeyChains(ctx.app, token, ctx.configFolder);
+            key = await newPrivateKey();
+            await importKeyChain(ctx.app, token, {
+                id: keyChainId,
+                key,
+                usageType: KeyUsageType.TrustList,
+            });
+            await request(ctx.app.getHttpServer())
+                .post("/trust-list")
+                .set("Authorization", auth)
+                .send({
+                    id: listId,
+                    description: "Before the bundle",
+                    keyChainId,
+                    entities: [
+                        {
+                            type: "internal",
+                            issuerKeyChainId:
+                                "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                            revocationKeyChainId:
+                                "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
+                            info: { name: "Bundle Provider" },
+                        },
+                    ],
+                } satisfies TrustListCreateDto)
+                .expect(201);
+            const exported = await request(ctx.app.getHttpServer())
+                .get(`/trust-list/${listId}/export`)
+                .set("Authorization", auth)
+                .expect(200);
+            const { keyChainId: _signing, ...rest } = exported.body;
+            spec = rest;
+            await importKeyChain(ctx.app, token, {
+                id: keyChainId,
+                key,
+                usageType: KeyUsageType.Attestation,
+            });
+        });
+
+        test("the plan blocks a change once the kept key chain lost trustList usage", async () => {
+            const bundle = listBundle({ description: "Changed by a bundle" });
+
+            const planned = await plan(bundle);
+
+            expect(planned.applicable).toBe(false);
+            expect(listItem(planned)).toMatchObject({
+                action: "blocked",
+                issues: [
+                    {
+                        severity: "error",
+                        code: "KEY_CHAIN_USAGE_MISMATCH",
+                        path: "/spec/keyChainId",
+                        message: keptRefusal,
+                        resource: { kind: "TrustList", id: listId },
+                    },
+                ],
+            });
+            const refused = await importBundle(bundle, planned, 400);
+            expect(refused.body.code).toBe("CONFIG_APPLY_BLOCKED");
+            expect(await storedList()).toMatchObject({
+                description: "Before the bundle",
+                keyChainId,
+                sequenceNumber: 1,
+            });
+        });
+
+        test("the plan blocks a change that names the key chain", async () => {
+            const planned = await plan(
+                listBundle({ description: "Changed by a bundle", keyChainId }),
+            );
+
+            expect(planned.applicable).toBe(false);
+            expect(listItem(planned)?.issues).toEqual([
+                expect.objectContaining({
+                    severity: "error",
+                    code: "KEY_CHAIN_USAGE_MISMATCH",
+                    path: "/spec/keyChainId",
+                    message: `Key chain ${keyChainId} is not valid for Trust List usage (key lacks TrustList usage)`,
+                }),
+            ]);
+        });
+
+        test("the plan does not check a list that create mode skips", async () => {
+            const planned = await plan(
+                listBundle({ description: "Changed by a bundle" }),
+                "create",
+            );
+
+            expect(planned.applicable, JSON.stringify(planned)).toBe(true);
+            expect(listItem(planned)).toMatchObject({
+                action: "skip",
+                issues: [expect.objectContaining({ code: "RESOURCE_EXISTS" })],
+            });
+        });
+
+        test("the plan reports a missing keyChainId only as a missing reference", async () => {
+            const missing = randomUUID();
+
+            const planned = await plan(listBundle({ keyChainId: missing }));
+
+            expect(listItem(planned)?.issues).toEqual([
+                expect.objectContaining({
+                    code: "MISSING_RESOURCE_REFERENCE",
+                    path: "/spec/keyChainId",
+                }),
+            ]);
+        });
+
+        test("the plan ignores the usage type of a key chain document it skips", async () => {
+            // Create mode skips the stored key chain, so its attestation
+            // usage stays and blocks a new list that names it.
+            const newListId = "bundle-trust-list-new";
+            const planned = await plan(
+                listBundle({ keyChainId }, KeyUsageType.TrustList, newListId),
+                "create",
+            );
+
+            expect(planned.applicable).toBe(false);
+            expect(keyChainItem(planned)).toMatchObject({ action: "skip" });
+            expect(listItem(planned, newListId)).toMatchObject({
+                action: "blocked",
+                issues: [
+                    expect.objectContaining({
+                        code: "KEY_CHAIN_USAGE_MISMATCH",
+                        message: `Key chain ${keyChainId} is not valid for Trust List usage (key lacks TrustList usage)`,
+                    }),
+                ],
+            });
+        });
+
+        test("the plan only warns for a list the bundle leaves unchanged", async () => {
+            for (const changes of [{}, { keyChainId }]) {
+                const bundle = listBundle(changes);
+
+                const planned = await plan(bundle);
+
+                expect(planned.applicable, JSON.stringify(planned)).toBe(true);
+                expect(listItem(planned)).toMatchObject({
+                    action: "unchanged",
+                    issues: [
+                        {
+                            severity: "warning",
+                            code: "KEY_CHAIN_USAGE_MISMATCH",
+                            path: "/spec/keyChainId",
+                        },
+                    ],
+                });
+                await importBundle(bundle, planned, 201);
+            }
+            expect(await storedList()).toMatchObject({
+                description: "Before the bundle",
+                keyChainId,
+                sequenceNumber: 1,
+            });
+        });
+
+        test("the plan takes the usage type from a key chain document of the same bundle", async () => {
+            // Taking trustList usage away in the same bundle blocks the
+            // list, so the key chain document is not applied either.
+            await importKeyChain(ctx.app, token, {
+                id: keyChainId,
+                key,
+                usageType: KeyUsageType.TrustList,
+            });
+            const takenAway = listBundle(
+                { description: "Changed by a bundle" },
+                KeyUsageType.Attestation,
+            );
+            const blocked = await plan(takenAway);
+            expect(blocked.applicable).toBe(false);
+            expect(keyChainItem(blocked)).toMatchObject({
+                action: "update",
+                issues: [],
+            });
+            expect(listItem(blocked)?.issues).toEqual([
+                expect.objectContaining({
+                    code: "KEY_CHAIN_USAGE_MISMATCH",
+                    message: keptRefusal,
+                }),
+            ]);
+            await importBundle(takenAway, blocked, 400);
+            expect(await storedUsageType()).toBe(KeyUsageType.TrustList);
+
+            // A list the bundle leaves unchanged is not written, so it only
+            // warns; renewals then sign it with the key chain of the bundle.
+            const unchanged = await plan(
+                listBundle({}, KeyUsageType.Attestation),
+            );
+            expect(unchanged.applicable, JSON.stringify(unchanged)).toBe(true);
+            expect(keyChainItem(unchanged)).toMatchObject({ action: "update" });
+            expect(listItem(unchanged)).toMatchObject({
+                action: "unchanged",
+                issues: [
+                    expect.objectContaining({
+                        severity: "warning",
+                        code: "KEY_CHAIN_USAGE_MISMATCH",
+                    }),
+                ],
+            });
+
+            // Giving it back in the same bundle lets the change apply.
+            await importKeyChain(ctx.app, token, {
+                id: keyChainId,
+                key,
+                usageType: KeyUsageType.Attestation,
+            });
+            const givenBack = listBundle(
+                { description: "Changed by a bundle" },
+                KeyUsageType.TrustList,
+            );
+            const planned = await plan(givenBack);
+            expect(planned.applicable, JSON.stringify(planned)).toBe(true);
+            expect(listItem(planned)).toMatchObject({
+                action: "update",
+                issues: [],
+            });
+            await importBundle(givenBack, planned, 201);
+            expect(await storedUsageType()).toBe(KeyUsageType.TrustList);
+            expect(await storedList()).toMatchObject({
+                description: "Changed by a bundle",
+                keyChainId,
+                sequenceNumber: 2,
+            });
+
+            // A key chain document that create mode skips does not take the
+            // stored trustList usage away.
+            const newListId = "bundle-trust-list-new";
+            const skipped = await plan(
+                listBundle({ keyChainId }, KeyUsageType.Attestation, newListId),
+                "create",
+            );
+            expect(skipped.applicable, JSON.stringify(skipped)).toBe(true);
+            expect(keyChainItem(skipped)).toMatchObject({ action: "skip" });
+            expect(listItem(skipped, newListId)).toMatchObject({
+                action: "create",
+                issues: [],
+            });
+
+            // Without a key chain document, the stored trustList usage of the
+            // kept key chain lets a change apply.
+            const kept = listBundle({ description: "Changed again" });
+            const keptPlan = await plan(kept);
+            expect(listItem(keptPlan)).toMatchObject({
+                action: "update",
+                issues: [],
+            });
+            await importBundle(kept, keptPlan, 201);
+            expect(await storedList()).toMatchObject({
+                description: "Changed again",
+                keyChainId,
+                sequenceNumber: 3,
+            });
         });
     });
 
@@ -984,6 +1513,42 @@ describe("Trust List e2e Tests", () => {
                 .post("/trust-list")
                 .set("Authorization", `Bearer ${ctx.authToken}`)
                 .send(createDto)
+                .expect(409);
+        });
+
+        test("should reject a trust list without keyChainId on a tenant without trust list key chain", async () => {
+            const token = await getToken(
+                ctx.app,
+                ctx.clientId,
+                ctx.clientSecret,
+                "trust-list-without-key-chain",
+            );
+            await importEntityKeyChains(ctx.app, token, ctx.configFolder);
+
+            const response = await request(ctx.app.getHttpServer())
+                .post("/trust-list")
+                .set("Authorization", `Bearer ${token}`)
+                .send({
+                    id: "no-key-chain-test",
+                    entities: [
+                        {
+                            type: "internal",
+                            issuerKeyChainId:
+                                "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                            revocationKeyChainId:
+                                "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
+                            info: { name: "Test Provider" },
+                        },
+                    ],
+                } satisfies TrustListCreateDto)
+                .expect(409);
+
+            expect(response.body.message).toBe(
+                "No key chain found with usage type 'trustList' for tenant trust-list-without-key-chain",
+            );
+            await request(ctx.app.getHttpServer())
+                .get("/trust-list/no-key-chain-test")
+                .set("Authorization", `Bearer ${token}`)
                 .expect(409);
         });
 

@@ -16,6 +16,7 @@ import {
 import { SchemaService } from '../schema.service';
 import { SchemaCreateComponent } from './schema-create.component';
 import { errorSnackBarDuration } from '../../utils/error-snackbar';
+import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 
 /** The arguments of an error snackbar with this text. */
 const errorSnackBar = (text: string) =>
@@ -580,6 +581,27 @@ describe('SchemaCreateComponent required fields', () => {
     expect(publishSchemaMetadata.mock.calls[0][0].trustedAuthorities).toEqual([
       { frameworkType: 'x509', value: other },
     ]);
+  });
+
+  it('waits while the schema is submitted: a second click sends nothing', async () => {
+    publishSchemaMetadata.mockReturnValue(new Promise(() => undefined));
+    const fixture = await render();
+    const component = fixture.componentInstance;
+    component.importSchemaConfigIds.setValue(['pid']);
+    component.syncSchemaURIsFromSelection();
+    component.importTrustListIds.setValue(['tl-1']);
+    component.syncTrustedAuthoritiesFromSelection();
+    fixture.detectChanges();
+    const submit = submitButton(fixture);
+    expectAvailable(fixture, submit);
+
+    submit.click();
+    fixture.detectChanges();
+    submit.click();
+    fixture.detectChanges();
+
+    expect(publishSchemaMetadata).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, submit, 'Submitting the schema…');
   });
 
   it('does not navigate after a submit that finishes once the user has left', async () => {
