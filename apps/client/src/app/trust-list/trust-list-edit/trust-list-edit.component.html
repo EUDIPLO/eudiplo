@@ -83,7 +83,7 @@
             <mat-form-field appearance="outline" subscriptSizing="dynamic">
               <mat-label>Signing Key Chain</mat-label>
               <mat-select formControlName="keyChainId">
-                <mat-option value="">Auto-generate</mat-option>
+                <mat-option value="">{{ defaultSigningKeyChainLabel }}</mat-option>
                 @if (unlistedKeyChain(form.get('keyChainId')?.value, 'trustList'); as unlisted) {
                   <mat-option [value]="unlisted.id">{{ unlisted.label }}</mat-option>
                 }
@@ -101,11 +101,16 @@
                   'trustList'
                 )
               }}</mat-hint>
-              <mat-error>{{ fieldError('keyChainId') }}</mat-error>
+              <mat-error>{{
+                fieldError('keyChainId', signingKeyChainProblem(form.get('keyChainId')?.value))
+              }}</mat-error>
             </mat-form-field>
-            @if (keyChainsLoadError) {
+            @if (keyChainActionsNeeded(signingKeyChainUsages)) {
               <ng-container
-                *ngTemplateOutlet="keyChainActions; context: { $implicit: basicFields }"
+                *ngTemplateOutlet="
+                  keyChainActions;
+                  context: { $implicit: basicFields, usages: signingKeyChainUsages }
+                "
               />
             }
           </div>
@@ -283,11 +288,14 @@
                           )
                         }}</mat-error>
                       </mat-form-field>
-                      @if (entityKeyChainsMissing) {
+                      @if (keyChainActionsNeeded(entityKeyChainUsages)) {
                         <ng-container
                           *ngTemplateOutlet="
                             keyChainActions;
-                            context: { $implicit: entityKeyChainFields, offerCreate: true }
+                            context: {
+                              $implicit: entityKeyChainFields,
+                              usages: entityKeyChainUsages,
+                            }
                           "
                         />
                       }
@@ -457,38 +465,27 @@
 
 <!--
   Next to the key chain selects in `fields`, which take the focus once the key chains are loaded.
-  With `offerCreate`, links to create the key chains none of the internal entity's selects can offer;
-  they open in a new tab, so the form keeps what was entered, and Reload brings the new key chain in.
+  `usages` lists the usages of those selects; for each usage no key chain has, a link creates one.
+  The links open in a new tab, so the form keeps what was entered, and Reload brings the new key
+  chain in.
 -->
-<ng-template #keyChainActions let-fields let-offerCreate="offerCreate">
+<ng-template #keyChainActions let-fields let-usages="usages">
   <div class="key-chain-actions">
-    @if (offerCreate && noKeyChains('attestation')) {
-      <a
-        mat-button
-        routerLink="/keys/create"
-        [queryParams]="{ usage: 'attestation' }"
-        target="_blank"
-        rel="noopener"
-        (click)="openKeyChainCreation(fields)"
-      >
-        <mat-icon>open_in_new</mat-icon>
-        Create credential signing key chain
-        <span class="visually-hidden">(opens in a new tab)</span>
-      </a>
-    }
-    @if (offerCreate && noKeyChains('statusList')) {
-      <a
-        mat-button
-        routerLink="/keys/create"
-        [queryParams]="{ usage: 'statusList' }"
-        target="_blank"
-        rel="noopener"
-        (click)="openKeyChainCreation(fields)"
-      >
-        <mat-icon>open_in_new</mat-icon>
-        Create status list key chain
-        <span class="visually-hidden">(opens in a new tab)</span>
-      </a>
+    @for (usage of usages; track usage) {
+      @if (noKeyChains(usage)) {
+        <a
+          mat-button
+          routerLink="/keys/create"
+          [queryParams]="keyChainLinkParamsOf(usage)"
+          target="_blank"
+          rel="noopener"
+          (click)="openKeyChainCreation(fields)"
+        >
+          <mat-icon>open_in_new</mat-icon>
+          Create {{ createdKeyChainName(usage) }} key chain
+          <span class="visually-hidden">(opens in a new tab)</span>
+        </a>
+      }
     }
     <button
       mat-button

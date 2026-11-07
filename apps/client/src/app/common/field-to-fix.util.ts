@@ -53,6 +53,33 @@ export function firstInvalidField(
   return container?.querySelector<HTMLElement>('[formcontrolname].ng-invalid') ?? undefined;
 }
 
+/**
+ * Fields that `firstInvalidField` misses: a field bound with `[formControl]`, as formly binds its
+ * fields, and a Material control that shows the error of other controls through its
+ * `errorStateMatcher`, which marks it `aria-invalid`, unless it is disabled and so cannot fix it.
+ */
+const FIELD_WITH_ERROR = [
+  '[formcontrolname].ng-invalid',
+  'input.ng-invalid',
+  'textarea.ng-invalid',
+  'mat-select.ng-invalid',
+  'mat-checkbox.ng-invalid',
+  'mat-radio-group.ng-invalid',
+  '[aria-invalid="true"]:not([aria-disabled="true"])',
+].join(', ');
+
+/**
+ * The first field in `container`, in the order of the page, that is invalid or shows an error: as
+ * `firstInvalidField`, and also a field bound with `[formControl]` or one that shows the error of
+ * other controls, such as a select that fills a required list. A form with such fields passes
+ * `field: () => firstFieldWithError(container())`.
+ */
+export function firstFieldWithError(
+  container: ParentNode | null | undefined
+): HTMLElement | undefined {
+  return container?.querySelector<HTMLElement>(FIELD_WITH_ERROR) ?? undefined;
+}
+
 export interface FocusFieldToFixOptions {
   /**
    * The expansion panel just opened to show the field. Its content stays hidden for the first
@@ -62,8 +89,9 @@ export interface FocusFieldToFixOptions {
   /** Takes the focus when no field is invalid, such as the Add button of a list that is empty. */
   readonly fallback?: () => HTMLElement | null | undefined;
   /**
-   * The field to focus instead of the first invalid one, for a form in which some errors do not
-   * keep it from saving, such as a backend rejection that saving again checks anew.
+   * The field to focus instead of the first invalid one: in a form in which some errors do not
+   * keep it from saving, such as a backend rejection that saving again checks anew, the first
+   * field that does; in a form with fields that `firstInvalidField` misses, `firstFieldWithError`.
    */
   readonly field?: () => HTMLElement | null | undefined;
 }

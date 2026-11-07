@@ -1,5 +1,13 @@
 import { CommonModule } from '@angular/common';
-import { inject, Component, type OnInit, ChangeDetectionStrategy } from '@angular/core';
+import {
+  inject,
+  Component,
+  type ElementRef,
+  Injector,
+  type OnInit,
+  ChangeDetectionStrategy,
+  viewChild,
+} from '@angular/core';
 import {
   FormControl,
   FormGroup,
@@ -27,6 +35,7 @@ import { transactionDataArraySchema } from '../../utils/schemas';
 import { asSentence, getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { JwtService } from '../../services/jwt.service';
+import { showFieldsToFix } from '../../common/field-to-fix.util';
 
 type ClientIdScheme = 'x509_hash' | 'x509_san_dns' | 'openid_federation';
 
@@ -72,9 +81,13 @@ export class PresentationRequestComponent implements OnInit {
   offerResult: OfferResponse | null = null;
   qrCodeDataUrl: string | null = null;
   showTransactionDataOverride = false;
+  /** The configurations could not be loaded, so the empty list says nothing. */
+  configsLoadFailed = false;
   transactionDataArraySchema = transactionDataArraySchema;
 
   private readonly jwtService = inject(JwtService);
+  private readonly injector = inject(Injector);
+  private readonly formElement = viewChild<ElementRef<HTMLFormElement>>('formElement');
 
   /** Presentation configurations can be created with `presentation:manage`. */
   get canManagePresentationConfigs(): boolean {
@@ -109,6 +122,7 @@ export class PresentationRequestComponent implements OnInit {
 
   async loadConfigurations(): Promise<void> {
     this.loading = true;
+    this.configsLoadFailed = false;
     try {
       this.configs = await this.presentationManagementService.loadConfigurations();
 
@@ -129,6 +143,7 @@ export class PresentationRequestComponent implements OnInit {
         }
       }
     } catch (error) {
+      this.configsLoadFailed = true;
       console.error('Error loading configurations:', error);
       openErrorSnackBar(
         this.snackBar,
@@ -185,20 +200,58 @@ export class PresentationRequestComponent implements OnInit {
     }
   }
 
-  async onSubmit(): Promise<void> {
-    const requestId = this.form.get('requestId')?.value;
-    await this.evaluateReadiness(requestId || undefined);
+  /** Why Generate Request cannot be used on a page that lists no configuration. */
+  private get noConfigurationReason(): string {
+    return this.configsLoadFailed
+      ? 'The presentation configurations could not be loaded.'
+      : 'There is no presentation configuration to request.';
+  }
 
-    if (this.dcApiOriginProblem) {
-      this.snackBar.open(this.dcApiOriginProblem, 'Close', { duration: 5000 });
+  /** Why the selected configuration cannot be requested from this page, if it cannot. */
+  private get generateProblem(): string | null {
+    if (this.dcApiOriginProblem) return this.dcApiOriginProblem;
+    if (this.isReadyToGenerate) return null;
+    return this.readinessError || 'Presentation cannot be generated with the current setup.';
+  }
+
+  /**
+   * Why Generate Request cannot be used now, for its tooltip; empty while it can. A
+   * configuration that is not selected is no such reason: generating says to select one.
+   */
+  get generateUnavailableReason(): string {
+    if (this.generatingOffer) return 'Generating the presentation request…';
+    if (this.configs.length === 0) return this.noConfigurationReason;
+    if (this.form.get('requestId')?.invalid) return '';
+    // Known at once, and still true after the readiness check.
+    if (this.dcApiOriginProblem) return this.dcApiOriginProblem;
+    if (this.checkingReadiness) return 'Checking whether the request can be generated…';
+    return this.generateProblem ?? '';
+  }
+
+  async onSubmit(): Promise<void> {
+    // `disabledInteractive` keeps the button clickable while it looks disabled.
+    if (this.generatingOffer || this.checkingReadiness) return;
+    // Enter in a field submits without showing the tooltip, so the snackbars say why.
+    if (this.configs.length === 0) {
+      openErrorSnackBar(this.snackBar, this.noConfigurationReason);
+      return;
+    }
+    if (this.form.invalid) {
+      showFieldsToFix(this.form, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container: () => this.formElement()?.nativeElement,
+      });
       return;
     }
 
-    if (!this.isReadyToGenerate) {
-      this.snackBar.open(this.readinessError || 'Presentation cannot be generated yet.', 'Close', {
-        duration: 4000,
-        panelClass: ['error-snackbar'],
-      });
+    // The setup may have changed since the configuration was checked, or the check failed.
+    if (!this.dcApiOriginProblem) {
+      await this.evaluateReadiness(this.form.get('requestId')?.value);
+    }
+    const problem = this.generateProblem;
+    if (problem) {
+      openErrorSnackBar(this.snackBar, problem, 'Close', { panelClass: ['error-snackbar'] });
       return;
     }
 

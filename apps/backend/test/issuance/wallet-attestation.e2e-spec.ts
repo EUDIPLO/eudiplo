@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { INestApplication } from "@nestjs/common";
+import { INestApplication, Logger } from "@nestjs/common";
 import {
     clientAuthenticationAnonymous,
     clientAuthenticationClientAttestationJwt,
@@ -21,6 +21,7 @@ import {
     describe,
     expect,
     test,
+    vi,
 } from "vitest";
 import { IssuanceDto } from "../../src/issuer/configuration/issuance/dto/issuance.dto.js";
 import { StatusListVerifierService } from "../../src/trust/status-list-verifier.service.js";
@@ -2255,22 +2256,44 @@ describe("Issuance - Wallet Attestation", () => {
             },
         });
 
-        // Should fail - trust list fetch fails
-        await expect(
-            clientWithAttestation.retrievePreAuthorizedCodeAccessTokenFromOffer(
-                {
-                    credentialOffer,
-                    issuerMetadata,
+        // Should fail - trust list fetch fails. The answer reaches the wallet,
+        // so it names neither the list's URL nor its host; the log does.
+        const warn = vi.spyOn(Logger.prototype, "warn");
+        try {
+            const tokenRequest =
+                clientWithAttestation.retrievePreAuthorizedCodeAccessTokenFromOffer(
+                    {
+                        credentialOffer,
+                        issuerMetadata,
+                    },
+                );
+            await expect(tokenRequest).rejects.toMatchObject({
+                response: { status: 401 },
+                errorResponse: {
+                    error: "invalid_client",
+                    error_description:
+                        "Wallet provider trust lists could not be loaded",
                 },
-            ),
-        ).rejects.toThrow();
+            });
+            expect(warn).toHaveBeenCalledWith(
+                expect.stringMatching(
+                    /^Client attestation validation failed for the token endpoint of tenant .+: Wallet provider trust lists could not be loaded: Failed to fetch trust list from http:\/\/localhost:8787\/trust-list-error/,
+                ),
+            );
+        } finally {
+            warn.mockRestore();
+        }
     });
 
     // An outdated list may be an older version replayed to undo a removal,
     // so it is discarded; with no other list left, the attestation is
     // rejected like one whose list cannot be read.
     test.each([
-        ["is not a valid JWT", "/trust-list-invalid", undefined],
+        [
+            "is not a valid JWT",
+            "/trust-list-invalid",
+            "Wallet provider trust lists could not be loaded",
+        ],
         [
             "is past its NextUpdate",
             "/trust-list-outdated",
@@ -2434,11 +2457,17 @@ describe("Issuance - Wallet Attestation", () => {
                 response: { status: 401 },
                 errorResponse: {
                     error: "invalid_client",
-                    ...(reason
-                        ? { error_description: expect.stringContaining(reason) }
-                        : {}),
+                    error_description: expect.stringContaining(reason),
                 },
             });
+            // The answer reaches the wallet; only the log names the list.
+            const { errorResponse } = await tokenRequest.catch(
+                (error: { errorResponse: { error_description: string } }) =>
+                    error,
+            );
+            expect(errorResponse.error_description).not.toContain(
+                "localhost:8787",
+            );
             expect(listNock.isDone()).toBe(true);
         },
     );
@@ -2606,7 +2635,16 @@ describe("Issuance - Wallet Attestation", () => {
                     issuerMetadata,
                 },
             ),
-        ).rejects.toThrow();
+        ).rejects.toMatchObject({
+            response: { status: 401 },
+            errorResponse: {
+                error: "invalid_client",
+                // The reason is about what the wallet sent, so it stays.
+                error_description: expect.stringMatching(
+                    /^Wallet attestation verification failed: .+/,
+                ),
+            },
+        });
     });
 
     type StatusCheckModeCase = {
@@ -3011,6 +3049,15 @@ describe("Issuance - Wallet Attestation", () => {
                     issuerMetadata,
                 },
             ),
-        ).rejects.toThrow();
+        ).rejects.toMatchObject({
+            response: { status: 401 },
+            errorResponse: {
+                error: "invalid_client",
+                // The reason is about what the wallet sent, so it stays.
+                error_description: expect.stringMatching(
+                    /^Wallet attestation verification failed: .+/,
+                ),
+            },
+        });
     });
 });

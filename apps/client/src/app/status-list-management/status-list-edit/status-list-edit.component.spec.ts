@@ -32,13 +32,16 @@ describe('StatusListEditComponent', () => {
     });
     client.setConfig({ fetch: fetchStub });
     const snackBar = { open: vi.fn() };
-    const component = new StatusListEditComponent(
-      { snapshot: { paramMap: { get: () => null } } } as never,
-      { navigate: vi.fn() } as never,
-      snackBar as never,
-      {} as never,
-      new CredentialConfigService(),
-      TestBed.inject(KeyChainService)
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new StatusListEditComponent(
+          { snapshot: { paramMap: { get: () => null } } } as never,
+          { navigate: vi.fn() } as never,
+          snackBar as never,
+          {} as never,
+          new CredentialConfigService(),
+          TestBed.inject(KeyChainService)
+        )
     );
 
     component.ngOnInit();
@@ -117,6 +120,30 @@ describe('StatusListEditComponent Save', () => {
 
     expect((fixture.nativeElement as HTMLElement).querySelector('mat-error')).toBeNull();
     expect(createList).toHaveBeenCalledWith(expect.objectContaining({ capacity }));
+  });
+
+  it('says that Capacity keeps it from saving, focuses Capacity and sends nothing', async () => {
+    const createList = vi.fn();
+    const { fixture, save } = await render(createList);
+    // The component's own injector provides the snack bar it uses.
+    const open = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open');
+    fixture.componentInstance.form.patchValue({ capacity: 500 });
+    fixture.detectChanges();
+    expectAvailable(fixture, save);
+
+    save.focus();
+    save.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement?.getAttribute('formcontrolname')).toBe('capacity');
+    });
+    expect(open).toHaveBeenLastCalledWith(
+      'Check the highlighted fields in Status List Settings.',
+      'Close',
+      expect.anything()
+    );
+    expect(createList).not.toHaveBeenCalled();
   });
 
   it.each([

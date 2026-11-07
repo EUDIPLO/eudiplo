@@ -23,7 +23,10 @@ describe("credential proof attestation trust", () => {
     ];
     const getTrustStore = vi.fn();
     const matchAttestationSigner = vi.fn();
+    const warn = vi.fn();
     const deps = {
+        tenantId: "tenant-1",
+        logger: { warn },
         trustStoreService: { getTrustStore } as unknown as TrustStoreService,
         x509ValidationService: {
             matchAttestationSigner,
@@ -99,11 +102,100 @@ describe("credential proof attestation trust", () => {
                 });
             });
 
-            it("rejects unavailable trust lists", async () => {
-                getTrustStore.mockRejectedValue(new Error("unavailable"));
+            it("rejects unavailable trust lists with a fixed answer and logs the reason", async () => {
+                getTrustStore.mockRejectedValue(
+                    new Error(
+                        "Failed to fetch trust list from http://internal/list",
+                    ),
+                );
+                await expect(
+                    validate(jwt({ x5c: ["cert"] })),
+                ).rejects.toMatchObject({
+                    response: {
+                        error: "invalid_proof",
+                        error_description:
+                            "Attestation proof x5c chain could not be validated",
+                    },
+                });
+                expect(warn).toHaveBeenCalledWith(
+                    "Key attestation validation failed for tenant tenant-1: Attestation proof x5c chain could not be validated: Failed to fetch trust list from http://internal/list",
+                );
+            });
+
+            it("logs the reason when the key attestation header cannot be read", async () => {
+                await expect(validate("not-a-jwt")).rejects.toMatchObject({
+                    response: {
+                        error_description:
+                            "Attestation proof x5c chain could not be validated",
+                    },
+                });
+                expect(warn).toHaveBeenCalledWith(
+                    expect.stringMatching(
+                        /^Key attestation validation failed for tenant tenant-1: Attestation proof x5c chain could not be validated: .+/,
+                    ),
+                );
+            });
+
+            it("answers the fixed text for a reference with whitespace-only verifier material, and logs it", async () => {
+                const url = "https://internal.example/list";
+                await expect(
+                    validate(jwt({ x5c: ["cert"] }), [
+                        { url, verifierX509Der: "   " },
+                    ]),
+                ).rejects.toMatchObject({
+                    response: {
+                        error: "invalid_proof",
+                        error_description:
+                            "Attestation proof x5c chain could not be validated",
+                    },
+                });
+                expect(getTrustStore).not.toHaveBeenCalled();
+                expect(warn).toHaveBeenCalledWith(
+                    expect.stringContaining(
+                        `Trust list reference '${url}' must define`,
+                    ),
+                );
+            });
+
+            it("counts discarded lists in the fixed answer, names them nowhere, and logs the reason", async () => {
+                getTrustStore.mockResolvedValue({
+                    entities,
+                    discarded: [
+                        { list: "http://internal/old", nextUpdate: null },
+                    ],
+                });
+                matchAttestationSigner.mockRejectedValue(new Error("bad cert"));
+                const fixed =
+                    "Attestation proof x5c chain could not be validated (1 outdated trust list(s) left out; the server log names them)";
+                await expect(
+                    validate(jwt({ x5c: ["cert"] })),
+                ).rejects.toMatchObject({
+                    response: {
+                        error: "invalid_proof",
+                        error_description: fixed,
+                    },
+                });
+                expect(warn).toHaveBeenCalledWith(
+                    `Key attestation validation failed for tenant tenant-1: ${fixed}: bad cert`,
+                );
+            });
+
+            it("logs an unknown reason for a value that is not an Error", async () => {
+                getTrustStore.mockRejectedValue("boom");
                 await expect(
                     validate(jwt({ x5c: ["cert"] })),
                 ).rejects.toThrow();
+                expect(warn).toHaveBeenCalledWith(
+                    "Key attestation validation failed for tenant tenant-1: Attestation proof x5c chain could not be validated: Unknown error",
+                );
+            });
+
+            it("does not log a rejection the wallet is told about", async () => {
+                matchAttestationSigner.mockResolvedValue(null);
+                await expect(
+                    validate(jwt({ x5c: ["untrusted"] })),
+                ).rejects.toThrow();
+                expect(warn).not.toHaveBeenCalled();
             });
         });
     }
@@ -290,12 +382,16 @@ describe("credential proof attestation trust with real certificates", () => {
                     verifierX509Der: "MII",
                 })),
                 {
-                    tenantId: "tenant",
+                    tenantId: "tenant-1",
+                    logger: { warn },
                     trustStoreService,
                     x509ValidationService: new X509ValidationService(),
                 },
             );
         }
+
+        const warn = vi.fn();
+        beforeEach(() => warn.mockReset());
 
         it("accepts a provider in a current list next to an outdated one", async () => {
             await expect(
@@ -330,11 +426,13 @@ describe("credential proof attestation trust with real certificates", () => {
             ).rejects.toMatchObject({
                 response: {
                     error: "invalid_proof",
-                    error_description: expect.stringContaining(
-                        "No configured trust list is current",
-                    ),
+                    error_description:
+                        "No configured trust list is current: each has no valid NextUpdate or one that has passed, no valid LoTESequenceNumber, or a lower one than a list accepted before",
                 },
             });
+            expect(warn).toHaveBeenCalledWith(
+                "Key attestation validation failed for tenant tenant-1: No configured trust list is current: each has no valid NextUpdate or one that has passed, no valid LoTESequenceNumber, or a lower one than a list accepted before",
+            );
         });
     });
 });
