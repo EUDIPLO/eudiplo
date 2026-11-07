@@ -71,6 +71,37 @@ describe('TrustListEditComponent save', () => {
     client.setConfig({ fetch: () => new Promise<Response>(() => undefined) });
   });
 
+  it('sends the e-mail address and web site, and no phone when it is empty', async () => {
+    const component = new TrustListEditComponent(
+      { snapshot: { paramMap: { get: () => null } } } as never,
+      { navigate: vi.fn() } as never,
+      snackBar as never,
+      { get: () => ({ destroyed: true }) } as never,
+      new ErrorStateMatcher()
+    );
+    component.ngOnInit();
+    component.form.patchValue({ id: 'trust-list' });
+    component.addExternalEntity();
+    component.entitiesArray.at(0).patchValue({
+      issuerCertPem: 'pem',
+      revocationCertPem: 'pem',
+      infoName: 'Example',
+      infoContactUri: 'info@example.com',
+      infoWebsite: 'https://example.com/',
+    });
+
+    await component.onSubmit();
+
+    const post = fetchStub.mock.calls.find(([input]) => (input as Request).method === 'POST');
+    const body = await (post?.[0] as Request).clone().json();
+    expect(body.entities[0].info).toEqual({
+      name: 'Example',
+      lang: 'en',
+      contactUri: 'info@example.com',
+      website: 'https://example.com/',
+    });
+  });
+
   it('shows rejected fields under the field, and lists the rest', async () => {
     const component = new TrustListEditComponent(
       { snapshot: { paramMap: { get: () => null } } } as never,
@@ -86,6 +117,8 @@ describe('TrustListEditComponent save', () => {
       issuerCertPem: 'not a pem',
       revocationCertPem: 'not a pem',
       infoName: 'Example',
+      infoContactUri: 'info@example.com',
+      infoWebsite: 'https://example.com/',
     });
 
     const first = component.onSubmit();
@@ -122,14 +155,23 @@ describe('TrustListEditComponent loading the trust list', () => {
         providerType: 'attestation-provider',
         issuerKeyChainId: 'issuer-keys',
         revocationKeyChainId: 'status-keys',
-        info: { name: 'Own Issuer' },
+        info: {
+          name: 'Own Issuer',
+          contactUri: 'info@example.com',
+          website: 'https://example.com/',
+        },
       },
       {
         type: 'external',
         providerType: 'wallet-provider',
         issuerCertPem: 'issuer pem',
         revocationCertPem: 'revocation pem',
-        info: { name: 'Example Wallet Provider' },
+        info: {
+          name: 'Example Wallet Provider',
+          contactUri: 'mailto:info@example.com',
+          website: 'https://example.com/',
+          phone: '+49-30-1234567',
+        },
       },
     ],
   };
@@ -283,6 +325,64 @@ describe('TrustListEditComponent loading the trust list', () => {
     expect(
       component.entitiesArray.value.map((entity: { infoName: string }) => entity.infoName)
     ).toEqual(['Own Issuer', 'Example Wallet Provider']);
+    expect(component.entitiesArray.at(1).value).toMatchObject({
+      infoContactUri: 'mailto:info@example.com',
+      infoWebsite: 'https://example.com/',
+      infoPhone: '+49-30-1234567',
+    });
+  });
+
+  it('opens an entity stored before 10.0 with its missing web site and e-mail address marked', async () => {
+    answers.trustList = {
+      status: 200,
+      body: {
+        ...trustList,
+        entityConfig: [
+          trustList.entityConfig[0],
+          {
+            ...trustList.entityConfig[1],
+            info: { name: 'Legacy Provider', contactUri: 'https://example.com/contact' },
+          },
+        ],
+      },
+    };
+    const { harness, component, page } = await render();
+    await vi.waitFor(() => expect(component.loading).toBe(false));
+    harness.detectChanges();
+
+    const legacy = component.entitiesArray.at(1);
+    expect(component.rejectedEntities.has(legacy)).toBe(true);
+    expect(component.rejectedEntities.has(component.entitiesArray.at(0))).toBe(false);
+    expect(legacy.get('infoWebsite')?.touched).toBe(true);
+    expect(legacy.get('infoContactUri')?.touched).toBe(true);
+    const descriptions = [...page.querySelectorAll('mat-panel-description')].map((element) =>
+      element.textContent?.trim()
+    );
+    expect(descriptions[1]).toBe('Check the highlighted fields');
+    const errors = [...page.querySelectorAll('mat-error')].map((error) =>
+      error.textContent?.trim()
+    );
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        'Enter one e-mail address in ASCII characters, for example info@example.com.',
+        'Enter a website; ETSI TS 119 602 requires one.',
+      ])
+    );
+  });
+
+  it('explains a missing e-mail address and web site under their fields', async () => {
+    const { component } = await render();
+    await vi.waitFor(() => expect(component.loading).toBe(false));
+    component.entitiesArray.at(0).patchValue({ infoContactUri: '', infoWebsite: 'example.com' });
+
+    expect(component.electronicAddressError(0, 'infoContactUri')).toBe(
+      'Enter an e-mail address; ETSI TS 119 602 requires one.'
+    );
+    expect(component.electronicAddressError(0, 'infoWebsite')).toBe(
+      'Enter an http or https URI, for example https://example.com/.'
+    );
+    expect(component.electronicAddressError(0, 'infoPhone')).toBe('');
+    expect(component.form.invalid).toBe(true);
   });
 
   it('leaves the focus alone when the trust list loads on the first try', async () => {
@@ -465,7 +565,11 @@ describe('TrustListEditComponent loading the trust list', () => {
 
     // With the entity named, Save points at the empty selects, whose error replaces the hint and
     // repeats why they are empty.
-    component.entitiesArray.at(1).patchValue({ infoName: 'Own Issuer' });
+    component.entitiesArray.at(1).patchValue({
+      infoName: 'Own Issuer',
+      infoContactUri: 'info@example.com',
+      infoWebsite: 'https://example.com/',
+    });
     harness.detectChanges();
     buttons(page, 'Save Changes')[0].click();
     await vi.waitFor(() => {
@@ -1069,6 +1173,8 @@ describe('TrustListEditComponent loading the trust list', () => {
       component.addInternalEntity();
       component.entitiesArray.at(2).patchValue({
         infoName: 'Own Issuer',
+        infoContactUri: 'info@example.com',
+        infoWebsite: 'https://example.com/',
         issuerKeyChainId: 'issuer-keys',
         revocationKeyChainId: 'status-keys',
       });

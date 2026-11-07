@@ -48,6 +48,16 @@ describe('TrustListShowComponent', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  it('links a bare e-mail address and a mailto: URI with one mailto: prefix', () => {
+    expect(component.mailtoUri('info@example.com')).toBe('mailto:info@example.com');
+    expect(component.mailtoUri('mailto:info@example.com')).toBe('mailto:info@example.com');
+  });
+
+  it('does not link a URL stored as e-mail address before 10.0', () => {
+    expect(component.isEmail('info@example.com')).toBe(true);
+    expect(component.isEmail('https://example.com/contact')).toBe(false);
+  });
 });
 
 describe('TrustListShowComponent public URL', () => {

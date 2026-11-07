@@ -285,7 +285,11 @@ describe("TrustListService", () => {
                 type: "external",
                 issuerCertPem: pem,
                 revocationCertPem: pem,
-                info: { name: "Issuer" },
+                info: {
+                    name: "Issuer",
+                    contactUri: "info@example.com",
+                    website: "https://example.com/",
+                },
             };
         });
 
@@ -314,9 +318,80 @@ describe("TrustListService", () => {
             expect(saved.sequenceNumber).toBe(1);
         });
 
+        it("publishes the e-mail address, web site and telephone number as TEElectronicAddress", async () => {
+            const { service, trustListRepo } = createService([]);
+
+            await service.create(
+                {
+                    id: "address",
+                    entities: [
+                        {
+                            ...externalEntity,
+                            info: {
+                                ...externalEntity.info,
+                                lang: "de-at",
+                                phone: "+49-30-1234567",
+                            },
+                        },
+                        {
+                            ...externalEntity,
+                            info: {
+                                ...externalEntity.info,
+                                contactUri: "mailto:info@example.com",
+                                phone: "tel:+49-30-1234567",
+                            },
+                        },
+                    ],
+                },
+                { id: "tenant", name: "Tenant" },
+            );
+
+            const saved = trustListRepo.save.mock.calls[0][0] as TrustList;
+            const addresses = (
+                saved.data as LoTEDocument
+            ).LoTE.TrustedEntitiesList?.map(
+                (entity) =>
+                    entity.TrustedEntityInformation.TEAddress
+                        ?.TEElectronicAddress,
+            );
+            expect(addresses).toEqual([
+                [
+                    { lang: "de-at", uriValue: "mailto:info@example.com" },
+                    { lang: "de-at", uriValue: "https://example.com/" },
+                    { lang: "en", uriValue: "mailto:info@example.com" },
+                    { lang: "en", uriValue: "https://example.com/" },
+                    { lang: "de-at", uriValue: "tel:+49-30-1234567" },
+                    { lang: "en", uriValue: "tel:+49-30-1234567" },
+                ],
+                [
+                    { lang: "en", uriValue: "mailto:info@example.com" },
+                    { lang: "en", uriValue: "https://example.com/" },
+                    { lang: "en", uriValue: "tel:+49-30-1234567" },
+                ],
+            ]);
+        });
+
+        it("publishes no telephone entry when phone is unset", async () => {
+            const { service, trustListRepo } = createService([]);
+
+            await service.create(
+                { id: "no-phone", entities: [externalEntity] },
+                { id: "tenant", name: "Tenant" },
+            );
+
+            const saved = trustListRepo.save.mock.calls[0][0] as TrustList;
+            expect(
+                (saved.data as LoTEDocument).LoTE.TrustedEntitiesList?.[0]
+                    .TrustedEntityInformation.TEAddress?.TEElectronicAddress,
+            ).toEqual([
+                { lang: "en", uriValue: "mailto:info@example.com" },
+                { lang: "en", uriValue: "https://example.com/" },
+            ]);
+        });
+
         describe("entity languages (ETSI TS 119 602 clause 6.1.4)", () => {
             const publishedEntity = async (
-                info: Record<string, string>,
+                info: TrustListCreateDto["entities"][number]["info"],
                 providerType?: "wallet-provider",
             ): Promise<Record<string, any>> => {
                 const { service, trustListRepo } = createService([]);
@@ -346,6 +421,7 @@ describe("TrustListService", () => {
                     lang: "de-at",
                     uri: "https://example.com/about",
                     contactUri: "mailto:info@example.com",
+                    website: "https://example.com/",
                     country: "AT",
                     locality: "Wien",
                     postalCode: "1010",
@@ -363,7 +439,9 @@ describe("TrustListService", () => {
                 ]);
                 expect(info.TEAddress.TEElectronicAddress).toEqual([
                     { lang: "de-at", uriValue: "mailto:info@example.com" },
+                    { lang: "de-at", uriValue: "https://example.com/" },
                     { lang: "en", uriValue: "mailto:info@example.com" },
+                    { lang: "en", uriValue: "https://example.com/" },
                 ]);
                 const address = {
                     Country: "AT",
@@ -388,7 +466,12 @@ describe("TrustListService", () => {
                 "publishes the service names of a %s entity in English only",
                 async (providerType, issuance, revocation) => {
                     const entity = await publishedEntity(
-                        { name: "Musteraussteller", lang: "de" },
+                        {
+                            name: "Musteraussteller",
+                            lang: "de",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
+                        },
                         providerType,
                     );
 
@@ -411,6 +494,7 @@ describe("TrustListService", () => {
                         name: "Issuer",
                         uri: "https://example.com/about",
                         contactUri: "mailto:info@example.com",
+                        website: "https://example.com/",
                         ...(lang ? { lang } : {}),
                     });
                     const info = entity.TrustedEntityInformation;
@@ -421,6 +505,7 @@ describe("TrustListService", () => {
                         "en",
                     ]);
                     expect(langs(info.TEAddress.TEElectronicAddress)).toEqual([
+                        "en",
                         "en",
                     ]);
                 },
@@ -585,7 +670,12 @@ describe("TrustListService", () => {
                                 ...externalEntity,
                                 // The body schema refuses this; the service
                                 // still answers the builder's refusal.
-                                info: { name: "Issuer", country: "Germany" },
+                                info: {
+                                    name: "Issuer",
+                                    contactUri: "info@example.com",
+                                    website: "https://example.com/",
+                                    country: "Germany",
+                                },
                             },
                         ],
                     },
@@ -870,7 +960,11 @@ describe("TrustListService", () => {
                                 type: "internal",
                                 issuerKeyChainId: "status-key",
                                 revocationKeyChainId: "status-key",
-                                info: { name: "Issuer" },
+                                info: {
+                                    name: "Issuer",
+                                    contactUri: "info@example.com",
+                                    website: "https://example.com/",
+                                },
                             },
                         ],
                     },
@@ -906,7 +1000,11 @@ describe("TrustListService", () => {
                                 type: "internal",
                                 issuerKeyChainId: "missing",
                                 revocationKeyChainId: "missing",
-                                info: { name: "Issuer" },
+                                info: {
+                                    name: "Issuer",
+                                    contactUri: "info@example.com",
+                                    website: "https://example.com/",
+                                },
                             },
                         ],
                     },
@@ -943,7 +1041,11 @@ describe("TrustListService", () => {
                                 type: "internal",
                                 issuerKeyChainId: "key",
                                 revocationKeyChainId: "key",
-                                info: { name: "Issuer" },
+                                info: {
+                                    name: "Issuer",
+                                    contactUri: "info@example.com",
+                                    website: "https://example.com/",
+                                },
                             },
                         ],
                     },
@@ -992,7 +1094,11 @@ describe("TrustListService", () => {
                                     type: "external",
                                     issuerCertPem: "not a certificate",
                                     revocationCertPem: "not a certificate",
-                                    info: { name: "Issuer" },
+                                    info: {
+                                        name: "Issuer",
+                                        contactUri: "info@example.com",
+                                        website: "https://example.com/",
+                                    },
                                 },
                             ],
                         },
@@ -1081,7 +1187,11 @@ describe("TrustListService", () => {
                             type: "internal",
                             issuerKeyChainId: "issuer-key",
                             revocationKeyChainId: "status-key",
-                            info: { name: "Issuer" },
+                            info: {
+                                name: "Issuer",
+                                contactUri: "info@example.com",
+                                website: "https://example.com/",
+                            },
                         },
                     ],
                 } as unknown as Partial<TrustList>),

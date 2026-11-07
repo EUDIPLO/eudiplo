@@ -1,9 +1,15 @@
 import {
     TRUST_LIST_COUNTRY_DESCRIPTION,
     TRUST_LIST_COUNTRY_PATTERN,
+    TRUST_LIST_EMAIL_DESCRIPTION,
+    TRUST_LIST_EMAIL_PATTERN,
     TRUST_LIST_LANGUAGE_DESCRIPTION,
     TRUST_LIST_LANGUAGE_TAG_PATTERN,
+    TRUST_LIST_PHONE_DESCRIPTION,
+    TRUST_LIST_PHONE_PATTERN,
     TRUST_LIST_URI_DESCRIPTION,
+    TRUST_LIST_WEBSITE_DESCRIPTION,
+    TRUST_LIST_WEBSITE_PATTERN,
 } from "@eudiplo/config-format/trust-list-entity-info.js";
 import {
     ApiExtraModels,
@@ -46,7 +52,25 @@ export class TrustListEntityInfo {
 
     streetAddress?: string;
 
-    contactUri?: string;
+    @ApiProperty({
+        pattern: TRUST_LIST_EMAIL_PATTERN,
+        description: TRUST_LIST_EMAIL_DESCRIPTION,
+    })
+    contactUri!: string;
+
+    @ApiProperty({
+        format: "uri",
+        pattern: TRUST_LIST_WEBSITE_PATTERN,
+        description: TRUST_LIST_WEBSITE_DESCRIPTION,
+    })
+    website!: string;
+
+    @ApiProperty({
+        required: false,
+        pattern: TRUST_LIST_PHONE_PATTERN,
+        description: TRUST_LIST_PHONE_DESCRIPTION,
+    })
+    phone?: string;
 }
 
 /**

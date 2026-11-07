@@ -1,5 +1,5 @@
 {
-  "$schema": "https://eudiplo.dev/schemas/v1/TrustListConfigFile.schema.json",
+  "$schema": "https://eudiplo.dev/schemas/v2/TrustListConfigFile.schema.json",
   "metadata": {
     "generation": 1
   },
@@ -14,7 +14,9 @@
         "revocationKeyChainId": "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
         "info": {
           "name": "PID Provider",
-          "locale": "en"
+          "locale": "en",
+          "contactUri": "info@example.com",
+          "website": "https://example.com/"
         }
       }
     ]

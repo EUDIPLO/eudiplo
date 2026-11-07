@@ -28,7 +28,9 @@ import {
   trustListControllerGetTrustList,
   trustListControllerGetTrustListVersions,
 } from '@eudiplo/sdk-core';
+import { FormControl } from '@angular/forms';
 import { ApiService } from '../../core';
+import { emailValidators } from '../trust-list-edit/trust-list-electronic-address';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { CredentialConfigService } from '../../issuance/credential-config/credential-config.service';
 import { PresentationManagementService } from '../../presentation/presentation-config/presentation-management.service';
@@ -57,6 +59,8 @@ interface EntityInfo {
   postalCode?: string;
   streetAddress?: string;
   contactUri?: string;
+  website?: string;
+  phone?: string;
 }
 
 interface InternalEntity {
@@ -188,6 +192,16 @@ export class TrustListShowComponent implements OnInit {
 
   isInternalEntity(entity: TrustListEntity): entity is InternalEntity {
     return entity.type === 'internal';
+  }
+
+  /** Whether a stored `contactUri` is an e-mail address; lists stored before 10.0 may hold a URL. */
+  isEmail(contactUri: string): boolean {
+    return emailValidators.every((validator) => !validator(new FormControl(contactUri)));
+  }
+
+  /** The link for an entity's e-mail address, which is stored bare or as a mailto: URI. */
+  mailtoUri(contactUri: string): string {
+    return contactUri.startsWith('mailto:') ? contactUri : `mailto:${contactUri}`;
   }
 
   isExternalEntity(entity: TrustListEntity): entity is ExternalEntity {

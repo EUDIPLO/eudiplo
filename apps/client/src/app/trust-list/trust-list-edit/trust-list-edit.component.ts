@@ -55,7 +55,19 @@ import {
   sectionsWithErrors,
 } from '../../common/field-to-fix.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
+import {
+  ELECTRONIC_ADDRESS_MESSAGES,
+  electronicAddressControls,
+  readElectronicAddress,
+} from './trust-list-electronic-address';
 import { fromFormQueryParams } from '../../common/return-to-form';
+
+/** The message set of each electronic address control. */
+const ELECTRONIC_ADDRESS_FIELDS = {
+  infoContactUri: 'email',
+  infoWebsite: 'website',
+  infoPhone: 'phone',
+} as const;
 
 /** Common info fields for both internal and external entities */
 interface EntityInfoForm {
@@ -68,6 +80,8 @@ interface EntityInfoForm {
   infoPostalCode: FormControl<string>;
   infoStreetAddress: FormControl<string>;
   infoContactUri: FormControl<string>;
+  infoWebsite: FormControl<string>;
+  infoPhone: FormControl<string>;
 }
 
 interface InternalEntityForm extends EntityInfoForm {
@@ -407,6 +421,22 @@ export class TrustListEditComponent implements OnInit {
   }
 
   /**
+   * Lists stored before 10.0 load without a website and sometimes with a URL as e-mail address
+   * (ETSI TS 119 602 clause 6.5.3.2). Their fields show the error right away and their panels
+   * open, so the user sees what to add before saving.
+   */
+  private showStoredAddressGaps(): void {
+    for (const entity of this.entitiesArray.controls) {
+      const gaps = ['infoContactUri', 'infoWebsite', 'infoPhone']
+        .map((name) => entity.get(name))
+        .filter((control) => control?.invalid);
+      if (gaps.length === 0) continue;
+      for (const control of gaps) control?.markAsTouched();
+      this.rejectedEntities.add(entity);
+    }
+  }
+
+  /**
    * Whether an internal entity selects a key chain that is of another usage type or does not
    * exist, as its header says, since its panel may be collapsed.
    */
@@ -555,6 +585,7 @@ export class TrustListEditComponent implements OnInit {
       } else if (this.trustList.data) {
         this.loadEntitiesFromData(this.trustList.data);
       }
+      this.showStoredAddressGaps();
       this.revalidateSigningKeyChain();
     } catch (error) {
       console.error('Failed to load trust list:', error);
@@ -599,7 +630,7 @@ export class TrustListEditComponent implements OnInit {
           infoStreetAddress: new FormControl(entity.info?.streetAddress || '', {
             nonNullable: true,
           }),
-          infoContactUri: new FormControl(entity.info?.contactUri || '', { nonNullable: true }),
+          ...electronicAddressControls(entity.info),
         });
         this.entitiesArray.push(entityGroup);
       } else {
@@ -628,7 +659,7 @@ export class TrustListEditComponent implements OnInit {
           infoStreetAddress: new FormControl(entity.info?.streetAddress || '', {
             nonNullable: true,
           }),
-          infoContactUri: new FormControl(entity.info?.contactUri || '', { nonNullable: true }),
+          ...electronicAddressControls(entity.info),
         });
         this.entitiesArray.push(entityGroup);
       }
@@ -660,7 +691,7 @@ export class TrustListEditComponent implements OnInit {
 
       // Extract entity info
       const postalAddress = info?.TEAddress?.TEPostalAddress?.[0];
-      const electronicAddress = info?.TEAddress?.TEElectronicAddress?.[0];
+      const electronicAddress = readElectronicAddress(info?.TEAddress?.TEElectronicAddress);
       const lang = info?.TEName?.[0]?.lang || 'en';
 
       // Create external entity form with loaded data
@@ -694,10 +725,7 @@ export class TrustListEditComponent implements OnInit {
         infoStreetAddress: new FormControl(postalAddress?.StreetAddress || '', {
           nonNullable: true,
         }),
-        infoContactUri: new FormControl(
-          this.getLocalizedUriValue(electronicAddress ? [electronicAddress] : undefined),
-          { nonNullable: true }
-        ),
+        ...electronicAddressControls(electronicAddress),
       });
       this.entitiesArray.push(entityGroup);
     }
@@ -751,7 +779,7 @@ export class TrustListEditComponent implements OnInit {
       infoLocality: new FormControl('', { nonNullable: true }),
       infoPostalCode: new FormControl('', { nonNullable: true }),
       infoStreetAddress: new FormControl('', { nonNullable: true }),
-      infoContactUri: new FormControl('', { nonNullable: true }),
+      ...electronicAddressControls(),
     });
     this.entitiesArray.push(entityGroup);
   }
@@ -775,7 +803,7 @@ export class TrustListEditComponent implements OnInit {
       infoLocality: new FormControl('', { nonNullable: true }),
       infoPostalCode: new FormControl('', { nonNullable: true }),
       infoStreetAddress: new FormControl('', { nonNullable: true }),
-      infoContactUri: new FormControl('', { nonNullable: true }),
+      ...electronicAddressControls(),
     });
     this.entitiesArray.push(entityGroup);
   }
@@ -823,7 +851,9 @@ export class TrustListEditComponent implements OnInit {
         locality: entity.infoLocality || undefined,
         postalCode: entity.infoPostalCode || undefined,
         streetAddress: entity.infoStreetAddress || undefined,
-        contactUri: entity.infoContactUri || undefined,
+        contactUri: entity.infoContactUri,
+        website: entity.infoWebsite,
+        phone: entity.infoPhone || undefined,
       };
 
       if (entity.type === 'internal') {
@@ -885,6 +915,19 @@ export class TrustListEditComponent implements OnInit {
     } finally {
       this.saving = false;
     }
+  }
+
+  /** Message under an electronic address field: the backend's issue, else the failed validator's. */
+  electronicAddressError(
+    index: number,
+    control: 'infoContactUri' | 'infoWebsite' | 'infoPhone'
+  ): string {
+    const path = `entities.${index}.${control}`;
+    const errors = this.form.get(path)?.errors ?? {};
+    const messages: Partial<Record<string, string>> =
+      ELECTRONIC_ADDRESS_MESSAGES[ELECTRONIC_ADDRESS_FIELDS[control]];
+    const failed = ['required', 'pattern', 'serializedUrl'].find((key) => errors[key]);
+    return this.fieldError(path, (failed && messages[failed]) || '');
   }
 
   /**

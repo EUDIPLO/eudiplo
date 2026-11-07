@@ -206,7 +206,12 @@ describe("Presentation - ES384 / ES512 key chains (e2e)", () => {
                             type: "internal",
                             issuerKeyChainId,
                             revocationKeyChainId: STATUS_LIST_KEY_CHAIN_ID,
-                            info: { name: `${alg} PID Provider`, lang: "en" },
+                            info: {
+                                name: `${alg} PID Provider`,
+                                contactUri: "info@example.com",
+                                website: "https://example.com/",
+                                lang: "en",
+                            },
                         },
                     ],
                 };

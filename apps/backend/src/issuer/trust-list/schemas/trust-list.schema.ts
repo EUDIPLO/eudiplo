@@ -1,13 +1,23 @@
 import {
     isTrustListEntityUri,
+    isTrustListWebsite,
     TRUST_LIST_COUNTRY_CODES,
     TRUST_LIST_COUNTRY_DESCRIPTION,
     TRUST_LIST_COUNTRY_MESSAGE,
+    TRUST_LIST_EMAIL_DESCRIPTION,
+    TRUST_LIST_EMAIL_MESSAGE,
+    TRUST_LIST_EMAIL_PATTERN,
     TRUST_LIST_LANGUAGE_DESCRIPTION,
     TRUST_LIST_LANGUAGE_MESSAGE,
     TRUST_LIST_LANGUAGE_TAG_PATTERN,
+    TRUST_LIST_PHONE_DESCRIPTION,
+    TRUST_LIST_PHONE_MESSAGE,
+    TRUST_LIST_PHONE_PATTERN,
     TRUST_LIST_URI_DESCRIPTION,
     TRUST_LIST_URI_MESSAGE,
+    TRUST_LIST_WEBSITE_DESCRIPTION,
+    TRUST_LIST_WEBSITE_MESSAGE,
+    TRUST_LIST_WEBSITE_PATTERN,
 } from "@eudiplo/config-format/trust-list-entity-info.js";
 import { z } from "zod";
 
@@ -42,9 +52,36 @@ const TrustListEntityInfoSchema = z
             .optional()
             .describe("Optional street address."),
         contactUri: z
-            .string()
+            .string({ error: TRUST_LIST_EMAIL_MESSAGE })
+            .regex(
+                new RegExp(TRUST_LIST_EMAIL_PATTERN),
+                TRUST_LIST_EMAIL_MESSAGE,
+            )
+            .describe(TRUST_LIST_EMAIL_DESCRIPTION),
+        website: z
+            // abort: a value that is no URL gets one error, not two.
+            .url({
+                protocol: /^https?$/,
+                abort: true,
+                error: TRUST_LIST_WEBSITE_MESSAGE,
+            })
+            // The pattern carries the rule into the generated JSON Schema,
+            // which the CLI and editors check; isTrustListWebsite adds the
+            // serialized-form check they cannot express.
+            .regex(new RegExp(TRUST_LIST_WEBSITE_PATTERN), {
+                error: TRUST_LIST_WEBSITE_MESSAGE,
+                abort: true,
+            })
+            .refine(isTrustListWebsite, TRUST_LIST_WEBSITE_MESSAGE)
+            .describe(TRUST_LIST_WEBSITE_DESCRIPTION),
+        phone: z
+            .string({ error: TRUST_LIST_PHONE_MESSAGE })
+            .regex(
+                new RegExp(TRUST_LIST_PHONE_PATTERN),
+                TRUST_LIST_PHONE_MESSAGE,
+            )
             .optional()
-            .describe("Optional contact URI for the entity."),
+            .describe(TRUST_LIST_PHONE_DESCRIPTION),
     })
     .describe("Human-readable metadata for a trust list entity.")
     .strict();

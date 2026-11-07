@@ -1,11 +1,20 @@
+import { RE2JS } from "re2js";
 import { describe, expect, it } from "vitest";
 import {
     isTrustListCountryCode,
+    isTrustListEmail,
     isTrustListEntityUri,
     isTrustListLanguageTag,
+    isTrustListPhone,
+    isTrustListWebsite,
     TRUST_LIST_COUNTRY_CODES,
+    TRUST_LIST_EMAIL_PATTERN,
+    TRUST_LIST_PHONE_PATTERN,
+    TRUST_LIST_WEBSITE_PATTERN,
     trustListCountryCode,
     trustListLanguageTag,
+    trustListMailtoUri,
+    trustListTelUri,
 } from "./trust-list-entity-info.js";
 
 describe("trust list entity info (ETSI TS 119 602)", () => {
@@ -78,5 +87,107 @@ describe("trust list entity info (ETSI TS 119 602)", () => {
         expect(isTrustListEntityUri("https:\\\\example.com")).toBe(false);
         expect(isTrustListEntityUri(" https://example.com/")).toBe(false);
         expect(isTrustListEntityUri("HTTPS://example.com/")).toBe(false);
+    });
+
+    describe("electronic address (clause 6.5.3.2)", () => {
+        it.each([
+            "info@example.com",
+            "mailto:info@example.com",
+            "first.last+tag@mail.example.co.uk",
+            "o'neil@xn--bcher-kva.example",
+        ])("accepts the e-mail address %j", (value) => {
+            expect(isTrustListEmail(value)).toBe(true);
+        });
+
+        it.each([
+            "",
+            "info",
+            "mailto:",
+            "info@localhost",
+            "info@example.com,other@example.com",
+            "mailto:info@example.com?subject=hi",
+            "MAILTO:info@example.com",
+            "in fo@example.com",
+            ".info@example.com",
+            "info..x@example.com",
+            "info@-example.com",
+            "info@bücher.example",
+            "https://example.com/contact",
+            "mailto:https://example.com",
+            "a/b@example.com",
+            "a=b@example.com",
+            "a&b@example.com",
+        ])("refuses the e-mail address %j", (value) => {
+            expect(isTrustListEmail(value)).toBe(false);
+        });
+
+        it("publishes an e-mail address as one mailto: URI", () => {
+            expect(trustListMailtoUri("info@example.com")).toBe(
+                "mailto:info@example.com",
+            );
+            expect(trustListMailtoUri("mailto:info@example.com")).toBe(
+                "mailto:info@example.com",
+            );
+        });
+
+        it.each([
+            "https://example.com/",
+            "https://example.com",
+            "http://example.com/about?x=1",
+        ])("accepts the web site %j", (value) => {
+            expect(isTrustListWebsite(value)).toBe(true);
+        });
+
+        it.each([
+            "",
+            "example.com",
+            "ftp://example.com/",
+            "mailto:info@example.com",
+            "HTTPS://example.com/",
+            "https:example.com",
+            "https://exa mple.com/",
+            "javascript:alert(1)",
+        ])("refuses the web site %j", (value) => {
+            expect(isTrustListWebsite(value)).toBe(false);
+        });
+
+        it.each([
+            "+49301234567",
+            "tel:+49-30-1234567",
+            "+1(555)123.4567",
+            "+123",
+        ])("accepts the telephone number %j", (value) => {
+            expect(isTrustListPhone(value)).toBe(true);
+        });
+
+        it.each([
+            "",
+            "030 1234567",
+            "+49 30 1234567",
+            "0301234567",
+            "+12",
+            "+1234567890123456",
+            "tel:+49--30",
+            "TEL:+49301234567",
+        ])("refuses the telephone number %j", (value) => {
+            expect(isTrustListPhone(value)).toBe(false);
+        });
+
+        it("publishes a telephone number as one tel: URI", () => {
+            expect(trustListTelUri("+49301234567")).toBe("tel:+49301234567");
+            expect(trustListTelUri("tel:+49301234567")).toBe(
+                "tel:+49301234567",
+            );
+        });
+
+        it("keeps the patterns runnable by RE2", () => {
+            const email = RE2JS.compile(TRUST_LIST_EMAIL_PATTERN);
+            const phone = RE2JS.compile(TRUST_LIST_PHONE_PATTERN);
+            expect(email.matches("mailto:info@example.com")).toBe(true);
+            expect(phone.matches("tel:+49-30-1234567")).toBe(true);
+            const website = RE2JS.compile(TRUST_LIST_WEBSITE_PATTERN);
+            expect(website.matches("https://example.com/about")).toBe(true);
+            expect(website.matches("ftp://example.com/")).toBe(false);
+        });
     });
 });

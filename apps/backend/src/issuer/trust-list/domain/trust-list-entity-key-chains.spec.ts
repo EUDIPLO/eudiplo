@@ -13,7 +13,11 @@ const internal = (
     type: "internal",
     issuerKeyChainId,
     revocationKeyChainId,
-    info: { name: "Issuer" },
+    info: {
+        name: "Issuer",
+        contactUri: "info@example.com",
+        website: "https://example.com/",
+    },
 });
 
 describe("entityKeyChainReferences", () => {

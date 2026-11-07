@@ -372,7 +372,11 @@ describe("configuration comparisons", () => {
                 type: "internal",
                 issuerKeyChainId: "issuer",
                 revocationKeyChainId: "issuer",
-                info: { name: "Issuer" },
+                info: {
+                    name: "Issuer",
+                    contactUri: "info@example.com",
+                    website: "https://example.com/",
+                },
             },
         ];
         const result = service({}) as any;

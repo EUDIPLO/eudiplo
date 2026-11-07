@@ -350,7 +350,7 @@ describe("config upgrade", () => {
         expect(result.spec).toEqual(valid);
     });
 
-    it("upgrades a v1 trust list to v2 with ETSI country and language codes and blocks a country name", async () => {
+    it("blocks a v1 trust list upgrade on a country name and on the web site v1 cannot carry", async () => {
         const { cwd, context, output } = await setup();
         const source = join(cwd, "trust-list.json");
         const spec = (info: Record<string, unknown>) => ({
@@ -378,22 +378,22 @@ describe("config upgrade", () => {
         );
         await expect(access(`${source}.upgraded.json`)).rejects.toThrow();
 
+        // v1 has no website field, so a v1 file always needs one by hand.
         await writeFile(
             source,
             JSON.stringify({
                 $schema: schemaUrl("TrustList", 1),
-                spec: spec({ country: "gb", lang: "EN" }),
+                spec: spec({ country: "gb", contactUri: "info@example.com" }),
             }),
         );
-        expect(await runCli(["config", "upgrade", source], context)).toBe(0);
+        expect(await runCli(["config", "upgrade", source], context)).toBe(1);
         expect(output.stderr).toContain(
-            "/spec/entities/0/info/country: warning TRUST_LIST_COUNTRY_REPLACED",
+            "/spec/entities/0/info/country: required-input TRUST_LIST_COUNTRY_INVALID",
         );
-        const result = JSON.parse(
-            await readFile(`${source}.upgraded.json`, "utf8"),
+        expect(output.stderr).toContain(
+            "/spec/entities/0/info/website: required-input TRUST_LIST_WEBSITE_MISSING",
         );
-        expect(result.$schema).toBe(schemaUrl("TrustList", 2));
-        expect(result.spec).toEqual(spec({ country: "UK", lang: "en" }));
+        await expect(access(`${source}.upgraded.json`)).rejects.toThrow();
     });
 
     it("upgrades a v2 credential configuration without unsupported constraint keywords", async () => {

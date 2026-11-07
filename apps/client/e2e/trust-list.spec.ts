@@ -96,7 +96,12 @@ test.describe('entities', () => {
           providerType: 'attestation-provider',
           issuerCertPem: certificatePem,
           revocationCertPem: certificatePem,
-          info: { name: `Entity ${name}`, country: name === 'C' ? 'FR' : 'DE' },
+          info: {
+            name: `Entity ${name}`,
+            contactUri: 'info@example.com',
+            website: 'https://example.com/',
+            country: name === 'C' ? 'FR' : 'DE',
+          },
         })),
       }),
     });
@@ -259,11 +264,11 @@ test.describe('edit page', () => {
     await expect(
       page.getByRole('link', { name: 'Create status list key chain (opens in a new tab)' })
     ).toHaveAttribute('href', '/keys/create?usage=statusList&from=form');
-    // With the entity named, Save points at the empty key chain selects.
-    await page
-      .getByRole('region', { name: /Internal Entity #2/ })
-      .getByRole('textbox', { name: 'Entity Name' })
-      .fill('Own Issuer');
+    // With the entity named and addressed, Save points at the empty key chain selects.
+    const ownIssuer = page.getByRole('region', { name: /Internal Entity #2/ });
+    await ownIssuer.getByRole('textbox', { name: 'Entity Name' }).fill('Own Issuer');
+    await ownIssuer.getByRole('textbox', { name: 'E-mail Address' }).fill('info@example.com');
+    await ownIssuer.getByRole('textbox', { name: 'Website' }).fill('https://example.com/');
     const save = page.getByRole('button', { name: 'Save Changes' });
     await expect(save).not.toHaveAttribute('aria-busy', 'true');
     await save.click();
@@ -306,6 +311,8 @@ test.describe('edit page', () => {
     await expect(page.getByRole('group', { name: 'Credential signing key chains' })).toBeVisible();
     await page.getByRole('option', { name: /^Own issuer/ }).click();
     await entity.getByRole('textbox', { name: 'Entity Name' }).fill('Own Issuer');
+    await entity.getByRole('textbox', { name: 'E-mail Address' }).fill('info@example.com');
+    await entity.getByRole('textbox', { name: 'Website' }).fill('https://example.com/');
 
     const save = page.getByRole('button', { name: 'Save Changes' });
     await expect(save).not.toHaveAttribute('aria-busy', 'true');
@@ -372,6 +379,8 @@ test.describe('edit page', () => {
     const second = page.getByRole('region', { name: /External Entity #2/ });
     const entityName = second.getByRole('textbox', { name: 'Entity Name' });
     await entityName.fill('Other Issuer');
+    await second.getByRole('textbox', { name: 'E-mail Address' }).fill('info@example.com');
+    await second.getByRole('textbox', { name: 'Website' }).fill('https://example.com/');
     await expect(page.getByRole('button', { name: 'Save Changes' })).not.toHaveAttribute(
       'aria-busy',
       'true'
@@ -430,6 +439,8 @@ test.describe('create page', () => {
     await entity.getByRole('combobox', { name: /^Revocation Key Chain/ }).click();
     await page.getByRole('option', { name: /^Own status list/ }).click();
     await entity.getByRole('textbox', { name: 'Entity Name' }).fill('Own Issuer');
+    await entity.getByRole('textbox', { name: 'E-mail Address' }).fill('info@example.com');
+    await entity.getByRole('textbox', { name: 'Website' }).fill('https://example.com/');
     // Saving would fail without a trust list key chain, so Save points at the signing select
     // instead of sending the form.
     const save = page.getByRole('button', { name: 'Create Trust List' });

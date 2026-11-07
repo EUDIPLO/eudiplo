@@ -38,7 +38,11 @@ function internal(
         type: "internal",
         issuerKeyChainId,
         revocationKeyChainId,
-        info: { name: "Provider" },
+        info: {
+            name: "Provider",
+            contactUri: "info@example.com",
+            website: "https://example.com/",
+        },
     };
 }
 

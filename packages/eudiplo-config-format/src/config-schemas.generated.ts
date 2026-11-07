@@ -9405,12 +9405,25 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
                           "type": "string"
                         },
                         "contactUri": {
-                          "description": "Optional contact URI for the entity.",
-                          "type": "string"
+                          "type": "string",
+                          "pattern": "^(?:mailto:)?[A-Za-z0-9!$'*+_~-]+(?:\\.[A-Za-z0-9!$'*+_~-]+)*@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
+                          "description": "E-mail address of the entity, for example info@example.com or mailto:info@example.com, published as a mailto: URI in TEElectronicAddress (ETSI TS 119 602 clause 6.5.3.2). Use ASCII characters; write an internationalized domain in its xn-- form."
+                        },
+                        "website": {
+                          "type": "string",
+                          "pattern": "^https?:\\/\\/[^\\s/?#]+(?:[/?#]\\S*)?$",
+                          "description": "Web site of the entity, an absolute http or https URI published in TEElectronicAddress (ETSI TS 119 602 clause 6.5.3.2). Write it as a URL parser serializes it, for example https://example.com/."
+                        },
+                        "phone": {
+                          "description": "Optional telephone number of the entity in international form, for example +49-30-1234567 or tel:+49-30-1234567, published as a tel: URI in TEElectronicAddress (ETSI TS 119 602 clause 6.5.3.2).",
+                          "type": "string",
+                          "pattern": "^(?:tel:)?\\+(?:[0-9][().-]?){2,14}[0-9]$"
                         }
                       },
                       "required": [
-                        "name"
+                        "name",
+                        "contactUri",
+                        "website"
                       ],
                       "additionalProperties": false,
                       "description": "Entity metadata."
@@ -9741,12 +9754,25 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
                           "type": "string"
                         },
                         "contactUri": {
-                          "description": "Optional contact URI for the entity.",
-                          "type": "string"
+                          "type": "string",
+                          "pattern": "^(?:mailto:)?[A-Za-z0-9!$'*+_~-]+(?:\\.[A-Za-z0-9!$'*+_~-]+)*@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$",
+                          "description": "E-mail address of the entity, for example info@example.com or mailto:info@example.com, published as a mailto: URI in TEElectronicAddress (ETSI TS 119 602 clause 6.5.3.2). Use ASCII characters; write an internationalized domain in its xn-- form."
+                        },
+                        "website": {
+                          "type": "string",
+                          "pattern": "^https?:\\/\\/[^\\s/?#]+(?:[/?#]\\S*)?$",
+                          "description": "Web site of the entity, an absolute http or https URI published in TEElectronicAddress (ETSI TS 119 602 clause 6.5.3.2). Write it as a URL parser serializes it, for example https://example.com/."
+                        },
+                        "phone": {
+                          "description": "Optional telephone number of the entity in international form, for example +49-30-1234567 or tel:+49-30-1234567, published as a tel: URI in TEElectronicAddress (ETSI TS 119 602 clause 6.5.3.2).",
+                          "type": "string",
+                          "pattern": "^(?:tel:)?\\+(?:[0-9][().-]?){2,14}[0-9]$"
                         }
                       },
                       "required": [
-                        "name"
+                        "name",
+                        "contactUri",
+                        "website"
                       ],
                       "additionalProperties": false,
                       "description": "Entity metadata."
