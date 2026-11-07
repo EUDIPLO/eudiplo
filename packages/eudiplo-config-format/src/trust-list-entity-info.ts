@@ -51,7 +51,7 @@ export const TRUST_LIST_LANGUAGE_MESSAGE =
     "Use an IETF RFC 5646 language tag in lower case, for example en or de-at (ETSI TS 119 602 clause 6.1.4).";
 
 export const TRUST_LIST_LANGUAGE_DESCRIPTION =
-    "Optional language of every text the entity publishes (name, service names, postal address, contact, information URI): an IETF RFC 5646 language tag in lower case, for example en or de-at (ETSI TS 119 602 clause 6.1.4). Defaults to en.";
+    "Optional language of the entity's name, postal address, contact and information URI: an IETF RFC 5646 language tag in lower case, for example en or de-at (ETSI TS 119 602 clause 6.1.4). Defaults to en. With another language, the list publishes these texts in that language and again under en with the same text, since every list supports English (clause 6.1.4); service names are published in English only.";
 
 export const TRUST_LIST_URI_DESCRIPTION =
     "Optional absolute URI where relying parties find information about the entity, published as TEInformationURI. Write it as a URL parser serializes it, for example https://example.com/about with spaces percent-encoded.";

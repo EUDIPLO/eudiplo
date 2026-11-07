@@ -358,7 +358,10 @@ describe("TrustListService", () => {
                 [
                     { lang: "de-at", uriValue: "mailto:info@example.com" },
                     { lang: "de-at", uriValue: "https://example.com/" },
+                    { lang: "en", uriValue: "mailto:info@example.com" },
+                    { lang: "en", uriValue: "https://example.com/" },
                     { lang: "de-at", uriValue: "tel:+49-30-1234567" },
+                    { lang: "en", uriValue: "tel:+49-30-1234567" },
                 ],
                 [
                     { lang: "en", uriValue: "mailto:info@example.com" },
@@ -384,6 +387,129 @@ describe("TrustListService", () => {
                 { lang: "en", uriValue: "mailto:info@example.com" },
                 { lang: "en", uriValue: "https://example.com/" },
             ]);
+        });
+
+        describe("entity languages (ETSI TS 119 602 clause 6.1.4)", () => {
+            const publishedEntity = async (
+                info: TrustListCreateDto["entities"][number]["info"],
+                providerType?: "wallet-provider",
+            ): Promise<Record<string, any>> => {
+                const { service, trustListRepo } = createService([]);
+                await service.create(
+                    {
+                        id: "languages",
+                        entities: [
+                            {
+                                ...externalEntity,
+                                info,
+                                ...(providerType ? { providerType } : {}),
+                            } as TrustListCreateDto["entities"][number],
+                        ],
+                    },
+                    { id: "tenant", name: "Tenant" },
+                );
+                const saved = trustListRepo.save.mock.calls[0][0] as TrustList;
+                return (saved.data as LoTEDocument).LoTE
+                    .TrustedEntitiesList[0] as Record<string, any>;
+            };
+            const langs = (entries: Array<{ lang: string }>) =>
+                entries.map((entry) => entry.lang);
+
+            it("publishes a non-English entity in its language and again in en", async () => {
+                const entity = await publishedEntity({
+                    name: "Musteraussteller",
+                    lang: "de-at",
+                    uri: "https://example.com/about",
+                    contactUri: "mailto:info@example.com",
+                    website: "https://example.com/",
+                    country: "AT",
+                    locality: "Wien",
+                    postalCode: "1010",
+                    streetAddress: "Ring 1",
+                });
+                const info = entity.TrustedEntityInformation;
+
+                expect(info.TEName).toEqual([
+                    { lang: "de-at", value: "Musteraussteller" },
+                    { lang: "en", value: "Musteraussteller" },
+                ]);
+                expect(info.TEInformationURI).toEqual([
+                    { lang: "de-at", uriValue: "https://example.com/about" },
+                    { lang: "en", uriValue: "https://example.com/about" },
+                ]);
+                expect(info.TEAddress.TEElectronicAddress).toEqual([
+                    { lang: "de-at", uriValue: "mailto:info@example.com" },
+                    { lang: "de-at", uriValue: "https://example.com/" },
+                    { lang: "en", uriValue: "mailto:info@example.com" },
+                    { lang: "en", uriValue: "https://example.com/" },
+                ]);
+                const address = {
+                    Country: "AT",
+                    Locality: "Wien",
+                    PostalCode: "1010",
+                    StreetAddress: "Ring 1",
+                };
+                expect(info.TEAddress.TEPostalAddress).toEqual([
+                    { ...address, lang: "de-at" },
+                    { ...address, lang: "en" },
+                ]);
+            });
+
+            it.each([
+                [undefined, "EAA-Issuance-Service", "EAA-Revocation-Service"],
+                [
+                    "wallet-provider" as const,
+                    "Wallet-Issuance-Service",
+                    "Wallet-Revocation-Service",
+                ],
+            ])(
+                "publishes the service names of a %s entity in English only",
+                async (providerType, issuance, revocation) => {
+                    const entity = await publishedEntity(
+                        {
+                            name: "Musteraussteller",
+                            lang: "de",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
+                        },
+                        providerType,
+                    );
+
+                    expect(
+                        entity.TrustedEntityServices.map(
+                            (svc: Record<string, any>) =>
+                                svc.ServiceInformation.ServiceName,
+                        ),
+                    ).toEqual([
+                        [{ lang: "en", value: issuance }],
+                        [{ lang: "en", value: revocation }],
+                    ]);
+                },
+            );
+
+            it.each([undefined, "en"])(
+                "publishes one en entry when lang is %s",
+                async (lang) => {
+                    const entity = await publishedEntity({
+                        name: "Issuer",
+                        uri: "https://example.com/about",
+                        contactUri: "mailto:info@example.com",
+                        website: "https://example.com/",
+                        ...(lang ? { lang } : {}),
+                    });
+                    const info = entity.TrustedEntityInformation;
+
+                    expect(langs(info.TEName)).toEqual(["en"]);
+                    expect(langs(info.TEInformationURI)).toEqual(["en"]);
+                    expect(langs(info.TEAddress.TEPostalAddress)).toEqual([
+                        "en",
+                    ]);
+                    expect(langs(info.TEAddress.TEElectronicAddress)).toEqual([
+                        "en",
+                        "en",
+                    ]);
+                },
+            );
         });
 
         it("accepts external certificates as Base64 DER", async () => {
