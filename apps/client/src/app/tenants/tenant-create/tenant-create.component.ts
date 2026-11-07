@@ -1,4 +1,12 @@
-import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  inject,
+  Injector,
+  OnInit,
+  ViewChild,
+} from '@angular/core';
 import {
   FormBuilder,
   FormControl,
@@ -28,6 +36,9 @@ import { SecretDialogComponent } from '../client/secret-dialog/secret-dialog.com
 import { ApiService } from '../../core';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { showFieldsToFix } from '../../common/field-to-fix.util';
+import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
+import { LoadErrorComponent } from '../../common/load-error.component';
 
 @Component({
   selector: 'app-tenant-create',
@@ -44,6 +55,7 @@ import { openErrorSnackBar } from '../../utils/error-snackbar';
     MatIconModule,
     MatTooltipModule,
     MatDialogModule,
+    LoadErrorComponent,
   ],
   templateUrl: './tenant-create.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -53,8 +65,19 @@ export class TenantCreateComponent implements OnInit {
   tenantForm: FormGroup;
   isSubmitting = false;
   isEditMode = false;
+  /** While the tenant to edit loads; the form waits for it. */
+  loading = false;
+  /** Set when the tenant to edit could not be loaded; the form stays hidden. */
+  loadError = '';
 
   roles = roles;
+
+  /** Where focus goes after a successful retry removed the error card with its Retry button. */
+  @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
+  /** Holds the fields; Save focuses the first invalid one. */
+  @ViewChild('formElement', { read: ElementRef })
+  private readonly formElement?: ElementRef<HTMLFormElement>;
+  private readonly injector = inject(Injector);
 
   constructor(
     private readonly fb: FormBuilder,
@@ -92,7 +115,15 @@ export class TenantCreateComponent implements OnInit {
     }
   }
 
+  /** Loads the tenant again after a failed load. */
+  retryLoad(): void {
+    void this.loadTenant(this.route.snapshot.paramMap.get('id')!);
+  }
+
   private async loadTenant(id: string): Promise<void> {
+    const retrying = this.loadError !== '';
+    this.loading = true;
+    this.loadError = '';
     try {
       const tenant = await tenantControllerGetTenant<true>({ path: { id } });
       this.tenantForm.patchValue({
@@ -104,13 +135,29 @@ export class TenantCreateComponent implements OnInit {
       this.tenantForm.get('id')?.disable();
       this.tenantForm.markAsPristine();
     } catch (error) {
-      openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to load tenant'));
-      this.router.navigate(['../'], { relativeTo: this.route });
+      this.loadError = getApiErrorMessage(error, 'Failed to load tenant');
+    } finally {
+      this.loading = false;
+    }
+    if (retrying && !this.loadError) {
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
     }
   }
 
+  /** Save stays focusable while a save runs, so its tooltip says why it waits. */
+  get saveTooltip(): string {
+    return this.isSubmitting ? 'Saving the tenant…' : '';
+  }
+
   async onSubmit(): Promise<void> {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
+    if (this.isSubmitting) return;
     if (this.tenantForm.invalid) {
+      showFieldsToFix(this.tenantForm, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container: () => this.formElement?.nativeElement,
+      });
       return;
     }
 

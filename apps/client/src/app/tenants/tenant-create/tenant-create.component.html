@@ -1,6 +1,6 @@
 <div fxLayout="column" fxFlex fxLayoutGap="24px">
   <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2>{{ isEditMode ? 'Edit' : 'Create' }} tenant</h2>
+    <h2 #pageHeading tabindex="-1">{{ isEditMode ? 'Edit' : 'Create' }} tenant</h2>
     <button
       matIconButton
       [routerLink]="['../']"
@@ -11,109 +11,124 @@
     </button>
   </div>
 
-  <form [formGroup]="tenantForm" (ngSubmit)="onSubmit()">
-    <mat-card>
-      <mat-card-content fxLayout="column" fxLayoutGap="16px">
-        <mat-form-field appearance="outline">
-          <mat-label>tenant ID</mat-label>
-          <input
-            matInput
-            formControlName="id"
-            placeholder="Enter unique tenant identifier"
-            required
-          />
-          <mat-hint>
-            @if (isEditMode) {
-              Tenant ID cannot be changed
-            } @else {
-              Unique; lowercase letters, digits, "-" and "_", starting with a letter or digit, at
-              most 63 characters
+  @if (loadError) {
+    <app-load-error
+      [message]="loadError"
+      hint="The tenant can only be edited after it has been loaded."
+      (retry)="retryLoad()"
+    >
+      <a mat-button [routerLink]="['../..']">Back to the list</a>
+    </app-load-error>
+  } @else if (loading) {
+    <p><output>Loading tenant…</output></p>
+  } @else {
+    <form #formElement [formGroup]="tenantForm" (ngSubmit)="onSubmit()">
+      <mat-card>
+        <mat-card-content fxLayout="column" fxLayoutGap="16px">
+          <mat-form-field appearance="outline">
+            <mat-label>tenant ID</mat-label>
+            <input
+              matInput
+              formControlName="id"
+              placeholder="Enter unique tenant identifier"
+              required
+            />
+            <mat-hint>
+              @if (isEditMode) {
+                Tenant ID cannot be changed
+              } @else {
+                Unique; lowercase letters, digits, "-" and "_", starting with a letter or digit, at
+                most 63 characters
+              }
+            </mat-hint>
+            @if (tenantForm.get('id')?.hasError('required')) {
+              <mat-error> tenant ID is required </mat-error>
+            } @else if (tenantForm.get('id')?.hasError('pattern')) {
+              <mat-error>
+                Use lowercase letters, digits, "-" and "_", start with a letter or digit, at most 63
+                characters
+              </mat-error>
             }
-          </mat-hint>
-          @if (tenantForm.get('id')?.hasError('required')) {
-            <mat-error> tenant ID is required </mat-error>
-          } @else if (tenantForm.get('id')?.hasError('pattern')) {
-            <mat-error>
-              Use lowercase letters, digits, "-" and "_", start with a letter or digit, at most 63
-              characters
-            </mat-error>
-          }
-        </mat-form-field>
+          </mat-form-field>
 
-        <mat-form-field appearance="outline">
-          <mat-label>Name</mat-label>
-          <input matInput formControlName="name" placeholder="Enter tenant name" required />
-          <mat-hint> Friendly name for the tenant, used as default display name</mat-hint>
-          @if (tenantForm.get('name')?.hasError('required')) {
-            <mat-error> tenant name is required </mat-error>
-          }
-        </mat-form-field>
-
-        <mat-form-field appearance="outline">
-          <mat-label>Description</mat-label>
-          <input
-            matInput
-            formControlName="description"
-            placeholder="Optional description for this tenant"
-          />
-          <mat-hint>Optional description for this tenant, not visible to the public</mat-hint>
-        </mat-form-field>
-
-        @if (!isEditMode) {
-          <div class="initial-client-section">
-            <h3>Initial Admin Client</h3>
-            <mat-slide-toggle
-              formControlName="createAdminClient"
-              color="primary"
-              aria-describedby="admin-client-hint"
-            >
-              Create an admin client
-            </mat-slide-toggle>
-            @if (tenantForm.get('createAdminClient')?.value) {
-              <p id="admin-client-hint" class="section-hint">
-                An admin client will be automatically created for this tenant. Select the roles this
-                client should have. It also gets clients:manage, and it can grant only these roles
-                to other clients, unless you include tenant:admin, which lets it grant every role
-                except tenants:manage and tenant:admin.
-              </p>
-              <mat-form-field>
-                <mat-label>Client Roles</mat-label>
-                <mat-select formControlName="roles" multiple>
-                  @for (role of roles; track role) {
-                    <mat-option [value]="role">
-                      {{ role }}
-                    </mat-option>
-                  }
-                </mat-select>
-                <mat-hint>Roles assigned to the auto-generated admin client</mat-hint>
-              </mat-form-field>
-            } @else {
-              <p id="admin-client-hint" class="section-hint">
-                No admin client is created. Choose this when your identity provider manages the
-                clients (OIDC_PROVIDER=generic), and create them there.
-              </p>
+          <mat-form-field appearance="outline">
+            <mat-label>Name</mat-label>
+            <input matInput formControlName="name" placeholder="Enter tenant name" required />
+            <mat-hint> Friendly name for the tenant, used as default display name</mat-hint>
+            @if (tenantForm.get('name')?.hasError('required')) {
+              <mat-error> tenant name is required </mat-error>
             }
-          </div>
-        }
-      </mat-card-content>
+          </mat-form-field>
 
-      <mat-card-actions fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="8px">
-        <button mat-button type="button" (click)="onCancel()" [disabled]="isSubmitting">
-          Cancel
-        </button>
-        <button
-          mat-flat-button
-          color="primary"
-          type="submit"
-          [disabled]="tenantForm.invalid || isSubmitting"
-        >
-          @if (isSubmitting) {
-            {{ isEditMode ? 'Updating...' : 'Creating...' }}
-          } @else {
-            {{ isEditMode ? 'Update tenant' : 'Create tenant' }}
+          <mat-form-field appearance="outline">
+            <mat-label>Description</mat-label>
+            <input
+              matInput
+              formControlName="description"
+              placeholder="Optional description for this tenant"
+            />
+            <mat-hint>Optional description for this tenant, not visible to the public</mat-hint>
+          </mat-form-field>
+
+          @if (!isEditMode) {
+            <div class="initial-client-section">
+              <h3>Initial Admin Client</h3>
+              <mat-slide-toggle
+                formControlName="createAdminClient"
+                color="primary"
+                aria-describedby="admin-client-hint"
+              >
+                Create an admin client
+              </mat-slide-toggle>
+              @if (tenantForm.get('createAdminClient')?.value) {
+                <p id="admin-client-hint" class="section-hint">
+                  An admin client will be automatically created for this tenant. Select the roles
+                  this client should have. It also gets clients:manage, and it can grant only these
+                  roles to other clients, unless you include tenant:admin, which lets it grant every
+                  role except tenants:manage and tenant:admin.
+                </p>
+                <mat-form-field>
+                  <mat-label>Client Roles</mat-label>
+                  <mat-select formControlName="roles" multiple>
+                    @for (role of roles; track role) {
+                      <mat-option [value]="role">
+                        {{ role }}
+                      </mat-option>
+                    }
+                  </mat-select>
+                  <mat-hint>Roles assigned to the auto-generated admin client</mat-hint>
+                  <mat-error>Select at least one role</mat-error>
+                </mat-form-field>
+              } @else {
+                <p id="admin-client-hint" class="section-hint">
+                  No admin client is created. Choose this when your identity provider manages the
+                  clients (OIDC_PROVIDER=generic), and create them there.
+                </p>
+              }
+            </div>
           }
-        </button>
-      </mat-card-actions>
-    </mat-card>
-  </form>
+        </mat-card-content>
+
+        <mat-card-actions fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="8px">
+          <button mat-button type="button" (click)="onCancel()" [disabled]="isSubmitting">
+            Cancel
+          </button>
+          <button
+            mat-flat-button
+            color="primary"
+            type="submit"
+            [disabled]="isSubmitting"
+            disabledInteractive
+            [matTooltip]="saveTooltip"
+          >
+            @if (isSubmitting) {
+              {{ isEditMode ? 'Updating...' : 'Creating...' }}
+            } @else {
+              {{ isEditMode ? 'Update tenant' : 'Create tenant' }}
+            }
+          </button>
+        </mat-card-actions>
+      </mat-card>
+    </form>
+  }
 </div>

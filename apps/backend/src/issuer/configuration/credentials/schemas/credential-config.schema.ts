@@ -1,3 +1,13 @@
+import {
+    DISPLAY_COLOR_MESSAGE,
+    DISPLAY_COLOR_PATTERN,
+    DISPLAY_DESCRIPTION_DESCRIPTION,
+    DISPLAY_LOCALE_DESCRIPTION,
+    DISPLAY_NAME_DESCRIPTION,
+    displayColorDescription,
+    duplicateDisplayLocaleMessage,
+    findDuplicateDisplayLocales,
+} from "@eudiplo/config-format/display-entries.js";
 import { z } from "zod";
 import {
     ACTIVE_CREDENTIALS_REQUIRE_STATUS_MANAGEMENT,
@@ -291,15 +301,22 @@ const DisplayImageSchema = z
     .describe("Display image reference.")
     .strict();
 
+const DisplayColorSchema = (what: "background" | "text") =>
+    z
+        .string()
+        .regex(new RegExp(DISPLAY_COLOR_PATTERN), DISPLAY_COLOR_MESSAGE)
+        .optional()
+        .describe(displayColorDescription(what));
+
 const CredentialDisplaySchema = FieldDisplaySchema.extend({
-    background_color: z
+    locale: z.string().min(1).describe(DISPLAY_LOCALE_DESCRIPTION),
+    name: z.string().min(1).describe(DISPLAY_NAME_DESCRIPTION),
+    description: z
         .string()
         .optional()
-        .describe("Optional background color for card-style rendering."),
-    text_color: z
-        .string()
-        .optional()
-        .describe("Optional text color for card-style rendering."),
+        .describe(DISPLAY_DESCRIPTION_DESCRIPTION),
+    background_color: DisplayColorSchema("background"),
+    text_color: DisplayColorSchema("text"),
     background_image: DisplayImageSchema.optional().describe(
         "Optional background image.",
     ),
@@ -414,7 +431,17 @@ const IssuerMetadataCredentialConfigSchema = z
             .describe("Credential format emitted by this configuration."),
         display: z
             .array(CredentialDisplaySchema)
-            .describe("Display metadata shown by wallets."),
+            .superRefine((display, context) => {
+                for (const duplicate of findDuplicateDisplayLocales(display))
+                    context.addIssue({
+                        code: "custom",
+                        path: [duplicate.index, "locale"],
+                        message: duplicateDisplayLocaleMessage(duplicate),
+                    });
+            })
+            .describe(
+                "Display metadata shown by wallets, one entry per locale.",
+            ),
         scope: z
             .string()
             .optional()

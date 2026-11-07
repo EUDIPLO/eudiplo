@@ -672,6 +672,96 @@ describe("startup configuration reconciliation", () => {
         ).toMatchObject({ action: "unchanged" });
     });
 
+    it("leaves display values v4 refuses out of exports, so they import again", async () => {
+        const appConfig = app.get(ConfigService);
+        const tenantId = "display-entries";
+        const bootstrap = await request(app.getHttpServer())
+            .post("/api/oauth2/token")
+            .send({
+                grant_type: "client_credentials",
+                client_id: appConfig.getOrThrow<string>("AUTH_CLIENT_ID"),
+                client_secret:
+                    appConfig.getOrThrow<string>("AUTH_CLIENT_SECRET"),
+            })
+            .expect(201);
+        const tenant = await request(app.getHttpServer())
+            .post("/tenant")
+            .set("Authorization", `Bearer ${bootstrap.body.access_token}`)
+            .send({
+                id: tenantId,
+                name: "Display entries tenant",
+                roles: ["issuance:manage"],
+            })
+            .expect(201);
+        const token = await request(app.getHttpServer())
+            .post("/api/oauth2/token")
+            .send({
+                grant_type: "client_credentials",
+                client_id: tenant.body.client.clientId,
+                client_secret: tenant.body.client.clientSecret,
+            })
+            .expect(201)
+            .then((response) => response.body.access_token);
+        await request(app.getHttpServer())
+            .post("/issuer/credentials")
+            .set("Authorization", `Bearer ${token}`)
+            .send({
+                id: "pid",
+                config: {
+                    format: "dc+sd-jwt",
+                    display: [{ name: "PID", locale: "en-US" }],
+                },
+                fields: [],
+            })
+            .expect(201);
+
+        // A configuration stored before CredentialConfig v4 refused these values
+        await app
+            .get(DataSource)
+            .getRepository(CredentialConfig)
+            .update(
+                { tenantId, id: "pid" },
+                {
+                    config: {
+                        format: "dc+sd-jwt",
+                        display: [
+                            {
+                                name: "PID",
+                                locale: "en-US",
+                                background_color: "RGB(18, 16, 124)",
+                                text_color: "navy",
+                            },
+                            { name: "PID (copy)", locale: "en-us" },
+                        ],
+                    } as never,
+                },
+            );
+        const service = app.get(ConfigBundleService);
+        const bundle = await service.exportBundle(tenantId);
+        const exported = bundle.documents.find(
+            (document) =>
+                normalizeDocument(document).kind === "CredentialConfig",
+        );
+        expect(
+            (exported?.spec.config as { display: unknown[] }).display,
+        ).toEqual([
+            {
+                name: "PID",
+                locale: "en-US",
+                background_color: "rgb(18, 16, 124)",
+            },
+        ]);
+        const plan = await service.plan(tenantId, bundle, "upsert");
+        expect(
+            plan.issues.filter(
+                (issue) => issue.resource?.kind === "CredentialConfig",
+            ),
+        ).toEqual([]);
+        expect(
+            plan.items.find((item) => item.kind === "CredentialConfig"),
+        ).toMatchObject({ action: "unchanged" });
+    });
+
     it("plans resources with unchanged image references as unchanged", async () => {
         const root = join(
             app.get(ConfigService).getOrThrow<string>("CONFIG_FOLDER"),

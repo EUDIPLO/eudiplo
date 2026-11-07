@@ -4,6 +4,13 @@ import {
     findUnsupportedClaimPatterns,
     sanitizeClaimFields,
 } from "./claim-constraints.js";
+import {
+    DISPLAY_COLOR_KEYS,
+    DISPLAY_COLOR_MESSAGE,
+    duplicateDisplayLocaleMessage,
+    findDuplicateDisplayLocales,
+    readableDisplayColor,
+} from "./display-entries.js";
 
 export const CONFIG_FORMATS = {
     Tenant: { slug: "tenant", file: "TenantConfigFile", version: 4 },
@@ -28,7 +35,7 @@ export const CONFIG_FORMATS = {
     CredentialConfig: {
         slug: "credential-config",
         file: "CredentialConfigFile",
-        version: 3,
+        version: 4,
     },
     PresentationConfig: {
         slug: "presentation-config",
@@ -416,6 +423,71 @@ const credentialConfigV2ToV3: ConfigMigration = {
     },
 };
 
+/**
+ * CredentialConfig v4 holds credential display entries to OID4VCI 1.0 Section
+ * 12.2.4: colors are CSS Color Level 3 numerical values, and each locale has
+ * one entry. Colors are trimmed and their function names lowercased; one that
+ * still cannot be read is removed with a warning, so the wallet uses its own
+ * (an empty one, which earlier Web Clients sent for "no color", silently).
+ * Which of two entries with the same locale to keep is the author's decision.
+ */
+const credentialConfigV3ToV4: ConfigMigration = {
+    id: "credential-config-v4-display-colors-locales",
+    kind: "CredentialConfig",
+    from: 3,
+    to: 4,
+    migrate(spec) {
+        const config = spec.config;
+        if (
+            typeof config !== "object" ||
+            config === null ||
+            !Array.isArray((config as { display?: unknown }).display)
+        )
+            return { spec };
+        const issues: ConfigMigrationIssue[] = [];
+        let changed = false;
+        const display = (config as { display: unknown[] }).display.map(
+            (entry, index) => {
+                if (typeof entry !== "object" || entry === null) return entry;
+                const next: Record<string, unknown> = { ...entry };
+                for (const key of DISPLAY_COLOR_KEYS) {
+                    const value = next[key];
+                    if (value === undefined) continue;
+                    const color = readableDisplayColor(value);
+                    if (color === value) continue;
+                    changed = true;
+                    if (color !== undefined) {
+                        next[key] = color;
+                        continue;
+                    }
+                    delete next[key];
+                    if (typeof value === "string" && value.trim() === "")
+                        continue;
+                    issues.push({
+                        severity: "warning",
+                        code: "DISPLAY_COLOR_REMOVED",
+                        path: `/spec/config/display/${index}/${key}`,
+                        message: `Removed ${JSON.stringify(value)}, so wallets use their own color. ${DISPLAY_COLOR_MESSAGE}`,
+                    });
+                }
+                return next;
+            },
+        );
+        for (const duplicate of findDuplicateDisplayLocales(display))
+            issues.push({
+                severity: "required-input",
+                code: "DISPLAY_LOCALE_DUPLICATE",
+                path: `/spec/config/display/${duplicate.index}/locale`,
+                message: duplicateDisplayLocaleMessage(duplicate),
+            });
+        if (!changed && issues.length === 0) return { spec };
+        return {
+            spec: changed ? { ...spec, config: { ...config, display } } : spec,
+            issues,
+        };
+    },
+};
+
 // The first published format is v1. Register one step per later version.
 const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
     {
@@ -558,6 +630,7 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         migrate: (spec) => ({ spec }),
     },
     credentialConfigV2ToV3,
+    credentialConfigV3ToV4,
     presentationConfigV1ToV2,
     {
         id: "presentation-config-v3-typed-claim-values",

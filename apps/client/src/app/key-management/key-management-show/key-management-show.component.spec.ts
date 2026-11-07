@@ -8,6 +8,11 @@ import { renderDownloadButton } from '../../config-portability/config-document.t
 import { keyChainDeleteQuestion } from '../key-chain-delete-question';
 import { KeyChainService } from '../key-chain.service';
 import { KeyManagementShowComponent } from './key-management-show.component';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { JwtService } from '../../services/jwt.service';
+import { RegistrarService } from '../../registrar/registrar.service';
+import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
+import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 
 describe('KeyManagementShowComponent', () => {
   let component: KeyManagementShowComponent;
@@ -552,6 +557,53 @@ describe('KeyManagementShowComponent registrar enrollment', () => {
     expect(component.isEnrolling).toBe(false);
   });
 
+  it('keeps Enroll focusable while it runs: a second click sends one request', async () => {
+    registrarService.createAccessCertificate.mockReturnValue(new Promise(() => undefined));
+    keyChainService.getById.mockResolvedValue(keyChain());
+    TestBed.configureTestingModule({
+      imports: [KeyManagementShowComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { paramMap: of(convertToParamMap({ id: 'access-key' })) },
+        },
+        { provide: KeyChainService, useValue: keyChainService },
+        { provide: RegistrarService, useValue: registrarService },
+        {
+          provide: JwtService,
+          useValue: {
+            hasRole: (role: string) => roles.includes(role),
+            canUseConfigPortability: () => false,
+          },
+        },
+        { provide: MatSnackBar, useValue: snackBar },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+      ],
+    });
+    const fixture = TestBed.createComponent(KeyManagementShowComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.canEnrollWithRegistrar).toBe(true));
+    fixture.detectChanges();
+    const enroll = [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('button'),
+    ].find((b) => b.textContent?.includes('Enroll with Registrar'))!;
+    // The ownership lookup of `appConfigManaged` holds clicks back until it answers.
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(enroll.getAttribute('aria-busy')).toBeNull();
+    });
+    expectAvailable(fixture, enroll, 'Request a certificate for this key from the registrar');
+
+    enroll.click();
+    fixture.detectChanges();
+    enroll.click();
+    fixture.detectChanges();
+
+    expect(registrarService.createAccessCertificate).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, enroll, 'Enrolling this key with the registrar…');
+  });
+
   it('keeps the key shown when its reload after the enrollment fails', async () => {
     const component = await create();
     keyChainService.getById.mockRejectedValue({
@@ -726,6 +778,57 @@ describe('KeyManagementShowComponent delete', () => {
     await create().deleteKey();
 
     expect(keyChainService.delete).not.toHaveBeenCalled();
+  });
+  it('keeps Delete key chain focusable and says why while it deletes', async () => {
+    keyChainService.delete.mockReturnValue(new Promise(() => undefined));
+    TestBed.configureTestingModule({
+      imports: [KeyManagementShowComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { paramMap: of(convertToParamMap({ id: 'signing' })) },
+        },
+        {
+          provide: KeyChainService,
+          useValue: {
+            ...keyChainService,
+            getById: async () => ({
+              ...keyChain,
+              type: 'standalone',
+              rotationPolicy: { enabled: false },
+            }),
+          },
+        },
+        {
+          provide: JwtService,
+          useValue: { hasRole: () => false, canUseConfigPortability: () => false },
+        },
+        { provide: MatSnackBar, useValue: snackBar },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+      ],
+    });
+    const fixture = TestBed.createComponent(KeyManagementShowComponent);
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(fixture.componentInstance.keyChain).toBeDefined());
+    fixture.detectChanges();
+    const remove = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[aria-label="Delete key chain"]'
+    )!;
+    // Clicks are held back until the ownership lookup of the managed resource has answered.
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(remove.getAttribute('aria-busy')).toBeNull();
+    });
+    expectAvailable(fixture, remove, 'Delete key chain');
+
+    remove.click();
+    fixture.detectChanges();
+    remove.click();
+    fixture.detectChanges();
+
+    expect(keyChainService.delete).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, remove, 'Deleting the key chain…');
   });
 });
 

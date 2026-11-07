@@ -1,34 +1,19 @@
-import { Component, forwardRef, Input } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { NG_VALUE_ACCESSOR, type ControlValueAccessor } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTooltip } from '@angular/material/tooltip';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { registerFieldFocus } from '../../common/field-to-fix.util';
 import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
 import { IssuanceConfigService } from '../../issuance/issuance-config/issuance-config.service';
 import { PresentationManagementService } from '../../presentation/presentation-config/presentation-management.service';
 import { JwtService } from '../../services/jwt.service';
 import { EditorComponent } from '../../utils/editor/editor.component';
+import { EditorStub } from '../../utils/editor/editor.testing';
 import { FederationTrustAnchorService } from '../federation-trust-anchor.service';
 import { FederationTrustAnchorEditComponent } from './federation-trust-anchor-edit.component';
-
-/** Stands in for the Monaco editor, which needs a browser. */
-@Component({
-  selector: 'app-editor',
-  template: '',
-  providers: [
-    { provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => EditorStub), multi: true },
-  ],
-})
-class EditorStub implements ControlValueAccessor {
-  @Input() schema: unknown;
-  @Input() editorOptions: unknown;
-  @Input() errors: unknown;
-  writeValue(): void {}
-  registerOnChange(): void {}
-  registerOnTouched(): void {}
-}
 
 const jwks = { keys: [{ kty: 'EC' as const, kid: 'ta-2026', crv: 'P-256', x: 'x', y: 'y' }] };
 const anchor = {
@@ -41,7 +26,7 @@ const anchor = {
 
 describe('FederationTrustAnchorEditComponent', () => {
   function render(
-    params: { id?: string; entityId?: string },
+    params: { id?: string; entityId?: string; from?: string },
     service: Record<string, unknown>,
     issuanceEntityIds = ['https://ta.example']
   ) {
@@ -72,9 +57,10 @@ describe('FederationTrustAnchorEditComponent', () => {
           useValue: {
             snapshot: {
               paramMap: convertToParamMap(params.id ? { id: params.id } : {}),
-              queryParamMap: convertToParamMap(
-                params.entityId ? { entityId: params.entityId } : {}
-              ),
+              queryParamMap: convertToParamMap({
+                ...(params.entityId ? { entityId: params.entityId } : {}),
+                ...(params.from ? { from: params.from } : {}),
+              }),
             },
           },
         },
@@ -123,6 +109,58 @@ describe('FederationTrustAnchorEditComponent', () => {
     expect(navigate).toHaveBeenCalledWith(['/federation-trust-anchor', 'eu-federation']);
   });
 
+  it('says to return to the form that opened the page instead of opening the trust anchor', async () => {
+    const create = vi.fn().mockResolvedValue(anchor);
+    const { component, fixture, navigate, snackBar } = render(
+      { entityId: 'https://ta.example', from: 'form' },
+      { create }
+    );
+    component.form.patchValue({ id: 'eu-federation', jwks: jwks as never });
+    const submit = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[type="submit"]'
+    )!;
+    submit.focus();
+
+    await component.onSubmit();
+    fixture.detectChanges();
+
+    expect(create).toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(snackBar.open).not.toHaveBeenCalled();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('form')).toBeNull();
+    const heading = element.querySelector('app-return-to-form h3');
+    expect(heading?.textContent?.trim()).toBe('Trust anchor "EU federation" registered');
+    expect(document.activeElement).toBe(heading);
+    expect(element.querySelector('app-return-to-form a')?.getAttribute('href')).toBe(
+      '/federation-trust-anchor/eu-federation'
+    );
+  });
+
+  it('reports the registration in a snackbar when the user left the page meanwhile', async () => {
+    let resolve!: (value: typeof anchor) => void;
+    const create = vi.fn().mockReturnValue(new Promise((r) => (resolve = r)));
+    const { component, fixture, navigate, snackBar } = render({ from: 'form' }, { create });
+    component.form.patchValue({
+      id: 'eu-federation',
+      entityId: 'https://ta.example',
+      jwks: jwks as never,
+    });
+
+    const registering = component.onSubmit();
+    fixture.destroy();
+    resolve({ ...anchor, description: null as never });
+    await registering;
+
+    expect(component.registeredForForm).toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Trust anchor "eu-federation" registered.',
+      'Close',
+      { duration: 5000 }
+    );
+  });
+
   it('rejects an entity ID the backend would reject before sending', async () => {
     const create = vi.fn();
     const { component } = render({}, { create });
@@ -134,6 +172,79 @@ describe('FederationTrustAnchorEditComponent', () => {
     expect(component.entityIdError).toBe(
       'Enter an https URL with a host and without query or fragment'
     );
+  });
+
+  it('says which fields keep a trust anchor from saving and focuses the first one', async () => {
+    const create = vi.fn();
+    const { fixture, component, snackBar } = render({}, { create });
+    component.form.patchValue({ id: 'ta', jwks });
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    const save = page.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+    expect(save.getAttribute('aria-disabled')).toBeNull();
+
+    save.focus();
+    save.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement?.getAttribute('formcontrolname')).toBe('entityId');
+    });
+    expect(snackBar.open).toHaveBeenLastCalledWith(
+      'Check the highlighted fields in Trust Anchor.',
+      'Close',
+      expect.anything()
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('waits while the trust anchor is saved: a second click sends nothing', async () => {
+    const create = vi.fn(() => new Promise(() => undefined));
+    const { fixture, component } = render({}, { create });
+    component.form.patchValue({ id: 'ta', entityId: 'https://ta.example', jwks });
+    fixture.detectChanges();
+    const save = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[type="submit"]'
+    )!;
+
+    save.click();
+    fixture.detectChanges();
+    save.click();
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(create).toHaveBeenCalledOnce();
+    expect(save.disabled).toBe(false);
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    expect(
+      fixture.debugElement
+        .queryAll(By.directive(MatTooltip))
+        .find((tooltip) => tooltip.nativeElement === save)!
+        .injector.get(MatTooltip).message
+    ).toBe('Saving the trust anchor…');
+  });
+
+  it('names Federation Keys and focuses the key editor when only the key set is missing', async () => {
+    const create = vi.fn();
+    const { fixture, component, snackBar } = render({}, { create });
+    component.form.patchValue({ id: 'ta', entityId: 'https://ta.example', jwks: null });
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    // Stands in for the editor's own focus, which puts the focus on Monaco's input.
+    const focusEditor = vi.fn();
+    registerFieldFocus(page.querySelector('app-editor')!, focusEditor);
+
+    page.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(focusEditor).toHaveBeenCalledOnce();
+    });
+    expect(snackBar.open).toHaveBeenLastCalledWith(
+      'Check the highlighted fields in Federation Keys.',
+      'Close',
+      expect.anything()
+    );
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('loads the trust anchor to edit, keeps its ID and sends the changes', async () => {

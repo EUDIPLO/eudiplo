@@ -1883,6 +1883,90 @@ export type WebhookEndpointEntity = {
     tenant: TenantEntity;
 };
 
+export type DisplayImage = {
+    /**
+     * Image URI.
+     */
+    uri: string;
+};
+
+export type Display = {
+    /**
+     * Credential name shown by wallets.
+     */
+    name: string;
+    /**
+     * Optional description of the credential for this locale.
+     */
+    description?: string;
+    /**
+     * Language tag of this entry, for example en-US. Each locale may appear once.
+     */
+    locale: string;
+    /**
+     * Optional background color for card-style rendering, as a CSS Color Level 3 numerical value: #rgb, #rrggbb, transparent, or lowercase rgb(), rgba(), hsl() or hsla() with comma-separated values. Without it, wallets use their own.
+     */
+    background_color?: string;
+    /**
+     * Optional text color for card-style rendering, as a CSS Color Level 3 numerical value: #rgb, #rrggbb, transparent, or lowercase rgb(), rgba(), hsl() or hsla() with comma-separated values. Without it, wallets use their own.
+     */
+    text_color?: string;
+    /**
+     * Background image.
+     */
+    background_image?: DisplayImage;
+    /**
+     * Logo.
+     */
+    logo?: DisplayImage;
+};
+
+export type KeyAttestationsRequired = {
+    /**
+     * List of required key storage types (e.g., iso_18045_high, iso_18045_moderate)
+     */
+    key_storage?: Array<string>;
+    /**
+     * List of required user authentication types (e.g., iso_18045_high, iso_18045_moderate)
+     */
+    user_authentication?: Array<string>;
+};
+
+export type CredentialReusePolicy = {
+    id: string;
+    options?: Array<{
+        details: Array<'once_only' | 'limited_time' | 'limited-time' | 'rotating-batch' | 'per-relying-party'>;
+        batch_size?: number;
+        reissue_trigger_unused?: number;
+        reissue_trigger_lifetime_left?: number;
+    }>;
+};
+
+export type IssuerMetadataCredentialConfig = {
+    /**
+     * Display metadata shown by wallets, one entry per locale.
+     */
+    display: Array<Display>;
+    /**
+     * Key attestation requirements for JWT proofs for this credential.
+     * When set, this is published in proof_types_supported.jwt.key_attestations_required
+     * for this specific credential configuration.
+     */
+    keyAttestationsRequired?: KeyAttestationsRequired;
+    /**
+     * Supported proof types for this credential configuration. Defaults to ['attestation', 'jwt'].
+     */
+    proofTypesSupported?: Array<'jwt' | 'attestation'>;
+    credentialReusePolicy?: CredentialReusePolicy;
+    format: 'dc+sd-jwt' | 'mso_mdoc';
+    scope?: string;
+    /**
+     * Document type for mDOC credentials (e.g., "org.iso.18013.5.1.mDL").
+     * Only applicable when format is "mso_mdoc".
+     */
+    docType?: string;
+};
+
 export type SchemaUriEntry = {
     /**
      * Credential configuration whose schema EUDIPLO builds and uploads; `uri` and `meta` are not needed.
@@ -2000,63 +2084,6 @@ export type SchemaMetaConfig = {
 
 export type EmbeddedDisclosurePolicy = {
     policy: string;
-};
-
-export type KeyAttestationsRequired = {
-    /**
-     * List of required key storage types (e.g., iso_18045_high, iso_18045_moderate)
-     */
-    key_storage?: Array<string>;
-    /**
-     * List of required user authentication types (e.g., iso_18045_high, iso_18045_moderate)
-     */
-    user_authentication?: Array<string>;
-};
-
-export type CredentialReusePolicy = {
-    id: string;
-    options?: Array<{
-        details: Array<'once_only' | 'limited_time' | 'limited-time' | 'rotating-batch' | 'per-relying-party'>;
-        batch_size?: number;
-        reissue_trigger_unused?: number;
-        reissue_trigger_lifetime_left?: number;
-    }>;
-};
-
-export type DisplayImage = {
-    uri: string;
-};
-
-export type Display = {
-    name: string;
-    description: string;
-    locale: string;
-    background_color?: string;
-    text_color?: string;
-    background_image?: DisplayImage;
-    logo?: DisplayImage;
-};
-
-export type IssuerMetadataCredentialConfig = {
-    /**
-     * Key attestation requirements for JWT proofs for this credential.
-     * When set, this is published in proof_types_supported.jwt.key_attestations_required
-     * for this specific credential configuration.
-     */
-    keyAttestationsRequired?: KeyAttestationsRequired;
-    /**
-     * Supported proof types for this credential configuration. Defaults to ['attestation', 'jwt'].
-     */
-    proofTypesSupported?: Array<'jwt' | 'attestation'>;
-    credentialReusePolicy?: CredentialReusePolicy;
-    format: 'dc+sd-jwt' | 'mso_mdoc';
-    display: Array<Display>;
-    scope?: string;
-    /**
-     * Document type for mDOC credentials (e.g., "org.iso.18013.5.1.mDL").
-     * Only applicable when format is "mso_mdoc".
-     */
-    docType?: string;
 };
 
 export type FieldDisplayDto = {
@@ -2271,6 +2298,7 @@ export type ActiveCredentialPolicy = {
 };
 
 export type CredentialConfig = {
+    config: IssuerMetadataCredentialConfig;
     /**
      * VCT as a URI string (e.g., urn:eudi:pid:de:1) or as an object for EUDIPLO-hosted VCT
      */
@@ -2299,7 +2327,6 @@ export type CredentialConfig = {
      * The tenant that owns this object.
      */
     tenant: TenantEntity;
-    config: IssuerMetadataCredentialConfig;
     fields: Array<ClaimFieldDefinitionDto>;
     /**
      * Reference to the attribute provider used for fetching claims.
@@ -2342,6 +2369,7 @@ export type CredentialConfig = {
 };
 
 export type CredentialConfigCreate = {
+    config: IssuerMetadataCredentialConfig;
     /**
      * VCT as a URI string (e.g., urn:eudi:pid:de:1) or as an object for EUDIPLO-hosted VCT
      */
@@ -2366,7 +2394,6 @@ export type CredentialConfigCreate = {
     embeddedDisclosurePolicy?: EmbeddedDisclosurePolicy | null;
     id: string;
     description?: string | null;
-    config: IssuerMetadataCredentialConfig;
     fields: Array<ClaimFieldDefinitionDto>;
     /**
      * Reference to the attribute provider used for fetching claims.
@@ -2406,6 +2433,7 @@ export type CredentialConfigCreate = {
 };
 
 export type CredentialConfigUpdate = {
+    config?: IssuerMetadataCredentialConfig;
     /**
      * VCT as a URI string (e.g., urn:eudi:pid:de:1) or as an object for EUDIPLO-hosted VCT
      */
@@ -2430,7 +2458,6 @@ export type CredentialConfigUpdate = {
     embeddedDisclosurePolicy?: EmbeddedDisclosurePolicy | null;
     id?: string;
     description?: string | null;
-    config?: IssuerMetadataCredentialConfig;
     fields?: Array<ClaimFieldDefinitionDto>;
     /**
      * Reference to the attribute provider used for fetching claims.
@@ -8152,6 +8179,17 @@ export type TrustListControllerCreateTrustListData = {
     url: '/api/trust-list';
 };
 
+export type TrustListControllerCreateTrustListErrors = {
+    /**
+     * The body fails validation, or an internal entity names a key chain whose usage type cannot provide its certificate: issuerKeyChainId needs attestation, revocationKeyChainId statusList or attestation. errors[].path names the field
+     */
+    400: unknown;
+    /**
+     * The trust list cannot be created, for example because a key chain does not exist or keyChainId names no trustList key chain
+     */
+    409: unknown;
+};
+
 export type TrustListControllerCreateTrustListResponses = {
     201: TrustList;
 };
@@ -8207,6 +8245,17 @@ export type TrustListControllerUpdateTrustListData = {
     };
     query?: never;
     url: '/api/trust-list/{id}';
+};
+
+export type TrustListControllerUpdateTrustListErrors = {
+    /**
+     * The body fails validation, or an internal entity names a key chain whose usage type cannot provide its certificate: issuerKeyChainId needs attestation, revocationKeyChainId statusList or attestation. errors[].path names the field; a key chain the stored list already names in that field is accepted
+     */
+    400: unknown;
+    /**
+     * The trust list cannot be updated, for example because it or a key chain does not exist, keyChainId names no trustList key chain, or another update or a renewal was published since it was read
+     */
+    409: unknown;
 };
 
 export type TrustListControllerUpdateTrustListResponses = {

@@ -80,8 +80,15 @@ describe('FederationTrustAnchorSelectComponent', () => {
     );
     const link = element.querySelector<HTMLAnchorElement>('a[target="_blank"]')!;
     expect(link.getAttribute('href')).toBe(
-      '/federation-trust-anchor/create?entityId=https:%2F%2Funknown.example'
+      '/federation-trust-anchor/create?entityId=https:%2F%2Funknown.example&from=form'
     );
+  });
+
+  it('opens the registration as one for this form, so that page says to return here', async () => {
+    const { element } = await render('https://ta.example', vi.fn().mockResolvedValue([anchor]));
+
+    const link = element.querySelector<HTMLAnchorElement>('a[target="_blank"]')!;
+    expect(link.getAttribute('href')).toBe('/federation-trust-anchor/create?from=form');
   });
 
   it('reloads the list when the user comes back from registering one', async () => {

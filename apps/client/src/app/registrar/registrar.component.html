@@ -57,7 +57,7 @@
 
           <mat-divider class="preset-divider"></mat-divider>
 
-          <form [formGroup]="configForm" fxLayout="column" fxLayoutGap="16px">
+          <form #formElement [formGroup]="configForm" fxLayout="column" fxLayoutGap="16px">
             <div fxLayout="row" fxLayoutGap="16px" fxLayout.lt-md="column">
               <mat-form-field fxFlex appearance="outline" subscriptSizing="dynamic">
                 <mat-label>Registrar URL</mat-label>
@@ -278,7 +278,9 @@
             color="primary"
             #saveButton
             (click)="saveConfig()"
-            [disabled]="hasInvalidInput || isSaving || isDeleting"
+            [disabled]="isSaving || isDeleting"
+            disabledInteractive
+            [matTooltip]="saveTooltip"
             appConfigManaged
             managedKind="RegistrarConfig"
             managedResourceId="registrar"

@@ -578,7 +578,7 @@ describe("default access key chain in replace imports", () => {
 
     async function plan(
         bundle: ConfigBundle,
-        mode: "upsert" | "replace",
+        mode: "upsert" | "replace" | "create",
     ): Promise<ConfigImportPlan> {
         const response = await api()
             .post(`/config-bundles/plan?mode=${mode}`)
@@ -698,6 +698,39 @@ describe("default access key chain in replace imports", () => {
             .get(`/key-chain/${accessKeyChain.id}`)
             .set("Authorization", auth)
             .expect(404);
+    });
+
+    test("ignores the usage type of a key chain document the plan skips", async () => {
+        // Create mode skips the stored attestation key chain, so a bundle
+        // that gives it access usage does not make it a default.
+        const skipped = await plan(
+            bundleOf([
+                {
+                    kind: "KeyChain",
+                    spec: { ...attestationKeyChain, usageType: "access" },
+                },
+                {
+                    kind: "KeyChainDefaults",
+                    spec: { access: attestationKeyChain.id },
+                },
+            ]),
+            "create",
+        );
+
+        expect(
+            skipped.items.find(
+                (item) =>
+                    item.kind === "KeyChain" &&
+                    item.id === attestationKeyChain.id,
+            ),
+        ).toMatchObject({ action: "skip" });
+        expect(skipped.applicable).toBe(false);
+        expect(skipped.issues).toContainEqual(
+            expect.objectContaining({
+                code: "KEY_CHAIN_USAGE_MISMATCH",
+                path: "/spec/access",
+            }),
+        );
     });
 });
 

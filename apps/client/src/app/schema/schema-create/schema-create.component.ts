@@ -415,7 +415,14 @@ export class SchemaCreateComponent implements OnInit {
     return !!this.resolveLinkedCredentialConfigId() && !!this.linkedSchemaMetadataId;
   }
 
+  /** Submit stays focusable while the schema is submitted, so its tooltip says why it waits. */
+  get submitTooltip(): string {
+    return this.loading ? 'Submitting the schema…' : '';
+  }
+
   async submit(): Promise<void> {
+    // `disabledInteractive` keeps Submit clickable while it looks disabled.
+    if (this.loading) return;
     this.submitAttempted = true;
     if (this.composeForm.invalid) {
       this.composeForm.markAllAsTouched();
