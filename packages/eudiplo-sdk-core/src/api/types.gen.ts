@@ -8124,11 +8124,11 @@ export type TrustListControllerCreateTrustListData = {
 
 export type TrustListControllerCreateTrustListErrors = {
     /**
-     * The body fails validation, or an internal entity names a key chain whose usage type cannot provide its certificate: issuerKeyChainId needs attestation, revocationKeyChainId statusList or attestation. errors[].path names the field
+     * The body fails validation, or a field names a key chain that does not exist or has the wrong usage type, or holds a value a trust list cannot publish: keyChainId needs a trustList key chain, issuerKeyChainId an attestation one and revocationKeyChainId a statusList or attestation one; issuerCertPem and revocationCertPem need an X.509 certificate, info.country two characters and info.uri an absolute URL. errors[].path names each field
      */
     400: unknown;
     /**
-     * The trust list cannot be created, for example because a key chain does not exist or keyChainId names no trustList key chain
+     * The body sets no keyChainId, and the tenant has no trustList key chain or the one EUDIPLO picks has no valid certificate
      */
     409: unknown;
 };
@@ -8175,6 +8175,13 @@ export type TrustListControllerGetTrustListData = {
     url: '/api/trust-list/{id}';
 };
 
+export type TrustListControllerGetTrustListErrors = {
+    /**
+     * The tenant has no trust list with this ID
+     */
+    404: unknown;
+};
+
 export type TrustListControllerGetTrustListResponses = {
     200: TrustList;
 };
@@ -8192,11 +8199,15 @@ export type TrustListControllerUpdateTrustListData = {
 
 export type TrustListControllerUpdateTrustListErrors = {
     /**
-     * The body fails validation, or an internal entity names a key chain whose usage type cannot provide its certificate: issuerKeyChainId needs attestation, revocationKeyChainId statusList or attestation. errors[].path names the field; a key chain the stored list already names in that field is accepted
+     * The body fails validation, or a field names a key chain that does not exist or has the wrong usage type, or holds a value a trust list cannot publish: keyChainId needs a trustList key chain, issuerKeyChainId an attestation one and revocationKeyChainId a statusList or attestation one; issuerCertPem and revocationCertPem need an X.509 certificate, info.country two characters and info.uri an absolute URL. errors[].path names each field. An entity key chain of another usage type that the stored list already names in the same field is accepted
      */
     400: unknown;
     /**
-     * The trust list cannot be updated, for example because it or a key chain does not exist, keyChainId names no trustList key chain, or another update or a renewal was published since it was read
+     * The tenant has no trust list with this ID
+     */
+    404: unknown;
+    /**
+     * Another update or a renewal was published since the list was read, so read it again and retry; or the body sets no keyChainId and the key chain the list is signed with no longer has usage type trustList, so name a trustList key chain in keyChainId
      */
     409: unknown;
 };
@@ -8216,6 +8227,13 @@ export type TrustListControllerExportTrustListData = {
     url: '/api/trust-list/{id}/export';
 };
 
+export type TrustListControllerExportTrustListErrors = {
+    /**
+     * The tenant has no trust list with this ID
+     */
+    404: unknown;
+};
+
 export type TrustListControllerExportTrustListResponses = {
     200: TrustListCreateDto;
 };
@@ -8229,6 +8247,13 @@ export type TrustListControllerGetTrustListVersionsData = {
     };
     query?: never;
     url: '/api/trust-list/{id}/versions';
+};
+
+export type TrustListControllerGetTrustListVersionsErrors = {
+    /**
+     * The tenant has no trust list with this ID
+     */
+    404: unknown;
 };
 
 export type TrustListControllerGetTrustListVersionsResponses = {
@@ -8245,6 +8270,13 @@ export type TrustListControllerGetTrustListVersionData = {
     };
     query?: never;
     url: '/api/trust-list/{id}/versions/{versionId}';
+};
+
+export type TrustListControllerGetTrustListVersionErrors = {
+    /**
+     * The tenant has no trust list with this ID or it has no such version
+     */
+    404: unknown;
 };
 
 export type TrustListControllerGetTrustListVersionResponses = {

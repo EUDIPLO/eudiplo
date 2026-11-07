@@ -305,6 +305,32 @@ describe("Trust List e2e Tests", () => {
             expect(response.body.length).toBeGreaterThanOrEqual(1);
         });
 
+        test("reads a stored version only under its own list", async () => {
+            const server = ctx.app.getHttpServer();
+            const auth = `Bearer ${ctx.authToken}`;
+            const history = await request(server)
+                .get(`/trust-list/${testTrustListId}/versions`)
+                .set("Authorization", auth)
+                .expect(200);
+            const oldest = history.body.at(-1);
+
+            const version = await request(server)
+                .get(`/trust-list/${testTrustListId}/versions/${oldest.id}`)
+                .set("Authorization", auth)
+                .expect(200);
+            expect(version.body).toMatchObject({
+                id: oldest.id,
+                trustListId: testTrustListId,
+                sequenceNumber: 1,
+            });
+
+            const other = await request(server)
+                .get(`/trust-list/does-not-exist/versions/${oldest.id}`)
+                .set("Authorization", auth)
+                .expect(404);
+            expect(other.body.message).toBe("Trust list version not found");
+        });
+
         test("should delete a trust list", async () => {
             await request(ctx.app.getHttpServer())
                 .delete(`/trust-list/${testTrustListId}`)
@@ -315,7 +341,7 @@ describe("Trust List e2e Tests", () => {
             await request(ctx.app.getHttpServer())
                 .get(`/trust-list/${testTrustListId}`)
                 .set("Authorization", `Bearer ${ctx.authToken}`)
-                .expect(409);
+                .expect(404);
         });
     });
 
@@ -1093,7 +1119,7 @@ describe("Trust List e2e Tests", () => {
             await request(server)
                 .get(`/trust-list/${listId}`)
                 .set("Authorization", auth)
-                .expect(409);
+                .expect(404);
         });
 
         test("answers 204 for an unknown trust list, even one a config names", async () => {
@@ -1467,7 +1493,7 @@ describe("Trust List e2e Tests", () => {
             expect(JSON.stringify(res.body.errors)).toContain("entites");
         });
 
-        test("should reject trust list with invalid key chain id", async () => {
+        test("refuses a key chain id that does not exist at keyChainId", async () => {
             const createDto: TrustListCreateDto = {
                 id: "invalid-keychain-test",
                 description: "Invalid Key Chain Test",
@@ -1484,14 +1510,22 @@ describe("Trust List e2e Tests", () => {
                 ],
             };
 
-            await request(ctx.app.getHttpServer())
+            const res = await request(ctx.app.getHttpServer())
                 .post("/trust-list")
                 .set("Authorization", `Bearer ${ctx.authToken}`)
                 .send(createDto)
-                .expect(409);
+                .expect(400);
+            expect(res.body.errors).toEqual([
+                {
+                    path: ["keyChainId"],
+                    code: "key_chain_not_found",
+                    message:
+                        'Key chain "non-existent-key-chain" does not exist.',
+                },
+            ]);
         });
 
-        test("should reject trust list with key chain that lacks TrustList usage", async () => {
+        test("refuses a key chain that lacks TrustList usage at keyChainId", async () => {
             // attestation key chain has Attestation usage, not TrustList
             const createDto: TrustListCreateDto = {
                 id: "wrong-usage-test",
@@ -1509,11 +1543,19 @@ describe("Trust List e2e Tests", () => {
                 ],
             };
 
-            await request(ctx.app.getHttpServer())
+            const res = await request(ctx.app.getHttpServer())
                 .post("/trust-list")
                 .set("Authorization", `Bearer ${ctx.authToken}`)
                 .send(createDto)
-                .expect(409);
+                .expect(400);
+            expect(res.body.errors).toEqual([
+                {
+                    path: ["keyChainId"],
+                    code: "key_chain_usage_mismatch",
+                    message:
+                        "Key chain c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad is not valid for Trust List usage (key lacks TrustList usage)",
+                },
+            ]);
         });
 
         test("should reject a trust list without keyChainId on a tenant without trust list key chain", async () => {
@@ -1544,15 +1586,15 @@ describe("Trust List e2e Tests", () => {
                 .expect(409);
 
             expect(response.body.message).toBe(
-                "No key chain found with usage type 'trustList' for tenant trust-list-without-key-chain",
+                "No key chain found with usage type 'trustList' for tenant trust-list-without-key-chain. Create a key chain with usage type \"trustList\" or name one in keyChainId.",
             );
             await request(ctx.app.getHttpServer())
                 .get("/trust-list/no-key-chain-test")
                 .set("Authorization", `Bearer ${token}`)
-                .expect(409);
+                .expect(404);
         });
 
-        test("should reject external entity with invalid PEM certificate", async () => {
+        test("refuses external entities with invalid PEM certificates at their fields", async () => {
             const createDto: TrustListCreateDto = {
                 id: "invalid-pem-test",
                 description: "Invalid PEM Test",
@@ -1566,18 +1608,85 @@ describe("Trust List e2e Tests", () => {
                 ],
             };
 
-            await request(ctx.app.getHttpServer())
+            const res = await request(ctx.app.getHttpServer())
                 .post("/trust-list")
                 .set("Authorization", `Bearer ${ctx.authToken}`)
                 .send(createDto)
-                .expect(409);
+                .expect(400);
+            expect(res.body.errors).toEqual(
+                ["issuerCertPem", "revocationCertPem"].map((field) => ({
+                    path: ["entities", 0, field],
+                    code: "invalid_certificate",
+                    message: `${field} must be an X.509 certificate in PEM or Base64 DER.`,
+                })),
+            );
         });
 
-        test("should return 409 when getting non-existent trust list", async () => {
-            await request(ctx.app.getHttpServer())
-                .get("/trust-list/does-not-exist")
+        test("refuses entity info a LoTE document cannot hold at its field", async () => {
+            const res = await request(ctx.app.getHttpServer())
+                .post("/trust-list")
                 .set("Authorization", `Bearer ${ctx.authToken}`)
-                .expect(409);
+                .send({
+                    id: "invalid-info-test",
+                    entities: [
+                        {
+                            type: "internal",
+                            issuerKeyChainId:
+                                "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                            revocationKeyChainId:
+                                "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
+                            info: {
+                                name: "Test Provider",
+                                country: "Germany",
+                                uri: "issuer.example",
+                            },
+                        },
+                    ],
+                })
+                .expect(400);
+            expect(
+                res.body.errors.map(
+                    (issue: { path: unknown[]; code: string }) => [
+                        issue.path.join("."),
+                        issue.code,
+                    ],
+                ),
+            ).toEqual([
+                ["entities.0.info.country", "invalid_entity_info"],
+                ["entities.0.info.uri", "invalid_entity_info"],
+            ]);
+        });
+
+        test.each([
+            ["get", "/trust-list/does-not-exist"],
+            ["get", "/trust-list/does-not-exist/export"],
+            ["get", "/trust-list/does-not-exist/versions"],
+            ["get", "/trust-list/does-not-exist/versions/does-not-exist"],
+        ] as const)("answers 404 for %s %s", async (method, path) => {
+            await request(ctx.app.getHttpServer())
+                [method](path)
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .expect(404);
+        });
+
+        test("answers 404 when updating a trust list that does not exist", async () => {
+            const res = await request(ctx.app.getHttpServer())
+                .put("/trust-list/does-not-exist")
+                .set("Authorization", `Bearer ${ctx.authToken}`)
+                .send({
+                    entities: [
+                        {
+                            type: "internal",
+                            issuerKeyChainId:
+                                "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
+                            revocationKeyChainId:
+                                "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
+                            info: { name: "Test Provider" },
+                        },
+                    ],
+                })
+                .expect(404);
+            expect(res.body.message).toBe("Trust list not found");
         });
     });
 
