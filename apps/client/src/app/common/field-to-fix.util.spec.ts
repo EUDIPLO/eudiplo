@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   fieldsToFixMessage,
+  firstFieldWithError,
   firstInvalidField,
   focusField,
   focusFieldToFix,
@@ -51,6 +52,56 @@ describe('firstInvalidField', () => {
 
     expect(firstInvalidField(container)).toBeUndefined();
     expect(firstInvalidField(undefined)).toBeUndefined();
+  });
+});
+
+describe('firstFieldWithError', () => {
+  it('also finds a field bound with [formControl] and one that shows another control’s error', () => {
+    const container = render(`
+      <input formcontrolname="id" class="ng-valid" />
+      <mat-select id="import" aria-invalid="true"></mat-select>
+      <input id="claim" class="ng-invalid" />
+      <input formcontrolname="name" class="ng-invalid" />
+    `);
+    const field = (id: string) => container.querySelector<HTMLElement>(`#${id}`);
+
+    expect(firstFieldWithError(container)).toBe(field('import'));
+    field('import')!.removeAttribute('aria-invalid');
+    expect(firstFieldWithError(container)).toBe(field('claim'));
+    field('claim')!.classList.replace('ng-invalid', 'ng-valid');
+    expect(firstFieldWithError(container)).toBe(byName('name'));
+  });
+
+  it('skips groups, which are invalid when a field in them is', () => {
+    const container = render(`
+      <div class="ng-invalid"><mat-select id="provider" class="ng-invalid"></mat-select></div>
+      <mat-checkbox id="consent" class="ng-invalid"></mat-checkbox>
+    `);
+
+    expect(firstFieldWithError(container)?.id).toBe('provider');
+    container.querySelector('#provider')!.classList.replace('ng-invalid', 'ng-valid');
+    expect(firstFieldWithError(container)?.id).toBe('consent');
+  });
+
+  it('finds a textarea and a radio group bound with [formControl], in page order', () => {
+    const container = render(`
+      <textarea id="notes" class="ng-invalid"></textarea>
+      <mat-radio-group id="level" class="ng-invalid"></mat-radio-group>
+    `);
+
+    expect(firstFieldWithError(container)?.id).toBe('notes');
+    container.querySelector('#notes')!.classList.replace('ng-invalid', 'ng-valid');
+    expect(firstFieldWithError(container)?.id).toBe('level');
+  });
+
+  it('skips a disabled field that only shows the error of another control', () => {
+    const container = render(`
+      <mat-select id="trust-lists" aria-invalid="true" aria-disabled="true"></mat-select>
+      <textarea formcontrolname="value" class="ng-invalid"></textarea>
+    `);
+
+    expect(firstFieldWithError(container)).toBe(byName('value'));
+    expect(firstFieldWithError(undefined)).toBeUndefined();
   });
 });
 

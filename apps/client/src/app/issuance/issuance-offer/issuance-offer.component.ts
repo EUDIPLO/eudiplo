@@ -2,7 +2,10 @@ import {
   inject,
   ChangeDetectorRef,
   Component,
+  type ElementRef,
+  Injector,
   ViewChild,
+  viewChild,
   type OnInit,
   ChangeDetectionStrategy,
 } from '@angular/core';
@@ -52,6 +55,11 @@ import { STEPPER_GLOBAL_OPTIONS } from '@angular/cdk/stepper';
 import { CommonModule } from '@angular/common';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import {
+  type FormSection,
+  firstFieldWithError,
+  showFieldsToFix,
+} from '../../common/field-to-fix.util';
 
 /**
  * Custom validator to check that array has at least one element
@@ -101,6 +109,10 @@ function arrayNotEmpty(control: AbstractControl): ValidationErrors | null {
 })
 export class IssuanceOfferComponent implements OnInit {
   @ViewChild('stepper') stepper!: MatStepper;
+  private readonly credentialStepElement =
+    viewChild<ElementRef<HTMLFormElement>>('credentialStepElement');
+  private readonly configStepElement = viewChild<ElementRef<HTMLFormElement>>('configStepElement');
+  private readonly injector = inject(Injector);
 
   // Step form groups
   flowStepForm: FormGroup;
@@ -129,6 +141,8 @@ export class IssuanceOfferComponent implements OnInit {
   availableManagedAuthorizationServers: { value: string; label: string }[] = [];
   hasChainedAuthorizationServer = false;
   availableAttributeProviders: AttributeProviderEntity[] = [];
+  /** The attribute providers could not be loaded, so an empty list says nothing. */
+  attributeProvidersLoadFailed = false;
 
   // IAE status tracking for selected credential configs
   selectedConfigsIaeStatus = new Map<string, boolean>();
@@ -258,15 +272,18 @@ export class IssuanceOfferComponent implements OnInit {
     return this.externalAsWebhooks.get(configId);
   }
 
-  /**
-   * Returns true if all attribute providers for external AS flow are configured
-   */
-  get allExternalAsWebhooksValid(): boolean {
-    const selectedIds = this.selectedCredentialConfigIds;
-    return selectedIds.every((id: string) => {
-      const apForm = this.externalAsWebhooks.get(id);
-      return apForm?.get('attributeProviderId')?.value; // Attribute provider must be set
-    });
+  /** What the attribute provider selects say when they have nothing to offer. */
+  get noAttributeProviderText(): string {
+    return this.attributeProvidersLoadFailed
+      ? 'The attribute providers could not be loaded.'
+      : 'No attribute providers configured. Create one in the Attribute Providers section.';
+  }
+
+  /** The attribute provider forms of the selected credential configurations. */
+  private get selectedAttributeProviderForms(): FormGroup[] {
+    return this.selectedCredentialConfigIds
+      .map((id) => this.externalAsWebhooks.get(id))
+      .filter((form): form is FormGroup => !!form);
   }
 
   private readonly jwtService = inject(JwtService);
@@ -315,7 +332,10 @@ export class IssuanceOfferComponent implements OnInit {
       this.attributeProviderService
         .getAll()
         .then((providers) => (this.availableAttributeProviders = providers))
-        .catch(() => (this.availableAttributeProviders = [])),
+        .catch(() => {
+          this.availableAttributeProviders = [];
+          this.attributeProvidersLoadFailed = true;
+        }),
       this.issuanceConfigService.getConfig(),
     ]);
 
@@ -435,8 +455,12 @@ export class IssuanceOfferComponent implements OnInit {
           (this.availableAttributeProviders.length === 1
             ? this.availableAttributeProviders[0].id
             : '');
+        // The external authorization server only authenticates; the provider resolves the claims.
         const apGroup = new FormGroup({
-          attributeProviderId: new FormControl(attributeProviderId),
+          attributeProviderId: new FormControl(
+            attributeProviderId,
+            this.isAuthCodeExternalFlow ? Validators.required : null
+          ),
         });
         this.externalAsWebhooks.set(id, apGroup);
       }
@@ -578,28 +602,25 @@ export class IssuanceOfferComponent implements OnInit {
   }
 
   /**
-   * Returns the first configured authorization server for auth-code flow.
+   * The authorization servers the user chooses from in `flow`. The IAE flow uses the built-in
+   * one, so it offers no choice.
+   */
+  private authorizationServerOptionsForFlow(flow: string): { value: string; label: string }[] {
+    if (flow === 'pre_authorized_code') return this.preAuthAuthorizationServerOptions;
+    if (flow === 'authorization_code_external') return this.authCodeAuthorizationServerOptions;
+    return [];
+  }
+
+  /**
+   * Returns the first configured authorization server for the flow.
    */
   private getDefaultAuthServerForFlow(flow: string): string {
-    let options: { value: string; label: string }[] = [];
-    if (flow === 'authorization_code_external') {
-      options = this.authCodeAuthorizationServerOptions;
-    } else if (flow === 'pre_authorized_code') {
-      options = this.preAuthAuthorizationServerOptions;
-    }
-
-    if (options.length === 0) {
-      return '';
-    }
-
-    return options[0]?.value || '';
+    return this.authorizationServerOptionsForFlow(flow)[0]?.value || '';
   }
 
   private syncAuthorizationServerControl(flow: string): void {
     const control = this.configStepForm.get('authorization_server');
-    const options = this.getAuthorizationServerOptions(
-      flow as 'authorization_code' | 'pre_authorized_code'
-    );
+    const options = this.authorizationServerOptionsForFlow(flow);
     const selected = control?.value;
 
     if (options.length === 1) {
@@ -788,17 +809,108 @@ export class IssuanceOfferComponent implements OnInit {
     };
   }
 
+  /**
+   * Why Next on the credential step cannot be used, for its tooltip; empty while it can. A
+   * missing selection is no such reason, as long as there is something to select.
+   */
+  get credentialStepUnavailableReason(): string {
+    return this.credentialStepForm.invalid && this.availableCredentialConfigs.length === 0
+      ? 'No credential configuration can be selected for this flow.'
+      : '';
+  }
+
+  /** Moves on to the last step, or says what keeps the credential step from being complete. */
+  nextFromCredentialStep(): void {
+    // `disabledInteractive` keeps Next clickable while it looks disabled.
+    if (this.credentialStepUnavailableReason) return;
+    if (this.credentialStepForm.invalid) {
+      this.showStepFieldsToFix(
+        this.credentialStepForm,
+        () => this.credentialStepElement()?.nativeElement
+      );
+      return;
+    }
+    this.stepper.next();
+  }
+
+  /**
+   * Why Generate Offer cannot be used now, for its tooltip; empty while it can. Missing or
+   * invalid fields are no such reason: generating says which ones to fix.
+   */
+  get generateUnavailableReason(): string {
+    if (this.generatingOffer) return 'Generating the offer…';
+    if (!this.isAuthCodeExternalFlow) return '';
+    if (this.authCodeAuthorizationServerOptions.length === 0) {
+      return 'No authorization server is configured for this flow.';
+    }
+    // A provider that the credential configuration names needs no choice.
+    const providerMissing = this.selectedAttributeProviderForms.some((form) => form.invalid);
+    if (providerMissing && this.availableAttributeProviders.length === 0) {
+      return this.attributeProvidersLoadFailed
+        ? 'The attribute providers could not be loaded.'
+        : 'No attribute provider is configured.';
+    }
+    return '';
+  }
+
+  /**
+   * Marks the fields of a step's form touched, names the sections that hold errors and moves
+   * focus to the first one, including fields formly or a `[formControl]` binds. A claim list
+   * that must not be empty has no field to focus, so its Add button takes the focus.
+   */
+  private showStepFieldsToFix(
+    form: FormGroup,
+    container: () => HTMLElement | undefined,
+    sections?: FormSection[]
+  ): void {
+    showFieldsToFix(form, {
+      snackBar: this.snackBar,
+      injector: this.injector,
+      container,
+      field: () => firstFieldWithError(container()),
+      fallback: () =>
+        container()
+          ?.querySelector('app-array-type [role="alert"]')
+          ?.closest('app-array-type')
+          ?.querySelector<HTMLElement>('button'),
+      sections,
+    });
+  }
+
+  /** The parts of the last step, by the names the page gives them. */
+  private get configStepSections(): FormSection[] {
+    const claims = this.configStepForm.get('claims');
+    return [
+      { name: 'Authorization Server', controls: [this.configStepForm.get('authorization_server')] },
+      ...this.selectedCredentialConfigIds.map((id) => ({
+        name: id,
+        controls: [claims?.get(id), this.externalAsWebhooks.get(id)],
+      })),
+    ];
+  }
+
   async onSubmit(): Promise<void> {
-    // Validate all step forms
+    // `disabledInteractive` keeps Generate Offer clickable while it looks disabled.
+    if (this.generateUnavailableReason) return;
     this.syncAuthorizationServerControl(this.selectedFlow);
-    if (
-      this.flowStepForm.invalid ||
-      this.credentialStepForm.invalid ||
-      this.configStepForm.invalid
-    ) {
-      this.flowStepForm.markAllAsTouched();
-      this.credentialStepForm.markAllAsTouched();
-      this.configStepForm.markAllAsTouched();
+    if (this.credentialStepForm.invalid) {
+      // A prefilled offer opens on the last step, even when it names no credential.
+      this.stepper.selectedIndex = 1;
+      this.showStepFieldsToFix(
+        this.credentialStepForm,
+        () => this.credentialStepElement()?.nativeElement
+      );
+      return;
+    }
+    const providerForms = this.selectedAttributeProviderForms;
+    if (this.configStepForm.invalid || providerForms.some((form) => form.invalid)) {
+      // The provider forms are not part of the step's form.
+      providerForms.forEach((form) => form.markAllAsTouched());
+      this.showStepFieldsToFix(
+        this.configStepForm,
+        () => this.configStepElement()?.nativeElement,
+        this.configStepSections
+      );
       return;
     }
 

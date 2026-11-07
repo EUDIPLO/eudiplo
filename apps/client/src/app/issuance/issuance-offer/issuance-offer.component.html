@@ -81,7 +81,12 @@
 
       <!-- Step 2: Credential Configuration Selection -->
       <mat-step [stepControl]="credentialStepForm" label="Select Credentials">
-        <form [formGroup]="credentialStepForm" fxLayout="column" fxLayoutGap="24px">
+        <form
+          #credentialStepElement
+          [formGroup]="credentialStepForm"
+          fxLayout="column"
+          fxLayoutGap="24px"
+        >
           <div class="step-content">
             <h3>Select Credential Configurations</h3>
             <p class="step-description">Choose which credential types to include in this offer.</p>
@@ -187,9 +192,11 @@
             <button
               mat-flat-button
               color="primary"
-              matStepperNext
               type="button"
-              [disabled]="credentialStepForm.invalid"
+              (click)="nextFromCredentialStep()"
+              [disabled]="!!credentialStepUnavailableReason"
+              disabledInteractive
+              [matTooltip]="credentialStepUnavailableReason"
             >
               Next
               <mat-icon>arrow_forward</mat-icon>
@@ -209,7 +216,7 @@
               : 'Review & Create'
         "
       >
-        <form [formGroup]="configStepForm" fxLayout="column" fxLayoutGap="24px">
+        <form #configStepElement [formGroup]="configStepForm" fxLayout="column" fxLayoutGap="24px">
           <div class="step-content">
             <!-- Pre-Authorized Code Flow: Claims Configuration -->
             @if (isPreAuthFlow) {
@@ -228,6 +235,7 @@
                   </mat-select>
                   <mat-icon matSuffix>dns</mat-icon>
                   <mat-hint>Select the authorization server for this offer</mat-hint>
+                  <mat-error>Select an authorization server.</mat-error>
                 </mat-form-field>
               }
 
@@ -375,6 +383,7 @@
                     >The selected authorization server will handle user authentication and provide
                     claims</mat-hint
                   >
+                  <mat-error>Select an authorization server.</mat-error>
                 </mat-form-field>
 
                 <!-- Attribute Provider configuration for each credential -->
@@ -413,11 +422,16 @@
                             </mat-select>
                             <mat-icon matSuffix>cloud_download</mat-icon>
                             @if (availableAttributeProviders.length === 0) {
-                              <mat-hint class="warning"
-                                >No attribute providers configured. Create one in the Attribute
-                                Providers section.</mat-hint
-                              >
+                              <mat-hint class="warning">{{ noAttributeProviderText }}</mat-hint>
                             }
+                            <!-- Replaces the hint, so it repeats why the select may be empty. -->
+                            <mat-error>
+                              @if (availableAttributeProviders.length === 0) {
+                                {{ noAttributeProviderText }}
+                              } @else {
+                                Select the attribute provider that resolves the claims.
+                              }
+                            </mat-error>
                           </mat-form-field>
                         }
                       </mat-card-content>
@@ -428,8 +442,8 @@
                 <div class="validation-error">
                   <mat-icon>error</mat-icon>
                   <span>
-                    No Authorization Servers configured. Add at least one external, oid4vp, chained,
-                    or built-in authorization server in the issuance configuration.
+                    No Authorization Servers configured. Add at least one external, oid4vp or
+                    chained authorization server in the issuance configuration.
                   </span>
                 </div>
               }
@@ -507,10 +521,7 @@
                           </mat-select>
                           <mat-icon matSuffix>cloud_download</mat-icon>
                           @if (availableAttributeProviders.length === 0) {
-                            <mat-hint class="warning"
-                              >No attribute providers configured. Create one in the Attribute
-                              Providers section.</mat-hint
-                            >
+                            <mat-hint class="warning">{{ noAttributeProviderText }}</mat-hint>
                           }
                         </mat-form-field>
                       }
@@ -533,12 +544,9 @@
                 color="primary"
                 type="button"
                 (click)="onSubmit()"
-                [disabled]="
-                  generatingOffer ||
-                  (isAuthCodeExternalFlow &&
-                    (!configStepForm.get('authorization_server')?.value ||
-                      !allExternalAsWebhooksValid))
-                "
+                [disabled]="!!generateUnavailableReason"
+                disabledInteractive
+                [matTooltip]="generateUnavailableReason"
               >
                 <mat-icon>qr_code</mat-icon>
                 Generate Offer

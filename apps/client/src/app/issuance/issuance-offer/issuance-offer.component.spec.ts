@@ -14,6 +14,7 @@ import { CredentialConfigService } from '../credential-config/credential-config.
 import { IssuanceConfigService } from '../issuance-config/issuance-config.service';
 import { ArrayTypeComponent } from '../../types/array.type';
 import { ObjectTypeComponent } from '../../types/object.type';
+import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 
 function buildMdocConfig() {
   return {
@@ -245,7 +246,7 @@ describe('IssuanceOfferComponent', () => {
       ],
     } as any;
 
-    (component as any).syncAuthorizationServerControl('authorization_code');
+    (component as any).syncAuthorizationServerControl('authorization_code_external');
 
     expect(component.authCodeAuthorizationServerOptions).toEqual([
       { value: 'external-auth', label: 'external-auth' },
@@ -280,7 +281,7 @@ describe('IssuanceOfferComponent', () => {
     } as any;
     component.configStepForm.patchValue({ authorization_server: 'issuer-built-in' });
 
-    (component as any).syncAuthorizationServerControl('authorization_code');
+    (component as any).syncAuthorizationServerControl('authorization_code_external');
 
     expect(component.configStepForm.get('authorization_server')?.value).toBe('external-auth');
   });
@@ -533,5 +534,335 @@ describe('IssuanceOfferComponent', () => {
     // another check, so the offer page hung once a config was selected
     expect(formly.fields).toBe(fields);
     expect(fixture.nativeElement.querySelectorAll('formly-form input').length).toBe(2);
+  });
+
+  it('lets the IAE flow generate an offer when several authorization servers are configured', async () => {
+    component.issuanceConfig = {
+      authorizationServers: [
+        { type: 'external', id: 'first-auth', issuer: 'https://first.example.com' },
+        { type: 'oid4vp', id: 'second-auth' },
+      ],
+    } as any;
+    component.credentialConfigs = [{ id: 'login', iaeActions: [{}] } as any];
+    component.flowStepForm.patchValue({ flow: 'authorization_code_iae' });
+    component.credentialStepForm.patchValue({ credentialConfigurationIds: ['login'] });
+    await component.setClaimFormFields(['login']);
+
+    (component as any).syncAuthorizationServerControl('authorization_code_iae');
+    expect(component.configStepForm.get('authorization_server')?.valid).toBe(true);
+    await component.onSubmit();
+
+    const offerRequest = vi.mocked(TestBed.inject(IssuanceConfigService).getOffer).mock
+      .lastCall![0];
+    expect(offerRequest).toMatchObject({
+      flow: 'authorization_code',
+      credentialConfigurationIds: ['login'],
+    });
+    expect(offerRequest.authorization_server).toBeUndefined();
+  });
+
+  describe('Next and Generate Offer', () => {
+    let open: ReturnType<typeof vi.spyOn>;
+
+    async function render(
+      setup: {
+        configs?: unknown[];
+        servers?: unknown[];
+        /** The attribute providers, or `'failed'` when loading them fails. */
+        providers?: unknown[] | 'failed';
+      } = {}
+    ): Promise<void> {
+      vi.mocked(TestBed.inject(CredentialConfigService).loadConfigurations).mockResolvedValue(
+        (setup.configs ?? [{ id: 'pid' }, { id: 'mdl' }]) as any
+      );
+      vi.mocked(TestBed.inject(IssuanceConfigService).getConfig).mockResolvedValue({
+        authorizationServers: setup.servers ?? [],
+      } as any);
+      const getAll = vi.mocked(TestBed.inject(AttributeProviderService).getAll);
+      if (setup.providers === 'failed') getAll.mockRejectedValue(new Error('offline'));
+      else getAll.mockResolvedValue((setup.providers ?? []) as any);
+      // The component's own injector provides the snack bar it uses.
+      open = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open');
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+    }
+
+    /** Takes the steps before the last one as completed, as a prefilled offer does. */
+    function openLastStep(): void {
+      component.stepper.steps.forEach((step, index) => {
+        if (index < 2) {
+          step.interacted = true;
+          step.completed = true;
+        }
+      });
+      component.stepper.selectedIndex = 2;
+      fixture.detectChanges();
+      expect(component.stepper.selectedIndex).toBe(2);
+    }
+
+    const buttons = (label: string) =>
+      [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].filter((button) =>
+        button.textContent?.includes(label)
+      );
+    const credentialStepNext = () => buttons('Next')[1];
+    const generate = () => buttons('Generate Offer')[0];
+    const getOffer = () => vi.mocked(TestBed.inject(IssuanceConfigService).getOffer);
+
+    /** Waits until the field that `matches` holds the focus. */
+    async function expectFocus(matches: (focused: Element) => boolean): Promise<void> {
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(document.activeElement && matches(document.activeElement)).toBe(true);
+      });
+    }
+
+    it('says on Next that a credential configuration is missing and focuses the picker', async () => {
+      await render();
+      component.stepper.next();
+      fixture.detectChanges();
+      const next = credentialStepNext();
+      expectAvailable(fixture, next);
+
+      next.focus();
+      next.click();
+
+      const picker = fixture.nativeElement.querySelector(
+        'mat-chip-grid[formcontrolname="credentialConfigurationIds"]'
+      ) as HTMLElement;
+      await expectFocus((focused) => picker.contains(focused));
+      expect(open).toHaveBeenLastCalledWith(
+        'Check the highlighted fields.',
+        'Close',
+        expect.anything()
+      );
+      expect(fixture.nativeElement.textContent).toContain(
+        'At least one credential configuration is required'
+      );
+      expect(component.stepper.selectedIndex).toBe(1);
+    });
+
+    it('moves on from the credential step once a configuration is selected', async () => {
+      await render();
+      component.stepper.next();
+      component.credentialStepForm.patchValue({ credentialConfigurationIds: ['pid'] });
+      fixture.detectChanges();
+
+      credentialStepNext().click();
+
+      expect(component.stepper.selectedIndex).toBe(2);
+      expect(open).not.toHaveBeenCalled();
+    });
+
+    it('says why Next cannot be used when no credential configuration fits the flow', async () => {
+      await render({ configs: [] });
+      component.stepper.next();
+      fixture.detectChanges();
+      const next = credentialStepNext();
+      expectUnavailable(
+        fixture,
+        next,
+        'No credential configuration can be selected for this flow.'
+      );
+
+      next.click();
+      fixture.detectChanges();
+
+      expect(component.stepper.selectedIndex).toBe(1);
+      expect(open).not.toHaveBeenCalled();
+    });
+
+    it('goes back to the credential step when a prefilled offer names no credential', async () => {
+      await render();
+      openLastStep();
+
+      generate().click();
+
+      const picker = fixture.nativeElement.querySelector(
+        'mat-chip-grid[formcontrolname="credentialConfigurationIds"]'
+      ) as HTMLElement;
+      await expectFocus((focused) => picker.contains(focused));
+      expect(component.stepper.selectedIndex).toBe(1);
+      expect(open).toHaveBeenLastCalledWith(
+        'Check the highlighted fields.',
+        'Close',
+        expect.anything()
+      );
+      expect(getOffer()).not.toHaveBeenCalled();
+    });
+
+    it('focuses the Add button of a claim list that must not be empty', async () => {
+      await render({
+        configs: [
+          {
+            id: 'pid',
+            config: { format: 'dc+sd-jwt' },
+            fields: [{ path: ['nationalities'], type: 'array', mandatory: true }],
+          },
+        ],
+      });
+      await fixture.whenStable();
+      openLastStep();
+
+      generate().click();
+
+      await expectFocus(
+        (focused) =>
+          focused.tagName === 'BUTTON' &&
+          !!focused.closest('app-array-type')?.querySelector('[role="alert"]')
+      );
+      expect(open).toHaveBeenLastCalledWith(
+        'Check the highlighted fields in pid.',
+        'Close',
+        expect.anything()
+      );
+    });
+
+    it('focuses a missing claim and names its credential configuration', async () => {
+      await render({ configs: [buildMdocConfig()] });
+      await fixture.whenStable();
+      openLastStep();
+      expectAvailable(fixture, generate());
+
+      generate().click();
+
+      // family_name has no default value, and formly binds its input with [formControl].
+      await expectFocus(
+        (focused) =>
+          focused.tagName === 'INPUT' &&
+          !!focused.closest('formly-form') &&
+          focused.classList.contains('ng-invalid')
+      );
+      expect(open).toHaveBeenLastCalledWith(
+        'Check the highlighted fields in pid.',
+        'Close',
+        expect.anything()
+      );
+      expect(getOffer()).not.toHaveBeenCalled();
+    });
+
+    it('says which authorization server and attribute provider are missing, one after the other', async () => {
+      await render({
+        configs: [{ id: 'pid' }],
+        servers: [
+          { type: 'external', id: 'ext-1', issuer: 'https://as.example' },
+          { type: 'oid4vp', id: 'vp-1' },
+        ],
+        providers: [{ id: 'provider-one' }, { id: 'provider-two' }],
+      });
+      component.flowStepForm.patchValue({ flow: 'authorization_code_external' });
+      component.credentialStepForm.patchValue({ credentialConfigurationIds: ['pid'] });
+      await fixture.whenStable();
+      component.configStepForm.patchValue({ authorization_server: '' });
+      openLastStep();
+      expectAvailable(fixture, generate());
+
+      generate().click();
+
+      await expectFocus(
+        (focused) => focused.getAttribute('formcontrolname') === 'authorization_server'
+      );
+      expect(open).toHaveBeenLastCalledWith(
+        'Check the highlighted fields in Authorization Server, pid.',
+        'Close',
+        expect.anything()
+      );
+
+      component.configStepForm.patchValue({ authorization_server: 'vp-1' });
+      fixture.detectChanges();
+      generate().click();
+
+      await expectFocus(
+        (focused) =>
+          focused.closest('mat-form-field')?.querySelector('mat-label')?.textContent ===
+          'Attribute Provider'
+      );
+      expect(open).toHaveBeenLastCalledWith(
+        'Check the highlighted fields in pid.',
+        'Close',
+        expect.anything()
+      );
+      expect(fixture.nativeElement.textContent).toContain(
+        'Select the attribute provider that resolves the claims.'
+      );
+      expect(getOffer()).not.toHaveBeenCalled();
+    });
+
+    /** Opens the last step of the External AS flow with `pid` selected. */
+    async function openExternalFlow(): Promise<void> {
+      component.flowStepForm.patchValue({ flow: 'authorization_code_external' });
+      component.credentialStepForm.patchValue({ credentialConfigurationIds: ['pid'] });
+      await fixture.whenStable();
+      openLastStep();
+    }
+
+    it.each([
+      ['no authorization server is configured', []],
+      ['only the built-in authorization server is configured', [{ type: 'built-in', id: 'b' }]],
+    ])('says why Generate Offer cannot be used when %s', async (_, servers) => {
+      await render({ configs: [{ id: 'pid' }], servers, providers: [{ id: 'provider-one' }] });
+      await openExternalFlow();
+
+      expectUnavailable(
+        fixture,
+        generate(),
+        'No authorization server is configured for this flow.'
+      );
+      expect(component.configStepForm.value.authorization_server).toBe('');
+      generate().click();
+      fixture.detectChanges();
+
+      expect(open).not.toHaveBeenCalled();
+      expect(component.stepper.selectedIndex).toBe(2);
+      expect(getOffer()).not.toHaveBeenCalled();
+    });
+
+    it('says why Generate Offer cannot be used when no attribute provider exists', async () => {
+      await render({
+        configs: [{ id: 'pid' }],
+        servers: [{ type: 'external', id: 'ext-1', issuer: 'https://as.example' }],
+      });
+      await openExternalFlow();
+
+      expectUnavailable(fixture, generate(), 'No attribute provider is configured.');
+    });
+
+    it('says that the attribute providers could not be loaded instead of that none exists', async () => {
+      await render({
+        configs: [{ id: 'pid' }],
+        servers: [{ type: 'external', id: 'ext-1', issuer: 'https://as.example' }],
+        providers: 'failed',
+      });
+      await openExternalFlow();
+
+      expectUnavailable(fixture, generate(), 'The attribute providers could not be loaded.');
+      expect(
+        fixture.nativeElement.querySelector('.webhook-config-card mat-hint')?.textContent
+      ).toBe('The attribute providers could not be loaded.');
+    });
+
+    it('needs no attribute provider choice for a configuration that names its provider', async () => {
+      await render({
+        configs: [{ id: 'pid', attributeProviderId: 'provider-one' }],
+        servers: [{ type: 'external', id: 'ext-1', issuer: 'https://as.example' }],
+      });
+      await openExternalFlow();
+
+      expectAvailable(fixture, generate());
+    });
+
+    it('waits while the offer is generated: a second click sends nothing', async () => {
+      getOffer().mockReturnValue(new Promise(() => undefined));
+      await render({ configs: [{ id: 'pid' }] });
+      openLastStep();
+
+      generate().click();
+      fixture.detectChanges();
+      generate().click();
+      fixture.detectChanges();
+
+      expect(getOffer()).toHaveBeenCalledOnce();
+      expectUnavailable(fixture, generate(), 'Generating the offer…');
+    });
   });
 });
