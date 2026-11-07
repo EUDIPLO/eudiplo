@@ -1,5 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTooltip } from '@angular/material/tooltip';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
 import { EMPTY, Subject, of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +10,7 @@ import { JwtService } from '../../services/jwt.service';
 import { SchemaService } from '../schema.service';
 import { SchemaShowComponent } from './schema-show.component';
 import { errorSnackBarDuration } from '../../utils/error-snackbar';
+import { expectAvailable, expectUnavailable } from '../../common/unavailable-action.testing';
 
 /** The arguments of an error snackbar with this text. */
 const errorSnackBar = (text: string) =>
@@ -195,6 +198,7 @@ describe('SchemaShowComponent publishing a new version', () => {
       errors: [{ path: ['category'], message: 'Invalid option', code: 'invalid_value' }],
     });
     await load();
+    component.metadataForm.controls.category.markAsDirty();
 
     await component.saveMetadata();
 
@@ -368,6 +372,27 @@ describe('SchemaShowComponent publishing a new version', () => {
     expect(schemaService['updateMetadata']).toHaveBeenCalledOnce();
     expect(component.saving).toBe(false);
     expect(component.metadataForm.pristine).toBe(true);
+  });
+
+  it('keeps a change made while the catalog metadata is saved as unsaved', async () => {
+    let finish!: (entry: unknown) => void;
+    schemaService['updateMetadata'] = vi
+      .fn()
+      .mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    await load();
+    const { displayName, tags } = component.metadataForm.controls;
+    displayName.setValue('Renamed PID');
+    displayName.markAsDirty();
+
+    const saving = component.saveMetadata();
+    tags.setValue(['pid']);
+    tags.markAsDirty();
+    finish(currentVersion({ displayName: 'Renamed PID' }));
+    await saving;
+
+    expect(displayName.pristine).toBe(true);
+    expect(tags.dirty).toBe(true);
+    expect(component.metadataSaveTooltip).toBe('');
   });
 
   it('keeps a version opened while its predecessor was being saved', async () => {
@@ -1189,19 +1214,94 @@ describe('SchemaShowComponent page', () => {
     expect(text(fixture)).toContain('pid, legacy-tag, eudi');
   });
 
-  it('enables Save only for changed catalog metadata', async () => {
+  /** Save under Catalog Metadata, the button of the form that holds the name. */
+  function metadataSave(fixture: { nativeElement: HTMLElement }): HTMLButtonElement {
+    const form = fixture.nativeElement.querySelector('#schema-display-name')!.closest('form')!;
+    return [...form.querySelectorAll('button')].find((b) => b.textContent?.includes('Sav'))!;
+  }
+
+  it('offers Save only for changed catalog metadata, and says so while nothing changed', async () => {
+    schemaService['updateMetadata'] = vi.fn().mockResolvedValue(currentVersion());
     const fixture = await render();
-    const element = fixture.nativeElement as HTMLElement;
-    const save = () =>
-      [...element.querySelectorAll<HTMLButtonElement>('button')].find(
-        (b) => b.textContent?.trim() === 'Save'
-      )!;
-    expect(save().disabled).toBe(true);
+    const save = metadataSave(fixture);
+    expectUnavailable(fixture, save, 'No changes to save');
+
+    save.click();
+    expect(schemaService['updateMetadata']).not.toHaveBeenCalled();
 
     fixture.componentInstance.metadataForm.controls.displayName.setValue('Renamed PID');
     fixture.componentInstance.metadataForm.markAsDirty();
     fixture.detectChanges();
-    expect(save().disabled).toBe(false);
+    expectAvailable(fixture, save);
+  });
+
+  it('waits while the catalog metadata is saved: a second click sends nothing', async () => {
+    schemaService['updateMetadata'] = vi.fn().mockReturnValue(new Promise(() => undefined));
+    const fixture = await render();
+    const component = fixture.componentInstance;
+    component.metadataForm.controls.displayName.setValue('Renamed PID');
+    component.metadataForm.controls.displayName.markAsDirty();
+    fixture.detectChanges();
+    const save = metadataSave(fixture);
+
+    save.click();
+    fixture.detectChanges();
+    save.click();
+    fixture.detectChanges();
+
+    expect(schemaService['updateMetadata']).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, save, 'Saving the catalog metadata…');
+  });
+
+  it('keeps Deprecate focusable while the version is deprecated: a second click sends nothing', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    schemaService['deprecateVersion'].mockReturnValue(new Promise(() => undefined));
+    const fixture = await render();
+    const deprecate = button(fixture, 'Deprecate version 1.0.0') as HTMLButtonElement;
+    expectAvailable(fixture, deprecate, 'Deprecate this version');
+
+    deprecate.click();
+    fixture.detectChanges();
+    deprecate.click();
+    fixture.detectChanges();
+
+    expect(schemaService['deprecateVersion']).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, deprecate, 'Deprecating this version…');
+  });
+
+  it('moves the focus to the heading when Deprecate goes away with a finished deprecation', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    let finish!: (entry: unknown) => void;
+    schemaService['deprecateVersion'].mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    const fixture = await render();
+    const deprecate = button(fixture, 'Deprecate version 1.0.0');
+    deprecate.focus();
+
+    const deprecating = fixture.componentInstance.deprecate();
+    fixture.detectChanges();
+    finish(currentVersion({ deprecated: true }));
+    await deprecating;
+    fixture.detectChanges();
+
+    await vi.waitFor(() =>
+      expect(document.activeElement?.textContent?.trim()).toBe('Schema Details')
+    );
+  });
+
+  it('keeps Delete focusable while the version is deleted: a second click sends nothing', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    schemaService['delete'].mockReturnValue(new Promise(() => undefined));
+    const fixture = await render();
+    const remove = button(fixture, 'Delete version 1.0.0') as HTMLButtonElement;
+    expectAvailable(fixture, remove, 'Delete this version');
+
+    remove.click();
+    fixture.detectChanges();
+    remove.click();
+    fixture.detectChanges();
+
+    expect(schemaService['delete']).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, remove, 'Deleting this version…');
   });
 
   it('offers no Deprecate for a version that is deprecated already', async () => {
@@ -1283,8 +1383,80 @@ describe('SchemaShowComponent page', () => {
     const publish = [...element.querySelectorAll<HTMLButtonElement>('button')].find(
       (b) => b.textContent?.trim() === 'Publish'
     )!;
-    expect(publish.disabled).toBe(true);
-    expect(text(fixture)).toContain('Loading credential configs and the registrar vocabulary…');
+    const reason = 'Loading credential configs and the registrar vocabulary…';
+    expect(publish.disabled).toBe(false);
+    expect(publish.getAttribute('aria-disabled')).toBe('true');
+    expect(
+      fixture.debugElement
+        .queryAll(By.directive(MatTooltip))
+        .find((tooltip) => tooltip.nativeElement === publish)!
+        .injector.get(MatTooltip).message
+    ).toBe(reason);
+    expect(text(fixture)).toContain(reason);
+    // Without the check, the click would fail to rebuild the schema URIs and say so.
+    const open = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open');
+    publish.click();
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(open).not.toHaveBeenCalled();
+    expect(schemaService['publishSchemaMetadataVersion']).not.toHaveBeenCalled();
+  });
+
+  it('publishes once when Publish is clicked again while it runs, and says why it waits', async () => {
+    schemaService['publishSchemaMetadataVersion'].mockReturnValue(new Promise(() => undefined));
+    const fixture = await render();
+    fixture.componentInstance.togglePublishForm();
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const publish = () =>
+      [...element.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+        ['Publish', 'Publishing…'].includes(b.textContent?.trim() ?? '')
+      )!;
+
+    publish().click();
+    fixture.detectChanges();
+    publish().click();
+    await new Promise((resolve) => setTimeout(resolve));
+    fixture.detectChanges();
+
+    expect(schemaService['publishSchemaMetadataVersion']).toHaveBeenCalledOnce();
+    expect(publish().getAttribute('aria-disabled')).toBe('true');
+    expect(
+      fixture.debugElement
+        .queryAll(By.directive(MatTooltip))
+        .find((tooltip) => tooltip.nativeElement === publish())!
+        .injector.get(MatTooltip).message
+    ).toBe('Publishing the new version…');
+  });
+
+  it('says which field keeps the new version from being published and focuses it', async () => {
+    const fixture = await render();
+    const component = fixture.componentInstance;
+    // The component imports MatSnackBarModule, whose provider wins over the test's.
+    const open = vi.spyOn(fixture.debugElement.injector.get(MatSnackBar), 'open');
+    component.togglePublishForm();
+    fixture.detectChanges();
+    component.publishForm.controls.newVersion.setValue('1.0.0');
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const publish = [...element.querySelectorAll<HTMLButtonElement>('button')].find(
+      (b) => b.textContent?.trim() === 'Publish'
+    )!;
+    expect(publish.getAttribute('aria-disabled')).toBeNull();
+
+    publish.focus();
+    publish.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement?.getAttribute('formcontrolname')).toBe('newVersion');
+    });
+    expect(text(fixture)).toContain('This version exists already.');
+    expect(open).toHaveBeenLastCalledWith(
+      'Check the highlighted fields.',
+      'Close',
+      expect.anything()
+    );
+    expect(schemaService['publishSchemaMetadataVersion']).not.toHaveBeenCalled();
   });
 
   it('does not navigate after a delete that finishes once the user has left', async () => {

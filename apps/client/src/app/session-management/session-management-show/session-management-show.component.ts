@@ -1,4 +1,12 @@
-import { Component, type OnDestroy, type OnInit, ChangeDetectionStrategy } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  Injector,
+  type OnDestroy,
+  type OnInit,
+  ViewChild,
+} from '@angular/core';
 import { UpperCasePipe } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -44,6 +52,7 @@ import { firstValueFrom } from 'rxjs';
 import { decodeJwt } from 'jose';
 import { getApiErrorMessage, getHttpErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
 import {
   isFinishedSession,
@@ -123,7 +132,8 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
     private httpClient: HttpClient,
     public grafanaLinkService: GrafanaLinkService,
     private dialog: MatDialog,
-    private jwtService: JwtService
+    private jwtService: JwtService,
+    private readonly injector: Injector
   ) {}
 
   /** Credential status is issuer data, like on the backend. */
@@ -147,15 +157,30 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
   }
 
   cancelling = false;
+  /** Takes the focus when Cancel goes away with the session it cancelled. */
+  @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
 
   /** Only offers and requests a wallet has neither redeemed nor finished can be cancelled. */
   canCancel(): boolean {
     return !!this.session && isCancellable(this.session) && this.canSeeOffer();
   }
 
+  /** Cancel stays focusable while the cancellation runs, so its tooltip says why it waits. */
+  get cancelTooltip(): string {
+    if (this.isIssuanceSession()) {
+      return this.cancelling
+        ? 'Cancelling this offer…'
+        : 'Cancel this offer, so a wallet can no longer use it';
+    }
+    return this.cancelling
+      ? 'Cancelling this request…'
+      : 'Cancel this request, so a wallet can no longer answer it';
+  }
+
   cancelSession(): void {
     const session = this.session;
-    if (!session || !this.canCancel()) return;
+    // `disabledInteractive` keeps Cancel clickable while it looks disabled.
+    if (!session || !this.canCancel() || this.cancelling) return;
 
     this.dialog
       .open<CancelSessionDialogComponent, CancelSessionDialogData, CancelSessionDialogResult>(
@@ -184,6 +209,8 @@ export class SessionManagementShowComponent implements OnInit, OnDestroy {
           await this.loadSession(session.id);
         } finally {
           this.cancelling = false;
+          // A session that is no longer pending offers no Cancel.
+          focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
         }
       });
   }

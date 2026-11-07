@@ -133,6 +133,8 @@ export class KeyManagementProvidersComponent implements OnInit {
   }
 
   async openTenantConfigEditor(): Promise<void> {
+    // `disabledInteractive` keeps the button clickable while a save runs.
+    if (this.isSavingConfig) return;
     const dialogRef = this.dialog.open(JsonViewDialogComponent, {
       data: {
         title: 'Tenant KMS Configuration JSON',

@@ -350,7 +350,7 @@ describe("config upgrade", () => {
         expect(result.spec).toEqual(valid);
     });
 
-    it("upgrades a v2 credential configuration to v3 without unsupported constraint keywords", async () => {
+    it("upgrades a v2 credential configuration without unsupported constraint keywords", async () => {
         const { cwd, context, output } = await setup();
         const source = join(cwd, "pid.json");
         const spec = (constraints: Record<string, unknown>) => ({
@@ -379,13 +379,72 @@ describe("config upgrade", () => {
         );
         const upgraded = `${source}.upgraded.json`;
         const result = JSON.parse(await readFile(upgraded, "utf8"));
-        expect(result.$schema).toBe(schemaUrl("CredentialConfig", 3));
+        expect(result.$schema).toBe(schemaUrl("CredentialConfig", 4));
         expect(result.spec).toEqual(
             spec({ pattern: "^\\d{4}$", items: { type: "string" } }),
         );
         expect(
             await runCli(["config", "upgrade", upgraded, "--check"], context),
         ).toBe(0);
+    });
+
+    it("upgrades a v3 credential configuration without display colors wallets cannot read", async () => {
+        const { cwd, context, output } = await setup();
+        const source = join(cwd, "pid.json");
+        const display = (entry: Record<string, unknown>) => ({
+            id: "pid",
+            config: {
+                format: "dc+sd-jwt",
+                display: [{ name: "PID", locale: "en-US", ...entry }],
+            },
+            fields: [],
+        });
+        await writeFile(
+            source,
+            JSON.stringify({
+                $schema: schemaUrl("CredentialConfig", 3),
+                spec: display({
+                    background_color: "#12107C",
+                    text_color: "white",
+                }),
+            }),
+        );
+
+        expect(await runCli(["config", "upgrade", source], context)).toBe(0);
+        expect(output.stderr).toContain(
+            "/spec/config/display/0/text_color: warning DISPLAY_COLOR_REMOVED",
+        );
+        const upgraded = `${source}.upgraded.json`;
+        const result = JSON.parse(await readFile(upgraded, "utf8"));
+        expect(result.$schema).toBe(schemaUrl("CredentialConfig", 4));
+        expect(result.spec).toEqual(display({ background_color: "#12107C" }));
+    });
+
+    it("blocks the upgrade of a credential configuration with two display entries for one locale", async () => {
+        const { cwd, context, output } = await setup();
+        const source = join(cwd, "pid.json");
+        await writeFile(
+            source,
+            JSON.stringify({
+                $schema: schemaUrl("CredentialConfig", 3),
+                spec: {
+                    id: "pid",
+                    config: {
+                        format: "dc+sd-jwt",
+                        display: [
+                            { name: "PID", locale: "en-US" },
+                            { name: "PID", locale: "en-US" },
+                        ],
+                    },
+                    fields: [],
+                },
+            }),
+        );
+
+        expect(await runCli(["config", "upgrade", source], context)).toBe(1);
+        expect(output.stderr).toContain(
+            "/spec/config/display/1/locale: required-input DISPLAY_LOCALE_DUPLICATE",
+        );
     });
 
     it("blocks the upgrade of a credential configuration with a claim pattern RE2 cannot run", async () => {

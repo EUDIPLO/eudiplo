@@ -65,9 +65,11 @@ export class CredentialConfigListComponent extends BaseAsyncListComponent<Creden
     return this.credentialConfigService.loadConfigurations();
   }
 
+  /** The wallet description of the first display entry, which is optional, else the configuration's own. */
   getDescription(config: CredentialConfig): string {
     return (
       ((config.config as any).display as DisplayFormValue[])[0]?.description ||
+      config.description ||
       'No description available'
     );
   }

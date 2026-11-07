@@ -1,14 +1,26 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  ChangeDetectionStrategy,
+  ElementRef,
+  HostListener,
+  Injector,
+  QueryList,
+  ViewChild,
+  ViewChildren,
+} from '@angular/core';
 import {
   type AbstractControl,
   FormArray,
   FormControl,
   FormGroup,
+  FormGroupDirective,
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { ErrorStateMatcher } from '@angular/material/core';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -17,7 +29,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatRadioModule } from '@angular/material/radio';
-import { MatExpansionModule } from '@angular/material/expansion';
+import { MatExpansionModule, MatExpansionPanel } from '@angular/material/expansion';
 import { MatDividerModule } from '@angular/material/divider';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
@@ -35,6 +47,13 @@ import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { fieldErrorMessage, showIssuesAtFields } from '../../utils/form-errors';
+import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../common/focus-if-lost.util';
+import {
+  fieldsToFixMessage,
+  focusFieldToFix,
+  sectionsWithErrors,
+} from '../../common/field-to-fix.util';
+import { LoadErrorComponent } from '../../common/load-error.component';
 
 /** Common info fields for both internal and external entities */
 interface EntityInfoForm {
@@ -61,6 +80,19 @@ interface ExternalEntityForm extends EntityInfoForm {
   revocationCertPem: FormControl<string>;
 }
 
+/**
+ * The key chain selects of this page, by the usage type they are for: an entity's issuer
+ * (`attestation`) and revocation (`statusList`) key chain, and the trust list's own (`trustList`).
+ */
+type TrustListKeyChainUsage = 'attestation' | 'statusList' | 'trustList';
+
+/** How hints and options name the key chains a select accepts, in the words of Key Management. */
+const KEY_CHAIN_USAGE_NAMES: Record<TrustListKeyChainUsage, string> = {
+  attestation: 'credential signing',
+  statusList: 'status list or credential signing',
+  trustList: 'trust list',
+};
+
 @Component({
   selector: 'app-trust-list-edit',
   imports: [
@@ -82,6 +114,7 @@ interface ExternalEntityForm extends EntityInfoForm {
     EditorComponent,
     ConfigOwnershipDirective,
     ConfigOwnershipNoticeComponent,
+    LoadErrorComponent,
   ],
   templateUrl: './trust-list-edit.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -91,6 +124,10 @@ export class TrustListEditComponent implements OnInit {
   trustListId?: string | null;
   trustList?: TrustList;
   form!: FormGroup;
+  /** While the trust list to edit is requested; the form waits for it. */
+  loading = false;
+  /** Set when the trust list to edit could not be loaded, so no empty form is shown. */
+  loadError = '';
   /** While a save runs, so a second click does not send it again. */
   saving = false;
   /** Entities with a field the backend rejected; their panels open and stay open. */
@@ -102,17 +139,65 @@ export class TrustListEditComponent implements OnInit {
   attestationKeyChains: KeyChainResponseDto[] = [];
   statusListKeyChains: KeyChainResponseDto[] = [];
   trustListKeyChains: KeyChainResponseDto[] = [];
+  /**
+   * The option groups of the Revocation Key Chain select. The backend accepts a status list key
+   * chain there, or a credential signing one, which signs the status lists that are pinned to it,
+   * and all of them when the tenant has no status list key chain. Status list key chains come
+   * first, so the usual choice stays the first one.
+   */
+  revocationGroups: { label: string; keyChains: KeyChainResponseDto[] }[] = [];
+  /** The key chains of `revocationGroups`, in their order. */
+  private revocationKeyChains: KeyChainResponseDto[] = [];
+  /** While the key chains are requested, so a second Retry does not send it again. */
+  loadingKeyChains = false;
+  /** Set when the key chains could not be loaded; the key chain selects say so and offer a retry. */
+  keyChainsLoadError = '';
+  /** Set once the key chains have loaded, so an empty list means the tenant has none of its kind. */
+  private keyChainsLoaded = false;
 
-  editorOptionsPem = {
+  /**
+   * Whether the key chain lists say what the tenant has: they loaded, and the last load did not
+   * fail. After a failed reload the lists are stale, so nothing is said about missing key chains.
+   */
+  private get keyChainsKnown(): boolean {
+    return this.keyChainsLoaded && !this.keyChainsLoadError;
+  }
+  /** The key chain selects whose create link the user followed; their key chains reload on return. */
+  private creatingKeyChainFor?: HTMLElement;
+
+  private readonly editorOptionsPem = {
     automaticLayout: true,
     language: 'pem',
     minimap: { enabled: false },
+    ariaRequired: true,
   };
+  /** Each certificate editor names its certificate, which its visible label does not do for it. */
+  readonly issuerCertEditorOptions = {
+    ...this.editorOptionsPem,
+    ariaLabel: 'Issuer certificate (PEM)',
+  };
+  readonly revocationCertEditorOptions = {
+    ...this.editorOptionsPem,
+    ariaLabel: 'Revocation certificate (PEM)',
+  };
+
+  // Where focus goes when the entity holding it is removed, in the order of the entities.
+  @ViewChildren('entityHeader', { read: ElementRef })
+  private readonly entityHeaders?: QueryList<ElementRef<HTMLElement>>;
+  @ViewChild('addEntityButton', { read: ElementRef })
+  private readonly addEntityButton?: ElementRef<HTMLElement>;
+  @ViewChildren(MatExpansionPanel) private readonly entityPanels?: QueryList<MatExpansionPanel>;
+  @ViewChild('trustListForm', { read: ElementRef })
+  private readonly formElement?: ElementRef<HTMLFormElement>;
+  @ViewChild(FormGroupDirective) private readonly formDirective?: FormGroupDirective;
+  @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
 
   constructor(
     private readonly route: ActivatedRoute,
     private readonly router: Router,
-    private readonly snackBar: MatSnackBar
+    private readonly snackBar: MatSnackBar,
+    private readonly injector: Injector,
+    private readonly errorStateMatcher: ErrorStateMatcher
   ) {}
 
   ngOnInit() {
@@ -125,10 +210,10 @@ export class TrustListEditComponent implements OnInit {
       entities: new FormArray([]),
     });
 
-    this.loadKeyChains();
+    void this.loadKeyChains();
 
     if (this.trustListId) {
-      this.loadTrustList();
+      void this.load();
     }
   }
 
@@ -141,6 +226,7 @@ export class TrustListEditComponent implements OnInit {
   }
 
   private async loadKeyChains(): Promise<void> {
+    this.loadingKeyChains = true;
     try {
       const response = await keyChainControllerGetAll({});
       this.availableKeyChains = response.data ?? [];
@@ -155,14 +241,206 @@ export class TrustListEditComponent implements OnInit {
       this.trustListKeyChains = this.availableKeyChains.filter(
         (kc) => kc.usageType === 'trustList'
       );
+      this.revocationGroups = [
+        { label: 'Status list key chains', keyChains: this.statusListKeyChains },
+        {
+          label: this.statusListKeyChains.length
+            ? 'Credential signing key chains (for status lists pinned to them)'
+            : 'Credential signing key chains',
+          keyChains: this.attestationKeyChains,
+        },
+      ].filter((group) => group.keyChains.length > 0);
+      this.revocationKeyChains = this.revocationGroups.flatMap((group) => group.keyChains);
+      this.keyChainsLoadError = '';
+      this.keyChainsLoaded = true;
     } catch (error) {
       console.error('Failed to load key chains:', error);
-      openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to load key chains'));
+      this.keyChainsLoadError = getApiErrorMessage(error, 'Failed to load key chains');
+      openErrorSnackBar(this.snackBar, this.keyChainsLoadError);
+    } finally {
+      this.loadingKeyChains = false;
     }
   }
 
-  private async loadTrustList(): Promise<void> {
+  /**
+   * Loads the key chains again, keeping what the user entered. When a success removes the Retry or
+   * Reload button, focus moves to the first select in `fields`, the key chain selects it was next
+   * to; a reload that still finds a usage without key chains keeps the button, and the focus on it.
+   */
+  async retryKeyChains(fields: HTMLElement): Promise<void> {
+    if (this.loadingKeyChains) return;
+    await this.loadKeyChains();
+    if (!this.keyChainsLoadError) {
+      focusAfterRenderIfLost(
+        this.injector,
+        () => fields.querySelector<HTMLElement>('mat-select') ?? undefined
+      );
+    }
+  }
+
+  /** A create link opened the key chain wizard in a new tab, next to the selects in `fields`. */
+  openKeyChainCreation(fields: HTMLElement): void {
+    this.creatingKeyChainFor = fields;
+  }
+
+  /** After creating a key chain in another tab, the user comes back to this one. */
+  @HostListener('window:focus')
+  onWindowFocus(): void {
+    const fields = this.creatingKeyChainFor;
+    if (!fields) return;
+    this.creatingKeyChainFor = undefined;
+    void this.retryKeyChains(fields);
+  }
+
+  /** How an option names a key chain. */
+  keyChainLabel(keyChain: KeyChainResponseDto): string {
+    return keyChain.description ? `${keyChain.description} (${keyChain.id})` : keyChain.id;
+  }
+
+  /** The key chains a select for `usage` offers. */
+  private keyChainsOf(usage: TrustListKeyChainUsage): KeyChainResponseDto[] {
+    switch (usage) {
+      case 'attestation':
+        return this.attestationKeyChains;
+      case 'statusList':
+        return this.revocationKeyChains;
+      case 'trustList':
+        return this.trustListKeyChains;
+    }
+  }
+
+  /**
+   * The selected key chain when it is not among the options for `usage`, so its select shows the
+   * stored ID instead of looking empty. While the key chains are known, its label says why it is
+   * not listed: another usage type, or it does not exist. Undefined when it is listed.
+   */
+  unlistedKeyChain(
+    value: unknown,
+    usage: TrustListKeyChainUsage
+  ): { id: string; label: string } | undefined {
+    if (typeof value !== 'string' || !value) return undefined;
+    if (this.keyChainsOf(usage).some((keyChain) => keyChain.id === value)) return undefined;
+    switch (this.unlistedReason(value, usage)) {
+      case 'otherUsage':
+        return { id: value, label: `${value} (not a ${KEY_CHAIN_USAGE_NAMES[usage]} key chain)` };
+      case 'missing':
+        return { id: value, label: `${value} (does not exist)` };
+      default:
+        // Until the key chains have loaded, or after a failed reload, nothing is known about it.
+        return { id: value, label: value };
+    }
+  }
+
+  /**
+   * Why the loaded key chains do not offer `value` for `usage`: it has another usage type, or it
+   * does not exist. Undefined when it is offered, empty, or the key chains are not known.
+   */
+  private unlistedReason(
+    value: unknown,
+    usage: TrustListKeyChainUsage
+  ): 'otherUsage' | 'missing' | undefined {
+    if (!this.keyChainsKnown || typeof value !== 'string' || !value) return undefined;
+    if (this.keyChainsOf(usage).some((keyChain) => keyChain.id === value)) return undefined;
+    return this.availableKeyChains.some((keyChain) => keyChain.id === value)
+      ? 'otherUsage'
+      : 'missing';
+  }
+
+  /** What saving does with a selected key chain the select for `usage` does not offer; '' otherwise. */
+  private unlistedKeyChainWarning(value: unknown, usage: TrustListKeyChainUsage): string {
+    switch (this.unlistedReason(value, usage)) {
+      case 'missing':
+        return 'This key chain does not exist, so saving fails. Choose another.';
+      case 'otherUsage':
+        // The backend refuses a signing key chain of another usage type. An entity's key chain of
+        // another usage type is accepted when the stored list already names it there, which is
+        // the only way the form holds one, since its selects offer only accepted usage types.
+        return usage === 'trustList'
+          ? 'This is not a trust list key chain, so saving fails. Choose another.'
+          : `This is not a ${KEY_CHAIN_USAGE_NAMES[usage]} key chain; saving still puts its certificate in the trust list. Choose another.`;
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * Whether an internal entity selects a key chain that is of another usage type or does not
+   * exist, as its header says, since its panel may be collapsed.
+   */
+  entityKeyChainsToCheck(entity: AbstractControl): boolean {
+    return (
+      this.unlistedReason(entity.get('issuerKeyChainId')?.value, 'attestation') !== undefined ||
+      this.unlistedReason(entity.get('revocationKeyChainId')?.value, 'statusList') !== undefined
+    );
+  }
+
+  /**
+   * For the revocation select holding `value`: when a credential signing key chain signs the
+   * status lists, as the select offers them too; '' when it holds none or the key chains are not
+   * known.
+   */
+  private credentialSigningRevocationHint(value: unknown): string {
+    if (!this.keyChainsKnown || !this.attestationKeyChains.length) return '';
+    if (!this.statusListKeyChains.length) {
+      return 'No status list key chains, so a credential signing key chain signs the status lists.';
+    }
+    return this.attestationKeyChains.some((keyChain) => keyChain.id === value)
+      ? 'A credential signing key chain signs only the status lists pinned to it; the others are signed by a status list key chain.'
+      : '';
+  }
+
+  /** Whether the key chains are known and none of them has `usage`. */
+  noKeyChains(usage: TrustListKeyChainUsage): boolean {
+    return this.keyChainsKnown && this.keyChainsOf(usage).length === 0;
+  }
+
+  /** Whether the internal entities' key chain selects need a retry, or a key chain created first. */
+  get entityKeyChainsMissing(): boolean {
+    return (
+      this.keyChainsLoadError !== '' ||
+      this.noKeyChains('attestation') ||
+      this.noKeyChains('statusList')
+    );
+  }
+
+  /** Why a select for `usage` has no options, and where to create one. */
+  private noKeyChainsMessage(usage: TrustListKeyChainUsage): string {
+    return `No ${KEY_CHAIN_USAGE_NAMES[usage]} key chains. Create one in Key Management.`;
+  }
+
+  /**
+   * The hint of the key chain select for `usage` holding `value`: `hint`, unless the key chains
+   * are loading or failed to load, the select does not offer `value`, for a required select no
+   * key chain has that usage, or a credential signing key chain may sign the revocation's status
+   * lists.
+   */
+  keyChainHint(hint: string, value: unknown, usage: TrustListKeyChainUsage): string {
+    if (this.loadingKeyChains) return 'Loading key chains…';
+    if (this.keyChainsLoadError) return 'Could not load key chains.';
+    const warning = this.unlistedKeyChainWarning(value, usage);
+    if (warning) return warning;
+    // The signing key chain select may stay empty (an update keeps the stored key chain, a create
+    // looks one up), so only the entities' selects say that none has their usage.
+    if (usage !== 'trustList' && this.noKeyChains(usage)) return this.noKeyChainsMessage(usage);
+    const credentialSigning =
+      usage === 'statusList' ? this.credentialSigningRevocationHint(value) : '';
+    return credentialSigning || hint;
+  }
+
+  /** Under an empty required key chain select of `usage`, which replaces its hint: why it may be empty. */
+  keyChainRequiredMessage(usage: TrustListKeyChainUsage): string {
+    if (this.keyChainsLoadError) return 'The key chains could not be loaded.';
+    return this.noKeyChains(usage) ? this.noKeyChainsMessage(usage) : 'Select a key chain.';
+  }
+
+  /** Loads the trust list to edit; on failure the form stays hidden behind a retry. */
+  async load(): Promise<void> {
     if (!this.trustListId) return;
+    const retrying = this.loadError !== '';
+    this.loading = true;
+    this.loadError = '';
+    // The form needs the key chains too; a retry of the page also retries them if they failed.
+    if (retrying && this.keyChainsLoadError && !this.loadingKeyChains) void this.loadKeyChains();
 
     try {
       const response = await trustListControllerGetTrustList({
@@ -170,6 +448,9 @@ export class TrustListEditComponent implements OnInit {
       });
 
       this.trustList = response.data;
+      // A defence: the form shows only after a successful load, so it holds no entities yet;
+      // should it ever load twice, the stored entities replace the form's, never add to them.
+      this.entitiesArray.clear();
 
       this.form.patchValue({
         id: this.trustList.id || this.trustListId,
@@ -185,8 +466,13 @@ export class TrustListEditComponent implements OnInit {
       }
     } catch (error) {
       console.error('Failed to load trust list:', error);
-      openErrorSnackBar(this.snackBar, getApiErrorMessage(error, 'Failed to load trust list'));
-      this.router.navigate(['/trust-list']);
+      this.loadError = getApiErrorMessage(error, 'Failed to load trust list');
+    } finally {
+      this.loading = false;
+    }
+    // The retry removed the error card with its focused Retry button.
+    if (retrying && !this.loadError) {
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
     }
   }
 
@@ -404,6 +690,12 @@ export class TrustListEditComponent implements OnInit {
 
   removeEntity(index: number): void {
     this.entitiesArray.removeAt(index);
+    focusRowAfterRemoval(
+      this.injector,
+      () => this.entityHeaders?.map((header) => header.nativeElement),
+      index,
+      () => this.addEntityButton?.nativeElement
+    );
   }
 
   getEntityType(index: number): 'internal' | 'external' {
@@ -415,19 +707,15 @@ export class TrustListEditComponent implements OnInit {
     return keyChain?.description || keyChainId;
   }
 
+  /** How the header and the messages of the page name the entity at `index`. */
+  entityLabel(index: number): string {
+    return `${this.getEntityType(index) === 'internal' ? 'Internal' : 'External'} Entity #${index + 1}`;
+  }
+
   async onSubmit(): Promise<void> {
     if (this.saving) return;
-    if (this.form.invalid) {
-      this.snackBar.open('Please fill in all required fields', 'Close', {
-        duration: 3000,
-      });
-      return;
-    }
-
-    if (this.entitiesArray.length === 0) {
-      this.snackBar.open('Please add at least one entity', 'Close', {
-        duration: 3000,
-      });
+    if (this.form.invalid || this.entitiesArray.length === 0) {
+      this.showWhatBlocksSaving();
       return;
     }
 
@@ -481,13 +769,6 @@ export class TrustListEditComponent implements OnInit {
           body,
         });
       } else {
-        // Create new trust list - id is required
-        if (!formValue.id) {
-          this.snackBar.open('ID is required for creating a new trust list', 'Close', {
-            duration: 5000,
-          });
-          return;
-        }
         await trustListControllerCreateTrustList({ body });
       }
 
@@ -514,9 +795,63 @@ export class TrustListEditComponent implements OnInit {
     }
   }
 
+  /**
+   * Save stays usable while the form is incomplete, so a click on it says what is missing: it
+   * marks every field, names the sections with errors, opens the first entity with one (the
+   * accordion shows one entity at a time, so it may be collapsed) and moves focus to the first
+   * field with an error, or to Add Internal Entity when no entity is listed.
+   */
+  private showWhatBlocksSaving(): void {
+    this.form.markAllAsTouched();
+    const entities = this.entitiesArray.controls;
+    const sections = sectionsWithErrors([
+      {
+        name: 'Basic Information',
+        controls: Object.entries(this.form.controls)
+          .filter(([name]) => name !== 'entities')
+          .map(([, control]) => control),
+      },
+      ...entities.map((entity, index) => ({ name: this.entityLabel(index), controls: [entity] })),
+    ]);
+    const problems: string[] = [];
+    if (sections.length) problems.push(fieldsToFixMessage(sections));
+    if (entities.length === 0) problems.push('Add at least one trusted entity.');
+    openErrorSnackBar(this.snackBar, problems.join(' '));
+
+    const firstInvalidEntity = entities.findIndex((entity) => entity.invalid);
+    const panel = firstInvalidEntity >= 0 ? this.entityPanels?.get(firstInvalidEntity) : undefined;
+    panel?.open();
+    focusFieldToFix(this.injector, () => this.formElement?.nativeElement, {
+      panel,
+      fallback: () => this.addEntityButton?.nativeElement,
+    });
+  }
+
+  /** Whether a field shows its error, by the same rule as the Material form fields. */
+  private showsError(control: AbstractControl | null | undefined): boolean {
+    return this.errorStateMatcher.isErrorState(control ?? null, this.formDirective ?? null);
+  }
+
+  /** Whether one of the entity's fields shows an error, which its header says while it is collapsed. */
+  entityShowsErrors(entity: AbstractControl): boolean {
+    return Object.values((entity as FormGroup).controls).some((control) =>
+      this.showsError(control)
+    );
+  }
+
   /** Message under a field: the backend's issue, else the local validator's message. */
   fieldError(path: string, localMessage = ''): string {
     return fieldErrorMessage(this.form.get(path), localMessage);
+  }
+
+  /**
+   * Message under a certificate editor, which has no form field to decide when it shows one: the
+   * backend's issue, else `requiredMessage` once the empty editor shows its error.
+   */
+  certificateError(path: string, requiredMessage: string): string {
+    const control = this.form.get(path);
+    const required = this.showsError(control) && control?.hasError('required');
+    return fieldErrorMessage(control, required ? requiredMessage : '');
   }
 }
 

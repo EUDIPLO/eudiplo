@@ -20,7 +20,6 @@ import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import {
   presentationManagementControllerUpdateConfiguration,
-  presentationManagementControllerReissueRegistrationCertificate,
   keyChainControllerGetAll,
   defaultAccessKeyChainControllerGet,
   type DefaultAccessKeyChainDto,
@@ -365,6 +364,12 @@ export class PresentationCreateComponent implements OnInit {
     this.activeStep++;
   }
 
+  previousStep(): void {
+    // Back waits for a running save, like Save, and stays focusable while it does.
+    if (this.saving) return;
+    this.activeStep = Math.max(0, this.activeStep - 1);
+  }
+
   submitPresentation(): void {
     if (this.loadingConfig || this.loadError) return;
     if (this.guided && this.activeStep < 3) {
@@ -597,7 +602,13 @@ export class PresentationCreateComponent implements OnInit {
     return value as FormGroup;
   }
 
+  /** Save and Back stay focusable while a save runs, so their tooltip says why they wait. */
+  get saveTooltip(): string {
+    return this.saving ? 'Saving the presentation configuration…' : '';
+  }
+
   createOrUpdatePresentation(): void {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
     if (this.saving) return;
     for (let step = 0; step < 3; step++) {
       if (!this.validateStep(step)) {
@@ -1003,13 +1014,13 @@ export class PresentationCreateComponent implements OnInit {
 
   reissueRegistrationCert(): void {
     const id = this.route.snapshot.params['id'];
-    if (!id || this.create) return;
+    // `disabledInteractive` keeps the button clickable while it looks disabled.
+    if (!id || this.create || this.reissuing) return;
     this.reissuing = true;
-    presentationManagementControllerReissueRegistrationCertificate({
-      path: { id },
-    })
-      .then((res: any) => {
-        this.registrationCertCache = res?.data?.registrationCertCache ?? null;
+    this.presentationService
+      .reissueRegistrationCertificate(id)
+      .then((updated) => {
+        this.registrationCertCache = updated?.registrationCertCache ?? null;
         this.snackBar.open('Registration certificate reissued', 'Close', {
           duration: 3000,
         });

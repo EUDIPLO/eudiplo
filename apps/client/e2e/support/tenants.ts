@@ -19,6 +19,20 @@ async function accessToken(clientId: string, clientSecret: string): Promise<stri
   return (await response.json()).access_token;
 }
 
+/** A request to the API (`path` without `/api`) with the access token of a tenant's admin client. */
+export function tenantRequest(
+  tenant: TestTenant,
+  method: string,
+  path: string,
+  body?: unknown
+): Promise<Response> {
+  return fetch(`${api}/api${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${tenant.token}`, 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
 export interface TestTenant {
   id: string;
   clientId: string;

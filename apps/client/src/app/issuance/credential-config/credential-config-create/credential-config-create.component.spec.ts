@@ -1,8 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ClaimFieldDefinitionDto } from '@eudiplo/sdk-core';
+import { TestBed } from '@angular/core/testing';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { ActivatedRoute, provideRouter } from '@angular/router';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ClaimFieldDefinitionDto, client } from '@eudiplo/sdk-core';
 import { CredentialConfigCreateComponent } from './credential-config-create.component';
 import { configs } from './pre-config';
 import { claimSchemaError } from '../../../utils/claim-schema-check';
+import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
+import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
+import { PresentationManagementService } from '../../../presentation/presentation-config/presentation-management.service';
+import { FrontendConfigService } from '../../../services/frontend-config.service';
+import { JwtService } from '../../../services/jwt.service';
+import { EditorComponent } from '../../../utils/editor/editor.component';
+import { CredentialConfigService } from '../credential-config.service';
 
 describe('CredentialConfigCreateComponent', () => {
   let component: CredentialConfigCreateComponent;
@@ -175,6 +186,174 @@ describe('CredentialConfigCreateComponent', () => {
       expect(component.displayConfigs.length).toBe(1);
       expect(component.displayConfigs.at(0).value).toEqual(empty);
     }
+  });
+
+  it('keeps display entries without description or colors as they are', () => {
+    const display = [
+      { name: 'Membership', locale: 'en-US' },
+      { name: 'Mitgliedschaft', locale: 'de-DE', background_color: 'rgb(18, 16, 124)' },
+      { name: 'Adhésion', description: 'Carte de membre', locale: 'fr-FR', text_color: '#fff' },
+    ];
+    (component as any).patchFormFromConfig({
+      id: 'member',
+      description: 'Membership',
+      vct: 'urn:member',
+      config: { format: 'dc+sd-jwt', display },
+      fields: [],
+    });
+
+    // Valid in the API, so the Appearance step accepts them as loaded.
+    expect(component.form.get('displayConfigs')?.valid).toBe(true);
+    expect((component as any).buildConfigurationPayload().config.display).toEqual(display);
+
+    // A cleared color or description is left out, not sent as an empty string.
+    component.displayConfigs.at(2).patchValue({ description: ' ', text_color: '' });
+    expect((component as any).buildConfigurationPayload().config.display[2]).toEqual({
+      name: 'Adhésion',
+      locale: 'fr-FR',
+    });
+
+    // Set values are sent trimmed.
+    component.displayConfigs
+      .at(2)
+      .patchValue({ description: ' Carte ', background_color: ' #12107C ' });
+    expect((component as any).buildConfigurationPayload().config.display[2]).toEqual({
+      name: 'Adhésion',
+      description: 'Carte',
+      locale: 'fr-FR',
+      background_color: '#12107C',
+    });
+  });
+
+  it('shows loaded entries the API would refuse with their errors, expanded', () => {
+    (component as any).patchFormFromConfig({
+      id: 'member',
+      description: 'Membership',
+      vct: 'urn:member',
+      config: {
+        format: 'dc+sd-jwt',
+        display: [
+          { name: 'Membership', locale: 'en-US', background_color: '#12107C' },
+          { name: 'Mitgliedschaft', locale: 'de-DE', text_color: 'navy' },
+          { name: 'Membership (copy)', locale: 'en-us' },
+        ],
+      },
+      fields: [],
+    });
+    const [valid, badColor, duplicate] = component.displayConfigs.controls;
+
+    expect(valid.valid).toBe(true);
+    expect(component.expandedAppearance.has(valid)).toBe(false);
+    expect(badColor.get('text_color')?.errors).toEqual({ displayColor: true });
+    expect(duplicate.get('locale')?.errors).toEqual({ duplicateLocale: { firstIndex: 0 } });
+    for (const entry of [badColor, duplicate]) {
+      expect(component.expandedAppearance.has(entry)).toBe(true);
+      expect(entry.touched).toBe(true);
+    }
+
+    // Fixing the first entry's locale clears the error on the later one.
+    valid.patchValue({ locale: 'fr-FR' });
+    expect(duplicate.get('locale')?.errors).toBeNull();
+  });
+
+  it('starts new display entries without colors, with an optional description and an unused locale', () => {
+    component.addDisplayConfig();
+    const added = component.displayConfigs.at(1);
+    expect(added.value).toMatchObject({
+      description: '',
+      locale: 'en-GB',
+      background_color: '',
+      text_color: '',
+    });
+    added.patchValue({ name: 'Mitgliedschaft' });
+    expect(added.valid).toBe(true);
+    expect((component as any).buildConfigurationPayload().config.display[1]).toEqual({
+      name: 'Mitgliedschaft',
+      locale: 'en-GB',
+    });
+
+    // Choosing a locale another entry uses marks the later entry, shown before it is touched.
+    added.patchValue({ locale: 'en-US' });
+    expect(added.get('locale')?.errors).toEqual({ duplicateLocale: { firstIndex: 0 } });
+    expect(added.get('locale')?.touched).toBe(false);
+    expect(component.localeErrorState.isErrorState(added.get('locale') as any, null)).toBe(true);
+    expect(
+      component.localeErrorState.isErrorState(
+        component.displayConfigs.at(0).get('locale') as any,
+        null
+      )
+    ).toBe(false);
+  });
+
+  it('recomputes repeated locales when an entry is removed', () => {
+    (component as any).patchFormFromConfig({
+      id: 'member',
+      vct: 'urn:member',
+      config: {
+        format: 'dc+sd-jwt',
+        display: [
+          { name: 'A', locale: 'en-US' },
+          { name: 'B', locale: 'de-DE' },
+          { name: 'C', locale: 'en-US' },
+        ],
+      },
+      fields: [],
+    });
+    const last = component.displayConfigs.at(2);
+    expect(last.get('locale')?.errors).toEqual({ duplicateLocale: { firstIndex: 0 } });
+
+    component.removeDisplayConfig(0);
+    expect(last.get('locale')?.errors).toBeNull();
+  });
+
+  it('adds entries only while a listed locale is unused', () => {
+    for (let i = 1; i < component.localeOptions.length; i++) component.addDisplayConfig();
+    expect(component.displayConfigs).toHaveLength(component.localeOptions.length);
+    expect(component.unusedDisplayLocale).toBeUndefined();
+
+    component.addDisplayConfig();
+    expect(component.displayConfigs).toHaveLength(component.localeOptions.length);
+  });
+
+  it('offers a loaded locale that is not listed and previews only accepted colors', () => {
+    (component as any).patchFormFromConfig({
+      id: 'member',
+      vct: 'urn:member',
+      config: {
+        format: 'dc+sd-jwt',
+        display: [{ name: 'Lid', locale: 'nl-NL', background_color: '#fff', text_color: 'navy' }],
+      },
+      fields: [],
+    });
+    const entry = component.displayConfigs.at(0);
+    expect(component.displayLocaleOptions(entry).at(-1)).toEqual({
+      value: 'nl-NL',
+      label: 'nl-NL',
+      disabled: false,
+    });
+    expect(component.swatchColor(entry.get('background_color'))).toBe('#fff');
+    expect(component.swatchColor(entry.get('text_color'))).toBeNull();
+  });
+
+  it('disables the locales other entries use in each select', () => {
+    component.addDisplayConfig();
+    const [first, second] = component.displayConfigs.controls;
+    const disabled = (entry: typeof first) =>
+      component
+        .displayLocaleOptions(entry)
+        .filter((option) => option.disabled)
+        .map((option) => option.value);
+
+    expect(disabled(first)).toEqual(['en-GB']);
+    expect(disabled(second)).toEqual(['en-US']);
+  });
+
+  it('saves a configuration without its optional description', () => {
+    basics();
+    component.form.patchValue({ description: ' ' });
+    component.displayConfigs.at(0).patchValue({ name: 'Membership' });
+    expect(component.form.get('description')?.valid).toBe(true);
+    expect((component as any).buildConfigurationPayload().description).toBeNull();
   });
 
   it('returns to an invalid earlier step before review or save', () => {
@@ -584,5 +763,90 @@ describe('CredentialConfigCreateComponent editing', () => {
     expect(component.loadError).toBe('Failed to load credential configuration: Forbidden resource');
     component.onSubmit();
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe('CredentialConfigCreateComponent Save', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Renders the create form with a configuration that can be saved; the save never answers. */
+  async function render() {
+    const save = vi.fn(() => new Promise(() => undefined));
+    vi.spyOn(client, 'get').mockResolvedValue({ data: [] } as any);
+    await TestBed.configureTestingModule({
+      imports: [CredentialConfigCreateComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { params: {} } } },
+        { provide: CredentialConfigService, useValue: { saveConfiguration: save } },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        { provide: MatDialog, useValue: { open: vi.fn() } },
+        {
+          provide: PresentationManagementService,
+          useValue: { loadConfigurations: vi.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: FrontendConfigService,
+          useValue: { getConfig: vi.fn().mockResolvedValue(null) },
+        },
+        { provide: JwtService, useValue: { getTenantId: () => 'tenant' } },
+        {
+          provide: ConfigOwnershipService,
+          useValue: { get: vi.fn().mockResolvedValue(undefined) },
+        },
+      ],
+    })
+      .overrideComponent(EditorComponent, { set: { template: '' } })
+      .compileComponents();
+    const fixture = TestBed.createComponent(CredentialConfigCreateComponent);
+    const component = fixture.componentInstance;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    component.form.patchValue({ id: 'member', description: 'Membership', vctString: 'urn:member' });
+    component.displayConfigs.at(0).patchValue({ name: 'Membership', description: 'Member card' });
+    return { fixture, component, save };
+  }
+
+  it('waits while the configuration is saved: a second click sends nothing', async () => {
+    const { fixture, component, save } = await render();
+    component.toggleGuidedMode();
+    fixture.detectChanges();
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[type="submit"]'
+    )!;
+    expectAvailable(fixture, button);
+
+    button.click();
+    fixture.detectChanges();
+    button.click();
+    fixture.detectChanges();
+
+    expect(save).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, button, 'Saving the credential configuration…');
+  });
+
+  it('steps back while idle and keeps Back focusable while the configuration is saved', async () => {
+    const { fixture, component, save } = await render();
+    component.activeStep = 4;
+    component.furthestStep = 4;
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const back = [...element.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Back'
+    )!;
+    expectAvailable(fixture, back);
+    back.click();
+    expect(component.activeStep).toBe(3);
+    component.activeStep = 4;
+    fixture.detectChanges();
+
+    element.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    fixture.detectChanges();
+    back.click();
+    fixture.detectChanges();
+
+    expect(save).toHaveBeenCalledOnce();
+    expect(component.activeStep).toBe(4);
+    expectUnavailable(fixture, back, 'Saving the credential configuration…');
   });
 });

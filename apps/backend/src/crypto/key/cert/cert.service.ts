@@ -122,15 +122,6 @@ export class CertService {
     }
 
     /**
-     * Find or create a certificate for a key chain.
-     * In the new model, certificates are always created with the key chain,
-     * so this just returns the existing one.
-     */
-    async findOrCreate(options: FindCertOptions): Promise<CertificateInfo> {
-        return this.find(options);
-    }
-
-    /**
      * Get a certificate by ID (key chain ID).
      */
     async getCertificateById(

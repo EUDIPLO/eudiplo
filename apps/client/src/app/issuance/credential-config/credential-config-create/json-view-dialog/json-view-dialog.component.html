@@ -8,6 +8,7 @@
 <mat-dialog-content>
   <div class="tab-content">
     <app-editor
+      #jsonEditor
       [formControl]="jsonControl"
       [schema]="data.schema"
       [errors]="jsonControl.errors"
@@ -18,7 +19,7 @@
 <mat-dialog-actions fxLayout="row" fxLayoutGap="16px" fxLayoutAlign="end center">
   <button mat-button (click)="cancel()">Cancel</button>
   @if (!data.readonly) {
-    <button mat-flat-button (click)="save()" [disabled]="jsonControl.invalid">
+    <button mat-flat-button (click)="save()">
       <mat-icon>save</mat-icon>
       Apply Changes
     </button>
