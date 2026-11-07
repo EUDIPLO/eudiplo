@@ -202,7 +202,8 @@ To let people sign in with their own accounts, set `OIDC` to a Keycloak realm
 
 - EUDIPLO accepts Keycloak access tokens instead of issuing its own; the
   built-in `POST /api/oauth2/token` is disabled.
-- The web client signs people in with the authorization code flow and PKCE.
+- The web client signs people in with the authorization code flow and PKCE,
+  from the URLs in `OIDC_UI_URL` or the redirect URIs set in Keycloak.
 - Clients created through `/api/client` are Keycloak clients, and people are
   managed through `/api/user` (role `users:manage`) or in the web client. Without
   `OIDC`, `/api/user` answers `501`.

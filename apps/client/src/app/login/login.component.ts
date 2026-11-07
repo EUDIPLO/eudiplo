@@ -34,7 +34,7 @@ import { map, merge, Subscription, take } from 'rxjs';
 
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { EnvironmentService } from '../services/environment.service';
-import { ApiService } from '../core';
+import { ApiService, withoutTrailingSlashes } from '../core';
 import { OidcService } from '../core/oidc.service';
 import { focusFieldToFix, showFieldsToFix } from '../common/field-to-fix.util';
 import { openErrorSnackBar } from '../utils/error-snackbar';
@@ -45,12 +45,11 @@ interface PreviousSession {
   baseUrl?: string;
 }
 
-/** `url` without the slashes it ends with, as the instance URL is kept. */
-function withoutTrailingSlashes(url: string): string {
-  let trimmed = url;
-  while (trimmed.endsWith('/')) trimmed = trimmed.slice(0, -1);
-  return trimmed;
-}
+/**
+ * What an instance a link chose receives when the user signs in there: the access token of a
+ * single sign-on, the client secret the user entered, or the session of the link's own client.
+ */
+type LinkedInstanceReceives = 'token' | 'secret' | 'link-client';
 
 /** A check of whether the instance at `url` offers SSO. */
 interface InstanceCheck {
@@ -118,6 +117,11 @@ export class LoginComponent implements OnInit, OnDestroy {
   private instanceCheck?: InstanceCheck;
   /** A submit on the SSO tab waits for the instance check. */
   private waitingForInstanceCheck = false;
+  /**
+   * The instance the link chose that the user agreed to sign in at, and what it receives then,
+   * so a retry does not ask again.
+   */
+  private confirmedInstance?: { url: string; receives: LinkedInstanceReceives };
 
   constructor(
     private readonly formBuilder: FormBuilder,
@@ -477,15 +481,15 @@ export class LoginComponent implements OnInit, OnDestroy {
       return;
     }
 
+    const formValue = this.loginForm.value;
+    const normalizedUrl = withoutTrailingSlashes(formValue.apiUrl);
+    if (!this.confirmInstanceFromLink(normalizedUrl)) return;
+
     // Signing in with the form replaces a kept session.
     this.stopWaitingForKeptSession();
     this.isLoading = true;
 
     try {
-      const formValue = this.loginForm.value;
-
-      const normalizedUrl = withoutTrailingSlashes(formValue.apiUrl);
-
       if (this.selectedLoginMode === 'sso') {
         const issuerUrl = this.discoveredIssuer;
         const uiClientId = this.discoveredUiClientId;
@@ -502,6 +506,8 @@ export class LoginComponent implements OnInit, OnDestroy {
         return;
       }
 
+      // A sign-in with the link's own client does not make its instance one the user knows.
+      const linkCredentials = this.linkCredentialsInForm();
       await this.apiService.loginWithClientCredentials(
         formValue.clientId,
         formValue.clientSecret,
@@ -511,6 +517,7 @@ export class LoginComponent implements OnInit, OnDestroy {
 
       // Attempt to refresh/get access token
       await this.apiService.refreshAccessToken();
+      if (!linkCredentials) this.apiService.rememberSignedInInstance(normalizedUrl);
 
       this.snackBar.open('Login successful!', 'Close', {
         duration: 3000,
@@ -549,6 +556,86 @@ export class LoginComponent implements OnInit, OnDestroy {
     } finally {
       this.isLoading = false;
     }
+  }
+
+  /**
+   * Whether to sign in at `url`. The instance receives the access token or the client secret,
+   * and nothing ties it to the identity provider it names. So the user confirms an instance that
+   * the link opening this page chose, unless the console knows it already. This also applies to
+   * a link with its own credentials. An agreement covers only what the instance receives with it:
+   * agreeing to the link's client does not cover sending it the access token of an SSO.
+   */
+  private confirmInstanceFromLink(url: string): boolean {
+    const link = this.route.snapshot.queryParams;
+    const linked: unknown = link['apiUrl'];
+    if (typeof linked !== 'string' || withoutTrailingSlashes(linked) !== url) return true;
+    const receives = this.linkedInstanceReceives();
+    const confirmed = this.confirmedInstance;
+    if (confirmed?.url === url && confirmed.receives === receives) return true;
+    if (this.knownInstances().includes(url)) return true;
+    if (globalThis.confirm(this.linkedInstanceQuestion(url, receives))) {
+      this.confirmedInstance = { url, receives };
+      return true;
+    }
+    if (this.keptSession()) {
+      // The page keeps waiting for the kept session instead of showing the form.
+      this.snackBar.open(`Not signed in at ${url}. The previous session continues.`, 'Close', {
+        duration: 10_000,
+        panelClass: ['warning-snackbar'],
+      });
+      return false;
+    }
+    // The link's client belongs to the instance the user declined.
+    if (this.linkCredentialsInForm()) this.loginForm.patchValue({ clientId: '', clientSecret: '' });
+    this.snackBar.open(
+      `Not signed in at ${url}. Enter the address of an EUDIPLO instance you trust.`,
+      'Close',
+      { duration: 10_000, panelClass: ['warning-snackbar'] }
+    );
+    afterNextRender(() => this.apiUrlInput()?.nativeElement.focus(), { injector: this.injector });
+    return false;
+  }
+
+  /** The form still holds the client ID and secret of the link that opened this page. */
+  private linkCredentialsInForm(): boolean {
+    const link = this.route.snapshot.queryParams;
+    const { clientId, clientSecret } = this.loginForm.value;
+    return (
+      !!link['clientSecret'] &&
+      clientId === link['clientId'] &&
+      clientSecret === link['clientSecret']
+    );
+  }
+
+  /** What the instance receives when the user signs in with the form as it is. */
+  private linkedInstanceReceives(): LinkedInstanceReceives {
+    if (this.selectedLoginMode === 'sso') return 'token';
+    return this.linkCredentialsInForm() ? 'link-client' : 'secret';
+  }
+
+  /** The question before signing in at `url`, which the link chose. */
+  private linkedInstanceQuestion(url: string, receives: LinkedInstanceReceives): string {
+    const consequence = {
+      token:
+        'After you sign in, the console sends it your access token, which lets it act with your roles.',
+      'link-client':
+        'It signs you in with the client the link names, and everything you do in the console goes to this instance.',
+      secret:
+        'Signing in sends it the client secret you entered, which lets it act as this client.',
+    }[receives];
+    return `The link you opened chose the EUDIPLO instance ${url}. ${consequence} Sign in only if you trust this instance.`;
+  }
+
+  /** The instance this deployment of the console names, and the one this browser last signed in to. */
+  private knownInstances(): string[] {
+    const runtime = (globalThis as { env?: { apiUrl?: string } }).env?.apiUrl;
+    // The production build only has a placeholder.
+    const development = this.environmentService.isDevelopment()
+      ? this.environmentService.getEnvironment().api.baseUrl
+      : undefined;
+    return [runtime, development, this.apiService.lastSignedInInstance()]
+      .filter((url): url is string => !!url)
+      .map(withoutTrailingSlashes);
   }
 
   private showFieldsToFix(fields: AbstractControl): void {

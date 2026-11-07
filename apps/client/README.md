@@ -172,8 +172,11 @@ Supported query parameters:
 
 - `apiUrl`: Override the API base URL for the current session
 - `clientId`: Set the client ID for the current session
+- `clientSecret`: Set the client secret; with `clientId` and `apiUrl`, the page signs in with these credentials at once
 
 This allows you to create shareable links that point to specific backend instances without changing the container configuration.
+
+The instance receives the access token after a single sign-on, or the client secret, so the login page asks before signing in at an instance that the link chose, also for a link with `clientId`, `clientSecret` and `apiUrl`. It does not ask about the instance `API_BASE_URL` names or the one this browser last signed in to with single sign-on or a client secret the user entered.
 
 #### Docker Environment Configuration
 

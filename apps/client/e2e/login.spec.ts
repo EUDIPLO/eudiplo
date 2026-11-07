@@ -10,6 +10,27 @@ test('login page is accessible', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
 });
 
+test('asks before a link signs in at an instance the console does not know', async ({ page }) => {
+  const questions: string[] = [];
+  page.on('dialog', (dialog) => {
+    questions.push(dialog.message());
+    void dialog.dismiss();
+  });
+
+  await page.goto('/login?clientId=client-b&clientSecret=secret-b&apiUrl=https://other.invalid');
+
+  await expect(
+    page.getByText(
+      'Not signed in at https://other.invalid. Enter the address of an EUDIPLO instance you trust.'
+    )
+  ).toBeVisible();
+  expect(questions).toEqual([
+    'The link you opened chose the EUDIPLO instance https://other.invalid. It signs you in with the client the link names, and everything you do in the console goes to this instance. Sign in only if you trust this instance.',
+  ]);
+  await expect(page).toHaveURL(/\/login\?/);
+  await expect(page.getByLabel('EUDIPLO Instance')).toBeFocused();
+});
+
 test('login with client credentials redirects to dashboard', async ({ page }) => {
   test.skip(
     !hasAuthCredentials,
