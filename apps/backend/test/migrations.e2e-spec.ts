@@ -1228,9 +1228,7 @@ describe("Migration tests", () => {
 
         async function expectNormalized(dataSource: DataSource) {
             const log = vi.spyOn(console, "log").mockImplementation(() => {});
-            const warn = vi
-                .spyOn(console, "warn")
-                .mockImplementation(() => {});
+            const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
             const queryRunner = dataSource.createQueryRunner();
             const migration = new NormalizeTrustListEntityInfo1786100000000();
             try {

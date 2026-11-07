@@ -923,8 +923,7 @@ describe("Trust List e2e Tests", () => {
 
             expect(planned.applicable).toBe(false);
             expect(
-                planned.items.find((item) => item.kind === "TrustList")
-                    ?.issues,
+                planned.items.find((item) => item.kind === "TrustList")?.issues,
             ).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({
@@ -954,7 +953,9 @@ describe("Trust List e2e Tests", () => {
                 (entry) => entry.kind === "TrustList",
             );
             expect(item?.issues ?? []).toEqual([]);
-            expect(item?.migrations).toEqual(["trust-list-v2-etsi-entity-info"]);
+            expect(item?.migrations).toEqual([
+                "trust-list-v2-etsi-entity-info",
+            ]);
         });
     });
 
