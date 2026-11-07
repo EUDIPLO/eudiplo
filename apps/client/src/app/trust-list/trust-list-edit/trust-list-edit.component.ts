@@ -62,6 +62,13 @@ import {
 } from './trust-list-electronic-address';
 import { fromFormQueryParams } from '../../common/return-to-form';
 
+/** The message set of each electronic address control. */
+const ELECTRONIC_ADDRESS_FIELDS = {
+  infoContactUri: 'email',
+  infoWebsite: 'website',
+  infoPhone: 'phone',
+} as const;
+
 /** Common info fields for both internal and external entities */
 interface EntityInfoForm {
   providerType: FormControl<'attestation-provider' | 'wallet-provider'>;
@@ -918,9 +925,7 @@ export class TrustListEditComponent implements OnInit {
     const path = `entities.${index}.${control}`;
     const errors = this.form.get(path)?.errors ?? {};
     const messages: Partial<Record<string, string>> =
-      ELECTRONIC_ADDRESS_MESSAGES[
-        control === 'infoContactUri' ? 'email' : control === 'infoWebsite' ? 'website' : 'phone'
-      ];
+      ELECTRONIC_ADDRESS_MESSAGES[ELECTRONIC_ADDRESS_FIELDS[control]];
     const failed = ['required', 'pattern', 'serializedUrl'].find((key) => errors[key]);
     return this.fieldError(path, (failed && messages[failed]) || '');
   }
