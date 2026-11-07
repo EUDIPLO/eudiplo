@@ -26,7 +26,7 @@ export type Caller = CallerResponseDto;
 const CALLER_TIMEOUT_MS = 10_000;
 
 /** Why the caller could not be loaded, and what the user can do about it. */
-export function callerFailureMessage(error: unknown): string {
+function callerFailureMessage(error: unknown): string {
   const failure = 'Could not load your roles';
   if (error instanceof DOMException && error.name === 'TimeoutError') {
     return `${failure}: the backend did not answer within ${CALLER_TIMEOUT_MS / 1000} seconds.`;
