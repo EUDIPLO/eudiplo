@@ -57,10 +57,8 @@ import {
 import { LoadErrorComponent } from '../../common/load-error.component';
 import {
   ELECTRONIC_ADDRESS_MESSAGES,
-  emailValidators,
-  phoneValidators,
+  electronicAddressControls,
   readElectronicAddress,
-  websiteValidators,
 } from './trust-list-electronic-address';
 import { fromFormQueryParams } from '../../common/return-to-form';
 
@@ -625,18 +623,7 @@ export class TrustListEditComponent implements OnInit {
           infoStreetAddress: new FormControl(entity.info?.streetAddress || '', {
             nonNullable: true,
           }),
-          infoContactUri: new FormControl(entity.info?.contactUri || '', {
-            nonNullable: true,
-            validators: emailValidators,
-          }),
-          infoWebsite: new FormControl(entity.info?.website || '', {
-            nonNullable: true,
-            validators: websiteValidators,
-          }),
-          infoPhone: new FormControl(entity.info?.phone || '', {
-            nonNullable: true,
-            validators: phoneValidators,
-          }),
+          ...electronicAddressControls(entity.info),
         });
         this.entitiesArray.push(entityGroup);
       } else {
@@ -665,18 +652,7 @@ export class TrustListEditComponent implements OnInit {
           infoStreetAddress: new FormControl(entity.info?.streetAddress || '', {
             nonNullable: true,
           }),
-          infoContactUri: new FormControl(entity.info?.contactUri || '', {
-            nonNullable: true,
-            validators: emailValidators,
-          }),
-          infoWebsite: new FormControl(entity.info?.website || '', {
-            nonNullable: true,
-            validators: websiteValidators,
-          }),
-          infoPhone: new FormControl(entity.info?.phone || '', {
-            nonNullable: true,
-            validators: phoneValidators,
-          }),
+          ...electronicAddressControls(entity.info),
         });
         this.entitiesArray.push(entityGroup);
       }
@@ -742,18 +718,7 @@ export class TrustListEditComponent implements OnInit {
         infoStreetAddress: new FormControl(postalAddress?.StreetAddress || '', {
           nonNullable: true,
         }),
-        infoContactUri: new FormControl(electronicAddress.contactUri, {
-          nonNullable: true,
-          validators: emailValidators,
-        }),
-        infoWebsite: new FormControl(electronicAddress.website, {
-          nonNullable: true,
-          validators: websiteValidators,
-        }),
-        infoPhone: new FormControl(electronicAddress.phone, {
-          nonNullable: true,
-          validators: phoneValidators,
-        }),
+        ...electronicAddressControls(electronicAddress),
       });
       this.entitiesArray.push(entityGroup);
     }
@@ -807,9 +772,7 @@ export class TrustListEditComponent implements OnInit {
       infoLocality: new FormControl('', { nonNullable: true }),
       infoPostalCode: new FormControl('', { nonNullable: true }),
       infoStreetAddress: new FormControl('', { nonNullable: true }),
-      infoContactUri: new FormControl('', { nonNullable: true, validators: emailValidators }),
-      infoWebsite: new FormControl('', { nonNullable: true, validators: websiteValidators }),
-      infoPhone: new FormControl('', { nonNullable: true, validators: phoneValidators }),
+      ...electronicAddressControls(),
     });
     this.entitiesArray.push(entityGroup);
   }
@@ -833,9 +796,7 @@ export class TrustListEditComponent implements OnInit {
       infoLocality: new FormControl('', { nonNullable: true }),
       infoPostalCode: new FormControl('', { nonNullable: true }),
       infoStreetAddress: new FormControl('', { nonNullable: true }),
-      infoContactUri: new FormControl('', { nonNullable: true, validators: emailValidators }),
-      infoWebsite: new FormControl('', { nonNullable: true, validators: websiteValidators }),
-      infoPhone: new FormControl('', { nonNullable: true, validators: phoneValidators }),
+      ...electronicAddressControls(),
     });
     this.entitiesArray.push(entityGroup);
   }

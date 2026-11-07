@@ -1,4 +1,4 @@
-import { ValidatorFn, Validators } from '@angular/forms';
+import { FormControl, ValidatorFn, Validators } from '@angular/forms';
 import trustListCreateSchema from '../../../../../../schemas/TrustListCreateDto.schema.json';
 
 // The API's patterns (TRUST_LIST_EMAIL_PATTERN, TRUST_LIST_WEBSITE_PATTERN and
@@ -74,5 +74,29 @@ export function readElectronicAddress(addresses: ElectronicAddress[] | undefined
     contactUri: values.find((value) => value.startsWith('mailto:')) ?? '',
     website: values.find((value) => /^https?:/.test(value)) ?? '',
     phone: values.find((value) => value.startsWith('tel:')) ?? '',
+  };
+}
+
+/** The form controls of an entity's electronic address, with the API's validators. */
+export function electronicAddressControls(
+  address: { contactUri?: string; website?: string; phone?: string } = {}
+): {
+  infoContactUri: FormControl<string>;
+  infoWebsite: FormControl<string>;
+  infoPhone: FormControl<string>;
+} {
+  return {
+    infoContactUri: new FormControl(address.contactUri || '', {
+      nonNullable: true,
+      validators: emailValidators,
+    }),
+    infoWebsite: new FormControl(address.website || '', {
+      nonNullable: true,
+      validators: websiteValidators,
+    }),
+    infoPhone: new FormControl(address.phone || '', {
+      nonNullable: true,
+      validators: phoneValidators,
+    }),
   };
 }
