@@ -1,5 +1,6 @@
-import type { Role } from "../../roles/role.enum.js";
 import { ConflictError } from "../../../shared/domain/conflict-error.js";
+import { NotSupportedError } from "../../../shared/domain/not-supported-error.js";
+import type { Role } from "../../roles/role.enum.js";
 
 export interface ClientData {
     clientId: string;
@@ -24,5 +25,15 @@ export interface CreatedClient extends ClientData {
 export class ClientIdTaken extends ConflictError {
     constructor(clientId: string) {
         super(`Client ID '${clientId}' is already in use`);
+    }
+}
+
+/** With `OIDC_PROVIDER=generic`, the identity provider manages the clients. */
+export class ClientsManagedByIdentityProvider extends NotSupportedError {
+    constructor() {
+        super(
+            "Clients are managed in the identity provider (OIDC_PROVIDER=generic).",
+        );
+        this.name = "ClientsManagedByIdentityProvider";
     }
 }

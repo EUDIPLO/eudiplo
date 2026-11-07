@@ -9,7 +9,7 @@ export interface OidcDiscoveryDto {
     issuer: string;
 
     /**
-     * Public client ID for the Angular UI (Authorization Code + PKCE). Only present in OIDC mode.
+     * Public client ID for the Angular UI (Authorization Code + PKCE). Only present with Keycloak (`OIDC_PROVIDER=keycloak`).
      */
     ui_client_id?: string;
 

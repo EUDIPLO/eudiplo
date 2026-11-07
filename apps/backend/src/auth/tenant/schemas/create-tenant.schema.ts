@@ -33,7 +33,7 @@ export const CreateTenantSchema = z
             .array(RoleSchema)
             .optional()
             .describe(
-                "Roles of the tenant's admin client `<id>-admin`, which also gets clients:manage. They are all that client can grant, unless they include tenant:admin. Without roles, no admin client is created.",
+                "Roles of the tenant's admin client `<id>-admin`, which also gets clients:manage. They are all that client can grant, unless they include tenant:admin. Without roles, or with an empty list, no admin client is created.",
             ),
         sessionConfig: SessionStorageConfigSchema.optional().describe(
             "Optional tenant-specific session storage configuration.",

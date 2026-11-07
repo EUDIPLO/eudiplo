@@ -56,6 +56,8 @@ OIDC_UI_URL=https://console.example.com  # where the web client is served, comma
 # OIDC_SUB=tenant_id            # claim that carries the tenant
 # OIDC_ALGORITHM=RS256          # RS256, PS256 or ES256
 # OIDC_INTERNAL_ISSUER_URL=     # expected token issuer, defaults to OIDC
+# OIDC_AUDIENCE=                # aud value tokens must carry, checked only when set (see below)
+# OIDC_ROLES_CLAIM=             # claim with the roles; leave unset with Keycloak (see step 3)
 # Optional: a Keycloak client with tenants:manage for automation
 AUTH_CLIENT_ID=root
 AUTH_CLIENT_SECRET=<secret>
@@ -65,6 +67,20 @@ EUDIPLO validates access tokens against the issuer `OIDC_INTERNAL_ISSUER_URL`
 (default: `OIDC`) and loads the signing keys from
 `<issuer>/protocol/openid-connect/certs`. Leave it unset unless the `iss` of
 your tokens differs from `OIDC`.
+
+`OIDC_AUDIENCE` is off by default: Keycloak access tokens carry `aud: account`.
+To require your own audience, create a client scope with an **Audience** mapper
+that adds the value to the access token, and make it a **Default** client scope
+of the realm (**Client scopes**, type **Default**), so that `eudiplo-ui`, the
+clients EUDIPLO creates and the `AUTH_CLIENT_ID` client all get it. Then set
+`OIDC_AUDIENCE` to that value.
+
+Keycloak adds a realm default client scope only to clients created after it
+became a default, and EUDIPLO assigns no scopes when it creates or updates a
+client. On an existing installation, also add the scope to `eudiplo-ui`, the
+`AUTH_CLIENT_ID` client and every tenant client created before: open the
+client under **Clients**, then **Client scopes > Add client scope**, type
+**Default**. Otherwise their tokens get `401` once `OIDC_AUDIENCE` is set.
 
 On every start, EUDIPLO:
 
@@ -88,15 +104,17 @@ becomes `+` (the origins of the redirect URIs), as does an empty list of web
 origins. If no redirect URI is left, the backend logs a warning and nobody can
 sign in to the web client with SSO.
 
-**Checkpoint:** the backend log shows `Mode: External OIDC` and no warning about
-`eudiplo-ui`, and the web client's login page offers single sign-on after you
-enter the backend URL.
+**Checkpoint:** the backend log shows `Mode: External OIDC (keycloak)` and no
+warning about `eudiplo-ui`, and the web client's login page offers single
+sign-on after you enter the backend URL.
 
 ## 3. Put the tenant into user tokens
 
 EUDIPLO reads the tenant from the `tenant_id` claim (`OIDC_SUB`) and the roles
 from `roles` or `realm_access.roles`. Service clients created through EUDIPLO
-get both claims automatically. For people, add the tenant claim once:
+get both claims automatically, so leave `OIDC_ROLES_CLAIM` unset with Keycloak:
+a claim these clients do not carry leaves them without roles. For people, add
+the tenant claim once:
 
 1. In Keycloak 24 or later, declare the user attribute `tenant_id` in
    **Realm settings > User profile** (or enable unmanaged attributes), so Keycloak
@@ -145,6 +163,7 @@ and shows only that tenant's data.
 | Startup fails with `reading 'split'`                 | Refresh tokens for client credentials disabled on `eudiplo-admin` | Enable **Use refresh tokens for client credentials grant**                     |
 | Keycloak shows "Invalid parameter: redirect_uri" after **Login with SSO** | The web client's URL is not a redirect URI of `eudiplo-ui` | Add it to `OIDC_UI_URL` and restart the backend, or add `<web client URL>/*` as redirect URI of `eudiplo-ui` in Keycloak when `OIDC_UI_URL` is unset |
 | API calls return 401 after login                     | Token `iss` differs from `OIDC_INTERNAL_ISSUER_URL`/`OIDC`, or wrong `OIDC_ALGORITHM` | Compare the `iss` and `alg` of a token with the configuration |
+| API calls return 401 since `OIDC_AUDIENCE` was set   | The token's `aud` lacks the value                           | Add the audience mapper to a realm default client scope, as in [step 2](#2-configure-eudiplo). Clients that existed before the scope became a default need it added in each client's **Client scopes** tab |
 | `This endpoint requires a tenant context`            | User token has no `tenant_id` claim                         | Add the mapper from [step 3](#3-put-the-tenant-into-user-tokens)                       |
 | `403` on an endpoint                                 | Missing realm role                                          | Assign the role listed for the endpoint in the [roles reference](../reference/roles.md#endpoints) |
 | `403` "Cannot grant …" or "Cannot manage …"          | The roles involved go beyond the caller's own               | Assign the realm role to the caller in Keycloak ([granting roles](../reference/roles.md#granting-roles)). A target with a `realm-management` role or another client role can only be managed in Keycloak |

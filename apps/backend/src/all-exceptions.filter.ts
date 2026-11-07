@@ -11,6 +11,7 @@ import { EntityNotFoundError } from "typeorm";
 import { redactUrlPath } from "./platform/observability/redact-url.js";
 import { ConflictError } from "./shared/domain/conflict-error.js";
 import { NotFoundError } from "./shared/domain/not-found-error.js";
+import { NotSupportedError } from "./shared/domain/not-supported-error.js";
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -23,45 +24,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
         const request = ctx.getRequest<Request>();
         const requestPath = request.path || request.url.split("?")[0] || "/";
 
-        let status: number;
-        if (exception instanceof HttpException) {
-            status = exception.getStatus();
-        } else if (
-            exception instanceof EntityNotFoundError ||
-            exception instanceof NotFoundError
-        ) {
-            status = HttpStatus.NOT_FOUND;
-        } else if (exception instanceof ConflictError) {
-            status = HttpStatus.CONFLICT;
-        } else {
-            status = HttpStatus.INTERNAL_SERVER_ERROR;
-        }
-
-        let message: unknown;
-        let responseBody: Record<string, unknown> | undefined;
-        if (exception instanceof HttpException) {
-            const httpResponse = exception.getResponse();
-            if (typeof httpResponse === "string") {
-                message = httpResponse;
-            } else if (
-                httpResponse &&
-                typeof httpResponse === "object" &&
-                !Array.isArray(httpResponse)
-            ) {
-                responseBody = httpResponse as Record<string, unknown>;
-                message = responseBody.message;
-            } else {
-                message = httpResponse;
-            }
-        } else if (
-            exception instanceof Error &&
-            (!isProduction || exception instanceof ConflictError)
-        ) {
-            // Conflict messages name the taken resource, never internals.
-            message = exception.message;
-        } else {
-            message = "Internal Server Error";
-        }
+        const status = AllExceptionsFilter.statusOf(exception);
+        const { message, responseBody } = AllExceptionsFilter.contentOf(
+            exception,
+            isProduction,
+        );
 
         // OAuth error responses (RFC 6749 Section 5.2) carry `error` and
         // `error_description` instead of `message`.
@@ -81,5 +48,59 @@ export class AllExceptionsFilter implements ExceptionFilter {
             ...(responseBody ?? {}),
             message,
         });
+    }
+
+    private static statusOf(exception: unknown): number {
+        if (exception instanceof HttpException) {
+            return exception.getStatus();
+        }
+        if (
+            exception instanceof EntityNotFoundError ||
+            exception instanceof NotFoundError
+        ) {
+            return HttpStatus.NOT_FOUND;
+        }
+        if (exception instanceof ConflictError) {
+            return HttpStatus.CONFLICT;
+        }
+        if (exception instanceof NotSupportedError) {
+            return HttpStatus.NOT_IMPLEMENTED;
+        }
+        return HttpStatus.INTERNAL_SERVER_ERROR;
+    }
+
+    /** The message, and the fields of an HTTP exception's own body. */
+    private static contentOf(
+        exception: unknown,
+        isProduction: boolean,
+    ): { message: unknown; responseBody?: Record<string, unknown> } {
+        if (exception instanceof HttpException) {
+            const httpResponse = exception.getResponse();
+            if (
+                httpResponse &&
+                typeof httpResponse === "object" &&
+                !Array.isArray(httpResponse)
+            ) {
+                const responseBody = httpResponse as Record<string, unknown>;
+                return { message: responseBody.message, responseBody };
+            }
+            return { message: httpResponse };
+        }
+        if (exception instanceof NotSupportedError) {
+            // The body of Nest's NotImplementedException, which /api/user
+            // answered with before. The message names the setting behind it.
+            return {
+                message: exception.message,
+                responseBody: { error: "Not Implemented" },
+            };
+        }
+        // Conflict messages name the taken resource, never internals.
+        if (
+            exception instanceof Error &&
+            (!isProduction || exception instanceof ConflictError)
+        ) {
+            return { message: exception.message };
+        }
+        return { message: "Internal Server Error" };
     }
 }

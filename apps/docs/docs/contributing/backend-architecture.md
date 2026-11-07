@@ -58,7 +58,7 @@ feature/
 └── feature.service.ts         # legacy/mixed service still being migrated
 ```
 
-- **Errors.** Application and domain code throw plain `Error` subclasses. A missing resource extends `NotFoundError` from `shared/domain/not-found-error.ts`, which `AllExceptionsFilter` maps to 404. Other application errors are mapped by the controller or protocol service that calls the use case.
+- **Errors.** Application and domain code throw plain `Error` subclasses. `AllExceptionsFilter` maps three base classes from `shared/domain/`: `NotFoundError` (a missing resource) to 404, `ConflictError` (a resource that already exists or is in use) to 409, and `NotSupportedError` (a feature this instance's configuration does not offer) to 501, keeping the message. Other application errors are mapped by the controller or protocol service that calls the use case.
 - **Wiring.** A framework-free class with constructor dependencies is registered with a `useFactory` provider that lists its `inject` tokens. As a bare class provider without `@Injectable()`, Nest constructs it with `undefined` dependencies.
 - **Request data.** Services receive plain values, never the Express `Request`. For audit metadata, controllers use the `@AuditMeta()` parameter decorator and pass an `AuditLogRequestMeta`.
 - **Single use is a conditional update.** Codes, nonces, `request_uri`s and presentation responses are consumed with one conditional write (for example `SessionStore.updateIfUnconsumed` or `consumeRequestUri`) whose result decides who wins. Never read a flag and write it later.
