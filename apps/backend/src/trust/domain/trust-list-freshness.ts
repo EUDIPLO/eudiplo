@@ -75,3 +75,28 @@ export class OutdatedTrustListsError extends Error {
         this.name = "OutdatedTrustListsError";
     }
 }
+
+/**
+ * Wallet-facing message for a failure while deciding trust in a wallet
+ * provider: an {@link OutdatedTrustListsError} keeps its message (behind
+ * `outdatedPrefix`), since it is safe for wallets and says why no provider is
+ * trusted; anything else answers `fixedMessage`, because its message can name
+ * a trust list URL or, for a managed list, an internal address. The original
+ * error is returned as `cause` for the server log, and `outdated` says
+ * whether the message is already the reason.
+ */
+export function walletSafeTrustFailure(
+    error: unknown,
+    fixedMessage: string,
+    outdatedPrefix = "",
+): { message: string; cause: Error | undefined; outdated: boolean } {
+    const cause = error instanceof Error ? error : undefined;
+    if (error instanceof OutdatedTrustListsError) {
+        return {
+            message: `${outdatedPrefix}${error.message}`,
+            cause,
+            outdated: true,
+        };
+    }
+    return { message: fixedMessage, cause, outdated: false };
+}

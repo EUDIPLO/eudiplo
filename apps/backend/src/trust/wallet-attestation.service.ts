@@ -14,7 +14,7 @@ import { CryptoImplementationService } from "../crypto/key/crypto-implementation
 import { TrustListRef } from "../verifier/presentations/entities/presentation-config.entity.js";
 import {
     discardedTrustListsNote,
-    OutdatedTrustListsError,
+    walletSafeTrustFailure,
 } from "./domain/trust-list-freshness.js";
 import {
     RevocationListUnavailableError,
@@ -183,16 +183,12 @@ export class WalletAttestationService {
         try {
             return await this.trustStoreService.getTrustStore(source);
         } catch (err) {
-            if (err instanceof OutdatedTrustListsError) {
-                throw new UnauthorizedException(
-                    `Wallet attestation verification failed: ${err.message}`,
-                    { cause: err },
-                );
-            }
-            throw new UnauthorizedException(
+            const { message, cause } = walletSafeTrustFailure(
+                err,
                 WALLET_PROVIDER_TRUST_LISTS_UNAVAILABLE,
-                { cause: err instanceof Error ? err : undefined },
+                "Wallet attestation verification failed: ",
             );
+            throw new UnauthorizedException(message, { cause });
         }
     }
 
