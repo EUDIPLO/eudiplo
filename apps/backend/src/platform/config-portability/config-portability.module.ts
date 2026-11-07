@@ -2,6 +2,7 @@ import { Global, Module } from "@nestjs/common";
 import { APP_INTERCEPTOR } from "@nestjs/core";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { AuditLogModule } from "../../audit-log/audit-log.module.js";
+import { AuthSettingsModule } from "../../auth/auth-settings.module.js";
 import { ClientModule } from "../../auth/client/client.module.js";
 import { ClientEntity } from "../../auth/client/entities/client.entity.js";
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
@@ -43,6 +44,7 @@ import { ConfigResourceMetadataEntity } from "./entities/config-resource-metadat
 @Module({
     imports: [
         AuditLogModule,
+        AuthSettingsModule,
         ClientModule,
         ConfigResourceCoreModule,
         ConfigurationModule,

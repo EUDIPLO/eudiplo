@@ -17,7 +17,8 @@ function service(
     result.documentValidationService = Object.create(
         ConfigDocumentValidationService.prototype,
     );
-    result.configService = { get: () => false };
+    result.configService = { get: () => undefined };
+    result.authSettings = { mode: "builtin" };
     return result as ConfigBundleService;
 }
 const client: ConfigDocument = {

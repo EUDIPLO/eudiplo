@@ -11,6 +11,7 @@ import {
     InternalServerErrorException,
     Logger,
 } from "@nestjs/common";
+import { AUTH_SETTINGS, type AuthSettings } from "../../auth/auth-settings.js";
 import {
     CLIENTS_PROVIDER,
     ClientsProvider,
@@ -55,6 +56,7 @@ import {
     documentSourceHash,
 } from "./config-source-hash.js";
 import type { ConfigImportRunEntity } from "./entities/config-import-run.entity.js";
+import { clientsManagedByIdentityProvider } from "./idp-managed-clients.js";
 import {
     appliedKeyChainType,
     appliedKmsProvider,
@@ -106,6 +108,8 @@ export class ConfigBundleApplyService {
         private readonly clientsProvider: ClientsProvider,
         private readonly repos: ConfigBundleRepositories,
         private readonly clientAccess: ClientAccessService,
+        @Inject(AUTH_SETTINGS)
+        private readonly authSettings: AuthSettings,
     ) {}
 
     /**
@@ -124,6 +128,10 @@ export class ConfigBundleApplyService {
             // Unknown role names are left to the document validation.
             const roles = spec.roles.filter(isRole);
             if (typeof spec.clientId === "string") {
+                // With OIDC_PROVIDER=generic the provider knows no roles, and
+                // the plan blocks every client document, so none is applied.
+                if (clientsManagedByIdentityProvider(this.authSettings))
+                    continue;
                 await this.clientAccess.assertMayAssignRoles(
                     callerRoles,
                     tenantId,

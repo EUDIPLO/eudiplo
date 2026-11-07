@@ -30,10 +30,11 @@ export class ClientIdTaken extends ConflictError {
 
 /** With `OIDC_PROVIDER=generic`, the identity provider manages the clients. */
 export class ClientsManagedByIdentityProvider extends NotSupportedError {
+    static readonly MESSAGE =
+        "Clients are managed in the identity provider (OIDC_PROVIDER=generic).";
+
     constructor() {
-        super(
-            "Clients are managed in the identity provider (OIDC_PROVIDER=generic).",
-        );
+        super(ClientsManagedByIdentityProvider.MESSAGE);
         this.name = "ClientsManagedByIdentityProvider";
     }
 }

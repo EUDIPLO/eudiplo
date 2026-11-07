@@ -115,6 +115,12 @@ file does not change; a newer `$schema` alone, as `eudiplo config upgrade`
 writes it, keeps it too. To skip this step, give the secret in the file as an environment
 variable, for example `"secret": "${SHOP_BACKEND_SECRET}"`.
 
+With `OIDC_PROVIDER=generic`, the identity provider manages the clients, so
+leave `clients/` out of the folder: a client file fails the import of its
+tenant, and the other tenants are still imported. Create the clients in the
+identity provider
+([details](../reference/config-bundle-format.md#clients-with-another-identity-provider)).
+
 ## Validate in CI
 
 The CLI validates tenant folders against the same schemas as the backend,
