@@ -44,6 +44,14 @@ describe('PresentationManagementService', () => {
     client.setConfig({ fetch: () => new Promise<Response>(() => undefined) });
   });
 
+  it('reissues the registration certificate and returns the configuration with its new cache', async () => {
+    const reissued = { id: 'pid', registrationCertCache: { jwt: 'ey.new', expiresAt: 1 } };
+    responses['/api/verifier/config/pid/registration-cert/reissue'] = reissued;
+
+    await expect(service.reissueRegistrationCertificate('pid')).resolves.toEqual(reissued);
+    expect(requests).toEqual(['/api/verifier/config/pid/registration-cert/reissue']);
+  });
+
   it('leaves the access certificate check to the backend for users who cannot read key chains', async () => {
     roles = ['presentation:request'];
 

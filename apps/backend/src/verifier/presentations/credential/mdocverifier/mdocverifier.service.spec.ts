@@ -9,10 +9,15 @@ import { MdocverifierService } from "./mdocverifier.service.js";
 
 describe("MdocverifierService failure classification", () => {
     let service: MdocverifierService;
+    let chainValidation: {
+        getTrustedCertificateEntries: ReturnType<typeof vi.fn>;
+        discardedTrustListsDetail: ReturnType<typeof vi.fn>;
+    };
 
     beforeEach(() => {
-        const chainValidation = {
-            getTrustedCertificateBuffers: vi.fn().mockResolvedValue([]),
+        chainValidation = {
+            getTrustedCertificateEntries: vi.fn().mockResolvedValue([]),
+            discardedTrustListsDetail: vi.fn().mockResolvedValue(undefined),
         };
         const logger = {
             setContext: vi.fn(),
@@ -104,6 +109,32 @@ describe("MdocverifierService failure classification", () => {
         expect(result.failureType).toBe("signature_invalid");
     });
 
+    it("names lists discarded as outdated when the issuer is not trusted", async () => {
+        vi.spyOn(service as any, "extractErrorDetails").mockResolvedValue({
+            docType: "org.iso.18013.5.1.mDL",
+            issuerCertInfo: "issuer",
+            issuerThumbprint: "thumb",
+            issuerValidity: "validity",
+            trustedCertsSummary: "none",
+        });
+        chainValidation.discardedTrustListsDetail.mockResolvedValue(
+            'Discarded outdated trust lists (their issuers are not trusted): https://trust.example/old (NextUpdate "2026-01-01T00:00:00Z")',
+        );
+
+        const result = await (service as any).handleVerificationError(
+            "AA",
+            new Error(
+                "No trusted certificate was found while validating the X.509 chain",
+            ),
+            { trustListSource: { lotes: [] } },
+        );
+
+        expect(result.failureType).toBe("trust_chain_not_trusted");
+        expect(result.failureReason).toContain(
+            "Discarded outdated trust lists (their issuers are not trusted): https://trust.example/old",
+        );
+    });
+
     it("overrides signature_invalid with trust-chain failure when probe fails", async () => {
         vi.spyOn(DeviceResponse, "decode").mockReturnValue({
             documents: [{}],
@@ -141,25 +172,64 @@ describe("MdocverifierService failure classification", () => {
         expect(result.failureType).toBe("no_trust_chain_to_root");
         expect(result.failureReason).toBe("No issuer chain to trusted root");
     });
+
+    it("names discarded lists once when the chain probe already did", async () => {
+        const detail =
+            "Discarded outdated trust lists (their issuers are not trusted): https://trust.example/old (NextUpdate null)";
+        vi.spyOn(DeviceResponse, "decode").mockReturnValue({
+            documents: [{}],
+        } as any);
+        vi.spyOn(service as any, "extractErrorDetails").mockResolvedValue({
+            docType: "org.iso.18013.5.1.mDL",
+            issuerCertInfo: "issuer",
+            issuerThumbprint: "thumb",
+            issuerValidity: "validity",
+            trustedCertsSummary: "none",
+        });
+        vi.spyOn(
+            service as any,
+            "validateIssuerCertificateChain",
+        ).mockResolvedValue({
+            verified: false,
+            matchedEntity: null,
+            error: "chain_build_failed",
+            errorDetails: `No issuer chain to trusted root | ${detail}`,
+        });
+        chainValidation.discardedTrustListsDetail.mockResolvedValue(detail);
+        const trustListSource = {
+            lotes: [{ url: "https://trust.example/old" }],
+        };
+
+        const result = await (service as any).handleVerificationError(
+            "AA",
+            new Error("Device signature must be valid"),
+            { trustListSource, policy: { requireX5c: true } },
+        );
+
+        expect(result.failureType).toBe("no_trust_chain_to_root");
+        expect(result.failureReason.split(detail)).toHaveLength(2);
+        expect(chainValidation.discardedTrustListsDetail).toHaveBeenCalledWith(
+            trustListSource,
+        );
+    });
 });
 
 describe("MdocverifierService revocation mode", () => {
     let service: MdocverifierService;
     let chainValidation: {
-        getTrustedCertificateBuffers: ReturnType<typeof vi.fn>;
-        getTrustedStatusCertificateBuffers: ReturnType<typeof vi.fn>;
+        getTrustedCertificateEntries: ReturnType<typeof vi.fn>;
     };
 
     beforeEach(() => {
         vi.restoreAllMocks();
 
         chainValidation = {
-            getTrustedCertificateBuffers: vi
-                .fn()
-                .mockResolvedValue([new Uint8Array([1, 2, 3])]),
-            getTrustedStatusCertificateBuffers: vi
-                .fn()
-                .mockResolvedValue([new Uint8Array([4, 5, 6])]),
+            getTrustedCertificateEntries: vi.fn().mockResolvedValue([
+                {
+                    issuance: [new Uint8Array([1, 2, 3])],
+                    status: [new Uint8Array([4, 5, 6])],
+                },
+            ]),
         };
 
         const logger = {
@@ -383,6 +453,49 @@ describe("MdocverifierService revocation mode", () => {
             new Uint8Array([4, 5, 6]),
         ]);
         expect(disableStatusValidation).toBe(true);
+    });
+    it("keeps each issuance anchor paired with its own status anchors", async () => {
+        chainValidation.getTrustedCertificateEntries.mockResolvedValue([
+            {
+                issuance: [new Uint8Array([1, 2, 3])],
+                status: [new Uint8Array([4, 5, 6])],
+            },
+            {
+                issuance: [new Uint8Array([7, 8, 9])],
+                status: [new Uint8Array([7, 8, 9])],
+            },
+        ]);
+        const verifyDeviceResponse = vi
+            .spyOn(Verifier, "verifyDeviceResponse")
+            .mockResolvedValueOnce(undefined as any);
+
+        await service.verify(
+            "AA",
+            {
+                protocol: "iso-18013-7",
+                sessionTranscript: {} as any,
+            },
+            {
+                trustListSource: { lotes: [] },
+                policy: {
+                    requireX5c: true,
+                    revocation: { enabled: true, failClosed: true },
+                },
+            } as any,
+        );
+
+        expect(
+            verifyDeviceResponse.mock.calls[0][0].trustedCertificates,
+        ).toEqual([
+            {
+                issuance: [new Uint8Array([1, 2, 3])],
+                status: [new Uint8Array([4, 5, 6])],
+            },
+            {
+                issuance: [new Uint8Array([7, 8, 9])],
+                status: [new Uint8Array([7, 8, 9])],
+            },
+        ]);
     });
 });
 

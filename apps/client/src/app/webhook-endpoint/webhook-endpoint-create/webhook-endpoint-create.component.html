@@ -11,9 +11,11 @@
     <div fxLayout="row" fxLayoutGap="8px">
       <button
         mat-stroked-button
+        type="button"
         (click)="viewAsJson()"
-        matTooltip="View/Edit as JSON"
-        [disabled]="loading || !!loadError"
+        [disabled]="!!jsonViewUnavailableReason"
+        disabledInteractive
+        [matTooltip]="jsonViewUnavailableReason || 'View/Edit as JSON'"
       >
         <mat-icon>code</mat-icon>
         JSON View
@@ -36,7 +38,7 @@
     <p><output>Loading webhook endpoint…</output></p>
   } @else {
     <!-- Form -->
-    <form [formGroup]="form" (ngSubmit)="onSubmit()">
+    <form #formElement [formGroup]="form" (ngSubmit)="onSubmit()">
       <mat-card>
         <mat-card-header>
           <mat-card-title>
@@ -127,7 +129,9 @@
           mat-flat-button
           color="primary"
           type="submit"
-          [disabled]="form.invalid || saving || loading"
+          [disabled]="saving"
+          disabledInteractive
+          [matTooltip]="saveTooltip"
           appConfigManaged
           managedKind="WebhookEndpoint"
           [managedResourceId]="create ? '' : form.get('id')?.value || ''"

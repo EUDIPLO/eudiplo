@@ -42,7 +42,8 @@ test('create pre authorized offer with array claims from defaults', async ({ pag
   );
   // Known bug: the default values are patched into the claims form, which
   // leaves the empty nationalities array required and the form invalid, so
-  // Generate Offer does nothing. Remove this line once that is fixed.
+  // Generate Offer only points at that list and generates nothing. Remove this
+  // line once that is fixed.
   test.fail();
   await startOffer(page, 'pid');
   await page.getByRole('button', { name: 'Use Pre-configured Default Values' }).click();

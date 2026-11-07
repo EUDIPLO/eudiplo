@@ -110,7 +110,12 @@ across all tenants: an ID that is already taken answers `409`.
 `allowedIssuanceConfigs` limits the credential configuration IDs the client may
 put in offers, `allowedPresentationConfigs` the presentation configurations it
 may request. Other IDs are rejected with `403`; an empty or missing list allows
-all.
+all. The web client's client form changes a list only when it can load the
+configurations to choose from: listing credential configurations needs
+`issuance:manage`, listing presentation configurations `presentation:manage` or
+`presentation:request`. Without that role, or when the list fails to load, the
+field is locked: editing a client keeps its stored list, and a new client is
+created without that limit. Set the list through the API in that case.
 
 The session endpoints (`/api/session`) need `issuance:offer`,
 `presentation:request` or `sessions:read`. Without `sessions:read`, a client
@@ -197,7 +202,8 @@ To let people sign in with their own accounts, set `OIDC` to a Keycloak realm
 
 - EUDIPLO accepts Keycloak access tokens instead of issuing its own; the
   built-in `POST /api/oauth2/token` is disabled.
-- The web client signs people in with the authorization code flow and PKCE.
+- The web client signs people in with the authorization code flow and PKCE,
+  from the URLs in `OIDC_UI_URL` or the redirect URIs set in Keycloak.
 - Clients created through `/api/client` are Keycloak clients, and people are
   managed through `/api/user` (role `users:manage`) or in the web client. Without
   `OIDC`, `/api/user` answers `501`.

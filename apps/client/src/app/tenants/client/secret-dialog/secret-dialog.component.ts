@@ -52,6 +52,8 @@ export class SecretDialogComponent {
   }
 
   loginAsClient(): void {
+    // The login page then does not ask about the instance the user is signed in to.
+    this.apiService.rememberSignedInInstance(this.data.apiUrl);
     // Logout current user
     this.apiService.logout();
 

@@ -5,7 +5,10 @@ import type { StatusListVerifierService } from "./status-list-verifier.service.j
 import type { TrustStoreService } from "./trust-store.service.js";
 
 function createController() {
-    const trustStoreService = { clearCache: vi.fn() };
+    const trustStoreService = {
+        clearCache: vi.fn(),
+        forgetSequenceNumbers: vi.fn().mockResolvedValue(undefined),
+    };
     const statusListVerifierService = { clearCache: vi.fn() };
     const federationTrustService = { clearTrustCache: vi.fn() };
     const controller = new CacheController(
@@ -50,6 +53,29 @@ describe("CacheController", () => {
         expect(trustStoreService.clearCache).toHaveBeenCalledTimes(1);
         expect(federationTrustService.clearTrustCache).toHaveBeenCalledTimes(1);
         expect(statusListVerifierService.clearCache).not.toHaveBeenCalled();
+    });
+
+    it("keeps the remembered sequence numbers when clearing caches", () => {
+        const { controller, trustStoreService } = createController();
+
+        controller.clearAllCaches();
+        controller.clearTrustListCache();
+
+        expect(trustStoreService.forgetSequenceNumbers).not.toHaveBeenCalled();
+    });
+
+    it("forgets the sequence numbers of the caller's tenant", async () => {
+        const { controller, trustStoreService, federationTrustService } =
+            createController();
+
+        await controller.forgetTrustListSequenceNumbers({
+            entity: { id: "tenant-a" },
+        } as never);
+
+        expect(trustStoreService.forgetSequenceNumbers).toHaveBeenCalledWith(
+            "tenant-a",
+        );
+        expect(federationTrustService.clearTrustCache).not.toHaveBeenCalled();
     });
 
     it("leaves the trust caches alone when clearing the status list cache", () => {

@@ -5,6 +5,8 @@ import {
   ViewChild,
   AfterViewInit,
   DestroyRef,
+  ElementRef,
+  Injector,
   OnInit,
   inject,
   ChangeDetectionStrategy,
@@ -52,6 +54,7 @@ import { maySessionChange, SESSION_CHANGER_ROLES } from '../session-roles';
 import { JwtService } from '../../services/jwt.service';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { getApiErrorMessage } from '../../utils/error-message';
+import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 
 // Define the SessionStatus type
@@ -144,6 +147,8 @@ function endOfDay(date: Date): Date {
 export class SessionManagementListComponent implements OnInit, AfterViewInit {
   @ViewChild(MatSort) sort!: MatSort;
   @ViewChild(MatPaginator) paginator!: MatPaginator;
+  /** Takes the focus when the bulk actions go away with the selection they acted on. */
+  @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
 
   dataSource = new MatTableDataSource<Session>([]);
   readonly isPresentationSession = isPresentationSession;
@@ -207,6 +212,7 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
   cancellingSelected = false;
 
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly credentialConfigService = inject(CredentialConfigService);
@@ -508,6 +514,8 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
   }
 
   async deleteSelectedSessions() {
+    // `disabledInteractive` keeps Delete Selected clickable while it looks disabled.
+    if (this.runningBulkAction) return;
     const sessions = [...this.selection.selected];
     const count = sessions.length;
     if (
@@ -541,6 +549,7 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
         });
       }
       this.selection.clear();
+      this.focusHeadingIfLost();
       this.refreshSessions();
     } finally {
       this.deletingSelected = false;
@@ -552,7 +561,28 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
     return this.selection.selected.filter(isCancellable);
   }
 
+  /**
+   * The bulk action that is running, if any. Both bulk actions wait for it, so
+   * a cancellation and a delete never work on the same selection at once.
+   */
+  get runningBulkAction(): string {
+    if (this.cancellingSelected) return 'Cancelling the selected sessions…';
+    if (this.deletingSelected) return 'Deleting the selected sessions…';
+    return '';
+  }
+
+  /** Cancel Selected stays focusable while it cannot be used, so its tooltip says why. */
+  get cancelSelectedTooltip(): string {
+    if (this.runningBulkAction) return this.runningBulkAction;
+    if (this.cancellableSelected.length === 0) {
+      return 'None of the selected sessions can be cancelled: a wallet has redeemed them or they have ended';
+    }
+    return 'Cancel the selected offers a wallet has not redeemed yet, so it can no longer use them';
+  }
+
   async cancelSelectedSessions() {
+    // `disabledInteractive` keeps Cancel Selected clickable while it looks disabled.
+    if (this.runningBulkAction) return;
     const sessions = this.cancellableSelected;
     if (sessions.length === 0) {
       return;
@@ -603,14 +633,21 @@ export class SessionManagementListComponent implements OnInit, AfterViewInit {
         );
       }
       this.selection.clear();
+      this.focusHeadingIfLost();
       await this.refreshSessions();
     } finally {
       this.cancellingSelected = false;
     }
   }
 
+  /** The bulk actions go away with the selection, and with them the focused button. */
+  private focusHeadingIfLost(): void {
+    focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
+  }
+
   clearSelection() {
     this.selection.clear();
+    this.focusHeadingIfLost();
   }
 
   getSessionStatus(session: Session): SessionStatus {

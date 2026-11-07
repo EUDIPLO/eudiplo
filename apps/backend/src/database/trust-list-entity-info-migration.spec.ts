@@ -1,8 +1,8 @@
 import { DataSource } from "typeorm";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { NormalizeTrustListEntityInfo1786100000000 } from "./migrations/1786100000000-NormalizeTrustListEntityInfo.js";
+import { NormalizeTrustListEntityInfo1786200000000 } from "./migrations/1786200000000-NormalizeTrustListEntityInfo.js";
 
-describe("NormalizeTrustListEntityInfo1786100000000", () => {
+describe("NormalizeTrustListEntityInfo1786200000000", () => {
     let dataSource: DataSource;
 
     beforeEach(async () => {
@@ -40,7 +40,7 @@ describe("NormalizeTrustListEntityInfo1786100000000", () => {
     });
     const run = async () => {
         const queryRunner = dataSource.createQueryRunner();
-        const migration = new NormalizeTrustListEntityInfo1786100000000();
+        const migration = new NormalizeTrustListEntityInfo1786200000000();
         await migration.up(queryRunner);
         await migration.up(queryRunner);
         await queryRunner.release();
@@ -79,7 +79,7 @@ describe("NormalizeTrustListEntityInfo1786100000000", () => {
         await dataSource.query(`DROP TABLE "trust_list"`);
         const queryRunner = dataSource.createQueryRunner();
         await expect(
-            new NormalizeTrustListEntityInfo1786100000000().up(queryRunner),
+            new NormalizeTrustListEntityInfo1786200000000().up(queryRunner),
         ).resolves.toBeUndefined();
         await queryRunner.release();
     });

@@ -1,8 +1,20 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ClaimFieldDefinitionDto } from '@eudiplo/sdk-core';
+import { TestBed } from '@angular/core/testing';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { ActivatedRoute, provideRouter } from '@angular/router';
+import { EMPTY } from 'rxjs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ClaimFieldDefinitionDto, client } from '@eudiplo/sdk-core';
 import { CredentialConfigCreateComponent } from './credential-config-create.component';
 import { configs } from './pre-config';
 import { claimSchemaError } from '../../../utils/claim-schema-check';
+import { expectAvailable, expectUnavailable } from '../../../common/unavailable-action.testing';
+import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
+import { PresentationManagementService } from '../../../presentation/presentation-config/presentation-management.service';
+import { FrontendConfigService } from '../../../services/frontend-config.service';
+import { JwtService } from '../../../services/jwt.service';
+import { EditorComponent } from '../../../utils/editor/editor.component';
+import { CredentialConfigService } from '../credential-config.service';
 
 describe('CredentialConfigCreateComponent', () => {
   let component: CredentialConfigCreateComponent;
@@ -752,5 +764,163 @@ describe('CredentialConfigCreateComponent editing', () => {
     expect(component.loadError).toBe('Failed to load credential configuration: Forbidden resource');
     component.onSubmit();
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe('CredentialConfigCreateComponent JSON View', () => {
+  function editor(params: Record<string, string>, service: Record<string, unknown>) {
+    const open = vi.fn(() => ({ afterClosed: () => EMPTY }));
+    const component = new CredentialConfigCreateComponent(
+      service as any,
+      { navigate: vi.fn() } as any,
+      { snapshot: { params } } as any,
+      { open: vi.fn() } as any,
+      { open } as any,
+      { loadConfigurations: vi.fn().mockResolvedValue([]) } as any,
+      { getConfig: vi.fn().mockResolvedValue(null) } as any,
+      { getTenantId: () => 'tenant' } as any,
+      { get: () => ({ destroyed: true }) } as any
+    );
+    return { component, open };
+  }
+
+  it('opens only with the loaded configuration and says why it waits', async () => {
+    const getConfig = vi
+      .fn()
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' })
+      .mockResolvedValue({ id: 'pid', description: 'PID', vct: 'urn:pid' });
+    const { component, open } = editor({ id: 'pid' }, { getConfig });
+
+    component.loadConfigForEdit();
+    expect(component.jsonViewUnavailableReason).toBe(
+      'Wait until the credential configuration has loaded'
+    );
+    // The button stays clickable while it cannot be used, so the handler checks again.
+    component.viewAsJson();
+    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+    expect(component.jsonViewUnavailableReason).toBe(
+      'Retry loading the credential configuration before opening JSON View'
+    );
+    component.viewAsJson();
+    expect(open).not.toHaveBeenCalled();
+
+    component.loadConfigForEdit();
+    await vi.waitFor(() => expect(component.loadingConfig).toBe(false));
+    expect(component.jsonViewUnavailableReason).toBe('');
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
+  });
+
+  it('opens right away when creating a configuration, but not while it saves', async () => {
+    let rejectSave!: (error: unknown) => void;
+    const saveConfiguration = vi.fn(() => new Promise((_, reject) => (rejectSave = reject)));
+    const getConfig = vi.fn();
+    const { component, open } = editor({}, { getConfig, saveConfiguration });
+
+    component.ngOnInit();
+    expect(getConfig).not.toHaveBeenCalled();
+    expect(component.loadingConfig).toBe(false);
+    expect(component.jsonViewUnavailableReason).toBe('');
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
+
+    // A successful save leaves the screen, so the dialog would stay open over the next one.
+    component.form.patchValue({ id: 'member', description: 'Membership', vctString: 'urn:member' });
+    component.displayConfigs.at(0).patchValue({ name: 'Membership', description: 'Member card' });
+    for (let i = 0; i < 5; i++) component.submitCredential();
+    expect(saveConfiguration).toHaveBeenCalledOnce();
+    expect(component.jsonViewUnavailableReason).toBe(
+      'Wait until the credential configuration has been saved'
+    );
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
+    rejectSave({ statusCode: 500, message: 'Unavailable' });
+    await vi.waitFor(() => expect(component.loading).toBe(false));
+    expect(component.jsonViewUnavailableReason).toBe('');
+  });
+});
+
+describe('CredentialConfigCreateComponent Save', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Renders the create form with a configuration that can be saved; the save never answers. */
+  async function render() {
+    const save = vi.fn(() => new Promise(() => undefined));
+    vi.spyOn(client, 'get').mockResolvedValue({ data: [] } as any);
+    await TestBed.configureTestingModule({
+      imports: [CredentialConfigCreateComponent],
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: { snapshot: { params: {} } } },
+        { provide: CredentialConfigService, useValue: { saveConfiguration: save } },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        { provide: MatDialog, useValue: { open: vi.fn() } },
+        {
+          provide: PresentationManagementService,
+          useValue: { loadConfigurations: vi.fn().mockResolvedValue([]) },
+        },
+        {
+          provide: FrontendConfigService,
+          useValue: { getConfig: vi.fn().mockResolvedValue(null) },
+        },
+        { provide: JwtService, useValue: { getTenantId: () => 'tenant' } },
+        {
+          provide: ConfigOwnershipService,
+          useValue: { get: vi.fn().mockResolvedValue(undefined) },
+        },
+      ],
+    })
+      .overrideComponent(EditorComponent, { set: { template: '' } })
+      .compileComponents();
+    const fixture = TestBed.createComponent(CredentialConfigCreateComponent);
+    const component = fixture.componentInstance;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    component.form.patchValue({ id: 'member', description: 'Membership', vctString: 'urn:member' });
+    component.displayConfigs.at(0).patchValue({ name: 'Membership', description: 'Member card' });
+    return { fixture, component, save };
+  }
+
+  it('waits while the configuration is saved: a second click sends nothing', async () => {
+    const { fixture, component, save } = await render();
+    component.toggleGuidedMode();
+    fixture.detectChanges();
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button[type="submit"]'
+    )!;
+    expectAvailable(fixture, button);
+
+    button.click();
+    fixture.detectChanges();
+    button.click();
+    fixture.detectChanges();
+
+    expect(save).toHaveBeenCalledOnce();
+    expectUnavailable(fixture, button, 'Saving the credential configuration…');
+  });
+
+  it('steps back while idle and keeps Back focusable while the configuration is saved', async () => {
+    const { fixture, component, save } = await render();
+    component.activeStep = 4;
+    component.furthestStep = 4;
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    const back = [...element.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Back'
+    )!;
+    expectAvailable(fixture, back);
+    back.click();
+    expect(component.activeStep).toBe(3);
+    component.activeStep = 4;
+    fixture.detectChanges();
+
+    element.querySelector<HTMLButtonElement>('button[type="submit"]')!.click();
+    fixture.detectChanges();
+    back.click();
+    fixture.detectChanges();
+
+    expect(save).toHaveBeenCalledOnce();
+    expect(component.activeStep).toBe(4);
+    expectUnavailable(fixture, back, 'Saving the credential configuration…');
   });
 });

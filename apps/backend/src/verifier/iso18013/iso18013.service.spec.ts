@@ -260,6 +260,33 @@ describe("Iso18013Service.processResponse presentation webhook", () => {
         );
     });
 
+    it("verifies against the trust lists of the session's tenant", async () => {
+        verify.mockResolvedValue({
+            verified: false,
+            docType: "org.iso.18013.5.1.mDL",
+            failure: {
+                type: "trust_chain_not_trusted",
+                reason: "verbose",
+                message: "failed",
+            },
+        });
+
+        await service
+            .processResponse("wallet-nonce", "encrypted")
+            .catch(() => undefined);
+
+        expect(verify).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.objectContaining({
+                options: expect.objectContaining({
+                    trustListSource: expect.objectContaining({
+                        tenantId: "tenant",
+                    }),
+                }),
+            }),
+        );
+    });
+
     it("reports a failed mDOC verification with status, outcome and no credentials", async () => {
         verify.mockResolvedValue({
             verified: false,

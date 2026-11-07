@@ -15,7 +15,13 @@
       <mat-spinner diameter="40"></mat-spinner>
     </div>
   } @else {
-    <form [formGroup]="form" (ngSubmit)="onSubmit()" fxLayout="column" fxLayoutGap="24px">
+    <form
+      #formElement
+      [formGroup]="form"
+      (ngSubmit)="onSubmit()"
+      fxLayout="column"
+      fxLayoutGap="24px"
+    >
       <!-- Status List Info Card (Edit mode only) -->
       @if (isEditMode && statusList) {
         <mat-card>
@@ -257,10 +263,18 @@
                     type="number"
                     formControlName="capacity"
                     placeholder="Use tenant default"
-                    min="1000"
                   />
                   <mat-icon matSuffix>storage</mat-icon>
-                  <mat-hint>Maximum number of credential entries in this list</mat-hint>
+                  <mat-hint>
+                    Maximum number of credential entries in this list, from 1,000 to 1,000,000
+                  </mat-hint>
+                  @if (form.get('capacity')?.hasError('integer')) {
+                    <mat-error>Enter a whole number of entries</mat-error>
+                  } @else if (form.get('capacity')?.hasError('min')) {
+                    <mat-error>Capacity must be at least 1,000</mat-error>
+                  } @else if (form.get('capacity')?.hasError('max')) {
+                    <mat-error>Capacity must be at most 1,000,000</mat-error>
+                  }
                 </mat-form-field>
 
                 <div fxLayout="row wrap" fxLayoutGap="8px">
@@ -288,12 +302,15 @@
           color="primary"
           type="submit"
           [disabled]="isSaving"
+          disabledInteractive
+          [matTooltip]="saveTooltip"
           appConfigManaged
           managedKind="StatusList"
           [managedResourceId]="listId || ''"
         >
           @if (isSaving) {
-            <mat-spinner diameter="20"></mat-spinner>
+            <mat-spinner diameter="20" class="button-spinner"></mat-spinner>
+            Saving…
           } @else {
             {{ isEditMode ? 'Save Changes' : 'Create Status List' }}
           }

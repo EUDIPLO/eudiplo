@@ -1,23 +1,29 @@
 import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiService } from '../../../core';
 import { SecretDialogComponent } from './secret-dialog.component';
 
-function createDialog(clipboard?: { writeText: (text: string) => Promise<void> }) {
+function createDialog(
+  clipboard?: { writeText: (text: string) => Promise<void> },
+  apiService: object = {}
+) {
   Object.defineProperty(navigator, 'clipboard', { value: clipboard, configurable: true });
   const snackBar = { open: vi.fn() };
   TestBed.configureTestingModule({
     imports: [SecretDialogComponent],
     providers: [
       provideRouter([]),
-      { provide: MAT_DIALOG_DATA, useValue: { clientId: 'client', secret: 's3cret', apiUrl: '' } },
+      {
+        provide: MAT_DIALOG_DATA,
+        useValue: { clientId: 'client', secret: 's3cret', apiUrl: 'https://backend.test' },
+      },
       { provide: MatDialogRef, useValue: { close: vi.fn() } },
       { provide: MatSnackBar, useValue: snackBar },
-      { provide: ApiService, useValue: {} },
+      { provide: ApiService, useValue: apiService },
     ],
   });
   return { dialog: TestBed.createComponent(SecretDialogComponent).componentInstance, snackBar };
@@ -66,5 +72,22 @@ describe('SecretDialogComponent', () => {
       'Close',
       expect.anything()
     );
+  });
+
+  it('signs in as the client at the instance the user is signed in to, without the login page asking about it', () => {
+    const calls: string[] = [];
+    const apiService = {
+      rememberSignedInInstance: (url: string) => calls.push(`remember ${url}`),
+      logout: () => calls.push('logout'),
+    };
+    const { dialog } = createDialog(undefined, apiService);
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+
+    dialog.loginAsClient();
+
+    expect(calls).toEqual(['remember https://backend.test', 'logout']);
+    expect(navigate).toHaveBeenCalledWith(['/login'], {
+      queryParams: { clientId: 'client', clientSecret: 's3cret', apiUrl: 'https://backend.test' },
+    });
   });
 });

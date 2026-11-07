@@ -89,21 +89,3 @@ export function entityKeyChainUsageRefusal(
     const expected = allowed.map((type) => JSON.stringify(type)).join(" or ");
     return `Key chain ${JSON.stringify(keyChainId)} has usage type ${JSON.stringify(usageType)}; ${field} needs a key chain with usage type ${expected}.`;
 }
-
-/** A key chain an internal entity names in a field it cannot provide. */
-export interface EntityKeyChainUsageIssue
-    extends Pick<EntityKeyChainReference, "index" | "field"> {
-    message: string;
-}
-
-/**
- * Internal entities of a trust list name key chains whose usage type cannot
- * provide the certificate of their field. The API answers it with an issue at
- * each field (`entities.<index>.<field>`).
- */
-export class TrustListEntityKeyChainUsageError extends Error {
-    constructor(readonly issues: EntityKeyChainUsageIssue[]) {
-        super(issues.map((issue) => issue.message).join(" "));
-        this.name = "TrustListEntityKeyChainUsageError";
-    }
-}

@@ -5,6 +5,7 @@ import {
     credentialIssuerAuthorityKeyIdentifiers,
     type IssuerAuthorityKeyIdentifiers,
 } from "../../trust/domain/authority-key-identifiers.js";
+import { OutdatedTrustListsError } from "../../trust/domain/trust-list-freshness.js";
 import { TrustStoreService } from "../../trust/trust-store.service.js";
 import {
     TrustedAuthorityType,
@@ -40,15 +41,16 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
      * identifiers of the credential issuers listed in the referenced trust
      * lists, so the wallet can match credentials without fetching the lists.
      *
-     * The values come from the PID/EAA issuance certificates of the listed
-     * entities (see {@link credentialIssuerAuthorityKeyIdentifiers}), not from
-     * the certificate that signs the trust list. Managed lists are read from
+     * The values come from the PID, Pub-EAA and EAA issuance certificates of
+     * the listed entities (see {@link credentialIssuerAuthorityKeyIdentifiers}),
+     * not from the certificate that signs the trust list. Managed lists are read from
      * their stored content, external lists are fetched and signature-verified.
      *
      * A trust list that cannot be loaded, or whose issuers are not all covered
      * by key identifiers (e.g. a pinned self-signed certificate without AKI),
      * is logged and additionally stays an `etsi_tl` entry, reduced to its plain
-     * trust-list URL as the spec requires. Entries of a credential query are
+     * trust-list URL as the spec requires. An outdated list is left out, as
+     * verification discards it, unless every list of the entry is outdated. Entries of a credential query are
      * alternatives, so the wallet still matches the issuers that resolved.
      * Verification is unaffected: it reads the stored config.
      */
@@ -154,29 +156,32 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
     /**
      * Wallet-facing entries for the trust lists of one `etsi_tl` entry: one
      * `aki` entry with the key identifiers of all lists, and an `etsi_tl` entry
-     * with the URLs of the lists they do not fully cover.
+     * with the URLs of the lists they do not fully cover. Outdated lists are
+     * left out, as verification discards them; only when every list of the
+     * entry is outdated are their URLs sent, so the entry is not empty.
      */
     private async toWalletAuthorities(
         refs: TrustListRef[],
         tenantId: string,
         tenantHost: string,
     ): Promise<WalletTrustedAuthority[]> {
-        const akiValues = new Set<string>();
-        const unresolvedUrls: string[] = [];
+        const lists: Array<ListKeyIdentifiers & { ref: TrustListRef }> = [];
         for (const ref of refs) {
-            const { values, complete } = await this.authorityKeyIdentifiers(
-                ref,
-                tenantId,
-            );
-            for (const value of values) akiValues.add(value);
-            if (complete && values.length > 0) continue;
-
-            const trustListId = ref.trustListId?.trim();
-            const url = trustListId
-                ? managedTrustListUrl(tenantHost, trustListId)
-                : ref.url;
-            if (url) unresolvedUrls.push(url);
+            // One list at a time, like verification (CollectTrustedEntities):
+            // bounds outbound requests and memory per request.
+            const keyIds = await this.authorityKeyIdentifiers(ref, tenantId); // NOSONAR: sequential on purpose, see above
+            lists.push({ ref, ...keyIds });
         }
+        const akiValues = new Set(lists.flatMap((list) => list.values));
+        const allOutdated = lists.every((list) => list.outdated);
+        const unresolvedUrls = lists
+            .filter(
+                (list) =>
+                    !(list.complete && list.values.length > 0) &&
+                    (!list.outdated || allOutdated),
+            )
+            .map(({ ref }) => trustListUrl(ref, tenantHost))
+            .filter((url): url is string => !!url);
 
         const authorities: WalletTrustedAuthority[] = [];
         if (akiValues.size > 0) {
@@ -199,19 +204,36 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
     private async authorityKeyIdentifiers(
         ref: TrustListRef,
         tenantId: string,
-    ): Promise<IssuerAuthorityKeyIdentifiers> {
+    ): Promise<ListKeyIdentifiers> {
         try {
             return credentialIssuerAuthorityKeyIdentifiers(
                 await this.trustStore.getListedEntities(ref, tenantId),
             );
         } catch (err: unknown) {
+            const outdated = err instanceof OutdatedTrustListsError;
             this.logger.warn(
                 { tenantId, trustListId: ref.trustListId, url: ref.url, err },
-                "Failed to load trust list for AKI extraction",
+                outdated
+                    ? "Trust list is outdated; its issuers are left out of trusted_authorities"
+                    : "Failed to load trust list for AKI extraction",
             );
-            return { values: [], complete: false };
+            return { values: [], complete: false, outdated };
         }
     }
+}
+
+/** Key identifiers of one list, and whether it was left out as outdated. */
+type ListKeyIdentifiers = IssuerAuthorityKeyIdentifiers & {
+    outdated?: boolean;
+};
+
+/** The URL a wallet can fetch a referenced trust list from, if any. */
+function trustListUrl(
+    ref: TrustListRef,
+    tenantHost: string,
+): string | undefined {
+    const trustListId = ref.trustListId?.trim();
+    return trustListId ? managedTrustListUrl(tenantHost, trustListId) : ref.url;
 }
 
 function managedTrustListUrl(tenantHost: string, trustListId: string): string {

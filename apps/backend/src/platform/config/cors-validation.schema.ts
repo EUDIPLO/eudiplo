@@ -1,17 +1,6 @@
 import Joi from "joi";
+import { splitCommaSeparatedList } from "../../shared/domain/comma-separated-list.js";
 import { isSerializedWebOrigin } from "../../shared/domain/web-origin.js";
-
-/**
- * Split a comma-separated `CORS_ORIGINS` value into its entries.
- * Whitespace around entries and empty entries are ignored.
- */
-export function splitCorsOrigins(value: string | undefined): string[] {
-    if (!value) return [];
-    return value
-        .split(",")
-        .map((origin) => origin.trim())
-        .filter((origin) => origin.length > 0);
-}
 
 /**
  * Validation schema for cross-origin resource sharing (CORS).
@@ -21,7 +10,7 @@ export const CORS_VALIDATION_SCHEMA = Joi.object({
         .allow("")
         .optional()
         .custom((value: string, helpers) => {
-            const invalid = splitCorsOrigins(value).filter(
+            const invalid = splitCommaSeparatedList(value).filter(
                 (origin) => !isSerializedWebOrigin(origin),
             );
             if (invalid.length > 0) {

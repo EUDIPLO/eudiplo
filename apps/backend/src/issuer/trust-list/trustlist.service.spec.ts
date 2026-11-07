@@ -1,10 +1,10 @@
-import { BadRequestException, ConflictException } from "@nestjs/common";
+import { ConflictException, NotFoundException } from "@nestjs/common";
 import type { LoTEDocument } from "@owf/eudi-lote";
 import * as x509 from "@peculiar/x509";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { KeyUsageType } from "../../crypto/key/types/key-usage-type.js";
 import { TrustListReferences } from "./application/trust-list-references.js";
-import { TrustListEntityKeyChainUsageError } from "./domain/trust-list-entity-key-chains.js";
+import { TrustListInputError } from "./domain/trust-list-input.js";
 import {
     type ManagedTrustList,
     TrustListInUseError,
@@ -95,6 +95,12 @@ function createService(
         findOneByOrFail: vi.fn(async ({ id }: { id: string }) =>
             structuredClone(store.get(id)),
         ),
+        findOneBy: vi.fn(
+            async ({ tenantId, id }: { tenantId: string; id: string }) => {
+                const row = store.get(id);
+                return row?.tenantId === tenantId ? structuredClone(row) : null;
+            },
+        ),
         existsBy: vi.fn(
             async ({ tenantId, id }: { tenantId: string; id: string }) =>
                 store.get(id)?.tenantId === tenantId,
@@ -115,12 +121,32 @@ function createService(
         getCertificateById: vi
             .fn()
             .mockResolvedValue(trustListKey("trust-list-key")),
+        getCertificatesByIds: vi.fn(
+            async (
+                _tenantId: string,
+                _ids: string[],
+            ): Promise<Map<string, object>> => new Map(),
+        ),
         // The tenant's pick, distinct from any key chain named by ID.
         find: vi.fn().mockResolvedValue(trustListKey("tenant-trust-list-key")),
     };
+    // Matches like a TypeORM `where` of plain values.
+    const matches = (row: object, where: object) =>
+        Object.entries(where).every(
+            ([key, value]) => (row as Record<string, unknown>)[key] === value,
+        );
+    const trustListVersionRepo = {
+        find: vi.fn(async ({ where }: { where: object }) =>
+            versions.filter((version) => matches(version, where)),
+        ),
+        findOneBy: vi.fn(
+            async (where: object) =>
+                versions.find((version) => matches(version, where)) ?? null,
+        ),
+    };
     const service = new TrustListService(
         trustListRepo as any,
-        {} as any,
+        trustListVersionRepo as any,
         {} as any,
         certService as any,
         {} as any,
@@ -392,48 +418,114 @@ describe("TrustListService", () => {
             expect(services[1]).toContain(otherDer);
         });
 
-        it("rejects an invalid revocation certificate by its field name", async () => {
-            const { service } = createService([]);
+        it("refuses external certificates that are neither PEM nor Base64 DER at their fields", async () => {
+            const { service, certService, trustListRepo } = createService([]);
 
-            await expect(
-                service.create(
-                    {
-                        id: "bad-revocation",
-                        entities: [
-                            {
-                                ...externalEntity,
-                                revocationCertPem: "bm90IGEgY2VydGlmaWNhdGU=",
-                            } as TrustListCreateDto["entities"][number],
-                        ],
-                    },
-                    { id: "tenant", name: "Tenant" },
-                ),
-            ).rejects.toThrow(
-                "revocationCertPem is not a valid X.509 certificate",
-            );
-        });
-
-        it("rejects an external certificate that is neither PEM nor Base64 DER, before any key chain error", async () => {
-            const { service, certService } = createService([]);
-            certService.find.mockRejectedValue(
-                new Error("No key chain found with usage type 'trustList'"),
-            );
-
-            await expect(
-                service.create(
+            const error = await service
+                .create(
                     {
                         id: "bad",
                         entities: [
+                            externalEntity,
                             {
                                 ...externalEntity,
                                 issuerCertPem: "bm90IGEgY2VydGlmaWNhdGU=",
+                                revocationCertPem: "  ",
                             } as TrustListCreateDto["entities"][number],
                         ],
                     },
                     { id: "tenant", name: "Tenant" },
-                ),
-            ).rejects.toThrow("issuerCertPem is not a valid X.509 certificate");
+                )
+                .catch((caught: unknown) => caught);
+
+            expect(error).toBeInstanceOf(TrustListInputError);
+            expect((error as TrustListInputError).issues).toEqual([
+                {
+                    path: ["entities", 1, "issuerCertPem"],
+                    code: "invalid_certificate",
+                    message:
+                        "issuerCertPem must be an X.509 certificate in PEM or Base64 DER.",
+                },
+                {
+                    path: ["entities", 1, "revocationCertPem"],
+                    code: "invalid_certificate",
+                    message:
+                        "revocationCertPem must be an X.509 certificate in PEM or Base64 DER.",
+                },
+            ]);
             expect(certService.find).not.toHaveBeenCalled();
+            expect(trustListRepo.save).not.toHaveBeenCalled();
+        });
+
+        it("refuses other entity info the LoTE builder rejects at the entity's info, before it picks a trust list key chain", async () => {
+            const { service, certService, trustListRepo } = createService([]);
+            certService.find.mockRejectedValue(
+                new NotFoundException("No trust list key chain"),
+            );
+
+            const error = await service
+                .create(
+                    {
+                        id: "bad-lang",
+                        entities: [
+                            {
+                                ...externalEntity,
+                                // The body schema refuses this; the service
+                                // still answers the builder's refusal.
+                                info: { name: "Issuer", country: "Germany" },
+                            },
+                        ],
+                    },
+                    { id: "tenant", name: "Tenant" },
+                )
+                .catch((caught: unknown) => caught);
+
+            expect(error).toBeInstanceOf(TrustListInputError);
+            expect((error as TrustListInputError).issues).toEqual([
+                expect.objectContaining({
+                    path: ["entities", 0, "info"],
+                    code: "invalid_entity_info",
+                    message: expect.stringContaining("Country"),
+                }),
+            ]);
+            expect(certService.find).not.toHaveBeenCalled();
+            expect(trustListRepo.save).not.toHaveBeenCalled();
+        });
+
+        it("passes on other failures to pick a trust list key chain", async () => {
+            const { service, certService } = createService([]);
+            certService.find.mockRejectedValue(new Error("db"));
+
+            const error = await service
+                .create(
+                    { id: "new", entities: [externalEntity] },
+                    { id: "tenant", name: "Tenant" },
+                )
+                .catch((caught: unknown) => caught);
+
+            expect(error).not.toBeInstanceOf(ConflictException);
+            expect((error as Error).message).toBe("db");
+        });
+
+        it("answers 409 when no key chain is named and the tenant has no trust list key chain", async () => {
+            const { service, certService } = createService([]);
+            certService.find.mockRejectedValue(
+                new NotFoundException(
+                    "No key chain found with usage type 'trustList' for tenant tenant",
+                ),
+            );
+
+            const error = await service
+                .create(
+                    { id: "no-signer", entities: [externalEntity] },
+                    { id: "tenant", name: "Tenant" },
+                )
+                .catch((caught: unknown) => caught);
+
+            expect(error).toBeInstanceOf(ConflictException);
+            expect((error as Error).message).toContain(
+                'Create a key chain with usage type "trustList" or name one in keyChainId.',
+            );
         });
 
         it("publishes updates with compare-and-set and keeps the previous version", async () => {
@@ -470,8 +562,8 @@ describe("TrustListService", () => {
                 storedList("list", inDays(1)),
             ]);
             // A renewal publishes sequence number 3 after the update read the list.
-            const read = trustListRepo.findOneByOrFail.getMockImplementation()!;
-            trustListRepo.findOneByOrFail.mockImplementationOnce(async (q) => {
+            const read = trustListRepo.findOneBy.getMockImplementation()!;
+            trustListRepo.findOneBy.mockImplementationOnce(async (q) => {
                 const row = await read(q);
                 await service.renewDueTrustLists(now);
                 return row;
@@ -530,53 +622,131 @@ describe("TrustListService", () => {
                 expect(store.get("list")!.keyChainId).toBe("stored-key");
             });
 
-            it.each([
-                ["names", { keyChainId: "other-key" }],
-                ["keeps", {}],
-            ])(
-                "refuses an update that %s a key chain without trustList usage",
-                async (_, keyChain) => {
-                    const { service, certService, store, manager } =
-                        createService([
-                            storedList("list", inDays(20), {
-                                keyChainId: "stored-key",
-                            }),
-                        ]);
-                    // For example after a key chain import reused its ID.
-                    certService.getCertificateById.mockImplementation(
-                        async (_tenantId: string, id: string) => ({
-                            id,
-                            keyChain: { usageType: KeyUsageType.Attestation },
-                        }),
-                    );
+            it("refuses an update that names a key chain without trustList usage at keyChainId", async () => {
+                const { service, certService, store, manager } = createService([
+                    storedList("list", inDays(20), {
+                        keyChainId: "stored-key",
+                    }),
+                ]);
+                certService.getCertificatesByIds.mockResolvedValue(
+                    new Map([
+                        [
+                            "other-key",
+                            {
+                                id: "other-key",
+                                keyChain: {
+                                    usageType: KeyUsageType.Attestation,
+                                },
+                            },
+                        ],
+                    ]),
+                );
 
-                    await expect(
-                        service.update("tenant", "list", {
-                            entities: [externalEntity],
-                            ...keyChain,
-                        }),
-                    ).rejects.toThrow(
-                        new BadRequestException(
-                            "keyChainId" in keyChain
-                                ? "Key chain other-key is not valid for Trust List usage (key lacks TrustList usage)"
-                                : "Key chain stored-key of this trust list is not valid for Trust List usage (key lacks TrustList usage). Name a key chain with usage type trustList in keyChainId.",
-                        ),
-                    );
-                    expect(manager.update).not.toHaveBeenCalled();
-                    expect(store.get("list")!.sequenceNumber).toBe(2);
-                },
-            );
+                const error = await service
+                    .update("tenant", "list", {
+                        entities: [externalEntity],
+                        keyChainId: "other-key",
+                    })
+                    .catch((caught: unknown) => caught);
+
+                expect((error as TrustListInputError).issues).toEqual([
+                    {
+                        path: ["keyChainId"],
+                        code: "key_chain_usage_mismatch",
+                        message:
+                            "Key chain other-key is not valid for Trust List usage (key lacks TrustList usage)",
+                    },
+                ]);
+                expect(manager.update).not.toHaveBeenCalled();
+                expect(store.get("list")!.sequenceNumber).toBe(2);
+            });
+
+            it("answers 409 for an update that keeps a key chain that no longer exists", async () => {
+                const { service, certService, manager } = createService([
+                    storedList("list", inDays(20), {
+                        keyChainId: "stored-key",
+                    }),
+                ]);
+                certService.getCertificateById.mockRejectedValue(
+                    new NotFoundException("Key chain stored-key not found"),
+                );
+
+                const error = await service
+                    .update("tenant", "list", { entities: [externalEntity] })
+                    .catch((caught: unknown) => caught);
+
+                expect(error).toBeInstanceOf(ConflictException);
+                expect((error as Error).message).toMatch(
+                    /^Key chain stored-key not found\. /,
+                );
+                expect(manager.update).not.toHaveBeenCalled();
+            });
+
+            it("answers 409 when the certificate of the tenant's trust list key chain fails validation", async () => {
+                const { service, certService } = createService([]);
+                certService.find.mockRejectedValue(
+                    new NotFoundException(
+                        "Certificate validation failed: Certificate expired",
+                    ),
+                );
+
+                const error = await service
+                    .create(
+                        { id: "new", entities: [externalEntity] },
+                        { id: "tenant", name: "Tenant" },
+                    )
+                    .catch((caught: unknown) => caught);
+
+                expect(error).toBeInstanceOf(ConflictException);
+                expect((error as Error).message).toContain(
+                    "Certificate validation failed",
+                );
+            });
+
+            it("answers 409 for an update that keeps a key chain without trustList usage", async () => {
+                const { service, certService, store, manager } = createService([
+                    storedList("list", inDays(20), {
+                        keyChainId: "stored-key",
+                    }),
+                ]);
+                // For example after a key chain import reused its ID.
+                certService.getCertificateById.mockImplementation(
+                    async (_tenantId: string, id: string) => ({
+                        id,
+                        keyChain: { usageType: KeyUsageType.Attestation },
+                    }),
+                );
+
+                await expect(
+                    service.update("tenant", "list", {
+                        entities: [externalEntity],
+                    }),
+                ).rejects.toThrow(
+                    new ConflictException(
+                        "Key chain stored-key of this trust list is not valid for Trust List usage (key lacks TrustList usage). Name a key chain with usage type trustList in keyChainId.",
+                    ),
+                );
+                expect(manager.update).not.toHaveBeenCalled();
+                expect(store.get("list")!.sequenceNumber).toBe(2);
+            });
         });
     });
 
     describe("internal entity key chains", () => {
         it("refuses a key chain of another usage type before it picks a trust list key chain", async () => {
             const { service, certService, trustListRepo } = createService([]);
-            certService.getCertificateById.mockResolvedValue({
-                id: "status-key",
-                crt: [],
-                keyChain: { usageType: "statusList" },
-            });
+            certService.getCertificatesByIds.mockResolvedValue(
+                new Map([
+                    [
+                        "status-key",
+                        {
+                            id: "status-key",
+                            crt: [],
+                            keyChain: { usageType: "statusList" },
+                        },
+                    ],
+                ]),
+            );
 
             const error = await service
                 .create(
@@ -595,32 +765,27 @@ describe("TrustListService", () => {
                 )
                 .catch((caught: unknown) => caught);
 
-            expect(error).toBeInstanceOf(TrustListEntityKeyChainUsageError);
+            expect(error).toBeInstanceOf(TrustListInputError);
             // The revocation field accepts the status list key chain.
-            expect((error as TrustListEntityKeyChainUsageError).issues).toEqual(
-                [
-                    {
-                        index: 0,
-                        field: "issuerKeyChainId",
-                        message: expect.stringContaining('"statusList"'),
-                    },
-                ],
-            );
-            // Each key chain is read once; a refused list creates no
+            expect((error as TrustListInputError).issues).toEqual([
+                {
+                    path: ["entities", 0, "issuerKeyChainId"],
+                    code: "key_chain_usage_mismatch",
+                    message: expect.stringContaining('"statusList"'),
+                },
+            ]);
+            // The key chains are read in one go; a refused list creates no
             // trust list key chain and is not saved.
-            expect(certService.getCertificateById).toHaveBeenCalledTimes(1);
+            expect(certService.getCertificatesByIds).toHaveBeenCalledTimes(1);
             expect(certService.find).not.toHaveBeenCalled();
             expect(trustListRepo.save).not.toHaveBeenCalled();
         });
 
-        it("fails on a missing key chain before it picks a trust list key chain", async () => {
+        it("refuses a missing key chain at each field before it picks a trust list key chain", async () => {
             const { service, certService } = createService([]);
-            certService.getCertificateById.mockRejectedValue(
-                new Error("Key chain not found"),
-            );
 
-            await expect(
-                service.create(
+            const error = await service
+                .create(
                     {
                         id: "new",
                         entities: [
@@ -633,9 +798,162 @@ describe("TrustListService", () => {
                         ],
                     },
                     { id: "tenant", name: "Tenant" },
-                ),
-            ).rejects.toThrow("Key chain not found");
+                )
+                .catch((caught: unknown) => caught);
+
+            expect((error as TrustListInputError).issues).toEqual(
+                ["issuerKeyChainId", "revocationKeyChainId"].map((field) => ({
+                    path: ["entities", 0, field],
+                    code: "key_chain_not_found",
+                    message: 'Key chain "missing" does not exist.',
+                })),
+            );
+            expect(certService.getCertificatesByIds).toHaveBeenCalledWith(
+                "tenant",
+                ["missing", "missing"],
+            );
             expect(certService.find).not.toHaveBeenCalled();
+        });
+
+        it("passes on other failures to read a key chain", async () => {
+            const { service, certService } = createService([]);
+            certService.getCertificatesByIds.mockRejectedValue(
+                new Error("database unavailable"),
+            );
+
+            await expect(
+                service.create(
+                    {
+                        id: "new",
+                        entities: [
+                            {
+                                type: "internal",
+                                issuerKeyChainId: "key",
+                                revocationKeyChainId: "key",
+                                info: { name: "Issuer" },
+                            },
+                        ],
+                    },
+                    { id: "tenant", name: "Tenant" },
+                ),
+            ).rejects.toThrow("database unavailable");
+        });
+    });
+
+    describe("signing key chain", () => {
+        it.each([
+            [
+                "a key chain that does not exist",
+                new Map<string, object>(),
+                "key_chain_not_found",
+                'Key chain "signer" does not exist.',
+            ],
+            [
+                "a key chain of another usage type",
+                new Map<string, object>([
+                    [
+                        "signer",
+                        {
+                            id: "signer",
+                            crt: [],
+                            keyChain: { usageType: "attestation" },
+                        },
+                    ],
+                ]),
+                "key_chain_usage_mismatch",
+                "Key chain signer is not valid for Trust List usage (key lacks TrustList usage)",
+            ],
+        ])(
+            "refuses %s at keyChainId, before the entities' issues",
+            async (_, found, code, message) => {
+                const { service, certService } = createService([]);
+                certService.getCertificatesByIds.mockResolvedValue(found);
+
+                const error = await service
+                    .create(
+                        {
+                            id: "new",
+                            keyChainId: "signer",
+                            entities: [
+                                {
+                                    type: "external",
+                                    issuerCertPem: "not a certificate",
+                                    revocationCertPem: "not a certificate",
+                                    info: { name: "Issuer" },
+                                },
+                            ],
+                        },
+                        { id: "tenant", name: "Tenant" },
+                    )
+                    .catch((caught: unknown) => caught);
+
+                expect((error as TrustListInputError).issues).toEqual([
+                    { path: ["keyChainId"], code, message },
+                    expect.objectContaining({
+                        path: ["entities", 0, "issuerCertPem"],
+                    }),
+                    expect.objectContaining({
+                        path: ["entities", 0, "revocationCertPem"],
+                    }),
+                ]);
+                expect(certService.find).not.toHaveBeenCalled();
+            },
+        );
+    });
+
+    describe("versions", () => {
+        const version = (
+            id: string,
+            trustListId: string,
+            tenantId = "tenant",
+        ) => ({
+            id,
+            trustListId,
+            tenantId,
+            sequenceNumber: 1,
+        });
+        const versions = [
+            version("v1", "list"),
+            version("v2", "list", "other"),
+            version("v3", "other-list"),
+        ];
+
+        it("lists only the versions of that list of the tenant", async () => {
+            const { service } = createService(
+                [storedList("list", inDays(20))],
+                undefined,
+                versions,
+            );
+
+            await expect(
+                service.getVersionHistory("tenant", "list"),
+            ).resolves.toEqual([versions[0]]);
+        });
+
+        it("reads a version of that list of the tenant only", async () => {
+            const { service } = createService([], undefined, versions);
+
+            await expect(
+                service.getVersion("tenant", "list", "v1"),
+            ).resolves.toEqual(versions[0]);
+            for (const [trustListId, versionId] of [
+                ["other-list", "v1"],
+                ["list", "v2"],
+            ]) {
+                await expect(
+                    service.getVersion("tenant", trustListId, versionId),
+                ).rejects.toThrow("Trust list version not found");
+            }
+        });
+
+        it("answers 404 for a list of another tenant", async () => {
+            const { service } = createService([
+                storedList("list", inDays(20), { tenantId: "other" }),
+            ]);
+
+            await expect(
+                service.getVersionHistory("tenant", "list"),
+            ).rejects.toBeInstanceOf(NotFoundException);
         });
     });
 

@@ -2,26 +2,39 @@ import { Injectable, Logger } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import {
     getRevocationCert,
-    serviceTypeMatches,
+    getStatusListSigners,
+} from "./domain/status-list-signers.js";
+import {
     TrustedEntity,
+    TrustedEntityServiceCert,
+    walletAttestationSignerServiceTypes,
 } from "./types.js";
 
 type X5cInput = string[]; // base64 DER entries
 
 /**
- * Whether a trust-list service has the requested type. A filter starting
- * with "/" matches by suffix (e.g. "/Issuance" matches PID/Issuance and
- * EAA/Issuance); otherwise exact or base-role matching applies (e.g.
- * WalletSolution matches WalletSolution/Issuance).
+ * Service type filter of {@link X509ValidationService.pathMatchesTrustedEntities}:
+ * the service type identifiers to match, each compared exactly. A suffix such
+ * as "/Issuance" would also match `WalletSolution/Issuance` or
+ * `WRPAC/Issuance`, whose certificates sign no credentials.
  */
+export type ServiceTypeFilter = readonly string[];
+
+/** Whether a trust-list service has the requested type. */
 function serviceMatchesFilter(
     serviceTypeIdentifier: string,
-    serviceTypeFilter: string,
+    serviceTypeFilter: ServiceTypeFilter,
 ): boolean {
-    return serviceTypeFilter.startsWith("/")
-        ? serviceTypeIdentifier.endsWith(serviceTypeFilter)
-        : serviceTypeMatches(serviceTypeIdentifier, serviceTypeFilter);
+    return serviceTypeFilter.includes(serviceTypeIdentifier);
 }
+
+/** How a listed certificate matched a path, see {@link X509ValidationService.pathMatchesTrustedEntities}. */
+type ServiceCertMatch = {
+    cert: x509.X509Certificate;
+    thumbprint: string;
+    isCa: boolean;
+    matchMode: MatchedTrustedEntity["matchMode"];
+};
 
 function arrayBufferToHex(buffer: ArrayBuffer): string {
     return Array.from(new Uint8Array(buffer))
@@ -56,10 +69,10 @@ export type MatchedTrustedEntity = {
     issuanceThumbprint: string;
     /** Whether the issuance certificate is a CA certificate */
     issuanceIsCa: boolean;
+    /** The service type the issuance certificate is listed with */
+    issuanceServiceType: string;
     /** The mode that matched (ca, leaf-pinned, pathEnd-pinned) */
     matchMode: "ca" | "leaf-pinned" | "pathEnd-pinned";
-    /** The revocation certificate from the same entity (if available) */
-    revocationCert?: x509.X509Certificate;
     /** Thumbprint of the revocation certificate (if available) */
     revocationThumbprint?: string;
 };
@@ -114,7 +127,7 @@ export class X509ValidationService {
      */
     anchorCertValuesFor(
         entities: TrustedEntity[],
-        serviceTypeFilter: string,
+        serviceTypeFilter: ServiceTypeFilter,
     ): Array<{ certValue: string }> {
         const preferred: Array<{ certValue: string }> = [];
         const others: Array<{ certValue: string }> = [];
@@ -168,6 +181,36 @@ export class X509ValidationService {
     }
 
     /**
+     * Match the `x5c` chain of a wallet or key attestation against
+     * wallet-provider entities: the path must end at a certificate listed as
+     * a service that signs attestations
+     * ({@link walletAttestationSignerServiceTypes}), not at one that only
+     * signs status lists. Those certificates are tried first as anchors, so
+     * the path ends there when an issuance and a revocation anchor share
+     * subject and key.
+     * @throws if no certificate path to a listed certificate can be built
+     */
+    async matchAttestationSigner(
+        x5c: X5cInput,
+        entities: TrustedEntity[],
+    ): Promise<MatchedTrustedEntity | null> {
+        const chain = this.parseX5c(x5c);
+        const anchors = this.parseTrustAnchors(
+            this.anchorCertValuesFor(
+                entities,
+                walletAttestationSignerServiceTypes,
+            ),
+        );
+        const path = await this.buildPath(chain[0], chain, anchors);
+        return this.pathMatchesTrustedEntities(
+            path,
+            entities,
+            "leaf",
+            walletAttestationSignerServiceTypes,
+        );
+    }
+
+    /**
      * Match a certificate chain against TrustedEntities.
      * Returns the matched entity with its issuance and revocation certificates.
      *
@@ -178,22 +221,16 @@ export class X509ValidationService {
      *   - pinnedMode "leaf": leaf equals pinned cert
      *   - pinnedMode "pathEnd": path end equals pinned cert
      *
-     * @param serviceTypeFilter The service type filter to match. If it starts with "/", uses suffix matching
-     *                          (e.g., "/Issuance" matches both PID/Issuance and EAA/Issuance).
-     *                          Otherwise uses exact matching (e.g., full WalletProvider URI).
-     *                          Defaults to "/Issuance" to match both PID and EAA issuance.
+     * @param serviceTypeFilter The service types to match, see {@link ServiceTypeFilter}.
      * @returns The matched entity info, or null if no match
      */
     async pathMatchesTrustedEntities(
         path: x509.X509Certificate[],
         entities: TrustedEntity[],
-        pinnedMode: "leaf" | "pathEnd" = "leaf",
-        serviceTypeFilter: string = "/Issuance",
+        pinnedMode: "leaf" | "pathEnd",
+        serviceTypeFilter: ServiceTypeFilter,
     ): Promise<MatchedTrustedEntity | null> {
-        const leaf = path[0];
-        const end = path.at(-1)!;
-        const leafThumb = arrayBufferToHex(await leaf.getThumbprint("SHA-256"));
-        const endThumb = arrayBufferToHex(await end.getThumbprint("SHA-256"));
+        const { leafThumb, endThumb } = await this.pathThumbprints(path);
 
         for (const entity of entities) {
             // Find certificates matching the specified service type in this entity
@@ -205,56 +242,34 @@ export class X509ValidationService {
             );
 
             for (const svc of matchingServices) {
-                const matchCert = certFromBase64Der(svc.certValue);
-                const matchThumb = arrayBufferToHex(
-                    await matchCert.getThumbprint("SHA-256"),
+                const match = await this.matchServiceCert(
+                    svc,
+                    leafThumb,
+                    endThumb,
+                    pinnedMode,
                 );
-                const matchIsCa = this.isCaCert(matchCert);
 
-                let matchMode: "ca" | "leaf-pinned" | "pathEnd-pinned" | null =
-                    null;
-
-                if (matchIsCa) {
-                    // CA cert: path must terminate at this anchor
-                    if (matchThumb === endThumb) {
-                        matchMode = "ca";
-                    }
-                } else if (pinnedMode === "leaf" && matchThumb === leafThumb) {
-                    // Pinned cert (non-CA) - leaf mode
-                    matchMode = "leaf-pinned";
-                } else if (
-                    pinnedMode === "pathEnd" &&
-                    matchThumb === endThumb
-                ) {
-                    // Pinned cert (non-CA) - pathEnd mode
-                    matchMode = "pathEnd-pinned";
-                }
-
-                if (matchMode) {
+                if (match) {
                     // Found a match! Now get the revocation cert from the same entity
                     const revocationSvc = getRevocationCert(
                         entity,
                         svc.serviceTypeIdentifier,
                     );
-                    let revocationCert: x509.X509Certificate | undefined;
-                    let revocationThumbprint: string | undefined;
-
-                    if (revocationSvc) {
-                        revocationCert = certFromBase64Der(
-                            revocationSvc.certValue,
-                        );
-                        revocationThumbprint = arrayBufferToHex(
-                            await revocationCert.getThumbprint("SHA-256"),
-                        );
-                    }
+                    const revocationThumbprint = revocationSvc
+                        ? arrayBufferToHex(
+                              await certFromBase64Der(
+                                  revocationSvc.certValue,
+                              ).getThumbprint("SHA-256"),
+                          )
+                        : undefined;
 
                     return {
                         entity,
-                        issuanceCert: matchCert,
-                        issuanceThumbprint: matchThumb,
-                        issuanceIsCa: matchIsCa,
-                        matchMode,
-                        revocationCert,
+                        issuanceCert: match.cert,
+                        issuanceThumbprint: match.thumbprint,
+                        issuanceIsCa: match.isCa,
+                        issuanceServiceType: svc.serviceTypeIdentifier,
+                        matchMode: match.matchMode,
                         revocationThumbprint,
                     };
                 }
@@ -262,5 +277,91 @@ export class X509ValidationService {
         }
 
         return null;
+    }
+
+    /**
+     * The services that may sign the status list of a credential or
+     * attestation matched as `matched`: the revocation services paired with
+     * the matched service, or the matched certificate itself when the entity
+     * lists none ({@link getStatusListSigners}).
+     */
+    statusListSigners(
+        matched: MatchedTrustedEntity,
+    ): TrustedEntityServiceCert[] {
+        return getStatusListSigners(matched.entity, {
+            serviceTypeIdentifier: matched.issuanceServiceType,
+            certValue: Buffer.from(matched.issuanceCert.rawData).toString(
+                "base64",
+            ),
+        });
+    }
+
+    /**
+     * Whether the validated certificate path of a status list ends at one of
+     * the {@link statusListSigners} of `matched`, by the rule credentials are
+     * matched with: a CA certificate must be the path end, a pinned one the
+     * leaf, or the path end in `pathEnd` mode. Entities are told apart by
+     * certificate, not by `entityId`, which is optional and not unique.
+     */
+    async matchesStatusListSigner(
+        path: x509.X509Certificate[],
+        matched: MatchedTrustedEntity,
+        pinnedMode: "leaf" | "pathEnd",
+    ): Promise<boolean> {
+        const { leafThumb, endThumb } = await this.pathThumbprints(path);
+        for (const signer of this.statusListSigners(matched)) {
+            if (
+                await this.matchServiceCert(
+                    signer,
+                    leafThumb,
+                    endThumb,
+                    pinnedMode,
+                )
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private async pathThumbprints(
+        path: x509.X509Certificate[],
+    ): Promise<{ leafThumb: string; endThumb: string }> {
+        return {
+            leafThumb: arrayBufferToHex(await path[0].getThumbprint("SHA-256")),
+            endThumb: arrayBufferToHex(
+                await path.at(-1)!.getThumbprint("SHA-256"),
+            ),
+        };
+    }
+
+    /**
+     * How the certificate of a listed service matches a path, or null:
+     * - CA certificate: the path must terminate at it
+     * - not a CA: it is a pin, the leaf (pinnedMode "leaf") or the path end
+     *   (pinnedMode "pathEnd") must be that certificate
+     */
+    private async matchServiceCert(
+        svc: TrustedEntityServiceCert,
+        leafThumb: string,
+        endThumb: string,
+        pinnedMode: "leaf" | "pathEnd",
+    ): Promise<ServiceCertMatch | null> {
+        const cert = certFromBase64Der(svc.certValue);
+        const thumbprint = arrayBufferToHex(
+            await cert.getThumbprint("SHA-256"),
+        );
+        const isCa = this.isCaCert(cert);
+
+        let matchMode: ServiceCertMatch["matchMode"] | null = null;
+        if (isCa) {
+            if (thumbprint === endThumb) matchMode = "ca";
+        } else if (pinnedMode === "leaf" && thumbprint === leafThumb) {
+            matchMode = "leaf-pinned";
+        } else if (pinnedMode === "pathEnd" && thumbprint === endThumb) {
+            matchMode = "pathEnd-pinned";
+        }
+
+        return matchMode ? { cert, thumbprint, isCa, matchMode } : null;
     }
 }

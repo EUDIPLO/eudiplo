@@ -1,8 +1,14 @@
 import '@angular/compiler';
+import { TestBed } from '@angular/core/testing';
 import { FormBuilder } from '@angular/forms';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatTooltip } from '@angular/material/tooltip';
+import { By } from '@angular/platform-browser';
+import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { client } from '@eudiplo/sdk-core';
 import { of } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TenantCreateComponent } from './tenant-create.component';
 
@@ -39,15 +45,18 @@ describe('TenantCreateComponent', () => {
     );
     client.setConfig({ fetch: fetchMock });
 
-    component = new TenantCreateComponent(
-      new FormBuilder(),
-      { open: vi.fn() } as never,
-      router as never,
-      {
-        snapshot: { paramMap: { get: vi.fn(() => routeId) } },
-      } as never,
-      { open: vi.fn(() => ({ afterClosed: () => of(undefined) })) } as never,
-      { getBaseUrl: vi.fn(() => 'http://localhost:3000') } as never
+    component = TestBed.runInInjectionContext(
+      () =>
+        new TenantCreateComponent(
+          new FormBuilder(),
+          { open: vi.fn() } as never,
+          router as never,
+          {
+            snapshot: { paramMap: { get: vi.fn(() => routeId) } },
+          } as never,
+          { open: vi.fn(() => ({ afterClosed: () => of(undefined) })) } as never,
+          { getBaseUrl: vi.fn(() => 'http://localhost:3000') } as never
+        )
     );
   });
 
@@ -203,6 +212,137 @@ describe('TenantCreateComponent', () => {
       method: 'PATCH',
       path: '/api/tenant/Acme',
       body: { name: 'Renamed' },
+    });
+  });
+
+  describe('rendered', () => {
+    afterEach(() => TestBed.resetTestingModule());
+
+    it('says which fields keep it from saving, focuses the first one and sends nothing', async () => {
+      const snackBar = { open: vi.fn() };
+      // The component of the other tests was built with this test module.
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [TenantCreateComponent],
+        providers: [provideRouter([]), { provide: MatSnackBar, useValue: snackBar }],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(TenantCreateComponent);
+      fixture.detectChanges();
+      const page = fixture.nativeElement as HTMLElement;
+      fixture.componentInstance.tenantForm.patchValue({ name: 'Acme', roles: [] });
+      fixture.detectChanges();
+      const save = [...page.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === 'Create tenant'
+      )!;
+      expect(save.disabled).toBe(false);
+      expect(save.getAttribute('aria-disabled')).toBeNull();
+
+      save.focus();
+      save.click();
+
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(document.activeElement?.getAttribute('formcontrolname')).toBe('id');
+      });
+      expect(
+        [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim())
+      ).toEqual(['tenant ID is required', 'Select at least one role']);
+      expect(snackBar.open).toHaveBeenLastCalledWith(
+        'Check the highlighted fields.',
+        'Close',
+        expect.anything()
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('waits while the tenant is saved: a second click sends nothing and the tooltip says why', async () => {
+      const pending = vi.fn<typeof fetch>(() => new Promise<Response>(() => undefined));
+      client.setConfig({ fetch: pending });
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [TenantCreateComponent],
+        providers: [provideRouter([]), { provide: MatSnackBar, useValue: { open: vi.fn() } }],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(TenantCreateComponent);
+      fixture.detectChanges();
+      fixture.componentInstance.tenantForm.patchValue({ id: 'acme', name: 'Acme' });
+      fixture.detectChanges();
+      const page = fixture.nativeElement as HTMLElement;
+      const save = page.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+
+      save.click();
+      fixture.detectChanges();
+      save.click();
+      await new Promise((resolve) => setTimeout(resolve));
+
+      expect(pending).toHaveBeenCalledOnce();
+      expect(save.disabled).toBe(false);
+      expect(save.getAttribute('aria-disabled')).toBe('true');
+      expect(
+        fixture.debugElement
+          .queryAll(By.directive(MatTooltip))
+          .find((element) => element.nativeElement === save)!
+          .injector.get(MatTooltip).message
+      ).toBe('Saving the tenant…');
+    });
+
+    it('says it is loading a tenant, and why it cannot be edited until a retry loads it', async () => {
+      let answer: (response: Response) => void = () => undefined;
+      let calls = 0;
+      client.setConfig({
+        fetch: vi.fn<typeof fetch>(() => {
+          calls++;
+          return new Promise<Response>((resolve) => (answer = resolve));
+        }),
+      });
+      const json = (status: number, body: unknown) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        providers: [
+          provideRouter([{ path: 'tenants/:id/edit', component: TenantCreateComponent }]),
+          { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        ],
+      }).compileComponents();
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl('/tenants/acme/edit', TenantCreateComponent);
+      const page = harness.routeNativeElement as HTMLElement;
+      harness.detectChanges();
+
+      expect(page.querySelector('form')).toBeNull();
+      expect(page.querySelector('output')?.textContent).toContain('Loading tenant…');
+
+      answer(json(404, { statusCode: 404, message: 'Tenant not found' }));
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(page.querySelector('[role="alert"]')?.textContent).toContain(
+          'Failed to load tenant: Tenant not found'
+        );
+      });
+      expect(page.querySelector('form')).toBeNull();
+
+      const retry = [...page.querySelectorAll('button')].find((b) =>
+        b.textContent?.includes('Retry')
+      )!;
+      retry.focus();
+      retry.click();
+      await vi.waitFor(() => expect(calls).toBe(2));
+      answer(json(200, { id: 'acme', name: 'Acme', description: null }));
+
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(page.querySelector<HTMLInputElement>('input[formcontrolname="id"]')?.value).toBe(
+          'acme'
+        );
+      });
+      expect(page.querySelector<HTMLInputElement>('input[formcontrolname="id"]')!.disabled).toBe(
+        true
+      );
+      expect(page.querySelector('[role="alert"]')).toBeNull();
+      await vi.waitFor(() => expect(document.activeElement).toBe(page.querySelector('h2')));
     });
   });
 });
