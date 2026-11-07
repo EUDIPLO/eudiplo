@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter } from '@angular/router';
+import { EMPTY } from 'rxjs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
@@ -186,5 +187,76 @@ describe('WebhookEndpointCreateComponent save', () => {
       );
       expect(create).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('WebhookEndpointCreateComponent JSON View', () => {
+  it('opens JSON View only with the loaded webhook endpoint and says why it waits', async () => {
+    const open = vi.fn(() => ({ afterClosed: () => EMPTY }));
+    const getById = vi
+      .fn()
+      .mockRejectedValueOnce({ statusCode: 500, message: 'Unavailable' })
+      .mockResolvedValue({ id: 'example', name: 'Example', url: 'https://a' });
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new WebhookEndpointCreateComponent(
+          { getById } as never,
+          { navigate: vi.fn() } as never,
+          { snapshot: { paramMap: { get: () => 'example' } } } as never,
+          { open: vi.fn() } as never,
+          { open } as never
+        )
+    );
+
+    component.ngOnInit();
+    expect(component.jsonViewUnavailableReason).toBe('Wait until the webhook endpoint has loaded');
+    // The button stays clickable while it cannot be used, so the handler checks again.
+    component.viewAsJson();
+    await vi.waitFor(() => expect(component.loading).toBe(false));
+    expect(component.jsonViewUnavailableReason).toBe(
+      'Retry loading the webhook endpoint before opening JSON View'
+    );
+    component.viewAsJson();
+    expect(open).not.toHaveBeenCalled();
+
+    component.retryLoad();
+    await vi.waitFor(() => expect(component.loading).toBe(false));
+    expect(component.jsonViewUnavailableReason).toBe('');
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
+  });
+
+  it('opens JSON View right away when creating a webhook endpoint, but not while it saves', async () => {
+    const open = vi.fn(() => ({ afterClosed: () => EMPTY }));
+    let rejectSave!: (error: unknown) => void;
+    const create = vi.fn(() => new Promise((_, reject) => (rejectSave = reject)));
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new WebhookEndpointCreateComponent(
+          { create } as never,
+          { navigate: vi.fn() } as never,
+          { snapshot: { paramMap: { get: () => null } } } as never,
+          { open: vi.fn() } as never,
+          { open } as never
+        )
+    );
+
+    component.ngOnInit();
+    expect(component.loading).toBe(false);
+    expect(component.jsonViewUnavailableReason).toBe('');
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
+
+    // A successful save leaves the screen, so the dialog would stay open over the next one.
+    component.form.patchValue({ id: 'example', name: 'Example', url: 'https://a' });
+    component.onSubmit();
+    expect(component.jsonViewUnavailableReason).toBe(
+      'Wait until the webhook endpoint has been saved'
+    );
+    component.viewAsJson();
+    expect(open).toHaveBeenCalledOnce();
+    rejectSave({ statusCode: 500, message: 'Unavailable' });
+    await vi.waitFor(() => expect(component.saving).toBe(false));
+    expect(component.jsonViewUnavailableReason).toBe('');
   });
 });

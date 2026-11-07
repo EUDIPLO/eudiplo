@@ -19,7 +19,9 @@
         mat-button
         type="button"
         (click)="viewAsJson()"
-        [disabled]="loadingConfig || !!loadError"
+        [disabled]="!!jsonViewUnavailableReason"
+        disabledInteractive
+        [matTooltip]="jsonViewUnavailableReason || 'View/Edit as JSON'"
       >
         <mat-icon>code</mat-icon>JSON View
       </button>
