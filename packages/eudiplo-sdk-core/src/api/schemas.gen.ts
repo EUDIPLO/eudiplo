@@ -8440,16 +8440,22 @@ export const PresentationConfigUpdateDtoSchema = {
 export const TrustListEntityInfoSchema = {
     type: 'object',
     properties: {
-        name: {
-            type: 'string'
-        },
         lang: {
-            type: 'string'
+            type: 'string',
+            pattern: '^(?:(?:[a-z]{2,3}(?:-[a-z]{3}){0,3}|[a-z]{4,8})(?:-[a-z]{4})?(?:-(?:[a-z]{2}|[0-9]{3}))?(?:-(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3}))*(?:-[0-9a-wy-z](?:-[a-z0-9]{2,8})+)*(?:-x(?:-[a-z0-9]{1,8})+)?)$',
+            description: 'Optional language of every text the entity publishes (name, service names, postal address, contact, information URI): an IETF RFC 5646 language tag in lower case, for example en or de-at (ETSI TS 119 602 clause 6.1.4). Defaults to en.'
         },
         uri: {
-            type: 'string'
+            type: 'string',
+            format: 'uri',
+            description: 'Optional absolute URI where relying parties find information about the entity, published as TEInformationURI. Write it as a URL parser serializes it, for example https://example.com/about with spaces percent-encoded.'
         },
         country: {
+            type: 'string',
+            pattern: '^[A-Z]{2}$',
+            description: 'Optional country of the postal address: an ISO 3166-1 alpha-2 code in capital letters, with "UK" for the United Kingdom, "EL" for Greece and "EU" for the European Union (ETSI TS 119 602 clause 6.1.5). Defaults to EU.'
+        },
+        name: {
             type: 'string'
         },
         locality: {

@@ -126,3 +126,11 @@ test("table mode lists the allowed values of enum arrays", () => {
         description: "Accepted formats.",
     });
 });
+
+test("leaves long value lists to the description", () => {
+    const codes = Array.from({ length: 21 }, (_, index) => `C${index}`) as [string, ...string[]];
+    const schema = z.object({ country: z.enum(codes).describe("A country code.") });
+    const [row] = schemaTableRows(buildSchemaModel(schema));
+    assert.equal(row.allowed, undefined);
+    assert.doesNotMatch(renderSchemaBody(buildSchemaModel(schema)), /allowed:/);
+});

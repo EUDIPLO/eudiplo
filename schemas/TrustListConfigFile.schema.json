@@ -9,7 +9,7 @@
       "properties": {
         "$schema": {
           "type": "string",
-          "const": "https://eudiplo.dev/schemas/v1/TrustListConfigFile.schema.json"
+          "const": "https://eudiplo.dev/schemas/v2/TrustListConfigFile.schema.json"
         },
         "metadata": {
           "type": "object",
@@ -55,6 +55,268 @@
         "spec"
       ],
       "additionalProperties": false
+    },
+    {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://eudiplo.dev/schemas/v1/TrustListConfigFile.schema.json",
+      "title": "TrustListConfigFile",
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string",
+          "const": "https://eudiplo.dev/schemas/v1/TrustListConfigFile.schema.json"
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Monotonically increasing configuration generation."
+            },
+            "ownership": {
+              "type": "string",
+              "enum": [
+                "unmanaged",
+                "file-managed"
+              ],
+              "description": "Requested ownership recorded when the document is applied."
+            }
+          },
+          "additionalProperties": false
+        },
+        "spec": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/TrustListCreateDto"
+            },
+            {
+              "type": "object",
+              "required": [
+                "id"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "$schema",
+        "spec"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "TrustListCreateDto": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "description": "Optional trust list id. If omitted, one may be generated.",
+              "type": "string",
+              "minLength": 1
+            },
+            "description": {
+              "description": "Optional trust list description.",
+              "type": "string"
+            },
+            "keyChainId": {
+              "description": "Optional key chain id used to sign trust list payloads.",
+              "type": "string",
+              "minLength": 1
+            },
+            "entities": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "internal",
+                        "description": "Use locally managed key chains for trust material."
+                      },
+                      "issuerKeyChainId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Key chain id for issuer certificate material."
+                      },
+                      "revocationKeyChainId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Key chain id for revocation/status list certificate material."
+                      },
+                      "providerType": {
+                        "description": "Provider role; defaults to attestation-provider.",
+                        "type": "string",
+                        "enum": [
+                          "attestation-provider",
+                          "wallet-provider"
+                        ]
+                      },
+                      "info": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Display name of the trusted entity."
+                          },
+                          "lang": {
+                            "description": "Optional language tag for entity info.",
+                            "type": "string"
+                          },
+                          "locale": {
+                            "description": "Optional locale identifier.",
+                            "type": "string"
+                          },
+                          "uri": {
+                            "description": "Optional entity URI.",
+                            "type": "string"
+                          },
+                          "country": {
+                            "description": "Optional country name or code.",
+                            "type": "string"
+                          },
+                          "locality": {
+                            "description": "Optional locality or city.",
+                            "type": "string"
+                          },
+                          "postalCode": {
+                            "description": "Optional postal code.",
+                            "type": "string"
+                          },
+                          "streetAddress": {
+                            "description": "Optional street address.",
+                            "type": "string"
+                          },
+                          "contactUri": {
+                            "description": "Optional contact URI for the entity.",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Entity metadata."
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "issuerKeyChainId",
+                      "revocationKeyChainId",
+                      "info"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "external",
+                        "description": "Provide external PEM certificates directly."
+                      },
+                      "issuerCertPem": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Issuer certificate in PEM format."
+                      },
+                      "revocationCertPem": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Revocation/status certificate in PEM format."
+                      },
+                      "providerType": {
+                        "description": "Provider role; defaults to attestation-provider.",
+                        "type": "string",
+                        "enum": [
+                          "attestation-provider",
+                          "wallet-provider"
+                        ]
+                      },
+                      "info": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Display name of the trusted entity."
+                          },
+                          "lang": {
+                            "description": "Optional language tag for entity info.",
+                            "type": "string"
+                          },
+                          "locale": {
+                            "description": "Optional locale identifier.",
+                            "type": "string"
+                          },
+                          "uri": {
+                            "description": "Optional entity URI.",
+                            "type": "string"
+                          },
+                          "country": {
+                            "description": "Optional country name or code.",
+                            "type": "string"
+                          },
+                          "locality": {
+                            "description": "Optional locality or city.",
+                            "type": "string"
+                          },
+                          "postalCode": {
+                            "description": "Optional postal code.",
+                            "type": "string"
+                          },
+                          "streetAddress": {
+                            "description": "Optional street address.",
+                            "type": "string"
+                          },
+                          "contactUri": {
+                            "description": "Optional contact URI for the entity.",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "additionalProperties": false,
+                        "description": "Entity metadata."
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "issuerCertPem",
+                      "revocationCertPem",
+                      "info"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "description": "One or more entities included in this trust list."
+            },
+            "data": {
+              "description": "Optional additional custom payload data.",
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "entities"
+          ],
+          "additionalProperties": false,
+          "title": "TrustListCreateDto"
+        }
+      }
     }
   ]
 }

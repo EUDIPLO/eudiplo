@@ -1,5 +1,4 @@
 import { X509Certificate } from "node:crypto";
-import { LocalizedURISchema, PostalAddressSchema } from "@owf/eudi-lote";
 
 /** Why a field of a trust list body that passed schema validation is refused. */
 type TrustListInputIssueCode =
@@ -122,45 +121,4 @@ export function keyChainNotFoundIssue(
         message: `Key chain ${JSON.stringify(keyChainId)} does not exist.`,
         code: "key_chain_not_found",
     };
-}
-
-/** The entity info fields a LoTE document restricts further than the body schema. */
-type EntityInfoInput = { info?: { country?: string; uri?: string } };
-
-/**
- * Issues for entity info that the LoTE builder of `@owf/eudi-lote` refuses:
- * a country of other than two characters and an information URI that is no
- * absolute URL. Checked with the builder's own schemas, so both refuse the
- * same values; like the builder, this does not check that the country is an
- * upper-case ISO 3166-1 code.
- */
-export function entityInfoIssues(
-    entities: readonly EntityInfoInput[],
-): TrustListInputIssue[] {
-    return entities.flatMap(({ info }, index) => {
-        const issues: TrustListInputIssue[] = [];
-        if (
-            info?.country &&
-            !PostalAddressSchema.shape.Country.safeParse(info.country).success
-        ) {
-            issues.push({
-                path: ["entities", index, "info", "country"],
-                message:
-                    'country must be a country code of two characters, such as "DE" or "EU".',
-                code: "invalid_entity_info",
-            });
-        }
-        if (
-            info?.uri &&
-            !LocalizedURISchema.shape.uriValue.safeParse(info.uri).success
-        ) {
-            issues.push({
-                path: ["entities", index, "info", "uri"],
-                message:
-                    'uri must be an absolute URL, such as "https://issuer.example".',
-                code: "invalid_entity_info",
-            });
-        }
-        return issues;
-    });
 }
