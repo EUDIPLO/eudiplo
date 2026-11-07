@@ -143,7 +143,11 @@ describe("DELETE /key-chain/{id} while configurations name the key chain", () =>
                         type: "internal",
                         issuerKeyChainId: attestationKeyChain,
                         revocationKeyChainId: statusListKeyChain,
-                        info: { name: "Provider" },
+                        info: {
+                            name: "Provider",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
+                        },
                     },
                 ],
             })
@@ -585,7 +589,11 @@ describe("replace imports and key chains that configurations name", () => {
                 type: "internal",
                 issuerKeyChainId: attestationKeyChain,
                 revocationKeyChainId: statusListKeyChain,
-                info: { name: "Provider" },
+                info: {
+                    name: "Provider",
+                    contactUri: "info@example.com",
+                    website: "https://example.com/",
+                },
             },
         ];
         // Without keyChainId, the list takes the tenant's trust list key chain.

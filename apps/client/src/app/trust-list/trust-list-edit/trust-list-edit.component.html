@@ -328,11 +328,11 @@
                   </div>
 
                   <mat-form-field appearance="outline">
-                    <mat-label>Website URI</mat-label>
+                    <mat-label>Information URI</mat-label>
                     <input
                       matInput
                       formControlName="infoUri"
-                      placeholder="e.g., https://issuer.example.com"
+                      placeholder="e.g., https://issuer.example.com/about"
                     />
                     <mat-icon matSuffix>link</mat-icon>
                     <mat-error>{{ fieldError('entities.' + i + '.infoUri') }}</mat-error>
@@ -374,15 +374,42 @@
                     </mat-form-field>
                   </div>
 
+                  <div fxLayout="row" fxLayoutGap="16px">
+                    <mat-form-field appearance="outline" fxFlex>
+                      <mat-label>E-mail Address *</mat-label>
+                      <input
+                        matInput
+                        type="email"
+                        formControlName="infoContactUri"
+                        placeholder="e.g., info@issuer.example.com"
+                      />
+                      <mat-icon matSuffix>contact_mail</mat-icon>
+                      <mat-error>{{ electronicAddressError(i, 'infoContactUri') }}</mat-error>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" fxFlex>
+                      <mat-label>Website *</mat-label>
+                      <input
+                        matInput
+                        type="url"
+                        formControlName="infoWebsite"
+                        placeholder="e.g., https://issuer.example.com/"
+                      />
+                      <mat-icon matSuffix>public</mat-icon>
+                      <mat-error>{{ electronicAddressError(i, 'infoWebsite') }}</mat-error>
+                    </mat-form-field>
+                  </div>
+
                   <mat-form-field appearance="outline">
-                    <mat-label>Contact URI</mat-label>
+                    <mat-label>Telephone</mat-label>
                     <input
                       matInput
-                      formControlName="infoContactUri"
-                      placeholder="e.g., https://issuer.example.com/contact"
+                      type="tel"
+                      formControlName="infoPhone"
+                      placeholder="e.g., +49-30-1234567"
                     />
-                    <mat-icon matSuffix>contact_mail</mat-icon>
-                    <mat-error>{{ fieldError('entities.' + i + '.infoContactUri') }}</mat-error>
+                    <mat-icon matSuffix>call</mat-icon>
+                    <mat-hint>International form without spaces</mat-hint>
+                    <mat-error>{{ electronicAddressError(i, 'infoPhone') }}</mat-error>
                   </mat-form-field>
 
                   @if (getEntityType(i) === 'external') {

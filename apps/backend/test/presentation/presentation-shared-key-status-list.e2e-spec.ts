@@ -119,7 +119,12 @@ describe("Presentation - status list key chain sharing the issuer key (e2e)", ()
                     type: "internal",
                     issuerKeyChainId,
                     revocationKeyChainId: statusKeyChainId,
-                    info: { name: "Shared Key PID Provider", lang: "en" },
+                    info: {
+                        name: "Shared Key PID Provider",
+                        contactUri: "info@example.com",
+                        website: "https://example.com/",
+                        lang: "en",
+                    },
                 },
             ],
         };

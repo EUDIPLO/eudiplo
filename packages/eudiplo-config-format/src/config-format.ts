@@ -12,10 +12,13 @@ import {
     readableDisplayColor,
 } from "./display-entries.js";
 import {
+    isTrustListEmail,
     isTrustListEntityUri,
     TRUST_LIST_COUNTRY_MESSAGE,
+    TRUST_LIST_EMAIL_MESSAGE,
     TRUST_LIST_LANGUAGE_MESSAGE,
     TRUST_LIST_URI_MESSAGE,
+    TRUST_LIST_WEBSITE_MESSAGE,
     trustListCountryCode,
     trustListLanguageTag,
 } from "./trust-list-entity-info.js";
@@ -499,71 +502,54 @@ const credentialConfigV3ToV4: ConfigMigration = {
 /**
  * TrustList v2 holds entity info to ETSI TS 119 602 V1.1.1: `country` is an
  * ISO 3166-1 alpha-2 code in capital letters with the exceptions of clause
- * 6.1.5, `lang` a lower-case RFC 5646 language tag (clause 6.1.4) and `uri`
- * an absolute URI. Case and surrounding spaces are fixed and "GB"/"GR" become
- * "UK"/"EL" (with a warning); a value that still does not fit, such as
- * "Germany", is the author's decision. v1 could not apply such a value
- * either: the LoTE builder refused it.
+ * 6.1.5 ("UK", "EL", "EU"), `lang` a lower-case RFC 5646 language tag (clause
+ * 6.1.4), `uri` an absolute URI, and the electronic address of clause 6.5.3.2
+ * needs an e-mail address (`contactUri`) and a web site (`website`, new in
+ * v2). No web site can be derived, so the author rewrites every v1 file; the
+ * step lists what to change, including the code to write for "gb" or "GR".
  */
 const trustListV1ToV2: ConfigMigration = {
     id: "trust-list-v2-etsi-entity-info",
     kind: "TrustList",
     from: 1,
     to: 2,
+    // Report-only: v1 has no website field, so the step always ends with a
+    // required input and migrateDocument keeps the v1 document. It names
+    // every value the author must write differently in the v2 file.
     migrate(spec) {
         if (!Array.isArray(spec.entities)) return { spec };
         const issues: ConfigMigrationIssue[] = [];
-        let changed = false;
-        const entities = spec.entities.map((entity, index) => {
-            if (!object(entity) || !object(entity.info)) return entity;
-            const info: Record<string, unknown> = { ...entity.info };
+        spec.entities.forEach((entity, index) => {
+            if (!object(entity) || !object(entity.info)) return;
+            const info = entity.info;
             const path = `/spec/entities/${index}/info`;
-            let fixedEntity = false;
-            const fixes = [
+            for (const { key, fix, message, invalid } of [
                 {
                     key: "country",
                     fix: trustListCountryCode,
                     message: TRUST_LIST_COUNTRY_MESSAGE,
                     invalid: "TRUST_LIST_COUNTRY_INVALID",
-                    replaced: "TRUST_LIST_COUNTRY_REPLACED",
                 },
                 {
                     key: "lang",
                     fix: trustListLanguageTag,
                     message: TRUST_LIST_LANGUAGE_MESSAGE,
                     invalid: "TRUST_LIST_LANGUAGE_INVALID",
-                    // Only the case changes, which needs no warning.
-                    replaced: undefined,
                 },
-            ] as const;
-            for (const { key, fix, message, invalid, replaced } of fixes) {
+            ] as const) {
                 const value = info[key];
                 if (value === undefined) continue;
                 const fixed = fix(value);
-                if (fixed === undefined) {
-                    issues.push({
-                        severity: "required-input",
-                        code: invalid,
-                        path: `${path}/${key}`,
-                        message: `${JSON.stringify(value)} cannot be published. ${message}`,
-                    });
-                    continue;
-                }
                 if (fixed === value) continue;
-                info[key] = fixed;
-                fixedEntity = true;
-                if (
-                    replaced &&
-                    typeof value === "string" &&
-                    value.trim().toUpperCase() !== fixed.toUpperCase()
-                ) {
-                    issues.push({
-                        severity: "warning",
-                        code: replaced,
-                        path: `${path}/${key}`,
-                        message: `Replaced ${JSON.stringify(value)} with ${JSON.stringify(fixed)}. ${message}`,
-                    });
-                }
+                issues.push({
+                    severity: "required-input",
+                    code: invalid,
+                    path: `${path}/${key}`,
+                    message:
+                        fixed === undefined
+                            ? `${JSON.stringify(value)} cannot be published. ${message}`
+                            : `Write ${JSON.stringify(fixed)} instead of ${JSON.stringify(value)}. ${message}`,
+                });
             }
             if (
                 info.uri !== undefined &&
@@ -576,12 +562,34 @@ const trustListV1ToV2: ConfigMigration = {
                     message: `${JSON.stringify(info.uri)} cannot be published. ${TRUST_LIST_URI_MESSAGE} Or remove uri.`,
                 });
             }
-            if (!fixedEntity) return entity;
-            changed = true;
-            return { ...entity, info };
+            // TEElectronicAddress (clause 6.5.3.2) needs an e-mail address
+            // and a web site.
+            const contactUri = info.contactUri;
+            if (contactUri === undefined) {
+                issues.push({
+                    severity: "required-input",
+                    code: "TRUST_LIST_CONTACT_URI_MISSING",
+                    path: `${path}/contactUri`,
+                    message: `Add contactUri: ETSI TS 119 602 clause 6.5.3.2 requires an e-mail address. ${TRUST_LIST_EMAIL_MESSAGE}`,
+                });
+            } else if (
+                !(typeof contactUri === "string" && isTrustListEmail(contactUri))
+            ) {
+                issues.push({
+                    severity: "required-input",
+                    code: "TRUST_LIST_CONTACT_URI_INVALID",
+                    path: `${path}/contactUri`,
+                    message: `${JSON.stringify(contactUri)} cannot be published. ${TRUST_LIST_EMAIL_MESSAGE}`,
+                });
+            }
+            issues.push({
+                severity: "required-input",
+                code: "TRUST_LIST_WEBSITE_MISSING",
+                path: `${path}/website`,
+                message: `Add website after changing $schema to ${schemaUrl("TrustList", 2)}: ETSI TS 119 602 clause 6.5.3.2 requires a web site, and v1 has no such field. ${TRUST_LIST_WEBSITE_MESSAGE}`,
+            });
         });
-        if (!changed && issues.length === 0) return { spec };
-        return { spec: changed ? { ...spec, entities } : spec, issues };
+        return { spec, issues };
     },
 };
 

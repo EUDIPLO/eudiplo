@@ -1478,81 +1478,140 @@ describe("PresentationConfig v3 to v4", () => {
 });
 
 describe("TrustList v1 to v2", () => {
-    const v1 = (info: Record<string, unknown>) => ({
-        $schema: schemaUrl("TrustList", 1),
-        spec: {
-            id: "eaa-providers",
-            entities: [
-                {
-                    type: "internal",
-                    issuerKeyChainId: "issuer",
-                    revocationKeyChainId: "status",
-                    info: { name: "Example", ...info },
-                },
-            ],
-        },
+    const entity = (info: Record<string, unknown>) => ({
+        type: "internal",
+        issuerKeyChainId: "issuer",
+        revocationKeyChainId: "status",
+        info: { name: "Example", ...info },
     });
+    const document = (version: number, info: Record<string, unknown>) =>
+        normalizeDocument({
+            $schema: schemaUrl("TrustList", version),
+            spec: { id: "eaa-providers", entities: [entity(info)] },
+        });
+    const address = {
+        contactUri: "info@example.com",
+        website: "https://example.com/",
+    };
     const issues = (result: ReturnType<typeof migrateDocument>) =>
         result.issues.map(({ severity, code, path }) => ({
             severity,
             code,
             path,
         }));
-
-    it("upgrades conforming entity info unchanged and only once", () => {
-        const info = {
-            lang: "de-at",
-            country: "DE",
-            uri: "https://example.com/about",
-        };
-        const result = migrateDocument(v1(info), validateConfigDocument);
-
-        expect(result.issues).toEqual([]);
-        expect(result.migrations).toEqual(["trust-list-v2-etsi-entity-info"]);
-        expect(result.document.$schema).toBe(schemaUrl("TrustList", 2));
-        expect(result.document.spec).toEqual(v1(info).spec);
-        expect(
-            migrateDocument(result.document, validateConfigDocument).migrations,
-        ).toEqual([]);
+    const websiteMissing = (index = 0) => ({
+        severity: "required-input",
+        code: "TRUST_LIST_WEBSITE_MISSING",
+        path: `/spec/entities/${index}/info/website`,
     });
 
-    it("fixes the case of country and lang without a warning", () => {
+    it("asks for a web site, which v1 cannot carry, for every entity", () => {
         const result = migrateDocument(
-            v1({ lang: "DE-AT", country: " de" }),
+            normalizeDocument({
+                $schema: schemaUrl("TrustList", 1),
+                spec: {
+                    id: "eaa-providers",
+                    entities: [
+                        entity({ contactUri: "info@example.com" }),
+                        entity({ contactUri: "mailto:info@example.com" }),
+                    ],
+                },
+            }),
             validateConfigDocument,
         );
 
-        expect(result.issues).toEqual([]);
-        expect(result.document.$schema).toBe(schemaUrl("TrustList", 2));
-        expect(
-            (result.document.spec.entities as { info: unknown }[])[0].info,
-        ).toEqual({ name: "Example", lang: "de-at", country: "DE" });
-        expect(validateConfigDocument(result.document)).toEqual([]);
+        expect(issues(result)).toEqual([websiteMissing(0), websiteMissing(1)]);
+        expect(result.migrations).toEqual([]);
+        expect(result.document.$schema).toBe(schemaUrl("TrustList", 1));
+        expect(result.issues[0].message).toContain(schemaUrl("TrustList", 2));
     });
 
-    it("replaces GB and GR with the ETSI codes and warns", () => {
+    it("asks for the e-mail address an entity lacks", () => {
+        const result = migrateDocument(document(1, {}), validateConfigDocument);
+
+        expect(issues(result)).toEqual([
+            {
+                severity: "required-input",
+                code: "TRUST_LIST_CONTACT_URI_MISSING",
+                path: "/spec/entities/0/info/contactUri",
+            },
+            websiteMissing(),
+        ]);
+    });
+
+    it("names an e-mail address it cannot publish", () => {
         const result = migrateDocument(
-            v1({ country: "gb" }),
+            document(1, { contactUri: "https://example.com/contact" }),
             validateConfigDocument,
         );
 
         expect(issues(result)).toEqual([
             {
-                severity: "warning",
-                code: "TRUST_LIST_COUNTRY_REPLACED",
+                severity: "required-input",
+                code: "TRUST_LIST_CONTACT_URI_INVALID",
+                path: "/spec/entities/0/info/contactUri",
+            },
+            websiteMissing(),
+        ]);
+    });
+
+    it("names the codes to write for a lower-case country, GB and an upper-case lang", () => {
+        const result = migrateDocument(
+            normalizeDocument({
+                $schema: schemaUrl("TrustList", 1),
+                spec: {
+                    id: "eaa-providers",
+                    entities: [
+                        entity({
+                            contactUri: address.contactUri,
+                            lang: "DE-AT",
+                            country: " de",
+                        }),
+                        entity({ contactUri: address.contactUri, country: "gb" }),
+                        entity({ contactUri: address.contactUri, country: "DE" }),
+                    ],
+                },
+            }),
+            validateConfigDocument,
+        );
+
+        expect(issues(result)).toEqual([
+            {
+                severity: "required-input",
+                code: "TRUST_LIST_COUNTRY_INVALID",
                 path: "/spec/entities/0/info/country",
             },
+            {
+                severity: "required-input",
+                code: "TRUST_LIST_LANGUAGE_INVALID",
+                path: "/spec/entities/0/info/lang",
+            },
+            websiteMissing(0),
+            {
+                severity: "required-input",
+                code: "TRUST_LIST_COUNTRY_INVALID",
+                path: "/spec/entities/1/info/country",
+            },
+            websiteMissing(1),
+            websiteMissing(2),
         ]);
-        expect(
-            (result.document.spec.entities as { info: { country: string } }[])[0]
-                .info.country,
-        ).toBe("UK");
-        expect(result.document.$schema).toBe(schemaUrl("TrustList", 2));
+        expect(result.issues.map(({ message }) => message)).toEqual(
+            expect.arrayContaining([
+                expect.stringMatching(/^Write "DE" instead of " de"\./),
+                expect.stringMatching(/^Write "de-at" instead of "DE-AT"\./),
+                expect.stringMatching(/^Write "UK" instead of "gb"\./),
+            ]),
+        );
     });
 
     it("stops at values it cannot fix", () => {
         const result = migrateDocument(
-            v1({ country: "Germany", lang: "en_US", uri: "example.com" }),
+            document(1, {
+                contactUri: address.contactUri,
+                country: "Germany",
+                lang: "en_US",
+                uri: "example.com",
+            }),
             validateConfigDocument,
         );
 
@@ -1572,6 +1631,7 @@ describe("TrustList v1 to v2", () => {
                 code: "TRUST_LIST_URI_INVALID",
                 path: "/spec/entities/0/info/uri",
             },
+            websiteMissing(),
         ]);
         expect(result.document.$schema).toBe(schemaUrl("TrustList", 1));
     });
@@ -1579,7 +1639,7 @@ describe("TrustList v1 to v2", () => {
     it("stops at a two-letter code that is no ISO 3166-1 code", () => {
         // 9.x published any two characters; a non-string fails v1 itself.
         const result = migrateDocument(
-            v1({ country: "xx" }),
+            document(1, { contactUri: address.contactUri, country: "xx" }),
             validateConfigDocument,
         );
 
@@ -1589,27 +1649,51 @@ describe("TrustList v1 to v2", () => {
                 code: "TRUST_LIST_COUNTRY_INVALID",
                 path: "/spec/entities/0/info/country",
             },
+            websiteMissing(),
         ]);
-        expect(result.document.$schema).toBe(schemaUrl("TrustList", 1));
+    });
+
+    it("accepts conforming v2 files without migrating them", () => {
+        const v2 = document(2, {
+            ...address,
+            lang: "de-at",
+            country: "DE",
+            uri: "https://example.com/about",
+            phone: "tel:+49-30-1234567",
+        });
+
+        expect(validateConfigDocument(v2)).toEqual([]);
+        expect(migrateDocument(v2, validateConfigDocument)).toMatchObject({
+            migrations: [],
+            issues: [],
+        });
+        expect(
+            validateConfigDocument(
+                document(2, { ...address, contactUri: "mailto:info@example.com" }),
+            ),
+        ).toEqual([]);
     });
 
     it("refuses lower-case codes and names in v2 files", () => {
-        const v2 = (country: string) =>
-            normalizeDocument({
-                $schema: schemaUrl("TrustList", 2),
-                spec: {
-                    ...v1({}).spec,
-                    entities: [
-                        {
-                            ...(v1({}).spec.entities[0] as object),
-                            info: { name: "Example", country },
-                        },
-                    ],
-                },
-            });
-        expect(validateConfigDocument(v2("EL"))).toEqual([]);
+        expect(
+            validateConfigDocument(document(2, { ...address, country: "EL" })),
+        ).toEqual([]);
         for (const country of ["de", "Germany", "GB", "12"]) {
-            expect(validateConfigDocument(v2(country))).not.toEqual([]);
+            expect(
+                validateConfigDocument(document(2, { ...address, country })),
+            ).not.toEqual([]);
         }
+    });
+
+    it.each([
+        { website: address.website },
+        { contactUri: address.contactUri },
+        { ...address, contactUri: "not an address" },
+        { ...address, contactUri: "https://example.com/contact" },
+        { ...address, website: "ftp://example.com/" },
+        { ...address, website: "example.com" },
+        { ...address, phone: "0301234567" },
+    ])("refuses the v2 electronic address %j", (info) => {
+        expect(validateConfigDocument(document(2, info))).not.toEqual([]);
     });
 });

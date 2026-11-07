@@ -3774,11 +3774,22 @@ export type TrustListEntityInfo = {
      * Optional country of the postal address: an ISO 3166-1 alpha-2 code in capital letters, with "UK" for the United Kingdom, "EL" for Greece and "EU" for the European Union (ETSI TS 119 602 clause 6.1.5). Defaults to EU.
      */
     country?: string;
+    /**
+     * E-mail address of the entity, for example info@example.com or mailto:info@example.com, published as a mailto: URI in TEElectronicAddress (ETSI TS 119 602 clause 6.5.3.2). Use ASCII characters; write an internationalized domain in its xn-- form.
+     */
+    contactUri: string;
+    /**
+     * Web site of the entity, an absolute http or https URI published in TEElectronicAddress (ETSI TS 119 602 clause 6.5.3.2). Write it as a URL parser serializes it, for example https://example.com/.
+     */
+    website: string;
+    /**
+     * Optional telephone number of the entity in international form, for example +49-30-1234567 or tel:+49-30-1234567, published as a tel: URI in TEElectronicAddress (ETSI TS 119 602 clause 6.5.3.2).
+     */
+    phone?: string;
     name: string;
     locality?: string;
     postalCode?: string;
     streetAddress?: string;
-    contactUri?: string;
 };
 
 export type InternalTrustListEntity = {

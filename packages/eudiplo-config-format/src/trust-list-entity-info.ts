@@ -110,3 +110,82 @@ export function isTrustListEntityUri(value: string): boolean {
     }
     return url.href === value || url.href === `${value}/`;
 }
+
+// TEElectronicAddress (ETSI TS 119 602 clause 6.5.3.2, format per 6.3.5.2):
+// an e-mail address as a mailto: URI and a web-site URI are mandatory, a
+// telephone number is optional.
+
+/**
+ * One e-mail address, bare or as a `mailto:` URI (RFC 6068), limited to
+ * characters that need no percent-encoding in the URI (RFC 6068 section 2
+ * requires "/", "&" and "=" to be encoded, so they are refused): a dot-atom local part
+ * and a domain of ASCII letters, digits and hyphens with at least one dot.
+ * Address lists and header fields (`?subject=`) are not accepted. The pattern
+ * has no lookarounds or backreferences, so JSON Schema validators and RE2
+ * run it as well.
+ */
+export const TRUST_LIST_EMAIL_PATTERN = String.raw`^(?:mailto:)?[A-Za-z0-9!$'*+_~-]+(?:\.[A-Za-z0-9!$'*+_~-]+)*@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$`;
+
+const EMAIL = new RegExp(TRUST_LIST_EMAIL_PATTERN);
+
+export const TRUST_LIST_EMAIL_DESCRIPTION =
+    "E-mail address of the entity, for example info@example.com or mailto:info@example.com, published as a mailto: URI in TEElectronicAddress (ETSI TS 119 602 clause 6.5.3.2). Use ASCII characters; write an internationalized domain in its xn-- form.";
+
+/** Explains the accepted e-mail addresses; shared by the API, the CLI and the migration. */
+export const TRUST_LIST_EMAIL_MESSAGE =
+    "Use one e-mail address, for example info@example.com or mailto:info@example.com, in ASCII characters (ETSI TS 119 602 clause 6.5.3.2).";
+
+export const TRUST_LIST_WEBSITE_DESCRIPTION =
+    "Web site of the entity, an absolute http or https URI published in TEElectronicAddress (ETSI TS 119 602 clause 6.5.3.2). Write it as a URL parser serializes it, for example https://example.com/.";
+
+/**
+ * The shape of a web-site URI for JSON Schema validators, which do not run
+ * {@link isTrustListWebsite}: an http or https URI without spaces.
+ */
+export const TRUST_LIST_WEBSITE_PATTERN = String.raw`^https?://[^\s/?#]+(?:[/?#]\S*)?$`;
+
+/** Explains the accepted web-site URIs; shared by the API, the CLI and the migration. */
+export const TRUST_LIST_WEBSITE_MESSAGE =
+    "Use an absolute http or https URI written as a URL parser serializes it, for example https://example.com/ (ETSI TS 119 602 clause 6.5.3.2).";
+
+/**
+ * A global telephone number, bare or as a `tel:` URI (RFC 3966): "+", then 3
+ * to 15 digits (E.164), each optionally followed by one visual separator
+ * "-", "." , "(" or ")". Spaces are not part of a tel: URI.
+ */
+export const TRUST_LIST_PHONE_PATTERN = String.raw`^(?:tel:)?\+(?:[0-9][().-]?){2,14}[0-9]$`;
+
+const PHONE = new RegExp(TRUST_LIST_PHONE_PATTERN);
+
+export const TRUST_LIST_PHONE_DESCRIPTION =
+    "Optional telephone number of the entity in international form, for example +49-30-1234567 or tel:+49-30-1234567, published as a tel: URI in TEElectronicAddress (ETSI TS 119 602 clause 6.5.3.2).";
+
+/** Explains the accepted telephone numbers, for the API and the JSON Schema. */
+export const TRUST_LIST_PHONE_MESSAGE =
+    'Use a telephone number in international form without spaces, for example +49-30-1234567 or tel:+49-30-1234567 (RFC 3966: "+", 3 to 15 digits, "-", ".", "(" and ")" as separators).';
+
+/** Whether `value` is an e-mail address a trust list may publish. */
+export function isTrustListEmail(value: string): boolean {
+    return EMAIL.test(value);
+}
+
+/** The `mailto:` URI a trust list publishes for an accepted e-mail address. */
+export function trustListMailtoUri(value: string): string {
+    return value.startsWith("mailto:") ? value : `mailto:${value}`;
+}
+
+/** Whether `value` is a web-site URI a trust list may publish. */
+export function isTrustListWebsite(value: string): boolean {
+    // The serialized form also refuses "HTTPS://..." and "https:example.com".
+    return /^https?:/.test(value) && isTrustListEntityUri(value);
+}
+
+/** Whether `value` is a telephone number a trust list may publish. */
+export function isTrustListPhone(value: string): boolean {
+    return PHONE.test(value);
+}
+
+/** The `tel:` URI a trust list publishes for an accepted telephone number. */
+export function trustListTelUri(value: string): string {
+    return value.startsWith("tel:") ? value : `tel:${value}`;
+}

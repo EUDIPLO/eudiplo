@@ -39,7 +39,7 @@ For the status list key, keep **Create Key Chain (Recommended)**: its signing ke
 Open **Cryptographic Assets → Trust Lists**, choose **+** (**Create new Trust List**) and enter:
 
 1. **ID** `membership-issuers`, **Description** `Issuers accepted for membership checks`, **Signing Key Chain** `Membership trust list signing`.
-2. Choose **Add Internal Entity**. Keep **Provider type** **Credential provider**, select **Issuer Key Chain** `Membership credential signing` and **Revocation Key Chain** `Membership status list signing`, and enter **Entity Name** `Membership Demo`.
+2. Choose **Add Internal Entity**. Keep **Provider type** **Credential provider**, select **Issuer Key Chain** `Membership credential signing` and **Revocation Key Chain** `Membership status list signing`, and enter **Entity Name** `Membership Demo`, **E-mail Address** `info@membership.example` and **Website** `https://membership.example/`. A published trust list names both for every entity (ETSI TS 119 602).
 3. Choose **Create Trust List**.
 
 For an internal entity, EUDIPLO lists the root CA certificate of the issuer key chain. The root stays the same when the signing key rotates. To list an issuer of another organization, choose **Add External Entity** and paste its certificates instead.
@@ -59,7 +59,11 @@ For an internal entity, EUDIPLO lists the root CA certificate of the issuer key 
             "type": "internal",
             "issuerKeyChainId": "<ID of Membership credential signing>",
             "revocationKeyChainId": "<ID of Membership status list signing>",
-            "info": { "name": "Membership Demo" }
+            "info": {
+                "name": "Membership Demo",
+                "contactUri": "info@membership.example",
+                "website": "https://membership.example/"
+            }
         }
     ]
 }

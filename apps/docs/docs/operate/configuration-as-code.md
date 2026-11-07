@@ -196,7 +196,10 @@ contains the private keys of a `db` key chain and needs `tenant:admin` or
 ## Upgrade old files
 
 After a backend upgrade, files and bundles in an older format keep working on
-import, but upgrade them in your repository to stay on the current schemas:
+import, but upgrade them in your repository to stay on the current schemas.
+One exception: trust list files of 9.x (format v1) lack the web site that
+10.0 requires, so their import and `eudiplo config upgrade` stop until you
+rewrite them as v2 ([Upgrading from 9.x to 10.0](../upgrade/9.x-to-10.0.md#trust-lists-v1-files-must-be-rewritten)).
 
 ```bash
 eudiplo config upgrade acme.zip --dry-run

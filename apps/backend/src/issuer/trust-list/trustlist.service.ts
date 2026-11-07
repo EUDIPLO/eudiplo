@@ -1,4 +1,8 @@
 import {
+    trustListMailtoUri,
+    trustListTelUri,
+} from "@eudiplo/config-format/trust-list-entity-info.js";
+import {
     BadRequestException,
     ConflictException,
     Injectable,
@@ -874,12 +878,25 @@ export class TrustListService {
                 },
                 lang,
             );
-            if (info.contactUri) {
-                entityBuilder.email(info.contactUri, lang);
+            // TEElectronicAddress (ETSI TS 119 602 clause 6.5.3.2): the
+            // e-mail address as a mailto: URI and the web site, both
+            // required by TrustListCreateSchema. The mailto: prefix is added
+            // here, not left to the builder, so the published form does not
+            // depend on the library.
+            entityBuilder.email(trustListMailtoUri(info.contactUri), lang);
+            entityBuilder.website(info.website, lang);
+        }
+        const entity = entityBuilder.build();
+        if (info.phone) {
+            // The optional telephone number; the builder has no method for
+            // it. TEAddress exists, since the postal address is always set.
+            for (const lang of langs) {
+                entity.TrustedEntityInformation.TEAddress!.TEElectronicAddress.push(
+                    { lang, uriValue: trustListTelUri(info.phone) },
+                );
             }
         }
-
-        return entityBuilder.build();
+        return entity;
     }
 
     /**

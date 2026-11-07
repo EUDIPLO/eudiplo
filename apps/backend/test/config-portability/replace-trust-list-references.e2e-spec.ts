@@ -204,7 +204,11 @@ describe("replace imports and trust lists that configurations reference", () => 
                             type: "internal",
                             issuerKeyChainId: attestationKeyChain,
                             revocationKeyChainId: statusListKeyChain,
-                            info: { name: `Provider of ${id}` },
+                            info: {
+                                name: `Provider of ${id}`,
+                                contactUri: "info@example.com",
+                                website: "https://example.com/",
+                            },
                         },
                     ],
                 })

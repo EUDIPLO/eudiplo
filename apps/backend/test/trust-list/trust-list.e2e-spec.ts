@@ -5,8 +5,11 @@ import { join, resolve } from "node:path";
 import { schemaUrl } from "@eudiplo/config-format/config-format.js";
 import {
     TRUST_LIST_COUNTRY_MESSAGE,
+    TRUST_LIST_EMAIL_MESSAGE,
     TRUST_LIST_LANGUAGE_MESSAGE,
+    TRUST_LIST_PHONE_MESSAGE,
     TRUST_LIST_URI_MESSAGE,
+    TRUST_LIST_WEBSITE_MESSAGE,
 } from "@eudiplo/config-format/trust-list-entity-info.js";
 import { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -177,6 +180,8 @@ describe("Trust List e2e Tests", () => {
                             "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
                         info: {
                             name: "Test Provider",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
                             lang: "en",
                         },
                     },
@@ -226,6 +231,8 @@ describe("Trust List e2e Tests", () => {
                             "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
                         info: {
                             name: "Updated Provider",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
                             lang: "en",
                         },
                     },
@@ -272,7 +279,11 @@ describe("Trust List e2e Tests", () => {
                                 "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
                             revocationKeyChainId:
                                 "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
-                            info: { name: "Test Provider" },
+                            info: {
+                                name: "Test Provider",
+                                contactUri: "info@example.com",
+                                website: "https://example.com/",
+                            },
                         },
                     ],
                 } satisfies TrustListCreateDto)
@@ -359,7 +370,12 @@ describe("Trust List e2e Tests", () => {
                 type: "internal",
                 issuerKeyChainId: "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
                 revocationKeyChainId: "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
-                info: { name: "Kept Key Chain Provider", lang: "en" },
+                info: {
+                    name: "Kept Key Chain Provider",
+                    contactUri: "info@example.com",
+                    website: "https://example.com/",
+                    lang: "en",
+                },
             },
         ];
         let key: KeyChainImportDto["key"];
@@ -582,7 +598,11 @@ describe("Trust List e2e Tests", () => {
                                 "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
                             revocationKeyChainId:
                                 "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
-                            info: { name: "Bundle Provider" },
+                            info: {
+                                name: "Bundle Provider",
+                                contactUri: "info@example.com",
+                                website: "https://example.com/",
+                            },
                         },
                     ],
                 } satisfies TrustListCreateDto)
@@ -832,7 +852,12 @@ describe("Trust List e2e Tests", () => {
                             "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
                         revocationKeyChainId:
                             "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
-                        info: { name: "Example Provider", ...info },
+                        info: {
+                            name: "Example Provider",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
+                            ...info,
+                        },
                     },
                 ],
             }) as TrustListCreateDto;
@@ -884,6 +909,14 @@ describe("Trust List e2e Tests", () => {
             ["lang", "en_US"],
             ["uri", "example.com"],
             ["uri", "https://example.com/a b"],
+            ["contactUri", undefined],
+            ["contactUri", "https://example.com/contact"],
+            ["contactUri", "info"],
+            ["website", undefined],
+            ["website", "example.com"],
+            ["website", "ftp://example.com/"],
+            ["website", "HTTPS://example.com/"],
+            ["phone", "030 1234567"],
         ])("refuses info.%s %j at its field", async (field, value) => {
             const response = await create(`etsi-${field}`, {
                 [field]: value,
@@ -901,6 +934,7 @@ describe("Trust List e2e Tests", () => {
                 country: "EL",
                 lang: "de-at",
                 uri: "https://example.com/about",
+                phone: "+30-21-1234567",
             }).expect(201);
 
             const stored = await request(ctx.app.getHttpServer())
@@ -919,6 +953,10 @@ describe("Trust List e2e Tests", () => {
                                 TEPostalAddress: Array<{
                                     Country: string;
                                     lang: string;
+                                }>;
+                                TEElectronicAddress: Array<{
+                                    lang: string;
+                                    uriValue: string;
                                 }>;
                             };
                             TEName: Array<{ lang: string }>;
@@ -944,6 +982,16 @@ describe("Trust List e2e Tests", () => {
             expect(
                 info.TEAddress.TEPostalAddress.map((address) => address.lang),
             ).toEqual(["de-at", "en"]);
+            // Clause 6.5.3.2: e-mail as mailto: URI and web site per
+            // language (6.1.4), then the telephone number.
+            expect(info.TEAddress.TEElectronicAddress).toEqual([
+                { lang: "de-at", uriValue: "mailto:info@example.com" },
+                { lang: "de-at", uriValue: "https://example.com/" },
+                { lang: "en", uriValue: "mailto:info@example.com" },
+                { lang: "en", uriValue: "https://example.com/" },
+                { lang: "de-at", uriValue: "tel:+30-21-1234567" },
+                { lang: "en", uriValue: "tel:+30-21-1234567" },
+            ]);
             expect(info.TEInformationURI.map((uri) => uri.lang)).toEqual([
                 "de-at",
                 "en",
@@ -954,6 +1002,9 @@ describe("Trust List e2e Tests", () => {
             ["country", "Germany", TRUST_LIST_COUNTRY_MESSAGE],
             ["lang", "EN", TRUST_LIST_LANGUAGE_MESSAGE],
             ["uri", "https://example.com/a b", TRUST_LIST_URI_MESSAGE],
+            ["contactUri", "info", TRUST_LIST_EMAIL_MESSAGE],
+            ["website", "ftp://example.com/", TRUST_LIST_WEBSITE_MESSAGE],
+            ["phone", "030 1234567", TRUST_LIST_PHONE_MESSAGE],
         ])("the plan blocks info.%s %j", async (field, value, message) => {
             const planned = await plan(
                 listBundle(`etsi-plan-${field}`, { [field]: value }),
@@ -974,10 +1025,16 @@ describe("Trust List e2e Tests", () => {
             );
         });
 
-        test("the plan upgrades a 9.x file with a lower-case country", async () => {
-            const bundle = listBundle("etsi-plan-v1", { country: "de" });
+        test("the plan asks for the web site a 9.x file cannot carry", async () => {
+            const bundle = listBundle("etsi-plan-v1", {});
             const document = bundle.documents[0];
             document.$schema = schemaUrl("TrustList", 1);
+            const info = (
+                document.spec.entities as Array<{
+                    info: Record<string, unknown>;
+                }>
+            )[0].info;
+            delete info.website;
             bundle.manifest.resources[0].$schema = document.$schema;
             bundle.manifest.resources[0].sha256 = createHash("sha256")
                 .update(JSON.stringify(document))
@@ -985,15 +1042,20 @@ describe("Trust List e2e Tests", () => {
 
             const planned = await plan(bundle);
 
-            expect(planned.applicable, JSON.stringify(planned)).toBe(true);
-            // Only the case changed, so the upgrade has nothing to report.
+            expect(planned.applicable).toBe(false);
             const item = planned.items.find(
                 (entry) => entry.kind === "TrustList",
             );
-            expect(item?.issues ?? []).toEqual([]);
-            expect(item?.migrations).toEqual([
-                "trust-list-v2-etsi-entity-info",
-            ]);
+            expect(item?.issues).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        severity: "required-input",
+                        code: "TRUST_LIST_WEBSITE_MISSING",
+                        path: "/spec/entities/0/info/website",
+                    }),
+                ]),
+            );
+            expect(item?.migrations ?? []).toEqual([]);
         });
     });
 
@@ -1035,7 +1097,11 @@ describe("Trust List e2e Tests", () => {
                                 "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
                             revocationKeyChainId:
                                 "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
-                            info: { name: "Referenced Provider" },
+                            info: {
+                                name: "Referenced Provider",
+                                contactUri: "info@example.com",
+                                website: "https://example.com/",
+                            },
                         },
                     ],
                 } satisfies TrustListCreateDto)
@@ -1347,6 +1413,8 @@ describe("Trust List e2e Tests", () => {
                             "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
                         info: {
                             name: "JWT Test Provider",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
                             lang: "en",
                         },
                     },
@@ -1444,6 +1512,8 @@ describe("Trust List e2e Tests", () => {
                             "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
                         info: {
                             name: "ES384 Test Provider",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
                             lang: "en",
                         },
                     },
@@ -1489,7 +1559,12 @@ describe("Trust List e2e Tests", () => {
                             "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
                         revocationKeyChainId:
                             "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
-                        info: { name: "Provider 1", lang: "en" },
+                        info: {
+                            name: "Provider 1",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
+                            lang: "en",
+                        },
                     },
                 ],
             };
@@ -1557,7 +1632,12 @@ describe("Trust List e2e Tests", () => {
                             "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
                         revocationKeyChainId:
                             "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
-                        info: { name: "Public URL Provider", lang: "en" },
+                        info: {
+                            name: "Public URL Provider",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
+                            lang: "en",
+                        },
                     },
                 ],
             };
@@ -1616,7 +1696,12 @@ describe("Trust List e2e Tests", () => {
                                 "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
                             revocationKeyChainId:
                                 "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
-                            info: { name: "Renewal Provider", lang: "en" },
+                            info: {
+                                name: "Renewal Provider",
+                                contactUri: "info@example.com",
+                                website: "https://example.com/",
+                                lang: "en",
+                            },
                         },
                     ],
                 } satisfies TrustListCreateDto)
@@ -1693,7 +1778,12 @@ describe("Trust List e2e Tests", () => {
                             "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
                         revocationKeyChainId:
                             "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
-                        info: { name: "Test Provider", lang: "en" },
+                        info: {
+                            name: "Test Provider",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
+                            lang: "en",
+                        },
                     },
                 ],
             };
@@ -1726,7 +1816,12 @@ describe("Trust List e2e Tests", () => {
                             "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
                         revocationKeyChainId:
                             "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
-                        info: { name: "Test Provider", lang: "en" },
+                        info: {
+                            name: "Test Provider",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
+                            lang: "en",
+                        },
                     },
                 ],
             };
@@ -1767,7 +1862,11 @@ describe("Trust List e2e Tests", () => {
                                 "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
                             revocationKeyChainId:
                                 "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
-                            info: { name: "Test Provider" },
+                            info: {
+                                name: "Test Provider",
+                                contactUri: "info@example.com",
+                                website: "https://example.com/",
+                            },
                         },
                     ],
                 } satisfies TrustListCreateDto)
@@ -1791,7 +1890,11 @@ describe("Trust List e2e Tests", () => {
                         type: "external",
                         issuerCertPem: "not-a-valid-pem",
                         revocationCertPem: "also-not-valid",
-                        info: { name: "Invalid Provider" },
+                        info: {
+                            name: "Invalid Provider",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
+                        },
                     },
                 ],
             };
@@ -1825,6 +1928,8 @@ describe("Trust List e2e Tests", () => {
                                 "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
                             info: {
                                 name: "Test Provider",
+                                contactUri: "info@example.com",
+                                website: "https://example.com/",
                                 country: "Germany",
                                 uri: "issuer.example",
                             },
@@ -1870,7 +1975,11 @@ describe("Trust List e2e Tests", () => {
                                 "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
                             revocationKeyChainId:
                                 "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
-                            info: { name: "Test Provider" },
+                            info: {
+                                name: "Test Provider",
+                                contactUri: "info@example.com",
+                                website: "https://example.com/",
+                            },
                         },
                     ],
                 })
@@ -1912,7 +2021,12 @@ describe("Trust List e2e Tests", () => {
                             "c3f24b6e-9b71-4b62-8d37-5f1a2c9e47ad",
                         revocationKeyChainId:
                             "1f8c6b29-a4d3-4e7f-b2a0-9c5d13e8f746",
-                        info: { name: "Public Access Provider", lang: "en" },
+                        info: {
+                            name: "Public Access Provider",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
+                            lang: "en",
+                        },
                     },
                 ],
             };

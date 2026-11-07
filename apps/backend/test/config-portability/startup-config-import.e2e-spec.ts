@@ -309,7 +309,11 @@ describe("startup configuration reconciliation", () => {
                         type: "internal",
                         issuerKeyChainId: issuerKeyChain.body.id,
                         revocationKeyChainId: issuerKeyChain.body.id,
-                        info: { name: "Issuer" },
+                        info: {
+                            name: "Issuer",
+                            contactUri: "info@example.com",
+                            website: "https://example.com/",
+                        },
                     },
                 ],
             })
