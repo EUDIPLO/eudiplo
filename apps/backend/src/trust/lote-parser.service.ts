@@ -5,6 +5,7 @@ import {
     serviceTypeMatches,
     TrustedEntity,
     TrustedEntityServiceCert,
+    withdrawnServiceStatuses,
 } from "./types.js";
 
 type LoteInfo = {
@@ -30,6 +31,8 @@ export class LoteParserService {
     /**
      * Parse a LoTE payload preserving TrustedEntity groupings.
      * This allows pairing issuance and revocation certificates from the same entity.
+     * Services whose status withdraws them ({@link withdrawnServiceStatuses})
+     * are left out, so their certificates are no trust anchors.
      */
     parse(root: LoTE): ParsedLoTE {
         const schemeInfo = root.ListAndSchemeInformation;
@@ -71,6 +74,16 @@ export class LoteParserService {
                 if (!serviceTypeIdentifier) {
                     this.logger.debug(
                         `    Skipping service without type identifier`,
+                    );
+                    continue;
+                }
+
+                if (
+                    svcInfo.ServiceStatus &&
+                    withdrawnServiceStatuses.includes(svcInfo.ServiceStatus)
+                ) {
+                    this.logger.debug(
+                        `    Skipping withdrawn service (${svcInfo.ServiceStatus})`,
                     );
                     continue;
                 }

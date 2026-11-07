@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ServiceTypeIdentifiers } from "../../../trust/types.js";
 import { verifierTrustOptions } from "./verifier-trust-options.js";
 
 const trustList = { url: "https://trust.example/lote.jwt" };
@@ -8,6 +9,20 @@ const federation = {
 };
 
 describe("verifierTrustOptions", () => {
+    it("accepts PID, Pub-EAA and EAA issuance services as credential issuers", () => {
+        const options = verifierTrustOptions({
+            trustLists: [trustList],
+            authorities: undefined,
+            skewSeconds: undefined,
+        });
+
+        expect(options.trustListSource?.acceptedServiceTypes).toEqual([
+            ServiceTypeIdentifiers.PIDIssuance,
+            ServiceTypeIdentifiers.PubEaaIssuance,
+            ServiceTypeIdentifiers.EaaIssuance,
+        ]);
+    });
+
     it("lets an openid_federation authority decide when no trust list is configured", () => {
         const options = verifierTrustOptions({
             trustLists: [],
