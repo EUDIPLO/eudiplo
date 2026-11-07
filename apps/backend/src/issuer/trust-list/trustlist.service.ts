@@ -75,6 +75,16 @@ enum ServiceTypeIdentifier {
 /** Default language for trust list entries */
 const DEFAULT_LANG = "en";
 
+/**
+ * The languages an entity's text is published in: its own language first
+ * and, when that is not English, "en" as well, since ETSI TS 119 602 clause
+ * 6.1.4 requires every list to support UK English.
+ */
+function trustListEntityLanguages(lang?: string): string[] {
+    const own = lang || DEFAULT_LANG;
+    return own === DEFAULT_LANG ? [DEFAULT_LANG] : [own, DEFAULT_LANG];
+}
+
 /** Fields that change when a new version of a trust list is published. */
 type TrustListVersionChanges = Pick<
     TrustList,
@@ -811,16 +821,16 @@ export class TrustListService {
         info: TrustListEntityInfo,
         providerType?: TrustListEntity["providerType"],
     ): LoTETrustedEntity {
-        const lang = info.lang || DEFAULT_LANG;
+        const langs = trustListEntityLanguages(info.lang);
         const walletProvider = providerType === "wallet-provider";
 
-        // Build the issuance service
+        // Service names are English labels, so they are published in English only.
         const issuanceService = service()
             .name(
                 walletProvider
                     ? "Wallet-Issuance-Service"
                     : "EAA-Issuance-Service",
-                lang,
+                DEFAULT_LANG,
             )
             .type(
                 walletProvider
@@ -830,13 +840,12 @@ export class TrustListService {
             .addCertificate(issuerCertBase64)
             .build();
 
-        // Build the revocation service
         const revocationService = service()
             .name(
                 walletProvider
                     ? "Wallet-Revocation-Service"
                     : "EAA-Revocation-Service",
-                lang,
+                DEFAULT_LANG,
             )
             .type(
                 walletProvider
@@ -846,31 +855,28 @@ export class TrustListService {
             .addCertificate(revocationCertBase64)
             .build();
 
-        // Build the trusted entity - only add optional fields if they have values
         const entityBuilder = trustedEntity()
-            .name(info.name, lang)
             .addService(issuanceService)
             .addService(revocationService);
 
-        // Only add infoUri if a valid URI is provided
-        if (info.uri) {
-            entityBuilder.infoUri(info.uri, lang);
-        }
-
-        // Postal address is required by @owf/eudi-lote - use "EU" as default country
-        entityBuilder.postalAddress(
-            {
-                Country: info.country || "EU",
-                Locality: info.locality || "",
-                PostalCode: info.postalCode || "",
-                StreetAddress: info.streetAddress || "",
-            },
-            lang,
-        );
-
-        // Only add email if a valid URI is provided
-        if (info.contactUri) {
-            entityBuilder.email(info.contactUri, lang);
+        for (const lang of langs) {
+            entityBuilder.name(info.name, lang);
+            if (info.uri) {
+                entityBuilder.infoUri(info.uri, lang);
+            }
+            // Postal address is required by @owf/eudi-lote - use "EU" as default country
+            entityBuilder.postalAddress(
+                {
+                    Country: info.country || "EU",
+                    Locality: info.locality || "",
+                    PostalCode: info.postalCode || "",
+                    StreetAddress: info.streetAddress || "",
+                },
+                lang,
+            );
+            if (info.contactUri) {
+                entityBuilder.email(info.contactUri, lang);
+            }
         }
 
         return entityBuilder.build();

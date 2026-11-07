@@ -922,6 +922,7 @@ describe("Trust List e2e Tests", () => {
                                 }>;
                             };
                             TEName: Array<{ lang: string }>;
+                            TEInformationURI: Array<{ lang: string }>;
                         };
                     }>;
                 };
@@ -933,9 +934,20 @@ describe("Trust List e2e Tests", () => {
             expect(LoTE.ListAndSchemeInformation.NextUpdate).toMatch(seconds);
             const info = LoTE.TrustedEntitiesList[0].TrustedEntityInformation;
             expect(info.TEAddress.TEPostalAddress[0].Country).toBe("EL");
-            expect(info.TEName[0].lang).toBe("de-at");
+            // Published in the entity's language and, as ETSI TS 119 602
+            // clause 6.1.4 requires, in en with the same text.
+            expect(info.TEName.map((name) => name.lang)).toEqual([
+                "de-at",
+                "en",
+            ]);
             // The postal address carries the full tag, not only "de".
-            expect(info.TEAddress.TEPostalAddress[0].lang).toBe("de-at");
+            expect(
+                info.TEAddress.TEPostalAddress.map((address) => address.lang),
+            ).toEqual(["de-at", "en"]);
+            expect(info.TEInformationURI.map((uri) => uri.lang)).toEqual([
+                "de-at",
+                "en",
+            ]);
         });
 
         test.each([
