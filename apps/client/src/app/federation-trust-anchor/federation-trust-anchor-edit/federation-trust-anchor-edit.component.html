@@ -35,8 +35,20 @@
     <app-load-error [message]="loadError" (retry)="load()">
       <a mat-button routerLink="/federation-trust-anchor">Back to the list</a>
     </app-load-error>
+  } @else if (registeredForForm) {
+    <app-return-to-form
+      [heading]="registeredForForm.heading"
+      [link]="['/federation-trust-anchor', registeredForForm.id]"
+      linkLabel="Open trust anchor"
+    />
   } @else {
-    <form [formGroup]="form" (ngSubmit)="onSubmit()" fxLayout="column" fxLayoutGap="24px">
+    <form
+      #formElement
+      [formGroup]="form"
+      (ngSubmit)="onSubmit()"
+      fxLayout="column"
+      fxLayoutGap="24px"
+    >
       <mat-card>
         <mat-card-header>
           <mat-card-title>
@@ -141,6 +153,8 @@
           color="primary"
           type="submit"
           [disabled]="saving"
+          disabledInteractive
+          [matTooltip]="saveTooltip"
           appConfigManaged
           managedKind="FederationTrustAnchor"
           [managedResourceId]="anchorId || ''"

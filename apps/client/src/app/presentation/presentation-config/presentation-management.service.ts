@@ -7,6 +7,7 @@ import {
   PresentationRequest,
   presentationManagementControllerConfiguration,
   presentationManagementControllerDeleteConfiguration,
+  presentationManagementControllerReissueRegistrationCertificate,
   presentationManagementControllerStorePresentationConfig,
   verifierOfferControllerGetOffer,
   PresentationConfigCreateDto,
@@ -33,6 +34,13 @@ export class PresentationManagementService {
     return presentationManagementControllerConfiguration().then((response) => {
       return response.data || [];
     });
+  }
+
+  /** Issues a new registration certificate and returns the configuration with its new cache. */
+  reissueRegistrationCertificate(id: string) {
+    return presentationManagementControllerReissueRegistrationCertificate({ path: { id } }).then(
+      (response) => response.data
+    );
   }
 
   deleteConfiguration(id: string) {

@@ -18,6 +18,8 @@ import {
   Input,
   SimpleChanges,
   ChangeDetectionStrategy,
+  ElementRef,
+  inject,
 } from '@angular/core';
 import { MatInputModule } from '@angular/material/input';
 import { SchemaValidation } from '../schemas';
@@ -25,6 +27,8 @@ import schemas from '../schemas.json';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { Subscription } from 'rxjs';
 import { ThemeService } from '../../services/theme.service';
+import { focusWasLost } from '../../common/focus-if-lost.util';
+import { registerFieldFocus } from '../../common/field-to-fix.util';
 
 let editorInstanceCounter = 0;
 
@@ -63,7 +67,8 @@ export class EditorComponent implements ControlValueAccessor, Validator, OnChang
   value = '';
   disabled = false;
 
-  private readonly ajv = new Ajv({ allowUnionTypes: true });
+  // verbose: errors carry their schema, so a pattern error can show its description.
+  private readonly ajv = new Ajv({ allowUnionTypes: true, verbose: true });
   private validateFn?: ValidateFunction;
   private schemaValidationError?: string;
   private readonly instanceId = ++editorInstanceCounter;
@@ -71,6 +76,13 @@ export class EditorComponent implements ControlValueAccessor, Validator, OnChang
   private editorInitialized = false;
   private themeSubscription: Subscription;
   private markerListener?: { dispose(): void };
+  private monacoEditor?: { focus(): void };
+  /** Set by `focus()` before Monaco has loaded: the element that had the focus then. */
+  private focusRequestedFrom?: Element | null;
+  /** A form that moves focus to this field focuses Monaco's input (see `focusField`). */
+  private readonly unregisterFieldFocus = registerFieldFocus(inject(ElementRef).nativeElement, () =>
+    this.focus()
+  );
   monacoSchemaError?: string;
 
   constructor(private readonly themeService: ThemeService) {
@@ -158,6 +170,15 @@ export class EditorComponent implements ControlValueAccessor, Validator, OnChang
           const suffix = extra ? ` "${extra}"` : '';
           return `${path}: must NOT have additional property${suffix}`;
         }
+        const pattern = (error.params as { pattern?: string } | undefined)?.pattern;
+        if (error.keyword === 'pattern' && pattern && pattern.length > 60) {
+          // A long pattern is unreadable; the field's description says what fits instead.
+          const description = (error.parentSchema as { description?: string } | undefined)
+            ?.description;
+          return description
+            ? `${path} has the wrong format. ${description}`
+            : `${path} has the wrong format`;
+        }
         return `${path} ${error.message}`;
       })
       .join(' | ');
@@ -176,7 +197,22 @@ export class EditorComponent implements ControlValueAccessor, Validator, OnChang
     this._onTouched();
   }
 
+  /**
+   * Moves focus into the editor once Monaco has loaded, for example to a field with an error.
+   * Monaco's input is a different element in each browser, so only Monaco can focus it.
+   */
+  focus(): void {
+    if (this.monacoEditor) this.monacoEditor.focus();
+    // Monaco loads on first use; it takes the focus then, unless the user has moved it meanwhile.
+    else this.focusRequestedFrom = document.activeElement;
+  }
+
   onEditorInit(editor: any): void {
+    this.monacoEditor = editor;
+    if (this.focusRequestedFrom !== undefined) {
+      if (focusWasLost(this.focusRequestedFrom)) editor.focus();
+      this.focusRequestedFrom = undefined;
+    }
     this.editorInitialized = true;
     this.markerListener?.dispose();
     this.markerListener = editor.onDidChangeModelDecorations(() => {
@@ -221,6 +257,7 @@ export class EditorComponent implements ControlValueAccessor, Validator, OnChang
   }
 
   ngOnDestroy(): void {
+    this.unregisterFieldFocus();
     this.themeSubscription.unsubscribe();
     this.markerListener?.dispose();
   }

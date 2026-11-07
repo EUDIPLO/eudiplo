@@ -298,6 +298,8 @@ export class IssuanceConfigShowComponent implements OnInit {
   }
 
   reissueRegistrationCertificate(): void {
+    // `disabledInteractive` keeps the button clickable while it looks disabled.
+    if (this.reissuing) return;
     this.reissuing = true;
     this.issuanceConfigService
       .reissueRegistrationCertificate()

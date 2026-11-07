@@ -284,7 +284,15 @@
     <button mat-stroked-button type="button" [routerLink]="['../']" class="no-shrink">
       Cancel
     </button>
-    <button mat-raised-button color="primary" type="button" (click)="submit()" [disabled]="loading">
+    <button
+      mat-raised-button
+      color="primary"
+      type="button"
+      (click)="submit()"
+      [disabled]="loading"
+      disabledInteractive
+      [matTooltip]="submitTooltip"
+    >
       <mat-icon>send</mat-icon>
       {{ loading ? 'Submitting…' : 'Submit' }}
     </button>

@@ -453,6 +453,7 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
    * earlier registrar certificate, is only replaced after confirmation.
    */
   async enrollWithRegistrar(): Promise<void> {
+    // `disabledInteractive` keeps Enroll clickable while it looks disabled.
     if (!this.keyChain || this.enrollingKeyId === this.keyChain.id) return;
     const question = this.enrollmentQuestion();
     if (question && !confirm(question)) return;

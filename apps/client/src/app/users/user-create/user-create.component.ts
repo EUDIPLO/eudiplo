@@ -1,4 +1,12 @@
-import { Component, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  inject,
+  Injector,
+  OnInit,
+  ViewChild,
+} from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators, type FormGroup } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -21,8 +29,11 @@ import { JwtService } from '../../services/jwt.service';
 import { type RoleOption, roleChoices } from '../../services/role-grants';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { RoleLockNoticeComponent } from '../../common/role-lock-notice.component';
+import { LoadErrorComponent } from '../../common/load-error.component';
 import { UserTemporaryPasswordDialogComponent } from '../user-temporary-password-dialog/user-temporary-password-dialog.component';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { showFieldsToFix } from '../../common/field-to-fix.util';
+import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 
 @Component({
   selector: 'app-user-create',
@@ -40,6 +51,7 @@ import { openErrorSnackBar } from '../../utils/error-snackbar';
     MatTooltipModule,
     MatCheckboxModule,
     RoleLockNoticeComponent,
+    LoadErrorComponent,
   ],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './user-create.component.html',
@@ -60,7 +72,18 @@ export class UserCreateComponent implements OnInit {
   /** Roles of the edited user that the caller neither holds nor may grant */
   unmanageableRoles: string[] = [];
   loaded = false;
+  /** While the user to edit loads; the form waits for it. */
+  loading = false;
+  /** Set when the user to edit could not be loaded; the form stays hidden. */
+  loadError = '';
   id?: string | null;
+
+  /** Where focus goes after a successful retry removed the error card with its Retry button. */
+  @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
+  /** Holds the fields; Save focuses the first invalid one. */
+  @ViewChild('formElement', { read: ElementRef })
+  private readonly formElement?: ElementRef<HTMLFormElement>;
+  private readonly injector = inject(Injector);
 
   constructor(
     private readonly fb: FormBuilder,
@@ -83,26 +106,65 @@ export class UserCreateComponent implements OnInit {
     this.id = this.route.snapshot.paramMap.get('id');
     if (this.id) {
       this.loaded = true;
-      userControllerGetUser({ path: { id: this.id } }).then((res) => {
-        if (!res.data) {
-          this.snackBar.open('User not found', 'Close', { duration: 3000 });
-          this.router.navigate(['../..'], { relativeTo: this.route });
-          return;
-        }
-
-        this.userForm.patchValue(res.data);
-        this.userForm.get('username')?.disable();
-        const choices = roleChoices(this.jwtService.getRoles(), res.data.roles ?? []);
-        this.roleOptions = choices.options;
-        this.unmanageableRoles = choices.unmanageable;
-        if (this.unmanageableRoles.length > 0) {
-          this.userForm.disable();
-        }
-      });
+      void this.load(this.id);
     }
   }
 
+  /** Loads the user again after a failed load. */
+  retryLoad(): void {
+    void this.load(this.id!);
+  }
+
+  private async load(id: string): Promise<void> {
+    const retrying = this.loadError !== '';
+    this.loading = true;
+    this.loadError = '';
+    try {
+      const res = await userControllerGetUser({ path: { id } });
+      if (!res.data) {
+        this.snackBar.open('User not found', 'Close', { duration: 3000 });
+        this.router.navigate(['../..'], { relativeTo: this.route });
+        return;
+      }
+
+      this.userForm.patchValue(res.data);
+      this.userForm.get('username')?.disable();
+      const choices = roleChoices(this.jwtService.getRoles(), res.data.roles ?? []);
+      this.roleOptions = choices.options;
+      this.unmanageableRoles = choices.unmanageable;
+      if (this.unmanageableRoles.length > 0) {
+        this.userForm.disable();
+      }
+    } catch (error) {
+      this.loadError = getApiErrorMessage(error, 'Failed to load user');
+    } finally {
+      this.loading = false;
+    }
+    if (retrying && !this.loadError) {
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
+    }
+  }
+
+  /** Save stays focusable while it cannot be used, so its tooltip says why. */
+  get saveTooltip(): string {
+    if (this.isSubmitting) return 'Saving the user…';
+    if (this.unmanageableRoles.length > 0) {
+      return 'You cannot change this user: it has roles you neither hold nor may grant';
+    }
+    return '';
+  }
+
   async onSubmit(): Promise<void> {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
+    if (this.isSubmitting || this.unmanageableRoles.length > 0) return;
+    if (this.userForm.invalid) {
+      showFieldsToFix(this.userForm, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container: () => this.formElement?.nativeElement,
+      });
+      return;
+    }
     this.isSubmitting = true;
 
     try {

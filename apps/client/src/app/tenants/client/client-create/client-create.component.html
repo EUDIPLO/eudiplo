@@ -4,112 +4,133 @@
   }
   <app-role-lock-notice subject="client" [roles]="unmanageableRoles" />
   <div fxLayout="row" fxLayoutAlign="space-between center">
-    <h2>{{ loaded ? 'Edit client' : 'Create client' }}</h2>
+    <h2 #pageHeading tabindex="-1">{{ loaded ? 'Edit client' : 'Create client' }}</h2>
     <button
       matIconButton
       [routerLink]="['../']"
-      matTooltip="Back to Client List"
-      aria-label="Back to Client List"
+      [matTooltip]="loaded ? 'Back to Client Details' : 'Back to Clients List'"
+      [attr.aria-label]="loaded ? 'Back to Client Details' : 'Back to Clients List'"
     >
       <mat-icon>arrow_back</mat-icon>
     </button>
   </div>
 
-  <form [formGroup]="clientForm" (ngSubmit)="onSubmit()">
-    <mat-card>
-      <mat-card-content fxLayout="column" fxLayoutGap="16px">
-        <mat-form-field appearance="outline">
-          <mat-label>Client ID</mat-label>
-          <input
-            matInput
-            formControlName="clientId"
-            placeholder="Enter unique client identifier"
-            required
-          />
-          @if (clientForm.get('clientId')?.hasError('required')) {
-            <mat-error> Client ID is required </mat-error>
-          }
-          @if (clientForm.get('clientId')?.hasError('minlength')) {
-            <mat-error> Client ID must be at least 1 character long </mat-error>
-          }
-          @if (clientForm.get('clientId')?.hasError('invalidClientId')) {
-            <mat-error>
-              Client ID may only contain letters, numbers, and the characters . _ : -
-            </mat-error>
-          }
-        </mat-form-field>
-
-        <mat-form-field appearance="outline">
-          <mat-label>Description</mat-label>
-          <input
-            matInput
-            formControlName="description"
-            placeholder="Optional description for this client"
-          />
-        </mat-form-field>
-
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>Roles</mat-label>
-          <mat-select formControlName="roles" multiple>
-            @for (option of roleOptions; track option.role) {
-              <mat-option [value]="option.role" [disabled]="option.locked">
-                {{ option.role }}
-              </mat-option>
+  @if (loadError) {
+    <app-load-error
+      [message]="loadError"
+      hint="The client can only be edited after it has been loaded."
+      (retry)="retryLoad()"
+    >
+      <a mat-button [routerLink]="['../..']">Back to the list</a>
+    </app-load-error>
+  } @else if (loading) {
+    <p><output>Loading client…</output></p>
+  } @else {
+    <form #formElement [formGroup]="clientForm" (ngSubmit)="onSubmit()">
+      <mat-card>
+        <mat-card-content fxLayout="column" fxLayoutGap="16px">
+          <mat-form-field appearance="outline">
+            <mat-label>Client ID</mat-label>
+            <input
+              matInput
+              formControlName="clientId"
+              placeholder="Enter unique client identifier"
+              required
+            />
+            @if (clientForm.get('clientId')?.hasError('required')) {
+              <mat-error> Client ID is required </mat-error>
             }
-          </mat-select>
-          <mat-hint>
-            Select one or more roles. {{ grantHint }}
-            <a href="https://docs.eudiplo.dev/reference/roles" target="_blank" rel="noopener"
-              >Learn about roles</a
-            >
-          </mat-hint>
-        </mat-form-field>
-
-        <mat-form-field>
-          <mat-label>Allowed Presentation Configs</mat-label>
-          <mat-select formControlName="allowedPresentationConfigs" multiple>
-            @for (config of availablePresentationConfigs; track config) {
-              <mat-option [value]="config">
-                {{ config }}
-              </mat-option>
+            @if (clientForm.get('clientId')?.hasError('minlength')) {
+              <mat-error> Client ID must be at least 1 character long </mat-error>
             }
-          </mat-select>
-          <mat-hint>Leave empty to allow all presentation configs</mat-hint>
-        </mat-form-field>
-
-        <mat-form-field>
-          <mat-label>Allowed Issuance Configs</mat-label>
-          <mat-select formControlName="allowedIssuanceConfigs" multiple>
-            @for (config of availableIssuanceConfigs; track config) {
-              <mat-option [value]="config">
-                {{ config }}
-              </mat-option>
+            @if (clientForm.get('clientId')?.hasError('invalidClientId')) {
+              <mat-error>
+                Client ID may only contain letters, numbers, and the characters . _ : -
+              </mat-error>
             }
-          </mat-select>
-          <mat-hint>Leave empty to allow all issuance configs</mat-hint>
-        </mat-form-field>
-      </mat-card-content>
+          </mat-form-field>
 
-      <mat-card-actions fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="8px">
-        <button mat-button type="button" (click)="onCancel()" [disabled]="isSubmitting">
-          Cancel
-        </button>
-        <button
-          mat-flat-button
-          color="primary"
-          type="submit"
-          [disabled]="clientForm.invalid || isSubmitting || unmanageableRoles.length > 0"
-          appConfigManaged
-          managedKind="Client"
-          [managedResourceId]="id || ''"
-        >
-          @if (loaded) {
-            {{ isSubmitting ? 'Updating...' : 'Update Client' }}
-          } @else {
-            {{ isSubmitting ? 'Creating...' : 'Create Client' }}
+          <mat-form-field appearance="outline">
+            <mat-label>Description</mat-label>
+            <input
+              matInput
+              formControlName="description"
+              placeholder="Optional description for this client"
+            />
+          </mat-form-field>
+
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>Roles</mat-label>
+            <mat-select formControlName="roles" multiple>
+              @for (option of roleOptions; track option.role) {
+                <mat-option [value]="option.role" [disabled]="option.locked">
+                  {{ option.role }}
+                </mat-option>
+              }
+            </mat-select>
+            <mat-hint>
+              Select one or more roles. {{ grantHint }}
+              <a href="https://docs.eudiplo.dev/reference/roles" target="_blank" rel="noopener"
+                >Learn about roles</a
+              >
+            </mat-hint>
+            <mat-error>Select at least one role</mat-error>
+          </mat-form-field>
+
+          @for (source of configSourceIds; track source) {
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ configSources[source].title }}</mat-label>
+              <mat-select
+                [formControlName]="configSources[source].control"
+                multiple
+                [attr.data-source]="source"
+              >
+                @for (config of configOptions[source]; track config) {
+                  <mat-option [value]="config">{{
+                    config + (isMissingConfig(source, config) ? ' (not found)' : '')
+                  }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>{{ configHint(source) }}</mat-hint>
+            </mat-form-field>
+            @if (configStatus(source) === 'failed') {
+              <button
+                #retryButton
+                mat-button
+                type="button"
+                [attr.data-source]="source"
+                (click)="retryConfigs(source)"
+              >
+                <mat-icon>refresh</mat-icon>
+                Retry loading {{ configSources[source].label }}
+              </button>
+            }
           }
-        </button>
-      </mat-card-actions>
-    </mat-card>
-  </form>
+        </mat-card-content>
+
+        <mat-card-actions fxLayout="row" fxLayoutAlign="end center" fxLayoutGap="8px">
+          <button mat-button type="button" (click)="onCancel()" [disabled]="isSubmitting">
+            Cancel
+          </button>
+          <button
+            mat-flat-button
+            color="primary"
+            type="submit"
+            [disabled]="isSubmitting || unmanageableRoles.length > 0"
+            disabledInteractive
+            [matTooltip]="saveTooltip"
+            appConfigManaged
+            managedKind="Client"
+            [managedResourceId]="id || ''"
+          >
+            @if (loaded) {
+              {{ isSubmitting ? 'Updating...' : 'Update Client' }}
+            } @else {
+              {{ isSubmitting ? 'Creating...' : 'Create Client' }}
+            }
+          </button>
+        </mat-card-actions>
+      </mat-card>
+    </form>
+  }
 </div>
