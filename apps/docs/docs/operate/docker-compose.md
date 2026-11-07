@@ -107,7 +107,7 @@ The Compose file also reads these variables from `.env`:
 | `EUDIPLO_BIND_ADDRESS`  | `0.0.0.0`                                            | Host address of all published ports (3000, 4200, 9000, 9001, 8200); `127.0.0.1` behind a local reverse proxy |
 | `EUDIPLO_CONFIG_MOUNT`  | named volume `eudiplo-config:/app/config`            | What is mounted at `/app/config`                            |
 | `EUDIPLO_ENV_FILE`      | `.env`                                               | Environment file passed to the backend                     |
-| `API_BASE_URL`          | `http://localhost:3000`                              | Backend URL prefilled on the web client's login page; set it to the URL your browser uses for the backend |
+| `API_BASE_URL`          | `http://localhost:3000`                              | Backend URL prefilled on the web client's login page; set it to the URL your browser uses for the backend. The login page asks before signing in at another instance that a link (`?apiUrl=`) chose |
 | `CLIENT_BASE_HREF`      | `/`                                                  | Path of the web client behind a reverse proxy ([TLS and reverse proxy](tls.md#serving-the-client-from-a-subpath)) |
 
 ### Web client addresses
@@ -122,6 +122,17 @@ origin (`CORS_ORIGINS` on the backend, the allowed web origins at the
 provider), and pass any proxy or WAF in front of them. They differ when, for
 example, the login page uses `http://localhost:3000` while `PUBLIC_URL` is a
 tunnel or the public host name.
+
+### Links to the login page
+
+A link to `<web client>/login?apiUrl=<backend URL>` opens the login page with
+that **EUDIPLO Instance** filled in; with `clientId` and `clientSecret` as well,
+it signs in with these credentials at once. The instance receives the access
+token after a single sign-on, or the client secret, so the login page asks
+before it signs in at an instance that a link chose, unless `API_BASE_URL`
+names it or the browser last signed in there with single sign-on or a client
+secret the user entered. The web client sends the access token only to the
+instance it is signed in to.
 
 ## Data and configuration folders
 

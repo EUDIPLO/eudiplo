@@ -80,6 +80,7 @@ import { openErrorSnackBar } from '../../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../../common/load-error.component';
 import { SourceLoadState, loadSource, reportSourceFailures } from '../../../common/load-source';
 import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../../common/focus-if-lost.util';
+import { jsonViewUnavailableReason } from '../../../common/json-view';
 
 /** The sources of the options of the form's selects. */
 type CredentialConfigSource =
@@ -190,6 +191,8 @@ export class CredentialConfigCreateComponent implements OnInit {
   }
 
   previousStep(): void {
+    // Back waits for a running save, like Save, and stays focusable while it does.
+    if (this.loading) return;
     this.activeStep = Math.max(0, this.activeStep - 1);
     this.stepError = '';
   }
@@ -209,7 +212,13 @@ export class CredentialConfigCreateComponent implements OnInit {
     this.submitCredential();
   }
 
+  /** Save and Back stay focusable while a save runs, so their tooltip says why they wait. */
+  get saveTooltip(): string {
+    return this.loading ? 'Saving the credential configuration…' : '';
+  }
+
   submitCredential(): void {
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
     if (this.loading) return;
     if (this.guidedMode && this.activeStep < 4) this.nextStep();
     else this.onSubmit();
@@ -1292,10 +1301,20 @@ export class CredentialConfigCreateComponent implements OnInit {
     this.iaeActions.updateValueAndValidity();
   }
 
+  /** Why JSON View cannot be opened right now, or '' when it can; its tooltip. */
+  get jsonViewUnavailableReason(): string {
+    return jsonViewUnavailableReason(
+      { loading: this.loadingConfig, loadError: this.loadError, saving: this.loading },
+      'the credential configuration'
+    );
+  }
+
   /**
    * Open JSON view dialog to show/edit the complete configuration
    */
   viewAsJson(): void {
+    // The button stays clickable while it cannot be used (disabledInteractive).
+    if (this.jsonViewUnavailableReason) return;
     let currentConfig: any;
     try {
       currentConfig = this.buildConfigurationPayload();

@@ -1,5 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { ErrorStateMatcher } from '@angular/material/core';
+import { MatExpansionPanel } from '@angular/material/expansion';
+import { MatTooltip } from '@angular/material/tooltip';
+import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { client } from '@eudiplo/sdk-core';
@@ -54,7 +58,8 @@ describe('TrustListEditComponent save', () => {
                   { path: ['entities', 0, 'type'], message: 'Invalid option' },
                 ],
               }
-            : []
+            : // The tenant's key chains: one can sign the trust list.
+              [{ id: 'trust-list-signing', usageType: 'trustList' }]
         ),
         { status: rejected ? 400 : 200, headers: { 'Content-Type': 'application/json' } }
       );
@@ -71,7 +76,8 @@ describe('TrustListEditComponent save', () => {
       { snapshot: { paramMap: { get: () => null } } } as never,
       { navigate: vi.fn() } as never,
       snackBar as never,
-      { get: () => ({ destroyed: true }) } as never
+      { get: () => ({ destroyed: true }) } as never,
+      new ErrorStateMatcher()
     );
     component.ngOnInit();
     component.form.patchValue({ id: 'trust-list' });
@@ -101,7 +107,8 @@ describe('TrustListEditComponent save', () => {
       { snapshot: { paramMap: { get: () => null } } } as never,
       { navigate: vi.fn() } as never,
       snackBar as never,
-      { get: () => ({ destroyed: true }) } as never
+      { get: () => ({ destroyed: true }) } as never,
+      new ErrorStateMatcher()
     );
     component.ngOnInit();
     component.form.patchValue({ id: 'trust-list' });
@@ -179,6 +186,8 @@ describe('TrustListEditComponent loading the trust list', () => {
   type Answer = { status: number; body: object } | null;
   let answers: { trustList: Answer; keyChains: Answer };
   let keyChainRequests: number;
+  /** Creates and updates the page sent. */
+  let saveRequests: number;
 
   function json(answer: { status: number; body: object }): Response {
     return new Response(JSON.stringify(answer.body), {
@@ -193,11 +202,13 @@ describe('TrustListEditComponent loading the trust list', () => {
       keyChains: { status: 200, body: keyChains },
     };
     keyChainRequests = 0;
+    saveRequests = 0;
     client.setConfig({
       fetch: async (input: RequestInfo | URL) => {
         const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
         const isKeyChains = path.endsWith('/api/key-chain');
         if (isKeyChains) keyChainRequests++;
+        if (input instanceof Request && input.method !== 'GET') saveRequests++;
         const answer = isKeyChains ? answers.keyChains : answers.trustList;
         return answer ? json(answer) : new Promise<Response>(() => undefined);
       },
@@ -209,12 +220,15 @@ describe('TrustListEditComponent loading the trust list', () => {
     client.setConfig({ fetch: () => new Promise<Response>(() => undefined) });
   });
 
-  /** Opens the edit page of the trust list under its real route. */
-  async function render() {
+  /** Opens the edit page of the trust list, or the page at `url`, under its real route. */
+  async function render(url = `/trust-list/${trustList.id}/edit`) {
     await TestBed.configureTestingModule({
       imports: [TrustListEditComponent],
       providers: [
-        provideRouter([{ path: 'trust-list/:id/edit', component: TrustListEditComponent }]),
+        provideRouter([
+          { path: 'trust-list/create', component: TrustListEditComponent },
+          { path: 'trust-list/:id/edit', component: TrustListEditComponent },
+        ]),
         { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
         { provide: JwtService, useValue: { canUseConfigPortability: () => false } },
       ],
@@ -228,10 +242,7 @@ describe('TrustListEditComponent loading the trust list', () => {
     const snackBar = vi.spyOn(MatSnackBar.prototype, 'open');
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigate');
     const harness = await RouterTestingHarness.create();
-    const component = await harness.navigateByUrl(
-      `/trust-list/${trustList.id}/edit`,
-      TrustListEditComponent
-    );
+    const component = await harness.navigateByUrl(url, TrustListEditComponent);
     const page = harness.routeNativeElement!;
     return { harness, component, page, snackBar, navigate };
   }
@@ -344,11 +355,10 @@ describe('TrustListEditComponent loading the trust list', () => {
     expect(component.rejectedEntities.has(component.entitiesArray.at(0))).toBe(false);
     expect(legacy.get('infoWebsite')?.touched).toBe(true);
     expect(legacy.get('infoContactUri')?.touched).toBe(true);
-    expect(component.entityAddressToCheck(legacy)).toBe('Check the e-mail address and website');
     const descriptions = [...page.querySelectorAll('mat-panel-description')].map((element) =>
       element.textContent?.trim()
     );
-    expect(descriptions[1]).toBe('Check the e-mail address and website');
+    expect(descriptions[1]).toBe('Check the highlighted fields');
     const errors = [...page.querySelectorAll('mat-error')].map((error) =>
       error.textContent?.trim()
     );
@@ -509,13 +519,13 @@ describe('TrustListEditComponent loading the trust list', () => {
   });
 
   it('says why an internal entity has no key chain to select, and links to create one', async () => {
-    // Only the external entity is stored, no signing key chain is chosen, and the tenant has no
-    // key chains at all.
+    // Only the external entity is stored, and the tenant has no key chains besides the one that
+    // signs the trust list.
     answers.trustList = {
       status: 200,
-      body: { ...trustList, keyChainId: '', entityConfig: [trustList.entityConfig[1]] },
+      body: { ...trustList, entityConfig: [trustList.entityConfig[1]] },
     };
-    answers.keyChains = { status: 200, body: [] };
+    answers.keyChains = { status: 200, body: [keyChains[2]] };
     const { harness, component, page } = await render();
     await vi.waitFor(() => {
       harness.detectChanges();
@@ -531,7 +541,7 @@ describe('TrustListEditComponent loading the trust list', () => {
       'No status list or credential signing key chains. Create one in Key Management.';
     expect(hints(page, noIssuer)).toHaveLength(1);
     expect(hints(page, noRevocation)).toHaveLength(1);
-    // The signing key chain select is not required, so it keeps its usual hint and gets no link.
+    // The signing key chain select has its key chain, so it keeps its usual hint and gets no link.
     expect(hints(page, 'Key chain used to sign the trust list JWT')).toHaveLength(1);
     expect(hints(page, 'No trust list key chains. Create one in Key Management.')).toHaveLength(0);
     // The links open in a new tab, so the form keeps what was entered.
@@ -540,12 +550,12 @@ describe('TrustListEditComponent loading the trust list', () => {
       links.map((link) => [link.getAttribute('href'), link.target, link.textContent?.trim()])
     ).toEqual([
       [
-        '/keys/create?usage=attestation',
+        '/keys/create?usage=attestation&from=form',
         '_blank',
         expect.stringMatching(/Create credential signing key chain\s+\(opens in a new tab\)$/),
       ],
       [
-        '/keys/create?usage=statusList',
+        '/keys/create?usage=statusList&from=form',
         '_blank',
         expect.stringMatching(/Create status list key chain\s+\(opens in a new tab\)$/),
       ],
@@ -553,23 +563,247 @@ describe('TrustListEditComponent loading the trust list', () => {
     expect(buttons(page, 'Reload key chains')).toHaveLength(1);
     expect(buttons(page, 'Retry loading key chains')).toHaveLength(0);
 
-    // Once touched, the error replaces the hint and repeats why the select is empty, and the
-    // empty selects are what keeps Save disabled.
-    const entity = component.entitiesArray.at(1);
-    entity.patchValue({
+    // With the entity named, Save points at the empty selects, whose error replaces the hint and
+    // repeats why they are empty.
+    component.entitiesArray.at(1).patchValue({
       infoName: 'Own Issuer',
       infoContactUri: 'info@example.com',
       infoWebsite: 'https://example.com/',
     });
-    entity.get('issuerKeyChainId')?.markAsTouched();
-    entity.get('revocationKeyChainId')?.markAsTouched();
     harness.detectChanges();
+    buttons(page, 'Save Changes')[0].click();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(document.activeElement?.getAttribute('formcontrolname')).toBe('issuerKeyChainId');
+    });
     const errors = [...page.querySelectorAll('mat-error')].map((error) =>
       error.textContent?.trim()
     );
     expect(errors).toEqual([noIssuer, noRevocation]);
-    expect(component.form.invalid).toBe(true);
-    expect(buttons(page, 'Save Changes')[0].disabled).toBe(true);
+    expect(saveRequests).toBe(0);
+  });
+
+  it('on create, says that no trust list key chain can sign the list, and links to create one', async () => {
+    answers.trustList = null;
+    answers.keyChains = { status: 200, body: [keyChains[0], keyChains[1]] };
+    const { harness, component, page } = await render('/trust-list/create');
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(buttons(page, 'Reload key chains')).toHaveLength(1);
+    });
+    // Without a selection, a create signs with a trust list key chain of the tenant, of which
+    // there is none, so saving would fail.
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(selected(page, 'keyChainId')).toBe('Any trust list key chain of the tenant');
+    });
+    // So the form cannot be sent. The select looks filled in, so instead of a hint it shows the
+    // reason as its error at once, without being touched first.
+    const signing = component.form.get('keyChainId')!;
+    expect(signing.hasError('signingKeyChain')).toBe(true);
+    const errors = () =>
+      [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim());
+    expect(errors()).toEqual(['No trust list key chains. Create one in Key Management.']);
+    expect(hints(page, 'Key chain used to sign the trust list JWT')).toHaveLength(0);
+    const links = [...page.querySelectorAll<HTMLAnchorElement>('a[href^="/keys/create"]')];
+    expect(
+      links.map((link) => [link.getAttribute('href'), link.target, link.textContent?.trim()])
+    ).toEqual([
+      [
+        '/keys/create?usage=trustList&from=form',
+        '_blank',
+        expect.stringMatching(/Create trust list key chain\s+\(opens in a new tab\)$/),
+      ],
+    ]);
+
+    // Created in the other tab: Reload removes the error, the link and itself, and focus moves to
+    // the signing key chain select.
+    answers.keyChains = { status: 200, body: keyChains };
+    const reload = buttons(page, 'Reload key chains')[0];
+    reload.focus();
+    reload.click();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(buttons(page, 'Reload key chains')).toHaveLength(0);
+      expect(document.activeElement?.getAttribute('formcontrolname')).toBe('keyChainId');
+    });
+    expect(page.querySelector('a[href^="/keys/create"]')).toBeNull();
+    expect(hints(page, 'Key chain used to sign the trust list JWT')).toHaveLength(1);
+    expect(errors()).toEqual([]);
+    expect(signing.value).toBe('');
+    expect(signing.valid).toBe(true);
+  });
+
+  it('on edit, the empty signing option keeps the current trust list key chain', async () => {
+    const { harness, component, page } = await render();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector('form')).not.toBeNull();
+      expect(component.loadingKeyChains).toBe(false);
+    });
+
+    const signing = component.form.get('keyChainId')!;
+    signing.setValue('');
+    signing.markAsTouched();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(selected(page, 'keyChainId')).toBe('Keep the current key chain');
+    });
+    expect(hints(page, 'Key chain used to sign the trust list JWT')).toHaveLength(1);
+    expect(signing.valid).toBe(true);
+    expect(page.querySelector('a[href^="/keys/create"]')).toBeNull();
+
+    // Saving leaves keyChainId out, so the backend keeps the current key chain.
+    const sent: Request[] = [];
+    client.setConfig({
+      fetch: async (input: RequestInfo | URL) => {
+        const request = input instanceof Request ? input : new Request(input);
+        sent.push(request.clone());
+        return json({ status: 200, body: trustList });
+      },
+    });
+    await component.onSubmit();
+    const update = sent.find((request) => request.method === 'PUT');
+    expect(new URL(update!.url).pathname).toMatch(/\/api\/trust-list\/membership-issuers$/);
+    const body = (await update!.json()) as Record<string, unknown>;
+    expect(body).not.toHaveProperty('keyChainId');
+    expect(body['entities']).toHaveLength(2);
+  });
+
+  it('on edit, does not save with a signing key chain of another usage, selected or kept', async () => {
+    // The current signing key chain now signs credentials, so the tenant has no trust list key
+    // chain, and an update that names it or keeps it fails.
+    answers.keyChains = {
+      status: 200,
+      body: [keyChains[0], keyChains[1], { id: 'trust-list-signing', usageType: 'attestation' }],
+    };
+    const { harness, component, page, snackBar, navigate } = await render();
+    const errors = () =>
+      [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim());
+    // The select looks filled in, so it shows why at once, without being touched first.
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(errors()).toEqual([
+        'This is not a trust list key chain, so saving fails. Choose another.',
+      ]);
+    });
+    const signing = component.form.get('keyChainId')!;
+    expect(signing.hasError('signingKeyChain')).toBe(true);
+    // Save sends nothing the backend refuses: it points at the select instead.
+    buttons(page, 'Save Changes')[0].click();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(document.activeElement?.getAttribute('formcontrolname')).toBe('keyChainId');
+    });
+    expect(snackBar).toHaveBeenLastCalledWith(
+      'Check the highlighted fields in Basic Information.',
+      'Close',
+      expect.anything()
+    );
+    expect(navigate).not.toHaveBeenCalled();
+
+    // Keeping the current key chain keeps the same key chain, so it fails the same way.
+    signing.setValue('');
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(selected(page, 'keyChainId')).toBe('Keep the current key chain');
+    });
+    expect(errors()).toEqual([
+      'The current key chain is not a trust list key chain, so saving fails. Choose another.',
+    ]);
+    expect(signing.hasError('signingKeyChain')).toBe(true);
+    expect(
+      [...page.querySelectorAll('a[href^="/keys/create"]')].map((link) => link.getAttribute('href'))
+    ).toEqual(['/keys/create?usage=trustList&from=form']);
+    expect(buttons(page, 'Reload key chains')).toHaveLength(1);
+  });
+
+  it('on edit, does not save with a signing key chain that no longer exists, selected or kept', async () => {
+    answers.keyChains = { status: 200, body: [keyChains[0], keyChains[1]] };
+    const { harness, component, page } = await render();
+    const errors = () =>
+      [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim());
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(errors()).toEqual(['This key chain does not exist, so saving fails. Choose another.']);
+    });
+
+    component.form.get('keyChainId')!.setValue('');
+    harness.detectChanges();
+    expect(errors()).toEqual([
+      'The current key chain does not exist, so saving fails. Choose another.',
+    ]);
+    expect(component.form.get('keyChainId')!.invalid).toBe(true);
+  });
+
+  it('shows the signing key chain error at once when the trust list arrives after the key chains', async () => {
+    answers.keyChains = { status: 200, body: [keyChains[0], keyChains[1]] };
+    let releaseTrustList!: () => void;
+    const trustListArrives = new Promise<void>((resolve) => (releaseTrustList = resolve));
+    client.setConfig({
+      fetch: async (input: RequestInfo | URL) => {
+        const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
+        if (path.endsWith('/api/key-chain')) return json(answers.keyChains!);
+        await trustListArrives;
+        return json(answers.trustList!);
+      },
+    });
+    const { harness, component, page } = await render();
+    await vi.waitFor(() => expect(component.attestationKeyChains).toHaveLength(1));
+
+    releaseTrustList();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(
+        [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim())
+      ).toEqual(['This key chain does not exist, so saving fails. Choose another.']);
+    });
+  });
+
+  it('keeps an issue the backend put at the signing key chain when the key chains reload', async () => {
+    const { harness, component, page } = await render();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(page.querySelector('form')).not.toBeNull();
+      expect(component.loadingKeyChains).toBe(false);
+    });
+    const signing = component.form.get('keyChainId')!;
+    signing.setErrors({ server: 'Rejected by the backend' });
+
+    // The user returns from creating a key chain in another tab.
+    component.openKeyChainCreation(page);
+    window.dispatchEvent(new Event('focus'));
+    await vi.waitFor(() => expect(keyChainRequests).toBe(2));
+    await vi.waitFor(() => expect(component.loadingKeyChains).toBe(false));
+
+    expect(component.fieldError('keyChainId')).toBe('Rejected by the backend');
+    // Editing the field removes it.
+    signing.setValue('');
+    expect(component.fieldError('keyChainId')).toBe('');
+  });
+
+  it('on create, does not block an empty signing key chain while the key chains are unknown', async () => {
+    answers.trustList = null;
+    answers.keyChains = { status: 200, body: [keyChains[0], keyChains[1]] };
+    const { harness, component, page } = await render('/trust-list/create');
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(buttons(page, 'Reload key chains')).toHaveLength(1);
+    });
+    const signing = component.form.get('keyChainId')!;
+    expect(signing.hasError('signingKeyChain')).toBe(true);
+
+    // After a failed reload nothing is known about the key chains, so the select only says that
+    // and offers a retry; the backend answers for a save.
+    answers.keyChains = { status: 500, body: failure };
+    buttons(page, 'Reload key chains')[0].click();
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(buttons(page, 'Retry loading key chains')).toHaveLength(1);
+    });
+    expect(signing.valid).toBe(true);
+    expect(hints(page, 'Could not load key chains.')).toHaveLength(1);
+    expect(page.querySelector('a[href^="/keys/create"]')).toBeNull();
   });
 
   it('reloads the key chains after one was created, keeping the focus while one is missing', async () => {
@@ -585,8 +819,8 @@ describe('TrustListEditComponent loading the trust list', () => {
         link.getAttribute('href')
       );
     expect(createLinks()).toEqual([
-      '/keys/create?usage=attestation',
-      '/keys/create?usage=statusList',
+      '/keys/create?usage=attestation&from=form',
+      '/keys/create?usage=statusList&from=form',
     ]);
     const header = () => page.querySelector('mat-panel-description')?.textContent?.trim();
     // The stored issuer key chain is not among the loaded ones.
@@ -622,7 +856,7 @@ describe('TrustListEditComponent loading the trust list', () => {
     reload.click();
     await vi.waitFor(() => expect(component.loadingKeyChains).toBe(false));
     harness.detectChanges();
-    expect(createLinks()).toEqual(['/keys/create?usage=attestation']);
+    expect(createLinks()).toEqual(['/keys/create?usage=attestation&from=form']);
     expect(buttons(page, 'Reload key chains')).toEqual([reload]);
     expect(document.activeElement).toBe(reload);
 
@@ -793,9 +1027,10 @@ describe('TrustListEditComponent loading the trust list', () => {
       issuerKeyChainId: 'issuer-keys',
       revocationKeyChainId: 'status-keys',
     });
+    // Saving fails with that signing key chain, so its select shows that as its error.
     expect(
-      hints(page, 'This is not a trust list key chain, so saving fails. Choose another.')
-    ).toHaveLength(1);
+      [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim())
+    ).toEqual(['This is not a trust list key chain, so saving fails. Choose another.']);
     expect(
       hints(
         page,
@@ -827,7 +1062,9 @@ describe('TrustListEditComponent loading the trust list', () => {
     window.dispatchEvent(new Event('focus'));
     expect(component.loadingKeyChains).toBe(false);
 
-    const link = page.querySelector<HTMLAnchorElement>('a[href="/keys/create?usage=attestation"]')!;
+    const link = page.querySelector<HTMLAnchorElement>(
+      'a[href="/keys/create?usage=attestation&from=form"]'
+    )!;
     // The test opens no tab.
     link.addEventListener('click', (event) => event.preventDefault());
     link.focus();
@@ -868,5 +1105,294 @@ describe('TrustListEditComponent loading the trust list', () => {
       expect(hints(page, 'Could not load key chains.')).toHaveLength(0);
     });
     expect(buttons(page, 'Retry loading key chains')).toHaveLength(0);
+  });
+
+  describe('Save', () => {
+    /** Renders the page at `url` and waits for its form and key chains. */
+    async function renderForm(url?: string) {
+      const rendered = await render(url);
+      await vi.waitFor(() => {
+        rendered.harness.detectChanges();
+        expect(rendered.page.querySelector('form')).not.toBeNull();
+        expect(rendered.component.loadingKeyChains).toBe(false);
+      });
+      return rendered;
+    }
+
+    const headers = (page: HTMLElement) => [
+      ...page.querySelectorAll<HTMLElement>('mat-expansion-panel-header'),
+    ];
+    const errors = (page: HTMLElement) =>
+      [...page.querySelectorAll('mat-error, .editor-error')].map((error) =>
+        error.textContent?.trim()
+      );
+
+    it('opens the collapsed entity that keeps the trust list from saving and focuses the field', async () => {
+      const { harness, component, page, snackBar } = await renderForm();
+      // Only the last entity opens, so the first one's missing name is out of sight.
+      component.entitiesArray.at(0).patchValue({ infoName: '' });
+      harness.detectChanges();
+      expect(headers(page)[0].getAttribute('aria-expanded')).toBe('false');
+      expect(errors(page)).toEqual([]);
+
+      // Save is not disabled for an incomplete form: a click says what is missing.
+      const save = buttons(page, 'Save Changes')[0];
+      expect(save.disabled).toBe(false);
+      expect(save.getAttribute('aria-disabled')).toBeNull();
+      save.click();
+
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(document.activeElement?.getAttribute('formcontrolname')).toBe('infoName');
+      });
+      const panels = [...page.querySelectorAll('mat-expansion-panel')];
+      expect(panels[0].contains(document.activeElement)).toBe(true);
+      expect(headers(page).map((header) => header.getAttribute('aria-expanded'))).toEqual([
+        'true',
+        'false',
+      ]);
+      expect(errors(page)).toEqual(['Entity name is required']);
+      expect(snackBar).toHaveBeenLastCalledWith(
+        'Check the highlighted fields in Internal Entity #1.',
+        'Close',
+        expect.anything()
+      );
+      expect(saveRequests).toBe(0);
+      // Collapsed again by opening the other entity, its header still says it needs a look.
+      headers(page)[1].click();
+      harness.detectChanges();
+      expect(headers(page)[0].getAttribute('aria-expanded')).toBe('false');
+      expect(page.querySelector('mat-panel-description')?.textContent?.trim()).toBe(
+        'Check the highlighted fields'
+      );
+    });
+
+    it('names every entity with an error and asks for missing certificates', async () => {
+      const { harness, component, page, snackBar } = await renderForm();
+      component.entitiesArray.at(1).patchValue({ issuerCertPem: '' });
+      component.addInternalEntity();
+      component.entitiesArray.at(2).patchValue({
+        infoName: 'Own Issuer',
+        infoContactUri: 'info@example.com',
+        infoWebsite: 'https://example.com/',
+        issuerKeyChainId: 'issuer-keys',
+        revocationKeyChainId: 'status-keys',
+      });
+      harness.detectChanges();
+
+      buttons(page, 'Save Changes')[0].click();
+
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(headers(page).map((header) => header.getAttribute('aria-expanded'))).toEqual([
+          'false',
+          'true',
+          'false',
+        ]);
+      });
+      expect(snackBar).toHaveBeenLastCalledWith(
+        'Check the highlighted fields in External Entity #2.',
+        'Close',
+        expect.anything()
+      );
+      // An editor has no form field, so the page says it under the editor once touched.
+      expect(errors(page)).toEqual(['Paste the issuer certificate.']);
+      expect(saveRequests).toBe(0);
+    });
+
+    it('asks for the ID and an entity on a new trust list, starting at the ID', async () => {
+      const { harness, page, snackBar } = await renderForm('/trust-list/create');
+
+      buttons(page, 'Create Trust List')[0].click();
+
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(document.activeElement?.getAttribute('formcontrolname')).toBe('id');
+      });
+      expect(errors(page)).toEqual(['ID is required']);
+      expect(snackBar).toHaveBeenLastCalledWith(
+        'Check the highlighted fields in Basic Information. Add at least one trusted entity.',
+        'Close',
+        expect.anything()
+      );
+      expect(saveRequests).toBe(0);
+    });
+
+    it('moves focus to Add Internal Entity when no entity is listed', async () => {
+      answers.trustList = { status: 200, body: { ...trustList, entityConfig: [] } };
+      const { harness, page, snackBar } = await renderForm();
+
+      buttons(page, 'Save Changes')[0].click();
+
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(document.activeElement).toBe(buttons(page, 'Add Internal Entity')[0]);
+      });
+      expect(snackBar).toHaveBeenLastCalledWith(
+        'Add at least one trusted entity.',
+        'Close',
+        expect.anything()
+      );
+      expect(saveRequests).toBe(0);
+    });
+
+    it('says in an entity header only what its fields show', async () => {
+      const { harness, component, page } = await renderForm();
+      const descriptions = () =>
+        [...page.querySelectorAll('mat-panel-description')].map((description) =>
+          description.textContent?.trim()
+        );
+      // A chosen provider type is touched but valid; the empty fields next to it show no error yet.
+      component.addInternalEntity();
+      component.entitiesArray.at(2).get('providerType')?.markAsTouched();
+      harness.detectChanges();
+      expect(errors(page)).toEqual([]);
+      expect(descriptions()[2]).toBe('Using system certificates');
+
+      buttons(page, 'Save Changes')[0].click();
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(descriptions()[2]).toBe('Check the highlighted fields');
+      });
+
+      // After a Save, a new entity shows its errors at once, as Material's form fields do.
+      component.addExternalEntity();
+      harness.detectChanges();
+      expect(descriptions()[3]).toBe('Check the highlighted fields');
+      expect(errors(page)).toContain('Paste the issuer certificate.');
+    });
+
+    it('says a certificate is missing only once its editor was touched', async () => {
+      const { harness, component, page } = await renderForm();
+      component.addExternalEntity();
+      harness.detectChanges();
+      expect(errors(page)).toEqual([]);
+
+      component.entitiesArray.at(2).get('issuerCertPem')?.markAsTouched();
+      harness.detectChanges();
+      expect(errors(page)).toEqual(['Paste the issuer certificate.']);
+    });
+
+    it('focuses a field its opening panel still hides once the panel has expanded', async () => {
+      const { harness, component, page } = await renderForm();
+      component.entitiesArray.at(0).patchValue({ infoName: '' });
+      harness.detectChanges();
+      const panel = harness
+        .routeDebugElement!.queryAll(By.directive(MatExpansionPanel))[0]
+        .injector.get(MatExpansionPanel);
+      const name = page.querySelector<HTMLInputElement>('input[formcontrolname="infoName"]')!;
+      const save = buttons(page, 'Save Changes')[0];
+      // A browser refuses the focus while the opening transition still hides the panel's content.
+      let refused = 0;
+      const refuseFocus = () => {
+        const focus = name.focus.bind(name);
+        name.focus = () => {
+          name.focus = focus;
+          refused++;
+        };
+      };
+
+      refuseFocus();
+      save.focus();
+      save.click();
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(refused).toBe(1);
+      });
+      expect(document.activeElement).toBe(save);
+      panel.afterExpand.emit();
+      expect(document.activeElement).toBe(name);
+
+      // Focus the user has moved meanwhile stays where it is.
+      panel.close();
+      harness.detectChanges();
+      refuseFocus();
+      save.focus();
+      save.click();
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(refused).toBe(2);
+      });
+      const addEntity = buttons(page, 'Add External Entity')[0];
+      addEntity.focus();
+      panel.afterExpand.emit();
+      expect(document.activeElement).toBe(addEntity);
+
+      // A panel closed again before it expanded leaves the focus alone, then and later.
+      panel.close();
+      harness.detectChanges();
+      refuseFocus();
+      save.focus();
+      save.click();
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(refused).toBe(3);
+      });
+      panel.close();
+      panel.afterExpand.emit();
+      expect(document.activeElement).toBe(save);
+    });
+
+    it("shows the backend's issue under a certificate editor", async () => {
+      const { harness, page, snackBar } = await renderForm();
+      answers.trustList = {
+        status: 400,
+        body: {
+          statusCode: 400,
+          message: 'Validation failed',
+          errors: [
+            { path: ['entities', 1, 'info', 'uri'], message: 'Invalid URL' },
+            { path: ['entities', 1, 'issuerCertPem'], message: 'Invalid PEM' },
+          ],
+        },
+      };
+      const save = buttons(page, 'Save Changes')[0];
+
+      save.click();
+
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(errors(page)).toEqual(['Invalid URL', 'Invalid PEM']);
+      });
+      expect(saveRequests).toBe(1);
+
+      // Until a rejected field is edited, Save points at it instead of sending the same again.
+      save.click();
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(document.activeElement?.getAttribute('formcontrolname')).toBe('infoUri');
+      });
+      expect(snackBar).toHaveBeenLastCalledWith(
+        'Check the highlighted fields in External Entity #2.',
+        'Close',
+        expect.anything()
+      );
+      expect(saveRequests).toBe(1);
+    });
+
+    it('stays focusable and says why while the trust list is being saved', async () => {
+      const { harness, component, page } = await renderForm();
+      // The update never answers.
+      answers.trustList = null;
+      const save = buttons(page, 'Save Changes')[0];
+      save.focus();
+      save.click();
+      harness.detectChanges();
+
+      expect(component.saving).toBe(true);
+      expect(save.disabled).toBe(false);
+      expect(save.getAttribute('aria-disabled')).toBe('true');
+      expect(document.activeElement).toBe(save);
+      const tooltip = harness
+        .routeDebugElement!.queryAll(By.directive(MatTooltip))
+        .find((element) => element.nativeElement === save)!
+        .injector.get(MatTooltip);
+      expect(tooltip.message).toBe('Saving the trust list…');
+      // A second click while the save runs sends nothing.
+      save.click();
+      await vi.waitFor(() => expect(saveRequests).toBe(1));
+      await new Promise((resolve) => setTimeout(resolve));
+      expect(saveRequests).toBe(1);
+    });
   });
 });

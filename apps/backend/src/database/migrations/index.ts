@@ -72,4 +72,5 @@ export { AddStatusUpdatedAtToStatusMapping1785700000000 } from "./1785700000000-
 export { MoveDefaultAccessKeyChainIntoDefaultKeyChains1785800000000 } from "./1785800000000-MoveDefaultAccessKeyChainIntoDefaultKeyChains.js";
 export { DropIssuanceSigningKeyId1785900000000 } from "./1785900000000-DropIssuanceSigningKeyId.js";
 export { AddAllowedOriginsToPresentationConfig1786000000000 } from "./1786000000000-AddAllowedOriginsToPresentationConfig.js";
-export { NormalizeTrustListEntityInfo1786100000000 } from "./1786100000000-NormalizeTrustListEntityInfo.js";
+export { AddTrustListSequenceNumber1786100000000 } from "./1786100000000-AddTrustListSequenceNumber.js";
+export { NormalizeTrustListEntityInfo1786200000000 } from "./1786200000000-NormalizeTrustListEntityInfo.js";

@@ -272,7 +272,7 @@
       <!-- Step 3: Configuration -->
       @if (showConfigStep) {
         <mat-step [stepControl]="configForm" label="Configure">
-          <form [formGroup]="configForm" fxLayout="column" fxLayoutGap="24px">
+          <form #configFormElement [formGroup]="configForm" fxLayout="column" fxLayoutGap="24px">
             <div class="step-description">
               <h3>Configure your key chain</h3>
               @if (isExternalCaChain) {
@@ -425,6 +425,7 @@
                       Must match the public key in the supplied
                       {{ isExternalCaChain ? 'CA certificate.' : 'leaf certificate.' }}
                     </mat-hint>
+                    <mat-error>Paste the private key or load a key file</mat-error>
                     <input
                       #privateKeyFile
                       id="external-private-key-file"
@@ -464,6 +465,7 @@
                       }}
                       Or load certificate files.
                     </mat-hint>
+                    <mat-error>Paste the certificate chain or load certificate files</mat-error>
                     <input
                       #certificateFiles
                       id="external-certificate-chain-file"
@@ -676,8 +678,17 @@
                 <mat-icon>arrow_back</mat-icon>
                 Back
               </button>
-              @if (isSubmitting) {
-                <button mat-flat-button type="button" color="primary" disabled>
+              <button
+                #createButton
+                mat-flat-button
+                type="button"
+                color="primary"
+                [disabled]="isSubmitting"
+                disabledInteractive
+                [matTooltip]="createTooltip"
+                (click)="createKey()"
+              >
+                @if (isSubmitting) {
                   <mat-icon class="spinning">sync</mat-icon>
                   @if (selectedUsage === 'access' && selectedAccessSource === 'registrar') {
                     <ng-container>Enrolling...</ng-container>
@@ -686,15 +697,7 @@
                   } @else {
                     <ng-container>Creating...</ng-container>
                   }
-                </button>
-              } @else {
-                <button
-                  mat-flat-button
-                  type="button"
-                  color="primary"
-                  [disabled]="!configForm.valid || !externalCertificateFormValid"
-                  (click)="createKey()"
-                >
+                } @else {
                   <mat-icon>vpn_key</mat-icon>
                   @if (selectedUsage === 'access' && selectedAccessSource === 'registrar') {
                     <ng-container>Create & Enroll</ng-container>
@@ -707,8 +710,8 @@
                   } @else {
                     <ng-container>Create Key Chain</ng-container>
                   }
-                </button>
-              }
+                }
+              </button>
             </div>
           </form>
         </mat-step>

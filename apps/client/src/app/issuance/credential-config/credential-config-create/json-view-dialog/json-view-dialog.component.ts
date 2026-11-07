@@ -1,4 +1,4 @@
-import { Component, Inject, ChangeDetectionStrategy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, Inject, ViewChild } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -13,6 +13,8 @@ import { MonacoEditorModule } from 'ngx-monaco-editor-v2';
 import { EditorComponent } from '../../../../utils/editor/editor.component';
 import { SchemaValidation } from '../../../../utils/schemas';
 import { copyToClipboard } from '../../../../utils/copy-to-clipboard';
+import { openErrorSnackBar } from '../../../../utils/error-snackbar';
+import { focusField } from '../../../../common/field-to-fix.util';
 
 export interface JsonViewDialogData {
   title: string;
@@ -50,6 +52,10 @@ export class JsonViewDialogComponent {
     language: 'json',
   };
 
+  /** Apply Changes moves focus here when the JSON cannot be applied. */
+  @ViewChild('jsonEditor', { read: ElementRef })
+  private readonly jsonEditor?: ElementRef<HTMLElement>;
+
   constructor(
     public dialogRef: MatDialogRef<JsonViewDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: JsonViewDialogData,
@@ -79,6 +85,13 @@ export class JsonViewDialogComponent {
   }
 
   save(): void {
+    const problem = this.jsonProblem();
+    if (problem) {
+      this.jsonControl.markAsTouched();
+      openErrorSnackBar(this.snackBar, problem);
+      if (this.jsonEditor) focusField(this.jsonEditor.nativeElement);
+      return;
+    }
     if (this.jsonControl.valid && this.jsonControl.value) {
       try {
         if (typeof this.jsonControl.value !== 'string') {
@@ -91,5 +104,14 @@ export class JsonViewDialogComponent {
         this.snackBar.open('Invalid JSON format', 'OK', { duration: 3000 });
       }
     }
+  }
+
+  /** Why the JSON in the editor cannot be applied, as the editor says under it; '' when it can. */
+  private jsonProblem(): string {
+    const errors = this.jsonControl.errors;
+    if (errors?.['invalidJson']) return 'Fix the JSON first: it is not valid JSON.';
+    if (errors?.['invalidSchema']) return `Fix the JSON first: ${errors['invalidSchema']}`;
+    if (!this.jsonControl.value) return 'Enter the JSON to apply.';
+    return '';
   }
 }

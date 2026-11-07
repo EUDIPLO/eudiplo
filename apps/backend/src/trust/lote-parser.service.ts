@@ -5,10 +5,13 @@ import {
     serviceTypeMatches,
     TrustedEntity,
     TrustedEntityServiceCert,
+    withdrawnServiceStatuses,
 } from "./types.js";
 
 type LoteInfo = {
     nextUpdate?: string;
+    /** `LoTESequenceNumber` as signed; not checked here. */
+    sequenceNumber?: unknown;
     listIssueDateTime?: string;
     schemeTerritory?: string;
 };
@@ -30,12 +33,15 @@ export class LoteParserService {
     /**
      * Parse a LoTE payload preserving TrustedEntity groupings.
      * This allows pairing issuance and revocation certificates from the same entity.
+     * Services whose status withdraws them ({@link withdrawnServiceStatuses})
+     * are left out, so their certificates are no trust anchors.
      */
     parse(root: LoTE): ParsedLoTE {
         const schemeInfo = root.ListAndSchemeInformation;
 
         const info: LoteInfo = {
             nextUpdate: schemeInfo.NextUpdate,
+            sequenceNumber: schemeInfo.LoTESequenceNumber,
             listIssueDateTime: schemeInfo.ListIssueDateTime,
             schemeTerritory: schemeInfo.SchemeTerritory,
         };
@@ -71,6 +77,16 @@ export class LoteParserService {
                 if (!serviceTypeIdentifier) {
                     this.logger.debug(
                         `    Skipping service without type identifier`,
+                    );
+                    continue;
+                }
+
+                if (
+                    svcInfo.ServiceStatus &&
+                    withdrawnServiceStatuses.includes(svcInfo.ServiceStatus)
+                ) {
+                    this.logger.debug(
+                        `    Skipping withdrawn service (${svcInfo.ServiceStatus})`,
                     );
                     continue;
                 }

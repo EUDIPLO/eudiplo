@@ -30,7 +30,7 @@ Every credential query of a presentation configuration names the issuers it acce
 | **Trust List Signing**  | `Membership trust list signing`   | Signs the trust list                                              |
 | **Status List Signing** | `Membership status list signing`  | Listed as the issuer's status list certificate                    |
 
-For the status list key, keep **Create Key Chain (Recommended)**: its signing key rotates while the trust list keeps naming the same root CA. EUDIPLO does not create a trust list signing key on its own, even though the trust list form offers **Auto-generate**.
+For the status list key, keep **Create Key Chain (Recommended)**: its signing key rotates while the trust list keeps naming the same root CA. EUDIPLO does not create a trust list signing key on its own.
 
 **Checkpoint:** both key chains appear under **Keys**.
 
@@ -124,7 +124,7 @@ Open **Credential Verification → Verification Configs** and choose **+** (**Cr
 
 EUDIPLO uses the trust list in two places:
 
-- **In the request to the wallet**, it replaces the reference with `{"type": "aki", "values": [...]}`, the key identifiers of the listed issuer certificates. If a list cannot be loaded or an entry has no key identifier, it also sends the list URL as `etsi_tl`. Wallets that support `trusted_authorities` offer only matching credentials.
+- **In the request to the wallet**, it replaces the reference with `{"type": "aki", "values": [...]}`, the key identifiers of the listed issuer certificates. If a list cannot be loaded or an entry has no key identifier, it also sends the list URL as `etsi_tl`. An outdated list is left out, unless every list is outdated. Wallets that support `trusted_authorities` offer only matching credentials.
 - **During verification**, the issuer certificate chain of the presented credential must lead to a listed entity. This check happens no matter what the wallet does.
 
 For other credentials, **Import from Issuer** fills in the types and claim paths from issuer metadata. See [DCQL](../presentation/dcql.md) for claim options and alternatives.
@@ -167,7 +167,7 @@ You have now issued and verified a credential end to end. In an application, you
 
 | Symptom                                     | Cause                                                                    | Fix                                                                                                               |
 | ------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| Creating the trust list fails with `409` about the key | No key chain with usage **Trust List Signing**, or a different one selected | Create the key in step 1 and select it as **Signing Key Chain**.                                       |
+| **Create Trust List** points at **Signing Key Chain**, which says "No trust list key chains" (the API call answers `409`) | No key chain with usage **Trust List Signing** | Create the key in step 1, choose **Reload key chains** and select it as **Signing Key Chain**. |
 | Saving fails with `Credential queries without trusted_authorities` | **Issuer trust** of the query is empty                   | Add `membership-issuers` as managed trust list (step 3).                                                          |
 | Wallet finds no matching credential         | VCT or claim path differ from chapter 2, the credential expired, or the wallet cannot match the `aki` values | Compare `urn:example:membership:1`, `name` and `member_id` with the credential type; issue a fresh credential. See [Accept only trusted issuers](trusted-issuers.md#troubleshooting) for wallets that cannot match `aki` values. |
 | Session `failed` with `trust_chain_not_trusted` | The trust list entity lists a different issuer key chain             | Edit the list and select `Membership credential signing` as **Issuer Key Chain**.                                 |

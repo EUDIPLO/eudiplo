@@ -473,8 +473,13 @@ export const mdocContext: Omit<MdocContext, "fetch"> = {
                 );
             }
 
+            // @owf/mdoc expects the validated path leaf first and the trusted
+            // anchor last: it takes the status list signers of the trusted
+            // entry whose issuance certificate is the last one.
             return {
-                chain: parsedChain.map((cert) => new Uint8Array(cert.rawData)),
+                chain: [...parsedChain]
+                    .reverse()
+                    .map((cert) => new Uint8Array(cert.rawData)),
             };
         },
         getCertificateData: async (input: { certificate: Uint8Array }) => {

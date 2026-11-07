@@ -5,6 +5,8 @@
     <title>EudiploClient</title>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Other sites see only the origin, never a page address with an authorization code. -->
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
     <!-- Environment configuration script with aggressive cache control -->
     <script src="env.js?nocache=1"></script>
     <link rel="icon" type="image/svg+xml" href="logo.svg" />

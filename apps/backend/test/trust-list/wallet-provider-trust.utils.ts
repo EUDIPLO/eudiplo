@@ -75,6 +75,6 @@ export async function configureWalletProviderTrust(
     // Fail setup immediately if the real endpoint or signature cannot be verified.
     await app
         .get(TrustStoreService)
-        .getTrustStore({ lotes: walletProviderTrustLists });
+        .getTrustStore({ tenantId, lotes: walletProviderTrustLists });
     return walletProviderTrustLists;
 }

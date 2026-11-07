@@ -15,10 +15,13 @@ import {
   FormArray,
   FormControl,
   FormGroup,
+  FormGroupDirective,
   ReactiveFormsModule,
+  type ValidationErrors,
   Validators,
 } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { ErrorStateMatcher } from '@angular/material/core';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -27,9 +30,9 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatRadioModule } from '@angular/material/radio';
-import { MatExpansionModule } from '@angular/material/expansion';
+import { MatExpansionModule, MatExpansionPanel } from '@angular/material/expansion';
 import { MatDividerModule } from '@angular/material/divider';
-import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { ActivatedRoute, type Params, Router, RouterModule } from '@angular/router';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import {
   keyChainControllerGetAll,
@@ -46,6 +49,11 @@ import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { fieldErrorMessage, showIssuesAtFields } from '../../utils/form-errors';
 import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../common/focus-if-lost.util';
+import {
+  fieldsToFixMessage,
+  focusFieldToFix,
+  sectionsWithErrors,
+} from '../../common/field-to-fix.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import {
   ELECTRONIC_ADDRESS_MESSAGES,
@@ -54,6 +62,7 @@ import {
   readElectronicAddress,
   websiteValidators,
 } from './trust-list-electronic-address';
+import { fromFormQueryParams } from '../../common/return-to-form';
 
 /** Common info fields for both internal and external entities */
 interface EntityInfoForm {
@@ -92,6 +101,13 @@ type TrustListKeyChainUsage = 'attestation' | 'statusList' | 'trustList';
 const KEY_CHAIN_USAGE_NAMES: Record<TrustListKeyChainUsage, string> = {
   attestation: 'credential signing',
   statusList: 'status list or credential signing',
+  trustList: 'trust list',
+};
+
+/** How a create link names the usage type of the key chain it creates for a select of a usage. */
+const CREATED_KEY_CHAIN_NAMES: Record<TrustListKeyChainUsage, string> = {
+  attestation: 'credential signing',
+  statusList: 'status list',
   trustList: 'trust list',
 };
 
@@ -156,6 +172,18 @@ export class TrustListEditComponent implements OnInit {
   keyChainsLoadError = '';
   /** Set once the key chains have loaded, so an empty list means the tenant has none of its kind. */
   private keyChainsLoaded = false;
+  /** The usages of the signing key chain select, and of an internal entity's key chain selects. */
+  readonly signingKeyChainUsages: readonly TrustListKeyChainUsage[] = ['trustList'];
+  readonly entityKeyChainUsages: readonly TrustListKeyChainUsage[] = ['attestation', 'statusList'];
+  /**
+   * Query parameters of the create links per usage: the key wizard preselects the usage and, once
+   * the key chain exists, says to return to this tab instead of leaving it.
+   */
+  private readonly keyChainLinkParams: Readonly<Record<TrustListKeyChainUsage, Params>> = {
+    attestation: fromFormQueryParams({ usage: 'attestation' }),
+    statusList: fromFormQueryParams({ usage: 'statusList' }),
+    trustList: fromFormQueryParams({ usage: 'trustList' }),
+  };
 
   /**
    * Whether the key chain lists say what the tenant has: they loaded, and the last load did not
@@ -167,10 +195,20 @@ export class TrustListEditComponent implements OnInit {
   /** The key chain selects whose create link the user followed; their key chains reload on return. */
   private creatingKeyChainFor?: HTMLElement;
 
-  editorOptionsPem = {
+  private readonly editorOptionsPem = {
     automaticLayout: true,
     language: 'pem',
     minimap: { enabled: false },
+    ariaRequired: true,
+  };
+  /** Each certificate editor names its certificate, which its visible label does not do for it. */
+  readonly issuerCertEditorOptions = {
+    ...this.editorOptionsPem,
+    ariaLabel: 'Issuer certificate (PEM)',
+  };
+  readonly revocationCertEditorOptions = {
+    ...this.editorOptionsPem,
+    ariaLabel: 'Revocation certificate (PEM)',
   };
 
   // Where focus goes when the entity holding it is removed, in the order of the entities.
@@ -178,13 +216,18 @@ export class TrustListEditComponent implements OnInit {
   private readonly entityHeaders?: QueryList<ElementRef<HTMLElement>>;
   @ViewChild('addEntityButton', { read: ElementRef })
   private readonly addEntityButton?: ElementRef<HTMLElement>;
+  @ViewChildren(MatExpansionPanel) private readonly entityPanels?: QueryList<MatExpansionPanel>;
+  @ViewChild('trustListForm', { read: ElementRef })
+  private readonly formElement?: ElementRef<HTMLFormElement>;
+  @ViewChild(FormGroupDirective) private readonly formDirective?: FormGroupDirective;
   @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
 
   constructor(
     private readonly route: ActivatedRoute,
     private readonly router: Router,
     private readonly snackBar: MatSnackBar,
-    private readonly injector: Injector
+    private readonly injector: Injector,
+    private readonly errorStateMatcher: ErrorStateMatcher
   ) {}
 
   ngOnInit() {
@@ -193,7 +236,9 @@ export class TrustListEditComponent implements OnInit {
     this.form = new FormGroup({
       id: new FormControl('', { validators: [Validators.required] }),
       description: new FormControl(''),
-      keyChainId: new FormControl(''),
+      keyChainId: new FormControl('', {
+        validators: (control) => this.signingKeyChainError(control),
+      }),
       entities: new FormArray([]),
     });
 
@@ -247,6 +292,22 @@ export class TrustListEditComponent implements OnInit {
     } finally {
       this.loadingKeyChains = false;
     }
+    this.revalidateSigningKeyChain();
+  }
+
+  /**
+   * Validates the signing key chain again once the key chains or the stored trust list arrive,
+   * since whether saving with it fails depends on both. The select looks filled in even then, so it
+   * shows its error at once instead of waiting to be touched. An issue the backend put at the field
+   * stays until the field is edited.
+   */
+  private revalidateSigningKeyChain(): void {
+    const signing = this.form.get('keyChainId');
+    if (!signing) return;
+    const server: unknown = signing.getError('server');
+    signing.updateValueAndValidity();
+    if (typeof server === 'string') signing.setErrors({ ...signing.errors, server });
+    if (signing.invalid) signing.markAsTouched();
   }
 
   /**
@@ -333,54 +394,39 @@ export class TrustListEditComponent implements OnInit {
       : 'missing';
   }
 
-  /** What saving does with a selected key chain the select for `usage` does not offer; '' otherwise. */
-  private unlistedKeyChainWarning(value: unknown, usage: TrustListKeyChainUsage): string {
+  /**
+   * What saving does with a key chain that an entity's select for `usage` holds but does not offer;
+   * '' otherwise. The signing key chain select has {@link signingKeyChainProblem}.
+   */
+  private unlistedKeyChainWarning(
+    value: unknown,
+    usage: Exclude<TrustListKeyChainUsage, 'trustList'>
+  ): string {
     switch (this.unlistedReason(value, usage)) {
       case 'missing':
-        return 'This key chain does not exist, so saving fails. Choose another.';
+        return missingKeyChainMessage('This key chain');
       case 'otherUsage':
-        // The backend refuses a signing key chain of another usage type. An entity's key chain of
-        // another usage type is accepted when the stored list already names it there, which is
-        // the only way the form holds one, since its selects offer only accepted usage types.
-        return usage === 'trustList'
-          ? 'This is not a trust list key chain, so saving fails. Choose another.'
-          : `This is not a ${KEY_CHAIN_USAGE_NAMES[usage]} key chain; saving still puts its certificate in the trust list. Choose another.`;
+        // An entity's key chain of another usage type is accepted when the stored list already
+        // names it there, which is the only way the form holds one, since its selects offer only
+        // accepted usage types.
+        return `This is not a ${KEY_CHAIN_USAGE_NAMES[usage]} key chain; saving still puts its certificate in the trust list. Choose another.`;
       default:
         return '';
     }
   }
 
   /**
-   * What of the entity's electronic address keeps Save disabled, for its collapsed panel, for
-   * example "Check the e-mail address and website"; '' when nothing does. Lists stored before
-   * 10.0 lack the website and sometimes hold a URL as e-mail address (ETSI TS 119 602 clause
-   * 6.5.3.2).
-   */
-  entityAddressToCheck(entity: AbstractControl): string {
-    const fields = [
-      ['infoContactUri', 'e-mail address'],
-      ['infoWebsite', 'website'],
-      ['infoPhone', 'telephone number'],
-    ]
-      .filter(([name]) => entity.get(name)?.invalid)
-      .map(([, label]) => label);
-    if (fields.length === 0) return '';
-    const last = fields.pop();
-    return `Check the ${fields.length ? `${fields.join(', ')} and ${last}` : last}`;
-  }
-
-  /**
-   * Lists stored before 10.0 load without a website and sometimes with a URL as e-mail address.
-   * Their fields show the error right away and their panels open, so the user sees what keeps
-   * Save disabled.
+   * Lists stored before 10.0 load without a website and sometimes with a URL as e-mail address
+   * (ETSI TS 119 602 clause 6.5.3.2). Their fields show the error right away and their panels
+   * open, so the user sees what to add before saving.
    */
   private showStoredAddressGaps(): void {
     for (const entity of this.entitiesArray.controls) {
-      if (!this.entityAddressToCheck(entity)) continue;
-      for (const name of ['infoContactUri', 'infoWebsite', 'infoPhone']) {
-        const control = entity.get(name);
-        if (control?.invalid) control.markAsTouched();
-      }
+      const gaps = ['infoContactUri', 'infoWebsite', 'infoPhone']
+        .map((name) => entity.get(name))
+        .filter((control) => control?.invalid);
+      if (gaps.length === 0) continue;
+      for (const control of gaps) control?.markAsTouched();
       this.rejectedEntities.add(entity);
     }
   }
@@ -416,13 +462,57 @@ export class TrustListEditComponent implements OnInit {
     return this.keyChainsKnown && this.keyChainsOf(usage).length === 0;
   }
 
-  /** Whether the internal entities' key chain selects need a retry, or a key chain created first. */
-  get entityKeyChainsMissing(): boolean {
-    return (
-      this.keyChainsLoadError !== '' ||
-      this.noKeyChains('attestation') ||
-      this.noKeyChains('statusList')
-    );
+  /** The query parameters of the create link for a select of `usage`, the same object each time. */
+  keyChainLinkParamsOf(usage: TrustListKeyChainUsage): Params {
+    return this.keyChainLinkParams[usage];
+  }
+
+  /** How the create link for a select of `usage` names the key chain it creates. */
+  createdKeyChainName(usage: TrustListKeyChainUsage): string {
+    return CREATED_KEY_CHAIN_NAMES[usage];
+  }
+
+  /**
+   * The empty option of the signing key chain select, which leaves `keyChainId` out: a create
+   * then signs with a trust list key chain of the tenant, and fails without one; an update keeps
+   * the stored key chain.
+   */
+  get defaultSigningKeyChainLabel(): string {
+    return this.isEditMode
+      ? 'Keep the current key chain'
+      : 'Any trust list key chain of the tenant';
+  }
+
+  /**
+   * Why saving fails with `value` in the signing key chain select, as far as the loaded key chains
+   * tell; '' when it does not, or nothing is known. The key chain that would sign is the selected
+   * one or, when the empty option keeps it on edit, the current one. The backend refuses one that
+   * is gone or lacks trust list usage, and a create without one while the tenant has no trust list
+   * key chain to look up.
+   */
+  signingKeyChainProblem(value: unknown): string {
+    const kept = !value && this.isEditMode;
+    // Until the trust list has loaded, nothing is known about the key chain it keeps.
+    if (kept && !this.trustList) return '';
+    const keyChainId = value || (kept ? this.trustList?.keyChainId : '');
+    const reason = this.unlistedReason(keyChainId, 'trustList');
+    if (reason === 'missing') {
+      return missingKeyChainMessage(kept ? 'The current key chain' : 'This key chain');
+    }
+    if (reason === 'otherUsage') {
+      return `${kept ? 'The current key chain' : 'This'} is not a trust list key chain, so saving fails. Choose another.`;
+    }
+    return !keyChainId && this.noKeyChains('trustList') ? this.noKeyChainsMessage('trustList') : '';
+  }
+
+  /** The signing key chain is invalid while saving with it fails, so the form says why first. */
+  private signingKeyChainError(control: AbstractControl): ValidationErrors | null {
+    return this.signingKeyChainProblem(control.value) ? { signingKeyChain: true } : null;
+  }
+
+  /** Whether key chain selects of `usages` need a retry, or a key chain created first. */
+  keyChainActionsNeeded(usages: readonly TrustListKeyChainUsage[]): boolean {
+    return this.keyChainsLoadError !== '' || usages.some((usage) => this.noKeyChains(usage));
   }
 
   /** Why a select for `usage` has no options, and where to create one. */
@@ -432,24 +522,28 @@ export class TrustListEditComponent implements OnInit {
 
   /**
    * The hint of the key chain select for `usage` holding `value`: `hint`, unless the key chains
-   * are loading or failed to load, the select does not offer `value`, for a required select no
+   * are loading or failed to load, saving with `value` fails or the select does not offer it, no
    * key chain has that usage, or a credential signing key chain may sign the revocation's status
    * lists.
    */
   keyChainHint(hint: string, value: unknown, usage: TrustListKeyChainUsage): string {
     if (this.loadingKeyChains) return 'Loading key chains…';
     if (this.keyChainsLoadError) return 'Could not load key chains.';
-    const warning = this.unlistedKeyChainWarning(value, usage);
+    const warning =
+      usage === 'trustList'
+        ? this.signingKeyChainProblem(value)
+        : this.unlistedKeyChainWarning(value, usage);
     if (warning) return warning;
-    // The signing key chain select may stay empty (an update keeps the stored key chain, a create
-    // looks one up), so only the entities' selects say that none has their usage.
-    if (usage !== 'trustList' && this.noKeyChains(usage)) return this.noKeyChainsMessage(usage);
+    if (this.noKeyChains(usage)) return this.noKeyChainsMessage(usage);
     const credentialSigning =
       usage === 'statusList' ? this.credentialSigningRevocationHint(value) : '';
     return credentialSigning || hint;
   }
 
-  /** Under an empty required key chain select of `usage`, which replaces its hint: why it may be empty. */
+  /**
+   * Under an empty key chain select of `usage` that must not stay empty, which replaces its hint:
+   * why it may be empty.
+   */
   keyChainRequiredMessage(usage: TrustListKeyChainUsage): string {
     if (this.keyChainsLoadError) return 'The key chains could not be loaded.';
     return this.noKeyChains(usage) ? this.noKeyChainsMessage(usage) : 'Select a key chain.';
@@ -487,6 +581,7 @@ export class TrustListEditComponent implements OnInit {
         this.loadEntitiesFromData(this.trustList.data);
       }
       this.showStoredAddressGaps();
+      this.revalidateSigningKeyChain();
     } catch (error) {
       console.error('Failed to load trust list:', error);
       this.loadError = getApiErrorMessage(error, 'Failed to load trust list');
@@ -764,19 +859,15 @@ export class TrustListEditComponent implements OnInit {
     return keyChain?.description || keyChainId;
   }
 
+  /** How the header and the messages of the page name the entity at `index`. */
+  entityLabel(index: number): string {
+    return `${this.getEntityType(index) === 'internal' ? 'Internal' : 'External'} Entity #${index + 1}`;
+  }
+
   async onSubmit(): Promise<void> {
     if (this.saving) return;
-    if (this.form.invalid) {
-      this.snackBar.open('Please fill in all required fields', 'Close', {
-        duration: 3000,
-      });
-      return;
-    }
-
-    if (this.entitiesArray.length === 0) {
-      this.snackBar.open('Please add at least one entity', 'Close', {
-        duration: 3000,
-      });
+    if (this.form.invalid || this.entitiesArray.length === 0) {
+      this.showWhatBlocksSaving();
       return;
     }
 
@@ -832,13 +923,6 @@ export class TrustListEditComponent implements OnInit {
           body,
         });
       } else {
-        // Create new trust list - id is required
-        if (!formValue.id) {
-          this.snackBar.open('ID is required for creating a new trust list', 'Close', {
-            duration: 5000,
-          });
-          return;
-        }
         await trustListControllerCreateTrustList({ body });
       }
 
@@ -880,10 +964,69 @@ export class TrustListEditComponent implements OnInit {
     return this.fieldError(path, (failed && messages[failed]) || '');
   }
 
+  /**
+   * Save stays usable while the form is incomplete, so a click on it says what is missing: it
+   * marks every field, names the sections with errors, opens the first entity with one (the
+   * accordion shows one entity at a time, so it may be collapsed) and moves focus to the first
+   * field with an error, or to Add Internal Entity when no entity is listed.
+   */
+  private showWhatBlocksSaving(): void {
+    this.form.markAllAsTouched();
+    const entities = this.entitiesArray.controls;
+    const sections = sectionsWithErrors([
+      {
+        name: 'Basic Information',
+        controls: Object.entries(this.form.controls)
+          .filter(([name]) => name !== 'entities')
+          .map(([, control]) => control),
+      },
+      ...entities.map((entity, index) => ({ name: this.entityLabel(index), controls: [entity] })),
+    ]);
+    const problems: string[] = [];
+    if (sections.length) problems.push(fieldsToFixMessage(sections));
+    if (entities.length === 0) problems.push('Add at least one trusted entity.');
+    openErrorSnackBar(this.snackBar, problems.join(' '));
+
+    const firstInvalidEntity = entities.findIndex((entity) => entity.invalid);
+    const panel = firstInvalidEntity >= 0 ? this.entityPanels?.get(firstInvalidEntity) : undefined;
+    panel?.open();
+    focusFieldToFix(this.injector, () => this.formElement?.nativeElement, {
+      panel,
+      fallback: () => this.addEntityButton?.nativeElement,
+    });
+  }
+
+  /** Whether a field shows its error, by the same rule as the Material form fields. */
+  private showsError(control: AbstractControl | null | undefined): boolean {
+    return this.errorStateMatcher.isErrorState(control ?? null, this.formDirective ?? null);
+  }
+
+  /** Whether one of the entity's fields shows an error, which its header says while it is collapsed. */
+  entityShowsErrors(entity: AbstractControl): boolean {
+    return Object.values((entity as FormGroup).controls).some((control) =>
+      this.showsError(control)
+    );
+  }
+
   /** Message under a field: the backend's issue, else the local validator's message. */
   fieldError(path: string, localMessage = ''): string {
     return fieldErrorMessage(this.form.get(path), localMessage);
   }
+
+  /**
+   * Message under a certificate editor, which has no form field to decide when it shows one: the
+   * backend's issue, else `requiredMessage` once the empty editor shows its error.
+   */
+  certificateError(path: string, requiredMessage: string): string {
+    const control = this.form.get(path);
+    const required = this.showsError(control) && control?.hasError('required');
+    return fieldErrorMessage(control, required ? requiredMessage : '');
+  }
+}
+
+/** Under a key chain select whose key chain, named by `subject`, no longer exists. */
+function missingKeyChainMessage(subject: string): string {
+  return `${subject} does not exist, so saving fails. Choose another.`;
 }
 
 /**

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     isTrustListReferenceKind,
+    managedTrustListAt,
     referencesVisibleTo,
     TrustListInUseError,
     type TrustListReference,
@@ -167,5 +168,65 @@ describe("isTrustListReferenceKind", () => {
     it("accepts only kinds that can reference a trust list", () => {
         expect(isTrustListReferenceKind("IssuanceConfig")).toBe(true);
         expect(isTrustListReferenceKind("TrustList")).toBe(false);
+    });
+});
+
+describe("managedTrustListAt", () => {
+    const bases = ["https://public.example/eudiplo/", "http://127.0.0.1:3000"];
+
+    it.each([
+        [
+            "below PUBLIC_URL with a path",
+            "https://public.example/eudiplo/issuers/acme/trust-list/list-1",
+        ],
+        [
+            "below INTERNAL_URL",
+            "http://127.0.0.1:3000/issuers/acme/trust-list/list-1",
+        ],
+        [
+            "with a trailing slash, a query and a fragment",
+            "https://PUBLIC.example/eudiplo/issuers/acme/trust-list/list-1/?a=b#c",
+        ],
+    ])("names the managed list for a URL %s", (_case, url) => {
+        expect(managedTrustListAt(url, bases)).toEqual({
+            tenantId: "acme",
+            id: "list-1",
+        });
+    });
+
+    it("decodes the tenant and list ID", () => {
+        expect(
+            managedTrustListAt(
+                "http://127.0.0.1:3000/issuers/a%2Fb/trust-list/list%201",
+                bases,
+            ),
+        ).toEqual({ tenantId: "a/b", id: "list 1" });
+    });
+
+    it.each([
+        [
+            "on another host",
+            "https://other.example/eudiplo/issuers/acme/trust-list/list-1",
+        ],
+        [
+            "on another port",
+            "http://127.0.0.1:3001/issuers/acme/trust-list/list-1",
+        ],
+        [
+            "outside the base path",
+            "https://public.example/issuers/acme/trust-list/list-1",
+        ],
+        [
+            "for another resource",
+            "http://127.0.0.1:3000/issuers/acme/status-list/list-1",
+        ],
+        [
+            "with more segments",
+            "http://127.0.0.1:3000/issuers/acme/trust-list/list-1/versions",
+        ],
+        ["without an ID", "http://127.0.0.1:3000/issuers/acme/trust-list/"],
+        ["that cannot be parsed", "<TENANT_URL>/trust-list/list-1"],
+    ])("names no managed list for a URL %s", (_case, url) => {
+        expect(managedTrustListAt(url, bases)).toBeUndefined();
     });
 });

@@ -55,6 +55,7 @@ describe("Hosted wallet provider trust", () => {
             .setProtectedHeader({ alg: "ES256", x5c: attester.x5c })
             .sign(await importJWK(attester, "ES256"));
         return validateAttestationProofTrust(jwt, refs, {
+            tenantId,
             trustStoreService: app.get(TrustStoreService),
             x509ValidationService: app.get(X509ValidationService),
         });
@@ -118,6 +119,7 @@ describe("Hosted wallet provider trust", () => {
             "http://uri.etsi.org/19602/LoTEType/EUWalletProvidersList",
         );
         const store = await app.get(TrustStoreService).getTrustStore({
+            tenantId,
             lotes: refs,
             acceptedServiceTypes: [...walletSolutionServiceTypes],
         });
@@ -148,6 +150,7 @@ describe("Hosted wallet provider trust", () => {
         await expect(validate(untrusted)).rejects.toThrow();
         await expect(
             app.get(TrustStoreService).getTrustStore({
+                tenantId,
                 lotes: [{ ...refs[0], verifierX509Der: untrusted.x5c[0] }],
             }),
         ).rejects.toThrow("verification failed");
@@ -175,6 +178,7 @@ describe("Hosted wallet provider trust", () => {
             .setProtectedHeader({ alg: "ES256", x5c: wallet.x5c })
             .sign(await importJWK(wallet, "ES256"));
         const deps = {
+            tenantId,
             trustStoreService: app.get(TrustStoreService),
             x509ValidationService: app.get(X509ValidationService),
         };
@@ -191,7 +195,9 @@ describe("Hosted wallet provider trust", () => {
             });
             const wrongRefs = await store(toPem(untrusted.x5c[0]));
             await expect(
-                app.get(TrustStoreService).getTrustStore({ lotes: wrongRefs }),
+                app
+                    .get(TrustStoreService)
+                    .getTrustStore({ tenantId, lotes: wrongRefs }),
             ).rejects.toThrow("verification failed");
         } finally {
             await issuanceService.storeIssuanceConfiguration(tenantId, {
@@ -246,6 +252,7 @@ describe("Hosted wallet provider trust", () => {
         expect(verifierX509Der).toBe(signer.x5c[0]);
         await expect(
             app.get(TrustStoreService).getTrustStore({
+                tenantId,
                 lotes: [{ ...refs[0], verifierX509Der }],
             }),
         ).resolves.toMatchObject({ entities: expect.any(Array) });

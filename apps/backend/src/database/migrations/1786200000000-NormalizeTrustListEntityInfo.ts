@@ -21,10 +21,10 @@ const COLUMN = "entityConfig";
  * page then show values that the API accepts. The signed list keeps its
  * published values until the next update.
  */
-export class NormalizeTrustListEntityInfo1786100000000
+export class NormalizeTrustListEntityInfo1786200000000
     implements MigrationInterface
 {
-    name = "NormalizeTrustListEntityInfo1786100000000";
+    name = "NormalizeTrustListEntityInfo1786200000000";
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         const table = await queryRunner.getTable(TABLE);

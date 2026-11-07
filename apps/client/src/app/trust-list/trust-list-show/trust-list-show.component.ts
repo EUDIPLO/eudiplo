@@ -339,6 +339,7 @@ export class TrustListShowComponent implements OnInit {
   }
 
   delete() {
+    // `disabledInteractive` keeps Delete clickable while it looks disabled.
     if (this.deleting) return;
     const blocked = this.deleteBlockedReason();
     if (blocked) {

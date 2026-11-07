@@ -38,9 +38,10 @@
         <button
           mat-icon-button
           (click)="delete()"
-          matTooltip="Delete list"
+          [matTooltip]="deleting ? 'Deleting the trust list…' : 'Delete list'"
           aria-label="Delete list"
           [disabled]="deleting"
+          disabledInteractive
           color="warn"
           appConfigManaged
           managedKind="TrustList"
