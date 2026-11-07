@@ -97,7 +97,8 @@ export class OidcService {
       onLoad: 'check-sso',
       pkceMethod: 'S256',
       checkLoginIframe: false,
-      silentCheckSsoRedirectUri: `${window.location.origin}/silent-check-sso.html`,
+      // Under the base href: Keycloak redirects only to pages of the web client.
+      silentCheckSsoRedirectUri: new URL('silent-check-sso.html', document.baseURI).href,
       token: storedTokens?.token,
       refreshToken: storedTokens?.refreshToken,
       idToken: storedTokens?.idToken,
@@ -123,7 +124,8 @@ export class OidcService {
 
   logout(redirectUri?: string): void {
     this.clearStorage();
-    this.keycloak?.logout({ redirectUri: redirectUri ?? window.location.origin });
+    // The web client's base URL, also when it is served under a path.
+    this.keycloak?.logout({ redirectUri: redirectUri ?? document.baseURI });
   }
 
   saveConfig(config: OidcConfig): void {

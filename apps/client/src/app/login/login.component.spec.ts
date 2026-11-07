@@ -4,7 +4,16 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { OAuth2HttpError } from '@badgateway/oauth2-client';
 import { Subject } from 'rxjs';
-import { beforeEach, describe, expect, it, type Mock, type MockInstance, vi } from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type Mock,
+  type MockInstance,
+  vi,
+} from 'vitest';
 
 import { ApiService, type EndedSession } from '../core';
 import { OidcService } from '../core/oidc.service';
@@ -33,10 +42,15 @@ describe('LoginComponent with a kept session', () => {
     discoveryAnswers?: Record<string, Promise<Record<string, string>>>;
     /** The instance URLs discovery was asked for, in order. */
     discoveryRequests: string[];
+    /** The instance this browser last signed in to. */
+    lastInstance?: string;
+    rememberSignedInInstance: Mock<(url: string) => void>;
   };
   let queryParams: Record<string, string>;
   let snackBar: { open: Mock };
   let navigateByUrl: MockInstance<Router['navigateByUrl']>;
+  /** The question before signing in at an instance the link chose; the user agrees unless a test says otherwise. */
+  let confirm: Mock<(question: string) => boolean>;
   let fixture: ComponentFixture<LoginComponent>;
 
   const page = () => fixture.nativeElement as HTMLElement;
@@ -77,9 +91,12 @@ describe('LoginComponent with a kept session', () => {
       logout: vi.fn(() => api.sessionEnded$.next()),
       discovery: {},
       discoveryRequests: [],
+      rememberSignedInInstance: vi.fn(),
     };
     queryParams = {};
     snackBar = { open: vi.fn() };
+    confirm = vi.fn(() => true);
+    vi.stubGlobal('confirm', confirm);
     TestBed.configureTestingModule({
       imports: [LoginComponent],
       providers: [
@@ -102,6 +119,8 @@ describe('LoginComponent with a kept session', () => {
             refreshAccessToken: api.refreshAccessToken,
             loginWithClientCredentials: api.loginWithClientCredentials,
             logout: api.logout,
+            lastSignedInInstance: () => api.lastInstance,
+            rememberSignedInInstance: api.rememberSignedInInstance,
             fetchDiscovery: (url: string) => {
               api.discoveryRequests.push(url);
               return (
@@ -128,6 +147,8 @@ describe('LoginComponent with a kept session', () => {
       .overrideProvider(MatSnackBar, { useValue: snackBar });
     navigateByUrl = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
   });
+
+  afterEach(() => vi.unstubAllGlobals());
 
   it('waits for the kept session instead of asking for credentials', () => {
     render();
@@ -656,6 +677,249 @@ describe('LoginComponent with a kept session', () => {
       expect(api.loginWithClientCredentials).toHaveBeenCalledOnce();
       expectUnavailable(fixture, login, 'Signing in…');
       expect(snackTexts()).toEqual([]);
+    });
+  });
+
+  describe('an instance the link chose', () => {
+    let redirectToLogin: Mock<() => Promise<void>>;
+
+    beforeEach(() => {
+      api.kept = false;
+      redirectToLogin = vi.fn(() => Promise.resolve());
+      Object.assign(TestBed.inject(OidcService), { redirectToLogin });
+    });
+
+    /** Opens the page from a link that chose `apiUrl`, which offers SSO. */
+    async function openLink(apiUrl: string): Promise<void> {
+      queryParams['apiUrl'] = apiUrl;
+      api.discovery = { issuer: 'http://idp.test', ui_client_id: 'ui' };
+      render();
+      await vi.waitFor(() => expect(fixture.componentInstance.detectedMode).toBe('oidc'));
+    }
+
+    /** Builds the console as a development or production build with `baseUrl` in its environment. */
+    function useBuild(development: boolean, baseUrl: string): void {
+      Object.assign(TestBed.inject(EnvironmentService), {
+        isDevelopment: () => development,
+        getEnvironment: () => ({ oidc: { clientId: '', clientSecret: '' }, api: { baseUrl } }),
+      });
+    }
+
+    it('asks before SSO sends the token to it, and says what to do when the user declines', async () => {
+      confirm.mockReturnValue(false);
+      await openLink('https://other.test/');
+
+      await fixture.componentInstance.onSubmit();
+
+      expect(confirm).toHaveBeenCalledWith(
+        'The link you opened chose the EUDIPLO instance https://other.test. After you sign in, the console sends it your access token, which lets it act with your roles. Sign in only if you trust this instance.'
+      );
+      expect(redirectToLogin).not.toHaveBeenCalled();
+      expect(fixture.componentInstance.isLoading).toBe(false);
+      expect(snackTexts()).toEqual([
+        'Not signed in at https://other.test. Enter the address of an EUDIPLO instance you trust.',
+      ]);
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(document.activeElement).toBe(input('apiUrl'));
+      });
+    });
+
+    it('signs in with SSO after the user agrees', async () => {
+      await openLink('https://other.test');
+
+      await fixture.componentInstance.onSubmit();
+
+      expect(confirm).toHaveBeenCalledOnce();
+      expect(redirectToLogin).toHaveBeenCalledWith({
+        issuerUrl: 'http://idp.test',
+        uiClientId: 'ui',
+        apiUrl: 'https://other.test',
+      });
+    });
+
+    it('asks before sending a client secret to it', async () => {
+      confirm.mockReturnValue(false);
+      queryParams['apiUrl'] = 'https://other.test';
+      render();
+
+      await submitForm('client-a', 'https://other.test');
+
+      expect(confirm.mock.calls[0][0]).toContain(
+        'Signing in sends it the client secret you entered, which lets it act as this client.'
+      );
+      expect(api.loginWithClientCredentials).not.toHaveBeenCalled();
+    });
+
+    it('does not ask again when the user signs in again after agreeing', async () => {
+      queryParams['apiUrl'] = 'https://other.test';
+      api.refreshAccessToken.mockRejectedValueOnce(new Error('401'));
+      render();
+
+      await submitForm('client-a', 'https://other.test');
+      expect(api.rememberSignedInInstance).not.toHaveBeenCalled();
+      await submitForm('client-a', 'https://other.test');
+
+      expect(confirm).toHaveBeenCalledOnce();
+      expect(api.loginWithClientCredentials).toHaveBeenCalledTimes(2);
+    });
+
+    it('asks before a link signs in with its own credentials', async () => {
+      confirm.mockReturnValue(false);
+      Object.assign(queryParams, {
+        clientId: 'client-b',
+        clientSecret: 'secret-b',
+        apiUrl: 'https://other.test',
+      });
+      render();
+      await fixture.whenStable();
+
+      expect(confirm).toHaveBeenCalledWith(
+        'The link you opened chose the EUDIPLO instance https://other.test. It signs you in with the client the link names, and everything you do in the console goes to this instance. Sign in only if you trust this instance.'
+      );
+      expect(api.loginWithClientCredentials).not.toHaveBeenCalled();
+    });
+
+    it("drops the link's client when the user declines its instance", async () => {
+      confirm.mockReturnValue(false);
+      Object.assign(queryParams, {
+        clientId: 'client-b',
+        clientSecret: 'secret-b',
+        apiUrl: 'https://other.test',
+      });
+      render();
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance.loginForm.value).toEqual({
+        apiUrl: 'https://other.test',
+        clientId: '',
+        clientSecret: '',
+      });
+      expect(snackTexts()).toEqual([
+        'Not signed in at https://other.test. Enter the address of an EUDIPLO instance you trust.',
+      ]);
+    });
+
+    it('keeps waiting for a kept session when the user declines the instance of a link', async () => {
+      api.kept = true;
+      confirm.mockReturnValue(false);
+      Object.assign(queryParams, {
+        clientId: 'client-b',
+        clientSecret: 'secret-b',
+        apiUrl: 'https://other.test',
+      });
+      render();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(page().querySelector('output')?.textContent).toContain(
+        'Resuming the session of client-a'
+      );
+      expect(snackTexts()).toEqual([
+        'Not signed in at https://other.test. The previous session continues.',
+      ]);
+      expect(api.loginWithClientCredentials).not.toHaveBeenCalled();
+    });
+
+    it("asks again before SSO after the user agreed to the link's own client", async () => {
+      Object.assign(queryParams, {
+        clientId: 'client-b',
+        clientSecret: 'secret-b',
+        apiUrl: 'https://other.test',
+      });
+      api.discovery = { issuer: 'http://idp.test', ui_client_id: 'ui' };
+      api.refreshAccessToken.mockRejectedValueOnce(new Error('401'));
+      render();
+      await vi.waitFor(() => expect(fixture.componentInstance.selectedLoginMode).toBe('sso'));
+
+      await fixture.componentInstance.onSubmit();
+
+      expect(confirm.mock.calls.map(([question]) => question)).toEqual([
+        expect.stringContaining('It signs you in with the client the link names'),
+        expect.stringContaining('the console sends it your access token'),
+      ]);
+      expect(redirectToLogin).toHaveBeenCalledOnce();
+    });
+
+    it("does not remember an instance signed in to with the link's own client", async () => {
+      Object.assign(queryParams, {
+        clientId: 'client-b',
+        clientSecret: 'secret-b',
+        apiUrl: 'https://other.test',
+      });
+      render();
+      await fixture.whenStable();
+
+      expect(api.loginWithClientCredentials).toHaveBeenCalledOnce();
+      expect(api.rememberSignedInInstance).not.toHaveBeenCalled();
+    });
+
+    it('remembers the instance it signed in to, so links to it do not ask', async () => {
+      queryParams['apiUrl'] = 'https://other.test/';
+      render();
+
+      await submitForm('client-a', 'https://other.test/');
+
+      expect(api.rememberSignedInInstance).toHaveBeenCalledWith('https://other.test');
+    });
+
+    it('does not ask for the instance this browser last signed in to', async () => {
+      api.lastInstance = 'https://backend.test';
+      Object.assign(queryParams, {
+        clientId: 'client-b',
+        clientSecret: 'secret-b',
+        apiUrl: 'https://backend.test/',
+      });
+      render();
+      await fixture.whenStable();
+
+      expect(confirm).not.toHaveBeenCalled();
+      expect(api.loginWithClientCredentials).toHaveBeenCalledWith(
+        'client-b',
+        'secret-b',
+        'https://backend.test',
+        undefined
+      );
+    });
+
+    it('does not ask for the instance the deployment names', async () => {
+      vi.stubGlobal('env', { apiUrl: 'https://backend.test/' });
+      await openLink('https://backend.test');
+
+      await fixture.componentInstance.onSubmit();
+
+      expect(confirm).not.toHaveBeenCalled();
+      expect(redirectToLogin).toHaveBeenCalledOnce();
+    });
+
+    it('does not ask in a development build for the instance of its environment', async () => {
+      useBuild(true, 'http://localhost:3000');
+      await openLink('http://localhost:3000');
+
+      await fixture.componentInstance.onSubmit();
+
+      expect(confirm).not.toHaveBeenCalled();
+    });
+
+    it('asks in a production build for the placeholder of its environment', async () => {
+      useBuild(false, 'https://your-api-prod.com');
+      await openLink('https://your-api-prod.com');
+
+      await fixture.componentInstance.onSubmit();
+
+      expect(confirm).toHaveBeenCalledOnce();
+    });
+
+    it('does not ask for an instance the user entered instead', async () => {
+      await openLink('https://other.test');
+      fixture.componentInstance.loginForm.patchValue({ apiUrl: 'https://mine.test' });
+
+      await fixture.componentInstance.onSubmit();
+
+      expect(confirm).not.toHaveBeenCalled();
+      expect(redirectToLogin).toHaveBeenCalledWith(
+        expect.objectContaining({ apiUrl: 'https://mine.test' })
+      );
     });
   });
 });
