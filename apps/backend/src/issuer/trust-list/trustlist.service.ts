@@ -39,7 +39,6 @@ import {
 } from "./domain/trust-list-entity-key-chains.js";
 import {
     type ExternalEntityCertificates,
-    entityInfoIssues,
     externalEntityCertificates,
     keyChainNotFoundIssue,
     TrustListInputError,
@@ -52,6 +51,7 @@ import {
 } from "./domain/trust-list-signing-key-chain.js";
 import {
     isTrustListRenewalDue,
+    trustListDateTime,
     trustListNextUpdate,
 } from "./domain/trust-list-validity.js";
 import {
@@ -485,8 +485,8 @@ export class TrustListService {
                 ListAndSchemeInformation: {
                     ...lote.ListAndSchemeInformation,
                     LoTESequenceNumber: sequenceNumber,
-                    ListIssueDateTime: now.toISOString(),
-                    NextUpdate: trustListNextUpdate(now).toISOString(),
+                    ListIssueDateTime: trustListDateTime(now),
+                    NextUpdate: trustListDateTime(trustListNextUpdate(now)),
                 },
             },
         };
@@ -575,7 +575,6 @@ export class TrustListService {
         const isStored = storedEntityKeyChains(existing?.entityConfig);
         const issues: TrustListInputIssue[] = [
             ...external.issues,
-            ...entityInfoIssues(config.entities),
             ...(keyChainId
                 ? keyChainIssues(
                       ["keyChainId"],
@@ -621,7 +620,7 @@ export class TrustListService {
      * The LoTE entries of entities whose input {@link checkedEntries}
      * accepted.
      * @throws TrustListInputError at `entities.<index>.info` for entity info
-     * the LoTE builder refuses and entityInfoIssues does not foresee
+     * the LoTE builder refuses although the body schema accepted it
      */
     private createEntities(
         entities: TrustListCreateDto["entities"],
@@ -866,7 +865,7 @@ export class TrustListService {
                 PostalCode: info.postalCode || "",
                 StreetAddress: info.streetAddress || "",
             },
-            lang.split("-")[0], // Use short lang code for postal
+            lang,
         );
 
         // Only add email if a valid URI is provided
@@ -912,8 +911,8 @@ export class TrustListService {
                     },
                 ],
                 SchemeTerritory: "EU",
-                ListIssueDateTime: issuedAt.toISOString(),
-                NextUpdate: nextUpdate.toISOString(),
+                ListIssueDateTime: trustListDateTime(issuedAt),
+                NextUpdate: trustListDateTime(nextUpdate),
                 LoTESequenceNumber: sequenceNumber,
             },
             entities,

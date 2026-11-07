@@ -3,6 +3,7 @@ import {
     isTrustListRenewalDue,
     TRUST_LIST_RENEWAL_WINDOW_MS,
     TRUST_LIST_VALIDITY_MS,
+    trustListDateTime,
     trustListNextUpdate,
 } from "./trust-list-validity.js";
 
@@ -15,6 +16,13 @@ describe("trust list validity", () => {
             "2026-11-01T12:00:00.000Z",
         );
         expect(TRUST_LIST_RENEWAL_WINDOW_MS).toBe(TRUST_LIST_VALIDITY_MS / 3);
+    });
+
+    it("publishes date-times in whole UTC seconds (ETSI TS 119 602 6.1.3)", () => {
+        expect(trustListDateTime(new Date("2026-10-02T12:00:00.987Z"))).toBe(
+            "2026-10-02T12:00:00Z",
+        );
+        expect(trustListDateTime(now)).toBe("2026-10-02T12:00:00Z");
     });
 
     it("is due inside the renewal window and after NextUpdate", () => {

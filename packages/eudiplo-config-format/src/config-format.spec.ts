@@ -1476,3 +1476,140 @@ describe("PresentationConfig v3 to v4", () => {
         );
     });
 });
+
+describe("TrustList v1 to v2", () => {
+    const v1 = (info: Record<string, unknown>) => ({
+        $schema: schemaUrl("TrustList", 1),
+        spec: {
+            id: "eaa-providers",
+            entities: [
+                {
+                    type: "internal",
+                    issuerKeyChainId: "issuer",
+                    revocationKeyChainId: "status",
+                    info: { name: "Example", ...info },
+                },
+            ],
+        },
+    });
+    const issues = (result: ReturnType<typeof migrateDocument>) =>
+        result.issues.map(({ severity, code, path }) => ({
+            severity,
+            code,
+            path,
+        }));
+
+    it("upgrades conforming entity info unchanged and only once", () => {
+        const info = {
+            lang: "de-at",
+            country: "DE",
+            uri: "https://example.com/about",
+        };
+        const result = migrateDocument(v1(info), validateConfigDocument);
+
+        expect(result.issues).toEqual([]);
+        expect(result.migrations).toEqual(["trust-list-v2-etsi-entity-info"]);
+        expect(result.document.$schema).toBe(schemaUrl("TrustList", 2));
+        expect(result.document.spec).toEqual(v1(info).spec);
+        expect(
+            migrateDocument(result.document, validateConfigDocument).migrations,
+        ).toEqual([]);
+    });
+
+    it("fixes the case of country and lang without a warning", () => {
+        const result = migrateDocument(
+            v1({ lang: "DE-AT", country: " de" }),
+            validateConfigDocument,
+        );
+
+        expect(result.issues).toEqual([]);
+        expect(result.document.$schema).toBe(schemaUrl("TrustList", 2));
+        expect(
+            (result.document.spec.entities as { info: unknown }[])[0].info,
+        ).toEqual({ name: "Example", lang: "de-at", country: "DE" });
+        expect(validateConfigDocument(result.document)).toEqual([]);
+    });
+
+    it("replaces GB and GR with the ETSI codes and warns", () => {
+        const result = migrateDocument(
+            v1({ country: "gb" }),
+            validateConfigDocument,
+        );
+
+        expect(issues(result)).toEqual([
+            {
+                severity: "warning",
+                code: "TRUST_LIST_COUNTRY_REPLACED",
+                path: "/spec/entities/0/info/country",
+            },
+        ]);
+        expect(
+            (result.document.spec.entities as { info: { country: string } }[])[0]
+                .info.country,
+        ).toBe("UK");
+        expect(result.document.$schema).toBe(schemaUrl("TrustList", 2));
+    });
+
+    it("stops at values it cannot fix", () => {
+        const result = migrateDocument(
+            v1({ country: "Germany", lang: "en_US", uri: "example.com" }),
+            validateConfigDocument,
+        );
+
+        expect(issues(result)).toEqual([
+            {
+                severity: "required-input",
+                code: "TRUST_LIST_COUNTRY_INVALID",
+                path: "/spec/entities/0/info/country",
+            },
+            {
+                severity: "required-input",
+                code: "TRUST_LIST_LANGUAGE_INVALID",
+                path: "/spec/entities/0/info/lang",
+            },
+            {
+                severity: "required-input",
+                code: "TRUST_LIST_URI_INVALID",
+                path: "/spec/entities/0/info/uri",
+            },
+        ]);
+        expect(result.document.$schema).toBe(schemaUrl("TrustList", 1));
+    });
+
+    it("stops at a two-letter code that is no ISO 3166-1 code", () => {
+        // 9.x published any two characters; a non-string fails v1 itself.
+        const result = migrateDocument(
+            v1({ country: "xx" }),
+            validateConfigDocument,
+        );
+
+        expect(issues(result)).toEqual([
+            {
+                severity: "required-input",
+                code: "TRUST_LIST_COUNTRY_INVALID",
+                path: "/spec/entities/0/info/country",
+            },
+        ]);
+        expect(result.document.$schema).toBe(schemaUrl("TrustList", 1));
+    });
+
+    it("refuses lower-case codes and names in v2 files", () => {
+        const v2 = (country: string) =>
+            normalizeDocument({
+                $schema: schemaUrl("TrustList", 2),
+                spec: {
+                    ...v1({}).spec,
+                    entities: [
+                        {
+                            ...(v1({}).spec.entities[0] as object),
+                            info: { name: "Example", country },
+                        },
+                    ],
+                },
+            });
+        expect(validateConfigDocument(v2("EL"))).toEqual([]);
+        for (const country of ["de", "Germany", "GB", "12"]) {
+            expect(validateConfigDocument(v2(country))).not.toEqual([]);
+        }
+    });
+});

@@ -19,6 +19,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const now = new Date("2026-10-02T12:00:00.000Z");
 const inDays = (days: number) =>
     new Date(now.getTime() + days * DAY_MS).toISOString();
+/** As a re-issued list publishes it: whole seconds (ETSI TS 119 602 6.1.3). */
+const publishedInDays = (days: number) => inDays(days).replace(".000Z", "Z");
 
 const entities = [{ TrustedEntityInformation: { TEName: [] } }];
 
@@ -194,8 +196,8 @@ describe("TrustListService", () => {
                     LoTE: {
                         ListAndSchemeInformation: {
                             LoTESequenceNumber: 3,
-                            ListIssueDateTime: now.toISOString(),
-                            NextUpdate: inDays(30),
+                            ListIssueDateTime: publishedInDays(0),
+                            NextUpdate: publishedInDays(30),
                         },
                         TrustedEntitiesList: entities,
                     },
@@ -228,7 +230,7 @@ describe("TrustListService", () => {
             for (const id of ["expired", "legacy"]) {
                 const data = store.get(id)!.data as LoTEDocument;
                 expect(data.LoTE.ListAndSchemeInformation.NextUpdate).toBe(
-                    inDays(30),
+                    publishedInDays(30),
                 );
                 expect(data.LoTE.TrustedEntitiesList).toEqual(entities);
             }
@@ -455,33 +457,6 @@ describe("TrustListService", () => {
             expect(trustListRepo.save).not.toHaveBeenCalled();
         });
 
-        it("refuses entity info a LoTE document cannot hold at its field", async () => {
-            const { service, trustListRepo } = createService([]);
-
-            const error = await service
-                .create(
-                    {
-                        id: "bad-info",
-                        entities: [
-                            {
-                                ...externalEntity,
-                                info: { name: "Issuer", country: "Germany" },
-                            },
-                        ],
-                    },
-                    { id: "tenant", name: "Tenant" },
-                )
-                .catch((caught: unknown) => caught);
-
-            expect((error as TrustListInputError).issues).toEqual([
-                expect.objectContaining({
-                    path: ["entities", 0, "info", "country"],
-                    code: "invalid_entity_info",
-                }),
-            ]);
-            expect(trustListRepo.save).not.toHaveBeenCalled();
-        });
-
         it("refuses other entity info the LoTE builder rejects at the entity's info, before it picks a trust list key chain", async () => {
             const { service, certService, trustListRepo } = createService([]);
             certService.find.mockRejectedValue(
@@ -495,8 +470,9 @@ describe("TrustListService", () => {
                         entities: [
                             {
                                 ...externalEntity,
-                                // The postal address takes "" before the "-".
-                                info: { name: "Issuer", lang: "-x" },
+                                // The body schema refuses this; the service
+                                // still answers the builder's refusal.
+                                info: { name: "Issuer", country: "Germany" },
                             },
                         ],
                     },
@@ -509,7 +485,7 @@ describe("TrustListService", () => {
                 expect.objectContaining({
                     path: ["entities", 0, "info"],
                     code: "invalid_entity_info",
-                    message: expect.stringContaining("lang"),
+                    message: expect.stringContaining("Country"),
                 }),
             ]);
             expect(certService.find).not.toHaveBeenCalled();

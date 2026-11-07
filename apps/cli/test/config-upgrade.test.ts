@@ -350,6 +350,52 @@ describe("config upgrade", () => {
         expect(result.spec).toEqual(valid);
     });
 
+    it("upgrades a v1 trust list to v2 with ETSI country and language codes and blocks a country name", async () => {
+        const { cwd, context, output } = await setup();
+        const source = join(cwd, "trust-list.json");
+        const spec = (info: Record<string, unknown>) => ({
+            id: "eaa-providers",
+            entities: [
+                {
+                    type: "internal",
+                    issuerKeyChainId: "issuer",
+                    revocationKeyChainId: "status",
+                    info: { name: "Example", ...info },
+                },
+            ],
+        });
+
+        await writeFile(
+            source,
+            JSON.stringify({
+                $schema: schemaUrl("TrustList", 1),
+                spec: spec({ country: "Germany" }),
+            }),
+        );
+        expect(await runCli(["config", "upgrade", source], context)).toBe(1);
+        expect(output.stderr).toContain(
+            "/spec/entities/0/info/country: required-input TRUST_LIST_COUNTRY_INVALID",
+        );
+        await expect(access(`${source}.upgraded.json`)).rejects.toThrow();
+
+        await writeFile(
+            source,
+            JSON.stringify({
+                $schema: schemaUrl("TrustList", 1),
+                spec: spec({ country: "gb", lang: "EN" }),
+            }),
+        );
+        expect(await runCli(["config", "upgrade", source], context)).toBe(0);
+        expect(output.stderr).toContain(
+            "/spec/entities/0/info/country: warning TRUST_LIST_COUNTRY_REPLACED",
+        );
+        const result = JSON.parse(
+            await readFile(`${source}.upgraded.json`, "utf8"),
+        );
+        expect(result.$schema).toBe(schemaUrl("TrustList", 2));
+        expect(result.spec).toEqual(spec({ country: "UK", lang: "en" }));
+    });
+
     it("upgrades a v2 credential configuration without unsupported constraint keywords", async () => {
         const { cwd, context, output } = await setup();
         const source = join(cwd, "pid.json");

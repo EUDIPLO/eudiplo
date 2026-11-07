@@ -8,7 +8,7 @@ Configuration files name their format in `$schema`, for example `https://eudiplo
 
 ## Format versions
 
-Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eudiplo-config-format/src/config-format.ts`); it is independent of the application version. EUDIPLO 9.0 introduced the first bumps; `IssuanceConfig` v3 followed in 9.1, `CredentialConfig` v2 to v4, `KeyChain` v2, `Client` v2, `KmsConfig` v2, `RegistrarConfig` v2, `Tenant` v2 to v4, `IssuanceConfig` v4 to v6, `KeyChain` v3 and v4, `KeyChainDefaults` v2 and `PresentationConfig` v4 in 10.0:
+Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eudiplo-config-format/src/config-format.ts`); it is independent of the application version. EUDIPLO 9.0 introduced the first bumps; `IssuanceConfig` v3 followed in 9.1, `CredentialConfig` v2 to v4, `KeyChain` v2, `Client` v2, `KmsConfig` v2, `RegistrarConfig` v2, `Tenant` v2 to v4, `IssuanceConfig` v4 to v6, `KeyChain` v3 and v4, `KeyChainDefaults` v2, `PresentationConfig` v4 and `TrustList` v2 in 10.0:
 
 | Resource | Version | Change |
 | --- | --- | --- |
@@ -33,6 +33,7 @@ Each resource type has its own format version in `CONFIG_FORMATS` (`packages/eud
 | `PresentationConfig` | v2 | `registration_cert.body.provided_attestations` is replaced by the registrar's `provides_attestations` (string array). The v1 → v2 step drops the old field with a warning. |
 | `PresentationConfig` | v3 | DCQL claim `values` accept integers and booleans besides strings and must be non-empty. A v2 file is a valid v3 file unless it has an empty `values` array. |
 | `PresentationConfig` | v4 | Optional `allowedOrigins` (web origins for Digital Credentials API requests). A v3 file is a valid v4 file; a bare presentation file with `allowedOrigins` is read as v4 (`bareFileVersion`). |
+| `TrustList` | v2 | Entity info follows ETSI TS 119 602: `info.country` is an ISO 3166-1 alpha-2 code in capital letters (`UK`, `EL`, `EU` as exceptions), `info.lang` a lower-case RFC 5646 tag and `info.uri` an absolute URI. The v1 → v2 step fixes the case, replaces `GB`/`GR` with the warning `TRUST_LIST_COUNTRY_REPLACED` and stops on other values (`TRUST_LIST_COUNTRY_INVALID`, `TRUST_LIST_LANGUAGE_INVALID`, `TRUST_LIST_URI_INVALID`). |
 | All other resources | v1 | |
 
 The backend and the CLI bundle every published snapshot (`schemas/v*/`) and never fetch schema URLs from files. Older files are upgraded on import, one version step at a time, through `CONFIG_MIGRATIONS`: the startup import and bundle imports (`POST /api/config-bundles/plan` and `/import`) accept warnings and stop on issues that need input; `eudiplo config upgrade <file-or-folder>` does the same offline. A file with a newer version than the running release supports is rejected, so 9.0 exports cannot be imported into 8.x.

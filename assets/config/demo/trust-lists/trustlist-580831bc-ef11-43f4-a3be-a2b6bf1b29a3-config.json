@@ -1,5 +1,5 @@
 {
-  "$schema": "https://eudiplo.dev/schemas/v1/TrustListConfigFile.schema.json",
+  "$schema": "https://eudiplo.dev/schemas/v2/TrustListConfigFile.schema.json",
   "metadata": {
     "generation": 1
   },

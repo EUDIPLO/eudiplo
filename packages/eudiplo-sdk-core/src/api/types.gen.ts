@@ -3762,10 +3762,19 @@ export type PresentationConfigUpdateDto = {
 };
 
 export type TrustListEntityInfo = {
-    name: string;
+    /**
+     * Optional language of every text the entity publishes (name, service names, postal address, contact, information URI): an IETF RFC 5646 language tag in lower case, for example en or de-at (ETSI TS 119 602 clause 6.1.4). Defaults to en.
+     */
     lang?: string;
+    /**
+     * Optional absolute URI where relying parties find information about the entity, published as TEInformationURI. Write it as a URL parser serializes it, for example https://example.com/about with spaces percent-encoded.
+     */
     uri?: string;
+    /**
+     * Optional country of the postal address: an ISO 3166-1 alpha-2 code in capital letters, with "UK" for the United Kingdom, "EL" for Greece and "EU" for the European Union (ETSI TS 119 602 clause 6.1.5). Defaults to EU.
+     */
     country?: string;
+    name: string;
     locality?: string;
     postalCode?: string;
     streetAddress?: string;
@@ -8219,7 +8228,7 @@ export type TrustListControllerCreateTrustListData = {
 
 export type TrustListControllerCreateTrustListErrors = {
     /**
-     * The body fails validation, or a field names a key chain that does not exist or has the wrong usage type, or holds a value a trust list cannot publish: keyChainId needs a trustList key chain, issuerKeyChainId an attestation one and revocationKeyChainId a statusList or attestation one; issuerCertPem and revocationCertPem need an X.509 certificate, info.country two characters and info.uri an absolute URL. errors[].path names each field
+     * The body fails validation, or a field names a key chain that does not exist or has the wrong usage type, or holds a value a trust list cannot publish: keyChainId needs a trustList key chain, issuerKeyChainId an attestation one and revocationKeyChainId a statusList or attestation one; issuerCertPem and revocationCertPem need an X.509 certificate, info.country an ISO 3166-1 alpha-2 code in capital letters (UK, EL, EU as exceptions), info.lang a lower-case RFC 5646 language tag and info.uri an absolute URI in serialized form (ETSI TS 119 602). errors[].path names each field
      */
     400: unknown;
     /**
@@ -8294,7 +8303,7 @@ export type TrustListControllerUpdateTrustListData = {
 
 export type TrustListControllerUpdateTrustListErrors = {
     /**
-     * The body fails validation, or a field names a key chain that does not exist or has the wrong usage type, or holds a value a trust list cannot publish: keyChainId needs a trustList key chain, issuerKeyChainId an attestation one and revocationKeyChainId a statusList or attestation one; issuerCertPem and revocationCertPem need an X.509 certificate, info.country two characters and info.uri an absolute URL. errors[].path names each field. An entity key chain of another usage type that the stored list already names in the same field is accepted
+     * The body fails validation, or a field names a key chain that does not exist or has the wrong usage type, or holds a value a trust list cannot publish: keyChainId needs a trustList key chain, issuerKeyChainId an attestation one and revocationKeyChainId a statusList or attestation one; issuerCertPem and revocationCertPem need an X.509 certificate, info.country an ISO 3166-1 alpha-2 code in capital letters (UK, EL, EU as exceptions), info.lang a lower-case RFC 5646 language tag and info.uri an absolute URI in serialized form (ETSI TS 119 602). errors[].path names each field. An entity key chain of another usage type that the stored list already names in the same field is accepted
      */
     400: unknown;
     /**

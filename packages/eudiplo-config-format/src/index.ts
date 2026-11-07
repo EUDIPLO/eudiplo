@@ -6,3 +6,4 @@ export * from "./config-values.js";
 export * from "./claim-constraints.js";
 export * from "./claim-patterns.js";
 export * from "./display-entries.js";
+export * from "./trust-list-entity-info.js";
