@@ -11,7 +11,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import * as x509 from "@peculiar/x509";
 import type { Signer } from "@sd-jwt/core";
 import type { JWK, JWSHeaderParameters, JWTPayload } from "jose";
-import { type FindOptionsSelect, Repository } from "typeorm";
+import { type FindOptionsSelect, In, Repository } from "typeorm";
 import { v4 } from "uuid";
 import type { DefaultKeyChains } from "../../auth/tenant/domain/tenant-data.js";
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
@@ -21,8 +21,8 @@ import {
     certificateNotBefore,
 } from "./cert/certificate-builder.service.js";
 import {
-    authorizationServerKeyChainUsageRefusal,
     accessTokenVerificationKeys,
+    authorizationServerKeyChainUsageRefusal,
     DEFAULT_AUTHORIZATION_SERVER_KEY_CHAIN_ID,
 } from "./domain/authorization-server-keys.js";
 import {
@@ -74,6 +74,12 @@ const PUBLIC_JWK_MEMBERS = [
 ] as const;
 
 /**
+ * The most IDs {@link KeyChainService.getEntities} binds in one query; for
+ * more it reads all key chains of the tenant instead.
+ */
+const MAX_IDS_PER_QUERY = 500;
+
+/**
  * KeyChainService manages the unified key chain model.
  *
  * Acts as a facade: all key generation, import and signing is delegated
@@ -81,6 +87,7 @@ const PUBLIC_JWK_MEMBERS = [
  * Certificate construction is delegated to
  * {@link CertificateBuilderService}.
  */
+
 @Injectable()
 export class KeyChainService {
     private readonly logger = new Logger(KeyChainService.name);
@@ -448,6 +455,29 @@ export class KeyChainService {
         }
 
         return keyChain;
+    }
+
+    /**
+     * The key chains of the tenant with these IDs, as {@link getEntity} finds
+     * them; IDs without a key chain are left out. Always one query, however
+     * many IDs a request names: by ID, or for more IDs than one query should
+     * bind, all key chains of the tenant, which are few.
+     */
+    async getEntities(
+        tenantId: string,
+        ids: Iterable<string>,
+    ): Promise<KeyChainEntity[]> {
+        const wanted = new Set(ids);
+        if (wanted.size === 0) return [];
+        if (wanted.size <= MAX_IDS_PER_QUERY) {
+            return this.keyChainRepository.find({
+                where: { tenantId, id: In([...wanted]) },
+            });
+        }
+        const keyChains = await this.keyChainRepository.find({
+            where: { tenantId },
+        });
+        return keyChains.filter(({ id }) => wanted.has(id));
     }
 
     /**

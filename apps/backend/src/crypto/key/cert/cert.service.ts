@@ -95,19 +95,7 @@ export class CertService {
             fallbackType,
         );
 
-        // Parse the certificate PEM to extract chain
-        const certChain = this.parseCertificateChain(
-            keyChain.activeCertificate,
-        );
-
-        const certInfo: CertificateInfo = {
-            id: keyChain.id,
-            tenantId,
-            crt: certChain,
-            description: keyChain.description,
-            keyId: keyChain.id,
-            keyChain,
-        };
+        const certInfo = this.certificateInfo(tenantId, keyChain);
 
         if (!skipValidation) {
             const validation = await this.validateCertificate(certInfo);
@@ -129,14 +117,35 @@ export class CertService {
         certId: string,
     ): Promise<CertificateInfo> {
         const keyChain = await this.keyChainService.getEntity(tenantId, certId);
-        const certChain = this.parseCertificateChain(
-            keyChain.activeCertificate,
-        );
+        return this.certificateInfo(tenantId, keyChain);
+    }
 
+    /**
+     * The certificates of the tenant's key chains with these IDs, by key chain
+     * ID, as {@link getCertificateById} gives them. IDs without a key chain
+     * are missing from the map.
+     */
+    async getCertificatesByIds(
+        tenantId: string,
+        ids: Iterable<string>,
+    ): Promise<Map<string, CertificateInfo>> {
+        const keyChains = await this.keyChainService.getEntities(tenantId, ids);
+        return new Map(
+            keyChains.map((keyChain) => [
+                keyChain.id,
+                this.certificateInfo(tenantId, keyChain),
+            ]),
+        );
+    }
+
+    private certificateInfo(
+        tenantId: string,
+        keyChain: KeyChainEntity,
+    ): CertificateInfo {
         return {
             id: keyChain.id,
             tenantId,
-            crt: certChain,
+            crt: this.parseCertificateChain(keyChain.activeCertificate),
             description: keyChain.description,
             keyId: keyChain.id,
             keyChain,
