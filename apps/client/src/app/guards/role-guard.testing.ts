@@ -21,11 +21,13 @@ import { RoleGuard } from './roles.guard';
  */
 export function respondWithCaller(caller: () => Partial<Caller> & { roles: string[] }): void {
   client.setConfig({
-    fetch: async () =>
-      new Response(JSON.stringify({ subject: null, tenantId: null, ...caller() }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
+    fetch: () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ subject: null, tenantId: null, ...caller() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      ),
   });
 }
 
@@ -35,6 +37,7 @@ export function respondWithCaller(caller: () => Partial<Caller> & { roles: strin
  */
 export function roleGuardHarness() {
   let token = '';
+  let tokenCount = 0;
   let roles: Role[] = [];
   const navigate = vi.fn();
   const openSnackBar = vi.fn();
@@ -63,7 +66,8 @@ export function roleGuardHarness() {
     canOpen(route: Route, callerRoles: Role[]): Promise<boolean> {
       expect(route.canActivate).toContain(RoleGuard);
       // A new token, so the guard loads its caller.
-      token = `token-${callerRoles.join(',')}-${Math.random()}`;
+      tokenCount += 1;
+      token = `token-${tokenCount}`;
       roles = callerRoles;
       const snapshot = { data: route.data } as unknown as ActivatedRouteSnapshot;
       return TestBed.inject(RoleGuard).canActivate(snapshot, { url: '/' } as RouterStateSnapshot);
