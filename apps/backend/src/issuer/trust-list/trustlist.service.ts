@@ -96,6 +96,21 @@ function checked<K, V>(values: ReadonlyMap<K, V>, key: K, what: string): V {
     return value;
 }
 
+/**
+ * The issue for a key chain field: the key chain does not exist, or `refusal`
+ * refuses its usage type. None when it may be used.
+ */
+function keyChainIssues(
+    path: TrustListInputIssue["path"],
+    keyChainId: string,
+    certificate: CertificateInfo | undefined,
+    refusal: (usageType: unknown) => string | undefined,
+): TrustListInputIssue[] {
+    if (!certificate) return [keyChainNotFoundIssue(path, keyChainId)];
+    const message = refusal(certificate.keyChain?.usageType);
+    return message ? [{ path, message, code: "key_chain_usage_mismatch" }] : [];
+}
+
 /** Stored list content; lists created by older releases lack the `LoTE` wrapper. */
 function storedLoTE(data: object | undefined): LoTE | undefined {
     const content = (data as { LoTE?: LoTE } | undefined)?.LoTE ?? data;
@@ -534,8 +549,8 @@ export class TrustListService {
     /**
      * Checks what the body schema cannot, and builds the LoTE entries of the
      * entities, all before a trust list key chain is picked: the key chains
-     * the list names, read in batched queries, the external certificates and
-     * the entity info. A key chain of another usage type that the stored list
+     * the list names, read in one query, the external certificates and the
+     * entity info. A key chain of another usage type that the stored list
      * already names in the same entity field is accepted.
      * @returns the certificate of `keyChainId`, when set, and the entries
      * @throws TrustListInputError with an issue at each refused field
@@ -546,10 +561,6 @@ export class TrustListService {
         existing: TrustList | undefined,
     ): Promise<{ signer?: CertificateInfo; entries: LoTETrustedEntity[] }> {
         const external = externalEntityCertificates(config.entities);
-        const issues: TrustListInputIssue[] = [
-            ...external.issues,
-            ...entityInfoIssues(config.entities),
-        ];
         const references = entityKeyChainReferences(config.entities);
         const certificates = await this.certService.getCertificatesByIds(
             tenantId,
@@ -558,68 +569,78 @@ export class TrustListService {
                 ...references.map(({ keyChainId }) => keyChainId),
             ],
         );
-
-        let signer: CertificateInfo | undefined;
-        if (config.keyChainId) {
-            signer = certificates.get(config.keyChainId);
-            const refusal =
-                signer &&
-                trustListKeyChainUsageRefusal(
-                    trustListSigningKeyChain(config.keyChainId, undefined)!,
-                    signer.keyChain?.usageType,
-                );
-            if (!signer) {
-                issues.push(
-                    keyChainNotFoundIssue(["keyChainId"], config.keyChainId),
-                );
-            } else if (refusal) {
-                issues.push({
-                    path: ["keyChainId"],
-                    message: refusal,
-                    code: "key_chain_usage_mismatch",
-                });
-            }
-        }
+        const { keyChainId } = config;
+        const signer = keyChainId ? certificates.get(keyChainId) : undefined;
 
         const isStored = storedEntityKeyChains(existing?.entityConfig);
-        for (const reference of references) {
-            const { index, field, keyChainId } = reference;
-            const path = ["entities", index, field];
-            const cert = certificates.get(keyChainId);
-            if (!cert) {
-                issues.push(keyChainNotFoundIssue(path, keyChainId));
-                continue;
-            }
-            const refusal = entityKeyChainUsageRefusal(
-                field,
-                keyChainId,
-                cert.keyChain?.usageType,
-            );
-            if (refusal && !isStored(reference)) {
-                issues.push({
-                    path,
-                    message: refusal,
-                    code: "key_chain_usage_mismatch",
-                });
-            }
-        }
+        const issues: TrustListInputIssue[] = [
+            ...external.issues,
+            ...entityInfoIssues(config.entities),
+            ...(keyChainId
+                ? keyChainIssues(
+                      ["keyChainId"],
+                      keyChainId,
+                      signer,
+                      (usageType) =>
+                          trustListKeyChainUsageRefusal(
+                              { id: keyChainId, kept: false },
+                              usageType,
+                          ),
+                  )
+                : []),
+            ...references.flatMap((reference) =>
+                keyChainIssues(
+                    ["entities", reference.index, reference.field],
+                    reference.keyChainId,
+                    certificates.get(reference.keyChainId),
+                    (usageType) =>
+                        isStored(reference)
+                            ? undefined
+                            : entityKeyChainUsageRefusal(
+                                  reference.field,
+                                  reference.keyChainId,
+                                  usageType,
+                              ),
+                ),
+            ),
+        ];
         if (issues.length > 0) {
             throw new TrustListInputError(issues);
         }
+        return {
+            signer,
+            entries: this.createEntities(
+                config.entities,
+                certificates,
+                external.certificates,
+            ),
+        };
+    }
 
+    /**
+     * The LoTE entries of entities whose input {@link checkedEntries}
+     * accepted.
+     * @throws TrustListInputError at `entities.<index>.info` for entity info
+     * the LoTE builder refuses and entityInfoIssues does not foresee
+     */
+    private createEntities(
+        entities: TrustListCreateDto["entities"],
+        keyChainCertificates: ReadonlyMap<string, CertificateInfo>,
+        externalCertificates: ReadonlyMap<number, ExternalEntityCertificates>,
+    ): LoTETrustedEntity[] {
         const entries: LoTETrustedEntity[] = [];
-        for (const [index, entity] of config.entities.entries()) {
+        const issues: TrustListInputIssue[] = [];
+        for (const [index, entity] of entities.entries()) {
             try {
                 entries.push(
                     this.createEntity(
                         entity,
                         index,
-                        certificates,
-                        external.certificates,
+                        keyChainCertificates,
+                        externalCertificates,
                     ),
                 );
             } catch (error) {
-                // Entity info that entityInfoIssues does not foresee
                 if (!(error instanceof LoTEException)) throw error;
                 issues.push({
                     path: ["entities", index, "info"],
@@ -631,7 +652,7 @@ export class TrustListService {
         if (issues.length > 0) {
             throw new TrustListInputError(issues);
         }
-        return { signer, entries };
+        return entries;
     }
 
     /**
