@@ -1,6 +1,7 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { jwtVerify, SignJWT } from "jose";
+import { AUTH_SETTINGS, type AuthSettings } from "./auth-settings.js";
 import { InternalTokenPayload, TokenPayload } from "./token.decorator.js";
 
 /** Lifetime of the access tokens the built-in OAuth2 server issues. */
@@ -14,7 +15,10 @@ export interface GenerateTokenOptions {
 
 @Injectable()
 export class JwtService {
-    constructor(private readonly configService: ConfigService) {}
+    constructor(
+        private readonly configService: ConfigService,
+        @Inject(AUTH_SETTINGS) private readonly settings: AuthSettings,
+    ) {}
 
     /**
      * Generate a JWT token for integrated OAuth2 server
@@ -82,6 +86,6 @@ export class JwtService {
      * Check if the service is using external OIDC provider
      */
     isUsingExternalOIDC(): boolean {
-        return this.configService.get<string>("OIDC") !== undefined;
+        return this.settings.mode !== "builtin";
     }
 }

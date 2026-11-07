@@ -1,7 +1,27 @@
+import { NotSupportedError } from "../../shared/domain/not-supported-error.js";
 import { ManagedUserDto } from "./dto/managed-user.dto.js";
 import type { CreateUser, UpdateUser } from "./schemas/create-user.schema.js";
 
 export const USERS_PROVIDER = "USERS_PROVIDER";
+
+/**
+ * EUDIPLO manages people only through Keycloak's admin API. The built-in
+ * server has none, and with `OIDC_PROVIDER=generic` the identity provider
+ * manages them.
+ */
+export class UserManagementNotSupported extends NotSupportedError {
+    private static readonly reasons = {
+        builtin:
+            "Human user management is only available when EUDIPLO is configured with Keycloak as its external OIDC provider.",
+        generic:
+            "Users are managed in the identity provider (OIDC_PROVIDER=generic).",
+    };
+
+    constructor(mode: "builtin" | "generic") {
+        super(UserManagementNotSupported.reasons[mode]);
+        this.name = "UserManagementNotSupported";
+    }
+}
 
 export abstract class UsersProvider {
     abstract getUsers(tenantId: string): Promise<ManagedUserDto[]>;

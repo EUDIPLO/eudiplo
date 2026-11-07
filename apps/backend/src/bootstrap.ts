@@ -8,6 +8,7 @@ import { Logger } from "nestjs-pino";
 import { cleanupOpenApiDoc } from "nestjs-zod";
 import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 import { AppModule } from "./app.module.js";
+import { AUTH_SETTINGS, type AuthSettings } from "./auth/auth-settings.js";
 import {
     configureCors,
     filterOpenApiPaths,
@@ -21,6 +22,7 @@ import {
 import { loadTlsOptions } from "./platform/config/tls-options.js";
 import { ValidationErrorFilter } from "./shared/common/filters/validation-error.filter.js";
 import { createAppValidationPipe } from "./shared/common/zod/zod-schema.util.js";
+import { oidcDiscoveryUrl } from "./shared/domain/oidc-discovery-url.js";
 import { registerTolerantX509Extensions } from "./shared/utils/x509-tolerant-extensions.js";
 
 /**
@@ -76,7 +78,7 @@ async function bootstrap() {
     );
     configureCors(app, corsOrigins);
 
-    const useExternalOIDC = configService.get<string>("OIDC");
+    const authSettings = app.get<AuthSettings>(AUTH_SETTINGS);
 
     // ── Management API OpenAPI config ────────────────────────────────
     const managementConfigBuilder = new DocumentBuilder()
@@ -89,19 +91,14 @@ async function bootstrap() {
         .setOpenAPIVersion("3.1.0")
         .setVersion(process.env.VERSION ?? "main");
 
-    if (useExternalOIDC) {
-        const oidcIssuerUrl = configService.get<string>(
-            "OIDC_INTERNAL_ISSUER_URL",
+    if (authSettings.mode !== "builtin") {
+        managementConfigBuilder.addOAuth2(
+            {
+                type: "openIdConnect",
+                openIdConnectUrl: oidcDiscoveryUrl(authSettings.internalIssuer),
+            },
+            "oauth2",
         );
-        if (oidcIssuerUrl) {
-            managementConfigBuilder.addOAuth2(
-                {
-                    type: "openIdConnect",
-                    openIdConnectUrl: `${oidcIssuerUrl}/.well-known/openid-configuration`,
-                },
-                "oauth2",
-            );
-        }
     } else if (publicUrl) {
         managementConfigBuilder.addOAuth2(
             {
@@ -207,7 +204,6 @@ async function bootstrap() {
 
         const logger =
             app.getHttpAdapter().getInstance().locals?.logger || console;
-        const oidc = configService.get<string>("OIDC");
 
         await app.listen(process.env.PORT ?? 3000).then(() => {
             const port = process.env.PORT ?? 3000;
@@ -243,9 +239,11 @@ async function bootstrap() {
             logger.log(`   → Endpoint:     ${baseUrl}/health`);
             logger.log("");
             logger.log("🔐 Authentication:");
-            if (oidc) {
-                logger.log(`   → Mode:         External OIDC`);
-                logger.log(`   → Provider:     ${oidc}`);
+            if (authSettings.mode !== "builtin") {
+                logger.log(
+                    `   → Mode:         External OIDC (${authSettings.mode})`,
+                );
+                logger.log(`   → Provider:     ${authSettings.issuer}`);
             } else {
                 logger.log(
                     `   → Mode:         Integrated OAuth2 (Client Credentials)`,

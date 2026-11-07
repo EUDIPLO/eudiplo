@@ -1,14 +1,19 @@
-import { Injectable, NotImplementedException } from "@nestjs/common";
 import { ManagedUserDto } from "../dto/managed-user.dto.js";
 import type { CreateUser, UpdateUser } from "../schemas/create-user.schema.js";
-import { UsersProvider } from "../user.provider.js";
+import { UserManagementNotSupported, UsersProvider } from "../user.provider.js";
 
-@Injectable()
-export class InternalUsersProvider extends UsersProvider {
+/**
+ * People where EUDIPLO cannot manage them: without `OIDC`, or with
+ * `OIDC_PROVIDER=generic`. Every call fails, which the HTTP boundary answers
+ * with `501`.
+ */
+export class UnmanagedUsersProvider extends UsersProvider {
+    constructor(private readonly mode: "builtin" | "generic") {
+        super();
+    }
+
     private unsupported(): never {
-        throw new NotImplementedException(
-            "Human user management is only available when EUDIPLO is configured with an external OIDC provider.",
-        );
+        throw new UserManagementNotSupported(this.mode);
     }
 
     getUsers(_tenantId: string): Promise<ManagedUserDto[]> {

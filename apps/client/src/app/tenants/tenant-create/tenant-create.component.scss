@@ -12,6 +12,11 @@
     color: var(--mat-sys-on-surface-variant);
   }
 
+  mat-slide-toggle {
+    display: block;
+    margin-bottom: 8px;
+  }
+
   .section-hint {
     margin: 0 0 16px 0;
     font-size: 12px;
