@@ -103,6 +103,21 @@ export type OAuthTokenErrorResponseDto = {
     error_uri?: string;
 };
 
+export type CallerResponseDto = {
+    /**
+     * Subject of the access token: the client ID for tokens of the built-in server, the `sub` claim with an external OIDC provider.
+     */
+    subject: string | null;
+    /**
+     * ID of the caller's tenant, or null for a caller without one, such as the root client or a token whose tenant does not exist.
+     */
+    tenantId: string | null;
+    /**
+     * Roles the backend grants the caller. With an external OIDC provider they may include role names EUDIPLO does not know.
+     */
+    roles: Array<string>;
+};
+
 export type KeyResponseDto = {
     /**
      * JSON Web Keys
@@ -6843,6 +6858,29 @@ export type AuthControllerGetOAuth2TokenResponses = {
 };
 
 export type AuthControllerGetOAuth2TokenResponse = AuthControllerGetOAuth2TokenResponses[keyof AuthControllerGetOAuth2TokenResponses];
+
+export type AuthControllerGetCallerData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/me';
+};
+
+export type AuthControllerGetCallerErrors = {
+    /**
+     * Missing or invalid access token
+     */
+    401: unknown;
+};
+
+export type AuthControllerGetCallerResponses = {
+    /**
+     * The caller
+     */
+    200: CallerResponseDto;
+};
+
+export type AuthControllerGetCallerResponse = AuthControllerGetCallerResponses[keyof AuthControllerGetCallerResponses];
 
 export type TenantControllerGetTenantsData = {
     body?: never;

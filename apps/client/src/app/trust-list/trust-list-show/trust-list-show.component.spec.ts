@@ -1,3 +1,4 @@
+import { NEVER } from 'rxjs';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
@@ -79,7 +80,10 @@ describe('TrustListShowComponent public URL', () => {
           useValue: { snapshot: { paramMap: convertToParamMap({ id: trustList.id }) } },
         },
         // The admin signed in with the Compose-internal address.
-        { provide: ApiService, useValue: { getBaseUrl: () => 'http://eudiplo:3000' } },
+        {
+          provide: ApiService,
+          useValue: { getBaseUrl: () => 'http://eudiplo:3000', sessionEnded$: NEVER },
+        },
         {
           provide: FrontendConfigService,
           useValue: { getConfig: async () => ({ configImportMode: 'disabled', publicUrl }) },
@@ -197,7 +201,7 @@ describe('TrustListShowComponent references', () => {
           provide: ActivatedRoute,
           useValue: { snapshot: { paramMap: convertToParamMap({ id: trustList.id }) } },
         },
-        { provide: ApiService, useValue: { getBaseUrl: () => undefined } },
+        { provide: ApiService, useValue: { getBaseUrl: () => undefined, sessionEnded$: NEVER } },
         { provide: FrontendConfigService, useValue: { getConfig: async () => undefined } },
         { provide: CredentialConfigService, useValue: { loadConfigurations: load } },
         {
@@ -611,7 +615,7 @@ describe('TrustListShowComponent delete', () => {
           provide: ActivatedRoute,
           useValue: { snapshot: { paramMap: convertToParamMap({ id: trustList.id }) } },
         },
-        { provide: ApiService, useValue: { getBaseUrl: () => undefined } },
+        { provide: ApiService, useValue: { getBaseUrl: () => undefined, sessionEnded$: NEVER } },
         { provide: FrontendConfigService, useValue: { getConfig: async () => undefined } },
         { provide: CredentialConfigService, useValue: { loadConfigurations: async () => [] } },
       ],
@@ -706,7 +710,7 @@ describe('TrustListShowComponent download', () => {
           provide: ActivatedRoute,
           useValue: { snapshot: { paramMap: convertToParamMap({ id: trustList.id }) } },
         },
-        { provide: ApiService, useValue: { getBaseUrl: () => undefined } },
+        { provide: ApiService, useValue: { getBaseUrl: () => undefined, sessionEnded$: NEVER } },
         { provide: FrontendConfigService, useValue: { getConfig: async () => undefined } },
         { provide: CredentialConfigService, useValue: { loadConfigurations: async () => [] } },
         {
@@ -772,7 +776,7 @@ describe('TrustListShowComponent loading the list', () => {
       imports: [TrustListShowComponent],
       providers: [
         provideRouter([{ path: 'trust-list/:id', component: TrustListShowComponent }]),
-        { provide: ApiService, useValue: { getBaseUrl: () => undefined } },
+        { provide: ApiService, useValue: { getBaseUrl: () => undefined, sessionEnded$: NEVER } },
         { provide: FrontendConfigService, useValue: { getConfig: async () => undefined } },
         { provide: CredentialConfigService, useValue: { loadConfigurations: async () => [] } },
       ],

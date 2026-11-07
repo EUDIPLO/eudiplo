@@ -1,19 +1,30 @@
-import { Body, Controller, Get, Headers, Post } from "@nestjs/common";
+import {
+    Body,
+    Controller,
+    Get,
+    Headers,
+    Post,
+    UseGuards,
+} from "@nestjs/common";
 import {
     ApiBody,
     ApiConsumes,
     ApiExtraModels,
     ApiOperation,
     ApiResponse,
+    ApiSecurity,
     ApiTags,
 } from "@nestjs/swagger";
 import { KeyResponseDto } from "../crypto/key/dto/key-response.dto.js";
+import { JwtAuthGuard } from "./auth.guard.js";
 import { AuthService } from "./auth.service.js";
+import { CallerResponseDto } from "./dto/caller-response.dto.js";
 import { ClientCredentialsDto } from "./dto/client-credentials.dto.js";
 import { OAuthTokenErrorResponseDto } from "./dto/oauth-token-error-response.dto.js";
 import { OidcDiscoveryDto } from "./dto/oidc-discovery.dto.js";
 import { RoleDto } from "./dto/role.dto.js";
 import { TokenResponse } from "./dto/token-response.dto.js";
+import { Token, TokenPayload } from "./token.decorator.js";
 
 /**
  * Authentication Controller
@@ -72,6 +83,35 @@ export class AuthController {
         @Headers() headers: any,
     ): Promise<TokenResponse> {
         return this.authService.getOAuth2Token(body, headers);
+    }
+
+    /**
+     * The caller as the backend resolved it from the access token, so the web
+     * client does not read roles and the tenant from the token itself.
+     */
+    @Get("auth/me")
+    @UseGuards(JwtAuthGuard)
+    @ApiSecurity("oauth2")
+    @ApiOperation({
+        summary: "Get the caller",
+        description:
+            "Returns the subject, tenant and roles the backend grants for the access token: with the built-in server the client's current roles, with an external OIDC provider those of the token's claims. Needs no role.",
+    })
+    @ApiResponse({
+        status: 200,
+        description: "The caller",
+        type: CallerResponseDto,
+    })
+    @ApiResponse({
+        status: 401,
+        description: "Missing or invalid access token",
+    })
+    getCaller(@Token() user: TokenPayload): CallerResponseDto {
+        return {
+            subject: user.subject ?? null,
+            tenantId: user.entity?.id ?? null,
+            roles: user.roles,
+        };
     }
 
     /**

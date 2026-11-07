@@ -52,8 +52,8 @@ apps/client/src/
 ├── app/
 │   ├── app.config.ts, app.routes.ts   # providers and top-level routes
 │   ├── core/                # API service (SDK setup), reaction to refused requests, OIDC service, auth interceptor
-│   ├── services/            # environment, theme, version check, frontend config, session notices, role change notice, Grafana links, JWT helpers
-│   ├── guards/              # auth.guard.ts, roles.guard.ts
+│   ├── services/            # environment, theme, version check, frontend config, session notices, role change notice, Grafana links, caller roles and tenant (jwt.service.ts)
+│   ├── guards/              # auth.guard.ts, roles.guard.ts; both wait for the caller from GET /api/auth/me
 │   ├── common/              # shared base list component, load error card, source loading, small utilities
 │   ├── utils/               # reusable UI: editor, image field, schema validation; error messages
 │   ├── login/, dashboard/, settings/

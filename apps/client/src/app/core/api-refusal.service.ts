@@ -4,8 +4,8 @@ import { Subject } from 'rxjs';
 import { ApiService } from './api.service';
 import { OidcService } from './oidc.service';
 
-/** Shortest time between two token renewals after a `403`. */
-const roleRenewalIntervalMs = 60_000;
+/** Shortest time between two token renewals, or two reloads of the caller, after a `403`. */
+export const ROLE_RENEWAL_INTERVAL_MS = 60_000;
 
 /**
  * Reason of a `403` from the backend's role check, which the backend answers
@@ -24,8 +24,8 @@ function bearerToken(header: string | null | undefined): string | undefined {
  * Reacts to refused calls of the management API. The backend reads the client
  * behind a built-in token on every request: it answers `401` once the client is
  * deleted or has a new secret, and `403` for roles the client no longer has. A new token tells
- * whether the client still exists and carries its current roles. With OIDC,
- * keycloak-js keeps the session.
+ * whether the client still exists, and with each new token the client's current
+ * roles are loaded (`GET /api/auth/me`). With OIDC, keycloak-js keeps the session.
  */
 @Injectable({ providedIn: 'root' })
 export class ApiRefusalService implements OnDestroy {
@@ -39,8 +39,9 @@ export class ApiRefusalService implements OnDestroy {
   readonly accessRevoked$ = this.revoked.asObservable();
   private readonly rolesRefused = new Subject<void>();
   /**
-   * Emits when the backend's role check refuses the current token and no new
-   * token can show whether the client's roles changed: the tab has no secret.
+   * Emits when the backend's role check refuses the current token and the tab
+   * has no secret to get a new one; the client's current roles are then loaded
+   * for the same token (`GET /api/auth/me`).
    */
   readonly rolesRefusedWithoutRenewal$ = this.rolesRefused.asObservable();
 
@@ -112,10 +113,10 @@ export class ApiRefusalService implements OnDestroy {
     this.revoked.next();
   }
 
-  /** A new token carries the client's current roles, so the menu follows them. */
+  /** With a new token, the client's current roles are loaded, so the menu follows them. */
   private async renewForRoles(): Promise<void> {
     const now = Date.now();
-    if (now - this.rolesRenewedAt < roleRenewalIntervalMs) return;
+    if (now - this.rolesRenewedAt < ROLE_RENEWAL_INTERVAL_MS) return;
     this.rolesRenewedAt = now;
     // A failed refresh is reported like any other.
     await this.apiService.refreshAccessToken().catch(() => undefined);

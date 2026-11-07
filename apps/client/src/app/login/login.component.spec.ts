@@ -350,6 +350,147 @@ describe('LoginComponent with a kept session', () => {
     expect(navigateByUrl).toHaveBeenCalledWith('/dashboard');
   });
 
+  it('stays busy until the next page opens, as its guards wait for the roles', async () => {
+    let opened: (value: boolean) => void = () => undefined;
+    navigateByUrl.mockReturnValue(new Promise((resolve) => (opened = resolve)));
+    render();
+    button('Sign out and use other credentials')?.click();
+
+    const submitted = submitForm('client-a', 'http://backend.test');
+    await vi.waitFor(() => expect(navigateByUrl).toHaveBeenCalled());
+    expect(fixture.componentInstance.isLoading).toBe(true);
+
+    opened(true);
+    await submitted;
+    expect(fixture.componentInstance.isLoading).toBe(false);
+  });
+
+  it('reports a failed navigation after a sign-in as such, not as a failed sign-in', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    navigateByUrl.mockRejectedValue(new Error('Loading chunk failed'));
+    render();
+    button('Sign out and use other credentials')?.click();
+
+    await submitForm('client-a', 'http://backend.test');
+
+    expect(snackTexts()).toEqual([
+      'Login successful!',
+      'Signed in, but the page could not be opened: Loading chunk failed. Reload the page.',
+    ]);
+    expect(fixture.componentInstance.isLoading).toBe(false);
+  });
+
+  it('says only that the page could not be opened when the navigation gives no reason', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    navigateByUrl.mockRejectedValue({});
+    api.authenticated = true;
+    render();
+
+    await vi.waitFor(() =>
+      expect(snackTexts()).toEqual([
+        'Signed in, but the page could not be opened. Reload the page.',
+      ])
+    );
+  });
+
+  describe('when the page to return to does not open', () => {
+    beforeEach(() => {
+      vi.spyOn(TestBed.inject(Router), 'url', 'get').mockReturnValue('/login');
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      api.authenticated = true;
+    });
+
+    it('opens the dashboard when a guard refuses it, for example without roles', async () => {
+      queryParams['returnUrl'] = '/clients';
+      navigateByUrl.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+      render();
+
+      await vi.waitFor(() =>
+        expect(navigateByUrl).toHaveBeenLastCalledWith('/dashboard', {
+          state: { keepCallerFailure: true },
+        })
+      );
+      expect(snackTexts()).toEqual([]);
+    });
+
+    it('stays where a guard sent the user instead of opening the dashboard', async () => {
+      vi.spyOn(TestBed.inject(Router), 'url', 'get').mockReturnValue('/');
+      queryParams['returnUrl'] = '/clients';
+      navigateByUrl.mockResolvedValueOnce(false);
+      render();
+
+      await vi.waitFor(() => expect(navigateByUrl).toHaveBeenCalledOnce());
+      await new Promise((resolve) => setTimeout(resolve));
+      expect(navigateByUrl).toHaveBeenCalledOnce();
+      expect(snackTexts()).toEqual([]);
+    });
+
+    it('says the page could not be opened when the dashboard fails too', async () => {
+      queryParams['returnUrl'] = '/clients';
+      navigateByUrl
+        .mockRejectedValueOnce(new Error('first'))
+        .mockRejectedValueOnce(new Error('second'));
+      render();
+
+      await vi.waitFor(() =>
+        expect(snackTexts()).toEqual([
+          'Signed in, but the page could not be opened: second. Reload the page.',
+        ])
+      );
+    });
+
+    it('opens the dashboard and says so when the page does not exist', async () => {
+      queryParams['returnUrl'] = '/old-page';
+      navigateByUrl
+        .mockRejectedValueOnce(
+          new Error("NG04002: Cannot match any routes. URL Segment: 'old-page'")
+        )
+        .mockResolvedValueOnce(true);
+      render();
+
+      await vi.waitFor(() =>
+        expect(snackTexts()).toEqual([
+          '/old-page could not be opened: no page has this address. The dashboard opened instead.',
+        ])
+      );
+      expect(navigateByUrl).toHaveBeenLastCalledWith('/dashboard', {
+        state: { keepCallerFailure: true },
+      });
+    });
+  });
+
+  it('keeps saying that the session resumes until the next page opens', async () => {
+    let opened: (value: boolean) => void = () => undefined;
+    navigateByUrl.mockReturnValue(new Promise((resolve) => (opened = resolve)));
+    render();
+
+    api.tokenRenewed$.next();
+    fixture.detectChanges();
+    expect(page().textContent).toContain('Resuming the session of client-a');
+
+    opened(true);
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(page().textContent).not.toContain('Resuming the session');
+    });
+  });
+
+  it('reports a failed navigation after the kept session resumed', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    navigateByUrl.mockRejectedValue(new Error('Loading chunk failed'));
+    render();
+
+    api.tokenRenewed$.next();
+
+    await vi.waitFor(() =>
+      expect(snackTexts()).toEqual([
+        'Signed in, but the page could not be opened: Loading chunk failed. Reload the page.',
+      ])
+    );
+    fixture.detectChanges();
+    expect(page().textContent).not.toContain('Resuming the session');
+  });
+
   it('stops waiting when the page is left', () => {
     render();
 

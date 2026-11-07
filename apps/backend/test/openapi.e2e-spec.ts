@@ -248,6 +248,13 @@ describe("OpenAPI contract", () => {
                 .schema,
         ).toMatchObject({ $ref: "#/components/schemas/VersionResponseDto" });
 
+        const callerOperation = getOperation(document, "/api/auth/me", "get");
+        expect(
+            callerOperation.responses["200"].content?.["application/json"]
+                .schema,
+        ).toMatchObject({ $ref: "#/components/schemas/CallerResponseDto" });
+        expect(callerOperation.security).toEqual([{ oauth2: [] }]);
+
         const tokenOperation = getOperation(
             document,
             "/api/oauth2/token",

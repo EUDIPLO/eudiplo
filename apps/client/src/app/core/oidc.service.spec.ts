@@ -7,6 +7,8 @@ function fakeKeycloak() {
   return {
     init: vi.fn().mockResolvedValue(false),
     updateToken: vi.fn(),
+    token: undefined as string | undefined,
+    onAuthRefreshSuccess: undefined as (() => void) | undefined,
   };
 }
 
@@ -47,5 +49,17 @@ describe('OidcService under a base href', () => {
         silentCheckSsoRedirectUri: `${location.origin}/eudiplo-client/silent-check-sso.html`,
       })
     );
+  });
+
+  it('says when keycloak-js renewed the token, after keeping the new one', async () => {
+    await service.initialize();
+    const stored: (string | null)[] = [];
+    service.tokenRefreshed$.subscribe(() => stored.push(localStorage.getItem('oidc_tokens')));
+
+    keycloak.token = 'token-b';
+    keycloak.onAuthRefreshSuccess?.();
+
+    expect(stored).toHaveLength(1);
+    expect(JSON.parse(stored[0] ?? '{}')).toMatchObject({ token: 'token-b' });
   });
 });

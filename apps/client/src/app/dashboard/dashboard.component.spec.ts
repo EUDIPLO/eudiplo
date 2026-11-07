@@ -1,6 +1,7 @@
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { client } from '@eudiplo/sdk-core';
+import { Subject } from 'rxjs';
 import { vi } from 'vitest';
 
 import { ApiService } from '../core';
@@ -25,6 +26,11 @@ const statusCounts = (counts: Record<string, number> = {}) => ({
 
 describe('DashboardComponent', () => {
   let roles: string[];
+  /** Emits like JwtService when a caller with other roles was loaded. */
+  let callerChanged: Subject<void>;
+  /** Whether JwtService has the caller's roles. */
+  let callerLoaded: boolean;
+  let loadCaller: ReturnType<typeof vi.fn>;
   let responses: Record<string, unknown>;
   let requests: string[];
   let fixture: ComponentFixture<DashboardComponent>;
@@ -58,6 +64,9 @@ describe('DashboardComponent', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 9, 11, 15, 30));
     roles = [];
+    callerChanged = new Subject();
+    callerLoaded = true;
+    loadCaller = vi.fn(async () => undefined);
     grafanaEnabled = false;
     preferences = {
       load: () => ({ ...DEFAULT_DASHBOARD_SECTIONS }),
@@ -103,6 +112,10 @@ describe('DashboardComponent', () => {
           provide: JwtService,
           useValue: {
             hasRole: (role: string | string[]) => [role].flat().some((r) => roles.includes(r)),
+            callerChanged$: callerChanged,
+            getCaller: () =>
+              callerLoaded ? { subject: 'shop', tenantId: 'acme', roles } : undefined,
+            loadCaller,
           },
         },
         {
@@ -271,6 +284,44 @@ describe('DashboardComponent', () => {
       ['Credential Configs', '2'],
       ['Key Chains', '0'],
     ]);
+  });
+
+  it('loads its figures and sections again once the roles are loaded, for example by a Retry', async () => {
+    responses['/api/key-chain'] = [];
+    responses['/api/issuer/credentials'] = [{ id: 'pid' }, { id: 'mdl' }];
+    responses['/api/issuer/config'] = { id: 'config' };
+    const saved = { ...DEFAULT_DASHBOARD_SECTIONS, quickActions: false };
+    const load = vi
+      .fn()
+      .mockReturnValueOnce({ ...DEFAULT_DASHBOARD_SECTIONS })
+      .mockReturnValueOnce(saved);
+    preferences.load = load;
+    callerLoaded = false;
+    const page = await render();
+    expect(page.querySelectorAll('.stat-card-link')).toHaveLength(0);
+    expect(text(page.querySelector('.subtitle'))).toBe('Your roles could not be loaded');
+    expect(page.querySelector('.updated-at')).toBeNull();
+    expect(text(page.querySelector('.roles-missing-card'))).toContain('Could not load your roles');
+
+    Array.from(page.querySelectorAll<HTMLButtonElement>('.roles-missing-card button'))
+      .find((button) => text(button) === 'refresh Retry')
+      ?.click();
+    expect(loadCaller).toHaveBeenCalledWith({ reload: true });
+
+    roles = ['issuance:manage'];
+    callerLoaded = true;
+    callerChanged.next();
+    fixture.detectChanges();
+    await settle();
+
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(fixture.componentInstance.sections).toEqual(saved);
+    expect(
+      Array.from(page.querySelectorAll('.stat-card-link'), (link) =>
+        text(link.querySelector('.stat-value'))
+      )
+    ).toEqual(['2', '0']);
+    expect(page.querySelector('.roles-missing-card')).toBeNull();
   });
 
   it('shows a failed recent activity request with a way to the session list', async () => {

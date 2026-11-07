@@ -197,6 +197,44 @@ export const OAuthTokenErrorResponseDtoSchema = {
     ]
 } as const;
 
+export const CallerResponseDtoSchema = {
+    type: 'object',
+    properties: {
+        subject: {
+            type: [
+                'string',
+                'null'
+            ],
+            description: 'Subject of the access token: the client ID for tokens of the built-in server, the `sub` claim with an external OIDC provider.',
+            example: 'my-client'
+        },
+        tenantId: {
+            type: [
+                'string',
+                'null'
+            ],
+            description: 'ID of the caller\'s tenant, or null for a caller without one, such as the root client or a token whose tenant does not exist.',
+            example: 'my-tenant'
+        },
+        roles: {
+            description: 'Roles the backend grants the caller. With an external OIDC provider they may include role names EUDIPLO does not know.',
+            example: [
+                'issuance:offer',
+                'sessions:read'
+            ],
+            type: 'array',
+            items: {
+                type: 'string'
+            }
+        }
+    },
+    required: [
+        'subject',
+        'tenantId',
+        'roles'
+    ]
+} as const;
+
 export const KeyResponseDtoSchema = {
     type: 'object',
     properties: {

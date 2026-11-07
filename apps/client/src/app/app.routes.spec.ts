@@ -18,7 +18,7 @@ describe.each([
     guard = roleGuardHarness();
   });
 
-  function canOpen(roles: Role[]): boolean {
+  function canOpen(roles: Role[]): Promise<boolean> {
     const route = routes.find((r) => r.path === path)!;
     expect(route.canActivate).toEqual([AuthGuard, RoleGuard]);
     return guard.canOpen(route, roles);
@@ -28,13 +28,13 @@ describe.each([
     ['issuance', ['issuance:manage']],
     ['verification', ['presentation:manage']],
     ['issuance and verification', ['issuance:manage', 'presentation:manage']],
-  ])(`opens ${page} for %s admins`, (_, roles) => {
-    expect(canOpen(roles)).toBe(true);
+  ])(`opens ${page} for %s admins`, async (_, roles) => {
+    expect(await canOpen(roles)).toBe(true);
     expect(guard.navigate).not.toHaveBeenCalled();
   });
 
-  it(`denies ${page} to clients that can only start sessions`, () => {
-    expect(canOpen(['issuance:offer', 'presentation:request'])).toBe(false);
+  it(`denies ${page} to clients that can only start sessions`, async () => {
+    expect(await canOpen(['issuance:offer', 'presentation:request'])).toBe(false);
     expect(guard.navigate).toHaveBeenCalledWith(['/']);
     expect(guard.openSnackBar).toHaveBeenCalledWith('Access denied', 'Close', { duration: 3000 });
   });
@@ -47,7 +47,7 @@ describe('Configuration routes', () => {
     guard = roleGuardHarness();
   });
 
-  function canOpen(path: string, roles: Role[]): boolean {
+  function canOpen(path: string, roles: Role[]): Promise<boolean> {
     const route = routes.find((r) => r.path === path)!;
     expect(route.canActivate).toEqual([AuthGuard, RoleGuard]);
     return guard.canOpen(route, roles);
@@ -64,9 +64,9 @@ describe('Configuration routes', () => {
     ['keys', ['presentation:manage'], ['issuance:offer', 'presentation:request']],
     ['kms', ['issuance:manage'], ['issuance:offer', 'presentation:request']],
     ['kms', ['presentation:manage'], ['issuance:offer', 'presentation:request']],
-  ])('opens %s for %j and denies %j', (path, allowed, denied) => {
-    expect(canOpen(path, allowed)).toBe(true);
-    expect(canOpen(path, denied)).toBe(false);
+  ])('opens %s for %j and denies %j', async (path, allowed, denied) => {
+    expect(await canOpen(path, allowed)).toBe(true);
+    expect(await canOpen(path, denied)).toBe(false);
     expect(guard.navigate).toHaveBeenCalledWith(['/']);
   });
 });

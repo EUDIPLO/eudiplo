@@ -8,7 +8,7 @@
       </p>
     </div>
     <div class="header-actions">
-      @if (dashboardService.lastUpdatedAt) {
+      @if (dashboardService.lastUpdatedAt && !rolesMissing) {
         <span class="updated-at">
           Updated {{ dashboardService.lastUpdatedAt | date: 'HH:mm' }}
         </span>
@@ -355,6 +355,23 @@
           </div>
         }
       </mat-card-content>
+    </mat-card>
+  }
+
+  @if (rolesMissing) {
+    <mat-card class="setup-card warnings-card roles-missing-card">
+      <mat-card-header>
+        <mat-icon mat-card-avatar class="setup-icon">error</mat-icon>
+        <mat-card-title>Could not load your roles</mat-card-title>
+        <mat-card-subtitle>
+          The dashboard and the menu show what your roles allow once they are loaded.
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-actions>
+        <button mat-stroked-button type="button" (click)="retryRoles()">
+          <mat-icon>refresh</mat-icon> Retry
+        </button>
+      </mat-card-actions>
     </mat-card>
   }
 
