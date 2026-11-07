@@ -65,6 +65,7 @@ function exchange(
     options: {
         publicJwk?: Jwk;
         createAccessTokenResponse?: Oauth2AuthorizationServer["createAccessTokenResponse"];
+        verifyClientAttestation?: () => Promise<void>;
     } = {},
 ) {
     const server = {
@@ -115,7 +116,11 @@ function exchange(
                 dpop_signing_alg_values_supported: ["ES256"],
             }),
         },
-        { verify: vi.fn().mockResolvedValue(undefined) },
+        {
+            verify: vi.fn(
+                options.verifyClientAttestation ?? (async () => undefined),
+            ),
+        },
         signingKeys,
         { publicUrl: "https://issuer.example" } as Oid4vciSettings,
         { register: vi.fn().mockResolvedValue(true) },
@@ -261,6 +266,33 @@ describe("ExchangeAccessToken", () => {
         await expect(
             jwtVerify(access_token, publicKey, { currentDate: NOW }),
         ).resolves.toBeDefined();
+    });
+
+    // The description reaches the wallet; the server-side reason only the log.
+    it("answers a rejected attestation with its message and logs the reason it keeps as cause", async () => {
+        const reason =
+            "Failed to fetch trust list from http://eudiplo-internal:3000/issuers/tenant-1/trust-list/w: connect ECONNREFUSED";
+        const { execute } = exchange(
+            { authorizationServers: [{ type: "built-in", id: "built-in" }] },
+            preAuthorizedCodeRequest,
+            issuanceSession(),
+            {
+                verifyClientAttestation: () =>
+                    Promise.reject(
+                        new Error(
+                            "Wallet provider trust lists could not be loaded",
+                            { cause: new Error(reason) },
+                        ),
+                    ),
+            },
+        );
+
+        await expect(execute()).rejects.toMatchObject({
+            code: "invalid_client",
+            description: "Wallet provider trust lists could not be loaded",
+            clientAuthenticationFailed: true,
+            logDetail: `Client attestation validation failed for the token endpoint of tenant tenant-1: Wallet provider trust lists could not be loaded: ${reason}`,
+        });
     });
 
     it("rejects refresh grants when refresh tokens are disabled", async () => {

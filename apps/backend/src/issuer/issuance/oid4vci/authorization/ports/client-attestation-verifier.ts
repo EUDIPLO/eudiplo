@@ -13,6 +13,12 @@ export interface ClientAttestation {
  * Verifies OAuth 2.0 Attestation-Based Client Authentication (wallet
  * attestation). Throws when a required attestation is missing or when a
  * presented attestation is invalid or not trusted.
+ *
+ * The error's message names no URL or host of the server's configuration,
+ * such as a trust list URL, so the built-in token endpoint returns it to the
+ * wallet. A server-side failure, such as trust lists that cannot be loaded,
+ * has a fixed message and its reason as `cause`, for the log
+ * (`clientAttestationLogDetail`).
  */
 export interface ClientAttestationVerifier {
     verify(

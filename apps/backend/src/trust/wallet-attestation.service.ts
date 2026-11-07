@@ -12,7 +12,10 @@ import { Span } from "nestjs-otel";
 import { CryptoService } from "../crypto/crypto.service.js";
 import { CryptoImplementationService } from "../crypto/key/crypto-implementation/crypto-implementation.service.js";
 import { TrustListRef } from "../verifier/presentations/entities/presentation-config.entity.js";
-import { discardedTrustListsNote } from "./domain/trust-list-freshness.js";
+import {
+    discardedTrustListsNote,
+    OutdatedTrustListsError,
+} from "./domain/trust-list-freshness.js";
 import {
     RevocationListUnavailableError,
     revocationModeToPolicy,
@@ -41,6 +44,10 @@ export interface ClientAttestation {
     clientAttestationJwt: string;
     clientAttestationPopJwt?: string;
 }
+
+/** Answer when the wallet-provider trust lists cannot be loaded. */
+const WALLET_PROVIDER_TRUST_LISTS_UNAVAILABLE =
+    "Wallet provider trust lists could not be loaded";
 
 /**
  * Service for verifying wallet attestations.
@@ -89,7 +96,8 @@ export class WalletAttestationService {
      * @param statusCheckMode How to handle the attestation's status list:
      * strict rejects on any status check failure, best_effort accepts when the
      * list cannot be fetched, disabled skips the check
-     * @throws UnauthorizedException if attestation is required but not provided, or if provided but invalid
+     * @throws UnauthorizedException if attestation is required but not provided, or if provided but invalid;
+     * message and cause as the `ClientAttestationVerifier` port describes
      */
     @Span("walletAttestation.verify")
     async verifyWalletAttestation(
@@ -110,14 +118,25 @@ export class WalletAttestationService {
         }
 
         try {
-            // First verify the attestation JWT structure and PoP
-            await this.getIssuer(tenantId).verifyWalletAttestation({
-                authorizationServer,
-                clientAttestationJwt: clientAttestation.clientAttestationJwt,
-                clientAttestationPopJwt:
-                    clientAttestation.clientAttestationPopJwt!,
-                allowedSkewInSeconds: this.settings.cryptoToleranceSeconds,
-            });
+            const issuer = this.getIssuer(tenantId);
+            // First verify the attestation JWT structure and PoP. The reason
+            // is about what the wallet sent (format, signature, audience,
+            // expiry), so it stays in the answer.
+            try {
+                await issuer.verifyWalletAttestation({
+                    authorizationServer,
+                    clientAttestationJwt:
+                        clientAttestation.clientAttestationJwt,
+                    clientAttestationPopJwt:
+                        clientAttestation.clientAttestationPopJwt!,
+                    allowedSkewInSeconds: this.settings.cryptoToleranceSeconds,
+                });
+            } catch (err) {
+                throw new UnauthorizedException(
+                    `Wallet attestation verification failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+                    { cause: err instanceof Error ? err : undefined },
+                );
+            }
 
             // Then validate the X.509 certificate against trust lists and get the matched entity
             const { matchedEntity, trustStore } =
@@ -141,8 +160,37 @@ export class WalletAttestationService {
             if (err instanceof UnauthorizedException) {
                 throw err;
             }
+            // Any other error comes from the server side, not from what the
+            // wallet sent: fixed message, reason as cause.
             throw new UnauthorizedException(
-                `Wallet attestation verification failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+                "Wallet attestation verification failed",
+                { cause: err instanceof Error ? err : undefined },
+            );
+        }
+    }
+
+    /**
+     * Fetch and verify the wallet-provider trust lists of a source.
+     * @throws UnauthorizedException when every list is outdated, with the
+     * message of {@link OutdatedTrustListsError}, which names no list
+     * @throws UnauthorizedException with a fixed message when a list cannot
+     * be fetched, read or verified; the reason, which names the list URL (for
+     * a managed list one built from `INTERNAL_URL`), is the cause
+     */
+    private async loadTrustStore(
+        source: TrustListSource,
+    ): Promise<BuiltTrustStore> {
+        try {
+            return await this.trustStoreService.getTrustStore(source);
+        } catch (err) {
+            if (err instanceof OutdatedTrustListsError) {
+                throw new UnauthorizedException(
+                    `Wallet attestation verification failed: ${err.message}`,
+                    { cause: err },
+                );
+            }
+            throw new UnauthorizedException(
+                WALLET_PROVIDER_TRUST_LISTS_UNAVAILABLE,
                 { cause: err instanceof Error ? err : undefined },
             );
         }
@@ -190,8 +238,7 @@ export class WalletAttestationService {
         };
 
         // Fetch and build the trust store
-        const trustStore =
-            await this.trustStoreService.getTrustStore(trustListSource);
+        const trustStore = await this.loadTrustStore(trustListSource);
 
         // Says when outdated lists were left out, so a missing provider is
         // not mistaken for one that is not listed at all.

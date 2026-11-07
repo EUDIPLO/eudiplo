@@ -3,9 +3,14 @@ import { ES256 } from "@owf/crypto";
 import * as x509 from "@peculiar/x509";
 import { describe, expect, it, vi } from "vitest";
 import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
+import { OutdatedTrustListsError } from "./domain/trust-list-freshness.js";
 import { RevocationListUnavailableError } from "./revocation-policy.util.js";
 import { TrustStoreService } from "./trust-store.service.js";
-import { RevocationCheckMode, ServiceTypeIdentifiers } from "./types.js";
+import {
+    RevocationCheckMode,
+    ServiceTypeIdentifiers,
+    type TrustListRef,
+} from "./types.js";
 import { WalletAttestationService } from "./wallet-attestation.service.js";
 import {
     MatchedTrustedEntity,
@@ -67,6 +72,126 @@ describe("WalletAttestationService trust requirements", () => {
             ).rejects.toThrow("No wallet provider trust lists configured");
         },
     );
+});
+
+// The built-in token endpoint returns the message as error_description, so
+// it reaches the wallet. Server-side reasons name trust list URLs, including
+// INTERNAL_URL for managed lists, and are only the cause, which callers log.
+describe("WalletAttestationService error messages for the wallet", () => {
+    const internalListUrl =
+        "http://eudiplo-internal:3000/issuers/tenant/trust-list/wallets";
+    const attestationJwt = `${Buffer.from(
+        JSON.stringify({ alg: "ES256", x5c: ["MII"] }),
+    ).toString("base64url")}.e30.c2ln`;
+
+    function createService(options: {
+        verifyAttestation?: () => Promise<void>;
+        getTrustStore?: () => Promise<unknown>;
+    }) {
+        return Object.assign(
+            Object.create(WalletAttestationService.prototype),
+            {
+                getIssuer: () => ({
+                    verifyWalletAttestation:
+                        options.verifyAttestation ?? vi.fn(),
+                }),
+                settings: { cryptoToleranceSeconds: 0 },
+                logger: { debug: vi.fn() },
+                trustStoreService: {
+                    getTrustStore:
+                        options.getTrustStore ??
+                        (() => Promise.reject(new Error("not reached"))),
+                },
+            },
+        ) as WalletAttestationService;
+    }
+
+    function verify(
+        service: WalletAttestationService,
+        trustLists: TrustListRef[] = [
+            { url: internalListUrl, verifierX509Der: "MII" },
+        ],
+    ): Promise<Error | undefined> {
+        return service
+            .verifyWalletAttestation(
+                "tenant",
+                {
+                    clientAttestationJwt: attestationJwt,
+                    clientAttestationPopJwt: "pop",
+                },
+                "https://as.example",
+                true,
+                trustLists,
+                RevocationCheckMode.Disabled,
+            )
+            .then(
+                () => undefined,
+                (error: Error) => error,
+            );
+    }
+
+    it.each([
+        `Failed to fetch trust list from ${internalListUrl}: connect ECONNREFUSED 10.0.0.7:3000`,
+        `Trust list JWT verification failed for ${internalListUrl}: signature verification failed`,
+    ])(
+        "answers a fixed message when a trust list cannot be loaded (%s)",
+        async (reason) => {
+            const service = createService({
+                getTrustStore: () => Promise.reject(new Error(reason)),
+            });
+
+            const error = await verify(service);
+
+            expect(error).toBeInstanceOf(UnauthorizedException);
+            expect(error?.message).toBe(
+                "Wallet provider trust lists could not be loaded",
+            );
+            expect((error?.cause as Error).message).toBe(reason);
+        },
+    );
+
+    it("answers a fixed message for other server-side errors and keeps the reason as cause", async () => {
+        const service = createService({});
+
+        // A reference without verification material names its URL.
+        const error = await verify(service, [{ url: internalListUrl }]);
+
+        expect(error).toBeInstanceOf(UnauthorizedException);
+        expect(error?.message).toBe("Wallet attestation verification failed");
+        expect((error?.cause as Error).message).toContain(internalListUrl);
+    });
+
+    it("keeps the reason when the attestation the wallet sent is invalid", async () => {
+        const service = createService({
+            verifyAttestation: () =>
+                Promise.reject(new Error("Client attestation jwt has expired")),
+        });
+
+        const error = await verify(service);
+
+        expect(error).toBeInstanceOf(UnauthorizedException);
+        expect(error?.message).toBe(
+            "Wallet attestation verification failed: Client attestation jwt has expired",
+        );
+    });
+
+    it("keeps the reason when every trust list is outdated", async () => {
+        const service = createService({
+            getTrustStore: () =>
+                Promise.reject(
+                    new OutdatedTrustListsError([
+                        { list: internalListUrl, nextUpdate: null },
+                    ]),
+                ),
+        });
+
+        const error = await verify(service);
+
+        expect(error).toBeInstanceOf(UnauthorizedException);
+        expect(error?.message).toBe(
+            "Wallet attestation verification failed: No configured trust list is current: each has no valid NextUpdate or one that has passed",
+        );
+    });
 });
 
 describe("WalletAttestationService status list signature", () => {
