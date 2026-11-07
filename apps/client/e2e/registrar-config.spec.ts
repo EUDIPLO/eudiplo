@@ -159,11 +159,17 @@ test('creates a configuration and explains a URL without a scheme', async ({ pag
   await expect(
     page.getByText('Enter a full URL, for example https://registrar.example.com/api')
   ).toBeVisible();
+  // Save stays usable; a click says what keeps the configuration from saving.
   const save = page.getByRole('button', { name: 'Save Configuration' });
-  await expect(save).toBeDisabled();
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(registrarUrlField).toBeFocused();
+  await expect(
+    page.getByText('Check the highlighted fields in Registrar Credentials.')
+  ).toBeVisible();
+  expect((await tenant.call('GET', '/api/registrar/config')).status).toBe(404);
 
   await registrarUrlField.fill(registrarUrl);
-  await expect(save).toBeEnabled();
   await save.click();
 
   await expect(page.getByText('Configuration saved successfully')).toBeVisible();
@@ -204,9 +210,14 @@ test('asks for the password again after a URL change and replaces the configurat
   await page.getByRole('textbox', { name: 'OIDC URL' }).fill(realmUrl('other'));
   await expect(page.getByText('The URL changed. Enter the password again.')).toBeVisible();
   const update = page.getByRole('button', { name: 'Update Configuration' });
-  await expect(update).toBeDisabled();
+  await update.click();
+  const passwordField = page.getByLabel('Password', { exact: true });
+  await expect(passwordField).toBeFocused();
+  await expect(
+    page.getByText('Check the highlighted fields in Registrar Credentials.')
+  ).toBeVisible();
 
-  await page.getByLabel('Password', { exact: true }).fill(password);
+  await passwordField.fill(password);
   await update.click();
 
   await expect(page.getByText('Configuration saved successfully')).toBeVisible();

@@ -42,6 +42,7 @@ import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-
 })
 export class WebhookEndpointCreateComponent extends ApiKeyEndpointFormComponent {
   protected readonly noun = 'webhook endpoint';
+  protected readonly detailsTitle = 'Endpoint Details';
   protected readonly jsonTitle = 'Webhook Endpoint JSON';
 
   constructor(

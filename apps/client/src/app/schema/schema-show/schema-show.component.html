@@ -116,7 +116,13 @@
               Unsaved changes under Catalog Metadata are not included; save them first.
             }
           </p>
-          <form [formGroup]="publishForm" fxLayout="column" fxLayoutGap="12px" class="publish-form">
+          <form
+            #publishFormElement
+            [formGroup]="publishForm"
+            fxLayout="column"
+            fxLayoutGap="12px"
+            class="publish-form"
+          >
             <mat-form-field appearance="outline">
               <mat-label>New Version (SemVer)</mat-label>
               <input matInput formControlName="newVersion" placeholder="1.1.0" />
@@ -149,7 +155,9 @@
                 mat-raised-button
                 color="primary"
                 type="button"
-                [disabled]="publishForm.invalid || publishing || !!publishBlockedReason"
+                [disabled]="publishing || !!publishBlockedReason"
+                disabledInteractive
+                [matTooltip]="publishTooltip"
                 (click)="publishNewVersion()"
               >
                 @if (publishing) {

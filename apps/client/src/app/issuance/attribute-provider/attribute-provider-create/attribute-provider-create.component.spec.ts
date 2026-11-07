@@ -1,5 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { TestBed } from '@angular/core/testing';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { provideRouter } from '@angular/router';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
+import { AttributeProviderService } from '../attribute-provider.service';
 import { AttributeProviderCreateComponent } from './attribute-provider-create.component';
 
 describe('AttributeProviderCreateComponent save', () => {
@@ -13,12 +18,15 @@ describe('AttributeProviderCreateComponent save', () => {
       ],
     });
     const snackBar = { open: vi.fn() };
-    const component = new AttributeProviderCreateComponent(
-      { create } as never,
-      { navigate: vi.fn() } as never,
-      { snapshot: { paramMap: { get: () => null } } } as never,
-      snackBar as never,
-      {} as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new AttributeProviderCreateComponent(
+          { create } as never,
+          { navigate: vi.fn() } as never,
+          { snapshot: { paramMap: { get: () => null } } } as never,
+          snackBar as never,
+          {} as never
+        )
     );
     component.form.patchValue({
       id: 'example',
@@ -39,6 +47,13 @@ describe('AttributeProviderCreateComponent save', () => {
     );
     expect(component.fieldError('url', 'URL is required')).toBe('Must be an https URL');
     expect(component.fieldError('authHeaderName')).toBe('Invalid header name');
+
+    // Until a rejected field is edited, Save points at it instead of sending the same again.
+    component.onSubmit();
+    expect(create).toHaveBeenCalledOnce();
+    expect(snackBar.open.mock.lastCall?.[0]).toBe(
+      'Check the highlighted fields in Provider Details, Authentication.'
+    );
   });
 
   it('shows rejected fields when an update is rejected', async () => {
@@ -47,15 +62,20 @@ describe('AttributeProviderCreateComponent save', () => {
       message: 'Validation failed',
       errors: [{ path: ['url'], message: 'Must be an https URL' }],
     });
-    const component = new AttributeProviderCreateComponent(
-      {
-        update,
-        getById: vi.fn().mockResolvedValue({ id: 'example', name: 'Example', url: 'https://a' }),
-      } as never,
-      { navigate: vi.fn() } as never,
-      { snapshot: { paramMap: { get: () => 'example' } } } as never,
-      { open: vi.fn() } as never,
-      {} as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new AttributeProviderCreateComponent(
+          {
+            update,
+            getById: vi
+              .fn()
+              .mockResolvedValue({ id: 'example', name: 'Example', url: 'https://a' }),
+          } as never,
+          { navigate: vi.fn() } as never,
+          { snapshot: { paramMap: { get: () => 'example' } } } as never,
+          { open: vi.fn() } as never,
+          {} as never
+        )
     );
     component.ngOnInit();
     await vi.waitFor(() => expect(component.loading).toBe(false));
@@ -69,12 +89,15 @@ describe('AttributeProviderCreateComponent save', () => {
   });
 
   it('lets Save go again when a rejected header field is hidden by choosing no auth', () => {
-    const component = new AttributeProviderCreateComponent(
-      {} as never,
-      { navigate: vi.fn() } as never,
-      { snapshot: { paramMap: { get: () => null } } } as never,
-      { open: vi.fn() } as never,
-      {} as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new AttributeProviderCreateComponent(
+          {} as never,
+          { navigate: vi.fn() } as never,
+          { snapshot: { paramMap: { get: () => null } } } as never,
+          { open: vi.fn() } as never,
+          {} as never
+        )
     );
     component.form.patchValue({
       id: 'example',
@@ -92,15 +115,18 @@ describe('AttributeProviderCreateComponent save', () => {
 
   it('does not save while the attribute provider to edit loads, nor after its load failed', async () => {
     const update = vi.fn();
-    const component = new AttributeProviderCreateComponent(
-      {
-        update,
-        getById: vi.fn().mockRejectedValue({ statusCode: 404, message: 'Not found' }),
-      } as never,
-      { navigate: vi.fn() } as never,
-      { snapshot: { paramMap: { get: () => 'example' } } } as never,
-      { open: vi.fn() } as never,
-      {} as never
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new AttributeProviderCreateComponent(
+          {
+            update,
+            getById: vi.fn().mockRejectedValue({ statusCode: 404, message: 'Not found' }),
+          } as never,
+          { navigate: vi.fn() } as never,
+          { snapshot: { paramMap: { get: () => 'example' } } } as never,
+          { open: vi.fn() } as never,
+          {} as never
+        )
     );
 
     component.ngOnInit();
@@ -113,5 +139,52 @@ describe('AttributeProviderCreateComponent save', () => {
 
     expect(component.loadError).toBe('Failed to load attribute provider: Not found');
     expect(update).not.toHaveBeenCalled();
+  });
+
+  describe('rendered', () => {
+    afterEach(() => TestBed.resetTestingModule());
+
+    it('says which fields keep it from saving, focuses the first one and sends nothing', async () => {
+      const create = vi.fn();
+      const snackBar = { open: vi.fn() };
+      await TestBed.configureTestingModule({
+        imports: [AttributeProviderCreateComponent],
+        providers: [
+          provideRouter([]),
+          { provide: AttributeProviderService, useValue: { create } },
+          { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+        ],
+      })
+        // The component imports MatSnackBarModule, whose provider wins over a root provider.
+        .overrideProvider(MatSnackBar, { useValue: snackBar })
+        .compileComponents();
+      const fixture = TestBed.createComponent(AttributeProviderCreateComponent);
+      fixture.detectChanges();
+      const page = fixture.nativeElement as HTMLElement;
+      fixture.componentInstance.form.patchValue({ id: 'example' });
+      fixture.detectChanges();
+      const save = [...page.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === 'Create'
+      )!;
+      expect(save.disabled).toBe(false);
+      expect(save.getAttribute('aria-disabled')).toBeNull();
+
+      save.focus();
+      save.click();
+
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(document.activeElement?.getAttribute('formcontrolname')).toBe('name');
+      });
+      expect(
+        [...page.querySelectorAll('mat-error')].map((error) => error.textContent?.trim())
+      ).toEqual(['Name is required', 'URL is required']);
+      expect(snackBar.open).toHaveBeenLastCalledWith(
+        'Check the highlighted fields in Provider Details.',
+        'Close',
+        expect.anything()
+      );
+      expect(create).not.toHaveBeenCalled();
+    });
   });
 });

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   expectResetAvailable,
   expectResetUnavailable,
+  expectSaveWaiting,
   findButton as button,
   loseFocus,
   NOTHING_TO_RESET,
@@ -320,7 +321,7 @@ describe('SessionConfigComponent', () => {
     expect(settingsTitle(element)?.textContent).toContain('Session Retention Settings');
   });
 
-  it('gives focus back to Save once saving has finished', async () => {
+  it('keeps Save focusable while saving and gives focus back to it once saving has finished', async () => {
     responses['GET /api/session-config'] = { status: 200, body: {} };
     responses['PUT /api/session-config'] = { status: 200, body: { ttlSeconds: 3600 } };
     const element = await render();
@@ -331,7 +332,9 @@ describe('SessionConfigComponent', () => {
     save.focus();
     save.click();
     fixture.detectChanges();
-    expect(save.disabled).toBe(true);
+    expectSaveWaiting(fixture, 'Save Configuration');
+    // A second click while the first save runs sends nothing.
+    save.click();
     loseFocus();
     expect(document.activeElement).toBe(document.body);
 
@@ -339,6 +342,7 @@ describe('SessionConfigComponent', () => {
       fixture.detectChanges();
       expect(document.activeElement).toBe(save);
     });
+    expect(putBodies).toHaveLength(1);
   });
 
   it('moves focus to the settings title when a reset ends with focus lost', async () => {
@@ -389,13 +393,39 @@ describe('SessionConfigComponent', () => {
     expect(element.querySelector('mat-error')?.textContent).toContain(
       'Enter a whole number of seconds'
     );
-    expect(button(element, 'Save Configuration').disabled).toBe(true);
 
     ttl.setValue(30);
     fixture.detectChanges();
     expect(element.querySelector('mat-error')?.textContent).toContain(
       'TTL must be at least 60 seconds'
     );
+  });
+
+  it('says which field keeps the settings from saving and focuses it', async () => {
+    responses['GET /api/session-config'] = { status: 200, body: {} };
+    const element = await render();
+    fixture.componentInstance.configForm.patchValue({ ttlSeconds: 30 });
+    fixture.detectChanges();
+    const save = button(element, 'Save Configuration');
+    expect(save.getAttribute('aria-disabled')).toBeNull();
+
+    snackBar.open.mockClear();
+    save.focus();
+    save.click();
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(document.activeElement?.getAttribute('formcontrolname')).toBe('ttlSeconds');
+    });
+    expect(element.querySelector('mat-error')?.textContent).toContain(
+      'TTL must be at least 60 seconds'
+    );
+    expect(snackBar.open).toHaveBeenCalledWith(
+      'Check the highlighted fields in Session Time-to-Live (TTL).',
+      'Close',
+      expect.anything()
+    );
+    expect(requests).not.toContain('PUT /api/session-config');
   });
 
   it('spells out the TTL exactly', () => {

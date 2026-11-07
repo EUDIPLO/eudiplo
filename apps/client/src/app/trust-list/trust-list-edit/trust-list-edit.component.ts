@@ -15,11 +15,13 @@ import {
   FormArray,
   FormControl,
   FormGroup,
+  FormGroupDirective,
   ReactiveFormsModule,
   type ValidationErrors,
   Validators,
 } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { ErrorStateMatcher } from '@angular/material/core';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -28,7 +30,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatRadioModule } from '@angular/material/radio';
-import { MatExpansionModule } from '@angular/material/expansion';
+import { MatExpansionModule, MatExpansionPanel } from '@angular/material/expansion';
 import { MatDividerModule } from '@angular/material/divider';
 import { ActivatedRoute, type Params, Router, RouterModule } from '@angular/router';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
@@ -47,6 +49,11 @@ import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { fieldErrorMessage, showIssuesAtFields } from '../../utils/form-errors';
 import { focusAfterRenderIfLost, focusRowAfterRemoval } from '../../common/focus-if-lost.util';
+import {
+  fieldsToFixMessage,
+  focusFieldToFix,
+  sectionsWithErrors,
+} from '../../common/field-to-fix.util';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { fromFormQueryParams } from '../../common/return-to-form';
 
@@ -179,10 +186,20 @@ export class TrustListEditComponent implements OnInit {
   /** The key chain selects whose create link the user followed; their key chains reload on return. */
   private creatingKeyChainFor?: HTMLElement;
 
-  editorOptionsPem = {
+  private readonly editorOptionsPem = {
     automaticLayout: true,
     language: 'pem',
     minimap: { enabled: false },
+    ariaRequired: true,
+  };
+  /** Each certificate editor names its certificate, which its visible label does not do for it. */
+  readonly issuerCertEditorOptions = {
+    ...this.editorOptionsPem,
+    ariaLabel: 'Issuer certificate (PEM)',
+  };
+  readonly revocationCertEditorOptions = {
+    ...this.editorOptionsPem,
+    ariaLabel: 'Revocation certificate (PEM)',
   };
 
   // Where focus goes when the entity holding it is removed, in the order of the entities.
@@ -190,13 +207,18 @@ export class TrustListEditComponent implements OnInit {
   private readonly entityHeaders?: QueryList<ElementRef<HTMLElement>>;
   @ViewChild('addEntityButton', { read: ElementRef })
   private readonly addEntityButton?: ElementRef<HTMLElement>;
+  @ViewChildren(MatExpansionPanel) private readonly entityPanels?: QueryList<MatExpansionPanel>;
+  @ViewChild('trustListForm', { read: ElementRef })
+  private readonly formElement?: ElementRef<HTMLFormElement>;
+  @ViewChild(FormGroupDirective) private readonly formDirective?: FormGroupDirective;
   @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
 
   constructor(
     private readonly route: ActivatedRoute,
     private readonly router: Router,
     private readonly snackBar: MatSnackBar,
-    private readonly injector: Injector
+    private readonly injector: Injector,
+    private readonly errorStateMatcher: ErrorStateMatcher
   ) {}
 
   ngOnInit() {
@@ -777,19 +799,15 @@ export class TrustListEditComponent implements OnInit {
     return keyChain?.description || keyChainId;
   }
 
+  /** How the header and the messages of the page name the entity at `index`. */
+  entityLabel(index: number): string {
+    return `${this.getEntityType(index) === 'internal' ? 'Internal' : 'External'} Entity #${index + 1}`;
+  }
+
   async onSubmit(): Promise<void> {
     if (this.saving) return;
-    if (this.form.invalid) {
-      this.snackBar.open('Please fill in all required fields', 'Close', {
-        duration: 3000,
-      });
-      return;
-    }
-
-    if (this.entitiesArray.length === 0) {
-      this.snackBar.open('Please add at least one entity', 'Close', {
-        duration: 3000,
-      });
+    if (this.form.invalid || this.entitiesArray.length === 0) {
+      this.showWhatBlocksSaving();
       return;
     }
 
@@ -843,13 +861,6 @@ export class TrustListEditComponent implements OnInit {
           body,
         });
       } else {
-        // Create new trust list - id is required
-        if (!formValue.id) {
-          this.snackBar.open('ID is required for creating a new trust list', 'Close', {
-            duration: 5000,
-          });
-          return;
-        }
         await trustListControllerCreateTrustList({ body });
       }
 
@@ -876,9 +887,63 @@ export class TrustListEditComponent implements OnInit {
     }
   }
 
+  /**
+   * Save stays usable while the form is incomplete, so a click on it says what is missing: it
+   * marks every field, names the sections with errors, opens the first entity with one (the
+   * accordion shows one entity at a time, so it may be collapsed) and moves focus to the first
+   * field with an error, or to Add Internal Entity when no entity is listed.
+   */
+  private showWhatBlocksSaving(): void {
+    this.form.markAllAsTouched();
+    const entities = this.entitiesArray.controls;
+    const sections = sectionsWithErrors([
+      {
+        name: 'Basic Information',
+        controls: Object.entries(this.form.controls)
+          .filter(([name]) => name !== 'entities')
+          .map(([, control]) => control),
+      },
+      ...entities.map((entity, index) => ({ name: this.entityLabel(index), controls: [entity] })),
+    ]);
+    const problems: string[] = [];
+    if (sections.length) problems.push(fieldsToFixMessage(sections));
+    if (entities.length === 0) problems.push('Add at least one trusted entity.');
+    openErrorSnackBar(this.snackBar, problems.join(' '));
+
+    const firstInvalidEntity = entities.findIndex((entity) => entity.invalid);
+    const panel = firstInvalidEntity >= 0 ? this.entityPanels?.get(firstInvalidEntity) : undefined;
+    panel?.open();
+    focusFieldToFix(this.injector, () => this.formElement?.nativeElement, {
+      panel,
+      fallback: () => this.addEntityButton?.nativeElement,
+    });
+  }
+
+  /** Whether a field shows its error, by the same rule as the Material form fields. */
+  private showsError(control: AbstractControl | null | undefined): boolean {
+    return this.errorStateMatcher.isErrorState(control ?? null, this.formDirective ?? null);
+  }
+
+  /** Whether one of the entity's fields shows an error, which its header says while it is collapsed. */
+  entityShowsErrors(entity: AbstractControl): boolean {
+    return Object.values((entity as FormGroup).controls).some((control) =>
+      this.showsError(control)
+    );
+  }
+
   /** Message under a field: the backend's issue, else the local validator's message. */
   fieldError(path: string, localMessage = ''): string {
     return fieldErrorMessage(this.form.get(path), localMessage);
+  }
+
+  /**
+   * Message under a certificate editor, which has no form field to decide when it shows one: the
+   * backend's issue, else `requiredMessage` once the empty editor shows its error.
+   */
+  certificateError(path: string, requiredMessage: string): string {
+    const control = this.form.get(path);
+    const required = this.showsError(control) && control?.hasError('required');
+    return fieldErrorMessage(control, required ? requiredMessage : '');
   }
 }
 
