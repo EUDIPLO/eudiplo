@@ -3,34 +3,103 @@ import { ConfigService } from "@nestjs/config";
 import { PassportStrategy } from "@nestjs/passport";
 import { passportJwtSecret } from "jwks-rsa";
 import { ExtractJwt, Strategy } from "passport-jwt";
+import { OutboundUrlPolicyService } from "../webhook/outbound-url-policy.service.js";
+import { jwksFetcher } from "./adapters/jwks-fetcher.js";
+import {
+    AUTH_SETTINGS,
+    type AuthSettings,
+    type ExternalAuthSettings,
+} from "./auth-settings.js";
 import { CLIENTS_PROVIDER, ClientsProvider } from "./client/client.provider.js";
 import type { ClientData } from "./client/domain/client-data.js";
+import { claimValue, roleNames } from "./domain/token-claims.js";
 import { ACCESS_TOKEN_LIFETIME_SECONDS } from "./jwt.service.js";
+import {
+    OIDC_ISSUER_METADATA,
+    type OidcIssuerMetadata,
+} from "./ports/oidc-issuer-metadata.js";
+import type { Role } from "./roles/role.enum.js";
 import { TenantNotFound } from "./tenant/domain/tenant-data.js";
 import { TenantService } from "./tenant/tenant.service.js";
 import { InternalTokenPayload, TokenPayload } from "./token.decorator.js";
 
+/** What the signature check of an external token compares. */
+export interface ExternalTokenChecks {
+    issuer: string;
+    jwksUri: string;
+    /** Checked only when set. */
+    audience?: string;
+    algorithms: string[];
+    /** Origins the operator configured, which skip the outbound URL policy. */
+    trustedOrigins: string[];
+}
+
+/**
+ * Keycloak: the realm's issuer and keys under the internal issuer URL. Other
+ * providers: the issuer and keys of the discovery document, which startup
+ * loaded, or `OIDC_JWKS_URI`. The audience is required for other providers
+ * and checked for Keycloak when it is set.
+ */
+export function externalTokenChecks(
+    settings: ExternalAuthSettings,
+    issuerMetadata: OidcIssuerMetadata | null,
+): ExternalTokenChecks {
+    const algorithms = [settings.algorithm];
+    const trustedOrigins = [
+        ...new Set(
+            [settings.issuer, settings.internalIssuer, settings.jwksUri]
+                .filter((url) => url !== undefined)
+                .map((url) => new URL(url).origin),
+        ),
+    ];
+    if (settings.mode === "keycloak") {
+        return {
+            issuer: settings.internalIssuer,
+            jwksUri: `${settings.internalIssuer}/protocol/openid-connect/certs`,
+            audience: settings.audience,
+            algorithms,
+            trustedOrigins,
+        };
+    }
+    if (!issuerMetadata) {
+        throw new Error(
+            "The OIDC discovery document was not loaded for OIDC_PROVIDER=generic",
+        );
+    }
+    return {
+        issuer: issuerMetadata.issuer,
+        jwksUri: settings.jwksUri ?? issuerMetadata.jwks_uri,
+        audience: settings.audience,
+        algorithms,
+        trustedOrigins,
+    };
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
-    private readonly useExternalOIDC: boolean;
-    /** Claim with the tenant ID of Keycloak tokens (`OIDC_SUB`). */
-    private readonly tenantClaim?: string;
+    /** The external provider, or undefined for the built-in server. */
+    private readonly external?: ExternalAuthSettings;
 
     constructor(
         configService: ConfigService,
         private readonly tenantService: TenantService,
         @Inject(CLIENTS_PROVIDER)
         private readonly clientsProvider: ClientsProvider,
+        @Inject(AUTH_SETTINGS) settings: AuthSettings,
+        @Inject(OIDC_ISSUER_METADATA)
+        issuerMetadata: OidcIssuerMetadata | null,
+        outboundUrlPolicy: OutboundUrlPolicyService,
     ) {
-        const useExternalOIDC = configService.get<string>("OIDC") !== undefined;
-
-        const config = useExternalOIDC
-            ? JwtStrategy.getExternalOIDCConfig(configService)
-            : JwtStrategy.getIntegratedOAuth2Config(configService);
-        super(config);
-        this.useExternalOIDC = useExternalOIDC;
-        if (useExternalOIDC) {
-            this.tenantClaim = configService.getOrThrow<string>("OIDC_SUB");
+        super(
+            settings.mode === "builtin"
+                ? JwtStrategy.getIntegratedOAuth2Config(configService)
+                : JwtStrategy.getExternalOIDCConfig(
+                      externalTokenChecks(settings, issuerMetadata),
+                      outboundUrlPolicy,
+                  ),
+        );
+        if (settings.mode !== "builtin") {
+            this.external = settings;
         }
     }
 
@@ -42,31 +111,36 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
         });
     }
 
-    private static getExternalOIDCConfig(configService: ConfigService) {
-        const keycloakIssuerUrl = configService.get("OIDC_INTERNAL_ISSUER_URL");
-        const jwksUri = `${keycloakIssuerUrl}/protocol/openid-connect/certs`;
-
+    private static getExternalOIDCConfig(
+        checks: ExternalTokenChecks,
+        outboundUrlPolicy: OutboundUrlPolicyService,
+    ) {
         return {
             secretOrKeyProvider: passportJwtSecret({
                 cache: true,
                 rateLimit: true,
                 jwksRequestsPerMinute: 5,
-                jwksUri: jwksUri,
+                jwksUri: checks.jwksUri,
+                fetcher: jwksFetcher(outboundUrlPolicy, checks.trustedOrigins),
                 handleSigningKeyError: (err, cb) => {
-                    console.error("❌ Keycloak JWKS error:", err);
+                    console.error(
+                        "❌ JWKS error of the identity provider:",
+                        err,
+                    );
                     if (err instanceof Error) {
                         return cb(err);
                     }
                     return cb(
                         new Error(
-                            "Could not get the signing key from Keycloak",
+                            "Could not get the signing key from the identity provider",
                         ),
                     );
                 },
             }),
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-            algorithms: [configService.get("OIDC_ALGORITHM")],
-            issuer: keycloakIssuerUrl,
+            algorithms: checks.algorithms,
+            issuer: checks.issuer,
+            ...(checks.audience && { audience: checks.audience }),
         };
     }
 
@@ -95,8 +169,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
      * @returns The validated payload with tenant and client info
      */
     validate(payload: InternalTokenPayload): Promise<TokenPayload> {
-        return this.useExternalOIDC
-            ? this.validateExternalToken(payload)
+        return this.external
+            ? this.validateExternalToken(payload, this.external)
             : this.validateIntegratedToken(payload);
     }
 
@@ -146,17 +220,24 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
     }
 
     /**
-     * Keycloak tokens are checked without asking Keycloak. People sign in
-     * through the web client's public client and the bootstrap client has no
-     * record here, so a token whose client is unknown keeps the roles of its
-     * claims and gets no resource limits. Deleting a client removes it from
-     * Keycloak, which issues no new tokens to it; tokens it already has stay
-     * valid until they expire.
+     * Tokens of the identity provider are checked without asking it. People
+     * sign in through the web client's public client and the bootstrap client
+     * has no record here, so a token whose client is unknown keeps the roles
+     * of its claims and gets no resource limits. With `OIDC_PROVIDER=generic`
+     * only records left from an earlier mode exist, matched by `azp`,
+     * `client_id` or `sub`. Deleting a client removes it from Keycloak,
+     * which issues no new tokens to it; tokens it already has stay valid
+     * until they expire.
      */
     private async validateExternalToken(
         payload: InternalTokenPayload,
+        settings: ExternalAuthSettings,
     ): Promise<TokenPayload> {
-        const tenantId = (payload as any)[this.tenantClaim!] as
+        // The signature check accepts tokens without exp, which never expire.
+        if (settings.mode === "generic" && typeof payload.exp !== "number") {
+            throw new UnauthorizedException("Access token has no expiry");
+        }
+        const tenantId = (payload as any)[settings.tenantClaim] as
             | string
             | undefined;
 
@@ -178,11 +259,26 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
 
         return {
             entity: tenantEntity,
-            roles: payload.roles || (payload as any).realm_access?.roles || [],
+            roles: JwtStrategy.externalRoles(payload, settings.rolesClaim),
             client: client ?? undefined,
             subject,
             authorizedParty,
         };
+    }
+
+    /**
+     * The roles of an external token: from `OIDC_ROLES_CLAIM`, or else from
+     * `roles` or Keycloak's `realm_access.roles`.
+     */
+    private static externalRoles(
+        payload: InternalTokenPayload,
+        rolesClaim: string | undefined,
+    ): Role[] {
+        // Only arrays of strings count: String#includes would match parts of a string claim.
+        const claim = rolesClaim
+            ? claimValue(payload, rolesClaim)
+            : payload.roles || (payload as any).realm_access?.roles;
+        return roleNames(claim) as Role[];
     }
 
     /**
@@ -219,7 +315,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
     }
 
     /**
-     * The tenant a Keycloak token names, or `undefined` when there is none;
+     * The tenant an external token names, or `undefined` when there is none;
      * other errors fail.
      */
     private async findTenant(tenantId: string | undefined) {

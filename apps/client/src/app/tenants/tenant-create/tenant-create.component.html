@@ -73,24 +73,38 @@
           @if (!isEditMode) {
             <div class="initial-client-section">
               <h3>Initial Admin Client</h3>
-              <p class="section-hint">
-                An admin client will be automatically created for this tenant. Select the roles this
-                client should have. It also gets clients:manage, and it can grant only these roles
-                to other clients, unless you include tenant:admin, which lets it grant every role
-                except tenants:manage and tenant:admin.
-              </p>
-              <mat-form-field>
-                <mat-label>Client Roles</mat-label>
-                <mat-select formControlName="roles" multiple>
-                  @for (role of roles; track role) {
-                    <mat-option [value]="role">
-                      {{ role }}
-                    </mat-option>
-                  }
-                </mat-select>
-                <mat-hint>Roles assigned to the auto-generated admin client</mat-hint>
-                <mat-error>Select at least one role</mat-error>
-              </mat-form-field>
+              <mat-slide-toggle
+                formControlName="createAdminClient"
+                color="primary"
+                aria-describedby="admin-client-hint"
+              >
+                Create an admin client
+              </mat-slide-toggle>
+              @if (tenantForm.get('createAdminClient')?.value) {
+                <p id="admin-client-hint" class="section-hint">
+                  An admin client will be automatically created for this tenant. Select the roles
+                  this client should have. It also gets clients:manage, and it can grant only these
+                  roles to other clients, unless you include tenant:admin, which lets it grant every
+                  role except tenants:manage and tenant:admin.
+                </p>
+                <mat-form-field>
+                  <mat-label>Client Roles</mat-label>
+                  <mat-select formControlName="roles" multiple>
+                    @for (role of roles; track role) {
+                      <mat-option [value]="role">
+                        {{ role }}
+                      </mat-option>
+                    }
+                  </mat-select>
+                  <mat-hint>Roles assigned to the auto-generated admin client</mat-hint>
+                  <mat-error>Select at least one role</mat-error>
+                </mat-form-field>
+              } @else {
+                <p id="admin-client-hint" class="section-hint">
+                  No admin client is created. Choose this when your identity provider manages the
+                  clients (OIDC_PROVIDER=generic), and create them there.
+                </p>
+              }
             </div>
           }
         </mat-card-content>

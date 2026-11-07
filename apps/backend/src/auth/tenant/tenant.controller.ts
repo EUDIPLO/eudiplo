@@ -63,6 +63,11 @@ export class TenantController {
         description:
             "The admin client ID `<id>-admin` is used by another tenant or the root client",
     })
+    @ApiResponse({
+        status: 501,
+        description:
+            "With `OIDC_PROVIDER=generic`, `roles` are refused: the identity provider manages the clients",
+    })
     @Post()
     initTenant(
         @Body() data: CreateTenantDto,
