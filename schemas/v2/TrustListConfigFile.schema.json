@@ -110,7 +110,7 @@
                         "description": "Display name of the trusted entity."
                       },
                       "lang": {
-                        "description": "Optional language of every text the entity publishes (name, service names, postal address, contact, information URI): an IETF RFC 5646 language tag in lower case, for example en or de-at (ETSI TS 119 602 clause 6.1.4). Defaults to en.",
+                        "description": "Optional language of the entity's name, postal address, contact and information URI: an IETF RFC 5646 language tag in lower case, for example en or de-at (ETSI TS 119 602 clause 6.1.4). Defaults to en. With another language, the list publishes these texts in that language and again under en with the same text, since every list supports English (clause 6.1.4); service names are published in English only.",
                         "type": "string",
                         "pattern": "^(?:(?:[a-z]{2,3}(?:-[a-z]{3}){0,3}|[a-z]{4,8})(?:-[a-z]{4})?(?:-(?:[a-z]{2}|[0-9]{3}))?(?:-(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3}))*(?:-[0-9a-wy-z](?:-[a-z0-9]{2,8})+)*(?:-x(?:-[a-z0-9]{1,8})+)?)$"
                       },
@@ -446,7 +446,7 @@
                         "description": "Display name of the trusted entity."
                       },
                       "lang": {
-                        "description": "Optional language of every text the entity publishes (name, service names, postal address, contact, information URI): an IETF RFC 5646 language tag in lower case, for example en or de-at (ETSI TS 119 602 clause 6.1.4). Defaults to en.",
+                        "description": "Optional language of the entity's name, postal address, contact and information URI: an IETF RFC 5646 language tag in lower case, for example en or de-at (ETSI TS 119 602 clause 6.1.4). Defaults to en. With another language, the list publishes these texts in that language and again under en with the same text, since every list supports English (clause 6.1.4); service names are published in English only.",
                         "type": "string",
                         "pattern": "^(?:(?:[a-z]{2,3}(?:-[a-z]{3}){0,3}|[a-z]{4,8})(?:-[a-z]{4})?(?:-(?:[a-z]{2}|[0-9]{3}))?(?:-(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3}))*(?:-[0-9a-wy-z](?:-[a-z0-9]{2,8})+)*(?:-x(?:-[a-z0-9]{1,8})+)?)$"
                       },
