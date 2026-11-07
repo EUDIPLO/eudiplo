@@ -1,15 +1,5 @@
 import * as x509 from "@peculiar/x509";
-import {
-    ServiceTypeIdentifiers,
-    serviceTypeMatches,
-    type TrustedEntity,
-} from "../types.js";
-
-/** Services whose certificates identify credential issuers, as in verification. */
-const credentialIssuanceServiceTypes = [
-    ServiceTypeIdentifiers.PIDIssuance,
-    ServiceTypeIdentifiers.EaaIssuance,
-];
+import { isCredentialIssuerServiceType, type TrustedEntity } from "../types.js";
 
 /** DCQL `aki` values for the credential issuers of a trust list. */
 export interface IssuerAuthorityKeyIdentifiers {
@@ -27,11 +17,12 @@ export interface IssuerAuthorityKeyIdentifiers {
  * trust list. A credential matches when a certificate in its chain carries one
  * of the values as the KeyIdentifier of its AuthorityKeyIdentifier.
  *
- * Every PID/EAA issuance certificate contributes its Subject Key Identifier,
- * which certificates issued below it carry as AKI. A listed certificate that is
- * not a CA is pinned as the signing certificate itself, so its own AKI is added
- * as well. A certificate that cannot be parsed, a CA without SKI, or a pinned
- * certificate without AKI (e.g. self-signed) marks the result incomplete.
+ * Every PID, Pub-EAA or EAA issuance certificate contributes its Subject Key
+ * Identifier, which certificates issued below it carry as AKI. A listed
+ * certificate that is not a CA is pinned as the signing certificate itself, so
+ * its own AKI is added as well. A certificate that cannot be parsed, a CA
+ * without SKI, or a pinned certificate without AKI (e.g. self-signed) marks the
+ * result incomplete.
  */
 export function credentialIssuerAuthorityKeyIdentifiers(
     entities: TrustedEntity[],
@@ -40,10 +31,8 @@ export function credentialIssuerAuthorityKeyIdentifiers(
     let complete = true;
     for (const entity of entities) {
         for (const service of entity.services) {
-            const isIssuance = credentialIssuanceServiceTypes.some((type) =>
-                serviceTypeMatches(service.serviceTypeIdentifier, type),
-            );
-            if (!isIssuance) continue;
+            if (!isCredentialIssuerServiceType(service.serviceTypeIdentifier))
+                continue;
 
             const cert = parseCertificate(service.certValue);
             if (!cert) {

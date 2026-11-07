@@ -2,6 +2,8 @@ import { CommonModule } from '@angular/common';
 import {
   Component,
   ElementRef,
+  inject,
+  Injector,
   OnDestroy,
   OnInit,
   QueryList,
@@ -9,7 +11,14 @@ import {
   ViewChildren,
   ChangeDetectionStrategy,
 } from '@angular/core';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import {
+  type AbstractControl,
+  FormBuilder,
+  FormGroup,
+  ReactiveFormsModule,
+  type ValidationErrors,
+  Validators,
+} from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -40,6 +49,7 @@ import { JwtService } from '../../services/jwt.service';
 import { focusIfFocusWasLost } from '../../common/focus-if-lost.util';
 import { type CreatedForForm, openedFromForm } from '../../common/return-to-form';
 import { ReturnToFormComponent } from '../../common/return-to-form.component';
+import { showFieldsToFix } from '../../common/field-to-fix.util';
 
 export type KeyUsageSelection =
   'attestation' | 'statusList' | 'access' | 'authorizationServer' | 'trustList' | 'federation';
@@ -66,6 +76,11 @@ export interface EnrollmentError {
   keptKeyId?: string;
   /** True when the outcome is unknown and the user should check Keys. */
   offerKeys?: boolean;
+}
+
+/** A pasted key or certificate chain: required, and blank text does not count. */
+function requiredText(control: AbstractControl): ValidationErrors | null {
+  return typeof control.value === 'string' && control.value.trim() ? null : { required: true };
 }
 
 @Component({
@@ -98,14 +113,17 @@ export interface EnrollmentError {
 export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   @ViewChild('stepper') stepper!: MatStepper;
 
+  @ViewChild('createButton', { read: ElementRef })
+  private readonly createButton?: ElementRef<HTMLElement>;
+
   /**
-   * The Create & Enroll button is replaced while the enrollment runs, so focus
-   * falls back to the page; it moves to the error that appears afterwards.
+   * The error of a refused enrollment takes the focus from Create & Enroll, which keeps it
+   * while the enrollment runs, or from the page, unless the user has moved it meanwhile.
    */
   @ViewChild('enrollmentErrorBox') set enrollmentErrorBox(
     box: ElementRef<HTMLElement> | undefined
   ) {
-    focusIfFocusWasLost(box?.nativeElement);
+    focusIfFocusWasLost(box?.nativeElement, this.createButton?.nativeElement);
   }
 
   @ViewChild('registrarRetry', { read: ElementRef })
@@ -122,6 +140,10 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
   configForm: FormGroup;
 
   isSubmitting = false;
+  /** Holds the fields of the Configure step; Create focuses the first invalid one. */
+  @ViewChild('configFormElement', { read: ElementRef })
+  private readonly configFormElement?: ElementRef<HTMLFormElement>;
+  private readonly injector = inject(Injector);
   isCheckingRegistrar = false;
   isLoadingKmsProviders = false;
   registrarConfig: RegistrarConfig | null = null;
@@ -295,6 +317,15 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
       .valueChanges.subscribe(() => this.syncRotationControls());
     this.syncRotationControls();
 
+    // The key and certificate fields are required only while the wizard imports them.
+    merge(
+      this.usageForm.valueChanges,
+      this.caSourceForm.valueChanges,
+      this.accessSourceForm.valueChanges,
+      this.configForm.valueChanges
+    ).subscribe(() => this.syncKeyMaterialValidators());
+    this.syncKeyMaterialValidators();
+
     // Each provider offers its own algorithms: keep the chosen one if the new
     // provider offers it, else use the provider's default.
     this.configForm.get('kmsProvider')!.valueChanges.subscribe((provider: string) => {
@@ -315,6 +346,16 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.destroyed = true;
+  }
+
+  /** Requires the pasted key and certificate chain while the Configure step shows them. */
+  private syncKeyMaterialValidators(): void {
+    const validators = this.importsExternalKey ? [requiredText] : [];
+    for (const name of ['externalPrivateKey', 'externalCertificate']) {
+      const control = this.configForm.get(name)!;
+      control.setValidators(validators);
+      control.updateValueAndValidity({ emitEvent: false });
+    }
   }
 
   /** Enables the interval and validity fields only while the Rotation Policy card shows them. */
@@ -543,14 +584,6 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
     return this.isExternalCertificate && !this.requestsCertificate;
   }
 
-  get externalCertificateFormValid(): boolean {
-    return (
-      !this.importsExternalKey ||
-      (!!this.configForm.value.externalPrivateKey?.trim() &&
-        !!this.configForm.value.externalCertificate?.trim())
-    );
-  }
-
   /**
    * Get the appropriate next step label based on current selection.
    */
@@ -600,12 +633,43 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
     this.stepper.next();
   }
 
+  /** Create stays focusable while the key chain is created, so its tooltip says why it waits. */
+  get createTooltip(): string {
+    if (!this.isSubmitting) return '';
+    if (this.selectedUsage === 'access' && this.selectedAccessSource === 'registrar') {
+      return 'Creating the key and enrolling it with the registrar…';
+    }
+    return this.importsExternalKey ? 'Importing the key chain…' : 'Creating the key chain…';
+  }
+
   /**
    * Create the key chain based on wizard selections.
    * For registrar enrollment, creates the key then requests a certificate.
    */
   async createKey(): Promise<void> {
+    // `disabledInteractive` keeps Create clickable while it looks disabled.
     if (this.isSubmitting) return;
+    if (this.configForm.invalid) {
+      const control = (name: string) => this.configForm.get(name);
+      showFieldsToFix(this.configForm, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container: () => this.configFormElement?.nativeElement,
+        sections: [
+          {
+            name: 'Basic Settings',
+            controls: ['kmsProvider', 'alg', 'externalPrivateKey', 'externalCertificate'].map(
+              control
+            ),
+          },
+          {
+            name: 'Rotation Policy',
+            controls: ['rotationIntervalDays', 'certValidityDays'].map(control),
+          },
+        ],
+      });
+      return;
+    }
     this.isSubmitting = true;
     this.enrollmentError = null;
 
@@ -624,15 +688,7 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
         return;
       }
 
-      // Build the KeyChainCreateDto
-      const createDto: KeyChainCreateDto = {
-        usageType: usage,
-        type: usage === 'access' || !this.isInternalChain ? 'standalone' : 'internalChain',
-        description: description || this.getDefaultDescription(),
-        kmsProvider: this.configForm.value.kmsProvider || this.defaultKmsProvider || 'db',
-        alg: this.configForm.value.alg || undefined,
-        rotationPolicy: this.rotationPolicy(),
-      };
+      const createDto = this.createRequest(usage, description);
 
       const result = await this.keyChainService.create(createDto);
 
@@ -664,6 +720,18 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
     } finally {
       this.isSubmitting = false;
     }
+  }
+
+  /** The request that creates the key chain the wizard describes, without key material. */
+  private createRequest(usage: KeyUsageSelection, description?: string): KeyChainCreateDto {
+    return {
+      usageType: usage,
+      type: usage === 'access' || !this.isInternalChain ? 'standalone' : 'internalChain',
+      description: description || this.getDefaultDescription(),
+      kmsProvider: this.configForm.value.kmsProvider || this.defaultKmsProvider || 'db',
+      alg: this.configForm.value.alg || undefined,
+      rotationPolicy: this.rotationPolicy(),
+    };
   }
 
   /** Imports the pasted key and certificate chain and opens the imported key chain. */

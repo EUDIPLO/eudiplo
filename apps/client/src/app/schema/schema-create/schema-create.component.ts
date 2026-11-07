@@ -2,10 +2,13 @@ import { CommonModule } from '@angular/common';
 import {
   Component,
   DestroyRef,
+  ElementRef,
+  Injector,
   OnInit,
   inject,
   isDevMode,
   ChangeDetectionStrategy,
+  viewChild,
 } from '@angular/core';
 import {
   FormArray,
@@ -41,6 +44,7 @@ import { getApiErrorMessage } from '../../utils/error-message';
 import { SourceLoadState, loadSource, reportSourceFailures } from '../../common/load-source';
 import { SEMVER_REGEX } from '../schema-version';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { firstFieldWithError, showFieldsToFix } from '../../common/field-to-fix.util';
 
 @Component({
   selector: 'app-schema-create',
@@ -68,10 +72,11 @@ export class SchemaCreateComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
+  private readonly formElement = viewChild<ElementRef<HTMLFormElement>>('formElement');
+  private readonly addRootCertificate = viewChild('addRootCertificate', { read: ElementRef });
 
   loading = false;
-  /** Set by the first Submit, so the missing-fields note does not show while filling in. */
-  submitAttempted = false;
   readonly demoDefaultsEnabled = isDevMode();
   /** Credential config ID passed via query param — linked back to the schema metadata on submit */
   credentialConfigId: string | undefined;
@@ -415,10 +420,45 @@ export class SchemaCreateComponent implements OnInit {
     return !!this.resolveLinkedCredentialConfigId() && !!this.linkedSchemaMetadataId;
   }
 
+  /** Submit stays focusable while the schema is submitted, so its tooltip says why it waits. */
+  get submitTooltip(): string {
+    return this.loading ? 'Submitting the schema…' : '';
+  }
+
   async submit(): Promise<void> {
-    this.submitAttempted = true;
+    // `disabledInteractive` keeps Submit clickable while it looks disabled.
+    if (this.loading) return;
     if (this.composeForm.invalid) {
-      this.composeForm.markAllAsTouched();
+      const form = this.composeForm.controls;
+      const container = () => this.formElement()?.nativeElement;
+      showFieldsToFix(this.composeForm, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container,
+        // The import selects show the errors of the lists they fill.
+        field: () => firstFieldWithError(container()),
+        // Without trust lists to select, a root certificate is the way to a trusted authority.
+        fallback: () =>
+          this.trustedAuthorities.hasError('required')
+            ? this.addRootCertificate()?.nativeElement
+            : undefined,
+        sections: [
+          {
+            name: 'Compose Schema',
+            controls: [
+              form.version,
+              form.rulebookURI,
+              form.attestationLoS,
+              form.bindingType,
+              form.name,
+              form.category,
+              form.tags,
+            ],
+          },
+          { name: 'Schema URIs', controls: [this.schemaURIs] },
+          { name: 'Trusted Authorities', controls: [this.trustedAuthorities] },
+        ],
+      });
       return;
     }
 

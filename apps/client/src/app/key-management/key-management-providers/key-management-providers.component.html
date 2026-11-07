@@ -11,8 +11,11 @@
           color="primary"
           type="button"
           [disabled]="isSavingConfig"
+          disabledInteractive
           (click)="openTenantConfigEditor()"
-          matTooltip="Show tenant config JSON"
+          [matTooltip]="
+            isSavingConfig ? 'Saving the tenant KMS configuration…' : 'Show tenant config JSON'
+          "
           aria-label="Show tenant config JSON"
           appConfigManaged
           managedKind="KmsConfig"

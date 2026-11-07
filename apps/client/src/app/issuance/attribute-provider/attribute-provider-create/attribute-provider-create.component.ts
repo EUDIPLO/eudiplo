@@ -42,6 +42,7 @@ import { ConfigOwnershipNoticeComponent } from '../../../config-portability/conf
 })
 export class AttributeProviderCreateComponent extends ApiKeyEndpointFormComponent {
   protected readonly noun = 'attribute provider';
+  protected readonly detailsTitle = 'Provider Details';
   protected readonly jsonTitle = 'Attribute Provider JSON';
 
   constructor(

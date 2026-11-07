@@ -1,8 +1,16 @@
+import { type Logger, UnauthorizedException } from "@nestjs/common";
 import { ES256 } from "@owf/crypto";
 import * as x509 from "@peculiar/x509";
 import { describe, expect, it, vi } from "vitest";
+import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
+import { OutdatedTrustListsError } from "./domain/trust-list-freshness.js";
 import { RevocationListUnavailableError } from "./revocation-policy.util.js";
-import { RevocationCheckMode } from "./types.js";
+import { TrustStoreService } from "./trust-store.service.js";
+import {
+    RevocationCheckMode,
+    ServiceTypeIdentifiers,
+    type TrustListRef,
+} from "./types.js";
 import { WalletAttestationService } from "./wallet-attestation.service.js";
 import {
     MatchedTrustedEntity,
@@ -64,6 +72,126 @@ describe("WalletAttestationService trust requirements", () => {
             ).rejects.toThrow("No wallet provider trust lists configured");
         },
     );
+});
+
+// The built-in token endpoint returns the message as error_description, so
+// it reaches the wallet. Server-side reasons name trust list URLs, including
+// INTERNAL_URL for managed lists, and are only the cause, which callers log.
+describe("WalletAttestationService error messages for the wallet", () => {
+    const internalListUrl =
+        "http://eudiplo-internal:3000/issuers/tenant/trust-list/wallets";
+    const attestationJwt = `${Buffer.from(
+        JSON.stringify({ alg: "ES256", x5c: ["MII"] }),
+    ).toString("base64url")}.e30.c2ln`;
+
+    function createService(options: {
+        verifyAttestation?: () => Promise<void>;
+        getTrustStore?: () => Promise<unknown>;
+    }) {
+        return Object.assign(
+            Object.create(WalletAttestationService.prototype),
+            {
+                getIssuer: () => ({
+                    verifyWalletAttestation:
+                        options.verifyAttestation ?? vi.fn(),
+                }),
+                settings: { cryptoToleranceSeconds: 0 },
+                logger: { debug: vi.fn() },
+                trustStoreService: {
+                    getTrustStore:
+                        options.getTrustStore ??
+                        (() => Promise.reject(new Error("not reached"))),
+                },
+            },
+        ) as WalletAttestationService;
+    }
+
+    function verify(
+        service: WalletAttestationService,
+        trustLists: TrustListRef[] = [
+            { url: internalListUrl, verifierX509Der: "MII" },
+        ],
+    ): Promise<Error | undefined> {
+        return service
+            .verifyWalletAttestation(
+                "tenant",
+                {
+                    clientAttestationJwt: attestationJwt,
+                    clientAttestationPopJwt: "pop",
+                },
+                "https://as.example",
+                true,
+                trustLists,
+                RevocationCheckMode.Disabled,
+            )
+            .then(
+                () => undefined,
+                (error: Error) => error,
+            );
+    }
+
+    it.each([
+        `Failed to fetch trust list from ${internalListUrl}: connect ECONNREFUSED 10.0.0.7:3000`,
+        `Trust list JWT verification failed for ${internalListUrl}: signature verification failed`,
+    ])(
+        "answers a fixed message when a trust list cannot be loaded (%s)",
+        async (reason) => {
+            const service = createService({
+                getTrustStore: () => Promise.reject(new Error(reason)),
+            });
+
+            const error = await verify(service);
+
+            expect(error).toBeInstanceOf(UnauthorizedException);
+            expect(error?.message).toBe(
+                "Wallet provider trust lists could not be loaded",
+            );
+            expect((error?.cause as Error).message).toBe(reason);
+        },
+    );
+
+    it("answers a fixed message for other server-side errors and keeps the reason as cause", async () => {
+        const service = createService({});
+
+        // A reference without verification material names its URL.
+        const error = await verify(service, [{ url: internalListUrl }]);
+
+        expect(error).toBeInstanceOf(UnauthorizedException);
+        expect(error?.message).toBe("Wallet attestation verification failed");
+        expect((error?.cause as Error).message).toContain(internalListUrl);
+    });
+
+    it("keeps the reason when the attestation the wallet sent is invalid", async () => {
+        const service = createService({
+            verifyAttestation: () =>
+                Promise.reject(new Error("Client attestation jwt has expired")),
+        });
+
+        const error = await verify(service);
+
+        expect(error).toBeInstanceOf(UnauthorizedException);
+        expect(error?.message).toBe(
+            "Wallet attestation verification failed: Client attestation jwt has expired",
+        );
+    });
+
+    it("keeps the reason when every trust list is outdated", async () => {
+        const service = createService({
+            getTrustStore: () =>
+                Promise.reject(
+                    new OutdatedTrustListsError([
+                        { list: internalListUrl, nextUpdate: null },
+                    ]),
+                ),
+        });
+
+        const error = await verify(service);
+
+        expect(error).toBeInstanceOf(UnauthorizedException);
+        expect(error?.message).toBe(
+            "Wallet attestation verification failed: No configured trust list is current: each has no valid NextUpdate or one that has passed",
+        );
+    });
 });
 
 describe("WalletAttestationService status list signature", () => {
@@ -152,7 +280,7 @@ describe("WalletAttestationService status list signature", () => {
     });
 });
 
-describe("WalletAttestationService status list signer without revocation certificate", () => {
+describe("WalletAttestationService status list signer", () => {
     const algorithm = { name: "ECDSA", namedCurve: "P-256", hash: "SHA-256" };
     const b64url = (input: string | ArrayBuffer) =>
         Buffer.from(
@@ -226,6 +354,7 @@ describe("WalletAttestationService status list signer without revocation certifi
             issuanceCert: providerCa,
             issuanceThumbprint,
             issuanceIsCa: true,
+            issuanceServiceType: ServiceTypeIdentifiers.WalletSolutionIssuance,
             matchMode: "ca",
         };
         const service = Object.assign(
@@ -295,19 +424,27 @@ describe("WalletAttestationService status list signer without revocation certifi
                 Buffer.from(await cert.getThumbprint("SHA-256")).toString(
                     "hex",
                 );
+            const services = [
+                {
+                    serviceTypeIdentifier:
+                        ServiceTypeIdentifiers.WalletSolutionIssuance,
+                    certValue: der(attestationCa.cert),
+                },
+                {
+                    serviceTypeIdentifier:
+                        ServiceTypeIdentifiers.WalletSolutionRevocation,
+                    certValue: der(revocationCa.cert),
+                },
+            ];
             const matchedEntity: MatchedTrustedEntity = {
-                entity: { entityId: "provider", services: [] },
+                entity: { entityId: "provider", services },
                 issuanceCert: attestationCa.cert,
                 issuanceThumbprint: await thumb(attestationCa.cert),
                 issuanceIsCa: true,
+                issuanceServiceType:
+                    ServiceTypeIdentifiers.WalletSolutionIssuance,
                 matchMode: "ca",
-                revocationCert: revocationCa.cert,
-                revocationThumbprint: await thumb(revocationCa.cert),
             };
-            const services = [
-                { certValue: der(attestationCa.cert) },
-                { certValue: der(revocationCa.cert) },
-            ];
             const service = Object.assign(
                 Object.create(WalletAttestationService.prototype),
                 {
@@ -337,6 +474,76 @@ describe("WalletAttestationService status list signer without revocation certifi
             ).resolves.toBe(true);
         });
     }
+
+    /** Verify against a provider that lists `revocationCas` as revocation services. */
+    async function verifyWithRevocation(
+        jwt: string,
+        attestationCa: x509.X509Certificate,
+        revocationCas: x509.X509Certificate[],
+    ) {
+        const services = [
+            {
+                serviceTypeIdentifier:
+                    ServiceTypeIdentifiers.WalletSolutionIssuance,
+                certValue: der(attestationCa),
+            },
+            ...revocationCas.map((cert) => ({
+                serviceTypeIdentifier:
+                    ServiceTypeIdentifiers.WalletSolutionRevocation,
+                certValue: der(cert),
+            })),
+        ];
+        const matchedEntity: MatchedTrustedEntity = {
+            entity: { entityId: "provider", services },
+            issuanceCert: attestationCa,
+            issuanceThumbprint: Buffer.from(
+                await attestationCa.getThumbprint("SHA-256"),
+            ).toString("hex"),
+            issuanceIsCa: true,
+            issuanceServiceType: ServiceTypeIdentifiers.WalletSolutionIssuance,
+            matchMode: "ca",
+        };
+        const service = Object.assign(
+            Object.create(WalletAttestationService.prototype),
+            {
+                logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+                cryptoImplementationService: {
+                    getCryptoFromJwk: () => ES256,
+                },
+                x509ValidationService: new X509ValidationService(),
+            },
+        );
+        return service.verifyStatusListSignature(jwt, matchedEntity, {
+            entities: [matchedEntity.entity],
+        });
+    }
+
+    it("accepts a status list under any revocation CA of the provider", async () => {
+        const attestationCa = await ca("Provider CA");
+        const firstRevocationCa = await ca("Provider Status CA 1");
+        const secondRevocationCa = await ca("Provider Status CA 2");
+
+        await expect(
+            verifyWithRevocation(
+                await statusListUnder(secondRevocationCa),
+                attestationCa.cert,
+                [firstRevocationCa.cert, secondRevocationCa.cert],
+            ),
+        ).resolves.toBe(true);
+    });
+
+    it("rejects a status list under the attestation CA when the provider lists a revocation CA", async () => {
+        const attestationCa = await ca("Provider CA");
+        const revocationCa = await ca("Provider Status CA");
+
+        await expect(
+            verifyWithRevocation(
+                await statusListUnder(attestationCa),
+                attestationCa.cert,
+                [revocationCa.cert],
+            ),
+        ).resolves.toBe(false);
+    });
 
     it("rejects a status list chained to another CA in the trust store", async () => {
         const providerCa = await ca("Provider CA");
@@ -522,5 +729,242 @@ describe("WalletAttestationService status check mode", () => {
         expect(
             statusListVerifierService.getStatusListJwt,
         ).not.toHaveBeenCalled();
+    });
+});
+
+describe("WalletAttestationService wallet attestation signer", () => {
+    const algorithm = { name: "ECDSA", namedCurve: "P-256", hash: "SHA-256" };
+    const der = (cert: x509.X509Certificate) =>
+        Buffer.from(cert.rawData).toString("base64");
+
+    async function keys() {
+        return (await crypto.subtle.generateKey(algorithm, true, [
+            "sign",
+            "verify",
+        ])) as CryptoKeyPair;
+    }
+
+    function selfSignedCa(serialNumber: string, caKeys: CryptoKeyPair) {
+        return x509.X509CertificateGenerator.createSelfSigned({
+            serialNumber,
+            name: "CN=Wallet Provider Root CA",
+            notBefore: new Date(Date.now() - 60_000),
+            notAfter: new Date(Date.now() + 3_600_000),
+            keys: caKeys,
+            signingAlgorithm: algorithm,
+            extensions: [new x509.BasicConstraintsExtension(true, 0, true)],
+        });
+    }
+
+    /**
+     * A provider whose attestation CA and revocation CA share subject and
+     * key, and a wallet attestation signed below them. Only the header is
+     * read here; signatures are checked elsewhere.
+     */
+    async function provider() {
+        const caKeys = await keys();
+        const attestationCa = await selfSignedCa("01", caKeys);
+        const revocationCa = await selfSignedCa("02", caKeys);
+        const leafKeys = await keys();
+        const leaf = await x509.X509CertificateGenerator.create({
+            serialNumber: "03",
+            subject: "CN=Wallet Attestation Signer",
+            issuer: attestationCa.subject,
+            notBefore: new Date(Date.now() - 60_000),
+            notAfter: new Date(Date.now() + 3_600_000),
+            publicKey: leafKeys.publicKey,
+            signingKey: caKeys.privateKey,
+            signingAlgorithm: algorithm,
+        });
+        const header = Buffer.from(
+            JSON.stringify({ alg: "ES256", x5c: [der(leaf)] }),
+        ).toString("base64url");
+        return { attestationCa, revocationCa, jwt: `${header}.e30.c2ln` };
+    }
+
+    function validate(
+        jwt: string,
+        services: Array<{ serviceTypeIdentifier: string; certValue: string }>,
+    ) {
+        const service = Object.assign(
+            Object.create(WalletAttestationService.prototype),
+            {
+                logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+                trustStoreService: {
+                    getTrustStore: async () => ({
+                        entities: [{ entityId: "provider", services }],
+                        discarded: [],
+                    }),
+                },
+                x509ValidationService: new X509ValidationService(),
+            },
+        );
+        return service.validateWalletSolutionCertificate(
+            jwt,
+            [{ url: "https://trust.example/wallets", verifierX509Der: "MII" }],
+            "tenant",
+        );
+    }
+
+    for (const order of [
+        "attestation CA first",
+        "revocation CA first",
+    ] as const) {
+        it(`accepts an attestation under the attestation CA when a revocation CA shares subject and key (${order})`, async () => {
+            const { attestationCa, revocationCa, jwt } = await provider();
+            const services = [
+                {
+                    serviceTypeIdentifier:
+                        ServiceTypeIdentifiers.WalletSolutionIssuance,
+                    certValue: der(attestationCa),
+                },
+                {
+                    serviceTypeIdentifier:
+                        ServiceTypeIdentifiers.WalletSolutionRevocation,
+                    certValue: der(revocationCa),
+                },
+            ];
+
+            const { matchedEntity } = await validate(
+                jwt,
+                order === "attestation CA first"
+                    ? services
+                    : [...services].reverse(),
+            );
+
+            expect(matchedEntity?.issuanceThumbprint).toBe(
+                Buffer.from(
+                    await attestationCa.getThumbprint("SHA-256"),
+                ).toString("hex"),
+            );
+        });
+    }
+
+    it("rejects an attestation under a CA listed only as WalletSolution/Revocation", async () => {
+        const { attestationCa, jwt } = await provider();
+
+        await expect(
+            validate(jwt, [
+                {
+                    serviceTypeIdentifier:
+                        ServiceTypeIdentifiers.WalletSolutionRevocation,
+                    certValue: der(attestationCa),
+                },
+            ]),
+        ).rejects.toThrow("Wallet provider certificate is not trusted");
+    });
+
+    // A replayed older provider list keeps its valid signature; its passed
+    // NextUpdate discards it (ETSI TS 119 602 §6.3.15), the other lists count.
+    describe("with an outdated wallet-provider list", () => {
+        const day = 86_400_000;
+        const current = () => new Date(Date.now() + day).toISOString();
+        const outdated = () => new Date(Date.now() - day).toISOString();
+
+        async function verifyWith(
+            lists: Array<{ withProvider: boolean; nextUpdate: string }>,
+        ) {
+            const { attestationCa, jwt } = await provider();
+            const providerEntity = {
+                entityId: "provider",
+                services: [
+                    {
+                        serviceTypeIdentifier:
+                            ServiceTypeIdentifiers.WalletSolutionIssuance,
+                        certValue: der(attestationCa),
+                    },
+                ],
+            };
+            const otherEntity = {
+                entityId: "other provider",
+                services: [
+                    {
+                        serviceTypeIdentifier:
+                            ServiceTypeIdentifiers.WalletSolutionIssuance,
+                        certValue: der((await provider()).attestationCa),
+                    },
+                ],
+            };
+            const loadVerified = vi.fn();
+            for (const list of lists) {
+                loadVerified.mockResolvedValueOnce({
+                    // Without the provider, the list names another one.
+                    entities: [
+                        list.withProvider ? providerEntity : otherEntity,
+                    ],
+                    nextUpdate: list.nextUpdate,
+                });
+            }
+            const trustStoreService = new TrustStoreService(
+                new CollectTrustedEntities({ loadVerified }),
+                {} as never,
+                {} as never,
+                {} as never,
+            );
+            vi.spyOn(
+                (trustStoreService as unknown as { logger: Logger }).logger,
+                "warn",
+            ).mockImplementation(() => {});
+            return (
+                Object.assign(
+                    Object.create(WalletAttestationService.prototype),
+                    {
+                        getIssuer: () => ({ verifyWalletAttestation: vi.fn() }),
+                        settings: { cryptoToleranceSeconds: 0 },
+                        logger: { debug: vi.fn(), warn: vi.fn() },
+                        trustStoreService,
+                        x509ValidationService: new X509ValidationService(),
+                    },
+                ) as WalletAttestationService
+            ).verifyWalletAttestation(
+                "tenant",
+                { clientAttestationJwt: jwt, clientAttestationPopJwt: "pop" },
+                "https://as.example",
+                true,
+                lists.map((_, i) => ({
+                    url: `https://trust.example/list-${i}`,
+                    verifierX509Der: "MII",
+                })),
+                // The attestation has no status claim; only provider trust is under test.
+                RevocationCheckMode.Disabled,
+            );
+        }
+
+        it("accepts a provider in a current list next to an outdated one", async () => {
+            await expect(
+                verifyWith([
+                    { withProvider: true, nextUpdate: current() },
+                    { withProvider: true, nextUpdate: outdated() },
+                ]),
+            ).resolves.toBeUndefined();
+        });
+
+        it("rejects with 401 a provider listed only in the outdated list, and says lists were left out", async () => {
+            const rejected = verifyWith([
+                { withProvider: false, nextUpdate: current() },
+                { withProvider: true, nextUpdate: outdated() },
+            ]);
+            await expect(rejected).rejects.toBeInstanceOf(
+                UnauthorizedException,
+            );
+            await expect(rejected).rejects.toThrow(
+                "Wallet provider certificate is not trusted - no matching entity in trust list (1 outdated trust list(s) left out; the server log names them)",
+            );
+            // The answer goes to the wallet; only the log names the list.
+            await expect(rejected).rejects.not.toThrow("trust.example");
+        });
+
+        it("rejects with 401 when every list is outdated", async () => {
+            const rejected = verifyWith([
+                { withProvider: true, nextUpdate: outdated() },
+                { withProvider: true, nextUpdate: outdated() },
+            ]);
+            await expect(rejected).rejects.toBeInstanceOf(
+                UnauthorizedException,
+            );
+            await expect(rejected).rejects.toThrow(
+                "No configured trust list is current",
+            );
+        });
     });
 });

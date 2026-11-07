@@ -1,8 +1,13 @@
+import { Logger } from "@nestjs/common";
 import { decodeProtectedHeader } from "jose";
+import {
+    type DiscardedTrustList,
+    discardedTrustListsNote,
+    walletSafeTrustFailure,
+} from "../../../trust/domain/trust-list-freshness.js";
 import { TrustStoreService } from "../../../trust/trust-store.service.js";
 import {
     normalizeTrustListRefs,
-    ServiceTypeIdentifiers,
     TrustListSource,
     walletSolutionServiceTypes,
 } from "../../../trust/types.js";
@@ -14,27 +19,42 @@ export interface AttestationProofTrustValidationDeps {
     tenantId?: string;
     trustStoreService: TrustStoreService;
     x509ValidationService: X509ValidationService;
+    /** Where a rejected key attestation's reason is logged. */
+    logger?: Pick<Logger, "warn">;
 }
+
+const defaultLogger = new Logger("AttestationProofTrust");
+
+/** Answer when the provider of a key attestation cannot be decided. */
+const ATTESTATION_PROOF_NOT_VALIDATED =
+    "Attestation proof x5c chain could not be validated";
 
 /**
  * Validate attestation proof signer chain against configured trusted wallet providers.
  * An attestation must always have a trusted signer, even when it is optional.
+ *
+ * When the provider cannot be decided (a trust list or reference that cannot
+ * be loaded, a header or certificate that cannot be read), the wallet gets a
+ * fixed `invalid_proof` text, since the reason can name a trust list URL or
+ * an internal address; the reason is logged with the tenant instead.
  */
 export async function validateAttestationProofTrust(
     keyAttestationJwt: string,
     trustListRefsInput: TrustListRef[],
     deps: AttestationProofTrustValidationDeps,
 ): Promise<void> {
-    const trustListRefs = normalizeTrustListRefs(trustListRefsInput);
-
-    if (trustListRefs.length === 0) {
-        throw new CredentialRequestException(
-            "invalid_proof",
-            "No wallet provider trust lists configured for key attestation verification",
-        );
-    }
-
+    // Outdated lists left out of the store, named by count in the answer so a
+    // missing provider is not mistaken for one that is not listed at all.
+    let discarded: DiscardedTrustList[] = [];
     try {
+        const trustListRefs = normalizeTrustListRefs(trustListRefsInput);
+        if (trustListRefs.length === 0) {
+            throw new CredentialRequestException(
+                "invalid_proof",
+                "No wallet provider trust lists configured for key attestation verification",
+            );
+        }
+
         const header = decodeProtectedHeader(keyAttestationJwt);
         const x5c = header.x5c;
         if (!Array.isArray(x5c) || x5c.length === 0) {
@@ -52,54 +72,42 @@ export async function validateAttestationProofTrust(
 
         const trustStore =
             await deps.trustStoreService.getTrustStore(trustListSource);
+        discarded = trustStore.discarded;
         if (trustStore.entities.length === 0) {
             throw new CredentialRequestException(
                 "invalid_proof",
-                "No trusted wallet providers found in configured trust lists",
+                `No trusted wallet providers found in configured trust lists${discardedTrustListsNote(discarded)}`,
             );
         }
 
-        const presentedChain = deps.x509ValidationService.parseX5c(x5c);
-        const leaf = presentedChain[0];
-        if (!leaf) {
-            throw new CredentialRequestException(
-                "invalid_proof",
-                "Attestation proof x5c chain is empty",
-            );
-        }
-
-        const anchors = deps.x509ValidationService.parseTrustAnchors(
-            trustStore.entities.flatMap((entity) => entity.services),
+        const matched = await deps.x509ValidationService.matchAttestationSigner(
+            x5c,
+            trustStore.entities,
         );
-
-        const path = await deps.x509ValidationService.buildPath(
-            leaf,
-            presentedChain,
-            anchors,
-        );
-
-        const matched =
-            await deps.x509ValidationService.pathMatchesTrustedEntities(
-                path,
-                trustStore.entities,
-                "leaf",
-                ServiceTypeIdentifiers.WalletSolution,
-            );
 
         if (!matched) {
             throw new CredentialRequestException(
                 "invalid_proof",
-                "Attestation proof signer is not trusted by configured wallet provider trust lists",
+                `Attestation proof signer is not trusted by configured wallet provider trust lists${discardedTrustListsNote(discarded)}`,
             );
         }
     } catch (error) {
         if (error instanceof CredentialRequestException) {
             throw error;
         }
-        throw new CredentialRequestException(
-            "invalid_proof",
-            "Attestation proof x5c chain could not be validated",
+        const { message, cause, outdated } = walletSafeTrustFailure(
+            error,
+            `${ATTESTATION_PROOF_NOT_VALIDATED}${discardedTrustListsNote(discarded)}`,
         );
+        // An outdated-lists message is its own reason; for the fixed text,
+        // the cause names the list or certificate that failed.
+        const reason = outdated
+            ? message
+            : `${message}: ${cause?.message || "Unknown error"}`;
+        (deps.logger ?? defaultLogger).warn(
+            `Key attestation validation failed for tenant ${deps.tenantId ?? "unknown"}: ${reason}`,
+        );
+        throw new CredentialRequestException("invalid_proof", message);
     }
 }
 

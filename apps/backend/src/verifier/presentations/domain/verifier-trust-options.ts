@@ -1,8 +1,8 @@
 import { revocationModeToPolicy } from "../../../trust/revocation-policy.util.js";
 import {
+    credentialIssuerServiceTypes,
     DEFAULT_VERIFIER_SKEW_SECONDS,
     type RevocationCheckMode,
-    ServiceTypeIdentifiers,
     type TrustListRef,
     type VerifierOptions,
 } from "../../../trust/types.js";
@@ -25,7 +25,7 @@ export function trustListAuthorities(
 /**
  * Trust options for verifying a presented credential: the resolved trust
  * lists, OpenID Federation trust anchors, revocation policy and clock skew.
- * Issuers must be listed as PID or EAA issuance services.
+ * Issuers must be listed as PID, Pub-EAA or EAA issuance services.
  *
  * Which `trusted_authorities` entry decides:
  * - an `etsi_tl` trust list: the issuer must be listed in it. An
@@ -65,10 +65,7 @@ export function verifierTrustOptions(input: {
     return {
         trustListSource: {
             lotes: input.trustLists,
-            acceptedServiceTypes: [
-                ServiceTypeIdentifiers.EaaIssuance,
-                ServiceTypeIdentifiers.PIDIssuance,
-            ],
+            acceptedServiceTypes: [...credentialIssuerServiceTypes],
             ...(input.tenantId !== undefined
                 ? { tenantId: input.tenantId }
                 : {}),

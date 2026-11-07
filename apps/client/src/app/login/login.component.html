@@ -51,7 +51,7 @@
           </div>
         </div>
       } @else if (loginForm) {
-        <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="login-form">
+        <form #formElement [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="login-form">
           <!-- API URL Field -->
           <mat-form-field>
             <mat-label>EUDIPLO Instance</mat-label>
@@ -80,8 +80,10 @@
             }
           </mat-form-field>
 
+          <!-- Without the slide, the other tab's fields exist at once, so a submit can focus them. -->
           <mat-tab-group
             class="login-tabs"
+            animationDuration="0ms"
             [selectedIndex]="selectedLoginMode === 'sso' ? 0 : 1"
             (selectedIndexChange)="onLoginTabChange($event)"
           >
@@ -166,9 +168,9 @@
               matButton="filled"
               color="primary"
               type="submit"
-              [disabled]="
-                isLoading || loginForm.invalid || (selectedLoginMode === 'sso' && !isSsoAvailable)
-              "
+              [disabled]="!!loginUnavailableReason"
+              disabledInteractive
+              [matTooltip]="loginUnavailableReason"
               class="login-button"
             >
               @if (isLoading) {

@@ -126,7 +126,15 @@ describe("credentialIssuerAuthorityKeyIdentifiers", () => {
         ).toEqual([ski(ca), ski(leaf)]);
     });
 
-    it("only uses PID and EAA issuance services", () => {
+    it("uses Pub-EAA issuance services", () => {
+        expect(
+            credentialIssuerAuthorityKeyIdentifiers([
+                entity([ServiceTypeIdentifiers.PubEaaIssuance, der(ca)]),
+            ]),
+        ).toEqual({ values: [ski(ca)], complete: true });
+    });
+
+    it("only uses PID, Pub-EAA and EAA issuance services", () => {
         expect(
             credentialIssuerAuthorityKeyIdentifiers([
                 entity(

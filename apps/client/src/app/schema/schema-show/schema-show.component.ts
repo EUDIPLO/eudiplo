@@ -1,5 +1,14 @@
 import { CommonModule, DatePipe } from '@angular/common';
-import { Component, DestroyRef, OnInit, inject, ChangeDetectionStrategy } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  ElementRef,
+  inject,
+  Injector,
+  OnInit,
+  ViewChild,
+} from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -30,7 +39,9 @@ import { LabelledFailure, getApiErrorMessage } from '../../utils/error-message';
 import { SourceLoadState, loadSource, reportSourceFailures } from '../../common/load-source';
 import { SEMVER_REGEX, compareVersionsDesc, proposeNextVersion } from '../schema-version';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { showFieldsToFix } from '../../common/field-to-fix.util';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
+import { focusAfterRenderIfLost } from '../../common/focus-if-lost.util';
 
 function formatNotCarriedOver(values: string[]): string {
   return `Not in the registrar vocabulary, so not carried over: ${values.join(', ')}.`;
@@ -62,12 +73,18 @@ function formatNotCarriedOver(values: string[]): string {
 })
 export class SchemaShowComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
+  /** Takes the focus when the focused Deprecate goes away with a finished deprecation. */
+  @ViewChild('pageHeading') private readonly pageHeading?: ElementRef<HTMLElement>;
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly schemaService = inject(SchemaService);
   private readonly credentialConfigService = inject(CredentialConfigService);
   private readonly jwtService = inject(JwtService);
   private readonly snackBar = inject(MatSnackBar);
+  /** Holds the fields of Publish New Version; Publish focuses the first invalid one. */
+  @ViewChild('publishFormElement', { read: ElementRef })
+  private readonly publishFormElement?: ElementRef<HTMLFormElement>;
 
   id = '';
   item?: SchemaMetadata;
@@ -321,8 +338,15 @@ export class SchemaShowComponent implements OnInit {
     return `${entry.label} (${entry.code})`;
   }
 
+  /** Save under Catalog Metadata stays focusable while it cannot be used, so its tooltip says why. */
+  get metadataSaveTooltip(): string {
+    if (this.saving) return 'Saving the catalog metadata…';
+    return this.metadataForm.pristine ? 'No changes to save' : '';
+  }
+
   async saveMetadata(): Promise<void> {
-    if (!this.item || this.saving) return;
+    // `disabledInteractive` keeps Save clickable while it looks disabled.
+    if (!this.item || this.saving || this.metadataForm.pristine) return;
     const entry = this.item;
     this.saving = true;
     try {
@@ -330,6 +354,10 @@ export class SchemaShowComponent implements OnInit {
       // the registrar vocabulary has no option in the selects, and sending it
       // back unchanged would fail validation.
       const { displayName, category, tags } = this.metadataForm.controls;
+      // A field changed while the save runs keeps its unsaved change afterwards.
+      const sent = [displayName, category, tags].map(
+        (control) => [control, JSON.stringify(control.value)] as const
+      );
       const updated = await this.schemaService.updateMetadata(entry.id, entry.version, {
         ...(displayName.dirty ? { displayName: displayName.value?.trim() || undefined } : {}),
         ...(category.dirty
@@ -344,7 +372,9 @@ export class SchemaShowComponent implements OnInit {
       // Another version may have been opened meanwhile; its form stays as it is.
       if (this.item === entry) {
         this.item = updated;
-        this.metadataForm.markAsPristine();
+        for (const [control, value] of sent) {
+          if (JSON.stringify(control.value) === value) control.markAsPristine();
+        }
       }
     } catch (error) {
       console.error('Failed to update metadata:', error);
@@ -543,8 +573,22 @@ export class SchemaShowComponent implements OnInit {
     return '';
   }
 
+  /** Publish stays focusable while it cannot be used, so its tooltip says why. */
+  get publishTooltip(): string {
+    return this.publishing ? 'Publishing the new version…' : this.publishBlockedReason;
+  }
+
   async publishNewVersion(): Promise<void> {
-    if (!this.item || this.publishForm.invalid || this.publishBlockedReason) return;
+    // `disabledInteractive` keeps Publish clickable while it looks disabled.
+    if (!this.item || this.publishing || this.publishBlockedReason) return;
+    if (this.publishForm.invalid) {
+      showFieldsToFix(this.publishForm, {
+        snackBar: this.snackBar,
+        injector: this.injector,
+        container: () => this.publishFormElement?.nativeElement,
+      });
+      return;
+    }
 
     const newVersion = this.publishForm.get('newVersion')!.value!;
     const rulebookURI = this.publishForm.get('rulebookURI')!.value || this.item.rulebookURI;
@@ -759,6 +803,7 @@ export class SchemaShowComponent implements OnInit {
    * as its successor.
    */
   async deprecate(): Promise<void> {
+    // `disabledInteractive` keeps Deprecate clickable while it looks disabled.
     if (!this.item || this.item.deprecated || this.deprecating) return;
     const entry = this.item;
     const successor = this.newestVersionAbove(entry.version);
@@ -782,10 +827,13 @@ export class SchemaShowComponent implements OnInit {
     // Show the new state unless another version was opened meanwhile.
     if (updated && this.item === entry) {
       this.item = updated;
+      // Deprecate is not offered for a deprecated version, so its focus would fall to the page.
+      focusAfterRenderIfLost(this.injector, () => this.pageHeading?.nativeElement);
     }
   }
 
   async delete(): Promise<void> {
+    // `disabledInteractive` keeps Delete clickable while it looks disabled.
     if (!this.item || this.deleting) return;
     const entry = this.item;
     const question = [
