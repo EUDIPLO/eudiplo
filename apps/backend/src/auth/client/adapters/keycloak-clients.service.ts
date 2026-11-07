@@ -13,6 +13,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { decodeJwt } from "jose";
 import { Repository } from "typeorm";
 import { ConfigImportService } from "../../../platform/config-import/config-import.service.js";
+import { splitCommaSeparatedList } from "../../../shared/domain/comma-separated-list.js";
 import { keycloakAuthorizationRoles } from "../../keycloak-authorization-roles.js";
 import { syncEudiploRealmRoles } from "../../keycloak-realm-roles.js";
 import { allRoles, Role } from "../../roles/role.enum.js";
@@ -25,6 +26,10 @@ import {
 import { CreateClientDto } from "../dto/create-client.dto.js";
 import { UpdateClientDto } from "../dto/update-client.dto.js";
 import { ClientEntity } from "../entities/client.entity.js";
+import {
+    webClientAddresses,
+    withoutAnyAddress,
+} from "../keycloak-ui-client.js";
 import { CreateClientSchema } from "../schemas/client.schema.js";
 
 @Injectable()
@@ -147,9 +152,9 @@ export class KeycloakClientsProvider
     /**
      * Checks if all the roles are available in the realm. If not they will be created.
      */
-    private init() {
+    private async init() {
         const existingRoles: Role[] = allRoles;
-        return this.kc.roles
+        await this.kc.roles
             .find()
             .then(async (roles) => {
                 // Check if all roles exist
@@ -166,11 +171,24 @@ export class KeycloakClientsProvider
                 }
 
                 await this.ensureBootstrapAdminClient();
-                await this.ensureUiPublicClient();
             })
             .catch((err) => {
                 this.logger.error("Error initializing Keycloak roles", err);
             });
+        // Also when the steps above fail: the client of 9.x accepts any redirect URI.
+        await this.ensureUiPublicClient().catch((err) => {
+            this.logger.error(
+                `Could not update the Keycloak client '${this.uiClientId()}'. Check in Keycloak that its redirect URIs do not contain '*', which lets any website receive sign-ins to the web client.`,
+                err,
+            );
+        });
+    }
+
+    /** The public Keycloak client the web client signs in with. */
+    private uiClientId(): string {
+        return (
+            this.configService.get<string>("OIDC_UI_CLIENT_ID") ?? "eudiplo-ui"
+        );
     }
 
     /**
@@ -258,10 +276,28 @@ export class KeycloakClientsProvider
 
     /**
      * Auto-create or update a public Keycloak client for the Angular UI (Authorization Code + PKCE).
+     *
+     * Keycloak sends authorization codes only to the web client URLs of
+     * `OIDC_UI_URL`, as anyone can redeem the codes of a public client. Without
+     * it, the redirect URIs set in Keycloak stay, except `*`.
      */
     private async ensureUiPublicClient(): Promise<void> {
-        const uiClientId =
-            this.configService.get<string>("OIDC_UI_CLIENT_ID") ?? "eudiplo-ui";
+        const uiClientId = this.uiClientId();
+        const webClientUrls = splitCommaSeparatedList(
+            this.configService.get<string>("OIDC_UI_URL"),
+        );
+
+        const existing = (
+            await this.kc.clients.find({ clientId: uiClientId })
+        )[0];
+        const addresses = webClientUrls.length
+            ? webClientAddresses(webClientUrls)
+            : withoutAnyAddress(existing);
+        if (!addresses.redirectUris.length) {
+            this.logger.warn(
+                `The Keycloak client '${uiClientId}' has no redirect URIs, so nobody can sign in to the web client with SSO. Set OIDC_UI_URL to the URL of the web client.`,
+            );
+        }
 
         const uiClientPayload = {
             clientId: uiClientId,
@@ -272,13 +308,9 @@ export class KeycloakClientsProvider
             standardFlowEnabled: true,
             directAccessGrantsEnabled: false,
             enabled: true,
-            redirectUris: ["*"],
-            webOrigins: ["*"],
+            ...addresses,
         };
 
-        const existing = (
-            await this.kc.clients.find({ clientId: uiClientId })
-        )[0];
         if (existing?.id) {
             await this.kc.clients.update({ id: existing.id }, uiClientPayload);
             this.logger.log(`Updated public UI client '${uiClientId}'`);

@@ -14,7 +14,6 @@ import {
     filterOpenApiPaths,
     GLOBAL_PREFIX_EXCLUSIONS,
 } from "./main.helpers.js";
-import { splitCorsOrigins } from "./platform/config/cors-validation.schema.js";
 import {
     getActiveSkipFlags,
     skippedProtection,
@@ -22,6 +21,7 @@ import {
 import { loadTlsOptions } from "./platform/config/tls-options.js";
 import { ValidationErrorFilter } from "./shared/common/filters/validation-error.filter.js";
 import { createAppValidationPipe } from "./shared/common/zod/zod-schema.util.js";
+import { splitCommaSeparatedList } from "./shared/domain/comma-separated-list.js";
 import { oidcDiscoveryUrl } from "./shared/domain/oidc-discovery-url.js";
 import { registerTolerantX509Extensions } from "./shared/utils/x509-tolerant-extensions.js";
 
@@ -73,7 +73,7 @@ async function bootstrap() {
     const configService = app.get(ConfigService);
     const publicUrl = configService.getOrThrow<string>("PUBLIC_URL");
 
-    const corsOrigins = splitCorsOrigins(
+    const corsOrigins = splitCommaSeparatedList(
         configService.get<string>("CORS_ORIGINS"),
     );
     configureCors(app, corsOrigins);

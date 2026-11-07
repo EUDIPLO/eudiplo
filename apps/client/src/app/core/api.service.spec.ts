@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpClient, provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clientControllerGetClients } from '@eudiplo/sdk-core';
 import { ApiRefusalService } from './api-refusal.service';
@@ -34,7 +35,7 @@ describe('defaultApiUrl', () => {
   });
 });
 
-describe('ApiService.syncWithOidcSession', () => {
+describe('ApiService and the instance it signs in to', () => {
   const oidcStub: { mode: 'local' | 'oidc'; apiUrl?: string } = { mode: 'local' };
 
   beforeEach(() => {
@@ -42,7 +43,11 @@ describe('ApiService.syncWithOidcSession', () => {
     oidcStub.mode = 'local';
     oidcStub.apiUrl = undefined;
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), { provide: OidcService, useValue: oidcStub }],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: OidcService, useValue: oidcStub },
+      ],
     });
   });
 
@@ -58,6 +63,39 @@ describe('ApiService.syncWithOidcSession', () => {
     expect(service.getBaseUrl()).toBe('https://eudiplo.example.com');
   });
 
+  it('remembers the instance of a restored OIDC session as the one last signed in to', () => {
+    const service = TestBed.inject(ApiService);
+    oidcStub.mode = 'oidc';
+    oidcStub.apiUrl = 'https://eudiplo.example.com';
+
+    service.syncWithOidcSession();
+
+    expect(service.lastSignedInInstance()).toBe('https://eudiplo.example.com');
+  });
+
+  it('keeps the instance it last signed in to after a logout', () => {
+    const service = TestBed.inject(ApiService);
+    service.rememberSignedInInstance('https://a.test');
+
+    service.logout();
+
+    expect(service.lastSignedInInstance()).toBe('https://a.test');
+  });
+
+  it('asks the instance for discovery without telling it the page address', async () => {
+    const service = TestBed.inject(ApiService);
+    const controller = TestBed.inject(HttpTestingController);
+
+    const discovery = service.fetchDiscovery('https://other.test');
+    const request = controller.expectOne(
+      'https://other.test/.well-known/oauth-authorization-server'
+    );
+    request.flush({ issuer: 'https://other.test' });
+
+    await expect(discovery).resolves.toEqual({ issuer: 'https://other.test' });
+    expect(request.request.referrerPolicy).toBe('no-referrer');
+  });
+
   it('keeps the current base URL when no OIDC session was restored', () => {
     const service = TestBed.inject(ApiService);
     const before = service.getBaseUrl();
@@ -66,6 +104,7 @@ describe('ApiService.syncWithOidcSession', () => {
     service.syncWithOidcSession();
 
     expect(service.getBaseUrl()).toBe(before);
+    expect(service.lastSignedInInstance()).toBeUndefined();
   });
 });
 

@@ -1,5 +1,7 @@
 import Joi from "joi";
+import { splitCommaSeparatedList } from "../shared/domain/comma-separated-list.js";
 import { OIDC_DEFAULTS } from "./auth-settings.js";
+import { isWebClientUrl } from "./client/domain/web-client-urls.js";
 
 export const AUTH_VALIDATION_SCHEMA: Joi.ObjectSchema = Joi.object({
     OIDC: Joi.string()
@@ -145,4 +147,23 @@ export const AUTH_VALIDATION_SCHEMA: Joi.ObjectSchema = Joi.object({
             "Public client ID for the Angular UI with `OIDC_PROVIDER=keycloak`. Used to register a public Keycloak client for Authorization Code + PKCE login.",
         )
         .meta({ group: "auth", order: 95 }),
+
+    OIDC_UI_URL: Joi.string()
+        .allow("")
+        .optional()
+        .custom((value: string, helpers) => {
+            const invalid = splitCommaSeparatedList(value).filter(
+                (url) => !isWebClientUrl(url),
+            );
+            if (invalid.length > 0) {
+                return helpers.message({
+                    custom: `"OIDC_UI_URL" contains invalid URLs: ${invalid.join(", ")}. Use the http or https URL the web client is served from, without query, fragment or *, e.g. https://console.example.com`,
+                });
+            }
+            return value;
+        })
+        .description(
+            "Comma-separated URLs the web client is served from with `OIDC_PROVIDER=keycloak`, e.g. https://console.example.com. EUDIPLO sets the redirect URIs of the UI client (`OIDC_UI_CLIENT_ID`) to the pages under these URLs and its web origins to their origins. If unset, the redirect URIs set in Keycloak stay, except `*`, and a web origin `*` or an empty list of web origins becomes `+` (the origins of the redirect URIs); without any redirect URI, nobody can sign in to the web client with SSO. Unused with `generic`",
+        )
+        .meta({ group: "auth", order: 96 }),
 }).unknown(true);

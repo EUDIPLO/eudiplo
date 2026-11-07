@@ -50,6 +50,7 @@ OIDC_CLIENT_ID=eudiplo-admin
 OIDC_CLIENT_SECRET=<secret of eudiplo-admin>
 PUBLIC_URL=https://eudiplo.example.com
 MASTER_SECRET=<random, 32+ characters>   # derives the default encryption key
+OIDC_UI_URL=https://console.example.com  # where the web client is served, comma-separated for several
 # Optional, defaults shown
 # OIDC_UI_CLIENT_ID=eudiplo-ui
 # OIDC_SUB=tenant_id            # claim that carries the tenant
@@ -84,16 +85,28 @@ client under **Clients**, then **Client scopes > Add client scope**, type
 On every start, EUDIPLO:
 
 - creates the missing realm roles (the [EUDIPLO roles](../reference/roles.md)),
-- creates or updates the public client `eudiplo-ui`, with redirect URIs and web
-  origins set to `*`,
+- creates or updates the public client `eudiplo-ui` (see below),
 - creates or updates the `AUTH_CLIENT_ID` client with `tenants:manage`, if both
   `AUTH_CLIENT_ID` and `AUTH_CLIENT_SECRET` are set.
 
-Restrictive redirect URIs that you set on `eudiplo-ui` are overwritten at the next
-start, so restrict access to the web client at the network level if needed.
+`eudiplo-ui` is a public client: whoever receives one of its authorization codes
+can exchange it for the signed-in person's tokens. Keycloak must therefore send
+codes only to the web client. With `OIDC_UI_URL` set, EUDIPLO sets the client's
+redirect URIs to the pages under each URL (`https://console.example.com/*`) and
+its web origins to their origins, on every start. A path, as in
+`https://example.com/eudiplo-client/` for a web client behind
+`CLIENT_BASE_HREF`, is kept.
 
-**Checkpoint:** the backend log shows `Mode: External OIDC (keycloak)`, and the web client's
-login page offers single sign-on after you enter the backend URL.
+Without `OIDC_UI_URL`, EUDIPLO keeps the redirect URIs and web origins set in
+Keycloak, so you can manage them there, but removes the redirect URI `*`, which
+EUDIPLO 9.x set and which lets any website receive codes. A web origin `*`
+becomes `+` (the origins of the redirect URIs), as does an empty list of web
+origins. If no redirect URI is left, the backend logs a warning and nobody can
+sign in to the web client with SSO.
+
+**Checkpoint:** the backend log shows `Mode: External OIDC (keycloak)` and no
+warning about `eudiplo-ui`, and the web client's login page offers single
+sign-on after you enter the backend URL.
 
 ## 3. Put the tenant into user tokens
 
@@ -148,6 +161,7 @@ and shows only that tenant's data.
 | Symptom                                              | Cause                                                       | Fix                                                                                   |
 | ---------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | Startup fails with `reading 'split'`                 | Refresh tokens for client credentials disabled on `eudiplo-admin` | Enable **Use refresh tokens for client credentials grant**                     |
+| Keycloak shows "Invalid parameter: redirect_uri" after **Login with SSO** | The web client's URL is not a redirect URI of `eudiplo-ui` | Add it to `OIDC_UI_URL` and restart the backend, or add `<web client URL>/*` as redirect URI of `eudiplo-ui` in Keycloak when `OIDC_UI_URL` is unset |
 | API calls return 401 after login                     | Token `iss` differs from `OIDC_INTERNAL_ISSUER_URL`/`OIDC`, or wrong `OIDC_ALGORITHM` | Compare the `iss` and `alg` of a token with the configuration |
 | API calls return 401 since `OIDC_AUDIENCE` was set   | The token's `aud` lacks the value                           | Add the audience mapper to a realm default client scope, as in [step 2](#2-configure-eudiplo). Clients that existed before the scope became a default need it added in each client's **Client scopes** tab |
 | `This endpoint requires a tenant context`            | User token has no `tenant_id` claim                         | Add the mapper from [step 3](#3-put-the-tenant-into-user-tokens)                       |

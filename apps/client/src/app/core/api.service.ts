@@ -42,6 +42,9 @@ export interface EndedSession {
   reason: 'expired' | 'rejected';
 }
 
+/** Storage key of the instance this browser last signed in to, kept after logout. */
+const signedInInstanceKey = 'signed_in_instance';
+
 /** OAuth settings stored for a reload. The client secret is kept in memory only. */
 interface StoredOAuthConfig {
   server?: string;
@@ -143,7 +146,12 @@ export class ApiService implements OnDestroy {
 
   /** Fetches the OIDC discovery document from the given base URL. */
   async fetchDiscovery(baseUrl: string): Promise<any> {
-    return firstValueFrom(this.httpClient.get(`${baseUrl}/.well-known/oauth-authorization-server`));
+    // The instance may come from a link, and the page address can hold an authorization code.
+    return firstValueFrom(
+      this.httpClient.get(`${baseUrl}/.well-known/oauth-authorization-server`, {
+        referrerPolicy: 'no-referrer',
+      })
+    );
   }
 
   async login(clientId: string, clientSecret: string, baseUrl: string) {
@@ -265,6 +273,25 @@ export class ApiService implements OnDestroy {
   syncWithOidcSession(): void {
     if (this.oidcService.mode === 'oidc' && this.oidcService.apiUrl) {
       this.setClient(this.oidcService.apiUrl);
+      this.rememberSignedInInstance(this.oidcService.apiUrl);
+    }
+  }
+
+  /** Remembers `url` as the instance this browser last signed in to. */
+  rememberSignedInInstance(url: string): void {
+    try {
+      localStorage.setItem(signedInInstanceKey, url);
+    } catch {
+      // Without storage, the login page asks again about an instance a link chose.
+    }
+  }
+
+  /** The instance this browser last signed in to, also after a logout. */
+  lastSignedInInstance(): string | undefined {
+    try {
+      return localStorage.getItem(signedInInstanceKey) ?? undefined;
+    } catch {
+      return undefined;
     }
   }
 
