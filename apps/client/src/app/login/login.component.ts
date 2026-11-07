@@ -368,13 +368,12 @@ export class LoginComponent implements OnInit, OnDestroy {
    * it, else a new one, and again when the URL changes meanwhile.
    */
   private async instanceInFieldChecked(): Promise<void> {
-    let check: InstanceCheck | undefined;
-    do {
-      const url = withoutTrailingSlashes(this.apiUrlControl.value);
-      if (this.instanceCheck?.url !== url) void this.detectMode(url);
-      check = this.instanceCheck;
-      await check?.done;
-    } while (check !== this.instanceCheck);
+    const url = withoutTrailingSlashes(this.apiUrlControl.value);
+    if (this.instanceCheck?.url !== url) void this.detectMode(url);
+    const check = this.instanceCheck;
+    await check?.done;
+    // A newer check started meanwhile, for an edited URL or after leaving the field again.
+    if (check !== this.instanceCheck) await this.instanceInFieldChecked();
   }
 
   private async checkInstance(check: InstanceCheck): Promise<void> {
