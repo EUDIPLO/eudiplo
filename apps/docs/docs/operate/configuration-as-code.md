@@ -55,6 +55,44 @@ Reattaching reads the resource from the tenant folder in `CONFIG_FOLDER`,
 applies it, and makes the resource `file-managed` again. Its stored generation
 becomes the file's generation, so later startups apply the folder again.
 
+Both endpoints first read and upgrade every resource file of the tenant
+folder except `info.json`, as the startup import does; reattaching
+`Tenant/tenant` reads only `info.json`. If a file cannot be imported, for example a trust list
+file of 9.x without `contactUri` and `website`, they answer `400` with the code
+`CONFIG_FOLDER_INVALID`, the `file` relative to the tenant folder and the
+blocking `issues` of that file, each with the JSON pointer `path`, the issue
+`code` and the `resource`, in the shape the [plan](#plan-and-import) of a
+bundle uses for a `blocked` item. A file that cannot be read as a
+document, for example one that is no JSON, holds another resource kind or has
+an unresolved `${VAR}` placeholder, gets one issue `CONFIG_FILE_INVALID` with
+the reason as its `message`, an empty `path` and no `resource`. The startup
+import logs the same `message` as `Failed to import tenant`, without an
+operation report, since nothing was applied. Fix the file and plan again:
+
+```json
+{
+  "code": "CONFIG_FOLDER_INVALID",
+  "message": "trust-lists/eaa.json: TRUST_LIST_CONTACT_URI_MISSING in TrustList/eaa at /spec/entities/0/info/contactUri: Add contactUri: ...; TRUST_LIST_WEBSITE_MISSING in TrustList/eaa at /spec/entities/0/info/website: Add website ...",
+  "file": "trust-lists/eaa.json",
+  "issues": [
+    {
+      "severity": "required-input",
+      "code": "TRUST_LIST_CONTACT_URI_MISSING",
+      "path": "/spec/entities/0/info/contactUri",
+      "message": "Add contactUri: ...",
+      "resource": { "kind": "TrustList", "id": "eaa" }
+    },
+    {
+      "severity": "required-input",
+      "code": "TRUST_LIST_WEBSITE_MISSING",
+      "path": "/spec/entities/0/info/website",
+      "message": "Add website ...",
+      "resource": { "kind": "TrustList", "id": "eaa" }
+    }
+  ]
+}
+```
+
 The web client lists ownership and offers **Detach** and **Reset to file**, and
 for clients from the config folder **Apply from file**, under
 **Settings > Config Portability** (shown to a tenant's clients and users with

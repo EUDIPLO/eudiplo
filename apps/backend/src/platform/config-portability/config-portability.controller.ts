@@ -54,6 +54,10 @@ import {
 import { ConfigDocumentDto } from "./dto/config-document.dto.js";
 import { ConfigResourceOwnershipDto } from "./dto/config-resource-ownership.dto.js";
 
+/** The 400 of the reattach endpoints for a tenant folder that does not import. */
+const FOLDER_INVALID_DESCRIPTION =
+    "Unknown resource kind, or a file of the tenant folder cannot be imported, for example a trust list file of 9.x without `contactUri` and `website`: `code` `CONFIG_FOLDER_INVALID`, `file` relative to the tenant folder and `issues` with the JSON pointer `path`, the issue `code` and the `resource` of every blocking issue, as the plan of a bundle reports them; a file that cannot be read as a document gets one `CONFIG_FILE_INVALID` issue with the reason and without `path` or `resource`. Fix the file and plan again.";
+
 @ApiTags("Configuration portability")
 @Secured([Role.Tenants, Role.TenantAdmin])
 @Controller("config-bundles")
@@ -435,6 +439,24 @@ export class ConfigPortabilityController {
     @ApiOperation({
         summary:
             "Plan resetting a resource to its version in the config folder",
+        description:
+            "Reads and upgrades every resource file of the tenant folder in `CONFIG_FOLDER` except `info.json`, as the startup import does, and plans the one resource; `Tenant/tenant` reads only `info.json`.",
+    })
+    @ApiParam({ name: "kind", enum: CONFIG_RESOURCE_KINDS })
+    @ApiParam({ name: "id", description: "Resource ID" })
+    @ApiResponse({
+        status: 400,
+        description: FOLDER_INVALID_DESCRIPTION,
+    })
+    @ApiResponse({
+        status: 404,
+        description:
+            "The resource is not defined in the tenant's config folder.",
+    })
+    @ApiResponse({
+        status: 409,
+        description:
+            "No `CONFIG_FOLDER` is configured, or the tenant ID is no folder name.",
     })
     planReattach(
         @Token() token: TokenPayload,
@@ -458,6 +480,22 @@ export class ConfigPortabilityController {
     @ApiOperation({
         summary:
             "Reset a resource to its version in the config folder and make it file-managed again",
+    })
+    @ApiParam({ name: "kind", enum: CONFIG_RESOURCE_KINDS })
+    @ApiParam({ name: "id", description: "Resource ID" })
+    @ApiResponse({
+        status: 400,
+        description: `${FOLDER_INVALID_DESCRIPTION} Also a missing \`planFingerprint\`, or a plan with blocking issues (\`CONFIG_APPLY_BLOCKED\`).`,
+    })
+    @ApiResponse({
+        status: 404,
+        description:
+            "The resource is not defined in the tenant's config folder.",
+    })
+    @ApiResponse({
+        status: 409,
+        description:
+            "No `CONFIG_FOLDER` is configured, the tenant ID is no folder name, or the folder or the stored configuration changed since the plan (`CONFIG_PLAN_STALE`).",
     })
     async reattach(
         @Token() token: TokenPayload,

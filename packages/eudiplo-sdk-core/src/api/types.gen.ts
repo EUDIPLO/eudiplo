@@ -9789,11 +9789,29 @@ export type ConfigPortabilityControllerDetachResponse = ConfigPortabilityControl
 export type ConfigPortabilityControllerPlanReattachData = {
     body?: never;
     path: {
-        kind: string;
+        kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
+        /**
+         * Resource ID
+         */
         id: string;
     };
     query?: never;
     url: '/api/config-bundles/resources/{kind}/{id}/reattach/plan';
+};
+
+export type ConfigPortabilityControllerPlanReattachErrors = {
+    /**
+     * Unknown resource kind, or a file of the tenant folder cannot be imported, for example a trust list file of 9.x without `contactUri` and `website`: `code` `CONFIG_FOLDER_INVALID`, `file` relative to the tenant folder and `issues` with the JSON pointer `path`, the issue `code` and the `resource` of every blocking issue, as the plan of a bundle reports them; a file that cannot be read as a document gets one `CONFIG_FILE_INVALID` issue with the reason and without `path` or `resource`. Fix the file and plan again.
+     */
+    400: unknown;
+    /**
+     * The resource is not defined in the tenant's config folder.
+     */
+    404: unknown;
+    /**
+     * No `CONFIG_FOLDER` is configured, or the tenant ID is no folder name.
+     */
+    409: unknown;
 };
 
 export type ConfigPortabilityControllerPlanReattachResponses = {
@@ -9807,7 +9825,10 @@ export type ConfigPortabilityControllerPlanReattachResponse = ConfigPortabilityC
 export type ConfigPortabilityControllerReattachData = {
     body?: never;
     path: {
-        kind: string;
+        kind: 'Tenant' | 'Client' | 'KmsConfig' | 'KeyChain' | 'KeyChainDefaults' | 'RegistrarConfig' | 'IssuanceConfig' | 'CredentialConfig' | 'PresentationConfig' | 'AttributeProvider' | 'WebhookEndpoint' | 'TrustList' | 'FederationTrustAnchor' | 'StatusList';
+        /**
+         * Resource ID
+         */
         id: string;
     };
     query: {
@@ -9817,6 +9838,21 @@ export type ConfigPortabilityControllerReattachData = {
         planFingerprint: string;
     };
     url: '/api/config-bundles/resources/{kind}/{id}/reattach';
+};
+
+export type ConfigPortabilityControllerReattachErrors = {
+    /**
+     * Unknown resource kind, or a file of the tenant folder cannot be imported, for example a trust list file of 9.x without `contactUri` and `website`: `code` `CONFIG_FOLDER_INVALID`, `file` relative to the tenant folder and `issues` with the JSON pointer `path`, the issue `code` and the `resource` of every blocking issue, as the plan of a bundle reports them; a file that cannot be read as a document gets one `CONFIG_FILE_INVALID` issue with the reason and without `path` or `resource`. Fix the file and plan again. Also a missing `planFingerprint`, or a plan with blocking issues (`CONFIG_APPLY_BLOCKED`).
+     */
+    400: unknown;
+    /**
+     * The resource is not defined in the tenant's config folder.
+     */
+    404: unknown;
+    /**
+     * No `CONFIG_FOLDER` is configured, the tenant ID is no folder name, or the folder or the stored configuration changed since the plan (`CONFIG_PLAN_STALE`).
+     */
+    409: unknown;
 };
 
 export type ConfigPortabilityControllerReattachResponses = {
