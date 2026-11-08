@@ -250,10 +250,15 @@ export class ConfigFolderBundleService {
                 `Tenant ID '${tenantId}' is not a folder name, so it has no config folder to reattach to.`,
             );
         }
+        // Only the files of the requested kind, so a file of another kind
+        // that does not import does not block this reattach. The plan checks
+        // references against the database, not against other folder files.
         const full = this.collectBundle(
             tenantId,
             tenantRoot,
-            kind === "Tenant" ? [TENANT_RESOURCE] : FOLDER_RESOURCES,
+            kind === "Tenant"
+                ? [TENANT_RESOURCE]
+                : FOLDER_RESOURCES.filter((resource) => resource.kind === kind),
         );
         const index = full.documents.findIndex(
             (document) =>

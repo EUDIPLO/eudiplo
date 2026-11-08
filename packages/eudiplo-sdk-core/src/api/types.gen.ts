@@ -9801,7 +9801,7 @@ export type ConfigPortabilityControllerPlanReattachData = {
 
 export type ConfigPortabilityControllerPlanReattachErrors = {
     /**
-     * Unknown resource kind, or a file of the tenant folder cannot be imported, for example a trust list file of 9.x without `contactUri` and `website`: `code` `CONFIG_FOLDER_INVALID`, `file` relative to the tenant folder and `issues` with the JSON pointer `path`, the issue `code` and the `resource` of every blocking issue, as the plan of a bundle reports them; a file that cannot be read as a document gets one `CONFIG_FILE_INVALID` issue with the reason and without `path` or `resource`. Fix the file and plan again.
+     * Unknown resource kind, or a file of the requested kind in the tenant folder cannot be imported, for example a trust list file of 9.x without `contactUri` and `website`: `code` `CONFIG_FOLDER_INVALID`, `file` relative to the tenant folder and `issues` with the JSON pointer `path`, the issue `code` and the `resource` of every blocking issue, as the plan of a bundle reports them; a file that cannot be read as a document gets one `CONFIG_FILE_INVALID` issue with the reason and without `path` or `resource`. Fix the file and plan again.
      */
     400: unknown;
     /**
@@ -9842,7 +9842,7 @@ export type ConfigPortabilityControllerReattachData = {
 
 export type ConfigPortabilityControllerReattachErrors = {
     /**
-     * Unknown resource kind, or a file of the tenant folder cannot be imported, for example a trust list file of 9.x without `contactUri` and `website`: `code` `CONFIG_FOLDER_INVALID`, `file` relative to the tenant folder and `issues` with the JSON pointer `path`, the issue `code` and the `resource` of every blocking issue, as the plan of a bundle reports them; a file that cannot be read as a document gets one `CONFIG_FILE_INVALID` issue with the reason and without `path` or `resource`. Fix the file and plan again. Also a missing `planFingerprint`, or a plan with blocking issues (`CONFIG_APPLY_BLOCKED`).
+     * Unknown resource kind, or a file of the requested kind in the tenant folder cannot be imported, for example a trust list file of 9.x without `contactUri` and `website`: `code` `CONFIG_FOLDER_INVALID`, `file` relative to the tenant folder and `issues` with the JSON pointer `path`, the issue `code` and the `resource` of every blocking issue, as the plan of a bundle reports them; a file that cannot be read as a document gets one `CONFIG_FILE_INVALID` issue with the reason and without `path` or `resource`. Fix the file and plan again. Also a missing `planFingerprint`, or a plan with blocking issues (`CONFIG_APPLY_BLOCKED`).
      */
     400: unknown;
     /**
