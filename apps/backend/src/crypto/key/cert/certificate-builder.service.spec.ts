@@ -142,3 +142,56 @@ describe("CertificateBuilderService.createCaSignedCert", () => {
         expect(authorityKeyId(leaf)).toBe(expected.keyId);
     });
 });
+
+describe("CertificateBuilderService key usages", () => {
+    beforeAll(() => {
+        x509.cryptoProvider.set(new KmsCryptoProvider());
+    });
+
+    function keyUsages(pem: string): number | undefined {
+        return new x509.X509Certificate(pem).getExtension(
+            x509.KeyUsagesExtension,
+        )?.usages;
+    }
+
+    // RFC 5480 3 does not allow keyEncipherment for id-ecPublicKey, and the
+    // ISO/IEC 18013-5 document signer profile expects digitalSignature only.
+    it("marks EC certificates for signing only, without keyEncipherment", async () => {
+        const adapter = new DbKmsAdapter("db");
+        const { ref } = await adapter.generateKey({ kid: "k", alg: "ES256" });
+        const builder = new CertificateBuilderService();
+        const notBefore = new Date(Date.now() - 60_000);
+        const notAfter = new Date(Date.now() + 86_400_000);
+
+        const selfSignedPem = await builder.createSelfSignedCert(
+            adapter,
+            ref,
+            "leaf",
+            "issuer.example",
+            notBefore,
+            notAfter,
+        );
+        // The generated CA signs the leaf, as for an internal chain.
+        const { caCertPem: caPem, leaf } = await signLeaf((caAdapter, caRef) =>
+            builder.createSelfSignedCaCert(
+                caAdapter,
+                caRef,
+                "CA",
+                "issuer.example",
+                notBefore,
+                notAfter,
+            ),
+        );
+
+        expect(keyUsages(caPem)).toBe(
+            x509.KeyUsageFlags.digitalSignature |
+                x509.KeyUsageFlags.keyCertSign,
+        );
+        expect(keyUsages(selfSignedPem)).toBe(
+            x509.KeyUsageFlags.digitalSignature,
+        );
+        expect(leaf.getExtension(x509.KeyUsagesExtension)?.usages).toBe(
+            x509.KeyUsageFlags.digitalSignature,
+        );
+    });
+});

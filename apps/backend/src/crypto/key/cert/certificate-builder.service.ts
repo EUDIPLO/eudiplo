@@ -32,6 +32,10 @@ export function certificateNotBefore(now: Date = new Date()): Date {
  * marker to `@peculiar/x509`. The {@link KmsCryptoProvider} (installed
  * globally on `x509.cryptoProvider`) intercepts `subtle.sign(...)` for
  * those keys and routes the call to {@link KmsAdapter.sign}.
+ *
+ * All keys are EC signing keys, so key usages never include
+ * keyEncipherment (RFC 5480 3; ISO/IEC 18013-5 expects digitalSignature
+ * alone for document signer certificates).
  */
 @Injectable()
 export class CertificateBuilderService {
@@ -62,7 +66,6 @@ export class CertificateBuilderService {
                 new x509.BasicConstraintsExtension(true, undefined, true),
                 new x509.KeyUsagesExtension(
                     x509.KeyUsageFlags.digitalSignature |
-                        x509.KeyUsageFlags.keyEncipherment |
                         x509.KeyUsageFlags.keyCertSign,
                     true,
                 ),
@@ -98,8 +101,7 @@ export class CertificateBuilderService {
                 ]),
                 new x509.BasicConstraintsExtension(false, undefined, true),
                 new x509.KeyUsagesExtension(
-                    x509.KeyUsageFlags.digitalSignature |
-                        x509.KeyUsageFlags.keyEncipherment,
+                    x509.KeyUsageFlags.digitalSignature,
                     true,
                 ),
                 await x509.SubjectKeyIdentifierExtension.create(publicKey),
@@ -173,8 +175,7 @@ export class CertificateBuilderService {
                 ]),
                 new x509.BasicConstraintsExtension(false, undefined, true),
                 new x509.KeyUsagesExtension(
-                    x509.KeyUsageFlags.digitalSignature |
-                        x509.KeyUsageFlags.keyEncipherment,
+                    x509.KeyUsageFlags.digitalSignature,
                     true,
                 ),
                 await x509.SubjectKeyIdentifierExtension.create(
