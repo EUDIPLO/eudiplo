@@ -116,6 +116,7 @@ export class TypeOrmDeferredTransactionRepository
             credentialConfigurationId: transaction.credentialConfigurationId,
             issuanceSetId: transaction.issuanceSetId,
             holderCnf: transaction.holderCnf,
+            walletUnit: transaction.walletUnit,
             status: transaction.status,
             credential: transaction.credential,
             errorMessage: transaction.errorMessage,

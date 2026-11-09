@@ -299,7 +299,11 @@ describe("credential proof attestation trust with real certificates", () => {
                 ServiceTypeIdentifiers.WalletSolutionIssuance,
                 der(ca),
             ),
-        ).resolves.toBeUndefined();
+        ).resolves.toMatchObject({
+            matchedEntity: expect.any(Object),
+            trustStore: expect.any(Object),
+            certificates: [expect.any(String)],
+        });
     });
 
     it("rejects a signer under a certificate listed only as WalletSolution/Revocation", async () => {
@@ -399,7 +403,7 @@ describe("credential proof attestation trust with real certificates", () => {
                     { withProvider: true, nextUpdate: current() },
                     { withProvider: true, nextUpdate: outdated() },
                 ]),
-            ).resolves.toBeUndefined();
+            ).resolves.toMatchObject({ matchedEntity: expect.any(Object) });
         });
 
         it("rejects with invalid_proof a provider listed only in the outdated list, and says lists were left out", async () => {

@@ -1,5 +1,6 @@
 import type { Jwk } from "@openid4vc/oauth2";
 import type { SessionData } from "../../../../session/domain/session-data.js";
+import type { WalletUnitReference } from "../../../status-list/domain/wallet-unit-reference.js";
 import type { CredentialConfiguration } from "./credential-configuration.js";
 
 export interface CredentialIssuanceContext {
@@ -11,6 +12,8 @@ export interface CredentialIssuanceContext {
     /** Trust chain for the `trust_chain` header of federation credentials. */
     federationTrustChain?: () => Promise<string[] | undefined>;
     issuanceSetId?: string;
+    /** Wallet unit attestation that attested `holderKey`, if any. */
+    walletUnit?: WalletUnitReference;
 }
 
 export interface CredentialIssuerFormat {

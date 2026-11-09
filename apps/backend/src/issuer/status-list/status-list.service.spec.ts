@@ -50,6 +50,7 @@ describe("StatusListService SQLite concurrency", () => {
             orchestrator as never,
             dataSource.getRepository(ActiveCredentialSlot),
             {} as never,
+            {} as never,
         );
 
         await dataSource.getRepository(TenantEntity).save({

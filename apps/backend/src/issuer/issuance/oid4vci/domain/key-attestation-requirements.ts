@@ -1,4 +1,5 @@
 import type { Jwk } from "@openid4vc/oauth2";
+import type { WalletUnitReference } from "../../../status-list/domain/wallet-unit-reference.js";
 import { InvalidCredentialProof } from "./credential-proof-errors.js";
 
 /**
@@ -18,6 +19,11 @@ export interface VerifiedKeyAttestation {
     attestedKeys: Jwk[];
     keyStorage?: string[];
     userAuthentication?: string[];
+    /**
+     * Status list reference and certificate chain of the attestation; only
+     * set when it has a `status_list` reference.
+     */
+    walletUnit?: WalletUnitReference;
 }
 
 /** Result of verifying one key proof of a credential request. */

@@ -160,6 +160,27 @@ describe("WebhookService presentation payloads", () => {
         });
     });
 
+    it("reports credentials revoked with their wallet unit", async () => {
+        const { service, post, policy } = setup();
+
+        await service.sendCredentialsRevokedWebhook(webhook, {
+            session: "session-1",
+            reference: "order-4711",
+            credentialConfigurationId: "pid",
+            statusEntries: [{ uri: "https://issuer.example/list-1", idx: 3 }],
+        });
+
+        expect(policy.assertSafeUrl).toHaveBeenCalledWith(webhook.url);
+        expect(post.mock.calls[0][1]).toEqual({
+            status: "revoked",
+            reason: "wallet_unit_revoked",
+            session: "session-1",
+            reference: "order-4711",
+            credentialConfigurationId: "pid",
+            statusEntries: [{ uri: "https://issuer.example/list-1", idx: 3 }],
+        });
+    });
+
     it("bounds every webhook request and follows redirects itself", async () => {
         const { service, post, policy } = setup();
         const webhook = {

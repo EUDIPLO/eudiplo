@@ -5,6 +5,7 @@ import { ConfigurationModule } from "./configuration/configuration.module.js";
 import { IssuanceModule } from "./issuance/issuance.module.js";
 import { StatusListModule } from "./status-list/status-list.module.js";
 import { TrustListModule } from "./trust-list/trustlist.module.js";
+import { WalletUnitRevocationModule } from "./wallet-unit-revocation/wallet-unit-revocation.module.js";
 
 /**
  * Issuer Module - Root module for credential issuance functionality
@@ -21,6 +22,7 @@ import { TrustListModule } from "./trust-list/trustlist.module.js";
         IssuanceModule,
         StatusListModule,
         TrustListModule,
+        WalletUnitRevocationModule,
     ],
     exports: [ConfigurationModule, IssuanceModule, StatusListModule],
 })

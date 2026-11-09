@@ -69,6 +69,49 @@ describe("CredentialConfigCreateSchema active credential policy", () => {
     });
 });
 
+describe("CredentialConfigCreateSchema revokeWithWalletUnit", () => {
+    test("requires status management and key attestations", () => {
+        const result = CredentialConfigCreateSchema.safeParse({
+            ...credentialConfig,
+            revokeWithWalletUnit: true,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues).toEqual([
+            expect.objectContaining({
+                path: ["statusManagement"],
+                message:
+                    "statusManagement must be enabled when revokeWithWalletUnit is enabled.",
+            }),
+            expect.objectContaining({
+                path: ["config", "keyAttestationsRequired"],
+                message:
+                    "config.keyAttestationsRequired must be set when revokeWithWalletUnit is enabled.",
+            }),
+        ]);
+    });
+
+    test("accepts it with status management and key attestations", () => {
+        const result = CredentialConfigCreateSchema.safeParse({
+            ...credentialConfig,
+            config: { ...credentialConfig.config, keyAttestationsRequired: {} },
+            statusManagement: true,
+            revokeWithWalletUnit: true,
+        });
+
+        expect(result.success).toBe(true);
+    });
+
+    test("accepts it disabled without either", () => {
+        expect(
+            CredentialConfigCreateSchema.safeParse({
+                ...credentialConfig,
+                revokeWithWalletUnit: false,
+            }).success,
+        ).toBe(true);
+    });
+});
+
 describe("CredentialConfigCreateSchema schemaMeta", () => {
     const keys = (schema: { shape: object }) =>
         Object.keys(schema.shape).sort();

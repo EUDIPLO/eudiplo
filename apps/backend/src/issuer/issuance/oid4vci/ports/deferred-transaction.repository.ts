@@ -1,5 +1,6 @@
 import type { Jwk } from "@openid4vc/oauth2";
 import type { SessionData } from "../../../../session/domain/session-data.js";
+import type { WalletUnitReference } from "../../../status-list/domain/wallet-unit-reference.js";
 import { DeferredTransactionStatus } from "../domain/deferred-transaction-status.js";
 
 export const DEFERRED_TRANSACTION_REPOSITORY = Symbol(
@@ -13,6 +14,8 @@ export interface DeferredTransactionData {
     credentialConfigurationId: string;
     issuanceSetId?: string | null;
     holderCnf: Record<string, unknown>;
+    /** Wallet unit attestation that attested `holderCnf`, if any. */
+    walletUnit?: WalletUnitReference | null;
     status: DeferredTransactionStatus;
     credential?: string | null;
     errorMessage?: string | null;
@@ -56,5 +59,6 @@ export interface DeferredCredentialIssuer {
         session: SessionData,
         claims: Record<string, unknown>,
         issuanceSetId?: string,
+        walletUnit?: WalletUnitReference,
     ): Promise<string>;
 }

@@ -13046,7 +13046,7 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
             ]
           },
           "webhookEndpointId": {
-            "description": "Not used for notifications: they go to the webhook endpoint of the offer.",
+            "description": "Receives the wallet unit revocation webhook (revokeWithWalletUnit). Not used for notifications: they go to the webhook endpoint of the offer.",
             "type": [
               "string",
               "null"
@@ -13138,6 +13138,10 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
                 "type": "null"
               }
             ]
+          },
+          "revokeWithWalletUnit": {
+            "description": "Revoke issued credentials when the wallet unit attestation (the key attestation of the proof) they were bound to is revoked. Requires statusManagement and config.keyAttestationsRequired.",
+            "type": "boolean"
           },
           "iaeActions": {
             "description": "Interactive authorization steps (a presentation or a web flow) that the wallet completes, in order, before the credential is issued.",
@@ -16707,7 +16711,7 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
             }
           },
           "walletAttestationStatusCheckMode": {
-            "description": "Default status check mode for wallet attestations at managed authorization servers: strict, best_effort (default) or disabled.",
+            "description": "Status check mode for key attestations at the credential endpoint, and default for wallet attestations at managed authorization servers: strict, best_effort (default) or disabled.",
             "anyOf": [
               {
                 "type": "string",

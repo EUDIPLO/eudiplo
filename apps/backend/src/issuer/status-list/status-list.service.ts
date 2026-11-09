@@ -50,11 +50,13 @@ import {
     StatusListValuesOutOfRange,
     StatusValueOutOfRange,
 } from "./domain/status-value.js";
+import type { WalletUnitReference } from "./domain/wallet-unit-reference.js";
 import { CredentialStatusDto } from "./dto/credential-status.dto.js";
 import { StatusListImportSchema } from "./dto/status-list.schema.js";
 import { StatusListImportDto } from "./dto/status-list-import.dto.js";
 import { StatusUpdateDto } from "./dto/status-update.dto.js";
 import { ActiveCredentialSlot } from "./entities/active-credential-slot.entity.js";
+import { CredentialWalletUnit } from "./entities/credential-wallet-unit.entity.js";
 import { StatusListEntity } from "./entities/status-list.entity.js";
 import { StatusMapping } from "./entities/status-mapping.entity.js";
 import { StatusListConfigService } from "./status-list-config.service.js";
@@ -67,7 +69,7 @@ import { SubjectKeyService } from "./subject-key.service.js";
 /** The credential configuration fields that govern status entry allocation. */
 type StatusEntryPolicy = Pick<
     CredentialConfiguration,
-    "activeCredentials" | "statusManagement"
+    "activeCredentials" | "statusManagement" | "revokeWithWalletUnit"
 >;
 
 interface EntryAllocationOptions {
@@ -85,7 +87,7 @@ interface AllocatedStatusEntry {
 }
 
 /** One status list entry to change, as recorded by a {@link StatusMapping}. */
-type StatusEntryRef = Pick<StatusMapping, "statusListId" | "index">;
+export type StatusEntryRef = Pick<StatusMapping, "statusListId" | "index">;
 
 /**
  * Entries of a stored status list whose values do not fit the list's bits per
@@ -139,6 +141,8 @@ export class StatusListService implements OnApplicationBootstrap {
         @InjectRepository(ActiveCredentialSlot)
         private readonly activeCredentialSlotRepository: Repository<ActiveCredentialSlot>,
         private readonly subjectKeyService: SubjectKeyService,
+        @InjectRepository(CredentialWalletUnit)
+        private readonly credentialWalletUnitRepository: Repository<CredentialWalletUnit>,
     ) {
         configImportOrchestrator.register(
             "status-lists",
@@ -202,10 +206,8 @@ export class StatusListService implements OnApplicationBootstrap {
         return shuffled;
     }
 
-    /**
-     * Build the URI for a status list.
-     */
-    private buildStatusListUri(tenantId: string, listId: string): string {
+    /** The URI under which a tenant's status list is published. */
+    buildStatusListUri(tenantId: string, listId: string): string {
         const baseUrl = this.settings.publicUrl;
         return `${baseUrl}/issuers/${tenantId}/status-management/status-list/${listId}`;
     }
@@ -636,6 +638,11 @@ export class StatusListService implements OnApplicationBootstrap {
      * Uses atomic batch allocation to prevent race conditions.
      * @param session The session for which to create the entry.
      * @param credentialConfigurationId The credential configuration ID.
+     * @param walletUnit The wallet unit attestation that attested the holder
+     * key; recorded with the entry when the configuration has
+     * `revokeWithWalletUnit`
+     * @param credentialExpiresAt When the credential expires, if it does;
+     * the wallet unit is no longer checked after that
      * @returns The status list payload to include in the credential.
      */
     async createEntry(
@@ -643,6 +650,8 @@ export class StatusListService implements OnApplicationBootstrap {
         credentialConfigurationId: string,
         credentialConfiguration?: StatusEntryPolicy,
         issuanceSetId?: string,
+        walletUnit?: WalletUnitReference,
+        credentialExpiresAt?: Date,
     ): Promise<JWTwithStatusListPayload> {
         // Resolve the pseudonymous subject key when the active-credential-limit
         // policy applies to this issuance; undefined means "policy off" and the
@@ -673,6 +682,16 @@ export class StatusListService implements OnApplicationBootstrap {
             "Could not allocate status entry after maximum retries",
         );
 
+        if (walletUnit && credentialConfiguration?.revokeWithWalletUnit) {
+            await this.recordWalletUnit(
+                session,
+                credentialConfigurationId,
+                entry,
+                walletUnit,
+                credentialExpiresAt,
+            );
+        }
+
         return {
             status: {
                 status_list: {
@@ -681,6 +700,31 @@ export class StatusListService implements OnApplicationBootstrap {
                 },
             },
         };
+    }
+
+    /**
+     * Record the wallet unit attestation of a new status entry, so that the
+     * background check revokes the entry when the wallet unit is revoked,
+     * until the credential expires.
+     */
+    private async recordWalletUnit(
+        session: Session,
+        credentialConfigurationId: string,
+        entry: AllocatedStatusEntry,
+        walletUnit: WalletUnitReference,
+        credentialExpiresAt: Date | undefined,
+    ): Promise<void> {
+        await this.credentialWalletUnitRepository.insert({
+            tenantId: session.tenantId,
+            statusListId: entry.statusListId,
+            index: entry.index,
+            sessionId: session.id,
+            credentialConfigurationId,
+            walletUnitStatusUri: walletUnit.statusUri,
+            walletUnitStatusIdx: walletUnit.statusIdx,
+            walletUnitCertificates: walletUnit.certificates,
+            credentialExpiresAt: credentialExpiresAt ?? null,
+        });
     }
 
     private async allocateAndClaimEntry(params: {
@@ -1461,6 +1505,55 @@ export class StatusListService implements OnApplicationBootstrap {
             );
         }
         await this.setEntries(tenantId, entries, value.status);
+    }
+
+    /**
+     * The current values of the given entries of a tenant's status lists,
+     * keyed by `<statusListId>:<index>`. Entries of lists that no longer
+     * exist are left out.
+     */
+    async currentValues(
+        tenantId: string,
+        entries: readonly StatusEntryRef[],
+    ): Promise<Map<string, number>> {
+        const listIds = [...new Set(entries.map((e) => e.statusListId))];
+        const values = new Map<string, number>();
+        if (listIds.length === 0) return values;
+        const lists = await this.statusListRepository.find({
+            select: { id: true, tenantId: true, elements: true },
+            where: { tenantId, id: In(listIds) },
+        });
+        const elementsById = new Map(
+            lists.map((list) => [list.id, list.elements]),
+        );
+        for (const entry of entries) {
+            const elements = elementsById.get(entry.statusListId);
+            if (elements) {
+                values.set(
+                    `${entry.statusListId}:${entry.index}`,
+                    elements[entry.index] ?? 0,
+                );
+            }
+        }
+        return values;
+    }
+
+    /**
+     * Revoke the given entries of a tenant's status lists. Entries that are
+     * already revoked are left as they are.
+     * @returns The entries this call revoked
+     */
+    async revokeEntries(
+        tenantId: string,
+        entries: readonly StatusEntryRef[],
+    ): Promise<StatusEntryRef[]> {
+        const values = await this.currentValues(tenantId, entries);
+        const toRevoke = entries.filter((entry) => {
+            const value = values.get(`${entry.statusListId}:${entry.index}`);
+            return value !== undefined && value !== STATUS_REVOKED;
+        });
+        await this.setEntries(tenantId, toRevoke, STATUS_REVOKED);
+        return toRevoke;
     }
 
     /**

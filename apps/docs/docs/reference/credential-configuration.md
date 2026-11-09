@@ -20,9 +20,10 @@ Notes on fields whose generated description is incomplete:
 | `config.scope` | Published as `scope` in the issuer metadata only. EUDIPLO does not map OAuth scopes to credential configurations; wallets select credentials with `authorization_details`. |
 | `config.proofTypesSupported` | Defaults to both `jwt` and `attestation`. |
 | `config.credentialReusePolicy.options[]` | `batch_size` (minimum 2) is required for `once_only`, `rotating-batch` and `per-relying-party`. `reissue_trigger_unused` is required for `once_only` and must be lower than `batch_size`. `reissue_trigger_lifetime_left` (seconds) is required for `limited_time`, `rotating-batch` and `per-relying-party`. `options` is required when `id` is `arf_annex_ii`. See [Reuse policy](../issuance/credential-configuration.md#publish-a-reuse-policy). |
-| `webhookEndpointId` | Stored with the configuration but not used. Notifications use the `webhookEndpointId` of the [credential offer](../issuance/notifications.md). |
+| `webhookEndpointId` | Receives the [wallet unit revocation webhook](webhooks.md#wallet-unit-revocation-webhook). Notifications use the `webhookEndpointId` of the [credential offer](../issuance/notifications.md). |
 | `iaeActions` | Actions of the [Interactive Authorization Endpoint](../issuance/interactive-authorization.md). |
 | `activeCredentials` | Rejected unless `statusManagement` is `true`. See [Single active credential](../issuance/credential-configuration.md#keep-one-active-credential-per-subject). |
+| `revokeWithWalletUnit` | Rejected unless `statusManagement` is `true` and `config.keyAttestationsRequired` is set. Exports include it only when it is `true`. See [Revoke credentials with their wallet unit](../trust/attestation.md#revoke-credentials-with-their-wallet-unit). |
 | `sdJwtTrustFormat` | `x5c` (default) or `federation`. See [OpenID Federation](../trust/federation.md). |
 | `schemaMeta` | See [Schema metadata](../trust/registrar.md). |
 

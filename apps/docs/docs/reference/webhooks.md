@@ -5,7 +5,7 @@ description: Webhook payloads, configuration, authentication and delivery semant
 
 # Webhooks
 
-EUDIPLO sends a webhook when a presentation ends and when a wallet reports what it did with an issued credential. This page is the reference for both payloads, for where webhooks are configured, and for how they are delivered. Claim requests during issuance use a different contract, described in the [attribute provider API](attribute-provider-api.md).
+EUDIPLO sends a webhook when a presentation ends, when a wallet reports what it did with an issued credential, when an operator cancels a session and when credentials are revoked with their wallet unit. This page is the reference for these payloads, for where webhooks are configured, and for how they are delivered. Claim requests during issuance use a different contract, described in the [attribute provider API](attribute-provider-api.md).
 
 ## Overview
 
@@ -13,6 +13,7 @@ EUDIPLO sends a webhook when a presentation ends and when a wallet reports what 
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | [Presentation result](#presentation-webhook) | An OID4VP, Digital Credentials API or ISO 18013-7 presentation ends as `completed` or `failed`   | Inline `webhook` of `POST /api/verifier/offer`, otherwise `webhookEndpointId` of the presentation configuration |
 | [Issuance notification](#notification-webhook) | The wallet calls the OID4VCI notification endpoint                                              | `webhookEndpointId` of `POST /api/issuer/offer`                                                         |
+| [Wallet unit revocation](#wallet-unit-revocation-webhook) | EUDIPLO revoked credentials because their wallet unit attestation was revoked | `webhookEndpointId` of the credential configuration, otherwise of the offer while the session exists |
 
 There is no event subscription model: each webhook goes to the one URL configured for that flow.
 
@@ -52,10 +53,10 @@ The API never returns `value`: webhook endpoint and attribute provider responses
 | --------------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------- |
 | Presentation request (`POST /api/verifier/offer`) | `webhook`  | Inline object with `url`, `auth` and optional `includeRawTokensFor`; replaces the configuration's endpoint for this request |
 | Presentation configuration              | `webhookEndpointId` | Default target for presentation results                                                                   |
-| Credential offer (`POST /api/issuer/offer`) | `webhookEndpointId` | Target for the notifications of this issuance session                                                 |
-| Credential configuration                | `webhookEndpointId` | Stored, but not used: notifications only go to the endpoint named in the offer                            |
+| Credential offer (`POST /api/issuer/offer`) | `webhookEndpointId` | Target for the notifications of this issuance session and, without one on the credential configuration, for its wallet unit revocation webhook                                                 |
+| Credential configuration                | `webhookEndpointId` | Target of the wallet unit revocation webhook; notifications only go to the endpoint named in the offer    |
 
-The presentation target is resolved when the request is created; later changes to the endpoint do not affect running sessions. A `webhookEndpointId` that does not exist is logged as a warning and no webhook is sent.
+The presentation target is resolved when the request is created; later changes to the endpoint do not affect running sessions. A `webhookEndpointId` that does not exist is logged as a warning and no webhook is sent; only the wallet unit revocation webhook then tries the next target.
 
 ## Presentation webhook
 
@@ -187,6 +188,37 @@ When an operator [cancels a pending session](../concepts/sessions.md#cancelling-
 
 The response body is ignored.
 
+## Wallet unit revocation webhook
+
+When the [wallet unit check](../trust/attestation.md#revoke-credentials-with-their-wallet-unit) revokes credentials because the wallet provider revoked their wallet unit attestation, EUDIPLO sends a webhook per issuance session and credential configuration with the credentials one run revoked; a run that works through many credentials, or a later run, can send further webhooks for the same session. It goes to the webhook endpoint of the credential configuration, otherwise to the webhook endpoint of the offer, as long as the session has not been deleted. An endpoint that no longer exists is logged as a warning and the next one is tried. Without any target, nothing is sent.
+
+```json
+{
+    "status": "revoked",
+    "reason": "wallet_unit_revoked",
+    "session": "a6318799-dff4-4b60-9d1d-58703611bd23",
+    "reference": "order-4711",
+    "credentialConfigurationId": "pid",
+    "statusEntries": [
+        {
+            "uri": "https://issuer.example/issuers/tenant-1/status-management/status-list/1b4c…",
+            "idx": 42
+        }
+    ]
+}
+```
+
+| Field                       | Description                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------- |
+| `status`                    | Always `revoked`                                                                                  |
+| `reason`                    | Always `wallet_unit_revoked`                                                                      |
+| `session`                   | Issuance session of the credentials                                                               |
+| `reference`                 | Your [reference](../concepts/sessions.md#your-own-reference), when one was set and the session still exists |
+| `credentialConfigurationId` | Credential configuration of the revoked credentials                                               |
+| `statusEntries`             | The `status.status_list` entries of the revoked credentials, as in the credentials                |
+
+The response body is ignored.
+
 ## Delivery
 
 - **One attempt.** Each webhook starts with a single `POST` with a JSON body. EUDIPLO does not retry.
@@ -195,5 +227,6 @@ The response body is ignored.
 - **Redirects.** EUDIPLO follows up to 5 redirects. Each target must pass the outbound URL policy below; `307` and `308` repeat the `POST`, other redirects continue with a `GET` without body. The API key header is only sent to the origin of the webhook URL, not to a redirect target on another origin.
 - **Presentation failures are best effort.** The session status is final before the webhook is sent. A failed delivery (connection error, non-2xx status, blocked URL) is logged and changes neither the session nor the wallet's result. Use [polling or the event stream](../presentation/receive-results.md) as a fallback.
 - **Cancellation webhooks are best effort.** The session is cancelled before the webhook is sent; a failed delivery is only logged.
+- **Wallet unit revocation webhooks are best effort.** The credentials are revoked before the webhook is sent; a failed delivery is only logged and not repeated.
 - **Notification failures are best effort.** EUDIPLO records the event and, for the session's first event, the session status before it sends the webhook. A failed delivery is logged and changes neither the session nor the answer to the wallet. The recorded events stay in `notifications` of the session.
 - **Outbound URL policy.** Webhook URLs must use HTTPS and resolve to public addresses unless `OUTBOUND_URL_ALLOW_HTTP` or `OUTBOUND_URL_ALLOW_PRIVATE_NETWORK` allow otherwise. With `OUTBOUND_URL_ALLOWED_HOSTS` set, the host must also be on that list; see [environment variables](environment-variables.md#webhook). A blocked URL counts as a failed delivery.

@@ -2350,6 +2350,7 @@ export type CredentialConfig = {
     attributeProviderId?: string | null;
     attributeProvider?: AttributeProviderEntity;
     /**
+     * Receives the wallet unit revocation webhook (`revokeWithWalletUnit`).
      * Not used for notifications: they go to the webhook endpoint of the offer.
      */
     webhookEndpointId?: string | null;
@@ -2374,6 +2375,17 @@ export type CredentialConfig = {
      * wallets); this one is enforced by the issuer at issuance time.
      */
     activeCredentials?: ActiveCredentialPolicy | null;
+    /**
+     * Revoke issued credentials when the wallet unit attestation they were
+     * bound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,
+     * Appendix D.1), whose status list entry is recorded with each
+     * credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
+     * seconds until the credential is revoked or expires.
+     *
+     * Requires `statusManagement` and `config.keyAttestationsRequired`.
+     * Applies to credentials issued while it is enabled.
+     */
+    revokeWithWalletUnit?: boolean;
     /**
      * For SD-JWT credentials: determines whether to include certificate chain (x5c)
      * or use federation-based trust (iss claim).
@@ -2416,6 +2428,7 @@ export type CredentialConfigCreate = {
      */
     attributeProviderId?: string | null;
     /**
+     * Receives the wallet unit revocation webhook (`revokeWithWalletUnit`).
      * Not used for notifications: they go to the webhook endpoint of the offer.
      */
     webhookEndpointId?: string | null;
@@ -2438,6 +2451,17 @@ export type CredentialConfigCreate = {
      * wallets); this one is enforced by the issuer at issuance time.
      */
     activeCredentials?: ActiveCredentialPolicy | null;
+    /**
+     * Revoke issued credentials when the wallet unit attestation they were
+     * bound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,
+     * Appendix D.1), whose status list entry is recorded with each
+     * credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
+     * seconds until the credential is revoked or expires.
+     *
+     * Requires `statusManagement` and `config.keyAttestationsRequired`.
+     * Applies to credentials issued while it is enabled.
+     */
+    revokeWithWalletUnit?: boolean;
     /**
      * For SD-JWT credentials: determines whether to include certificate chain (x5c)
      * or use federation-based trust (iss claim).
@@ -2480,6 +2504,7 @@ export type CredentialConfigUpdate = {
      */
     attributeProviderId?: string | null;
     /**
+     * Receives the wallet unit revocation webhook (`revokeWithWalletUnit`).
      * Not used for notifications: they go to the webhook endpoint of the offer.
      */
     webhookEndpointId?: string | null;
@@ -2502,6 +2527,17 @@ export type CredentialConfigUpdate = {
      * wallets); this one is enforced by the issuer at issuance time.
      */
     activeCredentials?: ActiveCredentialPolicy | null;
+    /**
+     * Revoke issued credentials when the wallet unit attestation they were
+     * bound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,
+     * Appendix D.1), whose status list entry is recorded with each
+     * credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
+     * seconds until the credential is revoked or expires.
+     *
+     * Requires `statusManagement` and `config.keyAttestationsRequired`.
+     * Applies to credentials issued while it is enabled.
+     */
+    revokeWithWalletUnit?: boolean;
     /**
      * For SD-JWT credentials: determines whether to include certificate chain (x5c)
      * or use federation-based trust (iss claim).
@@ -5500,7 +5536,7 @@ export type IssuanceConfig = {
      */
     walletProviderTrustLists?: Array<WalletProviderTrustListRefDto>;
     /**
-     * Default status check mode for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled.
+     * Status check mode for key attestations at the credential endpoint, and default for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled. The background check of revokeWithWalletUnit does not use this mode.
      */
     walletAttestationStatusCheckMode?: 'strict' | 'best_effort' | 'disabled' | null;
     /**
@@ -5579,7 +5615,7 @@ export type UpdateIssuanceDto = {
      */
     walletProviderTrustLists?: Array<WalletProviderTrustListRefDto>;
     /**
-     * Default status check mode for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled.
+     * Status check mode for key attestations at the credential endpoint, and default for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled. The background check of revokeWithWalletUnit does not use this mode.
      */
     walletAttestationStatusCheckMode?: 'strict' | 'best_effort' | 'disabled' | null;
     /**
@@ -6668,7 +6704,7 @@ export type IssuanceConfigWritable = {
      */
     walletProviderTrustLists?: Array<WalletProviderTrustListRefDto>;
     /**
-     * Default status check mode for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled.
+     * Status check mode for key attestations at the credential endpoint, and default for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled. The background check of revokeWithWalletUnit does not use this mode.
      */
     walletAttestationStatusCheckMode?: 'strict' | 'best_effort' | 'disabled' | null;
     /**
@@ -6743,7 +6779,7 @@ export type UpdateIssuanceDtoWritable = {
      */
     walletProviderTrustLists?: Array<WalletProviderTrustListRefDto>;
     /**
-     * Default status check mode for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled.
+     * Status check mode for key attestations at the credential endpoint, and default for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled. The background check of revokeWithWalletUnit does not use this mode.
      */
     walletAttestationStatusCheckMode?: 'strict' | 'best_effort' | 'disabled' | null;
     /**

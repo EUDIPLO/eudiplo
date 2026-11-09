@@ -1,5 +1,6 @@
 import type { Jwk } from "@openid4vc/oauth2";
 import type { SessionData } from "../../../../session/domain/session-data.js";
+import type { WalletUnitReference } from "../../../status-list/domain/wallet-unit-reference.js";
 import type { CredentialBatchIssuer } from "../ports/credential-batch-issuer.js";
 
 export interface IssueCredentialsForKeysInput {
@@ -8,6 +9,8 @@ export interface IssueCredentialsForKeysInput {
     session: SessionData;
     claims?: Record<string, unknown>;
     issuanceSetId: string;
+    /** Wallet unit attestation that attested the holder keys, if any. */
+    walletUnit?: WalletUnitReference;
 }
 
 export class IssueCredentialsForKeys {
@@ -23,6 +26,7 @@ export class IssueCredentialsForKeys {
                     input.session,
                     input.claims,
                     input.issuanceSetId,
+                    input.walletUnit,
                 ),
             );
         }

@@ -77,7 +77,7 @@ curl "$EUDIPLO_URL/api/session/a6318799-dff4-4b60-9d1d-58703611bd23/credential-s
 ]
 ```
 
-There is one entry per issued credential that carries a status, so a batch issuance returns several entries for the same type. The list is empty when no credential of the session carries a status. `statusUpdatedAt` is when the status value last changed, through `POST /api/session/revoke` or when [`activeCredentials`](credential-configuration.md#keep-one-active-credential-per-subject) revokes a previous credential. An update that sets the value the credential already has, or is rejected, does not change it. It is absent if the status has not changed since issuance, or only changed before this field was recorded. Allowed roles: `issuance:offer`, `issuance:manage`, `credentials:status` or `sessions:read`.
+There is one entry per issued credential that carries a status, so a batch issuance returns several entries for the same type. The list is empty when no credential of the session carries a status. `statusUpdatedAt` is when the status value last changed, through `POST /api/session/revoke`, when [`activeCredentials`](credential-configuration.md#keep-one-active-credential-per-subject) revokes a previous credential, or when [`revokeWithWalletUnit`](../trust/attestation.md#revoke-credentials-with-their-wallet-unit) revokes it. An update that sets the value the credential already has, or is rejected, does not change it. It is absent if the status has not changed since issuance, or only changed before this field was recorded. Allowed roles: `issuance:offer`, `issuance:manage`, `credentials:status` or `sessions:read`.
 
 Verifiers resolve `status_list.uri` and read the bit at `idx`. Status list tokens are cached:
 
@@ -111,4 +111,4 @@ EUDIPLO allocates entries automatically: first from lists bound to the credentia
 
 The environment defaults are `STATUS_CAPACITY` (10000), `STATUS_BITS` (1), `STATUS_TTL` (3600), `STATUS_IMMEDIATE_UPDATE` (`false`) and `STATUS_ENABLE_AGGREGATION` (`true`); see [Environment variables](../reference/environment-variables.md#status). `capacity` and `bits` apply to lists created afterwards. Status lists can also be managed as files; see [Configuration as code](../operate/configuration-as-code.md). In the web client, open **Status Lists**.
 
-To keep only one valid credential per person, combine status management with [`activeCredentials`](credential-configuration.md#keep-one-active-credential-per-subject).
+To keep only one valid credential per person, combine status management with [`activeCredentials`](credential-configuration.md#keep-one-active-credential-per-subject). To revoke credentials when the wallet provider revokes the wallet unit they were issued to, set [`revokeWithWalletUnit`](../trust/attestation.md#revoke-credentials-with-their-wallet-unit).

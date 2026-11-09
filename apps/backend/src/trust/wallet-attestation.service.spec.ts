@@ -4,8 +4,13 @@ import * as x509 from "@peculiar/x509";
 import { describe, expect, it, vi } from "vitest";
 import { acceptedSequenceNumbersFake } from "../../test/trust/accepted-trust-list-sequence-numbers.fake.js";
 import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
+import { AttestationStatusRejected } from "./domain/attestation-status-rejected.js";
 import { OutdatedTrustListsError } from "./domain/trust-list-freshness.js";
 import { RevocationListUnavailableError } from "./revocation-policy.util.js";
+import {
+    InvalidStatusListTokenError,
+    StatusListIndexOutOfRange,
+} from "./status-list-verifier.service.js";
 import { TrustStoreService } from "./trust-store.service.js";
 import {
     RevocationCheckMode,
@@ -600,17 +605,17 @@ describe("WalletAttestationService status check mode", () => {
     const check = (
         service: unknown,
         mode: RevocationCheckMode,
-    ): Promise<void> =>
+    ): Promise<unknown> =>
         (
             service as {
-                validateWalletAttestationStatus(
+                validateAttestationStatus(
                     jwt: string,
                     entity: null,
                     store: null,
                     mode: RevocationCheckMode,
-                ): Promise<void>;
+                ): Promise<unknown>;
             }
-        ).validateWalletAttestationStatus("attestation", null, null, mode);
+        ).validateAttestationStatus("attestation", null, null, mode);
 
     const unavailable = () =>
         new RevocationListUnavailableError(
@@ -633,7 +638,7 @@ describe("WalletAttestationService status check mode", () => {
 
         await expect(
             check(service, RevocationCheckMode.BestEffort),
-        ).resolves.toBeUndefined();
+        ).resolves.toEqual(statusEntry);
     });
 
     it.each([RevocationCheckMode.Strict, RevocationCheckMode.BestEffort])(
@@ -726,10 +731,82 @@ describe("WalletAttestationService status check mode", () => {
 
         await expect(
             check(service, RevocationCheckMode.Disabled),
-        ).resolves.toBeUndefined();
+        ).resolves.toEqual(statusEntry);
         expect(
             statusListVerifierService.getStatusListJwt,
         ).not.toHaveBeenCalled();
+    });
+
+    describe("of key attestations", () => {
+        const checkKey = (
+            service: WalletAttestationService,
+            mode: RevocationCheckMode,
+        ) =>
+            service.checkKeyAttestationStatus(
+                "key-attestation",
+                {} as never,
+                {} as never,
+                mode,
+            );
+
+        it("returns the status list reference of a valid key attestation", async () => {
+            const { service } = createService({});
+
+            await expect(
+                checkKey(service, RevocationCheckMode.Strict),
+            ).resolves.toEqual(statusEntry);
+        });
+
+        it.each([RevocationCheckMode.Strict, RevocationCheckMode.BestEffort])(
+            "%s rejects a revoked key attestation with a key attestation message",
+            async (mode) => {
+                const { service } = createService({
+                    readStatus: () => ({
+                        isValid: false,
+                        description: "INVALID",
+                    }),
+                });
+
+                const error = await checkKey(service, mode).catch((e) => e);
+                expect(error).toBeInstanceOf(AttestationStatusRejected);
+                expect(error.message).toBe(
+                    "Key attestation is not valid: INVALID",
+                );
+            },
+        );
+
+        it("hides why the status list could not be fetched", async () => {
+            const { service } = createService({ fetchError: unavailable() });
+
+            const error = await checkKey(
+                service,
+                RevocationCheckMode.Strict,
+            ).catch((e) => e);
+            expect(error).toBeInstanceOf(AttestationStatusRejected);
+            expect(error.message).toBe("Key attestation status check failed");
+            expect(error.cause.message).toContain("timeout");
+        });
+
+        it("returns no reference for a malformed claim when the check is disabled", async () => {
+            const { service } = createService({ malformedStatusClaim: true });
+
+            await expect(
+                checkKey(service, RevocationCheckMode.Disabled),
+            ).resolves.toBeUndefined();
+        });
+
+        it("returns the reference when the check is disabled", async () => {
+            const { service, statusListVerifierService } = createService({
+                readStatus: () => ({ isValid: false, description: "INVALID" }),
+            });
+
+            await expect(
+                checkKey(service, RevocationCheckMode.Disabled),
+            ).resolves.toEqual(statusEntry);
+            expect(
+                statusListVerifierService.getStatusListJwt,
+            ).not.toHaveBeenCalled();
+        });
     });
 });
 
@@ -970,5 +1047,147 @@ describe("WalletAttestationService wallet attestation signer", () => {
                 "No configured trust list is current",
             );
         });
+    });
+});
+
+describe("WalletAttestationService wallet unit status", () => {
+    const uri = "https://wp.example/wua-status";
+    const trustLists = [{ trustListId: "providers", url: "" }];
+    const provider = { entity: { entityId: "wp" } };
+
+    function createService(options: {
+        matched?: boolean;
+        signatureValid?: boolean;
+        statuses?: Record<number, number | Error>;
+    }) {
+        const getTrustStore = vi.fn(async () => ({
+            entities: [{ entityId: "wp" }],
+            discarded: [],
+        }));
+        const matchAttestationSigner = vi.fn(async () =>
+            options.matched === false ? null : provider,
+        );
+        const getStatusListJwt = vi.fn(async () => "status-list-jwt");
+        const getStatusFromStatusListJwt = vi.fn(
+            (_jwt: string, entry: { idx: number }) => {
+                const status = options.statuses?.[entry.idx] ?? 0;
+                if (status instanceof Error) throw status;
+                return { status, isValid: status === 0, description: "" };
+            },
+        );
+        const verifyStatusListSignature = vi.fn(
+            async () => options.signatureValid !== false,
+        );
+        const service = Object.assign(
+            Object.create(WalletAttestationService.prototype),
+            {
+                logger: { warn: vi.fn(), debug: vi.fn() },
+                trustStoreService: { getTrustStore },
+                x509ValidationService: { matchAttestationSigner },
+                statusListVerifierService: {
+                    getStatusListJwt,
+                    getStatusFromStatusListJwt,
+                },
+                settings: { cryptoToleranceSeconds: 5 },
+                verifyStatusListSignature,
+            },
+        ) as WalletAttestationService;
+        return {
+            service,
+            getStatusListJwt,
+            matchAttestationSigner,
+            getStatusFromStatusListJwt,
+            verifyStatusListSignature,
+        };
+    }
+
+    const read = (service: WalletAttestationService, indexes: number[]) =>
+        service.readWalletUnitStatuses(
+            "tenant",
+            ["leaf"],
+            uri,
+            indexes,
+            trustLists,
+        );
+
+    it("verifies the list once against the matched provider and reads every index", async () => {
+        const {
+            service,
+            getStatusListJwt,
+            matchAttestationSigner,
+            getStatusFromStatusListJwt,
+            verifyStatusListSignature,
+        } = createService({ statuses: { 3: 1 } });
+
+        await expect(read(service, [2, 3])).resolves.toEqual(
+            new Map([
+                [2, 0],
+                [3, 1],
+            ]),
+        );
+        expect(matchAttestationSigner).toHaveBeenCalledWith(
+            ["leaf"],
+            [{ entityId: "wp" }],
+        );
+        expect(getStatusListJwt).toHaveBeenCalledOnce();
+        expect(verifyStatusListSignature).toHaveBeenCalledOnce();
+        expect(verifyStatusListSignature).toHaveBeenCalledWith(
+            "status-list-jwt",
+            provider,
+            expect.objectContaining({ entities: [{ entityId: "wp" }] }),
+        );
+        expect(getStatusFromStatusListJwt).toHaveBeenCalledWith(
+            "status-list-jwt",
+            { uri, idx: 3 },
+            5,
+        );
+    });
+
+    it("leaves out an index outside the list", async () => {
+        const { service } = createService({
+            statuses: {
+                9: new StatusListIndexOutOfRange(
+                    "Status list index 9 is outside the list",
+                ),
+            },
+        });
+
+        await expect(read(service, [1, 9])).resolves.toEqual(new Map([[1, 0]]));
+    });
+
+    it("refuses a list whose claims are wrong", async () => {
+        const { service } = createService({
+            statuses: {
+                1: new InvalidStatusListTokenError(
+                    "Status list token has expired",
+                ),
+            },
+        });
+
+        await expect(read(service, [1])).rejects.toThrow("has expired");
+    });
+
+    it("refuses a provider that is no longer trusted", async () => {
+        const { service } = createService({ matched: false });
+
+        await expect(read(service, [1])).rejects.toThrow(
+            "no longer in the wallet provider trust lists",
+        );
+    });
+
+    it("refuses a list not signed by the provider", async () => {
+        const { service } = createService({ signatureValid: false });
+
+        await expect(read(service, [1])).rejects.toThrow(
+            "Status list JWT signature verification failed",
+        );
+    });
+
+    it("refuses without wallet provider trust lists", async () => {
+        const { service } = createService({});
+
+        await expect(
+            service.readWalletUnitStatuses("tenant", ["leaf"], uri, [1], []),
+        ).rejects.toThrow("No wallet provider trust lists are configured");
     });
 });

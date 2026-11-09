@@ -200,6 +200,7 @@ export class CredentialConfig {
     attributeProvider?: AttributeProviderEntity;
 
     /**
+     * Receives the wallet unit revocation webhook (`revokeWithWalletUnit`).
      * Not used for notifications: they go to the webhook endpoint of the offer.
      */
     @Column("varchar", { nullable: true })
@@ -259,6 +260,19 @@ export class CredentialConfig {
      */
     @Column("json", { nullable: true })
     activeCredentials?: ActiveCredentialPolicy | null;
+
+    /**
+     * Revoke issued credentials when the wallet unit attestation they were
+     * bound to is revoked: the key attestation of the proof (OpenID4VCI 1.0,
+     * Appendix D.1), whose status list entry is recorded with each
+     * credential and checked every `WALLET_UNIT_STATUS_CHECK_INTERVAL`
+     * seconds until the credential is revoked or expires.
+     *
+     * Requires `statusManagement` and `config.keyAttestationsRequired`.
+     * Applies to credentials issued while it is enabled.
+     */
+    @Column("boolean", { default: false })
+    revokeWithWalletUnit?: boolean;
 
     /**
      * List of Interactive Authorization Endpoint (IAE) actions to execute

@@ -41,6 +41,7 @@ export class CompleteDeferredCredential {
             session,
             input.claims,
             transaction.issuanceSetId ?? undefined,
+            transaction.walletUnit ?? undefined,
         );
 
         return this.transactions.markReady(

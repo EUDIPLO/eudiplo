@@ -73,6 +73,9 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
  */
 export class InvalidStatusListTokenError extends Error {}
 
+/** The index a referenced token names is outside its status list. */
+export class StatusListIndexOutOfRange extends InvalidStatusListTokenError {}
+
 /**
  * The status at `index` of a decompressed status list: `bits` bits per
  * status, the first status in the least significant bits of the first byte
@@ -85,7 +88,7 @@ function readStatus(bytes: Uint8Array, bits: number, index: number): number {
         index < 0 ||
         bitOffset >= bytes.byteLength * 8
     ) {
-        throw new InvalidStatusListTokenError(
+        throw new StatusListIndexOutOfRange(
             `Status list index ${index} is outside the list`,
         );
     }

@@ -16,6 +16,7 @@ import {
     ResolveAuthorizedCredentialConfiguration,
 } from "./application/resolve-authorized-credential-configuration.js";
 import { ResolveDeferredCredentialRetrieval } from "./application/resolve-deferred-credential-retrieval.js";
+import { resolveWalletAttestationPolicy } from "./authorization/domain/wallet-attestation-policy.js";
 import { CredentialAccessTokenVerifier } from "./credential-access-token.verifier.js";
 import { InvalidCredentialProof } from "./domain/credential-proof-errors.js";
 import { DeferredTransactionStatus } from "./domain/deferred-transaction-status.js";
@@ -158,14 +159,25 @@ export class DeferredCredentialService {
 
         const issuanceConfig =
             await this.issuanceService.getIssuanceConfiguration(tenantId);
+        const walletAttestationPolicy =
+            resolveWalletAttestationPolicy(issuanceConfig);
         const verifier = await this.proofVerifier.prepare(
             tenantId,
-            issuanceConfig.walletProviderTrustLists ?? [],
+            walletAttestationPolicy.walletProviderTrustLists,
+            walletAttestationPolicy.walletAttestationStatusCheckMode,
         );
-        const verified = await verifier.verify(
-            proof,
-            parsedCredentialRequest.proofType,
-        );
+        const verified = await verifier
+            .verify(proof, parsedCredentialRequest.proofType)
+            .catch((error: unknown) => {
+                // A key attestation whose status rejects it.
+                if (error instanceof InvalidCredentialProof) {
+                    throw new CredentialRequestException(
+                        "invalid_proof",
+                        error.message,
+                    );
+                }
+                throw error;
+            });
         const holderKeys = verified.holderKeys;
         if (parsedCredentialRequest.proofType === "attestation") {
             if (!Array.isArray(holderKeys) || holderKeys.length === 0) {
@@ -208,6 +220,7 @@ export class DeferredCredentialService {
                 parsedCredentialRequest.credentialConfigurationId,
             issuanceSetId,
             holderCnf: holderCnf as Record<string, unknown>,
+            walletUnit: verified.keyAttestation?.walletUnit ?? null,
             status: DeferredTransactionStatus.Pending,
             interval,
             expiresAt,

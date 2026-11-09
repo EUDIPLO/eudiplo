@@ -18,6 +18,7 @@ import { KeyChainService } from "../../../crypto/key/key-chain.service.js";
 import { KeyUsageType } from "../../../crypto/key/types/key-usage-type.js";
 import type { SessionData as Session } from "../../../session/domain/session-data.js";
 import { VCT } from "../../issuance/oid4vci/metadata/dto/vct.dto.js";
+import type { WalletUnitReference } from "../../status-list/domain/wallet-unit-reference.js";
 import { IssueCredential } from "./application/issue-credential.js";
 import {
     CREDENTIAL_SETTINGS,
@@ -459,6 +460,7 @@ export class CredentialsService {
      * @param session
      * @param preloadedClaims Claims resolved from the session's claim source; without them, the static defaults are issued
      * @param issuanceSetId Opaque identifier grouping credentials issued with one access token
+     * @param walletUnit Wallet unit attestation that attested `holderCnf`, if any
      * @returns
      */
     async getCredential(
@@ -467,6 +469,7 @@ export class CredentialsService {
         session: Session,
         preloadedClaims?: Record<string, any>,
         issuanceSetId?: string,
+        walletUnit?: WalletUnitReference,
     ) {
         return this.issueCredential
             .execute({
@@ -475,6 +478,7 @@ export class CredentialsService {
                 session,
                 preloadedClaims,
                 issuanceSetId,
+                walletUnit,
             })
             .catch((error: unknown) => {
                 throw toInvalidClaimsException(error);

@@ -128,12 +128,13 @@ export class IssuanceConfig {
     walletProviderTrustLists?: WalletProviderTrustListRefDto[];
 
     /**
-     * Default status check mode for wallet attestations at managed
-     * authorization servers. Unset means best_effort.
+     * Status check mode for key attestations at the credential endpoint, and
+     * default for wallet attestations at managed authorization servers.
+     * Unset means best_effort.
      */
     @ApiPropertyOptional({
         description:
-            "Default status check mode for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled.",
+            "Status check mode for key attestations at the credential endpoint, and default for presented wallet attestations at managed authorization servers. strict rejects when the status list cannot be fetched or read; best_effort (used when unset) accepts when the list cannot be fetched but rejects an unreadable list or an index outside it; disabled skips the status check. A revoked or suspended attestation is rejected unless the check is disabled. The background check of revokeWithWalletUnit does not use this mode.",
         enum: RevocationCheckMode,
         nullable: true,
     })

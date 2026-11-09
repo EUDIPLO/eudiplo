@@ -19,6 +19,7 @@ export class MdocCredentialIssuerFormat implements CredentialIssuerFormat {
             session: context.session,
             claims: context.claims,
             issuanceSetId: context.issuanceSetId,
+            walletUnit: context.walletUnit,
         });
     }
 }

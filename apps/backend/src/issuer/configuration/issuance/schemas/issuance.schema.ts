@@ -518,7 +518,7 @@ export const IssuanceConfigSchema = z
             .nullable()
             .optional()
             .describe(
-                "Default status check mode for wallet attestations at managed authorization servers: strict, best_effort (default) or disabled.",
+                "Status check mode for key attestations at the credential endpoint, and default for wallet attestations at managed authorization servers: strict, best_effort (default) or disabled.",
             ),
         authorizationServers: z
             .array(ManagedAuthorizationServerSchema)

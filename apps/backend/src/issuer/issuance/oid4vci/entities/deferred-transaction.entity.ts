@@ -7,6 +7,7 @@ import {
     UpdateDateColumn,
 } from "typeorm";
 import { TenantEntity } from "../../../../auth/tenant/entities/tenant.entity.js";
+import type { WalletUnitReference } from "../../../status-list/domain/wallet-unit-reference.js";
 import { DeferredTransactionStatus } from "../domain/deferred-transaction-status.js";
 
 /**
@@ -64,6 +65,14 @@ export class DeferredTransactionEntity {
      */
     @Column("json")
     holderCnf!: Record<string, unknown>;
+
+    /**
+     * The wallet unit attestation that attested `holderCnf`: status list
+     * reference and certificate chain of the key attestation, if it has a
+     * reference. Stored as JSON.
+     */
+    @Column("json", { nullable: true })
+    walletUnit?: WalletUnitReference | null;
 
     /**
      * Current status of the deferred transaction.

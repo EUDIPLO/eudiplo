@@ -95,6 +95,7 @@ describe("StatusListService active-credential limit", () => {
             { register: vi.fn() } as never,
             dataSource.getRepository(ActiveCredentialSlot),
             subjectKeyService,
+            {} as never,
         );
 
         await dataSource.getRepository(TenantEntity).save({

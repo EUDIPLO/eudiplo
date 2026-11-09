@@ -3,9 +3,11 @@ import type { Jwk } from "@openid4vc/oauth2";
 import type { IssuerMetadataResult } from "@openid4vc/openid4vci";
 import { describe, expect, it, vi } from "vitest";
 import type { SessionData } from "../../../session/domain/session-data.js";
+import { RevocationCheckMode } from "../../../trust/types.js";
 import { ResolveAuthorizedCredentialConfiguration } from "./application/resolve-authorized-credential-configuration.js";
 import { ResolveDeferredCredentialRetrieval } from "./application/resolve-deferred-credential-retrieval.js";
 import { DeferredCredentialService } from "./deferred-credential.service.js";
+import { InvalidCredentialProof } from "./domain/credential-proof-errors.js";
 import { DeferredTransactionStatus } from "./domain/deferred-transaction-status.js";
 import type {
     KeyAttestationRequirements,
@@ -130,7 +132,11 @@ describe("DeferredCredentialService.createDeferredTransaction", () => {
             interval: 5,
         });
         expect(nonces.delete).toHaveBeenCalledWith("tenant", "n-1");
-        expect(prepare).toHaveBeenCalledWith("tenant", ["trust-list"]);
+        expect(prepare).toHaveBeenCalledWith(
+            "tenant",
+            ["trust-list"],
+            RevocationCheckMode.BestEffort,
+        );
         expect(verify).toHaveBeenCalledWith(expect.any(String), "jwt");
         expect(transactions.create).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -221,6 +227,40 @@ describe("DeferredCredentialService.createDeferredTransaction", () => {
             key_storage: ["iso_18045_high"],
         });
         expect(high.transactions.create).toHaveBeenCalledOnce();
+    });
+
+    it("keeps the wallet unit of the key attestation with the transaction", async () => {
+        const holderKey = { kty: "EC", crv: "P-256", x: "x", y: "y" };
+        const walletUnit = {
+            statusUri: "https://wp.example/wua-status",
+            statusIdx: 7,
+            certificates: ["leaf"],
+        };
+        const { service, transactions } = setup({
+            holderKeys: [holderKey],
+            keyAttestation: { attestedKeys: [holderKey], walletUnit },
+        });
+
+        await create(service, "jwt", undefined, {});
+
+        expect(transactions.create).toHaveBeenCalledWith(
+            expect.objectContaining({ walletUnit }),
+        );
+    });
+
+    it("answers invalid_proof for a key attestation whose status rejects it", async () => {
+        const { service, verify, transactions } = setup();
+        verify.mockRejectedValueOnce(
+            new InvalidCredentialProof(
+                "Key attestation is not valid: Invalid/Revoked",
+            ),
+        );
+
+        expect(await protocolError(create(service, "jwt"))).toMatchObject({
+            error: "invalid_proof",
+            error_description: "Key attestation is not valid: Invalid/Revoked",
+        });
+        expect(transactions.create).not.toHaveBeenCalled();
     });
 });
 

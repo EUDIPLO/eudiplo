@@ -2054,6 +2054,11 @@ export class ConfigBundleService {
                     keyBinding: entity.keyBinding,
                     keyChainId: entity.keyChainId ?? undefined,
                     statusManagement: entity.statusManagement,
+                    // Only when enabled, so that exports of configurations
+                    // without it stay as they were
+                    revokeWithWalletUnit: entity.revokeWithWalletUnit
+                        ? true
+                        : undefined,
                     iaeActions: entity.iaeActions,
                     sdJwtTrustFormat: entity.sdJwtTrustFormat,
                     lifeTime: entity.lifeTime ?? undefined,

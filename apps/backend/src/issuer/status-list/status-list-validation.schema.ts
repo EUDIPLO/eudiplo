@@ -36,4 +36,14 @@ export const STATUS_LIST_VALIDATION_SCHEMA = Joi.object({
             "If true (default), include aggregation_uri in status list JWTs. This allows relying parties to pre-fetch all status lists for offline validation per RFC draft-ietf-oauth-status-list Section 9. Can be overridden per tenant.",
         )
         .meta({ group: "status", order: 50 }),
+    WALLET_UNIT_STATUS_CHECK_INTERVAL: Joi.number()
+        .integer()
+        .min(0)
+        // Longer delays overflow setInterval, which then fires every 1 ms.
+        .max(2_147_483)
+        .default(3600)
+        .description(
+            "Interval in seconds at which the status lists of wallet unit attestations are checked, for credential configurations with revokeWithWalletUnit. A credential is revoked once its wallet unit is. 0 turns the check off. A fetched status list is reused for its ttl (5 minutes without one), at most one hour and not past its exp.",
+        )
+        .meta({ group: "status", order: 60 }),
 });
