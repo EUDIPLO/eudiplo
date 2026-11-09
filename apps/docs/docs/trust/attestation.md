@@ -105,6 +105,8 @@ A wallet provider revokes a wallet unit attestation when the wallet unit can no 
 }
 ```
 
+In the Web Client, turn on **Revoke with Wallet Unit** under **Credential Features** in the credential configuration's settings. While it is on, **Status Management** and **Require Key Attestation** stay on and cannot be turned off.
+
 - Requires `statusManagement: true` and `config.keyAttestationsRequired`; the API and the configuration import reject it otherwise.
 - At issuance, EUDIPLO stores the status list reference (`status.status_list`) and the `x5c` of the key attestation with the status entry of every credential issued for the keys it attests. A key attestation without `status_list` is not followed.
 - Every `WALLET_UNIT_STATUS_CHECK_INTERVAL` seconds (default 3600, `0` turns the check off), and once after startup, EUDIPLO reads the status of every followed wallet unit. The provider must still be in the issuance configuration's `walletProviderTrustLists`, and its status list must pass the checks above. A fetched list is reused for its `ttl` (5 minutes without one), at most one hour and not past its `exp`.

@@ -52,6 +52,7 @@ import {
 } from '@eudiplo/sdk-core';
 import { PresentationManagementService } from '../../../presentation/presentation-config/presentation-management.service';
 import { CredentialConfigService } from '../credential-config.service';
+import { KEY_ATTESTATION_LEVELS } from '../credential-config.types';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../../config-portability/config-ownership-notice.component';
 import { JsonViewDialogComponent } from './json-view-dialog/json-view-dialog.component';
@@ -226,7 +227,7 @@ export class CredentialConfigCreateComponent implements OnInit {
 
   get settingsSummary(): string {
     const value = this.form.getRawValue();
-    return `Lifetime: ${this.formatLifetime(value.lifeTime)} · Signing: ${value.keyChainId || 'Default key chain'} · Holder binding: ${value.keyBinding ? 'On' : 'Off'} · Status management: ${value.statusManagement ? 'On' : 'Off'} · Trust: ${this.isMdocFormat ? 'mDOC certificate chain' : value.sdJwtTrustFormat} · Proofs: ${value.proofTypesSupported.join(', ')} · Credential reuse: ${value.credentialReusePolicyEnabled ? value.credentialReusePolicyDetails.join(', ') : 'Not configured'}`;
+    return `Lifetime: ${this.formatLifetime(value.lifeTime)} · Signing: ${value.keyChainId || 'Default key chain'} · Holder binding: ${value.keyBinding ? 'On' : 'Off'} · Status management: ${value.statusManagement ? 'On' : 'Off'} · Revoke with wallet unit: ${value.revokeWithWalletUnit ? 'On' : 'Off'} · Trust: ${this.isMdocFormat ? 'mDOC certificate chain' : value.sdJwtTrustFormat} · Proofs: ${value.proofTypesSupported.join(', ')} · Credential reuse: ${value.credentialReusePolicyEnabled ? value.credentialReusePolicyDetails.join(', ') : 'Not configured'}`;
   }
 
   keyChains: KeyChainResponseDto[] = [];
@@ -261,11 +262,7 @@ export class CredentialConfigCreateComponent implements OnInit {
   selectedLifetimePreset: number | null = 3600;
   customLifetime = false;
 
-  // Key attestation presets (HAIP-compliant values)
-  keyAttestationPresets = [
-    { label: 'ISO 18045 High', value: 'iso_18045_high' },
-    { label: 'ISO 18045 Moderate', value: 'iso_18045_moderate' },
-  ];
+  keyAttestationPresets = KEY_ATTESTATION_LEVELS;
 
   private readonly validateVct = schemaFormValidator(vctSchema);
   private readonly validateConstraintsSchema = schemaFormValidator(claimConstraintsSchema);
@@ -383,6 +380,7 @@ export class CredentialConfigCreateComponent implements OnInit {
       iaeActions: new FormArray([]),
       // Key attestation requirements (per-credential, HAIP compliance)
       keyAttestationEnabled: new FormControl(false),
+      revokeWithWalletUnit: new FormControl(false),
       keyStorageTypes: new FormControl<string[]>([]),
       userAuthenticationTypes: new FormControl<string[]>([]),
       proofTypesSupported: new FormControl<('attestation' | 'jwt')[]>(
@@ -422,7 +420,10 @@ export class CredentialConfigCreateComponent implements OnInit {
 
     this.form
       .get('activeCredentialsEnabled')
-      ?.valueChanges.subscribe(() => this.syncStatusManagementWithActiveCredentials());
+      ?.valueChanges.subscribe(() => this.syncRequiredSettings());
+    this.form
+      .get('revokeWithWalletUnit')
+      ?.valueChanges.subscribe(() => this.syncRequiredSettings());
 
     // A locale is checked against the other entries, which do not revalidate on their own.
     this.displayConfigs.valueChanges.subscribe(() => this.revalidateDisplayLocales());
@@ -704,17 +705,34 @@ export class CredentialConfigCreateComponent implements OnInit {
     return value as FormControl;
   }
 
+  /** Why status management is locked on, or null while it can be changed. */
+  get statusManagementRequiredBy(): string | null {
+    const requiredBy = [
+      this.form.get('activeCredentialsEnabled')?.value && 'Single Active Credential',
+      this.form.get('revokeWithWalletUnit')?.value && 'Revoke with Wallet Unit',
+    ].filter(Boolean);
+    return requiredBy.length ? requiredBy.join(' and ') : null;
+  }
+
   /**
-   * Single Active Credential revokes earlier credentials via the status list, so status
-   * management is forced on (and locked) while it is enabled.
+   * Single Active Credential and Revoke with Wallet Unit revoke credentials via the status
+   * list, so status management is forced on (and locked) while either is enabled. Revoke with
+   * Wallet Unit follows the key attestation of the proof, so it also forces key attestation on.
    */
-  private syncStatusManagementWithActiveCredentials(): void {
+  private syncRequiredSettings(): void {
     const statusManagement = this.form.get('statusManagement');
-    if (this.form.get('activeCredentialsEnabled')?.value) {
+    if (this.statusManagementRequiredBy) {
       statusManagement?.setValue(true);
       statusManagement?.disable();
     } else {
       statusManagement?.enable();
+    }
+    const keyAttestation = this.form.get('keyAttestationEnabled');
+    if (this.form.get('revokeWithWalletUnit')?.value) {
+      keyAttestation?.setValue(true);
+      keyAttestation?.disable();
+    } else {
+      keyAttestation?.enable();
     }
   }
 
@@ -752,6 +770,7 @@ export class CredentialConfigCreateComponent implements OnInit {
       keyBinding: normalizedConfig.keyBinding ?? true,
       statusManagement: normalizedConfig.statusManagement ?? true,
       activeCredentialsEnabled: normalizedConfig.activeCredentials?.enabled ?? false,
+      revokeWithWalletUnit: normalizedConfig.revokeWithWalletUnit ?? false,
       attributeProviderId: normalizedConfig.attributeProviderId || '',
       webhookEndpointId: normalizedConfig.webhookEndpointId || '',
       // SD-JWT specific
@@ -785,7 +804,7 @@ export class CredentialConfigCreateComponent implements OnInit {
         (normalizedConfig.config as any)?.credentialReusePolicy?.options?.[0]
           ?.reissue_trigger_lifetime_left || 86400,
     } as any);
-    this.syncStatusManagementWithActiveCredentials();
+    this.syncRequiredSettings();
 
     this.setDisplayConfigs(normalizedConfig.config?.display ?? []);
 
@@ -1388,8 +1407,9 @@ export class CredentialConfigCreateComponent implements OnInit {
           ],
         },
       }),
-      // Key attestation requirements (if enabled)
-      ...(formValue.keyAttestationEnabled && {
+      // Key attestation requirements (if enabled). The toggle is disabled (and thus missing
+      // from form.value) while Revoke with Wallet Unit requires it.
+      ...(this.form.get('keyAttestationEnabled')?.value && {
         keyAttestationsRequired: {
           key_storage: formValue.keyStorageTypes?.length ? formValue.keyStorageTypes : undefined,
           user_authentication: formValue.userAuthenticationTypes?.length
@@ -1408,10 +1428,9 @@ export class CredentialConfigCreateComponent implements OnInit {
       tracking: 'internal',
     };
     // The status management toggle is disabled (and thus missing from form.value) while
-    // Single Active Credential is on, which requires it.
-    formValue.statusManagement = !!(
-      formValue.activeCredentialsEnabled || this.form.get('statusManagement')?.value
-    );
+    // Single Active Credential or Revoke with Wallet Unit is on, which require it.
+    formValue.statusManagement = !!this.form.get('statusManagement')?.value;
+    formValue.revokeWithWalletUnit = !!formValue.revokeWithWalletUnit;
 
     formValue.fields = this.buildFieldsPayload(formValue.fields || []);
     // Optional, as in the API; null clears a description on update.

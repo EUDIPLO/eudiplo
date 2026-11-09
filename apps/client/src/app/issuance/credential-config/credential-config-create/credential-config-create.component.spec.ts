@@ -144,6 +144,73 @@ describe('CredentialConfigCreateComponent', () => {
     expect(statusManagement.enabled).toBe(true);
   });
 
+  it('keeps status management and key attestation on while Revoke with Wallet Unit is enabled', () => {
+    basics();
+    const statusManagement = component.form.get('statusManagement')!;
+    const keyAttestation = component.form.get('keyAttestationEnabled')!;
+    statusManagement.setValue(false);
+    component.form.get('revokeWithWalletUnit')!.setValue(true);
+    expect(statusManagement.value).toBe(true);
+    expect(statusManagement.disabled).toBe(true);
+    expect(keyAttestation.value).toBe(true);
+    expect(keyAttestation.disabled).toBe(true);
+    expect(component.statusManagementRequiredBy).toBe('Revoke with Wallet Unit');
+    expect(component.settingsSummary).toContain('Revoke with wallet unit: On');
+    expect((component as any).buildConfigurationPayload()).toMatchObject({
+      statusManagement: true,
+      revokeWithWalletUnit: true,
+      config: { keyAttestationsRequired: {} },
+    });
+
+    component.form.get('activeCredentialsEnabled')!.setValue(true);
+    expect(component.statusManagementRequiredBy).toBe(
+      'Single Active Credential and Revoke with Wallet Unit'
+    );
+    component.form.get('activeCredentialsEnabled')!.setValue(false);
+    expect(statusManagement.disabled).toBe(true);
+
+    component.form.get('revokeWithWalletUnit')!.setValue(false);
+    expect(statusManagement.enabled).toBe(true);
+    expect(keyAttestation.enabled).toBe(true);
+    keyAttestation.setValue(false);
+    const payload = (component as any).buildConfigurationPayload();
+    expect(payload.revokeWithWalletUnit).toBe(false);
+    expect(payload.config).not.toHaveProperty('keyAttestationsRequired');
+  });
+
+  it('loads Revoke with Wallet Unit with its key attestation requirements', () => {
+    (component as any).patchFormFromConfig({
+      id: 'pid',
+      description: 'PID',
+      vct: 'urn:pid',
+      statusManagement: true,
+      revokeWithWalletUnit: true,
+      config: {
+        format: 'dc+sd-jwt',
+        display: [{ name: 'PID', locale: 'en-US' }],
+        keyAttestationsRequired: { key_storage: ['iso_18045_high'] },
+      },
+      fields: [],
+    });
+    expect(component.form.get('revokeWithWalletUnit')!.value).toBe(true);
+    expect(component.form.get('keyAttestationEnabled')!.disabled).toBe(true);
+    expect((component as any).buildConfigurationPayload()).toMatchObject({
+      revokeWithWalletUnit: true,
+      statusManagement: true,
+      config: { keyAttestationsRequired: { key_storage: ['iso_18045_high'] } },
+    });
+
+    (component as any).patchFormFromConfig({
+      id: 'pid',
+      description: 'PID',
+      vct: 'urn:pid',
+      config: { format: 'dc+sd-jwt', display: [{ name: 'PID', locale: 'en-US' }] },
+      fields: [],
+    });
+    expect(component.form.get('revokeWithWalletUnit')!.value).toBe(false);
+    expect(component.form.get('keyAttestationEnabled')!.enabled).toBe(true);
+  });
+
   it('loads every display entry and saves them back unchanged', () => {
     const display = [
       {

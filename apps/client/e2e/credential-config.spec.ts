@@ -629,3 +629,96 @@ test('loading a template over existing claims shows and edits the loaded claims'
   await path.fill('address.country_code');
   await expect(page.getByRole('button', { name: /^address\.country_code string/ })).toBeVisible();
 });
+
+test('turns Revoke with Wallet Unit on and off with the settings it needs', async ({
+  page,
+  request,
+}) => {
+  test.skip(
+    !hasAuthCredentials,
+    'Set E2E_TENANT_CLIENT_ID and E2E_TENANT_CLIENT_SECRET for tenant flow tests.'
+  );
+  const id = `e2e-wallet-unit-${Date.now()}`;
+  const url = `${resolvedE2EConfig.apiBaseUrl}/api/issuer/credentials`;
+  const headers = { Authorization: `Bearer ${await tenantToken(request)}` };
+  await writeConfig(
+    () =>
+      request.post(url, {
+        headers,
+        data: {
+          id,
+          description: 'Wallet unit revocation',
+          vct: `urn:${id}`,
+          statusManagement: false,
+          config: { format: 'dc+sd-jwt', display: [{ name: 'Member', locale: 'en-US' }] },
+          fields: [],
+        },
+      }),
+    `create ${id}`
+  );
+  const stored = async () => {
+    const response = await request.get(`${url}/${id}`, { headers });
+    expect(response.ok(), `GET ${id}`).toBe(true);
+    return (await response.json()) as {
+      revokeWithWalletUnit?: boolean;
+      statusManagement?: boolean;
+      config: { keyAttestationsRequired?: unknown };
+    };
+  };
+  const openFeatures = async () => {
+    await page.goto(`/credential-config/${id}/edit`);
+    await page.getByRole('tab', { name: /Settings/ }).click();
+    await page.getByRole('button', { name: 'Credential Features' }).click();
+  };
+  const revoke = page.getByRole('switch', { name: /^Revoke with Wallet Unit/ });
+  const statusManagement = page.getByRole('switch', { name: /^Status Management/ });
+  const keyAttestation = page.getByRole('switch', { name: /^Require Key Attestation/ });
+
+  try {
+    await openFeatures();
+    await expect(revoke).not.toBeChecked();
+    await expect(statusManagement).not.toBeChecked();
+    await revoke.click();
+    await expect(statusManagement).toBeChecked();
+    await expect(statusManagement).toBeDisabled();
+    await expect(statusManagement).toHaveAccessibleName(/Required by Revoke with Wallet Unit/);
+    await expect(keyAttestation).toBeChecked();
+    await expect(keyAttestation).toBeDisabled();
+    // Locked, but still reachable with Tab so that the reason can be read.
+    await statusManagement.focus();
+    await expect(statusManagement).toBeFocused();
+    await keyAttestation.focus();
+    await expect(keyAttestation).toBeFocused();
+    await expect(keyAttestation).toHaveAccessibleName(/Required by Revoke with Wallet Unit/);
+    await page.getByRole('button', { name: 'Save Configuration' }).click();
+    await expect(page).toHaveURL(new RegExp(`/credential-config/${id}$`));
+    expect(await stored()).toMatchObject({
+      revokeWithWalletUnit: true,
+      statusManagement: true,
+      config: { keyAttestationsRequired: {} },
+    });
+
+    await page.getByRole('tab', { name: /Business Logic/ }).click();
+    await expect(page.getByText('Required, no level constraints')).toBeVisible();
+    await expect(
+      page.getByText(
+        'Enabled: credentials are revoked when their wallet unit attestation is revoked'
+      )
+    ).toBeVisible();
+
+    // Turning it off unlocks the settings it needed, which then can be turned off as well.
+    await openFeatures();
+    await expect(revoke).toBeChecked();
+    await revoke.click();
+    await expect(keyAttestation).toBeEnabled();
+    await keyAttestation.click();
+    await statusManagement.click();
+    await page.getByRole('button', { name: 'Save Configuration' }).click();
+    await expect(page).toHaveURL(new RegExp(`/credential-config/${id}$`));
+    const after = await stored();
+    expect(after).toMatchObject({ revokeWithWalletUnit: false, statusManagement: false });
+    expect(after.config.keyAttestationsRequired).toBeUndefined();
+  } finally {
+    await writeConfig(() => request.delete(`${url}/${id}`, { headers }), `delete ${id}`);
+  }
+});

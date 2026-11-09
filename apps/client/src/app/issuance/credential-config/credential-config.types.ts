@@ -15,3 +15,9 @@ export interface DisplayFormValue {
     url?: string;
   };
 }
+
+/** Key attestation levels (HAIP) the form offers, with the names both pages show. */
+export const KEY_ATTESTATION_LEVELS = [
+  { label: 'ISO 18045 High', value: 'iso_18045_high' },
+  { label: 'ISO 18045 Moderate', value: 'iso_18045_moderate' },
+];

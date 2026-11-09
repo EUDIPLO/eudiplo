@@ -192,7 +192,7 @@
                     </ng-container>
 
                     <ng-container matColumnDef="statusCheck">
-                      <th mat-header-cell *matHeaderCellDef>Attestation status check</th>
+                      <th mat-header-cell *matHeaderCellDef>Wallet attestation status check</th>
                       <td mat-cell *matCellDef="let row">{{ row.statusCheck }}</td>
                     </ng-container>
 
@@ -293,7 +293,7 @@
                     "
                     >fact_check</mat-icon
                   >
-                  <span matListItemTitle>Wallet Attestation Status Check</span>
+                  <span matListItemTitle>Attestation Status Check</span>
                   <span matListItemLine
                     >{{ statusCheckModeLabel(config.walletAttestationStatusCheckMode) }}
                     @if (!config.walletAttestationStatusCheckMode) {
@@ -302,6 +302,8 @@
                     @if (config.walletAttestationStatusCheckMode === 'disabled') {
                       (revoked attestations accepted)
                     }
+                    · key attestations at the credential endpoint, wallet attestations unless an
+                    authorization server overrides it
                   </span>
                 </mat-list-item>
                 @if (config.walletAttestationRequired) {
