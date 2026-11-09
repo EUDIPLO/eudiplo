@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { extname, join } from "node:path";
+import { extname, join, relative, sep } from "node:path";
 import {
     normalizeDocument,
     resourceId,
@@ -8,6 +8,7 @@ import {
     serializeDocument,
 } from "@eudiplo/config-format/config-format.js";
 import {
+    BadRequestException,
     ConflictException,
     Injectable,
     Logger,
@@ -16,7 +17,10 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { tenantConfigFolder } from "../../shared/utils/tenant-config-folder.util.js";
 import { ConfigImportService } from "../config-import/config-import.service.js";
-import { ConfigImportOrchestratorService } from "../config-import/config-import-orchestrator.service.js";
+import {
+    ConfigImportOrchestratorService,
+    formatBlockingIssue,
+} from "../config-import/config-import-orchestrator.service.js";
 import { ConfigBundleService } from "./config-bundle.service.js";
 import { ConfigBundleApplyService } from "./config-bundle-apply.service.js";
 import { ConfigMigrationService } from "./config-migration.service.js";
@@ -61,6 +65,37 @@ const FOLDER_RESOURCES: FolderResource[] = [
  * here.
  */
 const TENANT_RESOURCE: FolderResource = { kind: "Tenant", file: "info.json" };
+
+/**
+ * Body of the `400` that the reattach endpoints answer when a file of the
+ * tenant folder cannot be imported. The startup import logs its `message` as
+ * "Failed to import tenant".
+ */
+interface ConfigFolderInvalidResponse {
+    code: "CONFIG_FOLDER_INVALID";
+    /**
+     * `<file>: <reason>`; for blocking issues, each as the startup import
+     * logs it: `<code> in <kind>/<id> at <path>: <message>`.
+     */
+    message: string;
+    /** The file, relative to the tenant folder, with `/` separators. */
+    file: string;
+    /**
+     * The blocking issues of the file, as the plan of a bundle reports them
+     * for a document: the migration's required inputs or validation errors,
+     * each naming the resource; else one `CONFIG_FILE_INVALID` issue with the
+     * reason, for a file that is no JSON, holds another resource kind or has
+     * an unresolved placeholder.
+     */
+    issues: ConfigMigrationIssue[];
+}
+
+/** A file whose migration stopped with required inputs or errors. */
+class BlockingIssuesError extends Error {
+    constructor(readonly issues: ConfigMigrationIssue[]) {
+        super(issues.map(formatBlockingIssue).join("; "));
+    }
+}
 
 const MIME_TYPES: Record<string, string> = {
     ".png": "image/png",
@@ -215,10 +250,15 @@ export class ConfigFolderBundleService {
                 `Tenant ID '${tenantId}' is not a folder name, so it has no config folder to reattach to.`,
             );
         }
+        // Only the files of the requested kind, so a file of another kind
+        // that does not import does not block this reattach. The plan checks
+        // references against the database, not against other folder files.
         const full = this.collectBundle(
             tenantId,
             tenantRoot,
-            kind === "Tenant" ? [TENANT_RESOURCE] : FOLDER_RESOURCES,
+            kind === "Tenant"
+                ? [TENANT_RESOURCE]
+                : FOLDER_RESOURCES.filter((resource) => resource.kind === kind),
         );
         const index = full.documents.findIndex(
             (document) =>
@@ -282,11 +322,7 @@ export class ConfigFolderBundleService {
                     documents.push(document);
                     warnings.push(...issues);
                 } catch (error) {
-                    const message =
-                        error instanceof Error ? error.message : String(error);
-                    throw new Error(`${filePath}: ${message}`, {
-                        cause: error,
-                    });
+                    throw invalidFile(tenantRoot, filePath, error);
                 }
             }
         }
@@ -326,10 +362,7 @@ export class ConfigFolderBundleService {
         resource: FolderResource,
         filePath: string,
     ): { document: ConfigDocument; issues: ConfigMigrationIssue[] } {
-        const rawPayload = JSON.parse(readFileSync(filePath, "utf8")) as Record<
-            string,
-            unknown
-        >;
+        const rawPayload = parseJsonFile(filePath);
         const payload =
             this.configImportService.replacePlaceholders(rawPayload);
         const fileId = filePath
@@ -359,10 +392,14 @@ export class ConfigFolderBundleService {
             (issue) => issue.severity !== "warning",
         );
         if (blocking.length > 0) {
-            throw new Error(
-                `requires input: ${blocking
-                    .map((issue) => `${issue.path}: ${issue.message}`)
-                    .join("; ")}`,
+            // The ID of the plan item a bundle would report; a document
+            // without one is named after its file.
+            const owner = {
+                kind: result.document.kind,
+                id: documentId(result.document) ?? id,
+            };
+            throw new BlockingIssuesError(
+                blocking.map((issue) => ({ ...issue, resource: owner })),
             );
         }
         return { document: result.document, issues: result.issues };
@@ -415,6 +452,63 @@ export class ConfigFolderBundleService {
             return definition.file;
         }
         return `${definition.directory}/${resourceId(document)}.json`;
+    }
+}
+
+/**
+ * A file of the tenant folder cannot be imported. The operator fixes the file,
+ * so the API answers `400`, not `500`; the startup import logs the message.
+ */
+function invalidFile(
+    tenantRoot: string,
+    filePath: string,
+    error: unknown,
+): BadRequestException {
+    const file = relative(tenantRoot, filePath).split(sep).join("/");
+    const reason = error instanceof Error ? error.message : String(error);
+    const issues: ConfigMigrationIssue[] =
+        error instanceof BlockingIssuesError
+            ? error.issues
+            : [
+                  {
+                      severity: "error",
+                      code: "CONFIG_FILE_INVALID",
+                      path: "",
+                      message: reason,
+                  },
+              ];
+    const response: ConfigFolderInvalidResponse = {
+        code: "CONFIG_FOLDER_INVALID",
+        message: `${file}: ${reason}`,
+        file,
+        issues,
+    };
+    return new BadRequestException(response, { cause: error });
+}
+
+/**
+ * The parser's message quotes an excerpt of the file, which may be a key or a
+ * secret, and the reason reaches API callers, so it is not repeated.
+ */
+function parseJsonFile(filePath: string): Record<string, unknown> {
+    let text: string;
+    try {
+        text = readFileSync(filePath, "utf8");
+    } catch {
+        throw new Error("cannot be read");
+    }
+    try {
+        return JSON.parse(text) as Record<string, unknown>;
+    } catch {
+        throw new Error("is not valid JSON");
+    }
+}
+
+function documentId(document: ConfigDocument): string | undefined {
+    try {
+        return resourceId(document);
+    } catch {
+        return undefined;
     }
 }
 

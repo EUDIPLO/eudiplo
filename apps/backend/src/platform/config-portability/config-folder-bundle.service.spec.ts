@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { schemaUrl } from "@eudiplo/config-format/config-format.js";
 import {
+    BadRequestException,
     InternalServerErrorException,
     Logger,
     ServiceUnavailableException,
@@ -13,30 +14,34 @@ import { describe, expect, it, vi } from "vitest";
 import { importedRotationIntervals } from "../../crypto/key/key-chain-import-rotation.js";
 import { ConfigImportService } from "../config-import/config-import.service.js";
 import { ConfigImportOrchestratorService } from "../config-import/config-import-orchestrator.service.js";
+import { ConfigBundleService } from "./config-bundle.service.js";
 import { ConfigBundleApplyService } from "./config-bundle-apply.service.js";
 import { ConfigFolderBundleService } from "./config-folder-bundle.service.js";
 import { ConfigMigrationService } from "./config-migration.service.js";
 import { ConfigResourceRegistry } from "./config-resource.registry.js";
 
-function createService(apply = vi.fn()) {
+function createService(
+    apply = vi.fn(),
+    replacePlaceholders = <T>(value: T): T => value,
+    configFolder = fileURLToPath(
+        new URL("../../../../../assets/config", import.meta.url),
+    ),
+) {
     const registry = new ConfigResourceRegistry();
     const registerPortableRunner = vi.fn();
     const service = new ConfigFolderBundleService(
         {
-            getOrThrow: () =>
-                fileURLToPath(
-                    new URL("../../../../../assets/config", import.meta.url),
-                ),
+            get: () => configFolder,
+            getOrThrow: () => configFolder,
         } as unknown as ConfigService,
-        {
-            replacePlaceholders: <T>(value: T) => value,
-        } as ConfigImportService,
+        { replacePlaceholders } as ConfigImportService,
         new ConfigMigrationService(registry),
         registry,
         { apply } as unknown as ConfigBundleApplyService,
         {
             registerPortableRunner,
         } as unknown as ConfigImportOrchestratorService,
+        {} as ConfigBundleService,
     );
     return { service, registerPortableRunner };
 }
@@ -75,6 +80,287 @@ describe("ConfigFolderBundleService", () => {
                 importedRotationIntervals(policy);
             expect(intervalDays).toBeLessThan(certValidityDays);
         }
+    });
+
+    function tenantFolder(files: Record<string, string>): string {
+        const root = mkdtempSync(join(tmpdir(), "eudiplo-folder-bundle-"));
+        for (const [path, content] of Object.entries(files)) {
+            mkdirSync(join(root, path, ".."), { recursive: true });
+            writeFileSync(join(root, path), content);
+        }
+        return root;
+    }
+
+    it("answers 400 with the file and its required inputs when a folder file does not migrate", () => {
+        const { service } = createService();
+        // A 9.x trust list file: v2 needs contactUri and website. The file
+        // name is not the ID; the issues name the document's.
+        const root = tenantFolder({
+            "trust-lists/legacy.json": JSON.stringify({
+                $schema: schemaUrl("TrustList", 1),
+                metadata: { generation: 1 },
+                spec: {
+                    id: "legacy-list",
+                    entities: [
+                        {
+                            type: "internal",
+                            issuerKeyChainId: "issuer",
+                            revocationKeyChainId: "status",
+                            info: { name: "Example" },
+                        },
+                    ],
+                },
+            }),
+        });
+        try {
+            let thrown: unknown;
+            try {
+                service.buildBundle("demo", root);
+            } catch (error) {
+                thrown = error;
+            }
+            expect(thrown).toBeInstanceOf(BadRequestException);
+            const response = (thrown as BadRequestException).getResponse();
+            expect(response).toEqual({
+                code: "CONFIG_FOLDER_INVALID",
+                // The startup import logs it; the format is the one of a
+                // bundle's blocking issues.
+                message: expect.stringMatching(
+                    /^trust-lists\/legacy\.json: TRUST_LIST_CONTACT_URI_MISSING in TrustList\/legacy-list at \/spec\/entities\/0\/info\/contactUri: Add contactUri: .*; TRUST_LIST_WEBSITE_MISSING in TrustList\/legacy-list at \/spec\/entities\/0\/info\/website: Add website /,
+                ),
+                file: "trust-lists/legacy.json",
+                issues: [
+                    expect.objectContaining({
+                        severity: "required-input",
+                        code: "TRUST_LIST_CONTACT_URI_MISSING",
+                        path: "/spec/entities/0/info/contactUri",
+                        resource: { kind: "TrustList", id: "legacy-list" },
+                    }),
+                    expect.objectContaining({
+                        severity: "required-input",
+                        code: "TRUST_LIST_WEBSITE_MISSING",
+                        path: "/spec/entities/0/info/website",
+                        resource: { kind: "TrustList", id: "legacy-list" },
+                    }),
+                ],
+            });
+            // The startup import logs the message.
+            expect((thrown as Error).message).toBe(
+                (response as { message: string }).message,
+            );
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    it("answers 400 with one CONFIG_FILE_INVALID issue for a file that is no JSON", () => {
+        const { service } = createService();
+        // The parser's message would quote the secret.
+        const root = tenantFolder({
+            "clients/broken.json": '{"secret": "top-secret",',
+        });
+        try {
+            let thrown: unknown;
+            try {
+                service.buildBundle("demo", root);
+            } catch (error) {
+                thrown = error;
+            }
+            expect(thrown).toBeInstanceOf(BadRequestException);
+            expect((thrown as BadRequestException).getResponse()).toEqual({
+                code: "CONFIG_FOLDER_INVALID",
+                message: "clients/broken.json: is not valid JSON",
+                file: "clients/broken.json",
+                issues: [
+                    {
+                        severity: "error",
+                        code: "CONFIG_FILE_INVALID",
+                        path: "",
+                        message: "is not valid JSON",
+                    },
+                ],
+            });
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    it("answers 400 with one CONFIG_FILE_INVALID issue for an unresolved placeholder", () => {
+        const reason =
+            "/spec/secret: Unresolved placeholder ${SHOP_SECRET}: no environment value or default is available";
+        const { service } = createService(vi.fn(), () => {
+            throw new Error(reason);
+        });
+        const root = tenantFolder({
+            "clients/shop.json": JSON.stringify({
+                $schema: schemaUrl("Client"),
+                metadata: { generation: 1 },
+                spec: { clientId: "shop", secret: "${SHOP_SECRET}", roles: [] },
+            }),
+        });
+        try {
+            let thrown: unknown;
+            try {
+                service.buildBundle("demo", root);
+            } catch (error) {
+                thrown = error;
+            }
+            expect(thrown).toBeInstanceOf(BadRequestException);
+            expect((thrown as BadRequestException).getResponse()).toEqual({
+                code: "CONFIG_FOLDER_INVALID",
+                message: `clients/shop.json: ${reason}`,
+                file: "clients/shop.json",
+                issues: [
+                    {
+                        severity: "error",
+                        code: "CONFIG_FILE_INVALID",
+                        path: "",
+                        message: reason,
+                    },
+                ],
+            });
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    it("answers 400 with one CONFIG_FILE_INVALID issue for a file of another resource kind", () => {
+        const { service } = createService();
+        const root = tenantFolder({
+            "clients/other.json": JSON.stringify({
+                $schema: schemaUrl("TrustList"),
+                metadata: { generation: 1 },
+                spec: { id: "other", entities: [] },
+            }),
+        });
+        try {
+            let thrown: unknown;
+            try {
+                service.buildBundle("demo", root);
+            } catch (error) {
+                thrown = error;
+            }
+            expect(thrown).toBeInstanceOf(BadRequestException);
+            expect((thrown as BadRequestException).getResponse()).toEqual({
+                code: "CONFIG_FOLDER_INVALID",
+                message:
+                    "clients/other.json: contains TrustList, expected Client",
+                file: "clients/other.json",
+                issues: [
+                    {
+                        severity: "error",
+                        code: "CONFIG_FILE_INVALID",
+                        path: "",
+                        message: "contains TrustList, expected Client",
+                    },
+                ],
+            });
+        } finally {
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    describe("reattach", () => {
+        // A 9.x trust list file: v2 needs contactUri and website.
+        const legacyTrustList = JSON.stringify({
+            $schema: schemaUrl("TrustList", 1),
+            metadata: { generation: 1 },
+            spec: {
+                id: "legacy",
+                entities: [
+                    {
+                        type: "internal",
+                        issuerKeyChainId: "issuer",
+                        revocationKeyChainId: "status",
+                        info: { name: "Example" },
+                    },
+                ],
+            },
+        });
+
+        function reattachService(configFolder: string) {
+            const apply = vi.fn().mockResolvedValue({});
+            const { service } = createService(apply, undefined, configFolder);
+            return { service, apply };
+        }
+
+        it("reads only the files of the requested kind, so a broken file of another kind does not block it", async () => {
+            const root = tenantFolder({
+                "t/clients/folder-client.json": JSON.stringify({
+                    $schema: schemaUrl("Client"),
+                    metadata: { generation: 1 },
+                    spec: {
+                        clientId: "folder-client",
+                        secret: "secret",
+                        roles: ["issuance:offer"],
+                    },
+                }),
+                "t/trust-lists/legacy.json": legacyTrustList,
+            });
+            try {
+                const { service, apply } = reattachService(root);
+                await service.reattach(
+                    "t",
+                    "Client",
+                    "folder-client",
+                    "0".repeat(64),
+                );
+                expect(apply).toHaveBeenCalledTimes(1);
+                const bundle = apply.mock.calls[0][1];
+                expect(bundle.documents).toEqual([
+                    expect.objectContaining({ $schema: schemaUrl("Client") }),
+                ]);
+                expect(bundle.manifest.resources).toEqual([
+                    expect.objectContaining({
+                        kind: "Client",
+                        id: "folder-client",
+                    }),
+                ]);
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
+        it("answers 400 when another file of the requested kind cannot be imported", async () => {
+            const root = tenantFolder({
+                "t/trust-lists/good.json": JSON.stringify({
+                    $schema: schemaUrl("TrustList"),
+                    metadata: { generation: 1 },
+                    spec: {
+                        id: "good",
+                        entities: [
+                            {
+                                type: "internal",
+                                issuerKeyChainId: "issuer",
+                                revocationKeyChainId: "status",
+                                info: {
+                                    name: "Example",
+                                    contactUri: "info@example.com",
+                                    website: "https://example.com/",
+                                },
+                            },
+                        ],
+                    },
+                }),
+                "t/trust-lists/legacy.json": legacyTrustList,
+            });
+            try {
+                const { service, apply } = reattachService(root);
+                const thrown = await service
+                    .reattach("t", "TrustList", "good", "0".repeat(64))
+                    .catch((error: unknown) => error);
+                expect(thrown).toBeInstanceOf(BadRequestException);
+                expect(
+                    (thrown as BadRequestException).getResponse(),
+                ).toMatchObject({
+                    code: "CONFIG_FOLDER_INVALID",
+                    file: "trust-lists/legacy.json",
+                });
+                expect(apply).not.toHaveBeenCalled();
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
     });
 
     it("applies a tenant folder with a stable ownership source", async () => {
@@ -229,28 +515,20 @@ describe("ConfigFolderBundleService", () => {
     });
 
     it("uses stable IDs for legacy singleton configuration files", () => {
-        const tenantRoot = mkdtempSync(
-            join(tmpdir(), "eudiplo-config-folder-"),
-        );
-        mkdirSync(join(tenantRoot, "issuance"), { recursive: true });
-        writeFileSync(
-            join(tenantRoot, "registrar.json"),
-            JSON.stringify({
+        const tenantRoot = tenantFolder({
+            "registrar.json": JSON.stringify({
                 registrarUrl: "https://registrar.example.com/api",
                 oidcUrl: "https://auth.example.com/realms/registrar",
                 clientId: "test-client",
                 username: "test-user",
                 password: "test-password",
             }),
-        );
-        writeFileSync(
-            join(tenantRoot, "issuance", "issuance.json"),
-            JSON.stringify({
+            "issuance/issuance.json": JSON.stringify({
                 authorizationServers: [
                     { id: "issuer-built-in", type: "built-in" },
                 ],
             }),
-        );
+        });
         const { service } = createService();
 
         try {

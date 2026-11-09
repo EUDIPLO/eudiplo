@@ -1821,6 +1821,141 @@ describe("startup configuration reconciliation", () => {
         }
     });
 
+    it("reattaches a client while a trust list file of the tenant folder needs input, and answers 400 CONFIG_FOLDER_INVALID for the trust list", async () => {
+        const appConfig = app.get(ConfigService);
+        const http = app.getHttpServer();
+        const tenantId = "reattach-invalid-folder";
+        const clientId = "reattach-invalid-folder-client";
+        const bootstrap = await request(http)
+            .post("/api/oauth2/token")
+            .send({
+                grant_type: "client_credentials",
+                client_id: appConfig.getOrThrow<string>("AUTH_CLIENT_ID"),
+                client_secret:
+                    appConfig.getOrThrow<string>("AUTH_CLIENT_SECRET"),
+            })
+            .expect(201);
+        const tenant = await request(http)
+            .post("/tenant")
+            .set("Authorization", `Bearer ${bootstrap.body.access_token}`)
+            .send({
+                id: tenantId,
+                name: "Reattach with an invalid folder",
+                roles: ["tenant:admin"],
+            })
+            .expect(201);
+        const token = await request(http)
+            .post("/api/oauth2/token")
+            .send({
+                grant_type: "client_credentials",
+                client_id: tenant.body.client.clientId,
+                client_secret: tenant.body.client.clientSecret,
+            })
+            .expect(201);
+        const authorization = `Bearer ${token.body.access_token}`;
+        const tenantFolder = join(runtimeFolder, "config", tenantId);
+        mkdirSync(join(tenantFolder, "clients"), { recursive: true });
+        mkdirSync(join(tenantFolder, "trust-lists"));
+        writeFileSync(
+            join(tenantFolder, "clients", `${clientId}.json`),
+            JSON.stringify({
+                $schema: schemaUrl("Client"),
+                metadata: { generation: 1 },
+                spec: { clientId, secret: "secret", roles: ["issuance:offer"] },
+            }),
+        );
+        // A 9.x trust list file: v2 needs contactUri and website.
+        writeFileSync(
+            join(tenantFolder, "trust-lists", "legacy.json"),
+            JSON.stringify({
+                $schema: schemaUrl("TrustList", 1),
+                metadata: { generation: 1 },
+                spec: {
+                    id: "legacy",
+                    entities: [
+                        {
+                            type: "internal",
+                            issuerKeyChainId: "issuer",
+                            revocationKeyChainId: "status",
+                            info: { name: "Example" },
+                        },
+                    ],
+                },
+            }),
+        );
+
+        try {
+            const expected = {
+                code: "CONFIG_FOLDER_INVALID",
+                message: expect.stringMatching(
+                    /^trust-lists\/legacy\.json: TRUST_LIST_CONTACT_URI_MISSING in TrustList\/legacy at \/spec\/entities\/0\/info\/contactUri: /,
+                ),
+                file: "trust-lists/legacy.json",
+                issues: [
+                    expect.objectContaining({
+                        severity: "required-input",
+                        code: "TRUST_LIST_CONTACT_URI_MISSING",
+                        path: "/spec/entities/0/info/contactUri",
+                        resource: { kind: "TrustList", id: "legacy" },
+                    }),
+                    expect.objectContaining({
+                        severity: "required-input",
+                        code: "TRUST_LIST_WEBSITE_MISSING",
+                        path: "/spec/entities/0/info/website",
+                        resource: { kind: "TrustList", id: "legacy" },
+                    }),
+                ],
+            };
+            // The startup import fails the tenant, so the client is not applied.
+            await expect(
+                app
+                    .get(ConfigFolderBundleService)
+                    .applyTenantFolder(tenantId, "upsert"),
+            ).rejects.toMatchObject({ message: expected.message });
+            const clients = app.get(DataSource).getRepository(ClientEntity);
+            await expect(
+                clients.existsBy({ tenantId, clientId }),
+            ).resolves.toBe(false);
+
+            // A reattach reads only the files of the requested kind: the
+            // trust list answers 400 with the file and its issues ...
+            const trustListPlan = await request(http)
+                .post(
+                    "/config-bundles/resources/TrustList/legacy/reattach/plan",
+                )
+                .set("Authorization", authorization)
+                .expect(400);
+            expect(trustListPlan.body).toEqual(expected);
+            const trustListReattached = await request(http)
+                .post("/config-bundles/resources/TrustList/legacy/reattach")
+                .query({ planFingerprint: "0".repeat(64) })
+                .set("Authorization", authorization)
+                .expect(400);
+            expect(trustListReattached.body).toEqual(expected);
+
+            // ... while the client reattaches.
+            const plan = await request(http)
+                .post(
+                    `/config-bundles/resources/Client/${clientId}/reattach/plan`,
+                )
+                .set("Authorization", authorization)
+                .expect(201);
+            expect(plan.body.items).toEqual([
+                expect.objectContaining({ kind: "Client", id: clientId }),
+            ]);
+            await request(http)
+                .post(`/config-bundles/resources/Client/${clientId}/reattach`)
+                .query({ planFingerprint: plan.body.planFingerprint })
+                .set("Authorization", authorization)
+                .expect(201);
+            await expect(
+                clients.existsBy({ tenantId, clientId }),
+            ).resolves.toBe(true);
+        } finally {
+            rmSync(tenantFolder, { recursive: true, force: true });
+        }
+    });
+
     it("keeps the keys of an unchanged key chain file across startup imports and resets them on reattach", async () => {
         const folder = app.get(ConfigFolderBundleService);
         const keyChainService = app.get(KeyChainService);
