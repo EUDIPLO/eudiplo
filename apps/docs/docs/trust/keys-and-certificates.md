@@ -179,6 +179,24 @@ Certificates always belong to a key chain. Which one a wallet or verifier has to
 
 A presentation configuration uses the access key chain in `accessKeyChainId`, or the default access key chain when it is not set. Registration certificates are JWTs issued by a registrar, not key chains; see [Registration Certificates](registration-certificates.md).
 
+### Certificate profile
+
+Certificates that EUDIPLO creates follow the X.509 profiles of ISO/IEC 18013-5 Annex B for mdoc issuers, apart from the deviations listed below:
+
+- A root CA that EUDIPLO creates, for an internal chain or an external CA chain imported without `crt`, follows the IACA profile for every usage type: a random serial number, key usage `keyCertSign` and `cRLSign` only, `CA=true` with path length 0, and an IssuerAlternativeName with `PUBLIC_URL`.
+- The signing certificates of `attestation` key chains follow the document signer profile: the critical extended key usage `1.0.18013.5.1.2` (mDL document signer) and an IssuerAlternativeName. Under a CA, the IssuerAlternativeName is copied from the CA certificate, or is `PUBLIC_URL` when the CA certificate has none or one that is not a valid GeneralNames value, and the subject takes country (`C`) and state (`ST`) from the CA certificate. A self-signed attestation certificate gets the same extensions, but verifiers expect a document signer issued by a CA (IACA).
+- Signing certificates of the other usage types carry no extended key usage.
+
+An attestation key chain signs SD-JWT VCs with the same certificate. SD-JWT VC defines no extended key usage, but a verifier that applies RFC 5280 strictly (a certificate with this extension may be used only for the purposes it lists) rejects these SD-JWT VCs; make sure your SD-JWT VC verifiers accept the extended key usage, or import an attestation certificate of your own PKI. A status list signed with an attestation key chain ([which ones](../issuance/revocation.md#manage-status-lists)) carries the extended key usage too; use a `statusList` key chain if your verifiers check the extended key usage of status list certificates.
+
+Deviations from Annex B:
+
+- No CRLDistributionPoints extension. EUDIPLO publishes no CRL for the CAs it creates, and a distribution point without a CRL would make verifiers that fetch it fail.
+- The country is `DE` in the certificates EUDIPLO creates, except where a document signer takes it from an imported CA certificate.
+- Annex B allows document signer certificates at most 457 days of validity. EUDIPLO does not enforce it; keep `certValidityDays` of attestation key chains at 457 or less.
+
+Existing key chains get the profile with their next signing certificate: when they rotate, or when an import makes EUDIPLO create the signing certificate (a key without `crt`, or an external CA chain). Existing root CA certificates are kept.
+
 ### Default access key chain
 
 Presentation requests (OID4VP and ISO 18013-7) of a configuration without `accessKeyChainId`, signed issuer metadata and the link of a registration certificate to its access certificate use the tenant's default access key chain. A presentation configuration's `accessKeyChainId` always takes precedence; the issuer metadata has no such field, so all issuance of a tenant uses the default.

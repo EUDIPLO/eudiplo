@@ -104,7 +104,7 @@ EUDIPLO allocates entries automatically: first from lists bound to the credentia
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/status-lists`, `GET /api/status-lists/{listId}` | List status lists with `bits`, `capacity`, `usedEntries`, `availableEntries`, `uri` and token `expiresAt`. |
-| `POST /api/status-lists` | Create a list: `credentialConfigurationId` (bind it to one type; omit for a shared list), `keyChainId` (signing key; default: the tenant's status list key, else its attestation key), `bits` (1, 2, 4 or 8), `capacity` (1000 to 1,000,000). |
+| `POST /api/status-lists` | Create a list: `credentialConfigurationId` (bind it to one type; omit for a shared list), `keyChainId` (signing key: a `statusList` or `attestation` key chain; default: the tenant's status list key, else its attestation key), `bits` (1, 2, 4 or 8), `capacity` (1000 to 1,000,000). |
 | `PATCH /api/status-lists/{listId}` | Change `credentialConfigurationId` or `keyChainId` (`null` resets to shared or default). `bits` and `capacity` are fixed. |
 | `DELETE /api/status-lists/{listId}` | Delete an unused list. Lists with entries answer `409`. |
 | `GET`, `PUT`, `DELETE /api/status-list-config` | Tenant defaults: `capacity` (minimum 100), `bits`, `ttl` (minimum 60 seconds), `immediateUpdate`, `enableAggregation`. `PUT` replaces the whole object; omitted fields fall back to the environment defaults. `DELETE` resets to them. |
