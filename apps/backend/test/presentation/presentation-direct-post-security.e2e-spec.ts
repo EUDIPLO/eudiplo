@@ -5,7 +5,7 @@ import {
     Openid4vpAuthorizationRequest,
     Openid4vpClient,
 } from "@openid4vc/openid4vp";
-import { CryptoKey, decodeJwt } from "jose";
+import { CryptoKey, decodeJwt, EncryptJWT, type JWK } from "jose";
 import request from "supertest";
 import { App } from "supertest/types";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
@@ -208,6 +208,56 @@ describe("Presentation - Direct Post Security (Section 13.3)", () => {
             .set("Authorization", `Bearer ${authToken}`)
             .expect(200);
         expect(session.body.status).toBe("active");
+    });
+
+    // ─── Rejected encrypted responses ──────────────────────────────────
+
+    test("a response that cannot be decrypted gets 400 and leaves the session open", async () => {
+        const res = await createPresentationRequest(app, authToken, {
+            response_type: ResponseType.URI,
+            requestId: "pid-no-hook",
+        });
+        const sessionId: string = res.body.session;
+        const walletNonce = new URLSearchParams(res.body.uri)
+            .get("request_uri")!
+            .split("/presentations/")[1]
+            .split("/oid4vp")[0];
+
+        const authReqRes = await request(app.getHttpServer())
+            .get(`/presentations/${walletNonce}/oid4vp/request`)
+            .trustLocalhost()
+            .expect(200);
+        const { client_metadata } = decodeJwt(authReqRes.text) as {
+            client_metadata: { jwks: { keys: JWK[] } };
+        };
+        const encryptionJwk = client_metadata.jwks.keys[0];
+        const notYetValid = await new EncryptJWT({ vp_token: {} })
+            .setProtectedHeader({
+                alg: "ECDH-ES",
+                enc: "A128GCM",
+                kid: encryptionJwk.kid,
+            })
+            .setNotBefore(Math.floor(Date.now() / 1000) + 600)
+            .encrypt(encryptionJwk);
+
+        for (const response of ["not-a-jwe", notYetValid]) {
+            const answer = await request(app.getHttpServer())
+                .post(`/presentations/${walletNonce}/oid4vp`)
+                .trustLocalhost()
+                .type("form")
+                .send({ response })
+                .expect(400);
+            expect(answer.body.message).toMatch(
+                /^Could not decrypt the authorization response: /,
+            );
+        }
+
+        const session = await request(app.getHttpServer())
+            .get(`/session/${sessionId}`)
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        expect(session.body.status).toBe("fetched");
     });
 
     // ─── Frontend polling uses session ID ──────────────────────────────

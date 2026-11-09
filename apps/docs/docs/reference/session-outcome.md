@@ -118,7 +118,7 @@ Some failures have no code; `failureCode` and `outcome.error` are absent and `er
 
 ### What the wallet or browser receives
 
-An OpenID4VP response that fails verification is answered with `400` and an error body with `statusCode`, `timestamp` and `path` but no `message`; the session status says why. With a configured redirect the body also contains `redirect_uri` with `error=invalid_request` and the message as `error_description`. An ISO 18013-7 response that fails verification is answered with `400` and the code:
+An OpenID4VP response that fails verification is answered with `400` and an error body with `statusCode`, `timestamp` and `path` but no `message`; the session status says why. With a configured redirect the body also contains `redirect_uri` with `error=invalid_request` and the message as `error_description`. An encrypted OpenID4VP response that cannot be decrypted, or whose `nbf` or `exp` is out of range, is answered with `400` and a `message` starting `Could not decrypt the authorization response`, without `redirect_uri`; the session keeps its status, so the wallet can send the response again. An ISO 18013-7 response that fails verification is answered with `400` and the code:
 
 ```json
 {

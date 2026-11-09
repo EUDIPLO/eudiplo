@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import {
     compactDecrypt,
+    errors,
     exportJWK,
     generateKeyPair,
     importJWK,
@@ -10,13 +12,26 @@ import {
 } from "jose";
 import { KeyChainService } from "../key/key-chain.service.js";
 import { KeyUsageType } from "../key/types/key-usage-type.js";
+import { EncryptedResponseRejectedError } from "./encrypted-response-rejected.error.js";
 
 /**
  * Service for handling encryption and decryption operations.
  */
 @Injectable()
 export class EncryptionService {
-    constructor(private readonly keyChainService: KeyChainService) {}
+    /**
+     * Clock skew in seconds allowed for the `nbf` and `exp` claims of a
+     * decrypted JWT (`CRYPTO_TOLERANCE`, as for signed JWTs).
+     */
+    private readonly clockTolerance: number;
+
+    constructor(
+        private readonly keyChainService: KeyChainService,
+        configService: ConfigService,
+    ) {
+        this.clockTolerance =
+            configService.getOrThrow<number>("CRYPTO_TOLERANCE");
+    }
 
     /**
      * Initializes the encryption keys for a given tenant.
@@ -40,29 +55,12 @@ export class EncryptionService {
     }
 
     /**
-     * Decrypts a JWE (JSON Web Encryption) response.
-     * @param response - The encrypted JWE string.
-     * @param tenantId - The ID of the tenant for which to decrypt the response.
-     * @returns The decrypted payload.
-     */
-    async decryptJwe<T>(response: string, tenantId: string): Promise<T> {
-        const keyChain = await this.keyChainService.findByUsageType(
-            tenantId,
-            KeyUsageType.Encrypt,
-        );
-
-        const privateEncryptionKey = (await importJWK(
-            keyChain.activeJwk,
-            "ECDH-ES",
-        )) as CryptoKey;
-
-        const res = await jwtDecrypt<T>(response, privateEncryptionKey);
-        return res.payload;
-    }
-
-    /**
      * Decrypts a JWE response with a caller-supplied private encryption JWK.
      * Falls back to the tenant-wide encryption key when none is provided.
+     * Time claims in the payload (`nbf`, `exp`) are checked when present,
+     * allowing `CRYPTO_TOLERANCE` seconds of clock skew.
+     * @throws EncryptedResponseRejectedError when the JWE itself is rejected;
+     *   other failures (loading or importing the key) are thrown unchanged.
      */
     async decryptJweWithPrivateJwk<T>(
         response: string,
@@ -77,8 +75,20 @@ export class EncryptionService {
             "ECDH-ES",
         )) as CryptoKey;
 
-        const res = await jwtDecrypt<T>(response, privateEncryptionKey);
-        return res.payload;
+        // The key is already imported, so a jose error from jwtDecrypt is
+        // about the JWE: its header, ciphertext or claims. Anything else is
+        // a server-side failure and is thrown unchanged.
+        try {
+            const res = await jwtDecrypt<T>(response, privateEncryptionKey, {
+                clockTolerance: this.clockTolerance,
+            });
+            return res.payload;
+        } catch (error) {
+            if (error instanceof errors.JOSEError) {
+                throw new EncryptedResponseRejectedError(error);
+            }
+            throw error;
+        }
     }
 
     /**
