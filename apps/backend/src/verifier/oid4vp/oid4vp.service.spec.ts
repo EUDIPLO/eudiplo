@@ -1,4 +1,6 @@
+import { errors as joseErrors } from "jose";
 import { describe, expect, it, vi } from "vitest";
+import { EncryptedResponseRejectedError } from "../../crypto/encryption/encrypted-response-rejected.error.js";
 import { CryptoImplementationService } from "../../crypto/key/crypto-implementation/crypto-implementation.service.js";
 import { SessionStatus } from "../../session/domain/session-state.js";
 import { SessionNotUsable } from "../../session/domain/session-usability.js";
@@ -766,6 +768,61 @@ describe("OID4VP expired or finished requests", () => {
 
         expect(error.getStatus()).toBe(400);
         expect(error.message).toBe("The session has expired");
+    });
+});
+
+describe("OID4VP encrypted response rejection", () => {
+    function createService(decryptError: unknown) {
+        const service = Object.assign(
+            Object.create(Oid4vpService.prototype) as Oid4vpService,
+            {
+                resolveSessionByNonce: vi.fn().mockResolvedValue({
+                    id: "session",
+                    tenantId: "tenant",
+                    requestId: "presentation",
+                    consumed: false,
+                    status: SessionStatus.Active,
+                }),
+                logger: { debug: vi.fn() },
+                traceService: { getSpan: () => undefined },
+                encryptionService: {
+                    decryptJweWithPrivateJwk: vi
+                        .fn()
+                        .mockRejectedValue(decryptError),
+                },
+            },
+        );
+        return { service };
+    }
+
+    it("answers a rejected JWE with HTTP 400", async () => {
+        const rejected = new EncryptedResponseRejectedError(
+            new joseErrors.JWTClaimValidationFailed(
+                '"nbf" claim timestamp check failed',
+                {},
+                "nbf",
+                "check_failed",
+            ),
+        );
+        const { service } = createService(rejected);
+
+        const error = await service
+            .getResponse({ response: "encrypted" }, "nonce")
+            .catch((error) => error);
+
+        expect(error.getStatus()).toBe(400);
+        expect(error.message).toBe(
+            'Could not decrypt the authorization response: "nbf" claim timestamp check failed',
+        );
+    });
+
+    it("keeps other decryption failures as server errors", async () => {
+        const keyLookupFailure = new Error("database unavailable");
+        const { service } = createService(keyLookupFailure);
+
+        await expect(
+            service.getResponse({ response: "encrypted" }, "nonce"),
+        ).rejects.toBe(keyLookupFailure);
     });
 });
 

@@ -11,6 +11,7 @@ import { Span, TraceService } from "nestjs-otel";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 import { Repository } from "typeorm";
 import { v4 } from "uuid";
+import { EncryptedResponseRejectedError } from "../../crypto/encryption/encrypted-response-rejected.error.js";
 import { EncryptionService } from "../../crypto/encryption/encryption.service.js";
 import { CertService } from "../../crypto/key/cert/cert.service.js";
 import { KeyChainService } from "../../crypto/key/key-chain.service.js";
@@ -784,14 +785,26 @@ export class Oid4vpService {
             );
         }
 
-        const decrypted =
-            await this.encryptionService.decryptJweWithPrivateJwk<AuthResponse>(
-                body.response,
-                session.tenantId,
-                session.responseEncryptionPrivateJwk as
-                    | Record<string, unknown>
-                    | undefined,
-            );
+        let decrypted: AuthResponse;
+        try {
+            decrypted =
+                await this.encryptionService.decryptJweWithPrivateJwk<AuthResponse>(
+                    body.response,
+                    session.tenantId,
+                    session.responseEncryptionPrivateJwk as
+                        | Record<string, unknown>
+                        | undefined,
+                );
+        } catch (error) {
+            // A response the wallet encrypted wrongly, or whose time claims
+            // are out of range, is the wallet's error, not the server's.
+            if (error instanceof EncryptedResponseRejectedError) {
+                throw new BadRequestException(
+                    `Could not decrypt the authorization response: ${error.message}`,
+                );
+            }
+            throw error;
+        }
 
         this.logger.debug(
             {

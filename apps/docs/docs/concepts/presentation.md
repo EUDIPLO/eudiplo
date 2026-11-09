@@ -89,7 +89,7 @@ The ISO 18013-7 variant uses its own request format (HPKE encryption with the te
 
 ## Wallet response
 
-The wallet posts `response=<JWE>` to the `response_uri`. EUDIPLO only accepts encrypted responses: it decrypts the JWE with the session's private key and checks that `state`, if present, equals the `walletNonce`. The decrypted `vp_token` is an object keyed by DCQL credential `id`, each with one or more presentations.
+The wallet posts `response=<JWE>` to the `response_uri`. EUDIPLO only accepts encrypted responses: it decrypts the JWE with the session's private key and checks that `state`, if present, equals the `walletNonce`. If the decrypted payload has `nbf` or `exp`, they must hold, allowing `CRYPTO_TOLERANCE` seconds of clock skew. The decrypted `vp_token` is an object keyed by DCQL credential `id`, each with one or more presentations.
 
 If the user declines or the wallet cannot answer, the wallet sends an OAuth error (`error`, `error_description`) instead, plain or encrypted. EUDIPLO marks the session `failed` with the wallet's error code and answers with HTTP 200.
 
