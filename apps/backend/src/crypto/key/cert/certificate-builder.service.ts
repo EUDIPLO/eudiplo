@@ -132,7 +132,12 @@ export class CertificateBuilderService {
             subjectAlg = signingAlgForJwk(opts.subjectPublicJwk),
         } = opts;
         const caCert = new x509.X509Certificate(caCertPem);
-        const issuerName = caCert.subject;
+        // The parsed Name, not the `subject` string: re-encoding the string
+        // turns e.g. a UTF8String CN into a PrintableString, and validators
+        // that compare issuer and subject bytes (Go crypto/x509) then no longer
+        // link the leaf to its CA. RFC 5280 4.1.2.6 and 8 require the issuer
+        // to be encoded exactly like the CA's subject.
+        const issuerName = caCert.subjectName;
 
         const caPublicKey = await importPublicCryptoKey(
             caRef.publicJwk,
