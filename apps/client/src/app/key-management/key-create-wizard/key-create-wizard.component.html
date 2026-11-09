@@ -688,8 +688,10 @@
                 [matTooltip]="createTooltip"
                 (click)="createKey()"
               >
+                <mat-icon [class.spinning]="isSubmitting">{{
+                  isSubmitting ? 'sync' : 'vpn_key'
+                }}</mat-icon>
                 @if (isSubmitting) {
-                  <mat-icon class="spinning">sync</mat-icon>
                   @if (selectedUsage === 'access' && selectedAccessSource === 'registrar') {
                     <ng-container>Enrolling...</ng-container>
                   } @else if (importsExternalKey) {
@@ -698,7 +700,6 @@
                     <ng-container>Creating...</ng-container>
                   }
                 } @else {
-                  <mat-icon>vpn_key</mat-icon>
                   @if (selectedUsage === 'access' && selectedAccessSource === 'registrar') {
                     <ng-container>Create & Enroll</ng-container>
                   } @else if (importsExternalKey) {
