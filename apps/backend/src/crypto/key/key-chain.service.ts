@@ -37,6 +37,10 @@ import {
     signingAlgForCurve,
     signingAlgForJwk,
 } from "./domain/signing-algs.js";
+import {
+    type SigningCertificateProfile,
+    signingCertificateProfile,
+} from "./domain/signing-certificate-profile.js";
 import { KeyChainCreateDto, KeyChainType } from "./dto/key-chain-create.dto.js";
 import { KeyChainExportDto } from "./dto/key-chain-export.dto.js";
 import { KeyChainImportDto } from "./dto/key-chain-import.dto.js";
@@ -175,7 +179,7 @@ export class KeyChainService {
         const tenant = await this.tenantRepository.findOneByOrFail({
             id: tenantId,
         });
-        const hostname = this.getHostname();
+        const publicUrl = this.getPublicUrl();
         const subjectCN = tenant.name;
 
         const now = new Date();
@@ -195,9 +199,10 @@ export class KeyChainService {
                 adapter,
                 alg,
                 subjectCN,
-                hostname,
+                publicUrl,
                 certificateNotBefore(now),
                 notAfter,
+                signingCertificateProfile(dto.usageType),
             );
         } else {
             keyChain = await this.createStandaloneKey(
@@ -205,9 +210,10 @@ export class KeyChainService {
                 adapter,
                 alg,
                 subjectCN,
-                hostname,
+                publicUrl,
                 certificateNotBefore(now),
                 notAfter,
+                signingCertificateProfile(dto.usageType),
             );
         }
 
@@ -296,9 +302,10 @@ export class KeyChainService {
         adapter: KmsAdapter,
         alg: KmsSigningAlg,
         subjectCN: string,
-        hostname: string,
+        publicUrl: string,
         notBefore: Date,
         notAfter: Date,
+        profile: SigningCertificateProfile,
     ): Promise<Partial<KeyChainEntity>> {
         const rootMat = await adapter.generateKey({ kid: `${id}-root`, alg });
         const rootNotAfter = new Date(
@@ -308,7 +315,7 @@ export class KeyChainService {
             adapter,
             rootMat.ref,
             `${subjectCN} Root CA`,
-            hostname,
+            publicUrl,
             notBefore,
             rootNotAfter,
         );
@@ -323,9 +330,10 @@ export class KeyChainService {
             caCertPem: rootCertificate,
             subjectPublicJwk: activeMat.ref.publicJwk,
             subjectCN,
-            hostname,
+            publicUrl,
             notBefore,
             notAfter,
+            profile,
         });
 
         return {
@@ -343,19 +351,21 @@ export class KeyChainService {
         adapter: KmsAdapter,
         alg: KmsSigningAlg,
         subjectCN: string,
-        hostname: string,
+        publicUrl: string,
         notBefore: Date,
         notAfter: Date,
+        profile: SigningCertificateProfile,
     ): Promise<Partial<KeyChainEntity>> {
         const mat = await adapter.generateKey({ kid: `${id}-active`, alg });
-        const certificate = await this.certBuilder.createSelfSignedCert(
+        const certificate = await this.certBuilder.createSelfSignedCert({
             adapter,
-            mat.ref,
+            ref: mat.ref,
             subjectCN,
-            hostname,
+            publicUrl,
             notBefore,
             notAfter,
-        );
+            profile,
+        });
 
         return {
             activeJwk: this.storedKeyForEntity(adapter, mat.ref),
@@ -1031,7 +1041,8 @@ export class KeyChainService {
 
     async rotate(tenantId: string, id: string): Promise<void> {
         const keyChain = await this.getManageable(tenantId, id);
-        const hostname = this.getHostname();
+        const publicUrl = this.getPublicUrl();
+        const profile = signingCertificateProfile(keyChain.usageType);
         const tenant = await this.tenantRepository.findOneByOrFail({
             id: tenantId,
         });
@@ -1079,20 +1090,22 @@ export class KeyChainService {
                 caCertPem: keyChain.rootCertificate!,
                 subjectPublicJwk: newMat.ref.publicJwk,
                 subjectCN,
-                hostname,
+                publicUrl,
                 notBefore: certificateNotBefore(now),
                 notAfter,
+                profile,
             });
             newCertificate = chain.join("\n");
         } else {
-            newCertificate = await this.certBuilder.createSelfSignedCert(
+            newCertificate = await this.certBuilder.createSelfSignedCert({
                 adapter,
-                newMat.ref,
+                ref: newMat.ref,
                 subjectCN,
-                hostname,
-                certificateNotBefore(now),
+                publicUrl,
+                notBefore: certificateNotBefore(now),
                 notAfter,
-            );
+                profile,
+            });
         }
 
         await this.keyChainRepository.update(
@@ -1220,9 +1233,8 @@ export class KeyChainService {
     // HELPER METHODS
     // ─────────────────────────────────────────────────────────
 
-    private getHostname(): string {
-        return new URL(this.configService.getOrThrow<string>("PUBLIC_URL"))
-            .hostname;
+    private getPublicUrl(): string {
+        return this.configService.getOrThrow<string>("PUBLIC_URL");
     }
 
     /**

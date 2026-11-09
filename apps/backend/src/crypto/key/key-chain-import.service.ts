@@ -24,6 +24,7 @@ import {
 import { importedKeyChainType } from "./domain/key-chain-import-type.js";
 import { certificateHoldsKey } from "./domain/public-jwk-match.js";
 import { providerAlgRefusal, signingAlgForJwk } from "./domain/signing-algs.js";
+import { signingCertificateProfile } from "./domain/signing-certificate-profile.js";
 import { KeyChainImportDto } from "./dto/key-chain-import.dto.js";
 import { KeyChainEntity, KeyUsage } from "./entities/key-chain.entity.js";
 import { importedRotationIntervals } from "./key-chain-import-rotation.js";
@@ -105,7 +106,7 @@ export class KeyChainImportService {
         const tenant = await this.tenantRepository.findOneByOrFail({
             id: tenantId,
         });
-        const hostname = this.getHostname();
+        const publicUrl = this.getPublicUrl();
 
         const privateKey = this.resolvePrivateKey(dto);
         const existing = await this.keyChainRepository.findOne({
@@ -143,7 +144,7 @@ export class KeyChainImportService {
                 id,
                 tenantId,
                 tenant.name,
-                hostname,
+                publicUrl,
                 privateKey,
                 adapter,
                 dto,
@@ -167,14 +168,15 @@ export class KeyChainImportService {
             const notAfter = new Date(
                 now.getTime() + 365 * 24 * 60 * 60 * 1000,
             );
-            activeCertificate = await this.certBuilder.createSelfSignedCert(
+            activeCertificate = await this.certBuilder.createSelfSignedCert({
                 adapter,
-                activeMat.ref,
-                tenant.name,
-                hostname,
-                certificateNotBefore(now),
+                ref: activeMat.ref,
+                subjectCN: tenant.name,
+                publicUrl,
+                notBefore: certificateNotBefore(now),
                 notAfter,
-            );
+                profile: signingCertificateProfile(dto.usageType),
+            });
         }
 
         const intervals = rotationEnabled
@@ -260,7 +262,7 @@ export class KeyChainImportService {
         id: string,
         tenantId: string,
         subjectCN: string,
-        hostname: string,
+        publicUrl: string,
         rootKeyJwk: JWK,
         adapter: KmsAdapter,
         dto: KeyChainImportDto,
@@ -294,7 +296,7 @@ export class KeyChainImportService {
                 adapter,
                 rootMat.ref,
                 `${subjectCN} Root CA`,
-                hostname,
+                publicUrl,
                 certificateNotBefore(now),
                 rootNotAfter,
             );
@@ -313,9 +315,10 @@ export class KeyChainImportService {
             caCertPem: rootCertificate,
             subjectPublicJwk: activeMat.ref.publicJwk,
             subjectCN,
-            hostname,
+            publicUrl,
             notBefore: certificateNotBefore(now),
             notAfter,
+            profile: signingCertificateProfile(dto.usageType),
         });
 
         await this.keyChainRepository.save({
@@ -358,9 +361,8 @@ export class KeyChainImportService {
         return ref.publicJwk;
     }
 
-    private getHostname(): string {
-        return new URL(this.configService.getOrThrow<string>("PUBLIC_URL"))
-            .hostname;
+    private getPublicUrl(): string {
+        return this.configService.getOrThrow<string>("PUBLIC_URL");
     }
 
     private resolveCertificateChain(

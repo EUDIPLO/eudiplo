@@ -3,6 +3,7 @@ import * as x509 from "@peculiar/x509";
 import { importJWK, jwtVerify } from "jose";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { CertificateBuilderService } from "./cert/certificate-builder.service.js";
+import { MDL_DOCUMENT_SIGNER_EKU } from "./domain/signing-certificate-profile.js";
 import { KeyChainType } from "./dto/key-chain-create.dto.js";
 import { KeyChainEntity, KeyUsage } from "./entities/key-chain.entity.js";
 import { KeyChainService } from "./key-chain.service.js";
@@ -13,6 +14,8 @@ import { KeyUsageType } from "./types/key-usage-type.js";
 /**
  * Key chains on P-384 and P-521: creation picks the curve, certificates are
  * signed with the matching ecdsa-with-SHAxxx and rotation keeps the curve.
+ * The same in-memory service also checks which certificate profile creation
+ * and rotation choose for a usage type.
  */
 function serviceWith(adapter: DbKmsAdapter) {
     const rows = new Map<string, KeyChainEntity>();
@@ -186,4 +189,55 @@ describe("KeyChainService curves", () => {
 
         expect(rows.get(id)!.activeJwk.crv).toBe("P-384");
     });
+});
+
+describe("KeyChainService certificate profile", () => {
+    beforeAll(() => {
+        x509.cryptoProvider.set(new KmsCryptoProvider());
+    });
+
+    function leafEku(pem: string): x509.ExtendedKeyUsageExtension | null {
+        return new x509.X509Certificate(
+            pem.split(/(?<=-----END CERTIFICATE-----)/)[0],
+        ).getExtension(x509.ExtendedKeyUsageExtension);
+    }
+
+    it.each([KeyChainType.InternalChain, KeyChainType.Standalone])(
+        "gives the %s signing certificate of an attestation key chain the document signer EKU on creation and rotation",
+        async (type) => {
+            const { service, rows } = serviceWith(new DbKmsAdapter("db"));
+            const id = await service.create("tenant", {
+                usageType: KeyUsageType.Attestation,
+                type,
+            });
+
+            const created = leafEku(rows.get(id)!.activeCertificate);
+            expect(created?.usages).toEqual([MDL_DOCUMENT_SIGNER_EKU]);
+            expect(created?.critical).toBe(true);
+
+            await service.rotate("tenant", id);
+            expect(leafEku(rows.get(id)!.activeCertificate)?.usages).toEqual([
+                MDL_DOCUMENT_SIGNER_EKU,
+            ]);
+        },
+    );
+
+    it.each([
+        KeyUsageType.StatusList,
+        KeyUsageType.Access,
+        KeyUsageType.TrustList,
+    ])(
+        "leaves the signing certificate of a %s key chain without EKU on creation and rotation",
+        async (usageType) => {
+            const { service, rows } = serviceWith(new DbKmsAdapter("db"));
+            const id = await service.create("tenant", {
+                usageType,
+                type: KeyChainType.InternalChain,
+            });
+            expect(leafEku(rows.get(id)!.activeCertificate)).toBeNull();
+
+            await service.rotate("tenant", id);
+            expect(leafEku(rows.get(id)!.activeCertificate)).toBeNull();
+        },
+    );
 });

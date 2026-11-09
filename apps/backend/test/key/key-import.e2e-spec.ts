@@ -2,6 +2,7 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 import { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
+import * as x509 from "@peculiar/x509";
 import type { JWK } from "jose";
 import request from "supertest";
 import { v4 } from "uuid";
@@ -9,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { AppModule } from "../../src/app.module.js";
 import { Role } from "../../src/auth/roles/role.enum.js";
 import { EncryptionService } from "../../src/crypto/encryption/encryption.service.js";
+import { MDL_DOCUMENT_SIGNER_EKU } from "../../src/crypto/key/domain/signing-certificate-profile.js";
 import { KeyChainType } from "../../src/crypto/key/dto/key-chain-create.dto.js";
 import { KeyChainImportDto } from "../../src/crypto/key/dto/key-chain-import.dto.js";
 import { KeyUsageType } from "../../src/crypto/key/types/key-usage-type.js";
@@ -281,6 +283,13 @@ describe("Key Chain — Import (e2e)", () => {
                 rotationPolicy: { enabled: false },
             });
             expect(keyChain.body.activePublicKey.kid).not.toBe(`${keyId}-root`);
+            // An attestation leaf follows the ISO/IEC 18013-5 document
+            // signer profile.
+            const eku = new x509.X509Certificate(
+                keyChain.body.activeCertificate.pem,
+            ).getExtension(x509.ExtendedKeyUsageExtension);
+            expect(eku?.usages).toEqual([MDL_DOCUMENT_SIGNER_EKU]);
+            expect(eku?.critical).toBe(true);
         });
 
         test("rejects an unknown key chain type", async () => {

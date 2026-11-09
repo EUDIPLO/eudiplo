@@ -23,7 +23,7 @@ describe("key replacement preparation", () => {
             service.tenantRepository = {
                 findOneByOrFail: async () => ({ name: "Tenant" }),
             };
-            service.getHostname = () => "issuer.example";
+            service.getPublicUrl = () => "https://issuer.example";
             service.resolveCertificateChain = () => undefined;
             const adapter = {
                 type,
@@ -70,7 +70,7 @@ describe("system-owned key chains", () => {
         service.tenantRepository = {
             findOneByOrFail: async () => ({ name: "Tenant" }),
         };
-        service.getHostname = () => "issuer.example";
+        service.getPublicUrl = () => "https://issuer.example";
         const adapter = { type: "db", importKey: vi.fn() };
         service.kmsRegistry = { resolve: () => adapter };
 
@@ -109,7 +109,7 @@ describe("algorithms the provider does not offer", () => {
             service.tenantRepository = {
                 findOneByOrFail: async () => ({ name: "Tenant" }),
             };
-            service.getHostname = () => "issuer.example";
+            service.getPublicUrl = () => "https://issuer.example";
             const adapter = {
                 type: "http",
                 providerId: "remote",
@@ -151,7 +151,7 @@ describe("algorithms the provider offers", () => {
         service.tenantRepository = {
             findOneByOrFail: async () => ({ name: "Tenant" }),
         };
-        service.getHostname = () => "issuer.example";
+        service.getPublicUrl = () => "https://issuer.example";
         service.logger = { log: vi.fn() };
         const adapter = {
             type: "http",
@@ -181,6 +181,10 @@ describe("algorithms the provider offers", () => {
 
         expect(adapter.importKey.mock.calls[0][0].privateJwk.alg).toBe("ES384");
         expect(service.keyChainRepository.save).toHaveBeenCalled();
+        // An attestation key without certificate gets a document signer.
+        expect(
+            service.certBuilder.createSelfSignedCert.mock.calls[0][0].profile,
+        ).toBe("documentSigner");
     });
 });
 
@@ -258,7 +262,7 @@ describe("imports with rotation enabled", () => {
         service.tenantRepository = {
             findOneByOrFail: async () => ({ name: "Tenant" }),
         };
-        service.getHostname = () => "issuer.example";
+        service.getPublicUrl = () => "https://issuer.example";
         service.kmsRegistry = {
             resolve: () => ({
                 type: "db",
@@ -421,6 +425,29 @@ describe("imports with rotation enabled", () => {
                 }),
             );
         });
+
+        it.each([
+            ["attestation", "documentSigner"],
+            ["statusList", "default"],
+        ])(
+            "issues the leaf of a %s CA in the %s profile",
+            async (usageType, profile) => {
+                const service = internalChainService();
+                const { key, pem } = await keyWithCertificate({ ca: true });
+
+                await service.importKeyChain("tenant", {
+                    id: "key",
+                    key,
+                    usageType,
+                    type: "internalChain",
+                    crt: [pem],
+                });
+
+                expect(
+                    service.certBuilder.createCaSignedCert.mock.calls[0][0],
+                ).toEqual(expect.objectContaining({ profile }));
+            },
+        );
 
         it("rejects internalChain with a certificate that is not a CA", async () => {
             const service = internalChainService();

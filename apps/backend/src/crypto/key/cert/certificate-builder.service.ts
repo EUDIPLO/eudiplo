@@ -1,7 +1,13 @@
 import { Injectable } from "@nestjs/common";
+import { id_ce_issuerAltName } from "@peculiar/asn1-x509";
 import * as x509 from "@peculiar/x509";
 import type { JWK } from "jose";
 import { signingAlgForJwk, signingAlgSpec } from "../domain/signing-algs.js";
+import {
+    documentSignerSubject,
+    MDL_DOCUMENT_SIGNER_EKU,
+    type SigningCertificateProfile,
+} from "../domain/signing-certificate-profile.js";
 import type {
     KmsAdapter,
     KmsKeyRef,
@@ -36,50 +42,30 @@ export function certificateNotBefore(now: Date = new Date()): Date {
  * All keys are EC signing keys, so key usages never include
  * keyEncipherment (RFC 5480 3; ISO/IEC 18013-5 expects digitalSignature
  * alone for document signer certificates).
+ *
+ * Generated root CAs follow the ISO/IEC 18013-5 Annex B.1.2 IACA profile
+ * for every usage type, and signing certificates the B.1.4 document signer
+ * profile where {@link signingCertificateProfile} says so. Neither carries
+ * a CRLDistributionPoints extension: EUDIPLO publishes no CRL for the CAs
+ * it creates, and a distribution point that serves none would make
+ * verifiers that fetch it fail.
+ *
+ * `publicUrl` is EUDIPLO's `PUBLIC_URL`: its host becomes the dNSName of
+ * the SubjectAlternativeName, the URL itself the IssuerAlternativeName.
  */
 @Injectable()
 export class CertificateBuilderService {
+    /**
+     * A self-signed root CA in the IACA profile (ISO/IEC 18013-5 Annex
+     * B.1.2): random serial number, key usage keyCertSign and cRLSign only,
+     * CA=true with pathLenConstraint 0 (it signs the leaves directly), and
+     * an IssuerAlternativeName.
+     */
     async createSelfSignedCaCert(
         adapter: KmsAdapter,
         ref: KmsKeyRef,
         subjectCN: string,
-        hostname: string,
-        notBefore: Date,
-        notAfter: Date,
-    ): Promise<string> {
-        const publicKey = await importPublicCryptoKey(ref.publicJwk, ref.alg);
-        const signingKey = makeKmsSigningKey(adapter, ref, ref.alg);
-
-        const cert = await x509.X509CertificateGenerator.create({
-            serialNumber: "01",
-            subject: `C=DE, CN=${subjectCN}`,
-            issuer: `C=DE, CN=${subjectCN}`,
-            notBefore,
-            notAfter,
-            signingAlgorithm: signatureAlgFor(ref.alg),
-            publicKey,
-            signingKey,
-            extensions: [
-                new x509.SubjectAlternativeNameExtension([
-                    { type: "dns", value: hostname },
-                ]),
-                new x509.BasicConstraintsExtension(true, undefined, true),
-                new x509.KeyUsagesExtension(
-                    x509.KeyUsageFlags.digitalSignature |
-                        x509.KeyUsageFlags.keyCertSign,
-                    true,
-                ),
-                await x509.SubjectKeyIdentifierExtension.create(publicKey),
-            ],
-        });
-        return cert.toString("pem");
-    }
-
-    async createSelfSignedCert(
-        adapter: KmsAdapter,
-        ref: KmsKeyRef,
-        subjectCN: string,
-        hostname: string,
+        publicUrl: string,
         notBefore: Date,
         notAfter: Date,
     ): Promise<string> {
@@ -96,15 +82,53 @@ export class CertificateBuilderService {
             publicKey,
             signingKey,
             extensions: [
-                new x509.SubjectAlternativeNameExtension([
-                    { type: "dns", value: hostname },
-                ]),
+                subjectAltName(publicUrl),
+                issuerAltName(publicUrl),
+                new x509.BasicConstraintsExtension(true, 0, true),
+                new x509.KeyUsagesExtension(
+                    x509.KeyUsageFlags.keyCertSign | x509.KeyUsageFlags.cRLSign,
+                    true,
+                ),
+                await x509.SubjectKeyIdentifierExtension.create(publicKey),
+            ],
+        });
+        return cert.toString("pem");
+    }
+
+    async createSelfSignedCert(opts: {
+        adapter: KmsAdapter;
+        ref: KmsKeyRef;
+        subjectCN: string;
+        publicUrl: string;
+        notBefore: Date;
+        notAfter: Date;
+        profile: SigningCertificateProfile;
+    }): Promise<string> {
+        const { adapter, ref, subjectCN, publicUrl, notBefore, notAfter } =
+            opts;
+        const publicKey = await importPublicCryptoKey(ref.publicJwk, ref.alg);
+        const signingKey = makeKmsSigningKey(adapter, ref, ref.alg);
+
+        const cert = await x509.X509CertificateGenerator.create({
+            serialNumber: this.generateSerialNumber(),
+            subject: `C=DE, CN=${subjectCN}`,
+            issuer: `C=DE, CN=${subjectCN}`,
+            notBefore,
+            notAfter,
+            signingAlgorithm: signatureAlgFor(ref.alg),
+            publicKey,
+            signingKey,
+            extensions: [
+                subjectAltName(publicUrl),
                 new x509.BasicConstraintsExtension(false, undefined, true),
                 new x509.KeyUsagesExtension(
                     x509.KeyUsageFlags.digitalSignature,
                     true,
                 ),
                 await x509.SubjectKeyIdentifierExtension.create(publicKey),
+                ...(opts.profile === "documentSigner"
+                    ? documentSignerExtensions(issuerAltName(publicUrl))
+                    : []),
             ],
         });
         return cert.toString("pem");
@@ -116,9 +140,10 @@ export class CertificateBuilderService {
         caCertPem: string;
         subjectPublicJwk: JWK;
         subjectCN: string;
-        hostname: string;
+        publicUrl: string;
         notBefore: Date;
         notAfter: Date;
+        profile: SigningCertificateProfile;
         /** Defaults to the algorithm of the subject key's curve. */
         subjectAlg?: KmsSigningAlg;
     }): Promise<{ cert: string; chain: string[] }> {
@@ -128,9 +153,10 @@ export class CertificateBuilderService {
             caCertPem,
             subjectPublicJwk,
             subjectCN,
-            hostname,
+            publicUrl,
             notBefore,
             notAfter,
+            profile,
             subjectAlg = signingAlgForJwk(opts.subjectPublicJwk),
         } = opts;
         const caCert = new x509.X509Certificate(caCertPem);
@@ -162,7 +188,10 @@ export class CertificateBuilderService {
 
         const cert = await x509.X509CertificateGenerator.create({
             serialNumber: this.generateSerialNumber(),
-            subject: `C=DE, CN=${subjectCN}`,
+            subject:
+                profile === "documentSigner"
+                    ? documentSignerSubject(caCert.subjectName, subjectCN)
+                    : `C=DE, CN=${subjectCN}`,
             issuer: issuerName,
             notBefore,
             notAfter,
@@ -170,9 +199,7 @@ export class CertificateBuilderService {
             publicKey: subjectPublicKey,
             signingKey,
             extensions: [
-                new x509.SubjectAlternativeNameExtension([
-                    { type: "dns", value: hostname },
-                ]),
+                subjectAltName(publicUrl),
                 new x509.BasicConstraintsExtension(false, undefined, true),
                 new x509.KeyUsagesExtension(
                     x509.KeyUsageFlags.digitalSignature,
@@ -182,6 +209,11 @@ export class CertificateBuilderService {
                     subjectPublicKey,
                 ),
                 authorityKeyIdentifier,
+                ...(profile === "documentSigner"
+                    ? documentSignerExtensions(
+                          caIssuerAltName(caCert) ?? issuerAltName(publicUrl),
+                      )
+                    : []),
             ],
         });
 
@@ -211,4 +243,60 @@ export class CertificateBuilderService {
 /** X.509 signature algorithm (ecdsa-with-SHAxxx) for a signing key's algorithm. */
 function signatureAlgFor(alg: KmsSigningAlg): EcdsaParams {
     return { name: "ECDSA", hash: signingAlgSpec(alg).hash };
+}
+
+/** dNSName of the host of `PUBLIC_URL`. */
+function subjectAltName(publicUrl: string): x509.Extension {
+    return new x509.SubjectAlternativeNameExtension([
+        { type: "dns", value: new URL(publicUrl).hostname },
+    ]);
+}
+
+/**
+ * IssuerAlternativeName with `PUBLIC_URL` as uniformResourceIdentifier.
+ * ISO/IEC 18013-5 Annex B requires it, non-critical, with an e-mail
+ * address or a URL of the issuing authority, in the IACA and the document
+ * signer certificate.
+ */
+function issuerAltName(publicUrl: string): x509.Extension {
+    // Written as configured; subjectAltName has already parsed it.
+    return new x509.IssuerAlternativeNameExtension(
+        [{ type: "url", value: publicUrl }],
+        false,
+    );
+}
+
+/**
+ * The CA certificate's IssuerAlternativeName, byte for byte and
+ * non-critical, so a document signer under an imported IACA names the same
+ * issuing authority. Undefined when the CA has none, or when its value is
+ * not a GeneralNames structure, as in some reference IACAs that wrap a
+ * nested Extension: the document signer then names `PUBLIC_URL` rather
+ * than pass on an extension strict verifiers cannot parse.
+ */
+function caIssuerAltName(
+    caCert: x509.X509Certificate,
+): x509.Extension | undefined {
+    const ian = caCert.extensions.find((e) => e.type === id_ce_issuerAltName);
+    if (!ian) return undefined;
+    try {
+        new x509.GeneralNames(ian.value);
+    } catch {
+        return undefined;
+    }
+    return new x509.Extension(id_ce_issuerAltName, false, ian.value);
+}
+
+/**
+ * Extensions the document signer profile adds (ISO/IEC 18013-5 Annex
+ * B.1.4): the critical mDL document signer extended key usage and the
+ * IssuerAlternativeName.
+ */
+function documentSignerExtensions(
+    issuerAltNameExtension: x509.Extension,
+): x509.Extension[] {
+    return [
+        new x509.ExtendedKeyUsageExtension([MDL_DOCUMENT_SIGNER_EKU], true),
+        issuerAltNameExtension,
+    ];
 }
