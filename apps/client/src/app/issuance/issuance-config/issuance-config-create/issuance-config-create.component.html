@@ -911,7 +911,7 @@
                       </mat-slide-toggle>
 
                       <mat-form-field subscriptSizing="dynamic">
-                        <mat-label>Wallet Attestation Status Check</mat-label>
+                        <mat-label>Attestation Status Check</mat-label>
                         <mat-select formControlName="walletAttestationStatusCheckMode">
                           <mat-option [value]="null">Default (best effort)</mat-option>
                           <mat-option value="strict">Strict</mat-option>
@@ -919,12 +919,14 @@
                           <mat-option value="disabled">Disabled</mat-option>
                         </mat-select>
                         <mat-hint
-                          >How the status list of a presented wallet attestation is checked. Strict
-                          rejects the attestation when the list cannot be fetched or read. Best
-                          effort accepts it when the list cannot be fetched, but not when the list
-                          is unreadable. Disabled skips the check, so revoked attestations are
-                          accepted. Default follows EUDIPLO's default, which is best
-                          effort.</mat-hint
+                          >How the status list of a presented attestation is checked: of key
+                          attestations at the credential endpoint, and of wallet attestations at
+                          authorization servers that do not override it. Strict rejects the
+                          attestation when the list cannot be fetched or read. Best effort accepts
+                          it when the list cannot be fetched, but not when the list is unreadable.
+                          Disabled skips the check, so revoked attestations are accepted. Default
+                          follows EUDIPLO's default, which is best effort. Revoke with Wallet Unit
+                          checks wallet units in the background regardless of this mode.</mat-hint
                         >
                       </mat-form-field>
 

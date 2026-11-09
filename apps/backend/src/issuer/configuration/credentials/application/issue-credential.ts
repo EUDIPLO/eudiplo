@@ -1,5 +1,6 @@
 import type { Jwk } from "@openid4vc/oauth2";
 import type { SessionData } from "../../../../session/domain/session-data.js";
+import type { WalletUnitReference } from "../../../status-list/domain/wallet-unit-reference.js";
 import { assertClaimsMatchConfiguration } from "../domain/credential-claims-validation.js";
 import type { CredentialConfigurationRepository } from "../ports/credential-configuration.repository.js";
 import type { IssuerFederationContext } from "../ports/credential-generation-context.js";
@@ -28,6 +29,7 @@ export class IssueCredential {
         session: SessionData;
         preloadedClaims?: Record<string, unknown>;
         issuanceSetId?: string;
+        walletUnit?: WalletUnitReference;
     }): Promise<string> {
         const { credentialConfigurationId, session } = command;
         const configuration = await this.configurations.getForTenant(
@@ -54,6 +56,7 @@ export class IssueCredential {
             federationTrustChain: () =>
                 this.federation.trustChainForTenant(session.tenantId),
             issuanceSetId: command.issuanceSetId,
+            walletUnit: command.walletUnit,
         });
     }
 }

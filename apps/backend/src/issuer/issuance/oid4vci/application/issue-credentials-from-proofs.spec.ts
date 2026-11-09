@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { RevocationCheckMode } from "../../../../trust/types.js";
 import { InvalidCredentialProof } from "../domain/credential-proof-errors.js";
 import type { CredentialProofVerifier } from "../ports/credential-proof-verifier.js";
 import { IssueCredentialsFromProofs } from "./issue-credentials-from-proofs.js";
@@ -27,6 +28,7 @@ describe("IssueCredentialsFromProofs", () => {
                 claims: { name: "Ada" },
                 issuanceSetId: "set-1",
                 trustLists: [],
+                keyAttestationStatusCheckMode: RevocationCheckMode.BestEffort,
                 onIssued,
             }),
         ).resolves.toEqual([
@@ -98,6 +100,7 @@ describe("IssueCredentialsFromProofs", () => {
                 credentialConfigurationId: "config-1",
                 issuanceSetId: "set-1",
                 trustLists: [],
+                keyAttestationStatusCheckMode: RevocationCheckMode.BestEffort,
                 onIssued,
             }),
         ).rejects.toThrow("issuer failed");
@@ -199,5 +202,46 @@ describe("IssueCredentialsFromProofs", () => {
                 expect.objectContaining({ holderKeys: [holderKey] }),
             );
         });
+    });
+
+    it("checks key attestations in the given mode and issues each proof's keys with its wallet unit", async () => {
+        const walletUnit = {
+            statusUri: "https://wp.example/wua-status",
+            statusIdx: 7,
+            certificates: ["leaf"],
+        };
+        const verify = vi
+            .fn()
+            .mockResolvedValueOnce({
+                holderKeys: [{ kid: "one" }],
+                keyAttestation: { attestedKeys: [{ kid: "one" }], walletUnit },
+            })
+            .mockResolvedValueOnce({ holderKeys: [{ kid: "two" }] });
+        const prepare = vi.fn().mockResolvedValue({ verify });
+        const issue = vi.fn().mockResolvedValue(["credential"]);
+        const useCase = new IssueCredentialsFromProofs(
+            { prepare } as unknown as CredentialProofVerifier,
+            { execute: issue } as any,
+        );
+
+        await useCase.execute({
+            proofs: ["proof-1", "proof-2"],
+            proofType: "jwt",
+            session,
+            credentialConfigurationId: "config-1",
+            issuanceSetId: "set-1",
+            trustLists: [{ id: "providers" } as any],
+            keyAttestationStatusCheckMode: RevocationCheckMode.Strict,
+            onIssued: vi.fn(),
+        });
+
+        expect(prepare).toHaveBeenCalledWith(
+            "tenant-1",
+            [{ id: "providers" }],
+            RevocationCheckMode.Strict,
+        );
+        expect(issue.mock.calls.map(([command]) => command.walletUnit)).toEqual(
+            [walletUnit, undefined],
+        );
     });
 });

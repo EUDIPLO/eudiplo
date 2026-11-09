@@ -123,3 +123,51 @@ describe("CredentialConfigService active credential policy", () => {
         },
     );
 });
+
+describe("CredentialConfigService revokeWithWalletUnit", () => {
+    const withKeyAttestations = {
+        ...credentialConfig.config,
+        keyAttestationsRequired: {},
+    } as CredentialConfigCreate["config"];
+
+    test("rejects creating it without status management and key attestations", async () => {
+        const { service, repository } = setup();
+        const error = await rejection(
+            service.store("tenant", {
+                ...credentialConfig,
+                revokeWithWalletUnit: true,
+            }),
+        );
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect((error as Error).message).toBe(
+            "statusManagement must be enabled when revokeWithWalletUnit is enabled. config.keyAttestationsRequired must be set when revokeWithWalletUnit is enabled.",
+        );
+        expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    test("rejects removing the key attestation requirement while it is enabled", async () => {
+        const { service, repository } = setup({
+            config: withKeyAttestations,
+            statusManagement: true,
+            revokeWithWalletUnit: true,
+        });
+        const error = await rejection(
+            service.update("tenant", "pid", {
+                config: credentialConfig.config,
+            }),
+        );
+        expect((error as Error).message).toBe(
+            "config.keyAttestationsRequired must be set when revokeWithWalletUnit is enabled.",
+        );
+        expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    test("enables it on a configuration with status management and key attestations", async () => {
+        const { service, repository } = setup({
+            config: withKeyAttestations,
+            statusManagement: true,
+        });
+        await service.update("tenant", "pid", { revokeWithWalletUnit: true });
+        expect(repository.save).toHaveBeenCalledOnce();
+    });
+});

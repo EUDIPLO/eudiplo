@@ -7,6 +7,7 @@ import { CryptoModule } from "../../crypto/crypto.module.js";
 import { provideKeyChainReferenceSource } from "../../crypto/key/key-chain-reference-source.provider.js";
 import { TypeOrmStatusListKeyChainReferences } from "./adapters/typeorm-status-list-key-chain-references.js";
 import { ActiveCredentialSlot } from "./entities/active-credential-slot.entity.js";
+import { CredentialWalletUnit } from "./entities/credential-wallet-unit.entity.js";
 import { StatusListEntity } from "./entities/status-list.entity.js";
 import { StatusMapping } from "./entities/status-mapping.entity.js";
 import { StatusListController } from "./status-list.controller.js";
@@ -26,6 +27,7 @@ import { SubjectKeyService } from "./subject-key.service.js";
             StatusListEntity,
             TenantEntity,
             ActiveCredentialSlot,
+            CredentialWalletUnit,
         ]),
     ],
     controllers: [

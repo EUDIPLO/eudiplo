@@ -52,7 +52,7 @@ curl -X POST "$EUDIPLO_URL/api/issuer/config" \
 | `txCodeMaxAttempts` | `5` | Failed transaction code attempts before a pre-authorized code is invalidated. `null` restores the default. See [Transaction code](credential-offers.md#transaction-code). |
 | `offerLifetimeSeconds` | unset | Default lifetime of credential offers (9.0). Unset or `null`: offers do not expire. Offers can override it. See [Lifetime and expiry](credential-offers.md#lifetime-and-expiry). |
 | `walletAttestationRequired`, `walletProviderTrustLists` | `false`, none | Defaults for wallet attestation at EUDIPLO's authorization servers; the trust lists also validate key attestations at the credential endpoint. See [Wallet and key attestation](../trust/attestation.md). |
-| `walletAttestationStatusCheckMode` | unset (`best_effort`) | Default for how the status list of a wallet attestation is checked: `strict`, `best_effort` or `disabled`. `null` restores the default. See [Wallet and key attestation](../trust/attestation.md#2-require-wallet-attestation). |
+| `walletAttestationStatusCheckMode` | unset (`best_effort`) | How the status list of a key attestation is checked at the credential endpoint, and default for wallet attestations at the authorization servers: `strict`, `best_effort` or `disabled`. `null` restores the default. See [Wallet and key attestation](../trust/attestation.md#2-require-wallet-attestation) and [key attestation](../trust/attestation.md#3-require-key-attestation). |
 | `federation` | none | See [OpenID Federation](../trust/federation.md). |
 | `registrationCertificate` | none | Publish a registration certificate in `issuer_info`. See [Registration certificates](../trust/registration-certificates.md). |
 

@@ -20,6 +20,7 @@ import { KeyUsageType } from "../../../../../crypto/key/types/key-usage-type.js"
 import type { SessionData as Session } from "../../../../../session/domain/session-data.js";
 import { coseReadyJwk } from "../../../../../shared/utils/cose-key-jwk.util.js";
 import { mdocContext } from "../../../../../verifier/presentations/mdoc-context.js";
+import type { WalletUnitReference } from "../../../../status-list/domain/wallet-unit-reference.js";
 import { StatusListService } from "../../../../status-list/status-list.service.js";
 import type { CredentialConfiguration } from "../../domain/credential-configuration.js";
 import { buildClaimsByNamespace } from "../../utils/index.js";
@@ -34,6 +35,8 @@ export interface MdocIssueOptions {
     session: Session;
     claims: Record<string, any>;
     issuanceSetId?: string;
+    /** Wallet unit attestation that attested the holder key, if any. */
+    walletUnit?: WalletUnitReference;
 }
 
 /**
@@ -61,6 +64,7 @@ export class MdocIssuerService {
             session,
             claims,
             issuanceSetId,
+            walletUnit,
         } = options;
 
         // Get the docType from the credential configuration
@@ -165,6 +169,8 @@ export class MdocIssuerService {
                 credentialConfiguration.id,
                 credentialConfiguration,
                 issuanceSetId,
+                walletUnit,
+                validUntil,
             );
             const statusList = statusPayload.status?.status_list;
             if (statusList) {

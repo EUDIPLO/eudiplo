@@ -15,6 +15,11 @@ const transaction: DeferredTransactionData = {
     sessionId: "session-1",
     credentialConfigurationId: "credential-1",
     holderCnf: { kty: "EC", crv: "P-256" },
+    walletUnit: {
+        statusUri: "https://wp.example/wua-status",
+        statusIdx: 7,
+        certificates: ["leaf"],
+    },
     status: DeferredTransactionStatus.Pending,
     interval: 5,
     expiresAt: new Date("2026-09-28T00:00:00.000Z"),
@@ -60,6 +65,7 @@ describe("deferred credential lifecycle", () => {
             session,
             { given_name: "Ada" },
             undefined,
+            transaction.walletUnit,
         );
         expect(markReady).toHaveBeenCalledWith(
             "tenant-1",

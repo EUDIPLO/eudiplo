@@ -56,6 +56,7 @@ import {
     ResolveCredentialProofs,
 } from "./application/resolve-credential-proofs.js";
 import { ResolveCredentialSession } from "./application/resolve-credential-session.js";
+import { resolveWalletAttestationPolicy } from "./authorization/domain/wallet-attestation-policy.js";
 import {
     type CredentialAccessTokenPayload,
     CredentialAccessTokenVerifier,
@@ -565,6 +566,8 @@ export class Oid4vciService {
             );
 
             // Issue credentials for each proof
+            const walletAttestationPolicy =
+                resolveWalletAttestationPolicy(issuanceConfig);
             const credentials = await this.issueCredentialsFromProofs.execute({
                 proofs: parsedProofs.values,
                 proofType: parsedProofs.proofType,
@@ -573,7 +576,9 @@ export class Oid4vciService {
                 claims: claimsResult?.claims,
                 issuanceSetId,
                 batchSize: issuanceConfig.batchSize,
-                trustLists: issuanceConfig.walletProviderTrustLists ?? [],
+                trustLists: walletAttestationPolicy.walletProviderTrustLists,
+                keyAttestationStatusCheckMode:
+                    walletAttestationPolicy.walletAttestationStatusCheckMode,
                 keyAttestationsRequired,
                 onIssued: (credentialSize) =>
                     this.auditLogger.logCredentialIssuance(

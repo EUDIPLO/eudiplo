@@ -417,7 +417,7 @@ export class IssuanceConfigCreateComponent implements OnInit {
   }
 
   get trustSummary(): string {
-    return `Wallet attestation default: ${this.form.get('walletAttestationRequired')?.value ? 'Required' : 'Optional'} · Wallet attestation status check: ${this.issuerStatusCheckModeLabel}${this.form.get('walletAttestationStatusCheckMode')?.value === 'disabled' ? ' (revoked attestations accepted)' : ''} · Wallet provider trust lists: ${this.walletProviderTrustLists.length} · Federation: ${this.federationEnabled ? 'On' : 'Off'} · Registration certificate: ${this.registrationCertificateEnabled ? this.registrationCertificateMode : 'Off'} · PIN attempt limit: ${this.form.get('txCodeMaxAttempts')?.value ?? 5}`;
+    return `Wallet attestation default: ${this.form.get('walletAttestationRequired')?.value ? 'Required' : 'Optional'} · Attestation status check: ${this.issuerStatusCheckModeLabel}${this.form.get('walletAttestationStatusCheckMode')?.value === 'disabled' ? ' (revoked attestations accepted)' : ''} · Wallet provider trust lists: ${this.walletProviderTrustLists.length} · Federation: ${this.federationEnabled ? 'On' : 'Off'} · Registration certificate: ${this.registrationCertificateEnabled ? this.registrationCertificateMode : 'Off'} · PIN attempt limit: ${this.form.get('txCodeMaxAttempts')?.value ?? 5}`;
   }
 
   public form: FormGroup;

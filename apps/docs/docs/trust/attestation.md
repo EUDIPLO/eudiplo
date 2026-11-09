@@ -89,6 +89,33 @@ Wallets send key attestations in two ways:
 
 Every presented key attestation must be signed by a wallet provider in the issuance-level `walletProviderTrustLists`, whether it is required or not; lists on an authorization server are not used for keys.
 
+If a key attestation has a `status` claim, its status list entry is checked like that of a [wallet attestation](#2-require-wallet-attestation), in the issuance configuration's `walletAttestationStatusCheckMode` (default `best_effort`): the same signer rules, the same checks of the list and the same table of modes. A rejected key attestation answers `invalid_proof` with a message that starts with `Key attestation` instead of `Wallet attestation`. In the EUDI Wallet, the key attestation is the wallet unit attestation (WUA), and its status list says whether the wallet provider revoked the wallet unit.
+
+### Revoke credentials with their wallet unit
+
+A wallet provider revokes a wallet unit attestation when the wallet unit can no longer be trusted, for example after its device was compromised. Credentials issued to that wallet unit should be revoked as well. Set `revokeWithWalletUnit: true` on the credential configuration:
+
+```json
+{
+    "statusManagement": true,
+    "revokeWithWalletUnit": true,
+    "config": {
+        "keyAttestationsRequired": {}
+    }
+}
+```
+
+In the Web Client, turn on **Revoke with Wallet Unit** under **Credential Features** in the credential configuration's settings. While it is on, **Status Management** and **Require Key Attestation** stay on and cannot be turned off.
+
+- Requires `statusManagement: true` and `config.keyAttestationsRequired`; the API and the configuration import reject it otherwise.
+- At issuance, EUDIPLO stores the status list reference (`status.status_list`) and the `x5c` of the key attestation with the status entry of every credential issued for the keys it attests. A key attestation without `status_list` is not followed.
+- Every `WALLET_UNIT_STATUS_CHECK_INTERVAL` seconds (default 3600, `0` turns the check off), and once after startup, EUDIPLO reads the status of every followed wallet unit. The provider must still be in the issuance configuration's `walletProviderTrustLists`, and its status list must pass the checks above. A fetched list is reused for its `ttl` (5 minutes without one), at most one hour and not past its `exp`.
+- When the status is revoked (`1`), EUDIPLO revokes the credentials issued under that wallet unit attestation and sends the [wallet unit revocation webhook](../reference/webhooks.md#wallet-unit-revocation-webhook). Within a run, a status list is verified once per attestation certificate chain and batch of up to 500 credentials. Revocation is final. Other values, such as suspended (`2`), are logged and change nothing.
+- When the status cannot be read (the list cannot be fetched or verified, or the provider is no longer in the trust lists), nothing is revoked: the reason is logged as a warning and the next run tries again.
+- A credential is no longer checked once it is revoked, has expired (its `lifeTime`, one year for mDOC credentials without one; an mDOC also expires with its signing certificate), or its configuration no longer has `revokeWithWalletUnit`. The setting applies to credentials issued while it is enabled.
+- The check does not use `walletAttestationStatusCheckMode`: with `disabled`, issuance accepts revoked key attestations, but their status list reference is still recorded and the check still revokes the credentials once the wallet unit is revoked. Set `revokeWithWalletUnit: false` to stop following it.
+- Several instances sharing one database each run the check; a revocation is applied once, but its webhook may be sent by more than one instance.
+
 ## Troubleshooting
 
 | Symptom                                                        | Cause and fix                                                                                                         |
@@ -103,6 +130,7 @@ Every presented key attestation must be signed by a wallet provider in the issua
 | `Wallet attestation status check failed` | The attestation's `status` claim is malformed, or the status list could not be fetched (`strict` only), is not a status list JWT, or its signature could not be checked. The server log names the reason, and the list if the claim names one. A malformed claim is a problem of the wallet provider's attestation format. Otherwise, check that the wallet provider serves the list at the `status.status_list.uri` of the attestation. To accept attestations while the list is unreachable, set `walletAttestationStatusCheckMode: "best_effort"`. |
 | `Wallet attestation is not valid: ...` | The wallet provider has revoked or suspended this wallet instance. |
 | `Status list JWT signature verification failed ...` or `Wallet attestation status list rejected: ...` | The attestation's status list has no `x5c` header or is signed under another certificate than the provider's revocation or attestation certificate, or it is not the list the attestation names (`sub`), has expired, is not typed `statuslist+jwt` or does not contain the index. Add the provider's status list signing certificate to the trust list as a `WalletSolution/Revocation` service, or ask the provider to fix the list. |
+| `Key attestation is not valid: ...`, `Key attestation status list rejected: ...` or `Key attestation status check failed` | Answer of the credential endpoint (`invalid_proof`) for the key attestation's status list, with the causes of the rows above for wallet attestations. A status list signed by the wrong certificate answers `Status list JWT signature verification failed ...` here too. |
 | `Client attestation validation failed` | `error_description` of the `invalid_client` answer for every rejected wallet attestation at the PAR endpoint of each EUDIPLO-managed authorization server (HTTP 400) and at the token endpoint of chained and OID4VP authorization servers (HTTP 401). The built-in token endpoint answers `invalid_client` with HTTP 401 and, as `error_description`, the reason when it is about the attestation or its provider, such as one of the messages above, and a fixed text when the server failed: `Wallet attestation status check failed` (above) or one of the next two rows. At each of these endpoints, the server log line `Client attestation validation failed for ...: ...` has the reason. |
 | `Wallet provider trust lists could not be loaded` or `Attestation proof x5c chain could not be validated` | A wallet-provider list cannot be fetched or read, or its signature does not match `verifierX509Der`, `verifierKey` or `verifierKeyPem`. The credential endpoint also answers its message when the key attestation's header cannot be read or its `x5c` holds a certificate that cannot be parsed. The answer names no list: it reaches the wallet, and the URL of a managed list can name an internal address (`INTERNAL_URL`). For wallet attestations, the log line `Client attestation validation failed for ...: Wallet provider trust lists could not be loaded: ...` names the list and the reason; for key attestations at the credential endpoint, the log line `Key attestation validation failed for tenant ...: Attestation proof x5c chain could not be validated: ...` does. The credential endpoint also answers this text for a wallet-provider reference that defines no `verifierX509Der`, `verifierKey` or `verifierKeyPem` with content, for example one that is only whitespace. |
 | `Wallet attestation verification failed` | Answer of the built-in token endpoint for any other server-side failure, for example a `verifierX509Der` that is only whitespace. The log line `Client attestation validation failed for ...: Wallet attestation verification failed: ...` has the reason. With `: ...` after it in the answer, the text gives the reason: about the attestation the wallet sent, for example its signature, audience or expiry, or, with `No configured trust list is current`, every wallet-provider list is outdated (next row). |

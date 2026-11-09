@@ -5,13 +5,19 @@ import {
     discardedTrustListsNote,
     walletSafeTrustFailure,
 } from "../../../trust/domain/trust-list-freshness.js";
-import { TrustStoreService } from "../../../trust/trust-store.service.js";
+import type {
+    BuiltTrustStore,
+    TrustStoreService,
+} from "../../../trust/trust-store.service.js";
 import {
     normalizeTrustListRefs,
     TrustListSource,
     walletSolutionServiceTypes,
 } from "../../../trust/types.js";
-import { X509ValidationService } from "../../../trust/x509-validation.service.js";
+import type {
+    MatchedTrustedEntity,
+    X509ValidationService,
+} from "../../../trust/x509-validation.service.js";
 import { TrustListRef } from "../../../verifier/presentations/entities/presentation-config.entity.js";
 import { CredentialRequestException } from "./exceptions/index.js";
 
@@ -21,6 +27,14 @@ export interface AttestationProofTrustValidationDeps {
     x509ValidationService: X509ValidationService;
     /** Where a rejected key attestation's reason is logged. */
     logger?: Pick<Logger, "warn">;
+}
+
+/** The trusted provider of a key attestation, for its status check. */
+export interface AttestationProofTrust {
+    matchedEntity: MatchedTrustedEntity;
+    trustStore: BuiltTrustStore;
+    /** The attestation's `x5c`, leaf first. */
+    certificates: string[];
 }
 
 const defaultLogger = new Logger("AttestationProofTrust");
@@ -42,7 +56,7 @@ export async function validateAttestationProofTrust(
     keyAttestationJwt: string,
     trustListRefsInput: TrustListRef[],
     deps: AttestationProofTrustValidationDeps,
-): Promise<void> {
+): Promise<AttestationProofTrust> {
     // Outdated lists left out of the store, named by count in the answer so a
     // missing provider is not mistaken for one that is not listed at all.
     let discarded: DiscardedTrustList[] = [];
@@ -91,6 +105,7 @@ export async function validateAttestationProofTrust(
                 `Attestation proof signer is not trusted by configured wallet provider trust lists${discardedTrustListsNote(discarded)}`,
             );
         }
+        return { matchedEntity: matched, trustStore, certificates: [...x5c] };
     } catch (error) {
         if (error instanceof CredentialRequestException) {
             throw error;
@@ -114,19 +129,28 @@ export async function validateAttestationProofTrust(
 /**
  * Validate the provider of a key attestation embedded in a holder's JWT proof.
  * Signature verification and holder-key binding are handled by the OID4VCI library.
+ * @returns The key attestation and its trusted provider, or undefined when
+ * the proof has no key attestation
  */
 export async function validateJwtProofAttestationTrust(
     proofJwt: string,
     trustListRefs: TrustListRef[],
     deps: AttestationProofTrustValidationDeps,
-): Promise<void> {
+): Promise<
+    (AttestationProofTrust & { keyAttestationJwt: string }) | undefined
+> {
     const keyAttestation = decodeProtectedHeader(proofJwt).key_attestation;
-    if (keyAttestation === undefined) return;
+    if (keyAttestation === undefined) return undefined;
     if (typeof keyAttestation !== "string" || !keyAttestation) {
         throw new CredentialRequestException(
             "invalid_proof",
             "JWT proof key_attestation must be a compact JWT",
         );
     }
-    await validateAttestationProofTrust(keyAttestation, trustListRefs, deps);
+    const trust = await validateAttestationProofTrust(
+        keyAttestation,
+        trustListRefs,
+        deps,
+    );
+    return { ...trust, keyAttestationJwt: keyAttestation };
 }

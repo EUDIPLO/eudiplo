@@ -1,6 +1,10 @@
 import type { Jwk } from "@openid4vc/oauth2";
 import type { SessionData } from "../../../../session/domain/session-data.js";
-import type { TrustListRef } from "../../../../trust/types.js";
+import type {
+    RevocationCheckMode,
+    TrustListRef,
+} from "../../../../trust/types.js";
+import type { WalletUnitReference } from "../../../status-list/domain/wallet-unit-reference.js";
 import { InvalidCredentialProof } from "../domain/credential-proof-errors.js";
 import {
     assertKeyAttestationRequirements,
@@ -26,6 +30,8 @@ export class IssueCredentialsFromProofs {
         issuanceSetId: string;
         batchSize?: number;
         trustLists: TrustListRef[];
+        /** How the status list of a key attestation is checked. */
+        keyAttestationStatusCheckMode: RevocationCheckMode;
         /** Key attestation requirements of the credential configuration. */
         keyAttestationsRequired?: KeyAttestationRequirements;
         onIssued: (credentialSize: number) => void;
@@ -33,10 +39,14 @@ export class IssueCredentialsFromProofs {
         const verifier = await this.verifier.prepare(
             command.session.tenantId,
             command.trustLists,
+            command.keyAttestationStatusCheckMode,
         );
         // Verify every proof before issuing, so an invalid proof in a batch
         // does not leave credentials issued for the proofs before it.
-        const holderKeysPerProof: Jwk[][] = [];
+        const verifiedProofs: {
+            holderKeys: Jwk[];
+            walletUnit?: WalletUnitReference;
+        }[] = [];
         for (const proof of command.proofs) {
             const verified = await verifier.verify(proof, command.proofType);
             const holderKeys = verified.holderKeys;
@@ -54,16 +64,20 @@ export class IssueCredentialsFromProofs {
                 command.keyAttestationsRequired,
                 verified,
             );
-            holderKeysPerProof.push(holderKeys);
+            verifiedProofs.push({
+                holderKeys,
+                walletUnit: verified.keyAttestation?.walletUnit,
+            });
         }
         const result: { credential: string }[] = [];
-        for (const holderKeys of holderKeysPerProof) {
+        for (const { holderKeys, walletUnit } of verifiedProofs) {
             const credentials = await this.issue.execute({
                 credentialConfigurationId: command.credentialConfigurationId,
                 holderKeys,
                 session: command.session,
                 claims: command.claims,
                 issuanceSetId: command.issuanceSetId,
+                walletUnit,
             });
             for (const credential of credentials) {
                 result.push({ credential });

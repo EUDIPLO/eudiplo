@@ -29,6 +29,7 @@ describe("IssueCredentialsForKeys", () => {
                 session,
                 { given_name: "Ada" },
                 "set-1",
+                undefined,
             ],
             [
                 "credential-config",
@@ -36,6 +37,7 @@ describe("IssueCredentialsForKeys", () => {
                 session,
                 { given_name: "Ada" },
                 "set-1",
+                undefined,
             ],
         ]);
     });

@@ -313,7 +313,7 @@ export class WebhookService {
     ) {
         return this.postSessionEvent(
             webhook,
-            session,
+            session.id,
             { notification, session: session.id, ...referenceOf(session) },
             "webhook notification",
         );
@@ -333,7 +333,7 @@ export class WebhookService {
     ) {
         return this.postSessionEvent(
             webhook,
-            session,
+            session.id,
             {
                 status: SessionStatus.Cancelled,
                 session: session.id,
@@ -345,19 +345,45 @@ export class WebhookService {
     }
 
     /**
+     * Tells a webhook that credentials were revoked because the wallet unit
+     * they were bound to was revoked, with `status: "revoked"`. The issuance
+     * session may already be deleted, so the payload is built by the caller.
+     * @param webhook The webhook configuration
+     * @param payload The event: `session`, `credentialConfigurationId`,
+     * `statusEntries` and, while the session exists, `reference`
+     * @throws Error when the URL is blocked or the delivery failed
+     */
+    sendCredentialsRevokedWebhook(
+        webhook: WebhookConfig,
+        payload: {
+            session: string;
+            reference?: string;
+            credentialConfigurationId: string;
+            statusEntries: { uri: string; idx: number }[];
+        },
+    ): Promise<void> {
+        return this.postSessionEvent(
+            webhook,
+            payload.session,
+            { status: "revoked", reason: "wallet_unit_revoked", ...payload },
+            "credentials revoked webhook",
+        );
+    }
+
+    /**
      * Posts a session event whose response body is ignored.
      * @throws Error when the URL is blocked or the delivery failed
      */
     private async postSessionEvent(
         webhook: WebhookConfig,
-        session: Session,
+        sessionId: string,
         payload: Record<string, unknown>,
         description: string,
     ): Promise<void> {
         await this.outboundUrlPolicyService.assertSafeUrl(webhook.url);
 
         this.logger.debug(
-            { webhookUrl: webhook.url, sessionId: session.id },
+            { webhookUrl: webhook.url, sessionId },
             `Sending ${description}`,
         );
 

@@ -27,6 +27,10 @@ import {
     activeCredentialsLackStatusManagement,
 } from "../domain/active-credential-policy.js";
 import type { CredentialConfiguration as CredentialConfig } from "../domain/credential-configuration.js";
+import {
+    type WalletUnitRevocationSettings,
+    walletUnitRevocationProblems,
+} from "../domain/wallet-unit-revocation-policy.js";
 import { CredentialConfigCreate } from "../dto/credential-config-create.dto.js";
 import { CredentialConfigUpdate } from "../dto/credential-config-update.dto.js";
 import { IaeActionType } from "../entities/iae-action.dto.js";
@@ -265,6 +269,7 @@ export class CredentialConfigService {
         requestMeta?: AuditLogRequestMeta,
     ) {
         assertActiveCredentialsEnforceable(config);
+        assertWalletUnitRevocationEnforceable(config);
         await this.replaceImageReferences(tenantId, config);
         await this.validateAttestationKeyChain(tenantId, config.keyChainId);
         if (!skipValidation) {
@@ -329,6 +334,26 @@ export class CredentialConfigService {
                     config.statusManagement !== undefined
                         ? config.statusManagement
                         : existing.statusManagement,
+            });
+        }
+        if (
+            config.revokeWithWalletUnit !== undefined ||
+            config.statusManagement !== undefined ||
+            config.config !== undefined
+        ) {
+            assertWalletUnitRevocationEnforceable({
+                revokeWithWalletUnit:
+                    config.revokeWithWalletUnit !== undefined
+                        ? config.revokeWithWalletUnit
+                        : existing.revokeWithWalletUnit,
+                statusManagement:
+                    config.statusManagement !== undefined
+                        ? config.statusManagement
+                        : existing.statusManagement,
+                config:
+                    config.config !== undefined
+                        ? config.config
+                        : existing.config,
             });
         }
         const keyChainId =
@@ -405,6 +430,18 @@ export class CredentialConfigService {
             iaeActions: config.iaeActions,
             keyChainId: config.keyChainId,
         };
+    }
+}
+
+/** Rejects revocation with the wallet unit that cannot be enforced (HTTP 400). */
+function assertWalletUnitRevocationEnforceable(
+    settings: WalletUnitRevocationSettings,
+): void {
+    const problems = walletUnitRevocationProblems(settings);
+    if (problems.length > 0) {
+        throw new BadRequestException(
+            problems.map((problem) => problem.message).join(" "),
+        );
     }
 }
 

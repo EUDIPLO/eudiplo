@@ -7,6 +7,7 @@ import { CertService } from "../../../../../crypto/key/cert/cert.service.js";
 import { KeyChainService } from "../../../../../crypto/key/key-chain.service.js";
 import { KeyUsageType } from "../../../../../crypto/key/types/key-usage-type.js";
 import type { SessionData as Session } from "../../../../../session/domain/session-data.js";
+import type { WalletUnitReference } from "../../../../status-list/domain/wallet-unit-reference.js";
 import { StatusListService } from "../../../../status-list/status-list.service.js";
 import {
     CREDENTIAL_SETTINGS,
@@ -26,6 +27,8 @@ export interface SdJwtVcIssueOptions {
     federationEntityId?: string;
     federationTrustChain?: () => Promise<string[] | undefined>;
     issuanceSetId?: string;
+    /** Wallet unit attestation that attested the holder key, if any. */
+    walletUnit?: WalletUnitReference;
 }
 
 /**
@@ -55,6 +58,7 @@ export class SdjwtvcIssuerService {
             federationEntityId,
             federationTrustChain,
             issuanceSetId,
+            walletUnit,
         } = options;
 
         const certificate = await this.certService.find({
@@ -79,6 +83,12 @@ export class SdjwtvcIssuerService {
             loadTypeMetadataFormat: true,
         });
 
+        const { issuedAt: iat, expiresAt } = roundedCredentialValidity(
+            credentialConfiguration.lifeTime ?? 0,
+        );
+        // Set expiration time if lifeTime is defined
+        const exp = credentialConfiguration.lifeTime ? expiresAt : undefined;
+
         // If status management is enabled, create a status entry
         let status: JWTwithStatusListPayload | undefined;
         if (credentialConfiguration.statusManagement) {
@@ -87,14 +97,10 @@ export class SdjwtvcIssuerService {
                 credentialConfiguration.id,
                 credentialConfiguration,
                 issuanceSetId,
+                walletUnit,
+                exp === undefined ? undefined : new Date(exp * 1000),
             );
         }
-
-        const { issuedAt: iat, expiresAt } = roundedCredentialValidity(
-            credentialConfiguration.lifeTime ?? 0,
-        );
-        // Set expiration time if lifeTime is defined
-        const exp = credentialConfiguration.lifeTime ? expiresAt : undefined;
 
         // If key binding is enabled, include the JWK in the cnf
         let cnf: { jwk: Jwk } | undefined;

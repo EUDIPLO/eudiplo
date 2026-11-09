@@ -29,6 +29,7 @@ import { DropIssuanceSigningKeyId1785900000000 } from "../src/database/migration
 import { AddAllowedOriginsToPresentationConfig1786000000000 } from "../src/database/migrations/1786000000000-AddAllowedOriginsToPresentationConfig.js";
 import { AddTrustListSequenceNumber1786100000000 } from "../src/database/migrations/1786100000000-AddTrustListSequenceNumber.js";
 import { NormalizeTrustListEntityInfo1786200000000 } from "../src/database/migrations/1786200000000-NormalizeTrustListEntityInfo.js";
+import { AddWalletUnitRevocation1786300000000 } from "../src/database/migrations/1786300000000-AddWalletUnitRevocation.js";
 import { describeWithContainers } from "./container-runtime.js";
 import {
     addTokensValidAfterContract,
@@ -2993,6 +2994,96 @@ function describeNullableColumn(
                     dataSource,
                     driftAfterSynchronize,
                 );
+            });
+        });
+        describe("AddWalletUnitRevocation1786300000000", () => {
+            const migration = new AddWalletUnitRevocation1786300000000();
+
+            describeWithContainers("PostgreSQL", () => {
+                let dataSource: DataSource;
+                let driftAfterSynchronize: string[];
+                let postgresContainer: StartedPostgreSqlContainer;
+                const drift = async () =>
+                    (
+                        await dataSource.driver.createSchemaBuilder().log()
+                    ).upQueries
+                        .map((query) => query.query)
+                        .sort();
+
+                beforeAll(async () => {
+                    const entities = await Promise.all([
+                        import(
+                            "../src/auth/tenant/entities/tenant.entity.js"
+                        ).then((m) => m.TenantEntity),
+                        import(
+                            "../src/auth/client/entities/client.entity.js"
+                        ).then((m) => m.ClientEntity),
+                        import(
+                            "../src/crypto/key/entities/key-chain.entity.js"
+                        ).then((m) => m.KeyChainEntity),
+                        import(
+                            "../src/issuer/configuration/attribute-provider/entities/attribute-provider.entity.js"
+                        ).then((m) => m.AttributeProviderEntity),
+                        import(
+                            "../src/issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js"
+                        ).then((m) => m.WebhookEndpointEntity),
+                        import(
+                            "../src/issuer/configuration/credentials/entities/credential.entity.js"
+                        ).then((m) => m.CredentialConfig),
+                        import(
+                            "../src/issuer/issuance/oid4vci/entities/deferred-transaction.entity.js"
+                        ).then((m) => m.DeferredTransactionEntity),
+                        import(
+                            "../src/issuer/status-list/entities/status-list.entity.js"
+                        ).then((m) => m.StatusListEntity),
+                        import(
+                            "../src/issuer/status-list/entities/credential-wallet-unit.entity.js"
+                        ).then((m) => m.CredentialWalletUnit),
+                    ]);
+                    postgresContainer = await new PostgreSqlContainer(
+                        "postgres:alpine",
+                    ).start();
+                    dataSource = new DataSource({
+                        type: "postgres",
+                        url: postgresContainer.getConnectionUri(),
+                        entities,
+                        synchronize: true,
+                        logging: false,
+                    });
+                    await dataSource.initialize();
+                    driftAfterSynchronize = await drift();
+                    const queryRunner = dataSource.createQueryRunner();
+                    await migration.down(queryRunner);
+                    await queryRunner.release();
+                }, 60_000);
+
+                afterAll(async () => {
+                    await dataSource?.destroy();
+                    await postgresContainer?.stop();
+                });
+
+                test("adds the columns and the table idempotently, matching the entities, and is reversible", async () => {
+                    const queryRunner = dataSource.createQueryRunner();
+                    expect(
+                        await queryRunner.hasTable("credential_wallet_unit"),
+                    ).toBe(false);
+
+                    await migration.up(queryRunner);
+                    await migration.up(queryRunner);
+
+                    expect(await drift()).toEqual(driftAfterSynchronize);
+
+                    await migration.down(queryRunner);
+                    expect(
+                        await queryRunner.hasTable("credential_wallet_unit"),
+                    ).toBe(false);
+                    expect(
+                        (
+                            await queryRunner.getTable("credential_config")
+                        )?.findColumnByName("revokeWithWalletUnit"),
+                    ).toBeUndefined();
+                    await queryRunner.release();
+                });
             });
         });
     });

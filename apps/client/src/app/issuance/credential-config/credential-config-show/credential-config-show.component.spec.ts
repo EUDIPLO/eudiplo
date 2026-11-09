@@ -84,6 +84,58 @@ describe('CredentialConfigShowComponent schema links', () => {
   });
 });
 
+describe('CredentialConfigShowComponent credential features', () => {
+  async function businessLogic(extra: Record<string, unknown>): Promise<string> {
+    TestBed.configureTestingModule({
+      imports: [CredentialConfigShowComponent],
+      providers: [
+        provideRouter([]),
+        { provide: MATERIAL_ANIMATIONS, useValue: { animationsDisabled: true } },
+        {
+          provide: JwtService,
+          useValue: { hasRole: () => true, canUseConfigPortability: () => false },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(CredentialConfigShowComponent);
+    fixture.componentInstance.config = {
+      id: 'pid',
+      config: { format: 'dc+sd-jwt' },
+      ...extra,
+    } as unknown as CredentialConfig;
+    fixture.detectChanges();
+    const tabs = await TestbedHarnessEnvironment.loader(fixture).getHarness(MatTabGroupHarness);
+    await tabs.selectTab({ label: /Business Logic/ });
+    return (fixture.nativeElement as HTMLElement).textContent ?? '';
+  }
+
+  it('says when credentials are revoked with their wallet unit', async () => {
+    expect(await businessLogic({ statusManagement: true, revokeWithWalletUnit: true })).toContain(
+      'Enabled: credentials are revoked when their wallet unit attestation is revoked'
+    );
+  });
+
+  it('says when they are not', async () => {
+    const page = await businessLogic({});
+    expect(page).toContain('Revoke with Wallet Unit');
+    expect(page).not.toContain('Enabled: credentials are revoked');
+    expect(page).toContain('Key AttestationNot required');
+  });
+
+  it('shows the key attestation requirement it depends on, with its levels', async () => {
+    const config = (keyAttestationsRequired: object) => ({
+      config: { format: 'dc+sd-jwt', keyAttestationsRequired },
+    });
+    expect(await businessLogic(config({}))).toContain('Required, no level constraints');
+    TestBed.resetTestingModule();
+    expect(
+      await businessLogic(
+        config({ key_storage: ['iso_18045_high'], user_authentication: ['iso_18045_moderate'] })
+      )
+    ).toContain('Required: key storage ISO 18045 High; user authentication ISO 18045 Moderate');
+  });
+});
+
 describe('CredentialConfigShowComponent loading', () => {
   it('says why the configuration could not be loaded instead of a blank page', async () => {
     const component = new CredentialConfigShowComponent(

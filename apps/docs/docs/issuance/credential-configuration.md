@@ -115,6 +115,10 @@ Set `statusManagement: true` to add a status list entry to every credential, so 
 
 How the fingerprints and the revocation sequence work is described in [Issuance under the hood](../concepts/issuance.md).
 
+### Revoke credentials with their wallet unit
+
+`revokeWithWalletUnit: true` revokes a credential when the wallet provider revokes the wallet unit attestation (the key attestation of the proof) it was issued to. It requires `statusManagement: true` and `config.keyAttestationsRequired`. See [Revoke credentials with their wallet unit](../trust/attestation.md#revoke-credentials-with-their-wallet-unit).
+
 ## 7. Publish EUDI policies (optional)
 
 ### Publish a reuse policy

@@ -137,8 +137,12 @@ describe("Hosted wallet provider trust", () => {
             walletProviderTrustLists: refs,
             walletAttestationStatusCheckMode: "best_effort",
         });
-        await expect(validate(wallet)).resolves.toBeUndefined();
-        await expect(validate(keyAttester)).resolves.toBeUndefined();
+        await expect(validate(wallet)).resolves.toMatchObject({
+            certificates: wallet.x5c,
+        });
+        await expect(validate(keyAttester)).resolves.toMatchObject({
+            certificates: keyAttester.x5c,
+        });
     });
 
     test("rejects an untrusted attester and a wrong trust-list verifier", async () => {
@@ -186,7 +190,7 @@ describe("Hosted wallet provider trust", () => {
             const pemRefs = await store(toPem(refs[0].verifierX509Der!));
             await expect(
                 validateAttestationProofTrust(jwt, pemRefs, deps),
-            ).resolves.toBeUndefined();
+            ).resolves.toMatchObject({ matchedEntity: expect.any(Object) });
 
             const untrusted = await generateCaSignedJwk({
                 use: "sig",
@@ -213,7 +217,9 @@ describe("Hosted wallet provider trust", () => {
             cn: "Next wallet",
         });
         refs = await publish([nextWallet, keyAttester]);
-        await expect(validate(nextWallet)).resolves.toBeUndefined();
+        await expect(validate(nextWallet)).resolves.toMatchObject({
+            certificates: nextWallet.x5c,
+        });
         await expect(validate(wallet)).rejects.toThrow();
         const list = await app
             .get(TrustListService)

@@ -13,6 +13,7 @@ import {
     ACTIVE_CREDENTIALS_REQUIRE_STATUS_MANAGEMENT,
     activeCredentialsLackStatusManagement,
 } from "../domain/active-credential-policy.js";
+import { walletUnitRevocationProblems } from "../domain/wallet-unit-revocation-policy.js";
 import {
     AttestationLoS,
     SchemaMetaBindingType,
@@ -506,7 +507,7 @@ export const CredentialConfigCreateSchema = z
             .nullable()
             .optional()
             .describe(
-                "Not used for notifications: they go to the webhook endpoint of the offer.",
+                "Receives the wallet unit revocation webhook (revokeWithWalletUnit). Not used for notifications: they go to the webhook endpoint of the offer.",
             ),
         vct: z
             .union([z.string(), VctSchema, z.null()])
@@ -529,6 +530,12 @@ export const CredentialConfigCreateSchema = z
             .optional()
             .describe(
                 "Optional issuer-side policy limiting simultaneously active credentials per subject. Requires statusManagement.",
+            ),
+        revokeWithWalletUnit: z
+            .boolean()
+            .optional()
+            .describe(
+                "Revoke issued credentials when the wallet unit attestation (the key attestation of the proof) they were bound to is revoked. Requires statusManagement and config.keyAttestationsRequired.",
             ),
         iaeActions: z
             .array(IaeActionSchema)
@@ -563,6 +570,9 @@ export const CredentialConfigCreateSchema = z
                 path: ["statusManagement"],
                 message: ACTIVE_CREDENTIALS_REQUIRE_STATUS_MANAGEMENT,
             });
+        }
+        for (const problem of walletUnitRevocationProblems(value)) {
+            context.addIssue({ code: "custom", ...problem });
         }
     })
     .describe("Payload for creating credential issuance configuration.");

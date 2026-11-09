@@ -77,7 +77,7 @@ A presentation step is verified like any OID4VP response, and the verified crede
 5. **Find the session and resolve claims.** The session comes from the token (see the table above). Claims come from the offer, a claims webhook or the attribute provider, together with the user identity from the token; [Claims](../issuance/claims.md) explains the order.
 6. **Defer, if requested.** If the claim source answers `deferred`, EUDIPLO stops here (see [Deferred issuance](#deferred-issuance)).
 7. **Consume nonces.** Each proof must carry a nonce from the nonce endpoint; a nonce works once.
-8. **Issue.** EUDIPLO verifies the key proofs, and key attestations against the issuance configuration's wallet-provider trust lists, validates the claims against the configuration's `fields`, and signs one credential per holder key with the configuration's `attestation` key chain. With status management, each credential gets a status-list entry.
+8. **Issue.** EUDIPLO verifies the key proofs, and key attestations against the issuance configuration's wallet-provider trust lists and, if they have one, their status list entry ([Key attestation](../trust/attestation.md#3-require-key-attestation)), validates the claims against the configuration's `fields`, and signs one credential per holder key with the configuration's `attestation` key chain. With status management, each credential gets a status-list entry.
 9. **Respond.** EUDIPLO records a `notification_id`, moves the session to `fetched` on the first issuance, and returns the credentials, encrypted if the wallet asked for it.
 
 A batch is one request with several proofs; the issuer metadata advertises `batch_credential_issuance` when `batchSize` is greater than 1.

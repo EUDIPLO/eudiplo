@@ -19,6 +19,7 @@ import {
   flattenFields,
 } from '@eudiplo/sdk-core';
 import { CredentialConfigService } from '../credential-config.service';
+import { KEY_ATTESTATION_LEVELS } from '../credential-config.types';
 import { StatusListManagementService } from '../../../status-list-management/status-list-management.service';
 import { ConfigDocumentService } from '../../../config-portability/config-document.service';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
@@ -93,6 +94,30 @@ export class CredentialConfigShowComponent implements OnInit {
 
   get isMdocFormat(): boolean {
     return this.config?.config?.format === 'mso_mdoc';
+  }
+
+  get keyAttestationsRequired():
+    { key_storage?: string[]; user_authentication?: string[] } | undefined {
+    return (this.config?.config as { keyAttestationsRequired?: any } | undefined)
+      ?.keyAttestationsRequired;
+  }
+
+  /** Whether wallets must send a key attestation, and the levels it must attest. */
+  get keyAttestationSummary(): string {
+    const required = this.keyAttestationsRequired;
+    if (!required) return 'Not required';
+    const label = (values: string[]) =>
+      values
+        .map(
+          (value) => KEY_ATTESTATION_LEVELS.find((level) => level.value === value)?.label ?? value
+        )
+        .join(', ');
+    const levels = [
+      required.key_storage?.length && `key storage ${label(required.key_storage)}`,
+      required.user_authentication?.length &&
+        `user authentication ${label(required.user_authentication)}`,
+    ].filter(Boolean);
+    return levels.length ? `Required: ${levels.join('; ')}` : 'Required, no level constraints';
   }
 
   get isVctString(): boolean {
