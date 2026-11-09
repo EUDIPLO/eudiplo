@@ -218,8 +218,10 @@ provider's discovery document at startup, checks the issuer, the signing keys
 and the required `OIDC_AUDIENCE`, and accepts only JWT access tokens. The
 provider manages clients and people: `/api/client`, `/api/user` and creating a
 tenant with `roles` answer `501` (in the web client, turn off **Create an admin
-client**), and the web client signs in with client credentials only. The
-settings are listed in the
+client**), and the web client signs in with client credentials only. Config
+folders and bundles carry no clients either
+([details](../reference/config-bundle-format.md#clients-with-another-identity-provider)).
+The settings are listed in the
 [environment variable reference](../reference/environment-variables.md#authentication).
 
 Tokens get no client limits (`allowedIssuanceConfigs`,

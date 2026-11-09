@@ -16,6 +16,7 @@ import { publishableDisplayEntries } from "@eudiplo/config-format/display-entrie
 import {
     BadRequestException,
     ConflictException,
+    Inject,
     Injectable,
     NotFoundException,
 } from "@nestjs/common";
@@ -23,6 +24,8 @@ import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { compare as compareSecret } from "bcrypt";
 import { In, Not, Repository } from "typeorm";
+import { AUTH_SETTINGS, type AuthSettings } from "../../auth/auth-settings.js";
+import { ClientsManagedByIdentityProvider } from "../../auth/client/domain/client-data.js";
 import {
     DEFAULT_KEY_CHAIN_ENTRIES,
     type DefaultKeyChains,
@@ -100,6 +103,12 @@ import type {
     ConfigResourceKind,
 } from "./config-resource.types.js";
 import { documentAppliedAsIs } from "./config-source-hash.js";
+import {
+    clientDocumentRefusal,
+    clientKeptWarning,
+    clientNotExportedWarning,
+    clientsManagedByIdentityProvider,
+} from "./idp-managed-clients.js";
 import {
     appliedKeyChainType,
     appliedKmsProvider,
@@ -222,7 +231,14 @@ export class ConfigBundleService {
         private readonly trustListReferences: TrustListReferences,
         private readonly federationTrustAnchorReferences: FederationTrustAnchorReferences,
         private readonly keyChainReferences: KeyChainReferences,
+        @Inject(AUTH_SETTINGS)
+        private readonly authSettings: AuthSettings,
     ) {}
+
+    /** With `OIDC_PROVIDER=generic`, bundles neither carry nor change clients. */
+    private get clientsManagedByIdentityProvider(): boolean {
+        return clientsManagedByIdentityProvider(this.authSettings);
+    }
 
     private get tenants() {
         return this.repos.tenants;
@@ -278,6 +294,10 @@ export class ConfigBundleService {
         );
 
         for (const client of await this.clients.find({ where: { tenantId } })) {
+            if (this.clientsManagedByIdentityProvider) {
+                warnings.push(clientNotExportedWarning(client.clientId));
+                continue;
+            }
             await this.addDocument(
                 documents,
                 requirements,
@@ -513,6 +533,9 @@ export class ConfigBundleService {
         id: string,
     ): Promise<Record<string, unknown> | undefined> {
         if (kind === "Client") {
+            if (this.clientsManagedByIdentityProvider) {
+                throw new ClientsManagedByIdentityProvider();
+            }
             const client = await this.clients.findOneBy({
                 tenantId,
                 clientId: id,
@@ -669,6 +692,11 @@ export class ConfigBundleService {
                 }
             }
             if (
+                result.document.kind === "Client" &&
+                this.clientsManagedByIdentityProvider
+            ) {
+                itemIssues.push(clientDocumentRefusal(reference.id));
+            } else if (
                 !exists &&
                 result.document.kind === "Client" &&
                 (await this.clients.countBy({
@@ -824,6 +852,23 @@ export class ConfigBundleService {
                     (metadata.kind === "KeyChain" &&
                         systemOwnedKeyChains.has(metadata.resourceId))
                 ) {
+                    continue;
+                }
+                if (
+                    metadata.kind === "Client" &&
+                    this.clientsManagedByIdentityProvider
+                ) {
+                    const warning = clientKeptWarning(metadata.resourceId);
+                    items.push({
+                        kind: metadata.kind,
+                        id: metadata.resourceId,
+                        action: "skip",
+                        sourceVersion: "stored",
+                        targetVersion: "stored",
+                        migrations: [],
+                        issues: [warning],
+                    });
+                    issues.push(warning);
                     continue;
                 }
                 items.push({
@@ -2079,7 +2124,7 @@ export class ConfigBundleService {
             allowedPresentationConfigs: client.allowedPresentationConfigs,
             allowedIssuanceConfigs: client.allowedIssuanceConfigs,
         };
-        if (client.secret || this.configService.get<string>("OIDC")) {
+        if (client.secret || this.authSettings.mode === "keycloak") {
             const env = placeholder("Client", client.clientId, "secret");
             spec.secret = `\${${env}}`;
             requirements.push({
@@ -2393,7 +2438,7 @@ export class ConfigBundleService {
         metadata: Parameters<typeof documentAppliedAsIs>[1],
         source: string,
     ): boolean {
-        if (document.kind === "Client" && this.configService.get("OIDC"))
+        if (document.kind === "Client" && this.authSettings.mode === "keycloak")
             return false;
         return documentAppliedAsIs(document, metadata, source);
     }
@@ -2478,7 +2523,7 @@ export class ConfigBundleService {
                 desired.keySource?.type === "regenerate") ||
             (document.kind === "Client" &&
                 (desired.secret === "!generate" ||
-                    !!this.configService.get("OIDC")));
+                    this.authSettings.mode === "keycloak"));
         return {
             unchanged:
                 !alwaysApply &&

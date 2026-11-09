@@ -17,7 +17,8 @@ function service(
     result.documentValidationService = Object.create(
         ConfigDocumentValidationService.prototype,
     );
-    result.configService = { get: () => false };
+    result.configService = { get: () => undefined };
+    result.authSettings = { mode: "builtin" };
     return result as ConfigBundleService;
 }
 const client: ConfigDocument = {
@@ -98,6 +99,21 @@ describe("configuration comparisons", () => {
             before: "clients:manage",
             after: "presentation:request",
         });
+    });
+    it("applies an unchanged client again with Keycloak, which the plan cannot compare", async () => {
+        const document: ConfigDocument = {
+            ...client,
+            spec: { clientId: "client", roles: ["clients:manage"] },
+        };
+        const builtin = service(document.spec);
+        expect(
+            (await builtin.compareDocument("tenant", document)).unchanged,
+        ).toBe(true);
+        const keycloak = service(document.spec) as any;
+        keycloak.authSettings = { mode: "keycloak" };
+        expect(
+            (await keycloak.compareDocument("tenant", document)).unchanged,
+        ).toBe(false);
     });
     it("does not suppress explicit regeneration", async () => {
         const document: ConfigDocument = {

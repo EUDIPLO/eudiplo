@@ -136,6 +136,12 @@ placeholder fails the import of that tenant while other tenants continue.
 Restart the backend to apply changed files. The folder layout is listed in the
 [format reference](../reference/config-bundle-format.md#tenant-folder-layout).
 
+With `OIDC_PROVIDER=generic`, the identity provider manages the clients, so
+leave `clients/` out of the folder: a client file fails the import of its
+tenant, and the other tenants are still imported. Create the clients in the
+identity provider
+([details](../reference/config-bundle-format.md#clients-with-another-identity-provider)).
+
 ### Clients with generated secrets
 
 A client file with `"secret": "!generate"` gets a random secret when it is first

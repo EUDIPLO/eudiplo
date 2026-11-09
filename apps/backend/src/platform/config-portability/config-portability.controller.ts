@@ -382,6 +382,11 @@ export class ConfigPortabilityController {
             "The token has no tenant or no role that may export this kind.",
     })
     @ApiResponse({ status: 404, description: "The resource does not exist." })
+    @ApiResponse({
+        status: 501,
+        description:
+            "A `Client` with `OIDC_PROVIDER=generic`, where the identity provider manages the clients.",
+    })
     async exportDocument(
         @Token() token: TokenPayload,
         @Req() request: Request,

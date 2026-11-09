@@ -9759,6 +9759,10 @@ export type ConfigPortabilityControllerExportDocumentErrors = {
      * The resource does not exist.
      */
     404: unknown;
+    /**
+     * A `Client` with `OIDC_PROVIDER=generic`, where the identity provider manages the clients.
+     */
+    501: unknown;
 };
 
 export type ConfigPortabilityControllerExportDocumentResponses = {
