@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { schemaUrl } from "@eudiplo/config-format/config-format.js";
-import { BadRequestException, INestApplication } from "@nestjs/common";
+import { BadRequestException, INestApplication, Logger } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
 import { exportJWK, generateKeyPair, type JWTPayload, SignJWT } from "jose";
@@ -23,6 +23,8 @@ import { clientBundle, documentBundle } from "../shared/config-bundle.js";
 
 const AUDIENCE = "eudiplo-api";
 const TENANT = "generic-acme";
+/** A tenant whose config folder has no `clients/`, as the docs advise. */
+const FOLDER_TENANT = "generic-folder";
 
 /**
  * EUDIPLO with `OIDC_PROVIDER=generic` against an identity provider that is
@@ -113,6 +115,15 @@ describe("Generic OIDC provider (e2e)", () => {
                 },
             }),
         );
+        mkdirSync(join(configFolder, FOLDER_TENANT));
+        writeFileSync(
+            join(configFolder, FOLDER_TENANT, "info.json"),
+            JSON.stringify({
+                $schema: schemaUrl("Tenant"),
+                metadata: { generation: 1 },
+                spec: { name: "Folder" },
+            }),
+        );
         vi.stubEnv("CONFIG_FOLDER", configFolder);
         vi.stubEnv("OIDC", issuer);
         vi.stubEnv("OIDC_PROVIDER", "generic");
@@ -135,6 +146,9 @@ describe("Generic OIDC provider (e2e)", () => {
         });
         await as(operator)
             .post("/tenant", { id: TENANT, name: "Acme" })
+            .expect(201);
+        await as(operator)
+            .post("/tenant", { id: FOLDER_TENANT, name: "Folder" })
             .expect(201);
     });
 
@@ -358,10 +372,10 @@ describe("Generic OIDC provider (e2e)", () => {
         const admin = () => personToken([Role.TenantAdmin]);
 
         /** A client record as Keycloak or the built-in server left it. */
-        const leaveClientRecord = (clientId: string) =>
+        const leaveClientRecord = (clientId: string, tenantId = TENANT) =>
             app.get(getRepositoryToken(ClientEntity)).save({
                 clientId,
-                tenantId: TENANT,
+                tenantId,
                 roles: [Role.IssuanceOffer],
             });
 
@@ -426,7 +440,32 @@ describe("Generic OIDC provider (e2e)", () => {
             ]);
         });
 
-        test("fails the startup import of a tenant whose config folder has a client file", async () => {
+        test("refuses to import a client document", async () => {
+            const bundle = clientBundle(TENANT, {
+                clientId: "generic-imported",
+                secret: "!generate",
+                roles: [Role.IssuanceOffer],
+            });
+            const planned = await as(await admin())
+                .post("/config-bundles/plan?mode=upsert", bundle)
+                .expect(201);
+
+            const response = await as(await admin())
+                .post(
+                    `/config-bundles/import?mode=upsert&planFingerprint=${planned.body.planFingerprint}`,
+                    bundle,
+                )
+                .expect(400);
+
+            expect(response.body.code).toBe("CONFIG_APPLY_BLOCKED");
+            expect(
+                await app
+                    .get(getRepositoryToken(ClientEntity))
+                    .countBy({ clientId: "generic-imported" }),
+            ).toBe(0);
+        });
+
+        test("refuses the folder import of a tenant whose config folder has a client file", async () => {
             const failure = await app
                 .get(ConfigFolderBundleService)
                 .applyTenantFolder(TENANT, "upsert")
@@ -503,6 +542,38 @@ describe("Generic OIDC provider (e2e)", () => {
                 await app
                     .get(getRepositoryToken(ClientEntity))
                     .countBy({ clientId: "generic-replace-leftover" }),
+            ).toBe(1);
+        });
+
+        test("keeps and logs a client record in a folder replace that the folder no longer has", async () => {
+            await leaveClientRecord("generic-folder-leftover", FOLDER_TENANT);
+            await app.get(ConfigOwnershipService).markApplied({
+                tenantId: FOLDER_TENANT,
+                kind: "Client",
+                resourceId: "generic-folder-leftover",
+                ownership: "file-managed",
+                source: `folder:${join(configFolder, FOLDER_TENANT)}`,
+            });
+            const warn = vi
+                .spyOn(Logger.prototype, "warn")
+                .mockImplementation(() => undefined);
+            try {
+                await app
+                    .get(ConfigFolderBundleService)
+                    .applyTenantFolder(FOLDER_TENANT, "replace");
+
+                expect(warn).toHaveBeenCalledWith(
+                    expect.stringContaining(
+                        `[${FOLDER_TENANT}] Skipped Client 'generic-folder-leftover' (${CLIENT_MANAGED_BY_IDENTITY_PROVIDER})`,
+                    ),
+                );
+            } finally {
+                warn.mockRestore();
+            }
+            expect(
+                await app
+                    .get(getRepositoryToken(ClientEntity))
+                    .countBy({ clientId: "generic-folder-leftover" }),
             ).toBe(1);
         });
     });

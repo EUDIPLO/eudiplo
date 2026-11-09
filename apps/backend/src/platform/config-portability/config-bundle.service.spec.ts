@@ -348,3 +348,50 @@ describe("ConfigBundleService plans for documents applied as they are", () => {
         expect(skipsComparison("keycloak")).toBe(false);
     });
 });
+
+describe("ConfigBundleService client export", () => {
+    const clientSpec = (mode: AuthSettings["mode"], secret?: string) => {
+        const service = Object.create(
+            ConfigBundleService.prototype,
+        ) as ConfigBundleService;
+        Reflect.set(service, "authSettings", { mode });
+        const requirements: ConfigBundleRequirement[] = [];
+        const spec = (
+            Reflect.get(service, "clientSpec") as (
+                client: Record<string, unknown>,
+                requirements: ConfigBundleRequirement[],
+            ) => Record<string, unknown>
+        ).call(
+            service,
+            { clientId: "app", roles: ["clients:manage"], secret },
+            requirements,
+        );
+        return { spec, requirements };
+    };
+
+    it("asks for the secret of a Keycloak client, whose secret EUDIPLO does not hold", () => {
+        const { spec, requirements } = clientSpec("keycloak");
+        expect(spec.secret).toBe("${CLIENT_APP_SECRET}");
+        expect(requirements).toEqual([
+            expect.objectContaining({
+                code: "CLIENT_SECRET_REQUIRED",
+                resource: { kind: "Client", id: "app" },
+                path: "/spec/secret",
+            }),
+        ]);
+    });
+
+    it("asks for the secret of a built-in client, which is stored as a hash", () => {
+        const { spec, requirements } = clientSpec("builtin", "$2b$04$hash");
+        expect(spec.secret).toBe("${CLIENT_APP_SECRET}");
+        expect(requirements).toEqual([
+            expect.objectContaining({ code: "CLIENT_SECRET_REQUIRED" }),
+        ]);
+    });
+
+    it("exports no secret for a built-in client without one", () => {
+        const { spec, requirements } = clientSpec("builtin");
+        expect(spec).not.toHaveProperty("secret");
+        expect(requirements).toEqual([]);
+    });
+});

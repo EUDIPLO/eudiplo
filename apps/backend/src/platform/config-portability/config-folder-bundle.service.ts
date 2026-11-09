@@ -31,6 +31,7 @@ import type {
     ConfigResourceKind,
 } from "./config-resource.types.js";
 import { generatedSecretsOf } from "./generated-secrets.js";
+import { CLIENT_MANAGED_BY_IDENTITY_PROVIDER } from "./idp-managed-clients.js";
 
 type FolderResource =
     | { kind: ConfigResourceKind; file: string }
@@ -125,7 +126,8 @@ export class ConfigFolderBundleService {
                 if (
                     issue.code === "RESOURCE_DETACHED" ||
                     issue.code === "STALE_GENERATION" ||
-                    issue.code === "KEY_CHAIN_ID_RESERVED"
+                    issue.code === "KEY_CHAIN_ID_RESERVED" ||
+                    issue.code === CLIENT_MANAGED_BY_IDENTITY_PROVIDER
                 ) {
                     this.logger.warn(
                         `[${tenantId}] Skipped ${item.kind} '${item.id}' (${issue.code}): ${issue.message}`,

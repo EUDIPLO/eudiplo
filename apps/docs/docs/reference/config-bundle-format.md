@@ -270,7 +270,7 @@ the files sit at the root of the archive, and the issuance settings are stored a
 | `resources[]`   | `kind`, `id`, `$schema`, `path`, `sha256`, `ownership`, `generation` per document        |
 | `assets[]`      | `path`, `contentType`, `sha256` per binary file                                          |
 | `requirements[]`| Values the target must supply: `code`, `resource`, `path`, `message`, `placeholder`      |
-| `warnings[]`    | Migration warnings                                                                       |
+| `warnings[]`    | Warnings of the export: migration warnings, and `CLIENT_MANAGED_BY_IDENTITY_PROVIDER` for each client record left out ([see below](#clients-with-another-identity-provider)) |
 
 **Integrity and limits.** Backend and CLI verify that resource identities, paths
 and SHA-256 checksums match the manifest. Duplicate resources, unsafe paths and
@@ -291,7 +291,7 @@ exception ([single resources](#single-resources)).
 | Keys in an external KMS                                               | `keySource: { "type": "external-reference", provider, externalKeyId, publicJwk }` | -  | The target provider must reach the same key; checked by signing a challenge |
 | Sessions, status values, caches                                       | not exported                                                 | -                        | -                                                                     |
 
-A secret that is not set, such as the client secret of a registrar account without one, is left out of the export and adds no requirement.
+A secret that is not set, such as the client secret of a registrar account without one, is left out of the export and adds no requirement. Exception: with Keycloak (`OIDC` set and `OIDC_PROVIDER` unset or `keycloak`), Keycloak holds the client secrets, so every client gets the placeholder and `CLIENT_SECRET_REQUIRED`.
 
 `regenerate` keeps the key chain ID but creates a new cryptographic identity:
 certificates and anything bound to the old key must be renewed. In `upsert` and
@@ -361,14 +361,6 @@ A `KeyChain` document that is identical to the one last applied from the same so
 
 The same rule covers a `Client` document with `"secret": "!generate"`, since applying it generates a new secret: once this source applied it, the client keeps its secret while the document stays the same. A changed document, a raised `metadata.generation`, another source or reattaching generates a new secret, returned once in `generatedSecrets`. Other `Client` documents are compared field by field. With Keycloak (`OIDC` set and `OIDC_PROVIDER` unset or `keycloak`), every `Client` document is applied on every import, because the plan cannot see changes made in Keycloak; a `!generate` client applied as it is keeps its secret.
 
-### Clients with another identity provider
-
-With `OIDC_PROVIDER=generic`, the identity provider manages the clients, so bundles and config folders carry none:
-
-- An export leaves clients out and adds the warning `CLIENT_MANAGED_BY_IDENTITY_PROVIDER` for each client record left from an earlier mode. `GET /api/config-bundles/resources/Client/:id/document` answers `501`.
-- A `Client` document blocks the plan with `CLIENT_MANAGED_BY_IDENTITY_PROVIDER`. In a config folder, a file under `clients/` fails the import of its tenant until you delete it; create the client in the identity provider instead.
-- `replace` keeps a client record that its source no longer has: the plan lists it as `skip` with the warning `CLIENT_MANAGED_BY_IDENTITY_PROVIDER`. Such a record only adds limits to the tokens of its client ([External OIDC provider](../operate/tenants-and-access.md#external-oidc-provider-and-human-users)).
-
 The tenant's encryption key chain is managed by EUDIPLO and is not configuration: exports leave it out, and plans neither change nor delete it. A `KeyChain` document with its ID, such as the one exports of earlier versions contain, is skipped (warning `KEY_CHAIN_ID_RESERVED`).
 
 The import pipeline is: decode, verify checksums, migrate to the current
@@ -378,6 +370,14 @@ dependency order (for example key chains before issuance configs), record
 plan; a changed bundle, mode or target state fails with `CONFIG_PLAN_STALE`.
 Status lists keep their capacity and bit size: import a new list ID for a
 different layout.
+
+### Clients with another identity provider
+
+With `OIDC_PROVIDER=generic`, the identity provider manages the clients, so bundles and config folders carry none:
+
+- An export leaves clients out and adds the warning `CLIENT_MANAGED_BY_IDENTITY_PROVIDER` for each client record left from an earlier mode. `GET /api/config-bundles/resources/Client/:id/document` answers `501`.
+- A `Client` document blocks the plan with `CLIENT_MANAGED_BY_IDENTITY_PROVIDER`. In a config folder, a file under `clients/` fails the import of its tenant until you delete it; create the client in the identity provider instead.
+- `replace` keeps a client record that its source no longer has: the plan lists it as `skip` with the warning `CLIENT_MANAGED_BY_IDENTITY_PROVIDER`. Such a record only adds limits to the tokens of its client ([External OIDC provider](../operate/tenants-and-access.md#external-oidc-provider-and-human-users)).
 
 ## Management API
 
