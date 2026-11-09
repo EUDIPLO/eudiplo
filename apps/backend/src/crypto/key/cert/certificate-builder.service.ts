@@ -148,6 +148,15 @@ export class CertificateBuilderService {
             subjectAlg,
         );
         const signingKey = makeKmsSigningKey(caAdapter, caRef, caRef.alg);
+        // RFC 5280 4.2.1.2: the AKI carries the CA's own SKI. An imported CA
+        // may derive it differently (RFC 7093, random), so copy it; compute
+        // it from the key only when the CA certificate has none.
+        const caKeyId = caCert.getExtension(
+            x509.SubjectKeyIdentifierExtension,
+        )?.keyId;
+        const authorityKeyIdentifier = caKeyId
+            ? new x509.AuthorityKeyIdentifierExtension(caKeyId)
+            : await x509.AuthorityKeyIdentifierExtension.create(caPublicKey);
 
         const cert = await x509.X509CertificateGenerator.create({
             serialNumber: this.generateSerialNumber(),
@@ -171,7 +180,7 @@ export class CertificateBuilderService {
                 await x509.SubjectKeyIdentifierExtension.create(
                     subjectPublicKey,
                 ),
-                await x509.AuthorityKeyIdentifierExtension.create(caPublicKey),
+                authorityKeyIdentifier,
             ],
         });
 

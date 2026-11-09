@@ -13,7 +13,8 @@ import { CertificateBuilderService } from "./certificate-builder.service.js";
 async function caCertificate(
     adapter: DbKmsAdapter,
     ref: KmsKeyRef,
-    subject: x509.Name,
+    subject: x509.Name | string,
+    extensions: x509.Extension[] = [],
 ): Promise<string> {
     const publicKey = await importPublicCryptoKey(ref.publicJwk, ref.alg);
     const cert = await x509.X509CertificateGenerator.create({
@@ -28,9 +29,45 @@ async function caCertificate(
         extensions: [
             new x509.BasicConstraintsExtension(true, undefined, true),
             new x509.KeyUsagesExtension(x509.KeyUsageFlags.keyCertSign, true),
+            ...extensions,
         ],
     });
     return cert.toString("pem");
+}
+
+/** A CA key and a leaf key, and a leaf signed by a CA built from the first. */
+async function signLeaf(
+    buildCa: (adapter: DbKmsAdapter, caRef: KmsKeyRef) => Promise<string>,
+): Promise<{
+    caRef: KmsKeyRef;
+    caCertPem: string;
+    leaf: x509.X509Certificate;
+}> {
+    const adapter = new DbKmsAdapter("db");
+    const { ref: caRef } = await adapter.generateKey({
+        kid: "ca",
+        alg: "ES256",
+    });
+    const { ref: leafRef } = await adapter.generateKey({
+        kid: "leaf",
+        alg: "ES256",
+    });
+    const caCertPem = await buildCa(adapter, caRef);
+    const { cert } = await new CertificateBuilderService().createCaSignedCert({
+        caAdapter: adapter,
+        caRef,
+        caCertPem,
+        subjectPublicJwk: leafRef.publicJwk,
+        subjectCN: "leaf",
+        hostname: "issuer.example",
+        notBefore: new Date(Date.now() - 60_000),
+        notAfter: new Date(Date.now() + 86_400_000),
+    });
+    return { caRef, caCertPem, leaf: new x509.X509Certificate(cert) };
+}
+
+function authorityKeyId(cert: x509.X509Certificate): string | undefined {
+    return cert.getExtension(x509.AuthorityKeyIdentifierExtension)?.keyId;
 }
 
 describe("CertificateBuilderService.createCaSignedCert", () => {
@@ -62,36 +99,16 @@ describe("CertificateBuilderService.createCaSignedCert", () => {
     ])(
         "copies the CA subject with %s byte for byte into the issuer",
         async (_label, subject) => {
-            const adapter = new DbKmsAdapter("db");
-            const { ref: caRef } = await adapter.generateKey({
-                kid: "ca",
-                alg: "ES256",
-            });
-            const { ref: leafRef } = await adapter.generateKey({
-                kid: "leaf",
-                alg: "ES256",
-            });
-            const caCertPem = await caCertificate(adapter, caRef, subject);
             const subjectDer = Buffer.from(subject.toArrayBuffer());
+            const { caCertPem, leaf } = await signLeaf((adapter, caRef) =>
+                caCertificate(adapter, caRef, subject),
+            );
             expect(
                 Buffer.from(
                     new x509.X509Certificate(caCertPem).rawData,
                 ).includes(subjectDer),
             ).toBe(true);
 
-            const { cert } =
-                await new CertificateBuilderService().createCaSignedCert({
-                    caAdapter: adapter,
-                    caRef,
-                    caCertPem,
-                    subjectPublicJwk: leafRef.publicJwk,
-                    subjectCN: "leaf",
-                    hostname: "issuer.example",
-                    notBefore: new Date(Date.now() - 60_000),
-                    notAfter: new Date(Date.now() + 86_400_000),
-                });
-
-            const leaf = new x509.X509Certificate(cert);
             expect(
                 Buffer.from(leaf.issuerName.toArrayBuffer()).equals(subjectDer),
             ).toBe(true);
@@ -100,4 +117,28 @@ describe("CertificateBuilderService.createCaSignedCert", () => {
             expect(Buffer.from(leaf.rawData).includes(subjectDer)).toBe(true);
         },
     );
+
+    it("copies the CA's subject key identifier into the authority key identifier", async () => {
+        // Not the SHA-1 of the key: e.g. a truncated SHA-256 (RFC 7093) or
+        // a random value, as other CAs use.
+        const caKeyId = "0102030405060708090a0b0c0d0e0f1011121314";
+        const { leaf } = await signLeaf((adapter, caRef) =>
+            caCertificate(adapter, caRef, "C=IE, CN=Test CA", [
+                new x509.SubjectKeyIdentifierExtension(caKeyId),
+            ]),
+        );
+
+        expect(authorityKeyId(leaf)).toBe(caKeyId);
+    });
+
+    it("derives the authority key identifier from the CA key when the CA has no subject key identifier", async () => {
+        const { caRef, leaf } = await signLeaf((adapter, caRef) =>
+            caCertificate(adapter, caRef, "C=IE, CN=Test CA"),
+        );
+
+        const expected = await x509.SubjectKeyIdentifierExtension.create(
+            await importPublicCryptoKey(caRef.publicJwk, caRef.alg),
+        );
+        expect(authorityKeyId(leaf)).toBe(expected.keyId);
+    });
 });
