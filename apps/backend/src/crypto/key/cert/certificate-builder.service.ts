@@ -32,6 +32,10 @@ export function certificateNotBefore(now: Date = new Date()): Date {
  * marker to `@peculiar/x509`. The {@link KmsCryptoProvider} (installed
  * globally on `x509.cryptoProvider`) intercepts `subtle.sign(...)` for
  * those keys and routes the call to {@link KmsAdapter.sign}.
+ *
+ * All keys are EC signing keys, so key usages never include
+ * keyEncipherment (RFC 5480 3; ISO/IEC 18013-5 expects digitalSignature
+ * alone for document signer certificates).
  */
 @Injectable()
 export class CertificateBuilderService {
@@ -62,7 +66,6 @@ export class CertificateBuilderService {
                 new x509.BasicConstraintsExtension(true, undefined, true),
                 new x509.KeyUsagesExtension(
                     x509.KeyUsageFlags.digitalSignature |
-                        x509.KeyUsageFlags.keyEncipherment |
                         x509.KeyUsageFlags.keyCertSign,
                     true,
                 ),
@@ -98,8 +101,7 @@ export class CertificateBuilderService {
                 ]),
                 new x509.BasicConstraintsExtension(false, undefined, true),
                 new x509.KeyUsagesExtension(
-                    x509.KeyUsageFlags.digitalSignature |
-                        x509.KeyUsageFlags.keyEncipherment,
+                    x509.KeyUsageFlags.digitalSignature,
                     true,
                 ),
                 await x509.SubjectKeyIdentifierExtension.create(publicKey),
@@ -132,7 +134,12 @@ export class CertificateBuilderService {
             subjectAlg = signingAlgForJwk(opts.subjectPublicJwk),
         } = opts;
         const caCert = new x509.X509Certificate(caCertPem);
-        const issuerName = caCert.subject;
+        // The parsed Name, not the `subject` string: re-encoding the string
+        // turns e.g. a UTF8String CN into a PrintableString, and validators
+        // that compare issuer and subject bytes (Go crypto/x509) then no longer
+        // link the leaf to its CA. RFC 5280 4.1.2.6 and 8 require the issuer
+        // to be encoded exactly like the CA's subject.
+        const issuerName = caCert.subjectName;
 
         const caPublicKey = await importPublicCryptoKey(
             caRef.publicJwk,
@@ -143,6 +150,15 @@ export class CertificateBuilderService {
             subjectAlg,
         );
         const signingKey = makeKmsSigningKey(caAdapter, caRef, caRef.alg);
+        // RFC 5280 4.2.1.2: the AKI carries the CA's own SKI. An imported CA
+        // may derive it differently (RFC 7093, random), so copy it; compute
+        // it from the key only when the CA certificate has none.
+        const caKeyId = caCert.getExtension(
+            x509.SubjectKeyIdentifierExtension,
+        )?.keyId;
+        const authorityKeyIdentifier = caKeyId
+            ? new x509.AuthorityKeyIdentifierExtension(caKeyId)
+            : await x509.AuthorityKeyIdentifierExtension.create(caPublicKey);
 
         const cert = await x509.X509CertificateGenerator.create({
             serialNumber: this.generateSerialNumber(),
@@ -159,14 +175,13 @@ export class CertificateBuilderService {
                 ]),
                 new x509.BasicConstraintsExtension(false, undefined, true),
                 new x509.KeyUsagesExtension(
-                    x509.KeyUsageFlags.digitalSignature |
-                        x509.KeyUsageFlags.keyEncipherment,
+                    x509.KeyUsageFlags.digitalSignature,
                     true,
                 ),
                 await x509.SubjectKeyIdentifierExtension.create(
                     subjectPublicKey,
                 ),
-                await x509.AuthorityKeyIdentifierExtension.create(caPublicKey),
+                authorityKeyIdentifier,
             ],
         });
 
