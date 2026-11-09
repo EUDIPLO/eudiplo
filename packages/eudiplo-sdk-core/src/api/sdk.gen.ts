@@ -1572,7 +1572,7 @@ export const configPortabilityControllerDetach = <ThrowOnError extends boolean =
 /**
  * Plan resetting a resource to its version in the config folder
  *
- * Reads and upgrades every resource file of the tenant folder in `CONFIG_FOLDER` except `info.json`, as the startup import does, and plans the one resource; `Tenant/tenant` reads only `info.json`.
+ * Reads and upgrades the files of the requested kind in the tenant folder in `CONFIG_FOLDER`, as the startup import does, and plans the one resource; `Tenant/tenant` reads only `info.json`. A file of another kind that cannot be imported does not block the reattach.
  */
 export const configPortabilityControllerPlanReattach = <ThrowOnError extends boolean = true>(options: Options<ConfigPortabilityControllerPlanReattachData, ThrowOnError>): RequestResult<ConfigPortabilityControllerPlanReattachResponses, ConfigPortabilityControllerPlanReattachErrors, ThrowOnError> => (options.client ?? client).post<ConfigPortabilityControllerPlanReattachResponses, ConfigPortabilityControllerPlanReattachErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],

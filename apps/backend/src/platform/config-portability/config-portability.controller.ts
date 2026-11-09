@@ -56,7 +56,7 @@ import { ConfigResourceOwnershipDto } from "./dto/config-resource-ownership.dto.
 
 /** The 400 of the reattach endpoints for a tenant folder that does not import. */
 const FOLDER_INVALID_DESCRIPTION =
-    "Unknown resource kind, or a file of the tenant folder cannot be imported, for example a trust list file of 9.x without `contactUri` and `website`: `code` `CONFIG_FOLDER_INVALID`, `file` relative to the tenant folder and `issues` with the JSON pointer `path`, the issue `code` and the `resource` of every blocking issue, as the plan of a bundle reports them; a file that cannot be read as a document gets one `CONFIG_FILE_INVALID` issue with the reason and without `path` or `resource`. Fix the file and plan again.";
+    "Unknown resource kind, or a file of the requested kind in the tenant folder cannot be imported, for example a trust list file of 9.x without `contactUri` and `website`: `code` `CONFIG_FOLDER_INVALID`, `file` relative to the tenant folder and `issues` with the JSON pointer `path`, the issue `code` and the `resource` of every blocking issue, as the plan of a bundle reports them; a file that cannot be read as a document gets one `CONFIG_FILE_INVALID` issue with the reason and without `path` or `resource`. Fix the file and plan again.";
 
 @ApiTags("Configuration portability")
 @Secured([Role.Tenants, Role.TenantAdmin])
@@ -440,7 +440,7 @@ export class ConfigPortabilityController {
         summary:
             "Plan resetting a resource to its version in the config folder",
         description:
-            "Reads and upgrades every resource file of the tenant folder in `CONFIG_FOLDER` except `info.json`, as the startup import does, and plans the one resource; `Tenant/tenant` reads only `info.json`.",
+            "Reads and upgrades the files of the requested kind in the tenant folder in `CONFIG_FOLDER`, as the startup import does, and plans the one resource; `Tenant/tenant` reads only `info.json`. A file of another kind that cannot be imported does not block the reattach.",
     })
     @ApiParam({ name: "kind", enum: CONFIG_RESOURCE_KINDS })
     @ApiParam({ name: "id", description: "Resource ID" })

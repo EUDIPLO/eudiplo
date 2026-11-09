@@ -1821,7 +1821,7 @@ describe("startup configuration reconciliation", () => {
         }
     });
 
-    it("answers 400 CONFIG_FOLDER_INVALID from the reattach endpoints when another file of the tenant folder needs input", async () => {
+    it("reattaches a client while a trust list file of the tenant folder needs input, and answers 400 CONFIG_FOLDER_INVALID for the trust list", async () => {
         const appConfig = app.get(ConfigService);
         const http = app.getHttpServer();
         const tenantId = "reattach-invalid-folder";
@@ -1906,31 +1906,51 @@ describe("startup configuration reconciliation", () => {
                     }),
                 ],
             };
-            const plan = await request(http)
-                .post(
-                    `/config-bundles/resources/Client/${clientId}/reattach/plan`,
-                )
-                .set("Authorization", authorization)
-                .expect(400);
-            expect(plan.body).toEqual(expected);
-            const reattached = await request(http)
-                .post(`/config-bundles/resources/Client/${clientId}/reattach`)
-                .query({ planFingerprint: "0".repeat(64) })
-                .set("Authorization", authorization)
-                .expect(400);
-            expect(reattached.body).toEqual(expected);
-            // The startup import fails the tenant with the same message.
+            // The startup import fails the tenant, so the client is not applied.
             await expect(
                 app
                     .get(ConfigFolderBundleService)
                     .applyTenantFolder(tenantId, "upsert"),
             ).rejects.toMatchObject({ message: expected.message });
+            const clients = app.get(DataSource).getRepository(ClientEntity);
             await expect(
-                app
-                    .get(DataSource)
-                    .getRepository(ClientEntity)
-                    .existsBy({ tenantId, clientId }),
+                clients.existsBy({ tenantId, clientId }),
             ).resolves.toBe(false);
+
+            // A reattach reads only the files of the requested kind: the
+            // trust list answers 400 with the file and its issues ...
+            const trustListPlan = await request(http)
+                .post(
+                    "/config-bundles/resources/TrustList/legacy/reattach/plan",
+                )
+                .set("Authorization", authorization)
+                .expect(400);
+            expect(trustListPlan.body).toEqual(expected);
+            const trustListReattached = await request(http)
+                .post("/config-bundles/resources/TrustList/legacy/reattach")
+                .query({ planFingerprint: "0".repeat(64) })
+                .set("Authorization", authorization)
+                .expect(400);
+            expect(trustListReattached.body).toEqual(expected);
+
+            // ... while the client reattaches.
+            const plan = await request(http)
+                .post(
+                    `/config-bundles/resources/Client/${clientId}/reattach/plan`,
+                )
+                .set("Authorization", authorization)
+                .expect(201);
+            expect(plan.body.items).toEqual([
+                expect.objectContaining({ kind: "Client", id: clientId }),
+            ]);
+            await request(http)
+                .post(`/config-bundles/resources/Client/${clientId}/reattach`)
+                .query({ planFingerprint: plan.body.planFingerprint })
+                .set("Authorization", authorization)
+                .expect(201);
+            await expect(
+                clients.existsBy({ tenantId, clientId }),
+            ).resolves.toBe(true);
         } finally {
             rmSync(tenantFolder, { recursive: true, force: true });
         }

@@ -55,10 +55,13 @@ Reattaching reads the resource from the tenant folder in `CONFIG_FOLDER`,
 applies it, and makes the resource `file-managed` again. Its stored generation
 becomes the file's generation, so later startups apply the folder again.
 
-Both endpoints first read and upgrade every resource file of the tenant
-folder except `info.json`, as the startup import does; reattaching
-`Tenant/tenant` reads only `info.json`. If a file cannot be imported, for example a trust list
-file of 9.x without `contactUri` and `website`, they answer `400` with the code
+Both endpoints first read and upgrade the files of the requested kind in the
+tenant folder, for example every file in `clients/` for a `Client`, as the
+startup import does; reattaching `Tenant/tenant` reads only `info.json`. Files
+of other kinds are not read, so a broken trust list file does not block
+reattaching a client. If a file of the requested kind cannot be imported, for
+example a trust list file of 9.x without `contactUri` and `website` when you
+reattach a trust list, they answer `400` with the code
 `CONFIG_FOLDER_INVALID`, the `file` relative to the tenant folder and the
 blocking `issues` of that file, each with the JSON pointer `path`, the issue
 `code` and the `resource`, in the shape the [plan](#plan-and-import) of a

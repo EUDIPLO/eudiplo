@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from "vitest";
 import { importedRotationIntervals } from "../../crypto/key/key-chain-import-rotation.js";
 import { ConfigImportService } from "../config-import/config-import.service.js";
 import { ConfigImportOrchestratorService } from "../config-import/config-import-orchestrator.service.js";
+import { ConfigBundleService } from "./config-bundle.service.js";
 import { ConfigBundleApplyService } from "./config-bundle-apply.service.js";
 import { ConfigFolderBundleService } from "./config-folder-bundle.service.js";
 import { ConfigMigrationService } from "./config-migration.service.js";
@@ -22,15 +23,16 @@ import { ConfigResourceRegistry } from "./config-resource.registry.js";
 function createService(
     apply = vi.fn(),
     replacePlaceholders = <T>(value: T): T => value,
+    configFolder = fileURLToPath(
+        new URL("../../../../../assets/config", import.meta.url),
+    ),
 ) {
     const registry = new ConfigResourceRegistry();
     const registerPortableRunner = vi.fn();
     const service = new ConfigFolderBundleService(
         {
-            getOrThrow: () =>
-                fileURLToPath(
-                    new URL("../../../../../assets/config", import.meta.url),
-                ),
+            get: () => configFolder,
+            getOrThrow: () => configFolder,
         } as unknown as ConfigService,
         { replacePlaceholders } as ConfigImportService,
         new ConfigMigrationService(registry),
@@ -39,6 +41,7 @@ function createService(
         {
             registerPortableRunner,
         } as unknown as ConfigImportOrchestratorService,
+        {} as ConfigBundleService,
     );
     return { service, registerPortableRunner };
 }
@@ -255,6 +258,109 @@ describe("ConfigFolderBundleService", () => {
         } finally {
             rmSync(root, { recursive: true, force: true });
         }
+    });
+
+    describe("reattach", () => {
+        // A 9.x trust list file: v2 needs contactUri and website.
+        const legacyTrustList = JSON.stringify({
+            $schema: schemaUrl("TrustList", 1),
+            metadata: { generation: 1 },
+            spec: {
+                id: "legacy",
+                entities: [
+                    {
+                        type: "internal",
+                        issuerKeyChainId: "issuer",
+                        revocationKeyChainId: "status",
+                        info: { name: "Example" },
+                    },
+                ],
+            },
+        });
+
+        function reattachService(configFolder: string) {
+            const apply = vi.fn().mockResolvedValue({});
+            const { service } = createService(apply, undefined, configFolder);
+            return { service, apply };
+        }
+
+        it("reads only the files of the requested kind, so a broken file of another kind does not block it", async () => {
+            const root = tenantFolder({
+                "t/clients/folder-client.json": JSON.stringify({
+                    $schema: schemaUrl("Client"),
+                    metadata: { generation: 1 },
+                    spec: {
+                        clientId: "folder-client",
+                        secret: "secret",
+                        roles: ["issuance:offer"],
+                    },
+                }),
+                "t/trust-lists/legacy.json": legacyTrustList,
+            });
+            try {
+                const { service, apply } = reattachService(root);
+                await service.reattach(
+                    "t",
+                    "Client",
+                    "folder-client",
+                    "0".repeat(64),
+                );
+                expect(apply).toHaveBeenCalledTimes(1);
+                const bundle = apply.mock.calls[0][1];
+                expect(bundle.documents).toEqual([
+                    expect.objectContaining({ $schema: schemaUrl("Client") }),
+                ]);
+                expect(bundle.manifest.resources).toEqual([
+                    expect.objectContaining({
+                        kind: "Client",
+                        id: "folder-client",
+                    }),
+                ]);
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
+        it("answers 400 when another file of the requested kind cannot be imported", async () => {
+            const root = tenantFolder({
+                "t/trust-lists/good.json": JSON.stringify({
+                    $schema: schemaUrl("TrustList"),
+                    metadata: { generation: 1 },
+                    spec: {
+                        id: "good",
+                        entities: [
+                            {
+                                type: "internal",
+                                issuerKeyChainId: "issuer",
+                                revocationKeyChainId: "status",
+                                info: {
+                                    name: "Example",
+                                    contactUri: "info@example.com",
+                                    website: "https://example.com/",
+                                },
+                            },
+                        ],
+                    },
+                }),
+                "t/trust-lists/legacy.json": legacyTrustList,
+            });
+            try {
+                const { service, apply } = reattachService(root);
+                const thrown = await service
+                    .reattach("t", "TrustList", "good", "0".repeat(64))
+                    .catch((error: unknown) => error);
+                expect(thrown).toBeInstanceOf(BadRequestException);
+                expect(
+                    (thrown as BadRequestException).getResponse(),
+                ).toMatchObject({
+                    code: "CONFIG_FOLDER_INVALID",
+                    file: "trust-lists/legacy.json",
+                });
+                expect(apply).not.toHaveBeenCalled();
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
     });
 
     it("applies a tenant folder with a stable ownership source", async () => {
