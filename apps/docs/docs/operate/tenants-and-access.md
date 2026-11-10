@@ -218,11 +218,18 @@ provider's discovery document at startup, checks the issuer, the signing keys
 and the required `OIDC_AUDIENCE`, and accepts only JWT access tokens. The
 provider manages clients and people: `/api/client`, `/api/user` and creating a
 tenant with `roles` answer `501` (in the web client, turn off **Create an admin
-client**), and the web client signs in with client credentials only. Config
+client**), and the web client hides **API Clients** and **Users**. Config
 folders and bundles carry no clients either
 ([details](../reference/config-bundle-format.md#clients-with-another-identity-provider)).
 The settings are listed in the
 [environment variable reference](../reference/environment-variables.md#authentication).
+
+For single sign-on in the web client, create a public client at the provider
+with Authorization Code and PKCE, set `OIDC_UI_CLIENT_ID` to its client ID, and
+register the web client's URL and `<web client URL>/silent-check-sso.html` as
+redirect URIs and the web client's URL as post-logout redirect URI. The web
+client reads the provider's endpoints from its discovery document; logging out
+also ends the session at the provider when it offers an `end_session_endpoint`.
 
 Tokens get no client limits (`allowedIssuanceConfigs`,
 `allowedPresentationConfigs`), except where a client record is left from an

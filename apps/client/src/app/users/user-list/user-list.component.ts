@@ -15,7 +15,7 @@ import {
 } from '@eudiplo/sdk-core';
 import { JwtService } from '../../services/jwt.service';
 import { canManageRoles } from '../../services/role-grants';
-import { getApiErrorMessage } from '../../utils/error-message';
+import { getApiErrorMessage, hasHttpStatus } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { LoadErrorComponent } from '../../common/load-error.component';
 
@@ -128,6 +128,7 @@ export class UserListComponent implements OnInit {
     const errorText = `${message} ${this.getErrorDetails(error)}`.toLowerCase();
 
     return (
+      hasHttpStatus(error, 501) ||
       errorText.includes('human user management') ||
       errorText.includes('external oidc provider') ||
       errorText.includes('not implemented') ||

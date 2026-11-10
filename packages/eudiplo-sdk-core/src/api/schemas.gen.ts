@@ -88,12 +88,23 @@ export const FrontendConfigResponseDtoSchema = {
             type: 'string',
             description: 'Public URL of the instance (PUBLIC_URL). Wallets and other verifiers reach the wallet-facing endpoints, such as trust lists, under this URL, which can differ from the URL the client signed in with.',
             example: 'https://eudiplo.example.com'
+        },
+        authMode: {
+            enum: [
+                'builtin',
+                'keycloak',
+                'generic'
+            ],
+            type: 'string',
+            description: 'How the management API authenticates: `builtin` issues its own tokens, `keycloak` accepts Keycloak tokens and manages clients and people there, `generic` accepts the tokens of another OpenID Connect provider, which manages clients and people itself.',
+            example: 'builtin'
         }
     },
     required: [
         'grafana',
         'configImportMode',
-        'publicUrl'
+        'publicUrl',
+        'authMode'
     ]
 } as const;
 

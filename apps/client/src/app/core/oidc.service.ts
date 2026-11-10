@@ -1,14 +1,19 @@
 import { Injectable } from '@angular/core';
-import Keycloak from 'keycloak-js';
+import Keycloak, { type KeycloakConfig } from 'keycloak-js';
 import { Subject } from 'rxjs';
 
+/** How keycloak-js reaches the identity provider (`oidc_provider` of the backend's discovery). */
+export type OidcProvider = 'keycloak' | 'generic';
+
 export interface OidcConfig {
-  /** Keycloak issuer URL, e.g. http://localhost:8080/realms/eudiplo */
+  /** Issuer URL, e.g. http://localhost:8080/realms/eudiplo */
   issuerUrl: string;
-  /** Public client ID registered for the Angular UI, e.g. eudiplo-ui */
+  /** Public client ID of the Angular UI at the provider, e.g. eudiplo-ui */
   uiClientId: string;
   /** EUDIPLO backend base URL */
   apiUrl: string;
+  /** Keycloak realm or any provider by its discovery document; stored configs without it are Keycloak. */
+  provider?: OidcProvider;
 }
 
 const STORAGE_CONFIG_KEY = 'oidc_config';
@@ -129,10 +134,21 @@ export class OidcService {
     return this.keycloak.updateToken(minValidity);
   }
 
+  /**
+   * Ends the session here and at the provider, which then returns to the web
+   * client's base URL, also when it is served under a path. A provider without
+   * an `end_session_endpoint` keeps its session; the page still leaves.
+   */
   logout(redirectUri?: string): void {
+    const keycloak = this.keycloak;
+    const target = redirectUri ?? document.baseURI;
     this.clearStorage();
-    // The web client's base URL, also when it is served under a path.
-    this.keycloak?.logout({ redirectUri: redirectUri ?? document.baseURI });
+    keycloak?.logout({ redirectUri: target }).catch(() => this.leaveTo(target));
+  }
+
+  /** Opens `url` in place of the web client. */
+  protected leaveTo(url: string): void {
+    globalThis.location.assign(url);
   }
 
   saveConfig(config: OidcConfig): void {
@@ -161,10 +177,18 @@ export class OidcService {
   }
 
   private createKeycloakInstance(config: OidcConfig): Keycloak {
+    if (config.provider === 'generic') {
+      // keycloak-js loads the provider's discovery document from the issuer.
+      return this.newKeycloak({ oidcProvider: config.issuerUrl, clientId: config.uiClientId });
+    }
     const parts = config.issuerUrl.split('/realms/');
     const baseUrl = parts[0] + '/';
     const realm = parts[1] ?? 'master';
-    return new Keycloak({ url: baseUrl, realm, clientId: config.uiClientId });
+    return this.newKeycloak({ url: baseUrl, realm, clientId: config.uiClientId });
+  }
+
+  protected newKeycloak(config: KeycloakConfig): Keycloak {
+    return new Keycloak(config);
   }
 
   private scheduleTokenRefresh(): void {

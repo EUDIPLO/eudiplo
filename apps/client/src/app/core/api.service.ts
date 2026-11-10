@@ -174,6 +174,7 @@ export class ApiService implements OnDestroy {
         issuerUrl: discovery.issuer,
         uiClientId: discovery.ui_client_id,
         apiUrl: baseUrl,
+        provider: discovery.oidc_provider === 'generic' ? 'generic' : 'keycloak',
       });
       return;
     }

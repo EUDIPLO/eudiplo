@@ -21,7 +21,7 @@ export const AUTH_VALIDATION_SCHEMA: Joi.ObjectSchema = Joi.object({
             }),
         })
         .description(
-            "Identity provider in OIDC mode. Refused without `OIDC`. `keycloak` manages clients and people through the Keycloak admin API. `generic` accepts access tokens of any OpenID Connect provider and leaves clients and people to that provider: the client and user endpoints answer `501`, and the Web Client offers no single sign-on yet",
+            "Identity provider in OIDC mode. Refused without `OIDC`. `keycloak` manages clients and people through the Keycloak admin API. `generic` accepts access tokens of any OpenID Connect provider and leaves clients and people to that provider: the client and user endpoints answer `501`",
         )
         .meta({
             group: "auth",
@@ -144,7 +144,7 @@ export const AUTH_VALIDATION_SCHEMA: Joi.ObjectSchema = Joi.object({
         otherwise: Joi.optional(),
     })
         .description(
-            "Public client ID for the Angular UI with `OIDC_PROVIDER=keycloak`. Used to register a public Keycloak client for Authorization Code + PKCE login.",
+            "Public client ID for the Angular UI in OIDC mode, for Authorization Code + PKCE login. With `OIDC_PROVIDER=keycloak` EUDIPLO registers it in Keycloak; with `generic` create it at the provider as a public client with the Web Client's URL and `<url>/silent-check-sso.html` as redirect URIs.",
         )
         .meta({ group: "auth", order: 95 }),
 

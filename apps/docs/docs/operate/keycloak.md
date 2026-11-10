@@ -95,7 +95,9 @@ codes only to the web client. With `OIDC_UI_URL` set, EUDIPLO sets the client's
 redirect URIs to the pages under each URL (`https://console.example.com/*`) and
 its web origins to their origins, on every start. A path, as in
 `https://example.com/eudiplo-client/` for a web client behind
-`CLIENT_BASE_HREF`, is kept.
+`CLIENT_BASE_HREF`, is kept. Its valid post-logout redirect URIs are `+` (the
+redirect URIs), so logging out in the web client also ends the Keycloak session
+and returns to the web client.
 
 Without `OIDC_UI_URL`, EUDIPLO keeps the redirect URIs and web origins set in
 Keycloak, so you can manage them there, but removes the redirect URI `*`, which

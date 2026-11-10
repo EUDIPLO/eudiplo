@@ -8,6 +8,7 @@ import { provideRouter, Router, RouterLink } from '@angular/router';
 import { NEVER, of } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppComponent } from './app.component';
+import { type AuthMode, FrontendConfigService } from './services/frontend-config.service';
 import { ApiService } from './core';
 import { JwtService, roles as allRoles, type Role } from './services/jwt.service';
 import {
@@ -34,11 +35,15 @@ describe('AppComponent', () => {
 class EmptyPageComponent {}
 
 describe('AppComponent navigation', () => {
-  function renderNav(roles: Role[]): HTMLElement {
+  function renderNav(roles: Role[], authMode: AuthMode | null = null): HTMLElement {
     TestBed.configureTestingModule({
       imports: [AppComponent],
       providers: [
         provideRouter([{ path: '**', component: EmptyPageComponent }]),
+        {
+          provide: FrontendConfigService,
+          useValue: { authMode, getConfig: () => Promise.resolve(null) },
+        },
         {
           provide: JwtService,
           useValue: {
@@ -56,12 +61,24 @@ describe('AppComponent navigation', () => {
     return fixture.nativeElement as HTMLElement;
   }
 
-  function menuItems(roles: Role[]): string[] {
+  function menuItems(roles: Role[], authMode: AuthMode | null = null): string[] {
     return Array.from(
-      renderNav(roles).querySelectorAll('mat-sidenav [matListItemTitle]'),
+      renderNav(roles, authMode).querySelectorAll('mat-sidenav [matListItemTitle]'),
       (item) => item.textContent?.trim() ?? ''
     );
   }
+
+  it.each<[AuthMode | null, string[], string[]]>([
+    [null, ['API Clients', 'Users'], []],
+    ['keycloak', ['API Clients', 'Users'], []],
+    ['builtin', ['API Clients'], ['Users']],
+    ['generic', [], ['API Clients', 'Users']],
+  ])('with auth mode %s lists %j and hides %j', (authMode, listed, hidden) => {
+    const items = menuItems(['clients:manage', 'users:manage'], authMode);
+
+    for (const item of listed) expect(items).toContain(item);
+    for (const item of hidden) expect(items).not.toContain(item);
+  });
 
   // RouterLink only listens for click; on an anchor the browser turns Enter into one.
   it('renders every entry as a link, so Enter opens it', () => {

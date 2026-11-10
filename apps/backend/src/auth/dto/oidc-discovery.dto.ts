@@ -9,9 +9,16 @@ export interface OidcDiscoveryDto {
     issuer: string;
 
     /**
-     * Public client ID for the Angular UI (Authorization Code + PKCE). Only present with Keycloak (`OIDC_PROVIDER=keycloak`).
+     * Public client ID for the Angular UI (Authorization Code + PKCE). Only present in OIDC mode.
      */
     ui_client_id?: string;
+
+    /**
+     * How the Angular UI signs in with `ui_client_id`: `keycloak` through the
+     * Keycloak realm, `generic` through the discovery document of `issuer`.
+     * Only present in OIDC mode.
+     */
+    oidc_provider?: "keycloak" | "generic";
 
     /**
      * URL of the OP's OAuth 2.0 Authorization Endpoint.

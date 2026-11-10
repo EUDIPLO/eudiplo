@@ -43,6 +43,25 @@ describe('FrontendConfigService', () => {
     });
   });
 
+  it('reports how the management API authenticates', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          grafana: { tempoUid: 'tempo', lokiUid: 'loki' },
+          configImportMode: 'disabled',
+          publicUrl,
+          authMode: 'generic',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+    const service = TestBed.inject(FrontendConfigService);
+
+    expect(service.authMode).toBeNull();
+    await service.getConfig();
+    expect(service.authMode).toBe('generic');
+  });
+
   it('leaves the public URL out for backends that do not report it', async () => {
     publicUrl = undefined;
     const service = TestBed.inject(FrontendConfigService);

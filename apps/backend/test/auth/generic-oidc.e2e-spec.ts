@@ -339,7 +339,7 @@ describe("Generic OIDC provider (e2e)", () => {
         ).not.toContain("generic-half");
     });
 
-    test("advertises the provider's endpoints and no single sign-on for the Web Client", async () => {
+    test("advertises the provider's endpoints and the Web Client's client there", async () => {
         const response = await request(app.getHttpServer())
             .get("/.well-known/oauth-authorization-server")
             .expect(200);
@@ -348,8 +348,9 @@ describe("Generic OIDC provider (e2e)", () => {
             issuer,
             token_endpoint: `${base}/application/o/token/`,
             jwks_uri: `${base}/application/o/eudiplo/jwks/`,
+            ui_client_id: "eudiplo-ui",
+            oidc_provider: "generic",
         });
-        expect(response.body).not.toHaveProperty("ui_client_id");
     });
 
     test("has no built-in token endpoint", async () => {

@@ -153,7 +153,7 @@
               </a>
             }
 
-            @if (hasRole('clients:manage')) {
+            @if (hasRole('clients:manage') && managesClients) {
               <a
                 mat-list-item
                 [routerLink]="['/clients']"
@@ -166,7 +166,7 @@
               </a>
             }
 
-            @if (hasRole('users:manage')) {
+            @if (hasRole('users:manage') && managesUsers) {
               <a
                 mat-list-item
                 [routerLink]="['/users']"

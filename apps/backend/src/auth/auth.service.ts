@@ -148,7 +148,11 @@ export class AuthService {
         publicUrl: string,
     ): Pick<
         OidcDiscoveryDto,
-        "issuer" | "token_endpoint" | "jwks_uri" | "ui_client_id"
+        | "issuer"
+        | "token_endpoint"
+        | "jwks_uri"
+        | "ui_client_id"
+        | "oidc_provider"
     > {
         const settings = this.settings;
         switch (settings.mode) {
@@ -165,11 +169,11 @@ export class AuthService {
                     token_endpoint: `${settings.issuer}/protocol/openid-connect/token`,
                     jwks_uri: `${publicUrl}/.well-known/jwks.json`,
                     ui_client_id: settings.uiClientId,
+                    oidc_provider: "keycloak",
                 };
             case "generic": {
-                // From the provider's discovery document. The Web Client signs
-                // in to other providers with client credentials only, so it
-                // gets no client for single sign-on.
+                // From the provider's discovery document. The operator creates
+                // the Web Client's public client at the provider.
                 const provider = this.issuerMetadata;
                 if (!provider) {
                     throw new Error(
@@ -180,6 +184,8 @@ export class AuthService {
                     issuer: settings.issuer,
                     token_endpoint: provider.token_endpoint,
                     jwks_uri: provider.jwks_uri,
+                    ui_client_id: settings.uiClientId,
+                    oidc_provider: "generic",
                 };
             }
         }

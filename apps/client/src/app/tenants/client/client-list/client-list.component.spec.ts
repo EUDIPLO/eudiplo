@@ -282,3 +282,45 @@ describe('ClientListComponent rotate secret', () => {
     expect(useRotatedSecret).not.toHaveBeenCalled();
   });
 });
+
+describe('ClientListComponent with another identity provider', () => {
+  afterEach(() => {
+    client.setConfig({ fetch: () => new Promise<Response>(() => undefined) });
+  });
+
+  it('explains that the identity provider manages the clients instead of offering a retry', async () => {
+    vi.restoreAllMocks();
+    client.setConfig({
+      fetch: vi.fn<typeof fetch>(
+        async () =>
+          new Response(
+            JSON.stringify({
+              statusCode: 501,
+              message: 'Clients are managed in the identity provider (OIDC_PROVIDER=generic).',
+            }),
+            { status: 501, headers: { 'Content-Type': 'application/json' } }
+          )
+      ),
+    });
+    await TestBed.configureTestingModule({
+      imports: [ClientListComponent],
+      providers: [
+        provideRouter([]),
+        { provide: JwtService, useValue: { getRoles: () => ['clients:manage'] } },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ClientListComponent);
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(page.textContent).toContain('Client management is unavailable');
+    });
+    expect(page.textContent).toContain(
+      'Clients are managed in the identity provider (OIDC_PROVIDER=generic).'
+    );
+    expect(page.querySelector('app-load-error')).toBeNull();
+    expect(page.querySelector('[aria-label="Create New Client"]')).toBeNull();
+  });
+});

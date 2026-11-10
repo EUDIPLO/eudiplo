@@ -3,11 +3,15 @@ import { appControllerGetFrontendConfig, type FrontendConfigResponseDto } from '
 import { ApiService } from '../core';
 
 export type ConfigImportMode = 'disabled' | 'create' | 'upsert' | 'replace';
+/** How the management API authenticates; with `generic` the identity provider manages clients and people. */
+export type AuthMode = 'builtin' | 'keycloak' | 'generic';
 
 export interface FrontendConfig {
   configImportMode: ConfigImportMode;
   /** The backend's `PUBLIC_URL`; missing when the backend does not report it. */
   publicUrl?: string;
+  /** Missing when the backend does not report it. */
+  authMode?: AuthMode;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -27,7 +31,11 @@ export class FrontendConfigService {
       .then((response) => {
         const data = response.data as FrontendConfigResponseDto | undefined;
         this.config = data?.configImportMode
-          ? { configImportMode: data.configImportMode, publicUrl: data.publicUrl || undefined }
+          ? {
+              configImportMode: data.configImportMode,
+              publicUrl: data.publicUrl || undefined,
+              authMode: data.authMode,
+            }
           : null;
         this.configBaseUrl = baseUrl;
         return this.config;
@@ -42,5 +50,10 @@ export class FrontendConfigService {
 
   get configImportMode(): ConfigImportMode | null {
     return this.config?.configImportMode ?? null;
+  }
+
+  /** The authentication mode once the config is loaded, else null. */
+  get authMode(): AuthMode | null {
+    return this.config?.authMode ?? null;
   }
 }

@@ -365,6 +365,26 @@ describe('LoginComponent with a kept session', () => {
     expect(fixture.componentInstance.isLoading).toBe(false);
   });
 
+  it("names the token endpoint's reason, such as another identity provider's", async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    api.loginWithClientCredentials.mockRejectedValue(
+      new OAuth2HttpError(
+        'OAuth2 error invalid_client. Client authentication failed',
+        'invalid_client',
+        new Response(null, { status: 401 }),
+        { error: 'invalid_client', error_description: 'Client authentication failed' }
+      )
+    );
+    render();
+    button('Sign out and use other credentials')?.click();
+
+    await submitForm('client-a', 'http://backend.test');
+
+    expect(snackTexts()).toEqual([
+      'Login failed. The token endpoint refused the sign-in: OAuth2 error invalid_client. Client authentication failed',
+    ]);
+  });
+
   it('reports a failed navigation after a sign-in as such, not as a failed sign-in', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     navigateByUrl.mockRejectedValue(new Error('Loading chunk failed'));
@@ -648,6 +668,29 @@ describe('LoginComponent with a kept session', () => {
         issuerUrl: 'http://idp.test',
         uiClientId: 'ui',
         apiUrl: 'http://backend.test',
+        provider: 'keycloak',
+      });
+    });
+
+    it('signs in with SSO at another identity provider through its issuer', async () => {
+      api.discovery = {
+        issuer: 'https://auth.test/application/o/eudiplo/',
+        ui_client_id: 'eudiplo-console',
+        oidc_provider: 'generic',
+      };
+      const redirectToLogin = vi.fn(() => Promise.resolve());
+      Object.assign(TestBed.inject(OidcService), { redirectToLogin });
+      render();
+      fixture.componentInstance.loginForm.patchValue({ apiUrl: 'http://backend.test' });
+      fixture.detectChanges();
+
+      await fixture.componentInstance.onSubmit();
+
+      expect(redirectToLogin).toHaveBeenCalledWith({
+        issuerUrl: 'https://auth.test/application/o/eudiplo/',
+        uiClientId: 'eudiplo-console',
+        apiUrl: 'http://backend.test',
+        provider: 'generic',
       });
     });
 
@@ -767,6 +810,7 @@ describe('LoginComponent with a kept session', () => {
         issuerUrl: 'http://idp.test',
         uiClientId: 'ui',
         apiUrl: 'http://new.test',
+        provider: 'keycloak',
       });
       expectUnavailable(fixture, loginButton(), 'Redirecting to the identity provider…');
     });
@@ -876,6 +920,7 @@ describe('LoginComponent with a kept session', () => {
         issuerUrl: 'http://idp.test',
         uiClientId: 'ui',
         apiUrl: 'https://other.test',
+        provider: 'keycloak',
       });
     });
 

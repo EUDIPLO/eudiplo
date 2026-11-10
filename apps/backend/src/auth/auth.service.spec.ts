@@ -49,13 +49,19 @@ describe("AuthService discovery", () => {
             token_endpoint: `${oidc}/protocol/openid-connect/token`,
             jwks_uri: `${PUBLIC_URL}/.well-known/jwks.json`,
             ui_client_id: "web-ui",
+            oidc_provider: "keycloak",
         });
     });
 
-    it("advertises another provider's endpoints without single sign-on", () => {
+    it("advertises another provider's endpoints and the Web Client's client there", () => {
         const issuer = "https://auth.example.com/application/o/eudiplo/";
         const discovery = serviceFor(
-            { PUBLIC_URL, OIDC: issuer, OIDC_PROVIDER: "generic" },
+            {
+                PUBLIC_URL,
+                OIDC: issuer,
+                OIDC_PROVIDER: "generic",
+                OIDC_UI_CLIENT_ID: "eudiplo-console",
+            },
             {
                 issuer,
                 jwks_uri: `${issuer}jwks/`,
@@ -67,8 +73,9 @@ describe("AuthService discovery", () => {
             issuer,
             token_endpoint: "https://auth.example.com/application/o/token/",
             jwks_uri: `${issuer}jwks/`,
+            ui_client_id: "eudiplo-console",
+            oidc_provider: "generic",
         });
-        expect(discovery).not.toHaveProperty("ui_client_id");
     });
 
     it("never falls back to Keycloak's endpoints for another provider", () => {

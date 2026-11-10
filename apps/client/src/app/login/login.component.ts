@@ -35,7 +35,7 @@ import { map, merge, Subscription, take } from 'rxjs';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { EnvironmentService } from '../services/environment.service';
 import { ApiService, withoutTrailingSlashes } from '../core';
-import { OidcService } from '../core/oidc.service';
+import { type OidcProvider, OidcService } from '../core/oidc.service';
 import { focusFieldToFix, showFieldsToFix } from '../common/field-to-fix.util';
 import { apiErrorDetail, asSentence } from '../utils/error-message';
 import { KEEP_CALLER_FAILURE } from '../services/jwt.service';
@@ -99,6 +99,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   selectedLoginMode: 'sso' | 'client' = 'sso';
   private discoveredIssuer?: string;
   private discoveredUiClientId?: string;
+  private discoveredProvider?: OidcProvider;
   /** The kept session this page waits for instead of showing the form. */
   readonly keptSession = signal<PreviousSession | null>(null);
   /**
@@ -448,6 +449,7 @@ export class LoginComponent implements OnInit, OnDestroy {
         this.selectedLoginMode = this.keepClientCredentialsTab && sameInstance ? 'client' : 'sso';
         this.discoveredIssuer = discovery.issuer;
         this.discoveredUiClientId = discovery.ui_client_id;
+        this.discoveredProvider = discovery.oidc_provider === 'generic' ? 'generic' : 'keycloak';
       } else {
         this.detectedMode = 'local';
         this.selectedLoginMode = 'client';
@@ -555,6 +557,7 @@ export class LoginComponent implements OnInit, OnDestroy {
           issuerUrl,
           uiClientId,
           apiUrl: normalizedUrl,
+          provider: this.discoveredProvider,
         });
         return;
       }
@@ -594,6 +597,9 @@ export class LoginComponent implements OnInit, OnDestroy {
       if (error?.message?.includes('fetch') || error?.name === 'TypeError') {
         errorMessage +=
           'Could not connect to EUDIPLO. Check if the instance URL is correct and the server is running.';
+      } else if (error instanceof OAuth2HttpError && error.oauth2Code) {
+        // The reason of the token endpoint, such as another identity provider's.
+        errorMessage += `The token endpoint refused the sign-in: ${error.message}`;
       } else if (error?.status === 401 || error?.message?.includes('401')) {
         errorMessage += 'Invalid credentials. Please check your Client ID and Client Secret.';
       } else if (error?.status === 404 || error?.message?.includes('404')) {

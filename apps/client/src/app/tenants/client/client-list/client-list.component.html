@@ -1,6 +1,6 @@
 <div fxLayout="row" fxLayoutAlign="space-between center">
   <h2>Clients</h2>
-  @if (!loadedClients) {
+  @if (!loadedClients && !unavailableMessage) {
     <button
       matIconButton
       [routerLink]="['create']"
@@ -12,7 +12,19 @@
   }
 </div>
 
-@if (loadError) {
+@if (unavailableMessage) {
+  <mat-card class="mat-elevation-z2">
+    <mat-card-content>
+      <div fxLayout="column" fxLayoutGap="8px">
+        <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
+          <mat-icon color="warn">info</mat-icon>
+          <strong>Client management is unavailable</strong>
+        </div>
+        <p>{{ unavailableMessage }}</p>
+      </div>
+    </mat-card-content>
+  </mat-card>
+} @else if (loadError) {
   <app-load-error [message]="loadError" (retry)="loadClients()" />
 } @else if (!loading) {
   <table mat-table [dataSource]="clients" class="mat-elevation-z8">

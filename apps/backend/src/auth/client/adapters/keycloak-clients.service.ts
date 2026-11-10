@@ -309,6 +309,8 @@ export class KeycloakClientsProvider
             directAccessGrantsEnabled: false,
             enabled: true,
             ...addresses,
+            // Logging out returns to the web client: "+" allows the redirect URIs.
+            attributes: { "post.logout.redirect.uris": "+" },
         };
 
         if (existing?.id) {
