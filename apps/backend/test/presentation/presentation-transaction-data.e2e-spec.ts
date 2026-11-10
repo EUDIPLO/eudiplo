@@ -519,7 +519,9 @@ describe("Presentation - Transaction Data", () => {
             .expect(200);
 
         expect(sessionRes.body.status).toBe("failed");
-        expect(sessionRes.body.errorReason).toBeDefined();
+        expect(sessionRes.body.errorReason).toContain(
+            "Transaction data entry 0 has no matching hash",
+        );
     });
 
     test("should reject presentation when transaction data provided but no hashes in KB-JWT", async () => {
@@ -556,7 +558,131 @@ describe("Presentation - Transaction Data", () => {
             .expect(200);
 
         expect(sessionRes.body.status).toBe("failed");
-        expect(sessionRes.body.errorReason).toBeDefined();
+        expect(sessionRes.body.errorReason).toContain(
+            "Transaction data entry 0 has no matching hash",
+        );
+    });
+
+    describe("an entry referencing two credentials", () => {
+        const requestId = "pid-two-credentials";
+
+        beforeAll(async () => {
+            const pidQuery = (id: string) => ({
+                id,
+                format: "dc+sd-jwt" as const,
+                meta: {
+                    vct_values: [
+                        `${host}/issuers/demo/credentials-metadata/vct/pid`,
+                    ],
+                },
+                claims: [{ path: ["address", "locality"] }],
+                trusted_authorities: FIXTURE_TRUSTED_AUTHORITIES,
+            });
+            await request(app.getHttpServer())
+                .post("/verifier/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    id: requestId,
+                    description: "Two PIDs, either may authorize the payment",
+                    dcql_query: {
+                        credentials: [pidQuery("pid"), pidQuery("pid_second")],
+                    },
+                } satisfies PresentationConfigCreateDto)
+                .expect(201);
+        });
+
+        /**
+         * Presents both credentials; only those named in `carriers` carry
+         * the entry's hash in their KB-JWT (OID4VP 1.0 §5.1: the wallet
+         * uses one of the referenced credentials).
+         */
+        async function presentBoth(carriers: string[]) {
+            const transactionData: TransactionData[] = [
+                {
+                    type: "payment_authorization",
+                    credential_ids: ["pid", "pid_second"],
+                    amount: "30.00",
+                    currency: "EUR",
+                },
+            ];
+            const res = await createPresentationRequest(app, authToken, {
+                response_type: ResponseType.URI,
+                requestId,
+                transaction_data: transactionData,
+            });
+            const authRequest = client.parseOpenid4vpAuthorizationRequest({
+                authorizationRequest: res.body.uri,
+            });
+            const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+                authorizationRequestPayload: authRequest.params,
+                responseMode: { type: "direct_post" },
+            });
+            const hash = computeTransactionDataHash(
+                base64url.encode(JSON.stringify(transactionData[0])),
+            );
+
+            const vpToken: Record<string, string[]> = {};
+            for (const credentialId of ["pid", "pid_second"]) {
+                vpToken[credentialId] = [
+                    await preparePresentationWithTransactionData(
+                        {
+                            iat: Math.floor(Date.now() / 1000),
+                            aud: resolved.authorizationRequestPayload
+                                .client_id as string,
+                            nonce: resolved.authorizationRequestPayload.nonce,
+                            ...(carriers.includes(credentialId) && {
+                                transaction_data_hashes: [hash],
+                            }),
+                        },
+                        privateIssuerKey,
+                        issuerCertChain,
+                        statusListService,
+                        credentialConfigId,
+                    ),
+                ];
+            }
+
+            const jwt = await encryptVpToken(vpToken, "", resolved);
+
+            const authorizationResponse =
+                await client.createOpenid4vpAuthorizationResponse({
+                    authorizationRequestPayload: authRequest.params,
+                    authorizationResponsePayload: { response: jwt },
+                    ...callbacks,
+                });
+            const submitRes = await client.submitOpenid4vpAuthorizationResponse(
+                {
+                    authorizationResponsePayload:
+                        authorizationResponse.authorizationResponsePayload,
+                    authorizationRequestPayload:
+                        resolved.authorizationRequestPayload as Openid4vpAuthorizationRequest,
+                },
+            );
+            const sessionRes = await request(app.getHttpServer())
+                .get(`/session/${res.body.session}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            return { submitRes, session: sessionRes.body };
+        }
+
+        test("accepts the hash in only one of the credentials", async () => {
+            const { submitRes, session } = await presentBoth(["pid_second"]);
+
+            expect(submitRes.response.status).toBe(200);
+            expect(session.status).toBe("completed");
+        });
+
+        test("rejects the response when neither credential carries the hash", async () => {
+            const { submitRes, session } = await presentBoth([]);
+
+            expect(submitRes.response.status).toBe(400);
+            expect(session.status).toBe("failed");
+            expect(session.errorReason).toContain(
+                "Transaction data entry 0 has no matching hash",
+            );
+        });
     });
 
     test("should accept presentation without transaction data", async () => {

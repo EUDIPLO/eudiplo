@@ -1,4 +1,4 @@
-import { base64url, decodeJwt } from "jose";
+import { decodeJwt } from "jose";
 import type { SessionData } from "../../../session/domain/session-data.js";
 import type {
     RevocationCheckMode,
@@ -21,6 +21,7 @@ import {
     missingClaimsViolation,
     type VerifierCredentialFormat,
 } from "../domain/dcql-claim-policy.js";
+import { verifyTransactionDataBinding } from "../domain/transaction-data-binding.js";
 import { missingTrustedAuthorities } from "../domain/trusted-authority-requirement.js";
 import {
     type DcqlTrustedAuthority,
@@ -120,9 +121,12 @@ export class CredentialVerificationFailedError extends Error {
  * trusted authorities resolve, its claim sets are well formed; then every
  * presented value is verified by its format and must disclose the requested
  * claims (or one claim set) with one of their requested `values`. A value
- * mismatch is reported before missing claims.
+ * mismatch is reported before missing claims. Once every credential is
+ * verified, the request's transaction data must be authorized by the
+ * presentations it references (see `verifyTransactionDataBinding`).
  *
  * Throws the errors above, `UnknownClaimSetReferenceError`,
+ * `TransactionDataBindingError`,
  * `UnsupportedCredentialVerifierFormat`, `InvalidTrustedAuthoritiesError`, or
  * whatever a format throws (for example SD-JWT VC verification errors).
  */
@@ -184,7 +188,7 @@ export class VerifyPresentationResponse {
             request,
         };
 
-        return Promise.all(
+        const verified = await Promise.all(
             credentialIds.map(async (credentialId) => {
                 const presented = response.vp_token[credentialId];
                 const credentialQuery = query.dcql_query.credentials.find(
@@ -200,10 +204,6 @@ export class VerifyPresentationResponse {
                     );
                 }
 
-                const transactionData = transactionDataFor(
-                    transactionDataStrings,
-                    credentialId,
-                );
                 const trustLists =
                     await this.trustLists.resolveTrustListRefsForTenant(
                         trustListAuthorities(
@@ -212,20 +212,13 @@ export class VerifyPresentationResponse {
                         session.tenantId,
                         tenantHost,
                     );
-                const options: VerifierOptions = {
-                    ...verifierTrustOptions({
-                        trustLists,
-                        tenantId: session.tenantId,
-                        authorities: credentialQuery.trusted_authorities,
-                        statusCheckMode: query.statusCheckMode,
-                        skewSeconds: session.skewSeconds ?? query.skewSeconds,
-                    }),
-                    transactionData: transactionData && {
-                        credentialId,
-                        entries: transactionData,
-                    },
-                    ts12TransactionData: transactionData?.some(isTs12),
-                };
+                const options: VerifierOptions = verifierTrustOptions({
+                    trustLists,
+                    tenantId: session.tenantId,
+                    authorities: credentialQuery.trusted_authorities,
+                    statusCheckMode: query.statusCheckMode,
+                    skewSeconds: session.skewSeconds ?? query.skewSeconds,
+                });
 
                 const format = requestedFormat(
                     session.requestObject!,
@@ -237,8 +230,8 @@ export class VerifyPresentationResponse {
                     !!credentialQuery.claim_sets &&
                     credentialQuery.claim_sets.length > 0;
 
-                const values = await Promise.all(
-                    presented.map(async (credential) => {
+                const results = await Promise.all(
+                    presented.map(async (credential, index) => {
                         const result = await this.formats
                             .resolve(format)
                             .verify(credential, {
@@ -279,48 +272,39 @@ export class VerifyPresentationResponse {
                                 ),
                             );
                         }
-                        return result.claims;
+                        return {
+                            claims: result.claims,
+                            presentation: result.keyBinding && {
+                                credentialId,
+                                index,
+                                keyBinding: result.keyBinding,
+                            },
+                        };
                     }),
                 );
 
-                return { id: credentialId, values };
+                return {
+                    id: credentialId,
+                    values: results.map(({ claims }) => claims),
+                    presentations: results.flatMap(({ presentation }) =>
+                        presentation ? [presentation] : [],
+                    ),
+                };
             }),
         );
-    }
-}
 
-/**
- * The transaction data entries (still base64url encoded, as needed for the
- * hash check) whose `credential_ids` reference the credential.
- */
-function transactionDataFor(
-    transactionData: string[] | undefined,
-    credentialId: string,
-): string[] | undefined {
-    return transactionData?.filter(
-        (encoded) =>
-            decodeTransactionData<{ credential_ids?: string[] }>(
-                encoded,
-            )?.credential_ids?.includes(credentialId) ?? false,
-    );
-}
+        // An entry may reference several credentials, of which the wallet
+        // uses one to authorize it (OID4VP 1.0 §5.1), so the hashes are
+        // checked across all presentations.
+        await verifyTransactionDataBinding({
+            transactionData: transactionDataStrings,
+            presentations: verified.flatMap(
+                ({ presentations }) => presentations,
+            ),
+            responseMode: request?.response_mode,
+        });
 
-/** TS12 SCA transaction data requires additional key-binding claims. */
-function isTs12(encoded: string): boolean {
-    return (
-        decodeTransactionData<{ type?: string }>(encoded)?.type?.startsWith(
-            "urn:eudi:sca:",
-        ) ?? false
-    );
-}
-
-function decodeTransactionData<T>(encoded: string): T | undefined {
-    try {
-        return JSON.parse(
-            Buffer.from(base64url.decode(encoded)).toString(),
-        ) as T;
-    } catch {
-        return undefined;
+        return verified.map(({ id, values }) => ({ id, values }));
     }
 }
 

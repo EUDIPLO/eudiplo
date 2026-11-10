@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { BadRequestException, ConflictException } from "@nestjs/common";
 import { base64url } from "jose";
 import { describe, expect, it, vi } from "vitest";
@@ -209,9 +210,41 @@ describe("OID4VP presentation verification", () => {
                 requiredClaimKeys: ["address.locality"],
                 keyBindingNonce: "nonce",
                 keyBindingAudience: "x509_hash:client",
-                keyBindingResponseMode: "direct_post.jwt",
                 skewSeconds: expect.any(Number),
             }),
+        );
+    });
+
+    it("checks the KB-JWT transaction data hashes and answers a mismatch with 400", async () => {
+        const entry = base64url.encode(
+            JSON.stringify({ type: "payment", credential_ids: ["pid"] }),
+        );
+        const hash = createHash("sha256").update(entry).digest("base64url");
+        const { service, config, session, sdJwt } = setup(
+            [{ id: "pid", format: "dc+sd-jwt" }],
+            { request: { transaction_data: [entry] } },
+        );
+        const respond = () =>
+            service.parseResponse(
+                { vp_token: { pid: ["vp"] } } as any,
+                config,
+                session,
+            );
+
+        sdJwt.verify.mockResolvedValueOnce({
+            payload: { given_name: "Erika" },
+            kb: { payload: { transaction_data_hashes: [hash] } },
+        });
+        await expect(respond()).resolves.toHaveLength(1);
+
+        // Without a KB-JWT the adapter hands over no hashes.
+        sdJwt.verify.mockResolvedValueOnce({
+            payload: { given_name: "Erika" },
+        });
+        const error = await respond().catch((e) => e);
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect(error.message).toContain(
+            "Transaction data entry 0 has no matching hash",
         );
     });
 

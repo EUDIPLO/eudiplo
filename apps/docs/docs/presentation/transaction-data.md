@@ -51,7 +51,7 @@ A payment confirmation request, with the credential query `payment_credential` d
 }
 ```
 
-For TS12 entries, the key binding JWT must additionally contain:
+For TS12 entries, every key binding JWT that carries the entry's hash must additionally contain:
 
 - a non-empty `jti`,
 - `response_mode` equal to the request's response mode (`direct_post.jwt`, or `dc_api.jwt` with the DC API),
@@ -60,9 +60,16 @@ For TS12 entries, the key binding JWT must additionally contain:
 
 ## How EUDIPLO checks the binding
 
-The check applies to SD-JWT VC credentials; EUDIPLO does not check transaction data for mDOC presentations. For every presented SD-JWT VC, EUDIPLO takes the entries whose `credential_ids` contain the credential's query ID and requires in the key binding JWT:
+The check applies to SD-JWT VC credentials; EUDIPLO does not check transaction data for mDOC presentations. It runs once all credentials in the response are verified.
 
-- `transaction_data_hashes` with exactly one hash per entry, in any order,
-- each hash computed over the base64url-encoded entry exactly as sent in the request, with the algorithm from `transaction_data_hashes_alg` in the key binding JWT (`sha-256` when absent). The algorithm must be one the entry's own `transaction_data_hashes_alg` allows, so `sha-384` and `sha-512` are only accepted when the entry lists them.
+The wallet uses only one of the credentials an entry's `credential_ids` reference to authorize it ([OpenID4VP 1.0, section 5.1](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#section-5.1)). So for every entry, at least one presented SD-JWT VC it references must carry the entry's hash in `transaction_data_hashes` of its key binding JWT. The other referenced credentials do not need it. For example, with `"credential_ids": ["pid", "bank_card"]` and both credentials presented, the hash in the `bank_card` key binding JWT is enough. If a credential query allows several presentations (`multiple: true`) and the wallet uses that credential, each of its presentations must carry the hash, because the result does not say which one authorized the transaction; the hash in only some of them fails the response. Since mDOC presentations are not checked, an entry that references both an mDOC and an SD-JWT VC query still needs the hash in a presented SD-JWT VC.
+
+Each hash is computed over the base64url-encoded entry exactly as sent in the request, with the algorithm from `transaction_data_hashes_alg` in the key binding JWT (`sha-256` when absent). The algorithm must be one the entry's own `transaction_data_hashes_alg` allows, so `sha-384` and `sha-512` are only accepted when the entry lists them. Hashes may come in any order.
+
+EUDIPLO also rejects the response when:
+
+- two identical entries share one hash: each entry needs a hash of its own,
+- the key binding JWT of a credential that an entry references contains a hash that matches no entry referencing that credential, for example the hash of an entry whose `credential_ids` do not list it, or of data EUDIPLO never sent. The same entry's hash in several referenced credentials is accepted. Key binding JWTs of credentials that no entry references are not checked.
+- the key binding JWT of a credential that an entry references has `transaction_data_hashes` that is not an array of strings, or a `transaction_data_hashes_alg` that is not a string.
 
 EUDIPLO does not check that `credential_ids` exist in the DCQL query: an entry whose IDs match no presented SD-JWT VC is sent to the wallet but not verified. If a hash is missing or does not match, the presentation fails and the session is set to `failed` (see [Session Outcome](../reference/session-outcome.md)). On success, the session and the [webhook](../reference/webhooks.md) contain the `transaction_data` that was sent, so your backend can match the result to its transaction.

@@ -101,23 +101,26 @@ flowchart TB
     C -->|yes| P[For each presentation]
     P --> S[Signature and issuer certificate chain]
     S --> T[Issuer trusted?]
-    T --> H[Holder binding: nonce, audience,<br/>transaction data hashes]
+    T --> H[Holder binding: nonce, audience]
     H --> X[Status list check]
     X --> Q[Requested claims disclosed<br/>with accepted values?]
-    Q --> OK[Session completed]
+    Q --> D[Transaction data authorized<br/>by a referenced credential?]
+    D --> OK[Session completed]
     C -->|no| F[Session failed]
     S -->|invalid| F
     T -->|untrusted| F
     H -->|mismatch| F
     X -->|revoked, suspended<br/>or unavailable| F
     Q -->|missing or<br/>other value| F
+    D -->|no matching hash| F
 ```
 
 1. **Completeness.** Every required `credential_sets` option must be satisfied; without credential sets, every credential query must be answered. Credential IDs that are not in the query are rejected, and a query that does not set `multiple: true` accepts only one presentation.
 2. **Signature and trust.** The format verifier (SD-JWT VC or mdoc) checks the issuer signature, builds the issuer certificate chain and checks every certificate's validity period. An SD-JWT VC is rejected if one of `iss`, `nbf`, `exp`, `cnf`, `vct`, `vct#integrity` and `status`, or a part of it, is selectively disclosed. Every credential query names its trusted issuers in `trusted_authorities`: the chain must match a PID, Pub-EAA or EAA issuer listed in one of the trust lists, and a trust list that cannot be loaded or has a bad signature fails the check. A list without a valid `NextUpdate`, or past it, is discarded, so its issuers are not trusted, and so is an older version of a list or one without a valid `LoTESequenceNumber` ([Older versions of a list](../trust/trust-lists.md#older-versions-of-a-list)); the check fails only when no list of the query's `etsi_tl` entry is left. A query without `trusted_authorities` is rejected; only with `SKIP_TRUST_AUTHORITY=true` (development and tests) is it allowed, and then any validly signed issuer is accepted. Certificate revocation (CRL, OCSP) is not checked. An SD-JWT VC query with only `openid_federation` authorities is checked through the issuer's federation trust chain instead, with the key `kid` of its federation metadata and no certificate chain, as described in [OpenID Federation](../trust/federation.md).
-3. **Holder binding.** The key binding JWT (SD-JWT VC) or device authentication (mdoc) must match the request's `nonce` and audience and, with transaction data, contain the matching hashes.
+3. **Holder binding.** The key binding JWT (SD-JWT VC) or device authentication (mdoc) must match the request's `nonce` and audience.
 4. **Status.** The credential's status list is fetched and checked according to `statusCheckMode`: `strict` fails if the list is unavailable, `best_effort` continues, `disabled` skips the check. A credential without status information, such as a short-lived one, is accepted in every mode. An SD-JWT VC whose `status` claim has no `status_list` cannot be checked, so `strict` rejects it and `best_effort` accepts it.
 5. **Claims.** The requested claims, or one of the `claim_sets`, must be disclosed, each with one of its `values` if the claim query lists them (`claim_value_mismatch` otherwise).
+6. **Transaction data.** Once all credentials are verified, each transaction data entry must be authorized by one SD-JWT VC it references, with the entry's hash in its key binding JWT ([Transaction data](../presentation/transaction-data.md#how-eudiplo-checks-the-binding)).
 
 A failed check records the failure as a structured `outcome` on the session, with a machine-readable code such as `trust_chain_not_trusted` ([Session outcome](../reference/session-outcome.md)).
 

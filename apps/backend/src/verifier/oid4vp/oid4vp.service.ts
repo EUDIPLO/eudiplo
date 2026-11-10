@@ -51,6 +51,7 @@ import type { AuthResponseData } from "../presentations/domain/auth-response.js"
 import { UnsupportedCredentialVerifierFormat } from "../presentations/domain/credential-verifier-format.js";
 import { UnknownClaimSetReferenceError } from "../presentations/domain/dcql-claim-policy.js";
 import { resolveDcqlTenantUrl } from "../presentations/domain/dcql-tenant-url.js";
+import { TransactionDataBindingError } from "../presentations/domain/transaction-data-binding.js";
 import { IncompletePresentationException } from "../presentations/exceptions/incomplete-presentation.exception.js";
 import { InvalidTrustedAuthoritiesError } from "../presentations/ports/trust-list-ref-resolver.js";
 import { TrustedAuthoritiesService } from "../presentations/trusted-authorities.service.js";
@@ -1097,7 +1098,8 @@ function presentationVerificationException(error: unknown): unknown {
     if (
         error instanceof MultiplePresentationsNotAllowedError ||
         error instanceof InvalidTrustedAuthoritiesError ||
-        error instanceof UnknownClaimSetReferenceError
+        error instanceof UnknownClaimSetReferenceError ||
+        error instanceof TransactionDataBindingError
     ) {
         return new BadRequestException(error.message);
     }
