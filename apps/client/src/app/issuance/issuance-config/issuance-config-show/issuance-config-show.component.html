@@ -369,6 +369,14 @@
                     }}</span>
                   </mat-list-item>
 
+                  @if (registrationCertificateGenerated) {
+                    <mat-list-item>
+                      <mat-icon matListItemIcon>autorenew</mat-icon>
+                      <span matListItemTitle>Renewal</span>
+                      <span matListItemLine>{{ registrationCertificateRenewalLabel }}</span>
+                    </mat-list-item>
+                  }
+
                   <mat-list-item>
                     <mat-icon matListItemIcon>
                       {{
@@ -409,10 +417,7 @@
                 }
               </mat-list>
 
-              @if (
-                registrationCertificateConfig?.enabled &&
-                registrationCertificateConfig?.mode === 'generate'
-              ) {
+              @if (registrationCertificateConfig?.enabled && registrationCertificateGenerated) {
                 <div fxLayout="row" fxLayoutGap="12px" style="margin-top: 16px">
                   <button
                     mat-raised-button

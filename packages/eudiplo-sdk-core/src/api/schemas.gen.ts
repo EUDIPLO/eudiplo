@@ -11808,6 +11808,16 @@ export const IssuerRegistrationCertificateConfigSchema = {
             type: 'string',
             description: 'Support URI used when generating a registration certificate (optional if registrar defaults are configured).',
             example: 'mailto:support@issuer.example'
+        },
+        renewal: {
+            type: 'string',
+            enum: [
+                'onCredentialConfigChange',
+                'onMetadataRequest',
+                'manual'
+            ],
+            description: 'When a generated certificate is renewed. onCredentialConfigChange (default): in the background after a credential or issuance configuration changes, and when issuer metadata is built. onMetadataRequest: only when issuer metadata is built. manual: only with Regenerate now. In every mode a missing or expired certificate is requested when issuer metadata is built.',
+            default: 'onCredentialConfigChange'
         }
     },
     additionalProperties: false

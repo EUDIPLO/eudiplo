@@ -177,9 +177,14 @@ export class RegistrationCertificateService {
             ...(req.body ?? {}),
         };
 
+        // custom_provides_attestations selects the issuer role only from the
+        // request itself (a generated issuer certificate), never from the
+        // registrar defaults. provides_attestations still counts from either.
         const hasProvidesAttestations =
-            Array.isArray(mergedBody.provides_attestations) &&
-            mergedBody.provides_attestations.length > 0;
+            (Array.isArray(mergedBody.provides_attestations) &&
+                mergedBody.provides_attestations.length > 0) ||
+            (Array.isArray(req.body?.custom_provides_attestations) &&
+                req.body.custom_provides_attestations.length > 0);
 
         if (
             !hasProvidesAttestations &&
@@ -214,13 +219,14 @@ export class RegistrationCertificateService {
 
         // Two supported certificate intents:
         // 1) Verifier role: must carry purpose and credentials
-        // 2) Issuer role: must carry provides_attestations
+        // 2) Issuer role: must carry provides_attestations or
+        //    custom_provides_attestations
         if (hasProvidesAttestations) {
             // Issuer role accepted without verifier-specific purpose/credentials constraints.
         } else {
             if (!hasPurpose) {
                 throw new BadRequestException(
-                    "registrationCert.body must include either provides_attestations (issuer role) or both purpose and credentials (verifier role)",
+                    "registrationCert.body must include either provides_attestations or custom_provides_attestations (issuer role) or both purpose and credentials (verifier role)",
                 );
             }
 

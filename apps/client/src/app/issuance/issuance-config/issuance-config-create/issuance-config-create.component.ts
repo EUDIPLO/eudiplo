@@ -59,7 +59,7 @@ import { RegistrarService } from '../../../registrar/registrar.service';
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { ConfigOwnershipNoticeComponent } from '../../../config-portability/config-ownership-notice.component';
 import { asSentence, getApiErrorMessage, getHttpErrorMessage } from '../../../utils/error-message';
-import { openErrorSnackBar } from '../../../utils/error-snackbar';
+import { errorSnackBarDuration, openErrorSnackBar } from '../../../utils/error-snackbar';
 import { certificateBase64, certificateValidator } from '../../../utils/certificate-validator';
 import { KeyChainService } from '../../../key-management/key-chain.service';
 import { FrontendConfigService } from '../../../services/frontend-config.service';
@@ -555,6 +555,7 @@ export class IssuanceConfigCreateComponent implements OnInit {
         jwt: [''],
         privacyPolicy: [''],
         supportUri: [''],
+        renewal: ['onCredentialConfigChange'],
       }),
     } as any);
     // Hidden federation fields must not block saving.
@@ -931,6 +932,7 @@ export class IssuanceConfigCreateComponent implements OnInit {
         jwt: registrationCertificate?.jwt ?? '',
         privacyPolicy: registrationCertificate?.privacyPolicy ?? '',
         supportUri: registrationCertificate?.supportUri ?? '',
+        renewal: registrationCertificate?.renewal ?? 'onCredentialConfigChange',
       },
     });
 
@@ -1129,6 +1131,16 @@ export class IssuanceConfigCreateComponent implements OnInit {
     return authorizationServers;
   }
 
+  /** Whether saving starts a background renewal of the registration certificate. */
+  private renewsInBackground(issuanceDto: UpdateIssuanceDto): boolean {
+    const certificate = issuanceDto.registrationCertificate;
+    return (
+      !!certificate?.enabled &&
+      (certificate.mode ?? 'generate') === 'generate' &&
+      (certificate.renewal ?? 'onCredentialConfigChange') === 'onCredentialConfigChange'
+    );
+  }
+
   private buildRegistrationCertificatePayload(registrationCertificateFormValue: any): any {
     if (!registrationCertificateFormValue?.enabled) {
       return null;
@@ -1147,6 +1159,12 @@ export class IssuanceConfigCreateComponent implements OnInit {
       mode: 'generate',
       privacyPolicy: registrationCertificateFormValue.privacyPolicy || undefined,
       supportUri: registrationCertificateFormValue.supportUri || undefined,
+      // The default is left out, so stored and exported settings only carry a choice.
+      renewal:
+        registrationCertificateFormValue.renewal &&
+        registrationCertificateFormValue.renewal !== 'onCredentialConfigChange'
+          ? registrationCertificateFormValue.renewal
+          : undefined,
     };
   }
 
@@ -1204,7 +1222,13 @@ export class IssuanceConfigCreateComponent implements OnInit {
       .saveConfiguration(issuanceDto)
       .then(
         () => {
-          this.snackBar.open(`Configuration saved successfully`, 'Close', { duration: 3000 });
+          if (this.renewsInBackground(issuanceDto)) {
+            const message =
+              'Configuration saved. If the registration certificate inputs changed, a new certificate is requested in the background and shown on the Registration Certificate tab after the page is reloaded.';
+            this.snackBar.open(message, 'Close', { duration: errorSnackBarDuration(message) });
+          } else {
+            this.snackBar.open('Configuration saved successfully', 'Close', { duration: 3000 });
+          }
           this.router.navigate(['../'], { relativeTo: this.route });
         },
         (error: unknown) => {

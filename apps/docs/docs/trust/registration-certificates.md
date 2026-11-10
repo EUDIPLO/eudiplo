@@ -25,7 +25,7 @@ For `body`, EUDIPLO merges, with later values winning:
 1. `registrationCertificateDefaults` of the registrar configuration,
 2. `registration_cert.body` of the presentation configuration.
 
-The relying party (`rpId`) is always set by EUDIPLO. If neither `credentials` nor `provides_attestations` is set, `credentials` is derived from the DCQL query: `format`, `meta` and `claims` of every credential query. After merging, `privacy_policy`, `support_uri`, `purpose` (as `[{ "lang", "content" }]`) and `credentials` must be present, otherwise creating the request fails with `400`.
+The relying party (`rpId`) is always set by EUDIPLO. If neither `credentials` nor `provides_attestations` is set, `credentials` is derived from the DCQL query: `format`, `meta` and `claims` of every credential query. After merging, `privacy_policy` and `support_uri` must be present, and so must `purpose` (as `[{ "lang", "content" }]`) and `credentials` unless `provides_attestations` is set; otherwise creating the request fails with `400`.
 
 ```json
 {
@@ -58,7 +58,8 @@ Set `registrationCertificate` in the issuance configuration to publish a certifi
         "enabled": true,
         "mode": "generate",
         "privacyPolicy": "https://issuer.example.com/privacy",
-        "supportUri": "mailto:support@issuer.example.com"
+        "supportUri": "mailto:support@issuer.example.com",
+        "renewal": "onCredentialConfigChange"
     }
 }
 ```
@@ -66,9 +67,17 @@ Set `registrationCertificate` in the issuance configuration to publish a certifi
 | `mode`     | Behavior                                                                                                                                                                                                                                                                                       |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `import`   | Publishes `jwt` while it is within `nbf`/`exp` (30 seconds tolerance). No registrar configuration needed.                                                                                                                                                                                      |
-| `generate` | Requests a certificate from the registrar with `provides_attestations` set to the credential types of all SD-JWT VC and mDOC credential configurations: the `vct` of each SD-JWT VC configuration (for a `vct` object, its [hosted VCT URL](../issuance/credential-configuration.md)) and the `docType` of each mDOC configuration. Schema metadata (`schemaMeta`) is not used. At least one credential configuration needs a `vct` or `docType`, otherwise **Regenerate now** (`POST /api/issuer/config/registration-cert/reissue`) fails with `400`. `privacyPolicy` and `supportUri` fall back to the registrar defaults. |
+| `generate` | Requests a certificate from the registrar with `custom_provides_attestations` set to the credential types of all SD-JWT VC and mDOC credential configurations: the `vct` of each SD-JWT VC configuration (for a `vct` object, its [hosted VCT URL](../issuance/credential-configuration.md)) as `{ "format": "dc+sd-jwt", "meta": { "vct_values": [...] } }` and the `docType` of each mDOC configuration as `{ "format": "mso_mdoc", "meta": { "doctype_value": ... } }`. The registrar takes these types as given, so they do not need a published schema in its catalog; `provides_attestations` is sent empty, so a value in the registrar defaults is not used. Schema metadata (`schemaMeta`) is not used. At least one credential configuration needs a `vct` or `docType`, otherwise **Regenerate now** (`POST /api/issuer/config/registration-cert/reissue`) fails with `400`. `privacyPolicy` and `supportUri` fall back to the registrar defaults. |
 
-A generated certificate is created when the issuer metadata is built, for example when a wallet fetches `/.well-known/openid-credential-issuer/issuers/<tenant>`; saving the configuration does not create one. It is cached in the issuance configuration and reused while the inputs are unchanged and it is valid. When a new certificate replaces a valid one, EUDIPLO revokes the old one at the registrar. If generation fails, the metadata is served without `issuer_info` and the reason is logged.
+A generated certificate is cached in the issuance configuration. Its inputs are the credential types with their formats, `privacyPolicy` and `supportUri`. `renewal` decides when a change of these inputs leads to a new certificate (in the Web Client: **Renewal**):
+
+| `renewal` | A new certificate is requested |
+| --- | --- |
+| `onCredentialConfigChange` (default) | In the background about two seconds after a credential configuration or the issuance configuration is saved, deleted, imported or applied from a configuration bundle, and when the issuer metadata is built |
+| `onMetadataRequest` | When the issuer metadata is built, for example when a wallet fetches `/.well-known/openid-credential-issuer/issuers/<tenant>` |
+| `manual` | Only with **Regenerate now**; an active certificate is kept even if the inputs changed, so until then wallets may refuse credential types it does not list |
+
+In every mode a certificate is also requested when the issuer metadata is built and no certificate is cached or the cached one has expired. Metadata requests, background renewals and **Regenerate now** of one tenant run one at a time within an EUDIPLO instance; several instances behind a load balancer may still request one at the same time. When a new certificate replaces a valid one, EUDIPLO revokes the old one at the registrar. If the returned certificate does not list every requested type in `provides_attestations` (a registrar without `custom_provides_attestations` support), EUDIPLO revokes it and treats the request as refused, and **Regenerate now** fails with `400`. If generation fails, the metadata is served without `issuer_info` and the reason is logged; a failed background renewal is logged and retried with the next change or metadata request.
 
 ## Import and generate compared
 

@@ -363,6 +363,71 @@ describe('issuer settings guided setup', () => {
     });
   });
 
+  it('keeps and saves the renewal of a generated registration certificate', async () => {
+    service.getConfig.mockResolvedValue({
+      ...config,
+      registrationCertificate: { enabled: true, mode: 'generate', renewal: 'manual' },
+    });
+    await component.loadConfigForEdit();
+    expect(component.registrationCertificate.get('renewal')!.value).toBe('manual');
+    component.onSubmit();
+    expect(service.saveConfiguration.mock.calls[0][0].registrationCertificate).toEqual({
+      enabled: true,
+      mode: 'generate',
+      renewal: 'manual',
+    });
+  });
+
+  it('leaves the default renewal out of the saved registration certificate', async () => {
+    service.getConfig.mockResolvedValue({
+      ...config,
+      registrationCertificate: {
+        enabled: true,
+        mode: 'generate',
+        renewal: 'onCredentialConfigChange',
+      },
+    });
+    await component.loadConfigForEdit();
+    component.onSubmit();
+    expect(service.saveConfiguration.mock.calls[0][0].registrationCertificate).toEqual({
+      enabled: true,
+      mode: 'generate',
+    });
+  });
+
+  it('does not save a renewal for an imported registration certificate', async () => {
+    service.getConfig.mockResolvedValue({
+      ...config,
+      registrationCertificate: { enabled: true, mode: 'import', jwt: 'existing.jwt.value' },
+    });
+    await component.loadConfigForEdit();
+    component.registrationCertificate.patchValue({ renewal: 'manual' });
+    component.onSubmit();
+    expect(service.saveConfiguration.mock.calls[0][0].registrationCertificate).not.toHaveProperty(
+      'renewal'
+    );
+  });
+
+  it('says after saving when the certificate is renewed in the background', async () => {
+    const saveWith = async (registrationCertificate: unknown) => {
+      service.getConfig.mockResolvedValue({ ...config, registrationCertificate });
+      snackBar.open.mockClear();
+      await component.loadConfigForEdit();
+      component.onSubmit();
+      await vi.waitFor(() => expect(snackBar.open).toHaveBeenCalled());
+      return snackBar.open.mock.lastCall?.[0] as string;
+    };
+    expect(await saveWith({ enabled: true, mode: 'generate' })).toContain(
+      'requested in the background'
+    );
+    expect(await saveWith({ enabled: true, mode: 'generate', renewal: 'manual' })).toBe(
+      'Configuration saved successfully'
+    );
+    expect(await saveWith({ enabled: true, mode: 'import', jwt: 'existing.jwt.value' })).toBe(
+      'Configuration saved successfully'
+    );
+  });
+
   it('rejects duplicate and reserved authorization IDs before save', async () => {
     await component.loadConfigForEdit();
     component.authorizationServers.at(0).get('id')!.setValue('built-in');
