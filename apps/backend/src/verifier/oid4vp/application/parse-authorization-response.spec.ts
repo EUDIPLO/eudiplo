@@ -37,4 +37,19 @@ describe("ParseAuthorizationResponse", () => {
             "State mismatch",
         );
     });
+
+    it("accepts and strips additional authorization response parameters", () => {
+        const response = useCase.execute({
+            vp_token: { credential: ["vp"] },
+            state: "wallet-state",
+            nonce: "wallet-nonce",
+            nbf: 1760000000,
+            jti: "wallet-response-id",
+        });
+
+        expect(response).toEqual({
+            vp_token: { credential: ["vp"] },
+            state: "wallet-state",
+        });
+    });
 });

@@ -10,6 +10,6 @@ export const AuthResponseSchema = z
         iat: z.number().optional(),
         exp: z.number().optional(),
     })
-    .strict();
+    .strip();
 
 export type AuthResponseData = z.infer<typeof AuthResponseSchema>;
