@@ -160,7 +160,7 @@
               </mat-form-field>
             </div>
 
-            <h3>Relying Party Contact</h3>
+            <h3 [id]="contactAnchor">Relying Party Contact</h3>
             <p class="section-help">
               Sent when EUDIPLO registers your relying party at the registrar, which puts it in your
               access certificates. Set at least one value before creating an access certificate. A
@@ -176,6 +176,7 @@
               <mat-form-field fxFlex appearance="outline" subscriptSizing="dynamic">
                 <mat-label>Contact Support URL</mat-label>
                 <input
+                  #contactSupportUri
                   matInput
                   formControlName="supportUri"
                   type="url"

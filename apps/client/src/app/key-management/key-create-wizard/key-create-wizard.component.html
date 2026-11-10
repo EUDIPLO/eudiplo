@@ -215,6 +215,17 @@
                                 <span class="status-ok">
                                   Registrar configured. Its credentials are checked when you enroll.
                                 </span>
+                                @if (registrarContactMissing) {
+                                  <span class="status-hint">
+                                    <mat-icon>info</mat-icon>
+                                    <span>
+                                      No relying party contact set; the first enrollment needs one.
+                                      <a [routerLink]="['/registrar']" [fragment]="contactAnchor"
+                                        >Add a contact</a
+                                      >
+                                    </span>
+                                  </span>
+                                }
                               } @else {
                                 <mat-icon class="status-warning">warning</mat-icon>
                                 <span class="status-warning">
