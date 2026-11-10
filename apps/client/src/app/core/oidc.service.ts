@@ -25,7 +25,7 @@ export interface OidcConfig {
  * The page the identity provider returns to after a sign-in: the login page under the
  * web client's base href, `<web client URL>/login`. Operators register it as redirect URI.
  */
-export function oidcRedirectUri(): string {
+function oidcRedirectUri(): string {
   return new URL('login', document.baseURI).href;
 }
 
