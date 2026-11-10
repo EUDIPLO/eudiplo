@@ -55,6 +55,21 @@ export interface RegistrarConfigRequest {
  */
 export type AccessCertificateResponse = RegistrarControllerCreateAccessKeyChainResponse;
 
+/** Fragment of the Relying Party Contact section, linked from contact hints. */
+export const RELYING_PARTY_CONTACT_ANCHOR = 'relying-party-contact';
+
+/** The values of a relying party contact; one of them is enough. */
+export const RELYING_PARTY_CONTACT_FIELDS = ['supportUri', 'email', 'phone'] as const;
+
+/**
+ * Whether the configuration has a relying party contact. The registrar needs
+ * one to register the relying party on its first enrollment; a relying party
+ * that is already registered keeps its contact, so a missing one is a hint only.
+ */
+export function hasRelyingPartyContact(config: RegistrarConfig): boolean {
+  return RELYING_PARTY_CONTACT_FIELDS.some((field) => config.relyingPartyContact?.[field]?.trim());
+}
+
 /**
  * Response from enrolling an existing key at the registrar.
  */

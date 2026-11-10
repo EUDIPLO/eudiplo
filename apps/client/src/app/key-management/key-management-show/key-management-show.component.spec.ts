@@ -377,8 +377,17 @@ describe('KeyManagementShowComponent registrar enrollment', () => {
     } as unknown as KeyChainResponseDto;
   }
 
-  async function create(key = keyChain()): Promise<KeyManagementShowComponent> {
+  async function create(
+    key = keyChain(),
+    ownership: string | undefined = 'unmanaged'
+  ): Promise<KeyManagementShowComponent> {
     keyChainService.getById.mockResolvedValue(key);
+    const configOwnership = {
+      get:
+        ownership === 'reject'
+          ? vi.fn().mockRejectedValue(new Error('ownership unavailable'))
+          : vi.fn().mockResolvedValue(ownership ? { ownership } : undefined),
+    };
     const component = new KeyManagementShowComponent(
       keyChainService as never,
       { paramMap: of(convertToParamMap({ id: key.id })) } as never,
@@ -387,10 +396,13 @@ describe('KeyManagementShowComponent registrar enrollment', () => {
       {} as never,
       { hasRole: (role: string) => roles.includes(role) } as never,
       registrarService as never,
-      {} as never
+      {} as never,
+      configOwnership as never
     );
     component.ngOnInit();
     await vi.waitFor(() => expect(component.keyChain).toBeDefined());
+    await vi.waitFor(() => expect(configOwnership.get).toHaveBeenCalled());
+    await Promise.resolve();
     if (roles.includes('registrar:manage')) {
       await vi.waitFor(() => expect(component.registrarConfig).not.toBe('checking'));
     }
@@ -422,6 +434,60 @@ describe('KeyManagementShowComponent registrar enrollment', () => {
 
     expect(registrarService.getConfig).not.toHaveBeenCalled();
     expect(component.canEnrollWithRegistrar).toBe(false);
+  });
+
+  it('hints at a missing relying party contact and keeps the enrollment', async () => {
+    const component = await create();
+
+    expect(component.showRegistrarContactHint).toBe(true);
+    expect(component.canEnrollWithRegistrar).toBe(true);
+  });
+
+  it('drops the contact hint once the active certificate comes from the registrar', async () => {
+    const component = await create();
+    keyChainService.getById.mockResolvedValue(keyChain({ activeCertificate: registrarIssued }));
+
+    await component.enrollWithRegistrar();
+
+    expect(component.showRegistrarContactHint).toBe(false);
+    expect(
+      (await create(keyChain({ activeCertificate: registrarIssued }))).showRegistrarContactHint
+    ).toBe(false);
+  });
+
+  it('keeps the contact hint when the ownership lookup fails', async () => {
+    expect((await create(keyChain(), 'reject')).showRegistrarContactHint).toBe(true);
+  });
+
+  it('hints at a contact only where the enrollment can be started', async () => {
+    expect((await create(keyChain(), 'file-managed')).showRegistrarContactHint).toBe(false);
+    expect((await create(keyChain({ usageType: 'attestation' }))).showRegistrarContactHint).toBe(
+      false
+    );
+    expect((await create(keyChain({ type: 'internalChain' }))).showRegistrarContactHint).toBe(
+      false
+    );
+
+    roles = ['keys:manage'];
+    expect((await create()).showRegistrarContactHint).toBe(false);
+  });
+
+  it('does not hint when the configuration has a relying party contact', async () => {
+    registrarService.getConfig.mockResolvedValue({
+      registrarUrl: 'https://registrar.example',
+      relyingPartyContact: { email: 'support@verifier.example' },
+    });
+
+    expect((await create()).showRegistrarContactHint).toBe(false);
+  });
+
+  it('does not hint at a contact without a configuration or when it could not be read', async () => {
+    registrarService.getConfig.mockResolvedValue(null);
+    expect((await create()).showRegistrarContactHint).toBe(false);
+
+    registrarService.getConfig.mockRejectedValue({ status: 500 });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect((await create()).showRegistrarContactHint).toBe(false);
   });
 
   it('links to the registrar configuration instead when there is none', async () => {

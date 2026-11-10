@@ -31,6 +31,27 @@
   }
 }
 
+.registrar-contact-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  color: var(--mat-sys-on-surface-variant);
+
+  mat-icon {
+    flex-shrink: 0;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  a {
+    color: var(--mat-sys-primary);
+    text-decoration: underline;
+  }
+}
+
 .cert-pem-section {
   h4 {
     margin-bottom: 12px;

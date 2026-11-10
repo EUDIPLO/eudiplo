@@ -395,3 +395,35 @@ test('links to the registrar configuration instead of the enrollment without one
   await page.getByRole('link', { name: 'Configure the registrar to enroll this key' }).click();
   await expect(page.getByRole('heading', { name: 'Registrar Configuration' })).toBeVisible();
 });
+
+test('hints at a missing relying party contact without blocking the enrollment', async ({
+  page,
+}) => {
+  const tenant = await createTenant(['keys:manage']);
+  await storeConfig(tenant);
+  const keyId = await createAccessKey(tenant);
+  await signIn(page, tenant);
+  const hint = 'No relying party contact set; the first enrollment needs one.';
+
+  await page.goto('/keys/create');
+  await page.getByRole('radio', { name: /^Access Certificate/ }).check();
+  await page.getByRole('button', { name: /^Next/ }).click();
+  await page.getByRole('radio', { name: /^Registrar Enrollment/ }).check();
+  await expect(page.getByText(hint)).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Enroll Certificate/ })).toBeEnabled();
+
+  await page.goto(`/keys/${keyId}`);
+  await expect(page.getByRole('button', { name: 'Enroll with Registrar' })).toBeVisible();
+  await expect(page.getByText(hint)).toBeVisible();
+  await page.getByRole('link', { name: 'Add a contact' }).click();
+  await expect(page.getByRole('heading', { name: 'Registrar Configuration' })).toBeVisible();
+  await expect(page.getByLabel('Contact Support URL')).toBeFocused();
+
+  const contactSet = await tenant.call('PATCH', '/api/registrar/config', {
+    relyingPartyContact: { email: 'support@verifier.example' },
+  });
+  expect(contactSet.status).toBe(200);
+  await page.goto(`/keys/${keyId}`);
+  await expect(page.getByRole('button', { name: 'Enroll with Registrar' })).toBeVisible();
+  await expect(page.getByText(hint)).toHaveCount(0);
+});

@@ -89,6 +89,48 @@ describe('KeyCreateWizardComponent', () => {
     expect(text).not.toContain('Registrar credentials configured');
   });
 
+  it('hints at a missing relying party contact and keeps the registrar option', async () => {
+    getConfig.mockResolvedValue({
+      registrarUrl: 'https://registrar.example',
+      relyingPartyContact: { supportUri: ' ', email: '' },
+    });
+    const component = await create(['keys:manage', 'registrar:manage']);
+    component.usageForm.patchValue({ usage: 'access' });
+    component.accessSourceForm.patchValue({ accessSource: 'registrar' });
+    fixture.detectChanges();
+
+    const hint: HTMLElement = fixture.nativeElement.querySelector('.status-hint');
+    expect(hint.textContent).toContain(
+      'No relying party contact set; the first enrollment needs one.'
+    );
+    expect(hint.querySelector('a')?.getAttribute('href')).toBe('/registrar#relying-party-contact');
+    expect(component.hasRegistrarConfig).toBe(true);
+  });
+
+  it.each([
+    { supportUri: 'https://verifier.example/support' },
+    { email: 'support@verifier.example' },
+    { phone: '+49 30 1234567' },
+  ])('shows no contact hint with a relying party contact %o', async (relyingPartyContact) => {
+    getConfig.mockResolvedValue({ registrarUrl: 'https://registrar.example', relyingPartyContact });
+    const component = await create(['keys:manage', 'registrar:manage']);
+    component.usageForm.patchValue({ usage: 'access' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Registrar configured.');
+    expect(fixture.nativeElement.querySelector('.status-hint')).toBeNull();
+  });
+
+  it('shows no contact hint without a registrar configuration', async () => {
+    getConfig.mockResolvedValue(null);
+    const component = await create(['keys:manage', 'registrar:manage']);
+    component.usageForm.patchValue({ usage: 'access' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Registrar credentials not configured.');
+    expect(fixture.nativeElement.querySelector('.status-hint')).toBeNull();
+  });
+
   it('says that the registrar configuration could not be read, and retries', async () => {
     getConfig.mockRejectedValueOnce(
       new HttpErrorResponse({ status: 500, error: { message: 'Internal server error' } })
