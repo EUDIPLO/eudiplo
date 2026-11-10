@@ -10,6 +10,8 @@ export const AuthResponseSchema = z
         iat: z.number().optional(),
         exp: z.number().optional(),
     })
+    // OID4VP 1.0 §8.1: the Verifier MUST ignore unrecognized response
+    // parameters (some wallets send nonce, nbf, jti), so strip, don't reject.
     .strip();
 
 export type AuthResponseData = z.infer<typeof AuthResponseSchema>;
