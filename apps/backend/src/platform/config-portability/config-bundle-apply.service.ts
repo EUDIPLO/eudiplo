@@ -11,6 +11,7 @@ import {
     InternalServerErrorException,
     Logger,
 } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { AUTH_SETTINGS, type AuthSettings } from "../../auth/auth-settings.js";
 import {
     CLIENTS_PROVIDER,
@@ -28,6 +29,10 @@ import { KmsTenantConfigService } from "../../crypto/key/kms/kms-tenant-config.s
 import { AttributeProviderService } from "../../issuer/configuration/attribute-provider/attribute-provider.service.js";
 import { CredentialConfigService } from "../../issuer/configuration/credentials/credential-config/credential-config.service.js";
 import { IssuanceService } from "../../issuer/configuration/issuance/issuance.service.js";
+import {
+    ISSUER_REGISTRATION_CERTIFICATE_INPUTS_CHANGED,
+    type IssuerRegistrationCertificateInputsChangedEvent,
+} from "../../issuer/configuration/issuer-registration-certificate-inputs-changed.js";
 import { WebhookEndpointService } from "../../issuer/configuration/webhook-endpoint/webhook-endpoint.service.js";
 import { StatusListService } from "../../issuer/status-list/status-list.service.js";
 import { TrustListService } from "../../issuer/trust-list/trustlist.service.js";
@@ -110,6 +115,7 @@ export class ConfigBundleApplyService {
         private readonly clientAccess: ClientAccessService,
         @Inject(AUTH_SETTINGS)
         private readonly authSettings: AuthSettings,
+        private readonly events: EventEmitter2,
     ) {}
 
     /**
@@ -209,7 +215,7 @@ export class ConfigBundleApplyService {
         expectedFingerprint?: string,
         options: ConfigPlanOptions = {},
     ): Promise<ConfigImportPlan> {
-        return this.journal.run(
+        const plan = await this.journal.run(
             tenantId,
             options.reattach ? "reattach" : mode,
             (run) =>
@@ -223,6 +229,12 @@ export class ConfigBundleApplyService {
                     options,
                 ),
         );
+        // Bundle writes bypass the services; listeners compare fingerprints,
+        // so publishing after every apply is cheap.
+        this.events.emit(ISSUER_REGISTRATION_CERTIFICATE_INPUTS_CHANGED, {
+            tenantId,
+        } satisfies IssuerRegistrationCertificateInputsChangedEvent);
+        return plan;
     }
 
     private async applyLocked(

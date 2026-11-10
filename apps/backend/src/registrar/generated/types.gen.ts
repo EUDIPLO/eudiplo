@@ -218,6 +218,13 @@ export type CredentialDef = {
     };
 };
 
+export type ProvidedAttestation = {
+    format: "dc+sd-jwt" | "mso_mdoc";
+    meta: {
+        [key: string]: unknown;
+    };
+};
+
 export type MultiLang = {
     lang: string;
     content: string;
@@ -260,6 +267,11 @@ export type RegistrationCertificateCreation = {
      * The list of purposes for which the credential can be used
      */
     purpose?: Array<MultiLang>;
+    /**
+     * Attestations provided by an issuer whose credential type has no schema in
+     * the published catalog. They are taken as given, without a catalog lookup.
+     */
+    custom_provides_attestations?: Array<ProvidedAttestation>;
 };
 
 export type OmitRegistrationCertificateRevoked = {

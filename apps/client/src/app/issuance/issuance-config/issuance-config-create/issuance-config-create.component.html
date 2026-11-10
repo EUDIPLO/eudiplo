@@ -1366,6 +1366,39 @@
                             />
                             <mat-icon matSuffix>support_agent</mat-icon>
                           </mat-form-field>
+
+                          <mat-form-field subscriptSizing="dynamic">
+                            <mat-label>Renewal</mat-label>
+                            <mat-select id="registration-cert-renewal" formControlName="renewal">
+                              <mat-option value="onCredentialConfigChange"
+                                >When credential configs or these settings change
+                                (default)</mat-option
+                              >
+                              <mat-option value="onMetadataRequest"
+                                >On the next metadata request</mat-option
+                              >
+                              <mat-option value="manual">Only with Regenerate now</mat-option>
+                            </mat-select>
+                            <mat-icon matSuffix>autorenew</mat-icon>
+                            <mat-hint>
+                              @switch (registrationCertificate.get('renewal')?.value) {
+                                @case ('onMetadataRequest') {
+                                  A changed credential config or setting gets a new certificate when
+                                  a wallet next fetches the issuer metadata.
+                                }
+                                @case ('manual') {
+                                  After a change, use Regenerate now on the Registration Certificate
+                                  tab. Until then wallets get the old certificate, which may not
+                                  list new credential types. A missing or expired certificate is
+                                  still requested automatically.
+                                }
+                                @default {
+                                  A new certificate is requested in the background after you save a
+                                  credential config or these settings.
+                                }
+                              }
+                            </mat-hint>
+                          </mat-form-field>
                         }
                       }
                     </mat-card-content>

@@ -19,6 +19,30 @@ import type {
 import { documentSourceHash } from "./config-source-hash.js";
 
 describe("ConfigBundleApplyService", () => {
+    it("publishes a registration certificate input change only after a successful apply", async () => {
+        const service = Object.create(
+            ConfigBundleApplyService.prototype,
+        ) as any;
+        service.events = { emit: vi.fn() };
+        const bundle = { manifest: { tenant: "tenant-a" } } as ConfigBundle;
+
+        service.journal = { run: vi.fn().mockResolvedValue({ items: [] }) };
+        await service.apply("tenant-a", bundle, "upsert");
+        expect(service.events.emit).toHaveBeenCalledExactlyOnceWith(
+            "issuer.registration-certificate-inputs.changed",
+            { tenantId: "tenant-a" },
+        );
+
+        service.events.emit.mockClear();
+        service.journal = {
+            run: vi.fn().mockRejectedValue(new Error("plan changed")),
+        };
+        await expect(
+            service.apply("tenant-a", bundle, "upsert"),
+        ).rejects.toThrow("plan changed");
+        expect(service.events.emit).not.toHaveBeenCalled();
+    });
+
     it("does not apply or claim ownership of resources skipped in create mode", async () => {
         const plan: ConfigImportPlan = {
             tenantId: "tenant-a",
@@ -61,6 +85,7 @@ describe("ConfigBundleApplyService", () => {
         const service = Object.create(
             ConfigBundleApplyService.prototype,
         ) as any;
+        service.events = { emit: vi.fn() };
         service.journal = {
             run: async (_tenant: string, _mode: string, execute: any) =>
                 execute({ id: "run-1", operations: [] }),
@@ -121,6 +146,7 @@ function setupApply(
         assets: [],
     } as unknown as ConfigBundle;
     const service = Object.create(ConfigBundleApplyService.prototype) as any;
+    service.events = { emit: vi.fn() };
     service.journal = {
         run: async (_tenant: string, _mode: string, execute: any) =>
             execute({ id: "run-1", operations: [] }),

@@ -40,6 +40,25 @@ describe('IssuanceConfigShowComponent', () => {
     ]);
   });
 
+  it('shows how a generated registration certificate is renewed', () => {
+    const renewalFor = (renewal?: string) => {
+      component.config = {
+        registrationCertificate: { enabled: true, mode: 'generate', renewal },
+      } as any;
+      return component.registrationCertificateRenewalLabel;
+    };
+    expect(renewalFor()).toBe('When credential configs or issuer settings change');
+    expect(renewalFor('onMetadataRequest')).toBe('On the next metadata request');
+    expect(renewalFor('manual')).toBe('Only with Regenerate now');
+  });
+
+  it('treats a registration certificate without a mode as generated', () => {
+    component.config = { registrationCertificate: { enabled: true } } as any;
+    expect(component.registrationCertificateGenerated).toBe(true);
+    component.config = { registrationCertificate: { enabled: true, mode: 'import' } } as any;
+    expect(component.registrationCertificateGenerated).toBe(false);
+  });
+
   it('shows the status check mode that applies per authorization server', () => {
     component.config = {
       walletAttestationStatusCheckMode: 'strict',

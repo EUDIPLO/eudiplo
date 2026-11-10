@@ -5,6 +5,7 @@ import {
     Logger,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { v4 } from "uuid";
 import type { AuditLogRequestMeta } from "../../../audit-log/audit-log.service.js";
 import { AuditLogService } from "../../../audit-log/audit-log.service.js";
@@ -19,6 +20,7 @@ import {
     ConfigImportOrchestratorService,
     ImportPhase,
 } from "../../../platform/config-import/config-import-orchestrator.service.js";
+import { issuerRegistrationCertificateBody } from "../../../registrar/issuer-registration-certificate-request.js";
 import { RegistrarService } from "../../../registrar/registrar.service.js";
 import { loadConfigDto } from "../../../shared/utils/config-file-loader.util.js";
 import { FilesService } from "../../../storage/files.service.js";
@@ -31,10 +33,15 @@ import {
     deriveRegistrationCertificateMaterial,
     isJwtActive,
     NO_CREDENTIAL_TYPES_MESSAGE,
-    registrationCertificateCreationBody,
     registrationCertificateFingerprint,
+    unlistedCredentialTypes,
+    unlistedCredentialTypesMessage,
 } from "../../issuance/oid4vci/domain/issuer-registration-certificate.js";
 import { CredentialConfigService } from "../credentials/credential-config/credential-config.service.js";
+import {
+    ISSUER_REGISTRATION_CERTIFICATE_INPUTS_CHANGED,
+    type IssuerRegistrationCertificateInputsChangedEvent,
+} from "../issuer-registration-certificate-inputs-changed.js";
 import type { IssuanceConfiguration as IssuanceConfig } from "./domain/issuance-configuration.js";
 import { federationEntityIdProblem } from "./domain/own-federation-entity.js";
 import {
@@ -43,6 +50,7 @@ import {
 } from "./domain/removed-authorization-servers.js";
 import { DisplayInfo } from "./dto/display.dto.js";
 import { IssuanceDto } from "./dto/issuance.dto.js";
+import { IssuerRegistrationCertificateLock } from "./issuer-registration-certificate-lock.js";
 import {
     ISSUANCE_CONFIG_REPOSITORY,
     type IssuanceConfigRepository,
@@ -77,6 +85,8 @@ export class IssuanceService {
         private readonly outboundUrlPolicy: OutboundUrlPolicyService,
         private readonly configService: ConfigService,
         private readonly keyChainService: KeyChainService,
+        private readonly events: EventEmitter2,
+        private readonly certificateLock: IssuerRegistrationCertificateLock,
     ) {
         this.configImportOrchestrator.register(
             "issuance",
@@ -182,8 +192,16 @@ export class IssuanceService {
     /**
      * Force reissue of issuer registration certificate in generate mode.
      * Replaces cache and revokes the previously active cached certificate.
+     * Runs under the tenant's certificate lock, after any generation in
+     * progress, so it replaces and revokes the certificate cached by then.
      */
-    async reissueRegistrationCertificate(
+    reissueRegistrationCertificate(tenantId: string): Promise<IssuanceConfig> {
+        return this.certificateLock.run(tenantId, () =>
+            this.reissueRegistrationCertificateLocked(tenantId),
+        );
+    }
+
+    private async reissueRegistrationCertificateLocked(
         tenantId: string,
     ): Promise<IssuanceConfig> {
         const issuanceConfig = await this.getIssuanceConfiguration(tenantId);
@@ -220,9 +238,9 @@ export class IssuanceService {
             throw new BadRequestException(NO_CREDENTIAL_TYPES_MESSAGE);
         }
 
-        const creationBody = registrationCertificateCreationBody(
+        const creationBody = issuerRegistrationCertificateBody(
             registrationCertificateConfig,
-            material,
+            material.providesAttestations,
         );
 
         const resolved =
@@ -232,6 +250,20 @@ export class IssuanceService {
                 `issuance-reissue-${v4()}`,
                 tenantId,
             );
+
+        const unlisted = unlistedCredentialTypes(resolved.payload, material);
+        if (unlisted.length > 0) {
+            await this.registrarService
+                .revokeRegistrationCertificateByJwt(tenantId, resolved.jwt)
+                .catch((error: unknown) =>
+                    this.logger.warn(
+                        `[${tenantId}] Failed to revoke a registration certificate that does not list the requested types: ${error instanceof Error ? error.message : "unknown error"}`,
+                    ),
+                );
+            throw new BadRequestException(
+                unlistedCredentialTypesMessage(unlisted),
+            );
+        }
 
         if (
             previousJwt &&
@@ -441,6 +473,9 @@ export class IssuanceService {
             ...filteredValue,
             tenantId,
         });
+        this.events.emit(ISSUER_REGISTRATION_CERTIFICATE_INPUTS_CHANGED, {
+            tenantId,
+        } satisfies IssuerRegistrationCertificateInputsChangedEvent);
 
         if (actorToken) {
             const after = this.sanitizeIssuanceConfigForLog(saved);

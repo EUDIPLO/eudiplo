@@ -5492,6 +5492,10 @@ export type IssuerRegistrationCertificateConfig = {
      * Support URI used when generating a registration certificate (optional if registrar defaults are configured).
      */
     supportUri?: string;
+    /**
+     * When a generated certificate is renewed. onCredentialConfigChange (default): in the background after a credential or issuance configuration changes, and when issuer metadata is built. onMetadataRequest: only when issuer metadata is built. manual: only with Regenerate now. In every mode a missing or expired certificate is requested when issuer metadata is built.
+     */
+    renewal?: 'onCredentialConfigChange' | 'onMetadataRequest' | 'manual';
 };
 
 export type IssuerRegistrationCertificateCache = {

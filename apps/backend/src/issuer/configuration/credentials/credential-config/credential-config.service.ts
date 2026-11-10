@@ -4,6 +4,7 @@ import {
     Injectable,
     Logger,
 } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import type { AuditLogRequestMeta } from "../../../../audit-log/audit-log.service.js";
 import { AuditLogService } from "../../../../audit-log/audit-log.service.js";
 import {
@@ -21,6 +22,10 @@ import {
 import { loadConfigDto } from "../../../../shared/utils/config-file-loader.util.js";
 import { FilesService } from "../../../../storage/files.service.js";
 import { PresentationConfigService } from "../../../../verifier/presentations/configuration/presentation-config.service.js";
+import {
+    ISSUER_REGISTRATION_CERTIFICATE_INPUTS_CHANGED,
+    type IssuerRegistrationCertificateInputsChangedEvent,
+} from "../../issuer-registration-certificate-inputs-changed.js";
 import {
     ACTIVE_CREDENTIALS_REQUIRE_STATUS_MANAGEMENT,
     type ActiveCredentialPolicySettings,
@@ -60,6 +65,7 @@ export class CredentialConfigService {
         private readonly configImportOrchestrator: ConfigImportOrchestratorService,
         private readonly presentationConfigService: PresentationConfigService,
         private readonly tenantActionLogService: AuditLogService,
+        private readonly events: EventEmitter2,
     ) {
         this.configImportOrchestrator.register(
             "credentials",
@@ -279,6 +285,7 @@ export class CredentialConfigService {
             ...config,
             tenantId,
         });
+        this.publishRegistrationCertificateInputsChanged(tenantId);
 
         if (actorToken) {
             await this.tenantActionLogService.record({
@@ -367,6 +374,7 @@ export class CredentialConfigService {
             id,
             tenantId,
         });
+        this.publishRegistrationCertificateInputsChanged(tenantId);
 
         if (actorToken) {
             await this.tenantActionLogService.record({
@@ -403,6 +411,7 @@ export class CredentialConfigService {
             tenantId,
             id,
         );
+        this.publishRegistrationCertificateInputsChanged(tenantId);
 
         if (actorToken) {
             await this.tenantActionLogService.record({
@@ -415,6 +424,12 @@ export class CredentialConfigService {
         }
 
         return result;
+    }
+
+    private publishRegistrationCertificateInputsChanged(tenantId: string) {
+        this.events.emit(ISSUER_REGISTRATION_CERTIFICATE_INPUTS_CHANGED, {
+            tenantId,
+        } satisfies IssuerRegistrationCertificateInputsChangedEvent);
     }
 
     private sanitizeCredentialConfigForLog(

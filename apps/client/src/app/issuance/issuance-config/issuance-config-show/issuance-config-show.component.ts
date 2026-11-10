@@ -177,6 +177,22 @@ export class IssuanceConfigShowComponent implements OnInit {
     return null;
   }
 
+  /** Generate mode, which is also the backend's default when `mode` is unset. */
+  get registrationCertificateGenerated(): boolean {
+    return (this.registrationCertificateConfig?.mode || 'generate') === 'generate';
+  }
+
+  get registrationCertificateRenewalLabel(): string {
+    switch (this.registrationCertificateConfig?.renewal) {
+      case 'onMetadataRequest':
+        return 'On the next metadata request';
+      case 'manual':
+        return 'Only with Regenerate now';
+      default:
+        return 'When credential configs or issuer settings change';
+    }
+  }
+
   get registrationCertificateStatus(): 'none' | 'pending' | 'active' | 'expiring' | 'expired' {
     const cfg = this.registrationCertificateConfig;
     if (!cfg?.enabled) {
