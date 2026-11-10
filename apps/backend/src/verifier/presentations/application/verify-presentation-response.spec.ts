@@ -339,7 +339,10 @@ describe("VerifyPresentationResponse", () => {
 
         await run({ pid: ["vp"] });
         const { options } = vi.mocked(format.verify).mock.calls[0][1];
-        expect(options.transactionData).toEqual([forPid]);
+        expect(options.transactionData).toEqual({
+            credentialId: "pid",
+            entries: [forPid],
+        });
         expect(options.ts12TransactionData).toBe(true);
     });
 });

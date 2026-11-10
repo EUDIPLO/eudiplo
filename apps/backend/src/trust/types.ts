@@ -195,12 +195,13 @@ export type VerifierOptions = {
     federationTrustSource?: FederationTrustSource;
     policy: VerifyPolicy;
     /**
-     * Transaction data from the OID4VP request.
+     * Transaction data from the OID4VP request that references the DCQL
+     * credential `credentialId`, still base64url encoded as sent.
      * When provided, the verifier will validate that the KB-JWT contains
-     * transaction_data_hashes that match SHA-256 hashes of each transaction data string.
+     * a matching transaction_data_hashes entry for each of them.
      * See OID4VP spec Appendix B.3.3.1 for details.
      */
-    transactionData?: string[];
+    transactionData?: { credentialId: string; entries: string[] };
     /** Enforce TS12 SCA key-binding claims for this credential. */
     ts12TransactionData?: boolean;
     /** OID4VP response_mode from the signed authorization request. */

@@ -87,9 +87,15 @@ async function createCredentialWithStatus(options: {
  * Computes SHA-256 hash and returns base64url-encoded result
  * According to spec, hashes are computed over the raw string (no decoding before hashing)
  */
-function computeTransactionDataHash(transactionDataBase64url: string): string {
+function computeTransactionDataHash(
+    transactionDataBase64url: string,
+    alg: "sha-256" | "sha-384" = "sha-256",
+): string {
     return base64url.encode(
-        crypto.createHash("sha256").update(transactionDataBase64url).digest(),
+        crypto
+            .createHash(alg.replace("-", ""))
+            .update(transactionDataBase64url)
+            .digest(),
     );
 }
 
@@ -173,6 +179,8 @@ describe("Presentation - Transaction Data", () => {
         transactionData?: TransactionData[];
         // Transaction data hashes to include in KB-JWT (if different from computed hashes)
         overrideTransactionDataHashes?: string[];
+        // Hash algorithm the KB-JWT names as transaction_data_hashes_alg
+        kbHashAlg?: "sha-384";
     }) {
         const requestBody: PresentationRequest = {
             response_type: ResponseType.URI,
@@ -224,7 +232,10 @@ describe("Presentation - Transaction Data", () => {
                             const encoded = base64url.encode(
                                 JSON.stringify(td),
                             );
-                            return computeTransactionDataHash(encoded);
+                            return computeTransactionDataHash(
+                                encoded,
+                                values.kbHashAlg,
+                            );
                         },
                     );
                 }
@@ -238,6 +249,9 @@ describe("Presentation - Transaction Data", () => {
                 nonce: resolved.authorizationRequestPayload.nonce,
                 ...(transactionDataHashes && {
                     transaction_data_hashes: transactionDataHashes,
+                }),
+                ...(values.kbHashAlg && {
+                    transaction_data_hashes_alg: values.kbHashAlg,
                 }),
             },
             values.privateKey,
@@ -437,6 +451,41 @@ describe("Presentation - Transaction Data", () => {
         expect(submitRes).toBeDefined();
         expect(submitRes.response.status).toBe(200);
     });
+
+    test.each([
+        ["accepts", ["sha-256", "sha-384"], 200, "completed"],
+        ["rejects", undefined, 400, "failed"],
+    ])(
+        "%s sha-384 hashes when the entry lists %j",
+        async (_verb, allowedAlgs, httpStatus, sessionStatus) => {
+            const { res, submitRes } =
+                await submitPresentationWithTransactionData({
+                    requestId: "pid-no-hook",
+                    credentialId: "pid",
+                    privateKey: privateIssuerKey,
+                    x5c: issuerCertChain,
+                    transactionData: [
+                        {
+                            type: "payment_authorization",
+                            credential_ids: ["pid"],
+                            amount: "12.00",
+                            ...(allowedAlgs && {
+                                transaction_data_hashes_alg: allowedAlgs,
+                            }),
+                        },
+                    ],
+                    kbHashAlg: "sha-384",
+                });
+
+            expect(submitRes.response.status).toBe(httpStatus);
+            const sessionRes = await request(app.getHttpServer())
+                .get(`/session/${res.body.session}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            expect(sessionRes.body.status).toBe(sessionStatus);
+        },
+    );
 
     test("should reject presentation with mismatched transaction data hashes", async () => {
         const transactionData: TransactionData[] = [

@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { BadRequestException, Injectable } from "@nestjs/common";
+import { Oauth2ServerErrorResponseError } from "@openid4vc/oauth2";
+import { Openid4vpVerifier } from "@openid4vc/openid4vp";
 import { digest } from "@owf/crypto";
 import { SDJwtVcInstance, VerificationResult } from "@sd-jwt/sd-jwt-vc";
-import { base64url, decodeJwt, decodeProtectedHeader, JWK } from "jose";
+import { decodeJwt, decodeProtectedHeader, JWK } from "jose";
 import { Span } from "nestjs-otel";
 import { PinoLogger } from "nestjs-pino";
 import { CryptoImplementationService } from "../../../../crypto/key/crypto-implementation/crypto-implementation.service.js";
@@ -46,6 +48,26 @@ export class SdJwtVerificationError extends BadRequestException {
         });
     }
 }
+
+const notUsedForTransactionData = (): never => {
+    throw new Error("Not used to verify transaction data");
+};
+
+/**
+ * Checks transaction data hashes. `verifyTransactionData` only uses the
+ * `hash` callback.
+ */
+const transactionDataVerifier = new Openid4vpVerifier({
+    callbacks: {
+        // HashAlgorithm values are sha-256, sha-384 and sha-512.
+        hash: (data, alg) =>
+            createHash(alg.replace("-", "")).update(data).digest(),
+        signJwt: notUsedForTransactionData,
+        verifyJwt: notUsedForTransactionData,
+        encryptJwe: notUsedForTransactionData,
+        decryptJwe: notUsedForTransactionData,
+    },
+});
 
 @Injectable()
 export class SdjwtvcverifierService {
@@ -203,8 +225,14 @@ export class SdjwtvcverifierService {
         }
 
         // Validate transaction data hashes if transaction data was provided
-        if (options.transactionData && options.transactionData.length > 0) {
-            this.validateTransactionDataHashes(result, options.transactionData);
+        if (
+            options.transactionData &&
+            options.transactionData.entries.length > 0
+        ) {
+            await this.validateTransactionDataHashes(
+                result,
+                options.transactionData,
+            );
         }
 
         if (options.ts12TransactionData) {
@@ -246,24 +274,25 @@ export class SdjwtvcverifierService {
     }
 
     /**
-     * Validates that the KB-JWT contains transaction_data_hashes that match
-     * the SHA-256 hashes of the provided transaction data.
-     *
-     * According to OID4VP spec Appendix B.3.3.1:
-     * - transaction_data_hashes: A non-empty array of strings where each element
-     *   is a base64url-encoded hash calculated over the transaction data string
-     *   (base64url decoding is NOT performed before hashing).
-     * - The hash function defaults to SHA-256 unless transaction_data_hashes_alg
-     *   specifies otherwise.
+     * Validates that the KB-JWT contains a transaction_data_hashes entry for
+     * every transaction data entry that references the credential (OID4VP
+     * 1.0 Appendix B.3.3.1), with `@openid4vc/openid4vp`: each hash is
+     * calculated over the transaction data string as sent (no base64url
+     * decoding), with the KB-JWT's transaction_data_hashes_alg (default
+     * sha-256), which must be one the entry's transaction_data_hashes_alg
+     * allows (default sha-256). Hashes may come in any order, but each one
+     * matches exactly one entry and the KB-JWT carries no further hashes.
      *
      * @param result The verification result containing the KB-JWT payload
-     * @param transactionData The base64url-encoded transaction data strings from the request
+     * @param transactionData The DCQL credential id and the base64url-encoded
+     *   transaction data strings from the request that reference it
      * @throws BadRequestException if validation fails
      */
-    private validateTransactionDataHashes(
+    private async validateTransactionDataHashes(
         result: VerificationResult,
-        transactionData: string[],
-    ): void {
+        transactionData: NonNullable<VerifierOptions["transactionData"]>,
+    ): Promise<void> {
+        const { credentialId, entries } = transactionData;
         const kbPayload = result.kb?.payload as
             | (Record<string, unknown> & {
                   transaction_data_hashes?: string[];
@@ -285,48 +314,58 @@ export class SdjwtvcverifierService {
             );
         }
 
-        if (receivedHashes.length !== transactionData.length) {
+        if (receivedHashes.length !== entries.length) {
             throw new BadRequestException(
-                `Transaction data hash count mismatch: expected ${transactionData.length}, received ${receivedHashes.length}`,
+                `Transaction data hash count mismatch: expected ${entries.length}, received ${receivedHashes.length}`,
             );
         }
 
-        // Determine hash algorithm - defaults to sha-256 per spec
-        const hashAlg = kbPayload.transaction_data_hashes_alg ?? "sha-256";
-
-        // Map OID4VP hash algorithm names to Node.js crypto names
-        const algoMap: Record<string, string> = {
-            "sha-256": "sha256",
-            "sha-384": "sha384",
-            "sha-512": "sha512",
-        };
-
-        const nodeAlgo = algoMap[hashAlg];
-        if (!nodeAlgo) {
-            throw new BadRequestException(
-                `Unsupported transaction_data_hashes_alg: ${hashAlg}`,
-            );
-        }
-
-        // Compute expected hashes and compare
-        // Per spec: hash is computed over the string as-is (no base64url decoding)
-        for (let i = 0; i < transactionData.length; i++) {
-            const expectedHash = base64url.encode(
-                createHash(nodeAlgo).update(transactionData[i]).digest(),
-            );
-
-            if (receivedHashes[i] !== expectedHash) {
-                this.logger.debug(
-                    `Transaction data hash mismatch at index ${i}: expected ${expectedHash}, received ${receivedHashes[i]}`,
-                );
+        let verified: Awaited<
+            ReturnType<Openid4vpVerifier["verifyTransactionData"]>
+        >;
+        try {
+            verified = await transactionDataVerifier.verifyTransactionData({
+                transactionData: entries,
+                credentials: {
+                    [credentialId]: [
+                        {
+                            transaction_data_hashes: receivedHashes,
+                            transaction_data_hashes_alg:
+                                kbPayload.transaction_data_hashes_alg,
+                        },
+                    ],
+                },
+            });
+        } catch (error) {
+            if (error instanceof Oauth2ServerErrorResponseError) {
                 throw new BadRequestException(
-                    `Transaction data hash mismatch at index ${i}`,
+                    error.errorResponse.error_description ??
+                        "Transaction data hashes do not match",
                 );
             }
+            throw error;
+        }
+
+        // The library finds each entry's hash anywhere in the list, so two
+        // identical entries could share one hash and leave another unchecked.
+        // Each entry therefore uses up one occurrence of its hash.
+        const unmatched = [...receivedHashes];
+        const oneToOne = verified.every(({ presentations }) =>
+            presentations.every(({ hash }) => {
+                const index = unmatched.indexOf(hash);
+                if (index === -1) return false;
+                unmatched.splice(index, 1);
+                return true;
+            }),
+        );
+        if (!oneToOne) {
+            throw new BadRequestException(
+                "Transaction data hashes do not match the transaction data entries one to one",
+            );
         }
 
         this.logger.debug(
-            `Transaction data hashes validated successfully (${transactionData.length} entries)`,
+            `Transaction data hashes validated successfully (${entries.length} entries)`,
         );
     }
 

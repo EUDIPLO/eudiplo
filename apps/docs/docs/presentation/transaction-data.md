@@ -14,6 +14,7 @@ Each entry needs:
 | ---------------- | -------------------------------------------------------------------------------------------- |
 | `type`           | Transaction data type. Wallets must reject types they do not support, so use one your target wallets know, such as a TS12 type. |
 | `credential_ids` | IDs of the DCQL credential queries the transaction applies to.                              |
+| `transaction_data_hashes_alg` | Optional non-empty array of hash algorithms the wallet may use for this entry, for example `["sha-256", "sha-384"]`. Defaults to `sha-256` only. EUDIPLO can check `sha-256`, `sha-384` and `sha-512`; a hash with another listed algorithm fails. |
 | other fields     | Type-specific content. TS12 types put it in `payload`.                                       |
 
 EUDIPLO sends each entry base64url-encoded as JSON in the `transaction_data` parameter of the signed request.
@@ -61,7 +62,7 @@ For TS12 entries, the key binding JWT must additionally contain:
 
 The check applies to SD-JWT VC credentials; EUDIPLO does not check transaction data for mDOC presentations. For every presented SD-JWT VC, EUDIPLO takes the entries whose `credential_ids` contain the credential's query ID and requires in the key binding JWT:
 
-- `transaction_data_hashes` with one hash per entry, in request order,
-- each hash computed over the base64url-encoded entry exactly as sent in the request, with the algorithm from `transaction_data_hashes_alg` (`sha-256` by default, `sha-384` and `sha-512` also accepted).
+- `transaction_data_hashes` with exactly one hash per entry, in any order,
+- each hash computed over the base64url-encoded entry exactly as sent in the request, with the algorithm from `transaction_data_hashes_alg` in the key binding JWT (`sha-256` when absent). The algorithm must be one the entry's own `transaction_data_hashes_alg` allows, so `sha-384` and `sha-512` are only accepted when the entry lists them.
 
 EUDIPLO does not check that `credential_ids` exist in the DCQL query: an entry whose IDs match no presented SD-JWT VC is sent to the wallet but not verified. If a hash is missing or does not match, the presentation fails and the session is set to `failed` (see [Session Outcome](../reference/session-outcome.md)). On success, the session and the [webhook](../reference/webhooks.md) contain the `transaction_data` that was sent, so your backend can match the result to its transaction.

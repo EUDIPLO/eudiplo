@@ -326,6 +326,26 @@ describe("OID4VP wallet error response handling", () => {
         });
     });
 
+    it("rejects an error response that also carries a vp_token and leaves the session open", async () => {
+        const { service, decrypt, update, updateForTenant, publish } =
+            createService();
+        decrypt.mockResolvedValue({
+            error: "access_denied",
+            vp_token: { credential: ["vp"] },
+            state: "expected",
+        });
+
+        const error = await service
+            .getResponse({ response: "encrypted" }, "expected")
+            .catch((error) => error);
+
+        expect(error.getStatus()).toBe(400);
+        expect(error.message).toMatch(/^Invalid authorization response: /);
+        expect(update).not.toHaveBeenCalled();
+        expect(updateForTenant).not.toHaveBeenCalled();
+        expect(publish).not.toHaveBeenCalled();
+    });
+
     it("does not overwrite a session a concurrent presentation already completed", async () => {
         const { service, update, announce, publish } = createService({
             parsedWebhook: webhook,
