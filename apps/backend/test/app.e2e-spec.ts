@@ -37,7 +37,7 @@ describe("Home", () => {
         return request(app.getHttpServer()).get("/version").expect(401);
     });
 
-    test("GET /frontend-config returns the public URL", async () => {
+    test("GET /frontend-config returns the public URL and the auth mode", async () => {
         const configService = app.get(ConfigService);
         const token = await request(app.getHttpServer())
             .post("/api/oauth2/token")
@@ -57,5 +57,6 @@ describe("Home", () => {
 
         // The E2E environment keeps the PUBLIC_URL default.
         expect(response.body.publicUrl).toBe("http://localhost:3000");
+        expect(response.body.authMode).toBe("builtin");
     });
 });

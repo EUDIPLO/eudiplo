@@ -134,7 +134,7 @@
         </app-nav-section>
 
         <!-- Administration Section -->
-        @if (hasRole(['tenants:manage', 'clients:manage', 'users:manage', 'audit:read'])) {
+        @if (hasAdministration) {
           <app-nav-section
             section="administration"
             icon="admin_panel_settings"

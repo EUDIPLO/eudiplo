@@ -1,6 +1,6 @@
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { Component } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MATERIAL_ANIMATIONS } from '@angular/material/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { By } from '@angular/platform-browser';
@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppComponent } from './app.component';
 import { type AuthMode, FrontendConfigService } from './services/frontend-config.service';
 import { ApiService } from './core';
+import { VersionService } from './services/version.service';
 import { JwtService, roles as allRoles, type Role } from './services/jwt.service';
 import {
   NAV_SECTION_ROUTES,
@@ -35,15 +36,21 @@ describe('AppComponent', () => {
 class EmptyPageComponent {}
 
 describe('AppComponent navigation', () => {
-  function renderNav(roles: Role[], authMode: AuthMode | null = null): HTMLElement {
+  let fixture: ComponentFixture<AppComponent>;
+
+  function renderNav(
+    roles: Role[],
+    authMode: AuthMode | null = null,
+    frontendConfig: Partial<FrontendConfigService> = {
+      authMode,
+      getConfig: () => Promise.resolve(null),
+    }
+  ): HTMLElement {
     TestBed.configureTestingModule({
       imports: [AppComponent],
       providers: [
         provideRouter([{ path: '**', component: EmptyPageComponent }]),
-        {
-          provide: FrontendConfigService,
-          useValue: { authMode, getConfig: () => Promise.resolve(null) },
-        },
+        { provide: FrontendConfigService, useValue: frontendConfig },
         {
           provide: JwtService,
           useValue: {
@@ -56,7 +63,7 @@ describe('AppComponent navigation', () => {
         },
       ],
     });
-    const fixture = TestBed.createComponent(AppComponent);
+    fixture = TestBed.createComponent(AppComponent);
     fixture.detectChanges();
     return fixture.nativeElement as HTMLElement;
   }
@@ -72,12 +79,56 @@ describe('AppComponent navigation', () => {
     [null, ['API Clients', 'Users'], []],
     ['keycloak', ['API Clients', 'Users'], []],
     ['builtin', ['API Clients'], ['Users']],
-    ['generic', [], ['API Clients', 'Users']],
+    ['generic', ['Activity Logs'], ['API Clients', 'Users']],
   ])('with auth mode %s lists %j and hides %j', (authMode, listed, hidden) => {
     const items = menuItems(['clients:manage', 'users:manage'], authMode);
 
     for (const item of listed) expect(items).toContain(item);
     for (const item of hidden) expect(items).not.toContain(item);
+  });
+
+  it.each<[Role[], AuthMode | null, boolean]>([
+    [['users:manage'], 'generic', false],
+    [['users:manage'], 'builtin', false],
+    [['users:manage'], 'keycloak', true],
+    [['clients:manage'], 'generic', true],
+  ])('with %j and auth mode %s shows the Administration section: %s', (roles, mode, shown) => {
+    const nav = renderNav(roles, mode).querySelector('mat-sidenav')!;
+
+    expect(nav.textContent?.includes('Administration')).toBe(shown);
+  });
+
+  it('loads the auth mode once signed in and then hides the entries the instance lacks', async () => {
+    let loadedMode: AuthMode | null = null;
+    const getConfig = vi.fn(() => {
+      loadedMode = 'builtin';
+      return Promise.resolve(null);
+    });
+    const frontendConfig = {
+      get authMode() {
+        return loadedMode;
+      },
+      getConfig,
+    } as unknown as FrontendConfigService;
+    const element = renderNav(['clients:manage', 'users:manage'], null, frontendConfig);
+    const titles = () =>
+      Array.from(
+        element.querySelectorAll('mat-sidenav [matListItemTitle]'),
+        (item) => item.textContent?.trim() ?? ''
+      );
+    expect(titles()).toContain('Users');
+
+    // Signed in, the next page loads the frontend config.
+    vi.spyOn(TestBed.inject(ApiService), 'getAuthenticationStatus').mockReturnValue(true);
+    vi.spyOn(TestBed.inject(VersionService), 'check').mockResolvedValue(undefined);
+    await TestBed.inject(Router).navigateByUrl('/dashboard');
+
+    expect(getConfig).toHaveBeenCalled();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(titles()).toContain('API Clients');
+      expect(titles()).not.toContain('Users');
+    });
   });
 
   // RouterLink only listens for click; on an anchor the browser turns Enter into one.

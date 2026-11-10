@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import type { AuthSettings } from "../../../auth/auth-settings.js";
 
 class GrafanaConfigDto {
     @ApiPropertyOptional({
@@ -44,5 +45,5 @@ export class FrontendConfigResponseDto {
         enum: ["builtin", "keycloak", "generic"],
         example: "builtin",
     })
-    authMode!: "builtin" | "keycloak" | "generic";
+    authMode!: AuthSettings["mode"];
 }

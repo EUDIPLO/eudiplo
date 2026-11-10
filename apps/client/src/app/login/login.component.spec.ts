@@ -148,7 +148,10 @@ describe('LoginComponent with a kept session', () => {
     navigateByUrl = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
   });
 
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+  });
 
   it('waits for the kept session instead of asking for credentials', () => {
     render();
@@ -365,24 +368,86 @@ describe('LoginComponent with a kept session', () => {
     expect(fixture.componentInstance.isLoading).toBe(false);
   });
 
-  it("names the token endpoint's reason, such as another identity provider's", async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    api.loginWithClientCredentials.mockRejectedValue(
-      new OAuth2HttpError(
+  it.each([
+    {
+      name: "the built-in server's wrong secret",
+      error: new OAuth2HttpError(
+        'OAuth2 error Unauthorized.',
+        'Unauthorized' as never,
+        new Response(null, { status: 401 }),
+        { statusCode: 401, message: 'Invalid client credentials', error: 'Unauthorized' }
+      ),
+      text: 'Login failed. Invalid credentials. Please check your Client ID and Client Secret. The token endpoint says: Invalid client credentials.',
+    },
+    {
+      name: "another identity provider's wrong secret",
+      error: new OAuth2HttpError(
         'OAuth2 error invalid_client. Client authentication failed',
         'invalid_client',
         new Response(null, { status: 401 }),
         { error: 'invalid_client', error_description: 'Client authentication failed' }
-      )
-    );
+      ),
+      text: 'Login failed. Invalid credentials. Please check your Client ID and Client Secret. The token endpoint says: Client authentication failed.',
+    },
+    {
+      name: 'a refusal with another RFC 6749 code',
+      error: new OAuth2HttpError(
+        'OAuth2 error unauthorized_client.',
+        'unauthorized_client',
+        new Response(null, { status: 400 }),
+        { error: 'unauthorized_client' }
+      ),
+      text: 'Login failed. The token endpoint refused the sign-in (unauthorized_client). Check that this client may use the client credentials grant at the identity provider.',
+    },
+    {
+      name: 'a refusal with a reason',
+      error: new OAuth2HttpError(
+        'OAuth2 error invalid_scope. Scope eudiplo is not allowed',
+        'invalid_scope',
+        new Response(null, { status: 400 }),
+        { error: 'invalid_scope', error_description: 'Scope eudiplo is not allowed' }
+      ),
+      text: 'Login failed. The token endpoint refused the sign-in (invalid_scope). The token endpoint says: Scope eudiplo is not allowed. Check the scopes this client may request at the identity provider.',
+    },
+    {
+      name: 'an unreachable instance',
+      error: new TypeError('Failed to fetch'),
+      text: 'Login failed. Could not connect to EUDIPLO. Check if the instance URL is correct and the server is running.',
+    },
+    {
+      name: 'a discovery without a token endpoint',
+      error: new Error('OIDC discovery response is missing an issuer or token endpoint.'),
+      text: 'Login failed. Please check your credentials and instance URL.',
+    },
+    {
+      name: 'a token endpoint that is not there',
+      error: new OAuth2HttpError(
+        'OAuth2 error Not Found.',
+        'Not Found' as never,
+        new Response(null, { status: 404 }),
+        { statusCode: 404, message: 'Cannot POST /api/oauth2/token', error: 'Not Found' }
+      ),
+      text: 'Login failed. Endpoint not found. Please verify the EUDIPLO instance URL.',
+    },
+    {
+      name: 'a failing token endpoint',
+      error: new OAuth2HttpError(
+        'HTTP Error 503 Service Unavailable',
+        null as never,
+        new Response(null, { status: 503 }),
+        undefined as never
+      ),
+      text: 'Login failed. The token endpoint failed with status 503. Try again later.',
+    },
+  ])('names what to check for $name', async ({ error, text }) => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    api.loginWithClientCredentials.mockRejectedValue(error);
     render();
     button('Sign out and use other credentials')?.click();
 
     await submitForm('client-a', 'http://backend.test');
 
-    expect(snackTexts()).toEqual([
-      'Login failed. The token endpoint refused the sign-in: OAuth2 error invalid_client. Client authentication failed',
-    ]);
+    expect(snackTexts()).toEqual([text]);
   });
 
   it('reports a failed navigation after a sign-in as such, not as a failed sign-in', async () => {
@@ -692,6 +757,91 @@ describe('LoginComponent with a kept session', () => {
         apiUrl: 'http://backend.test',
         provider: 'generic',
       });
+    });
+
+    it('opens the page asked for after the provider returns to the login page', async () => {
+      queryParams['returnUrl'] = '/issuance/offer';
+      api.discovery = { issuer: 'http://idp.test', ui_client_id: 'ui' };
+      const redirectToLogin = vi.fn(() => Promise.resolve());
+      Object.assign(TestBed.inject(OidcService), { redirectToLogin });
+      render();
+      fixture.componentInstance.loginForm.patchValue({ apiUrl: 'http://backend.test' });
+      fixture.detectChanges();
+      await fixture.componentInstance.onSubmit();
+      expect(redirectToLogin).toHaveBeenCalledOnce();
+      fixture.destroy();
+
+      // The provider returns to the login page without its query, signed in.
+      delete queryParams['returnUrl'];
+      api.authenticated = true;
+      render();
+
+      expect(navigateByUrl).toHaveBeenCalledWith('/issuance/offer');
+      expect(sessionStorage.getItem('oidc_return_url')).toBeNull();
+    });
+
+    it('names the identity provider when its sign-in settings do not load', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      api.discovery = {
+        issuer: 'https://auth.test/application/o/eudiplo/',
+        ui_client_id: 'eudiplo-console',
+        oidc_provider: 'generic',
+      };
+      const redirectToLogin = vi.fn(() => Promise.reject(new TypeError('Failed to fetch')));
+      Object.assign(TestBed.inject(OidcService), { redirectToLogin });
+      render();
+      fixture.componentInstance.loginForm.patchValue({ apiUrl: 'http://backend.test' });
+      fixture.detectChanges();
+
+      await fixture.componentInstance.onSubmit();
+
+      expect(snackTexts()).toEqual([
+        'Login failed. Could not load the sign-in settings of the identity provider at ' +
+          `https://auth.test/application/o/eudiplo/. Check that it is reachable and allows requests from ${location.origin}.`,
+      ]);
+      expect(fixture.componentInstance.isLoading).toBe(false);
+      expect(sessionStorage.getItem('oidc_return_url')).toBeNull();
+    });
+
+    it.each([
+      {
+        name: "another provider's error status",
+        provider: 'generic',
+        secure: true,
+        error: Object.assign(new Error('Server responded with an invalid status.'), {
+          response: new Response(null, { status: 404 }),
+        }),
+        text:
+          'Login failed. The identity provider at https://idp.test answered the request for its ' +
+          'sign-in settings with status 404. Check OIDC on the backend.',
+      },
+      {
+        name: 'a page that is not secure',
+        provider: 'keycloak',
+        secure: false,
+        error: new Error('Web Crypto API is not available.'),
+        text: 'Login failed. Single sign-on needs a secure page: open the Web Client over HTTPS or on localhost.',
+      },
+      {
+        name: 'any other failure of keycloak-js',
+        provider: 'keycloak',
+        secure: true,
+        error: new Error('Failed to generate PKCE challenge.'),
+        text: 'Login failed. Single sign-on could not start: Failed to generate PKCE challenge.',
+      },
+    ])('says what kept SSO from starting for $name', async ({ provider, secure, error, text }) => {
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      vi.stubGlobal('isSecureContext', secure);
+      api.discovery = { issuer: 'https://idp.test', ui_client_id: 'ui', oidc_provider: provider };
+      const redirectToLogin = vi.fn(() => Promise.reject(error));
+      Object.assign(TestBed.inject(OidcService), { redirectToLogin });
+      render();
+      fixture.componentInstance.loginForm.patchValue({ apiUrl: 'http://backend.test' });
+      fixture.detectChanges();
+
+      await fixture.componentInstance.onSubmit();
+
+      expect(snackTexts()).toEqual([text]);
     });
 
     it('checks an instance entered without leaving its field and asks for its client', async () => {

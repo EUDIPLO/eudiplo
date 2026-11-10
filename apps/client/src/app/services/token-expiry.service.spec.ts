@@ -23,6 +23,7 @@ describe('TokenExpiryService', () => {
     logout: ReturnType<typeof vi.fn>;
     logoutExpired: ReturnType<typeof vi.fn>;
     hasEndedSession: () => boolean;
+    usesSso: () => boolean;
   };
   let refusals: { isAccessRevoked: () => boolean; accessRevoked$: Subject<void> };
   let router: { url: string; navigate: ReturnType<typeof vi.fn>; events: Subject<unknown> };
@@ -49,6 +50,7 @@ describe('TokenExpiryService', () => {
       logout: vi.fn(),
       logoutExpired: vi.fn(),
       hasEndedSession: () => false,
+      usesSso: () => false,
     };
     refusals = { isAccessRevoked: () => false, accessRevoked$: new Subject<void>() };
     router = { url: '/dashboard', navigate: vi.fn(), events: new Subject<unknown>() };
@@ -160,6 +162,20 @@ describe('TokenExpiryService', () => {
     await service.check();
     notices[0].action.next();
 
+    expect(router.navigate).toHaveBeenCalledWith(['/login'], {
+      queryParams: { returnUrl: '/issuance/config?tab=claims' },
+    });
+  });
+
+  it('returns to the page after signing in again with SSO when the SSO session expired', async () => {
+    router.url = '/issuance/config?tab=claims';
+    api.getAuthenticationStatus = () => false;
+    api.usesSso = () => true;
+
+    await service.check();
+    notices[0].action.next();
+
+    expect(api.logoutExpired).toHaveBeenCalledOnce();
     expect(router.navigate).toHaveBeenCalledWith(['/login'], {
       queryParams: { returnUrl: '/issuance/config?tab=claims' },
     });

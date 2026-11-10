@@ -52,6 +52,30 @@ describe('OidcService under a base href', () => {
     );
   });
 
+  it('returns from the provider to the login page under the base href, without its query', async () => {
+    const config = { issuerUrl: 'https://idp.test/realms/r', uiClientId: 'ui', apiUrl: 'x' };
+
+    await service.redirectToLogin(config);
+
+    expect(keycloak.init).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onLoad: 'login-required',
+        redirectUri: `${location.origin}/eudiplo-client/login`,
+      })
+    );
+  });
+
+  it("keeps no session when the provider's sign-in settings do not load", async () => {
+    const failure = new TypeError('Failed to fetch');
+    keycloak.init.mockRejectedValue(failure);
+    const config = { issuerUrl: 'https://idp.test/realms/r', uiClientId: 'ui', apiUrl: 'x' };
+
+    await expect(service.redirectToLogin(config)).rejects.toBe(failure);
+
+    expect(localStorage.getItem('oidc_config')).toBeNull();
+    expect(service.mode).toBe('local');
+  });
+
   it('says when keycloak-js renewed the token, after keeping the new one', async () => {
     await service.initialize();
     const stored: (string | null)[] = [];

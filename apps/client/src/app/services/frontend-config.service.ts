@@ -49,11 +49,16 @@ export class FrontendConfigService {
   }
 
   get configImportMode(): ConfigImportMode | null {
-    return this.config?.configImportMode ?? null;
+    return this.currentConfig?.configImportMode ?? null;
   }
 
   /** The authentication mode once the config is loaded, else null. */
   get authMode(): AuthMode | null {
-    return this.config?.authMode ?? null;
+    return this.currentConfig?.authMode ?? null;
+  }
+
+  /** The cached config while it belongs to the instance signed in to; another instance's is none. */
+  private get currentConfig(): FrontendConfig | null {
+    return this.configBaseUrl === this.apiService.getBaseUrl() ? this.config : null;
   }
 }

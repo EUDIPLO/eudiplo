@@ -31,8 +31,11 @@ export interface ExternalAuthSettings {
     jwksUri?: string;
     /** Signature algorithm of the tokens (`OIDC_ALGORITHM`). */
     algorithm: string;
-    /** Public client of the Web Client (`OIDC_UI_CLIENT_ID`). */
-    uiClientId: string;
+    /**
+     * Public client of the Web Client (`OIDC_UI_CLIENT_ID`). Keycloak mode has
+     * a default; with `generic`, single sign-on is offered only when it is set.
+     */
+    uiClientId?: string;
 }
 
 /** How the management API authenticates; `builtin` issues its own tokens. */
@@ -44,11 +47,13 @@ export function readAuthSettings(configService: ConfigService): AuthSettings {
     if (issuer === undefined) {
         return { mode: "builtin" };
     }
+    const mode =
+        configService.get<string>("OIDC_PROVIDER") === "generic"
+            ? "generic"
+            : "keycloak";
+    const uiClientId = configService.get<string>("OIDC_UI_CLIENT_ID");
     return {
-        mode:
-            configService.get<string>("OIDC_PROVIDER") === "generic"
-                ? "generic"
-                : "keycloak",
+        mode,
         issuer,
         internalIssuer:
             configService.get<string>("OIDC_INTERNAL_ISSUER_URL") ?? issuer,
@@ -61,7 +66,8 @@ export function readAuthSettings(configService: ConfigService): AuthSettings {
             configService.get<string>("OIDC_ALGORITHM") ??
             OIDC_DEFAULTS.algorithm,
         uiClientId:
-            configService.get<string>("OIDC_UI_CLIENT_ID") ??
-            OIDC_DEFAULTS.uiClientId,
+            mode === "generic"
+                ? uiClientId
+                : (uiClientId ?? OIDC_DEFAULTS.uiClientId),
     };
 }

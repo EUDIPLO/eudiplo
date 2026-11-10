@@ -81,4 +81,24 @@ describe('FrontendConfigService', () => {
     expect((await service.getConfig())?.publicUrl).toBe('https://other.example');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("applies no other instance's auth mode while the new one is unknown", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ configImportMode: 'disabled', authMode: 'builtin' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    const service = TestBed.inject(FrontendConfigService);
+    await service.getConfig();
+    expect(service.authMode).toBe('builtin');
+
+    instanceUrl = 'https://admin.other.example';
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    expect(service.authMode).toBeNull();
+    await service.getConfig();
+    expect(service.authMode).toBeNull();
+    expect(service.configImportMode).toBeNull();
+  });
 });

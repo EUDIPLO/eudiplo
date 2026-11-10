@@ -184,7 +184,10 @@ export class AuthService {
                     issuer: settings.issuer,
                     token_endpoint: provider.token_endpoint,
                     jwks_uri: provider.jwks_uri,
-                    ui_client_id: settings.uiClientId,
+                    // Without OIDC_UI_CLIENT_ID the login page offers no SSO.
+                    ...(settings.uiClientId && {
+                        ui_client_id: settings.uiClientId,
+                    }),
                     oidc_provider: "generic",
                 };
             }

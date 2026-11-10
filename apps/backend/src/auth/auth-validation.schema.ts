@@ -138,13 +138,15 @@ export const AUTH_VALIDATION_SCHEMA: Joi.ObjectSchema = Joi.object({
         )
         .meta({ group: "auth", order: 90 }),
 
-    OIDC_UI_CLIENT_ID: Joi.when("OIDC", {
-        is: Joi.exist(),
-        then: Joi.string().default(OIDC_DEFAULTS.uiClientId),
-        otherwise: Joi.optional(),
-    })
+    // OIDC_PROVIDER is `keycloak` by default with OIDC and unset without it. With
+    // `generic`, single sign-on is on only for a client the operator created.
+    OIDC_UI_CLIENT_ID: Joi.string()
+        .when("OIDC_PROVIDER", {
+            is: "keycloak",
+            then: Joi.string().default(OIDC_DEFAULTS.uiClientId),
+        })
         .description(
-            "Public client ID for the Angular UI in OIDC mode, for Authorization Code + PKCE login. With `OIDC_PROVIDER=keycloak` EUDIPLO registers it in Keycloak; with `generic` create it at the provider as a public client with the Web Client's URL and `<url>/silent-check-sso.html` as redirect URIs.",
+            "Public client ID for the Angular UI in OIDC mode, for Authorization Code + PKCE login. With `OIDC_PROVIDER=keycloak` (default `eudiplo-ui`) EUDIPLO registers it in Keycloak. With `generic` it has no default: the Web Client's login page offers SSO only when it is set. Create it at the provider as a public client with `<web client URL>/login` and `<web client URL>/silent-check-sso.html` as redirect URIs and the Web Client's URL as post-logout redirect URI.",
         )
         .meta({ group: "auth", order: 95 }),
 

@@ -5,6 +5,11 @@ import { Subject } from 'rxjs';
 /** How keycloak-js reaches the identity provider (`oidc_provider` of the backend's discovery). */
 export type OidcProvider = 'keycloak' | 'generic';
 
+/** The provider a discovery's `oidc_provider` names; older backends, which leave it out, use Keycloak. */
+export function oidcProviderOf(oidcProvider: unknown): OidcProvider {
+  return oidcProvider === 'generic' ? 'generic' : 'keycloak';
+}
+
 export interface OidcConfig {
   /** Issuer URL, e.g. http://localhost:8080/realms/eudiplo */
   issuerUrl: string;
@@ -14,6 +19,14 @@ export interface OidcConfig {
   apiUrl: string;
   /** Keycloak realm or any provider by its discovery document; stored configs without it are Keycloak. */
   provider?: OidcProvider;
+}
+
+/**
+ * The page the identity provider returns to after a sign-in: the login page under the
+ * web client's base href, `<web client URL>/login`. Operators register it as redirect URI.
+ */
+export function oidcRedirectUri(): string {
+  return new URL('login', document.baseURI).href;
 }
 
 const STORAGE_CONFIG_KEY = 'oidc_config';
@@ -72,13 +85,22 @@ export class OidcService {
     const keycloak = this.createKeycloakInstance(config);
     this.keycloak = keycloak;
 
-    // init() with login-required will redirect the browser to Keycloak.
-    // This function will not return in the normal case.
-    await keycloak.init({
-      onLoad: 'login-required',
-      pkceMethod: 'S256',
-      checkLoginIframe: false,
-    });
+    // init() with login-required will redirect the browser to the identity provider.
+    // This function will not return in the normal case. It throws when the
+    // provider's discovery document does not load; no session is kept then.
+    try {
+      await keycloak.init({
+        onLoad: 'login-required',
+        pkceMethod: 'S256',
+        checkLoginIframe: false,
+        // One fixed page, without the query of the login page, so providers that compare
+        // redirect URIs exactly accept it.
+        redirectUri: oidcRedirectUri(),
+      });
+    } catch (error) {
+      this.clearStorage();
+      throw error;
+    }
   }
 
   /**

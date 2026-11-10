@@ -13,20 +13,16 @@
 </div>
 
 @if (unavailableMessage) {
-  <mat-card class="mat-elevation-z2">
-    <mat-card-content>
-      <div fxLayout="column" fxLayoutGap="8px">
-        <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
-          <mat-icon color="warn">info</mat-icon>
-          <strong>Client management is unavailable</strong>
-        </div>
-        <p>{{ unavailableMessage }}</p>
-      </div>
-    </mat-card-content>
-  </mat-card>
+  <app-unavailable-card heading="Client management is unavailable" [message]="unavailableMessage" />
 } @else if (loadError) {
   <app-load-error [message]="loadError" (retry)="loadClients()" />
 } @else if (!loading) {
+  @if (loadedClients && !rotatesSecrets) {
+    <p class="section-hint">
+      The identity provider manages this tenant's clients. These records are left from an earlier
+      mode.
+    </p>
+  }
   <table mat-table [dataSource]="clients" class="mat-elevation-z8">
     <ng-container matColumnDef="clientId">
       <th mat-header-cell *matHeaderCellDef>Client ID</th>
@@ -80,20 +76,24 @@
             </button>
           </span>
         }
-        <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
-          <button
-            matIconButton
-            [disabled]="!manageable"
-            matTooltip="Rotate Secret - Generate a new secret (invalidates current)"
-            [attr.aria-label]="manageable ? 'Rotate Secret' : 'Rotate Secret: ' + manageDeniedHint"
-            (click)="rotateSecret(client)"
-            appConfigManaged
-            managedKind="Client"
-            [managedResourceId]="client.clientId"
-          >
-            <mat-icon>refresh</mat-icon>
-          </button>
-        </span>
+        @if (rotatesSecrets) {
+          <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
+            <button
+              matIconButton
+              [disabled]="!manageable"
+              matTooltip="Rotate Secret - Generate a new secret (invalidates current)"
+              [attr.aria-label]="
+                manageable ? 'Rotate Secret' : 'Rotate Secret: ' + manageDeniedHint
+              "
+              (click)="rotateSecret(client)"
+              appConfigManaged
+              managedKind="Client"
+              [managedResourceId]="client.clientId"
+            >
+              <mat-icon>refresh</mat-icon>
+            </button>
+          </span>
+        }
         @if (!loadedClients) {
           <span [matTooltip]="manageDeniedHint" [matTooltipDisabled]="manageable">
             <button
@@ -115,7 +115,7 @@
       </td>
     </ng-container>
 
-    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-    <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+    <tr mat-header-row *matHeaderRowDef="columns"></tr>
+    <tr mat-row *matRowDef="let row; columns: columns"></tr>
   </table>
 }

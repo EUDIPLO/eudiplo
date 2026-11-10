@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vite
 import { ConfigOwnershipService } from '../../../config-portability/config-ownership.service';
 import { ApiService } from '../../../core';
 import { JwtService } from '../../../services/jwt.service';
+import { FrontendConfigService } from '../../../services/frontend-config.service';
 import { ClientListComponent } from './client-list.component';
 import { errorSnackBarDuration } from '../../../utils/error-snackbar';
 
@@ -22,6 +23,7 @@ describe('ClientListComponent role limits', () => {
         provideRouter([]),
         { provide: JwtService, useValue: { getRoles: () => ['clients:manage', 'issuance:offer'] } },
         { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+        { provide: FrontendConfigService, useValue: { authMode: null } },
       ],
     }).compileComponents();
 
@@ -93,6 +95,7 @@ describe('ClientListComponent delete', () => {
         provideRouter([]),
         { provide: JwtService, useValue: { getRoles: () => ['clients:manage', 'issuance:offer'] } },
         { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+        { provide: FrontendConfigService, useValue: { authMode: null } },
         { provide: ApiService, useValue: { getClientId: () => 'offer', logout } },
         { provide: MatSnackBar, useValue: snackBar },
       ],
@@ -196,12 +199,18 @@ describe('ClientListComponent loading', () => {
           })
       ),
     });
-    const component = new ClientListComponent(
-      { open: vi.fn() } as never,
-      {} as never,
-      { navigate: vi.fn() } as never,
-      {} as never,
-      { getRoles: () => ['clients:manage'] } as never
+    TestBed.configureTestingModule({
+      providers: [{ provide: FrontendConfigService, useValue: { authMode: null } }],
+    });
+    const component = TestBed.runInInjectionContext(
+      () =>
+        new ClientListComponent(
+          { open: vi.fn() } as never,
+          {} as never,
+          { navigate: vi.fn() } as never,
+          {} as never,
+          { getRoles: () => ['clients:manage'] } as never
+        )
     );
 
     await component.loadClients();
@@ -237,6 +246,7 @@ describe('ClientListComponent rotate secret', () => {
         provideRouter([]),
         { provide: JwtService, useValue: { getRoles: () => ['clients:manage', 'issuance:offer'] } },
         { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+        { provide: FrontendConfigService, useValue: { authMode: null } },
         {
           provide: ApiService,
           useValue: {
@@ -308,6 +318,7 @@ describe('ClientListComponent with another identity provider', () => {
         provideRouter([]),
         { provide: JwtService, useValue: { getRoles: () => ['clients:manage'] } },
         { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+        { provide: FrontendConfigService, useValue: { authMode: 'generic' } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(ClientListComponent);
@@ -322,5 +333,31 @@ describe('ClientListComponent with another identity provider', () => {
     );
     expect(page.querySelector('app-load-error')).toBeNull();
     expect(page.querySelector('[aria-label="Create New Client"]')).toBeNull();
+  });
+
+  it('offers no new secret for a record left from an earlier mode', async () => {
+    vi.restoreAllMocks();
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [ClientListComponent],
+      providers: [
+        provideRouter([]),
+        { provide: JwtService, useValue: { getRoles: () => ['clients:manage'] } },
+        { provide: ConfigOwnershipService, useValue: { get: async () => undefined } },
+        { provide: FrontendConfigService, useValue: { authMode: 'generic' } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ClientListComponent);
+    fixture.componentRef.setInput('loadedClients', [
+      { clientId: 'acme-admin', tenantId: 'acme', roles: [] } as unknown as ClientEntity,
+    ]);
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(page.textContent).toContain('acme-admin');
+    });
+    expect(page.querySelector('[aria-label^="Rotate Secret"]')).toBeNull();
   });
 });

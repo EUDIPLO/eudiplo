@@ -137,6 +137,15 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Whether the Administration section has an entry for the caller on this instance. */
+  get hasAdministration(): boolean {
+    // Activity Logs is open to clients:manage, also where the provider manages the clients.
+    return (
+      this.hasRole(['tenants:manage', 'clients:manage', 'audit:read']) ||
+      (this.hasRole('users:manage') && this.managesUsers)
+    );
+  }
+
   /** People are managed here only with Keycloak; until the mode is known the entry stays. */
   get managesUsers(): boolean {
     const mode = this.frontendConfig.authMode;

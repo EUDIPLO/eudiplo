@@ -129,6 +129,7 @@ describe("Generic OIDC provider (e2e)", () => {
         vi.stubEnv("OIDC_PROVIDER", "generic");
         vi.stubEnv("OIDC_AUDIENCE", AUDIENCE);
         vi.stubEnv("OIDC_ROLES_CLAIM", "eudiplo.roles");
+        vi.stubEnv("OIDC_UI_CLIENT_ID", "eudiplo-console");
         vi.stubEnv("CONFIG_IMPORT_MODE", "disabled");
         // AppModule reads the environment when it is imported.
         const { AppModule } = await import("../../src/app.module.js");
@@ -348,9 +349,17 @@ describe("Generic OIDC provider (e2e)", () => {
             issuer,
             token_endpoint: `${base}/application/o/token/`,
             jwks_uri: `${base}/application/o/eudiplo/jwks/`,
-            ui_client_id: "eudiplo-ui",
+            ui_client_id: "eudiplo-console",
             oidc_provider: "generic",
         });
+    });
+
+    test("tells the Web Client that the provider manages clients and people", async () => {
+        const response = await as(await personToken([Role.SessionsRead]))
+            .get("/frontend-config")
+            .expect(200);
+
+        expect(response.body.authMode).toBe("generic");
     });
 
     test("has no built-in token endpoint", async () => {
@@ -513,7 +522,9 @@ describe("Generic OIDC provider (e2e)", () => {
                 "Tenant",
                 "tenant",
                 "tenant.json",
-                { name: "Acme" },
+                {
+                    name: "Acme",
+                },
             );
 
             const planned = await as(await admin())
