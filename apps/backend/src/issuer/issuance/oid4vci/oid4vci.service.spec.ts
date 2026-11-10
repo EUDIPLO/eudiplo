@@ -83,33 +83,48 @@ describe("Oid4vciService credential request error mapping", () => {
         updateForTenant?: ReturnType<typeof vi.fn>;
         executeFrom?: ReturnType<typeof vi.fn>;
         keyAttestationsRequired?: Record<string, string[]>;
-        parseCredentialRequest?: () => unknown;
+        parseCredentialRequest?: (options: never) => unknown;
+        onIssuer?: (decryptJwe: unknown) => void;
+        metadata?: unknown;
+        decryptJweToJson?: ReturnType<typeof vi.fn>;
     }) {
         const session = {
             id: "session",
             tenantId: "tenant",
             notifications: [],
         };
+        const issuerStub = () => ({
+            getKnownCredentialConfigurationsSupported: () => ({ pid: {} }),
+            parseCredentialRequest:
+                overrides.parseCredentialRequest ??
+                (() => ({
+                    proofs: { jwt: ["proof-jwt"] },
+                    credentialConfigurationId: "pid",
+                })),
+            createCredentialResponse: () => ({ credentialResponse: {} }),
+        });
         return service({
             changeSessionState: {
                 executeFrom:
                     overrides.executeFrom ?? vi.fn().mockResolvedValue(true),
             },
+            ...(overrides.metadata !== undefined && {
+                buildIssuerMetadata: {
+                    execute: vi.fn().mockResolvedValue(overrides.metadata),
+                },
+            }),
+            encryptionService: {
+                decryptJweToJson: overrides.decryptJweToJson ?? vi.fn(),
+            },
             sdk: {
-                issuer: () => ({
-                    getKnownCredentialConfigurationsSupported: () => ({
-                        pid: {},
-                    }),
-                    parseCredentialRequest:
-                        overrides.parseCredentialRequest ??
-                        (() => ({
-                            proofs: { jwt: ["proof-jwt"] },
-                            credentialConfigurationId: "pid",
-                        })),
-                    createCredentialResponse: () => ({
-                        credentialResponse: {},
-                    }),
-                }),
+                issuer: (
+                    _tenantId: string,
+                    _sessionId?: string,
+                    decryptJwe?: unknown,
+                ) => {
+                    overrides.onIssuer?.(decryptJwe);
+                    return issuerStub();
+                },
             },
             issuanceService: {
                 getIssuanceConfiguration: vi.fn().mockResolvedValue({}),
@@ -200,6 +215,92 @@ describe("Oid4vciService credential request error mapping", () => {
         expect(protocolError(error)).toEqual({
             error: "invalid_credential_request",
             error_description: "malformed",
+        });
+    });
+
+    it("hands a plain request to the parser as application/json", async () => {
+        let options: Record<string, unknown> | undefined;
+        await setup({
+            parseCredentialRequest: (received: never) => {
+                options = received;
+                return {
+                    proofs: { jwt: ["proof-jwt"] },
+                    credentialConfigurationId: "pid",
+                };
+            },
+        }).getCredential(request, "tenant");
+
+        expect(options).toMatchObject({
+            contentType: "application/json",
+            credentialRequest: request.body,
+        });
+    });
+
+    it("hands an encrypted request to the parser as sent and returns the rewritten request from its decrypt callback", async () => {
+        const jwe = "header.key.iv.ciphertext.tag";
+        const responseJwk = { kty: "EC", crv: "P-256", alg: "ECDH-ES" };
+        let decryptJwe:
+            | ((
+                  jwe: string,
+                  options?: { jwk?: Record<string, unknown> },
+              ) => unknown)
+            | undefined;
+        let options: Record<string, unknown> | undefined;
+
+        await setup({
+            metadata: {
+                ...issuerMetadata,
+                credentialIssuer: {
+                    ...issuerMetadata.credentialIssuer,
+                    credential_response_encryption: {
+                        alg_values_supported: ["ECDH-ES"],
+                        enc_values_supported: ["A128GCM"],
+                    },
+                },
+            },
+            decryptJweToJson: vi.fn().mockResolvedValue({
+                credential_configuration_id: "pid",
+                proofs: {},
+                credential_response_encryption: {
+                    jwk: responseJwk,
+                    enc: "A128GCM",
+                    zip: "DEF",
+                },
+            }),
+            onIssuer: (callback) => {
+                if (callback) decryptJwe = callback as typeof decryptJwe;
+            },
+            parseCredentialRequest: (received: never) => {
+                options = received;
+                return {
+                    proofs: { jwt: ["proof-jwt"] },
+                    credentialConfigurationId: "pid",
+                };
+            },
+        }).getCredential(
+            { ...request, contentType: "application/jwt", body: jwe },
+            "tenant",
+        );
+
+        expect(options).toMatchObject({
+            contentType: "application/jwt",
+            credentialRequest: jwe,
+        });
+        const advertisedJwk = { kty: "EC", kid: "enc", alg: "ECDH-ES" };
+        const decrypted = (await decryptJwe?.(jwe, {
+            jwk: advertisedJwk,
+        })) as { decrypted: boolean; decryptionJwk: unknown; payload: string };
+        expect(decrypted.decrypted).toBe(true);
+        expect(decrypted.decryptionJwk).toBe(advertisedJwk);
+        // zip is not advertised, so it is dropped; the legacy sibling alg is added.
+        expect(JSON.parse(decrypted.payload)).toEqual({
+            credential_configuration_id: "pid",
+            proofs: {},
+            credential_response_encryption: {
+                jwk: responseJwk,
+                enc: "A128GCM",
+                alg: "ECDH-ES",
+            },
         });
     });
 

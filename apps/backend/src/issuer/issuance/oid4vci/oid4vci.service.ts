@@ -320,9 +320,9 @@ export class Oid4vciService {
         );
 
         let requestBody: CredentialRequest;
+        let jweString: string | undefined;
         if (isJwtContentType || typeof rawBody === "string") {
             // Encrypted credential request - need to read and decrypt JWE
-            let jweString: string;
             if (typeof rawBody === "string") {
                 // Text body parser successfully set req.body as string
                 jweString = rawBody;
@@ -396,19 +396,45 @@ export class Oid4vciService {
             }
         }
 
+        const preparedRequest = addLegacyCredentialResponseEncryptionAlg(
+            dropUnsupportedCredentialResponseCompression(
+                requestBody,
+                issuerMetadata.credentialIssuer.credential_response_encryption
+                    ?.zip_values_supported,
+            ),
+        );
+
+        // The request was decrypted above so the checks and compatibility
+        // rewrites see the plaintext. The library still gets the body as sent,
+        // so it applies the rules of its transport: the advertised key and enc
+        // for an encrypted request, encryption_required and "response
+        // encryption only in an encrypted request" for a plain one. Its
+        // decrypt callback returns the rewritten request. The library passes
+        // the advertised key it matched by kid; without one, refuse.
+        const parsingIssuer = this.sdk.issuer(
+            tenantId,
+            undefined,
+            (_jwe, options) =>
+                options?.jwk
+                    ? {
+                          decrypted: true,
+                          decryptionJwk: options.jwk,
+                          payload: JSON.stringify(preparedRequest),
+                      }
+                    : { decrypted: false },
+        );
+
         let parsedCredentialRequest: ParseCredentialRequestReturn;
         try {
-            parsedCredentialRequest = issuer.parseCredentialRequest({
-                issuerMetadata,
-                credentialRequest: addLegacyCredentialResponseEncryptionAlg(
-                    dropUnsupportedCredentialResponseCompression(
-                        requestBody,
-                        issuerMetadata.credentialIssuer
-                            .credential_response_encryption
-                            ?.zip_values_supported,
-                    ),
-                ),
-            });
+            parsedCredentialRequest =
+                await parsingIssuer.parseCredentialRequest({
+                    issuerMetadata,
+                    contentType:
+                        jweString === undefined
+                            ? "application/json"
+                            : "application/jwt",
+                    credentialRequest: jweString ?? preparedRequest,
+                });
         } catch (err) {
             // Keep the code so a wallet can tell it has to retry encrypted
             // (OpenID4VCI 1.0 Section 8.3.1.2).

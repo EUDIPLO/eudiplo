@@ -18,7 +18,7 @@ SD-JWT VCs are issued with `iss` = `{PUBLIC_URL}/issuers/{tenant}` and the certi
 
 ## 2. Define the claims
 
-Each entry of `fields[]` describes one claim: its `path`, `type`, whether it is `mandatory` and, for SD-JWT VC, whether it is `disclosable`. Both default to `false`, so set `disclosable: true` for every claim the holder should be able to disclose selectively.
+Each entry of `fields[]` describes one claim: its `path`, `type`, whether it is `mandatory` and, for SD-JWT VC, whether it is `disclosable`. Both default to `false`, so set `disclosable: true` for every claim the holder should be able to disclose selectively. `iss`, `nbf`, `exp`, `cnf`, `vct`, `vct#integrity` and `status`, and claims below them, cannot be disclosable: issuing then fails.
 
 ```json
 {
