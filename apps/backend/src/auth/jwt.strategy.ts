@@ -16,6 +16,7 @@ import type { ClientData } from "./client/domain/client-data.js";
 import {
     accessTokenTypeRefusal,
     idTokenClaimRefusal,
+    keycloakTokenTypeRefusal,
 } from "./domain/access-token-shape.js";
 import { claimValue, roleNames } from "./domain/token-claims.js";
 import { ACCESS_TOKEN_LIFETIME_SECONDS } from "./jwt.service.js";
@@ -37,20 +38,6 @@ export interface ExternalTokenChecks {
     algorithms: string[];
     /** Origins the operator configured, which skip the outbound URL policy. */
     trustedOrigins: string[];
-    /**
-     * Refuse tokens whose `typ` or claims mark them as another kind of token
-     * than an access token, such as ID tokens that carry the audience too.
-     */
-    accessTokensOnly: boolean;
-}
-
-/**
- * Whether tokens whose `typ` or claims mark them as another kind of token
- * than an access token are refused: with other providers than Keycloak, whose
- * ID tokens can carry `OIDC_AUDIENCE` too.
- */
-function acceptsAccessTokensOnly(settings: ExternalAuthSettings): boolean {
-    return settings.mode === "generic";
 }
 
 /**
@@ -78,7 +65,6 @@ export function externalTokenChecks(
             audience: settings.audience,
             algorithms,
             trustedOrigins,
-            accessTokensOnly: acceptsAccessTokensOnly(settings),
         };
     }
     if (!issuerMetadata) {
@@ -92,7 +78,6 @@ export function externalTokenChecks(
         audience: settings.audience,
         algorithms,
         trustedOrigins,
-        accessTokensOnly: acceptsAccessTokensOnly(settings),
     };
 }
 
@@ -155,9 +140,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
             },
         });
         return {
-            secretOrKeyProvider: checks.accessTokensOnly
-                ? JwtStrategy.refusingOtherTokenTypes(keyProvider)
-                : keyProvider,
+            secretOrKeyProvider:
+                JwtStrategy.refusingOtherTokenTypes(keyProvider),
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
             algorithms: checks.algorithms,
             issuer: checks.issuer,
@@ -167,7 +151,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
 
     /**
      * Refuses a token whose JWS header names another type than an access
-     * token before its key is looked up. The guard answers with the reason.
+     * token before its key is looked up, so that ID, logout and other tokens
+     * of the provider fail even when they carry the audience. The guard
+     * answers with the reason.
      */
     private static refusingOtherTokenTypes(
         keyProvider: ReturnType<typeof passportJwtSecret>,
@@ -277,11 +263,16 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
         settings: ExternalAuthSettings,
     ): Promise<TokenPayload> {
         // The signature check accepts tokens without exp, which never expire.
-        if (settings.mode === "generic" && typeof payload.exp !== "number") {
+        if (typeof payload.exp !== "number") {
             throw new UnauthorizedException("Access token has no expiry");
         }
+        // ID tokens are signed with the same keys; without OIDC_AUDIENCE,
+        // Keycloak's for any client of the realm pass the signature check.
         const refusal =
-            acceptsAccessTokensOnly(settings) && idTokenClaimRefusal(payload);
+            idTokenClaimRefusal(payload) ??
+            (settings.mode === "keycloak"
+                ? keycloakTokenTypeRefusal(payload)
+                : undefined);
         if (refusal) {
             throw new UnauthorizedException(refusal);
         }
