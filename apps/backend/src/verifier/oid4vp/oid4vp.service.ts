@@ -792,17 +792,24 @@ export class Oid4vpService {
 
         let decrypted: unknown;
         try {
+            // Only the encryption the request advertised: the alg of its
+            // key and the enc values of its client_metadata, for
+            // direct_post.jwt and dc_api.jwt alike.
             decrypted =
                 await this.encryptionService.decryptJweWithPrivateJwk<unknown>(
                     body.response,
                     session.tenantId,
-                    session.responseEncryptionPrivateJwk as
-                        | Record<string, unknown>
-                        | undefined,
+                    {
+                        privateJwk:
+                            session.responseEncryptionPrivateJwk ?? undefined,
+                        contentEncryptionAlgorithms:
+                            ENCRYPTED_RESPONSE_ENC_VALUES_SUPPORTED,
+                    },
                 );
         } catch (error) {
-            // A response the wallet encrypted wrongly, or whose time claims
-            // are out of range, is the wallet's error, not the server's.
+            // A response the wallet encrypted wrongly, with an alg or enc the
+            // request did not advertise, or whose time claims are out of
+            // range, is the wallet's error, not the server's.
             if (error instanceof EncryptedResponseRejectedError) {
                 throw new BadRequestException(
                     `Could not decrypt the authorization response: ${error.message}`,

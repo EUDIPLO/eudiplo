@@ -231,6 +231,7 @@ describe("Presentation - Direct Post Security (Section 13.3)", () => {
             client_metadata: { jwks: { keys: JWK[] } };
         };
         const encryptionJwk = client_metadata.jwks.keys[0];
+        expect(encryptionJwk.alg).toBe("ECDH-ES");
         const notYetValid = await new EncryptJWT({ vp_token: {} })
             .setProtectedHeader({
                 alg: "ECDH-ES",
@@ -239,8 +240,23 @@ describe("Presentation - Direct Post Security (Section 13.3)", () => {
             })
             .setNotBefore(Math.floor(Date.now() / 1000) + 600)
             .encrypt(encryptionJwk);
+        // Encryption the request did not advertise: its key says ECDH-ES
+        // (HAIP Section 5) and its encrypted_response_enc_values_supported
+        // lists A128GCM and A256GCM only. jose refuses a JWK whose alg
+        // differs from the header, so the alg goes with the key.
+        const notAdvertised = await Promise.all(
+            [
+                { alg: "ECDH-ES+A128KW", enc: "A128GCM" },
+                { alg: "ECDH-ES+A256KW", enc: "A256GCM" },
+                { alg: "ECDH-ES", enc: "A128CBC-HS256" },
+            ].map((header) =>
+                new EncryptJWT({ vp_token: {} })
+                    .setProtectedHeader({ ...header, kid: encryptionJwk.kid })
+                    .encrypt({ ...encryptionJwk, alg: header.alg }),
+            ),
+        );
 
-        for (const response of ["not-a-jwe", notYetValid]) {
+        for (const response of ["not-a-jwe", notYetValid, ...notAdvertised]) {
             const answer = await request(app.getHttpServer())
                 .post(`/presentations/${walletNonce}/oid4vp`)
                 .trustLocalhost()
@@ -260,49 +276,63 @@ describe("Presentation - Direct Post Security (Section 13.3)", () => {
         expect(session.body.status).toBe("fetched");
     });
 
+    /**
+     * Creates a presentation request and answers it with a PID
+     * presentation. The encrypted payload holds the `vp_token` and the
+     * members `claims` returns for the request's `state`.
+     * @returns the session ID and the HTTP status of the answer
+     */
+    async function answerWithPid(
+        claims: (requestState: string | undefined) => Record<string, unknown>,
+    ): Promise<{ sessionId: string; status: number }> {
+        const res = await createPresentationRequest(app, authToken, {
+            response_type: ResponseType.URI,
+            requestId: "pid-no-hook",
+        });
+        const authRequest = client.parseOpenid4vpAuthorizationRequest({
+            authorizationRequest: res.body.uri,
+        });
+        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+            authorizationRequestPayload: authRequest.params,
+            responseMode: { type: "direct_post" },
+        });
+        const payload = resolved.authorizationRequestPayload;
+        const vp_token = await preparePresentation(
+            {
+                iat: Math.floor(Date.now() / 1000),
+                aud: payload.client_id as string,
+                nonce: payload.nonce,
+            },
+            privateIssuerKey,
+            issuerCertChain,
+            statusListService,
+            credentialConfigId,
+        );
+        const response = await new EncryptJWT({
+            vp_token: { pid: [vp_token] },
+            ...claims(payload.state),
+        })
+            .setProtectedHeader({ alg: "ECDH-ES", enc: "A128GCM" })
+            .encrypt(payload.client_metadata!.jwks!.keys[0] as JWK);
+
+        const answer = await request(app.getHttpServer())
+            .post(new URL(payload.response_uri as string).pathname)
+            .trustLocalhost()
+            .type("form")
+            .send({ response });
+        return { sessionId: res.body.session, status: answer.status };
+    }
+
     test.each([
         ["without state", undefined, /^State missing: /],
         ["with another state", "other-state", /^State mismatch: /],
     ])(
         "a response %s gets 400 and fails the session",
         async (_kind, state, reason) => {
-            const res = await createPresentationRequest(app, authToken, {
-                response_type: ResponseType.URI,
-                requestId: "pid-no-hook",
-            });
-            const sessionId: string = res.body.session;
-            const authRequest = client.parseOpenid4vpAuthorizationRequest({
-                authorizationRequest: res.body.uri,
-            });
-            const resolved = await client.resolveOpenId4vpAuthorizationRequest({
-                authorizationRequestPayload: authRequest.params,
-                responseMode: { type: "direct_post" },
-            });
-            const payload = resolved.authorizationRequestPayload;
-            const vp_token = await preparePresentation(
-                {
-                    iat: Math.floor(Date.now() / 1000),
-                    aud: payload.client_id as string,
-                    nonce: payload.nonce,
-                },
-                privateIssuerKey,
-                issuerCertChain,
-                statusListService,
-                credentialConfigId,
+            const { sessionId, status } = await answerWithPid(() =>
+                state ? { state } : {},
             );
-            const response = await new EncryptJWT({
-                vp_token: { pid: [vp_token] },
-                ...(state && { state }),
-            })
-                .setProtectedHeader({ alg: "ECDH-ES", enc: "A128GCM" })
-                .encrypt(payload.client_metadata!.jwks!.keys[0] as JWK);
-
-            await request(app.getHttpServer())
-                .post(new URL(payload.response_uri as string).pathname)
-                .trustLocalhost()
-                .type("form")
-                .send({ response })
-                .expect(400);
+            expect(status).toBe(400);
 
             const session = await request(app.getHttpServer())
                 .get(`/session/${sessionId}`)
@@ -670,5 +700,21 @@ describe("Presentation - Direct Post Security (Section 13.3)", () => {
         expect(sessionRes.body.status).toBe("completed");
         expect(sessionRes.body.credentials).toBeDefined();
         expect(sessionRes.body.credentials.length).toBeGreaterThan(0);
+    });
+
+    // OID4VP 1.0 Section 8.1: the client MUST ignore unrecognized parameters.
+    test("a response with an unrecognized parameter completes the session", async () => {
+        const { sessionId, status } = await answerWithPid((state) => ({
+            state,
+            foo: "bar",
+        }));
+        expect(status).toBe(200);
+
+        const session = await request(app.getHttpServer())
+            .get(`/session/${sessionId}`)
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        expect(session.body.status).toBe("completed");
     });
 });

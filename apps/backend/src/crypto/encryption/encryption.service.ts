@@ -15,6 +15,13 @@ import { KeyUsageType } from "../key/types/key-usage-type.js";
 import { EncryptedResponseRejectedError } from "./encrypted-response-rejected.error.js";
 
 /**
+ * The JWE key management algorithm of every encryption key EUDIPLO publishes
+ * (HAIP Section 5): the tenant encryption key and the ephemeral keys of OID4VP
+ * requests. Encrypted responses must use it.
+ */
+export const ENCRYPTION_KEY_MANAGEMENT_ALG = "ECDH-ES";
+
+/**
  * Service for handling encryption and decryption operations.
  */
 @Injectable()
@@ -39,12 +46,15 @@ export class EncryptionService {
      * @param tenantId - The ID of the tenant for which to initialize the keys.
      */
     async onTenantInit(tenantId: string): Promise<void> {
-        const privateKey = await generateKeyPair("ECDH-ES", {
-            crv: "P-256",
-            extractable: true,
-        }).then(async (secret) => exportJWK(secret.privateKey));
+        const privateKey = await generateKeyPair(
+            ENCRYPTION_KEY_MANAGEMENT_ALG,
+            {
+                crv: "P-256",
+                extractable: true,
+            },
+        ).then(async (secret) => exportJWK(secret.privateKey));
 
-        privateKey.alg = "ECDH-ES";
+        privateKey.alg = ENCRYPTION_KEY_MANAGEMENT_ALG;
 
         await this.keyChainService.createStandalone({
             tenantId,
@@ -57,22 +67,31 @@ export class EncryptionService {
     /**
      * Decrypts a JWE response with a caller-supplied private encryption JWK.
      * Falls back to the tenant-wide encryption key when none is provided.
+     * Only what the recipient advertised is accepted: `alg`
+     * {@link ENCRYPTION_KEY_MANAGEMENT_ALG}, the `alg` of every published
+     * encryption key, and an `enc` of `contentEncryptionAlgorithms`.
      * Time claims in the payload (`nbf`, `exp`) are checked when present,
      * allowing `CRYPTO_TOLERANCE` seconds of clock skew.
-     * @throws EncryptedResponseRejectedError when the JWE itself is rejected;
-     *   other failures (loading or importing the key) are thrown unchanged.
+     * @throws EncryptedResponseRejectedError when the JWE itself is rejected,
+     *   including another `alg` or `enc`; other failures (loading or
+     *   importing the key) are thrown unchanged.
      */
     async decryptJweWithPrivateJwk<T>(
         response: string,
         tenantId: string,
-        privateJwk?: JWK,
+        options: {
+            privateJwk?: JWK;
+            /** The `enc` values the recipient advertised. */
+            contentEncryptionAlgorithms: readonly string[];
+        },
     ): Promise<T> {
         const jwk =
-            privateJwk ?? (await this.getEncryptionPrivateJwk(tenantId));
+            options.privateJwk ??
+            (await this.getEncryptionPrivateJwk(tenantId));
 
         const privateEncryptionKey = (await importJWK(
             jwk,
-            "ECDH-ES",
+            ENCRYPTION_KEY_MANAGEMENT_ALG,
         )) as CryptoKey;
 
         // The key is already imported, so a jose error from jwtDecrypt is
@@ -81,6 +100,10 @@ export class EncryptionService {
         try {
             const res = await jwtDecrypt<T>(response, privateEncryptionKey, {
                 clockTolerance: this.clockTolerance,
+                keyManagementAlgorithms: [ENCRYPTION_KEY_MANAGEMENT_ALG],
+                contentEncryptionAlgorithms: [
+                    ...options.contentEncryptionAlgorithms,
+                ],
             });
             return res.payload;
         } catch (error) {
@@ -119,6 +142,10 @@ export class EncryptionService {
         delete publicKey.d;
         publicKey.kid = keyChain.id;
         publicKey.use = "enc";
+        // The key is only used with ECDH-ES. The stored alg is not used: a
+        // signing key chain with usage type encrypt stores its signing alg
+        // (ES256).
+        publicKey.alg = ENCRYPTION_KEY_MANAGEMENT_ALG;
 
         return publicKey;
     }
@@ -130,7 +157,7 @@ export class EncryptionService {
         publicJwk: JWK;
         privateJwk: JWK;
     }> {
-        const keyPair = await generateKeyPair("ECDH-ES", {
+        const keyPair = await generateKeyPair(ENCRYPTION_KEY_MANAGEMENT_ALG, {
             crv: "P-256",
             extractable: true,
         });
@@ -139,10 +166,10 @@ export class EncryptionService {
         const publicJwk = await exportJWK(keyPair.publicKey);
 
         const kid = randomUUID();
-        privateJwk.alg = "ECDH-ES";
+        privateJwk.alg = ENCRYPTION_KEY_MANAGEMENT_ALG;
         privateJwk.use = "enc";
         privateJwk.kid = kid;
-        publicJwk.alg = "ECDH-ES";
+        publicJwk.alg = ENCRYPTION_KEY_MANAGEMENT_ALG;
         publicJwk.use = "enc";
         publicJwk.kid = kid;
 
@@ -167,7 +194,7 @@ export class EncryptionService {
 
         const privateEncryptionKey = (await importJWK(
             keyChain.activeJwk,
-            "ECDH-ES",
+            ENCRYPTION_KEY_MANAGEMENT_ALG,
         )) as CryptoKey;
 
         const { plaintext } = await compactDecrypt(jwe, privateEncryptionKey);
