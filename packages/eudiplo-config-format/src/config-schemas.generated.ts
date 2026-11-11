@@ -17333,6 +17333,15 @@ export const CONFIG_SCHEMAS: Record<string, any>[] = [
                   "supportUri": {
                     "description": "Optional support URI.",
                     "type": "string"
+                  },
+                  "renewal": {
+                    "description": "When a generated certificate is renewed. onCredentialConfigChange (default): in the background after a credential or issuance configuration changes, and when issuer metadata is built. onMetadataRequest: only when issuer metadata is built. manual: only with Regenerate now. In every mode a missing or expired certificate is requested when issuer metadata is built.",
+                    "type": "string",
+                    "enum": [
+                      "onCredentialConfigChange",
+                      "onMetadataRequest",
+                      "manual"
+                    ]
                   }
                 },
                 "additionalProperties": false

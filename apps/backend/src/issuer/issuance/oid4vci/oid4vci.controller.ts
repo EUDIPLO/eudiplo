@@ -10,7 +10,13 @@ import {
     Req,
     Res,
 } from "@nestjs/common";
-import { ApiParam, ApiTags } from "@nestjs/swagger";
+import {
+    ApiBody,
+    ApiConsumes,
+    ApiParam,
+    ApiResponse,
+    ApiTags,
+} from "@nestjs/swagger";
 import type {
     CreateCredentialResponseReturn,
     CredentialResponse,
@@ -24,6 +30,16 @@ import { CredentialRequestException } from "./exceptions/index.js";
 import { NonceService } from "./nonce.service.js";
 import { Oid4vciService } from "./oid4vci.service.js";
 import type { Oid4vciRequestContext } from "./request-context.js";
+
+/** Upper bound for an encrypted request body that no body parser read. */
+const MAX_ENCRYPTED_REQUEST_BYTES = 10 * 1024 * 1024;
+
+/** The unparsed encrypted request body exceeds the limit. */
+class EncryptedRequestTooLarge extends Error {
+    constructor() {
+        super("Encrypted credential request body is too large");
+    }
+}
 
 /**
  * Controller for handling OID4VCI (OpenID for Verifiable Credential Issuance) requests.
@@ -111,16 +127,28 @@ export class Oid4vciController {
                 try {
                     body = await new Promise<string>((resolve, reject) => {
                         const chunks: Buffer[] = [];
-                        req.on("data", (chunk: Buffer) => chunks.push(chunk));
+                        let size = 0;
+                        req.on("data", (chunk: Buffer) => {
+                            size += chunk.length;
+                            // Same limit as the body parsers in bootstrap.ts.
+                            if (size > MAX_ENCRYPTED_REQUEST_BYTES) {
+                                req.destroy();
+                                reject(new EncryptedRequestTooLarge());
+                                return;
+                            }
+                            chunks.push(chunk);
+                        });
                         req.on("end", () =>
                             resolve(Buffer.concat(chunks).toString("utf8")),
                         );
                         req.on("error", reject);
                     });
-                } catch {
+                } catch (error) {
                     throw new CredentialRequestException(
                         "invalid_encryption_parameters",
-                        "Failed to read encrypted credential request body",
+                        error instanceof EncryptedRequestTooLarge
+                            ? error.message
+                            : "Failed to read encrypted credential request body",
                     );
                 }
                 if (!body) {
@@ -145,36 +173,57 @@ export class Oid4vciController {
      * Deferred Credential Endpoint
      *
      * According to OID4VCI Section 9, this endpoint is used by the wallet to poll
-     * for credentials that were not immediately available.
+     * for credentials that were not immediately available. Like the credential
+     * endpoint, it accepts an encrypted request (`application/jwt`) and
+     * encrypts the response when the request carries
+     * `credential_response_encryption`.
      *
      * @param req The request
-     * @param body The deferred credential request containing transaction_id
      * @param tenantId The tenant ID
      * @returns The credential response if ready, or issuance_pending error
      */
     @Post("deferred_credential")
     @HttpCode(HttpStatus.OK)
-    deferredCredential(
+    @ApiConsumes("application/json", "application/jwt")
+    @ApiBody({
+        type: DeferredCredentialRequestDto,
+        description:
+            "The deferred credential request as JSON, or as a JWE (`application/jwt`) encrypted to the key in `credential_request_encryption` of the issuer metadata.",
+    })
+    @ApiResponse({
+        status: 200,
+        description:
+            "The credential as JSON, or as a JWE (`application/jwt`) when the encrypted request carries `credential_response_encryption`.",
+        content: {
+            "application/json": {},
+            "application/jwt": { schema: { type: "string" } },
+        },
+    })
+    @ApiResponse({
+        status: 400,
+        description:
+            "OAuth error: `issuance_pending` (with `interval`), `invalid_transaction_id`, `invalid_credential_request` or `invalid_encryption_parameters`.",
+    })
+    async deferredCredential(
         @Req() req: Request,
-        @Body() body: DeferredCredentialRequestDto,
         @Param("tenantId") tenantId: string,
         @Res({ passthrough: true }) res: Response,
-    ): Promise<CredentialResponse> {
+    ): Promise<DeferredCredentialResponse | string> {
+        const requestContext = await this.toRequestContext(req);
         return this.oid4vciService
-            .getDeferredCredential(
-                {
-                    body: req.body,
-                    contentType: req.headers["content-type"] ?? "",
-                    headers: req.headers,
-                    method: req.method,
-                    url: req.url,
+            .getDeferredCredential(requestContext, tenantId)
+            .then(
+                (result) => {
+                    if (result.deferredCredentialResponseJwt) {
+                        res.setHeader("Content-Type", "application/jwt");
+                        return result.deferredCredentialResponseJwt;
+                    }
+                    return result.deferredCredentialResponse;
                 },
-                body,
-                tenantId,
-            )
-            .catch((err) => {
-                throw toResourceAuthError(err, res) ?? err;
-            });
+                (err) => {
+                    throw toResourceAuthError(err, res) ?? err;
+                },
+            );
     }
 
     /**

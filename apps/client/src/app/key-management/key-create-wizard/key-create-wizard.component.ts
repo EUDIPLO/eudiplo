@@ -39,6 +39,8 @@ import { readCertificateFiles } from '../certificate-files';
 import { KeyChainService } from '../key-chain.service';
 import {
   accessKeyEnrollmentFailure,
+  hasRelyingPartyContact,
+  RELYING_PARTY_CONTACT_ANCHOR,
   RegistrarConfig,
   RegistrarService,
 } from '../../registrar/registrar.service';
@@ -65,7 +67,7 @@ const SIGNING_ALGORITHM_LABELS: Record<SigningAlgorithm, string> = {
 };
 
 /** Whether the external certificate comes with its key, or is requested for a key EUDIPLO creates. */
-export type ExternalCertificateSource = 'import' | 'csr';
+type ExternalCertificateSource = 'import' | 'csr';
 
 /** Why a registrar enrollment was refused, shown next to Create & Enroll. */
 export interface EnrollmentError {
@@ -459,6 +461,14 @@ export class KeyCreateWizardComponent implements OnInit, OnDestroy {
    */
   get hasRegistrarConfig(): boolean {
     return this.registrarConfig !== null;
+  }
+
+  /** Fragment of the registrar page's contact section. */
+  readonly contactAnchor = RELYING_PARTY_CONTACT_ANCHOR;
+
+  /** A configuration without relying party contact; the first enrollment needs one. */
+  get registrarContactMissing(): boolean {
+    return this.registrarConfig !== null && !hasRelyingPartyContact(this.registrarConfig);
   }
 
   /** Reading the registrar configuration and enrolling through it need registrar:manage. */

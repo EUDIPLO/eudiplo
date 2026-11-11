@@ -207,7 +207,7 @@ through Keycloak's admin API. Then:
   from the URLs in `OIDC_UI_URL` or the redirect URIs set in Keycloak.
 - Clients created through `/api/client` are Keycloak clients, and people are
   managed through `/api/user` (role `users:manage`) or in the web client. Without
-  `OIDC`, `/api/user` answers `501`.
+  `OIDC`, `/api/user` answers `501` and the web client hides **Users**.
 - Access tokens must carry the tenant ID in the claim named by `OIDC_SUB`
   (default `tenant_id`) and the roles in `roles` or `realm_access.roles`, or in
   the claim named by `OIDC_ROLES_CLAIM`.
@@ -217,12 +217,19 @@ works with `OIDC_PROVIDER=generic` for signing in only. EUDIPLO then loads the
 provider's discovery document at startup, checks the issuer, the signing keys
 and the required `OIDC_AUDIENCE`, and accepts only JWT access tokens. The
 provider manages clients and people: `/api/client`, `/api/user` and creating a
-tenant with `roles` answer `501` (in the web client, turn off **Create an admin
-client**), and the web client signs in with client credentials only. Config
+tenant with `roles` answer `501` (the web client creates tenants without an
+admin client), and the web client hides **API Clients** and **Users**. Config
 folders and bundles carry no clients either
 ([details](../reference/config-bundle-format.md#clients-with-another-identity-provider)).
 The settings are listed in the
 [environment variable reference](../reference/environment-variables.md#authentication).
+
+For single sign-on (an **SSO** tab on the login page), create a public client
+with Authorization Code and PKCE, set `OIDC_UI_CLIENT_ID` to its client ID, and
+register `<web client URL>/login` and `<web client URL>/silent-check-sso.html`
+as redirect URIs, the web client's URL as post-logout redirect URI, and its
+origin for CORS. The browser reads the provider's discovery document; logging
+out ends the provider's session only when it has an `end_session_endpoint`.
 
 Tokens get no client limits (`allowedIssuanceConfigs`,
 `allowedPresentationConfigs`), except where a client record is left from an

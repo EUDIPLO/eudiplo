@@ -401,6 +401,15 @@
               </a>
             }
           </div>
+          @if (showRegistrarContactHint) {
+            <p class="registrar-contact-hint">
+              <mat-icon>info</mat-icon>
+              <span>
+                No relying party contact set; the first enrollment needs one.
+                <a routerLink="/registrar" [fragment]="contactAnchor">Add a contact</a>
+              </span>
+            </p>
+          }
         </mat-card-content>
       </mat-card>
     }

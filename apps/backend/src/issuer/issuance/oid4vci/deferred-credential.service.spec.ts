@@ -273,12 +273,18 @@ describe("DeferredCredentialService.getDeferredCredential", () => {
         body: {},
     };
     const metadata = {} as IssuerMetadataResult;
-    const retrieve = (service: DeferredCredentialService) =>
+    const retrieve = (
+        service: DeferredCredentialService,
+        buildResponse: (credential: string) => Promise<unknown> = async (
+            credential,
+        ) => ({ credential }),
+    ) =>
         service.getDeferredCredential(
             request,
-            { transaction_id: "tx" },
+            "tx",
             "tenant",
             metadata,
+            buildResponse,
         );
 
     it("returns a ready credential once and marks it retrieved", async () => {
@@ -324,6 +330,26 @@ describe("DeferredCredentialService.getDeferredCredential", () => {
             error_description: "The transaction_id is invalid or has expired",
         });
         expect(transactions.markExpired).not.toHaveBeenCalled();
+    });
+
+    it("builds the response before it marks the transaction retrieved", async () => {
+        const { service, transactions } = setup();
+        const failure = new Error("encryption failed");
+        await expect(
+            retrieve(service, async () => {
+                throw failure;
+            }),
+        ).rejects.toBe(failure);
+        expect(transactions.markRetrieved).not.toHaveBeenCalled();
+    });
+
+    it("returns the built response", async () => {
+        const { service } = setup();
+        await expect(
+            retrieve(service, async (credential) => ({
+                credentials: [{ credential }],
+            })),
+        ).resolves.toEqual({ credentials: [{ credential: "credential-jwt" }] });
     });
 
     it("rejects a concurrent second retrieval", async () => {

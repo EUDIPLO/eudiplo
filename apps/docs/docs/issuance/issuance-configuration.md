@@ -46,8 +46,8 @@ curl -X POST "$EUDIPLO_URL/api/issuer/config" \
 | `authorizationServers` | built-in server | Required, at least one entry. See [Authorization servers](authorization-servers.md). |
 | `batchSize` | `1` | Batch issuance: how many credentials (one per key proof) a wallet may request at once. Values above 1 are published as `batch_credential_issuance.batch_size`. A key attestation proof may carry up to `batchSize` keys. |
 | `dPopRequired` | `true` | Require DPoP-bound access tokens at the built-in token endpoint and the credential, deferred credential and notification endpoints. See [DPoP](authorization-servers.md#dpop). |
-| `credentialRequestEncryption` | `false` | Sets `encryption_required` of `credential_request_encryption`. |
-| `credentialResponseEncryption` | `false` | Sets `encryption_required` of `credential_response_encryption`. |
+| `credentialRequestEncryption` | `false` | Sets `encryption_required` of `credential_request_encryption`; plain credential requests are then rejected. |
+| `credentialResponseEncryption` | `false` | Sets `encryption_required` of `credential_response_encryption`; requests without response encryption are then rejected. |
 | `notificationEndpointEnabled` | `true` | Publish and serve the [notification endpoint](notifications.md). |
 | `txCodeMaxAttempts` | `5` | Failed transaction code attempts before a pre-authorized code is invalidated. `null` restores the default. See [Transaction code](credential-offers.md#transaction-code). |
 | `offerLifetimeSeconds` | unset | Default lifetime of credential offers (9.0). Unset or `null`: offers do not expire. Offers can override it. See [Lifetime and expiry](credential-offers.md#lifetime-and-expiry). |
@@ -58,4 +58,8 @@ curl -X POST "$EUDIPLO_URL/api/issuer/config" \
 
 ### Encryption flags
 
-EUDIPLO always advertises `credential_request_encryption` (its encryption key, `enc` `A128GCM` or `A256GCM`) and `credential_response_encryption` (`alg` `ECDH-ES`, `enc` `A128GCM` or `A256GCM`), so wallets may encrypt in either direction. The two flags only set `encryption_required` in these objects. Set them only if every wallet you serve supports encryption.
+EUDIPLO always advertises `credential_request_encryption` (its encryption key with `kid` and `alg` `ECDH-ES`, `enc` `A128GCM` or `A256GCM`) and `credential_response_encryption` (`alg` `ECDH-ES`, `enc` `A128GCM` or `A256GCM`). The two flags set `encryption_required` in these objects, and the credential and deferred credential endpoints enforce it. Set them only if every wallet you serve supports encryption.
+
+A wallet that wants an encrypted response must also encrypt its request: a plain request with `credential_response_encryption` is rejected with `invalid_encryption_parameters`. So `credentialResponseEncryption: true` in effect requires encryption in both directions. An encrypted request names the advertised key with `kid` in the JWE header and uses that key's `alg`; other headers are rejected with `invalid_encryption_parameters`. An encrypted response names the wallet's key in the JWE header `kid` when that key has one.
+
+The same rules apply when the wallet polls the deferred credential endpoint: it may send `{"transaction_id": "…"}` encrypted (`application/jwt`) and gets the credential back encrypted when the encrypted request carries `credential_response_encryption`. With `credentialRequestEncryption`, every poll must be encrypted; with `credentialResponseEncryption`, every poll must also carry `credential_response_encryption`. Errors such as `issuance_pending` stay plain JSON. See [Deferred issuance](deferred-issuance.md).

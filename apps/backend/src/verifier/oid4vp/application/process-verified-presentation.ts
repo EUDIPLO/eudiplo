@@ -3,6 +3,7 @@ import { SessionStatus } from "../../../session/domain/session-state.js";
 import type { WebhookConfiguration } from "../../../webhook/domain/webhook-configuration.js";
 import type { PresentationResultPublisher } from "../../../webhook/ports/presentation-result-publisher.js";
 import type { AuthResponseData } from "../../presentations/domain/auth-response.js";
+import { presentationRequestState } from "../domain/presentation-request-state.js";
 import type { CompletePresentationResponse } from "./complete-presentation-response.js";
 import type { ParseAuthorizationResponse } from "./parse-authorization-response.js";
 
@@ -34,7 +35,7 @@ export class ProcessVerifiedPresentation {
         const { session } = input;
         this.state.validateState(
             input.response,
-            session.walletNonce ?? session.id,
+            presentationRequestState(session),
         );
         const outcome = await this.complete.execute({
             tenantId: session.tenantId,

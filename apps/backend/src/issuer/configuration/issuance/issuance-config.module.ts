@@ -17,6 +17,7 @@ import { TypeOrmIssuanceConfigTrustListReferences } from "./adapters/typeorm-iss
 import { IssuanceConfig } from "./entities/issuance-config.entity.js";
 import { IssuanceService } from "./issuance.service.js";
 import { IssuanceConfigController } from "./issuance-config.controller.js";
+import { IssuerRegistrationCertificateLock } from "./issuer-registration-certificate-lock.js";
 import { ISSUANCE_CONFIG_REPOSITORY } from "./ports/issuance-config.repository.js";
 
 @Module({
@@ -32,6 +33,7 @@ import { ISSUANCE_CONFIG_REPOSITORY } from "./ports/issuance-config.repository.j
     controllers: [IssuanceConfigController],
     providers: [
         IssuanceService,
+        IssuerRegistrationCertificateLock,
         {
             provide: ISSUANCE_CONFIG_REPOSITORY,
             inject: [getRepositoryToken(IssuanceConfig)],
@@ -51,6 +53,6 @@ import { ISSUANCE_CONFIG_REPOSITORY } from "./ports/issuance-config.repository.j
             IssuanceConfig,
         ),
     ],
-    exports: [IssuanceService],
+    exports: [IssuanceService, IssuerRegistrationCertificateLock],
 })
 export class IssuanceConfigModule {}

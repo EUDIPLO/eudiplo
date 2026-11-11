@@ -193,6 +193,7 @@ describe('ApiService token refresh', () => {
 
   afterEach(() => {
     delete (oidcStub as { logout?: unknown }).logout;
+    delete (oidcStub as { clearStorage?: unknown }).clearStorage;
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -453,16 +454,19 @@ describe('ApiService token refresh', () => {
     expect(service.hasEndedSession()).toBe(false);
   });
 
-  it('hands no ended session to the login page in SSO mode', async () => {
+  it("ends an expired SSO session here only, keeping the provider's for signing in again", async () => {
     const service = await signIn();
     expect(service.getClientId()).toBe('client');
     oidcStub.mode = 'oidc';
     const logout = vi.fn();
-    Object.assign(oidcStub, { logout });
+    const clearStorage = vi.fn();
+    Object.assign(oidcStub, { logout, clearStorage });
 
     service.logoutExpired();
 
-    expect(logout).toHaveBeenCalledOnce();
+    // A logout at the provider would leave the page and lose the in-app login page.
+    expect(logout).not.toHaveBeenCalled();
+    expect(clearStorage).toHaveBeenCalledOnce();
     expect(service.hasEndedSession()).toBe(false);
   });
 

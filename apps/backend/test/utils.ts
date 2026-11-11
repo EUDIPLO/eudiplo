@@ -3,6 +3,7 @@ import { readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { Test, TestingModule } from "@nestjs/testing";
 import {
     CallbackContext,
@@ -52,6 +53,7 @@ import { IssuanceDto } from "../src/issuer/configuration/issuance/dto/issuance.d
 import { CreateWebhookEndpointDto } from "../src/issuer/configuration/webhook-endpoint/dto/create-webhook-endpoint.dto.js";
 import { StatusListService } from "../src/issuer/status-list/status-list.service.js";
 import { TrustListCreateDto } from "../src/issuer/trust-list/dto/trust-list-create.dto.js";
+import { configureBodyParsers } from "../src/main.helpers.js";
 import { createAppValidationPipe } from "../src/shared/common/zod/zod-schema.util.js";
 import { PresentationRequest } from "../src/verifier/oid4vp/dto/presentation-request.dto.js";
 import { PresentationConfigCreateDto } from "../src/verifier/presentations/dto/presentation-config-create.dto.js";
@@ -589,7 +591,8 @@ export async function setupIssuanceTestApp({
         imports: [AppModule],
     }).compile();
 
-    const app = moduleFixture.createNestApplication();
+    const app = moduleFixture.createNestApplication<NestExpressApplication>();
+    configureBodyParsers(app);
     app.useGlobalPipes(createAppValidationPipe());
 
     const configService = app.get(ConfigService);

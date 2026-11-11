@@ -9,6 +9,14 @@ export const IssuerRegistrationCertificateMode = {
 export type IssuerRegistrationCertificateMode =
     (typeof IssuerRegistrationCertificateMode)[keyof typeof IssuerRegistrationCertificateMode];
 
+export const IssuerRegistrationCertificateRenewal = {
+    ON_CREDENTIAL_CONFIG_CHANGE: "onCredentialConfigChange",
+    ON_METADATA_REQUEST: "onMetadataRequest",
+    MANUAL: "manual",
+} as const;
+export type IssuerRegistrationCertificateRenewal =
+    (typeof IssuerRegistrationCertificateRenewal)[keyof typeof IssuerRegistrationCertificateRenewal];
+
 const IssuerRegistrationCertificateConfigSchema = z
     .object({
         enabled: z.boolean().optional(),
@@ -16,6 +24,7 @@ const IssuerRegistrationCertificateConfigSchema = z
         jwt: z.string().optional(),
         privacyPolicy: z.string().optional(),
         supportUri: z.string().optional(),
+        renewal: z.enum(IssuerRegistrationCertificateRenewal).optional(),
     })
     .strict();
 
@@ -65,6 +74,15 @@ export class IssuerRegistrationCertificateConfig extends createZodDto(
         example: "mailto:support@issuer.example",
     })
     supportUri?: string;
+
+    @ApiPropertyOptional({
+        enum: IssuerRegistrationCertificateRenewal,
+        description:
+            "When a generated certificate is renewed. onCredentialConfigChange (default): in the background after a credential or issuance configuration changes, and when issuer metadata is built. onMetadataRequest: only when issuer metadata is built. manual: only with Regenerate now. In every mode a missing or expired certificate is requested when issuer metadata is built.",
+        default:
+            IssuerRegistrationCertificateRenewal.ON_CREDENTIAL_CONFIG_CHANGE,
+    })
+    renewal?: IssuerRegistrationCertificateRenewal;
 }
 
 export class IssuerRegistrationCertificateCache extends createZodDto(

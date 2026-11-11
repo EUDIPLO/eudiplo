@@ -669,6 +669,21 @@ export const CredentialDefSchema = {
     required: ["format", "meta"],
 } as const;
 
+export const ProvidedAttestationSchema = {
+    type: "object",
+    properties: {
+        format: {
+            enum: ["dc+sd-jwt", "mso_mdoc"],
+            type: "string",
+            example: "dc+sd-jwt",
+        },
+        meta: {
+            type: "object",
+        },
+    },
+    required: ["format", "meta"],
+} as const;
+
 export const MultiLangSchema = {
     type: "object",
     properties: {
@@ -755,6 +770,28 @@ export const RegistrationCertificateCreationSchema = {
             type: "array",
             items: {
                 $ref: "#/components/schemas/MultiLang",
+            },
+        },
+        custom_provides_attestations: {
+            description:
+                "Attestations provided by an issuer whose credential type has no schema in\nthe published catalog. They are taken as given, without a catalog lookup.",
+            example: [
+                {
+                    format: "dc+sd-jwt",
+                    meta: {
+                        vct_values: ["urn:example:custom:1"],
+                    },
+                },
+                {
+                    format: "mso_mdoc",
+                    meta: {
+                        doctype_value: "org.example.custom.1",
+                    },
+                },
+            ],
+            type: "array",
+            items: {
+                $ref: "#/components/schemas/ProvidedAttestation",
             },
         },
     },

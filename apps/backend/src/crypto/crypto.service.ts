@@ -82,6 +82,11 @@ export class CryptoService {
                     .setProtectedHeader({
                         alg: encryptor.alg,
                         enc: encryptor.enc,
+                        // OpenID4VCI 1.0 Section 10: the JWE names the
+                        // wallet's key when that key has a kid.
+                        ...(typeof encryptor.publicJwk.kid === "string" && {
+                            kid: encryptor.publicJwk.kid,
+                        }),
                     })
                     .encrypt(josePublicKey);
                 return { jwe, encryptionJwk: encryptor.publicJwk };

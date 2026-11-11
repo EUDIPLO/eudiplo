@@ -1,12 +1,17 @@
 import { BadRequestException } from "@nestjs/common";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RegistrarService } from "../../../registrar/registrar.service.js";
 import { RegistrarIssuerRegistrationCertificateProvider } from "../../issuance/oid4vci/adapters/registrar-issuer-registration-certificate-provider.js";
 import { NO_CREDENTIAL_TYPES_MESSAGE } from "../../issuance/oid4vci/domain/issuer-registration-certificate.js";
 import type { CredentialsService } from "../credentials/credentials.service.js";
 import { IssuanceService } from "./issuance.service.js";
+import { IssuerRegistrationCertificateLock } from "./issuer-registration-certificate-lock.js";
 
 describe("IssuanceService.storeIssuanceConfiguration", () => {
+    let events: { emit: ReturnType<typeof vi.fn> };
+    beforeEach(() => {
+        events = { emit: vi.fn() };
+    });
     const service = (
         save = vi.fn(async (config) => config),
         unregistered = vi.fn().mockResolvedValue([]),
@@ -14,7 +19,9 @@ describe("IssuanceService.storeIssuanceConfiguration", () => {
     ) => ({
         save,
         unregistered,
+        events,
         issuance: Object.assign(Object.create(IssuanceService.prototype), {
+            events,
             federationTrustAnchors: { unregistered },
             outboundUrlPolicy: { allowHttp: () => allowHttp },
             keyChainService: {
@@ -67,6 +74,26 @@ describe("IssuanceService.storeIssuanceConfiguration", () => {
             ] as any,
         });
         expect(save).toHaveBeenCalled();
+    });
+
+    it("publishes a registration certificate input change only after saving", async () => {
+        const { issuance } = service();
+        await issuance.storeIssuanceConfiguration("tenant-1", {});
+        expect(events.emit).toHaveBeenCalledWith(
+            "issuer.registration-certificate-inputs.changed",
+            { tenantId: "tenant-1" },
+        );
+
+        events.emit.mockClear();
+        const failing = service(
+            vi.fn(async () => {
+                throw new Error("save failed");
+            }),
+        );
+        await expect(
+            failing.issuance.storeIssuanceConfiguration("tenant-1", {}),
+        ).rejects.toThrow("save failed");
+        expect(events.emit).not.toHaveBeenCalled();
     });
 
     it("keeps accepting a stored token.signingKeyId from before the check", async () => {
@@ -331,6 +358,7 @@ describe("IssuanceService audit log", () => {
                     save: vi.fn(async (config) => config),
                 },
                 tenantActionLogService: { record },
+                events: { emit: vi.fn() },
                 federationTrustAnchors: {
                     unregistered: vi.fn().mockResolvedValue([]),
                 },
@@ -360,10 +388,15 @@ describe("IssuanceService.reissueRegistrationCertificate", () => {
         JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 }),
     ).toString("base64url")}.sig`;
     const service = (credentialConfigs: any[]) => {
-        const resolveRegistrationCertificate = vi.fn(async () => ({
-            jwt: "e30.e30.sig",
-            payload: {},
-        }));
+        const certificateLock = new IssuerRegistrationCertificateLock();
+        const resolveRegistrationCertificate = vi.fn(
+            async ({ body }: { body: Record<string, unknown> }) => ({
+                jwt: "e30.e30.sig",
+                payload: {
+                    provides_attestations: body.custom_provides_attestations,
+                },
+            }),
+        );
         const revokeRegistrationCertificateByJwt = vi.fn(async () => true);
         const updateRegistrationCertificateCache = vi.fn();
         const issuance = Object.assign(
@@ -397,15 +430,45 @@ describe("IssuanceService.reissueRegistrationCertificate", () => {
                         return "https://issuer.example";
                     },
                 },
+                certificateLock,
             },
         ) as IssuanceService;
         return {
             issuance,
+            certificateLock,
             resolveRegistrationCertificate,
             revokeRegistrationCertificateByJwt,
             updateRegistrationCertificateCache,
         };
     };
+
+    it("waits for a generation of the tenant that is in progress", async () => {
+        const { issuance, certificateLock, resolveRegistrationCertificate } =
+            service([
+                {
+                    id: "pid",
+                    config: { format: "dc+sd-jwt" },
+                    vct: "urn:eudi:pid:de:1",
+                },
+            ]);
+        let finishRunning!: () => void;
+        const running = certificateLock.run(
+            "tenant-1",
+            () =>
+                new Promise<void>((resolve) => {
+                    finishRunning = resolve;
+                }),
+        );
+
+        const reissued = issuance.reissueRegistrationCertificate("tenant-1");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(resolveRegistrationCertificate).not.toHaveBeenCalled();
+
+        finishRunning();
+        await running;
+        await reissued;
+        expect(resolveRegistrationCertificate).toHaveBeenCalledOnce();
+    });
 
     it("requests the certificate for the vct and docType values", async () => {
         const configs = [
@@ -439,10 +502,24 @@ describe("IssuanceService.reissueRegistrationCertificate", () => {
         expect(resolveRegistrationCertificate).toHaveBeenCalledWith(
             {
                 body: {
-                    provides_attestations: [
-                        "eu.europa.ec.eudi.mdl.1",
-                        "https://issuer.example/issuers/tenant-1/credentials-metadata/vct/hosted",
-                        "urn:eudi:pid:de:1",
+                    provides_attestations: [],
+                    custom_provides_attestations: [
+                        {
+                            format: "mso_mdoc",
+                            meta: { doctype_value: "eu.europa.ec.eudi.mdl.1" },
+                        },
+                        {
+                            format: "dc+sd-jwt",
+                            meta: {
+                                vct_values: [
+                                    "https://issuer.example/issuers/tenant-1/credentials-metadata/vct/hosted",
+                                ],
+                            },
+                        },
+                        {
+                            format: "dc+sd-jwt",
+                            meta: { vct_values: ["urn:eudi:pid:de:1"] },
+                        },
                     ],
                 },
             },
@@ -475,6 +552,7 @@ describe("IssuanceService.reissueRegistrationCertificate", () => {
                 }),
             } as unknown as IssuanceService,
             "https://issuer.example",
+            new IssuerRegistrationCertificateLock(),
         );
         await expect(
             provider.resolve("tenant-1", { enabled: true, mode: "generate" }),
@@ -482,6 +560,35 @@ describe("IssuanceService.reissueRegistrationCertificate", () => {
         expect(
             metadataRegistrar.resolveRegistrationCertificate,
         ).not.toHaveBeenCalled();
+    });
+
+    it("revokes and refuses a certificate that does not list the requested types", async () => {
+        const {
+            issuance,
+            resolveRegistrationCertificate,
+            revokeRegistrationCertificateByJwt,
+            updateRegistrationCertificateCache,
+        } = service([
+            {
+                id: "pid",
+                config: { format: "dc+sd-jwt" },
+                vct: "urn:eudi:pid:de:1",
+            },
+        ]);
+        resolveRegistrationCertificate.mockResolvedValueOnce({
+            jwt: "e30.new.sig",
+            payload: {},
+        } as never);
+
+        await expect(
+            issuance.reissueRegistrationCertificate("tenant-1"),
+        ).rejects.toThrow(
+            "The registrar issued a registration certificate that does not list urn:eudi:pid:de:1",
+        );
+        expect(
+            revokeRegistrationCertificateByJwt,
+        ).toHaveBeenCalledExactlyOnceWith("tenant-1", "e30.new.sig");
+        expect(updateRegistrationCertificateCache).not.toHaveBeenCalled();
     });
 
     it("refuses when no credential config has a vct or docType", async () => {

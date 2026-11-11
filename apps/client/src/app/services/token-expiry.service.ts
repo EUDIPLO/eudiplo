@@ -166,13 +166,15 @@ export class TokenExpiryService implements OnDestroy {
    */
   private logInAgain(expired: boolean): void {
     const returnUrl = this.router.url;
+    // After an expired SSO session the next SSO sign-in is the same person's.
+    const sameSso = expired && this.apiService.usesSso();
     if (expired) {
       this.apiService.logoutExpired();
     } else {
       this.apiService.logout();
     }
     // The login page keeps the return path only for the client of the ended session.
-    const queryParams = this.apiService.hasEndedSession() ? { returnUrl } : undefined;
+    const queryParams = sameSso || this.apiService.hasEndedSession() ? { returnUrl } : undefined;
     void this.router.navigate(['/login'], { queryParams });
   }
 

@@ -10,6 +10,7 @@ const credentialConfig = {
 } as unknown as CredentialConfigCreate;
 
 function setup(stored: Record<string, unknown> = {}) {
+    const events = { emit: vi.fn() };
     const repository = {
         getForTenant: vi.fn().mockResolvedValue({
             ...credentialConfig,
@@ -28,8 +29,9 @@ function setup(stored: Record<string, unknown> = {}) {
         { register: vi.fn() } as never,
         { getPresentationConfig: vi.fn() } as never,
         { record: vi.fn() } as never,
+        events as never,
     );
-    return { service, repository };
+    return { service, repository, events };
 }
 
 async function rejection(promise: Promise<unknown>): Promise<unknown> {
@@ -169,5 +171,24 @@ describe("CredentialConfigService revokeWithWalletUnit", () => {
         });
         await service.update("tenant", "pid", { revokeWithWalletUnit: true });
         expect(repository.save).toHaveBeenCalledOnce();
+    });
+});
+
+describe("CredentialConfigService registration certificate inputs", () => {
+    test("publishes a change after storing, updating and deleting", async () => {
+        const { service, repository, events } = setup();
+        Object.assign(repository, {
+            deleteForTenant: vi.fn().mockResolvedValue({ affected: 1 }),
+        });
+
+        await service.store("tenant", { ...credentialConfig }, true);
+        await service.update("tenant", "pid", {});
+        await service.delete("tenant", "pid");
+
+        expect(events.emit).toHaveBeenCalledTimes(3);
+        expect(events.emit).toHaveBeenCalledWith(
+            "issuer.registration-certificate-inputs.changed",
+            { tenantId: "tenant" },
+        );
     });
 });

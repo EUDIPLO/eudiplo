@@ -76,6 +76,20 @@ describe("KeycloakClientsProvider.ensureUiPublicClient", () => {
         expect(payload.webOrigins).toEqual(["https://console.example"]);
     });
 
+    it("lets a logout return to the web client's redirect URIs", async () => {
+        const { kc, ensureUiPublicClient } = provider(
+            { OIDC_UI_URL: "https://console.example" },
+            { id: "kc-ui", redirectUris: [], webOrigins: [] },
+        );
+
+        await ensureUiPublicClient();
+
+        const [, payload] = kc.clients.update.mock.calls[0];
+        expect(payload.attributes).toEqual({
+            "post.logout.redirect.uris": "+",
+        });
+    });
+
     it("keeps the redirect URIs set in Keycloak without OIDC_UI_URL, except *", async () => {
         const { kc, logger, ensureUiPublicClient } = provider(
             {},

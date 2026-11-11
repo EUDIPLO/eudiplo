@@ -1,14 +1,32 @@
 import { Injectable } from '@angular/core';
-import Keycloak from 'keycloak-js';
+import Keycloak, { type KeycloakConfig } from 'keycloak-js';
 import { Subject } from 'rxjs';
 
+/** How keycloak-js reaches the identity provider (`oidc_provider` of the backend's discovery). */
+export type OidcProvider = 'keycloak' | 'generic';
+
+/** The provider a discovery's `oidc_provider` names; older backends, which leave it out, use Keycloak. */
+export function oidcProviderOf(oidcProvider: unknown): OidcProvider {
+  return oidcProvider === 'generic' ? 'generic' : 'keycloak';
+}
+
 export interface OidcConfig {
-  /** Keycloak issuer URL, e.g. http://localhost:8080/realms/eudiplo */
+  /** Issuer URL, e.g. http://localhost:8080/realms/eudiplo */
   issuerUrl: string;
-  /** Public client ID registered for the Angular UI, e.g. eudiplo-ui */
+  /** Public client ID of the Angular UI at the provider, e.g. eudiplo-ui */
   uiClientId: string;
   /** EUDIPLO backend base URL */
   apiUrl: string;
+  /** Keycloak realm or any provider by its discovery document; stored configs without it are Keycloak. */
+  provider?: OidcProvider;
+}
+
+/**
+ * The page the identity provider returns to after a sign-in: the login page under the
+ * web client's base href, `<web client URL>/login`. Operators register it as redirect URI.
+ */
+function oidcRedirectUri(): string {
+  return new URL('login', document.baseURI).href;
 }
 
 const STORAGE_CONFIG_KEY = 'oidc_config';
@@ -67,13 +85,22 @@ export class OidcService {
     const keycloak = this.createKeycloakInstance(config);
     this.keycloak = keycloak;
 
-    // init() with login-required will redirect the browser to Keycloak.
-    // This function will not return in the normal case.
-    await keycloak.init({
-      onLoad: 'login-required',
-      pkceMethod: 'S256',
-      checkLoginIframe: false,
-    });
+    // init() with login-required will redirect the browser to the identity provider.
+    // This function will not return in the normal case. It throws when the
+    // provider's discovery document does not load; no session is kept then.
+    try {
+      await keycloak.init({
+        onLoad: 'login-required',
+        pkceMethod: 'S256',
+        checkLoginIframe: false,
+        // One fixed page, without the query of the login page, so providers that compare
+        // redirect URIs exactly accept it.
+        redirectUri: oidcRedirectUri(),
+      });
+    } catch (error) {
+      this.clearStorage();
+      throw error;
+    }
   }
 
   /**
@@ -129,10 +156,21 @@ export class OidcService {
     return this.keycloak.updateToken(minValidity);
   }
 
+  /**
+   * Ends the session here and at the provider, which then returns to the web
+   * client's base URL, also when it is served under a path. A provider without
+   * an `end_session_endpoint` keeps its session; the page still leaves.
+   */
   logout(redirectUri?: string): void {
+    const keycloak = this.keycloak;
+    const target = redirectUri ?? document.baseURI;
     this.clearStorage();
-    // The web client's base URL, also when it is served under a path.
-    this.keycloak?.logout({ redirectUri: redirectUri ?? document.baseURI });
+    keycloak?.logout({ redirectUri: target }).catch(() => this.leaveTo(target));
+  }
+
+  /** Opens `url` in place of the web client. */
+  protected leaveTo(url: string): void {
+    globalThis.location.assign(url);
   }
 
   saveConfig(config: OidcConfig): void {
@@ -161,10 +199,18 @@ export class OidcService {
   }
 
   private createKeycloakInstance(config: OidcConfig): Keycloak {
+    if (config.provider === 'generic') {
+      // keycloak-js loads the provider's discovery document from the issuer.
+      return this.newKeycloak({ oidcProvider: config.issuerUrl, clientId: config.uiClientId });
+    }
     const parts = config.issuerUrl.split('/realms/');
     const baseUrl = parts[0] + '/';
     const realm = parts[1] ?? 'master';
-    return new Keycloak({ url: baseUrl, realm, clientId: config.uiClientId });
+    return this.newKeycloak({ url: baseUrl, realm, clientId: config.uiClientId });
+  }
+
+  protected newKeycloak(config: KeycloakConfig): Keycloak {
+    return new Keycloak(config);
   }
 
   private scheduleTokenRefresh(): void {

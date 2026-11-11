@@ -1,6 +1,7 @@
 import { BadRequestException } from "@nestjs/common";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { registrationCertificateControllerRegister } from "./generated/index.js";
+import { issuerRegistrationCertificateBody } from "./issuer-registration-certificate-request.js";
 import { RegistrationCertificateService } from "./registration-certificate.service.js";
 
 vi.mock("./generated/index.js", async (importOriginal) => ({
@@ -300,6 +301,97 @@ describe("RegistrationCertificateService creation via the registrar", () => {
                 }),
             }),
         );
+    });
+
+    it("creates an issuer certificate from custom provided attestations alone", async () => {
+        const issuerBody = {
+            custom_provides_attestations: [
+                {
+                    format: "mso_mdoc",
+                    meta: { doctype_value: "eu.europa.ec.eudi.mdl.1" },
+                },
+            ],
+        } as any;
+
+        await expect(
+            service.resolveRegistrationCertificate(
+                { body: issuerBody },
+                {},
+                "r",
+                "tenant",
+            ),
+        ).resolves.toMatchObject({ jwt: issued, source: "registrar" });
+
+        const [request] = vi.mocked(registrationCertificateControllerRegister)
+            .mock.calls[0];
+        expect(request.body).toMatchObject(issuerBody);
+        expect(request.body).not.toHaveProperty("credentials");
+    });
+
+    it("keeps provides_attestations of the registrar defaults out of an issuer request", async () => {
+        defaults.provides_attestations = ["urn:catalog:only"];
+
+        await service.resolveRegistrationCertificate(
+            {
+                body: issuerRegistrationCertificateBody({}, [
+                    { format: "dc+sd-jwt", type: "urn:eudi:pid:1" },
+                ]) as any,
+            },
+            {},
+            "r",
+            "tenant",
+        );
+
+        const [request] = vi.mocked(registrationCertificateControllerRegister)
+            .mock.calls[0];
+        expect(request.body).toMatchObject({
+            provides_attestations: [],
+            custom_provides_attestations: [
+                {
+                    format: "dc+sd-jwt",
+                    meta: { vct_values: ["urn:eudi:pid:1"] },
+                },
+            ],
+        });
+    });
+
+    it("derives credentials for a verifier request despite custom_provides_attestations in the defaults", async () => {
+        defaults.custom_provides_attestations = [
+            { format: "dc+sd-jwt", meta: { vct_values: ["urn:other"] } },
+        ];
+
+        await service.resolveRegistrationCertificate(
+            { body },
+            dcqlQuery,
+            "r",
+            "tenant",
+        );
+
+        const [request] = vi.mocked(registrationCertificateControllerRegister)
+            .mock.calls[0];
+        expect(request.body.credentials).toEqual([
+            {
+                format: "dc+sd-jwt",
+                meta: { vct_values: ["urn:eudi:pid:1"] },
+                claims: [{ path: ["given_name"] }],
+            },
+        ]);
+    });
+
+    it("does not treat an empty custom_provides_attestations as an issuer request", async () => {
+        await expect(
+            service.resolveRegistrationCertificate(
+                { body: { custom_provides_attestations: [] } as any },
+                {},
+                "r",
+                "tenant",
+            ),
+        ).rejects.toThrow(
+            "registrationCert.body must include either provides_attestations or custom_provides_attestations (issuer role) or both purpose and credentials (verifier role)",
+        );
+        expect(
+            registrationCertificateControllerRegister,
+        ).not.toHaveBeenCalled();
     });
 
     it("passes on only the registrar's messages, not its error body", async () => {

@@ -20,7 +20,7 @@ sequenceDiagram
     E-->>W: 400 issuance_pending
     B->>E: POST /api/issuer/deferred/{transactionId}/complete
     W->>E: Deferred credential request
-    E-->>W: 200 {"credential"}
+    E-->>W: 200 {"credentials": [{"credential"}]}
 ```
 
 ## 1. Defer in the attribute provider
@@ -37,7 +37,7 @@ Deferred requests must carry exactly one key proof with a `nonce`; batch request
 
 ## 2. Let the wallet poll
 
-The wallet polls `POST /issuers/{tenant}/vci/deferred_credential` with `{"transaction_id": "…"}` and the access token of the issuance (with DPoP when `dPopRequired` is set). While the transaction is pending, it receives HTTP `400`:
+The wallet polls `POST /issuers/{tenant}/vci/deferred_credential` with `{"transaction_id": "…"}` and the access token of the issuance (with DPoP when `dPopRequired` is set). Like the credential request, the poll can be encrypted and can ask for an encrypted response; see [Encryption flags](issuance-configuration.md#encryption-flags). While the transaction is pending, it receives HTTP `400`:
 
 ```json
 { "error": "issuance_pending", "error_description": "The credential issuance is still pending", "interval": 5 }
@@ -76,7 +76,7 @@ EUDIPLO currently does not send the `transaction_id` to your backend: the attrib
 | Status | Meaning | Wallet's next poll |
 | --- | --- | --- |
 | `pending` | Waiting for complete or fail | `issuance_pending` |
-| `ready` | Credential signed | Credential (once) |
+| `ready` | Credential signed | `{"credentials": [{"credential": "…"}]}` (once) |
 | `retrieved` | The wallet fetched the credential | `invalid_transaction_id` |
 | `failed` | Marked as failed | `invalid_transaction_id` |
 | `expired` | 24 hours passed since the transaction was created | `invalid_transaction_id` |

@@ -6,7 +6,7 @@ import { Subject } from 'rxjs';
 import { client } from '@eudiplo/sdk-core';
 import type { Client } from '@eudiplo/sdk-core/api/client/index';
 import { environment } from '../../environments/environment';
-import { OidcService } from './oidc.service';
+import { OidcService, oidcProviderOf } from './oidc.service';
 
 /**
  * Base URL used before a session is restored. The runtime value from env.js
@@ -174,6 +174,7 @@ export class ApiService implements OnDestroy {
         issuerUrl: discovery.issuer,
         uiClientId: discovery.ui_client_id,
         apiUrl: baseUrl,
+        provider: oidcProviderOf(discovery.oidc_provider),
       });
       return;
     }
@@ -423,13 +424,25 @@ export class ApiService implements OnDestroy {
     return !!this.endedSession;
   }
 
+  /** Whether the user signed in with SSO at the identity provider. */
+  usesSso(): boolean {
+    return this.oidcService.mode === 'oidc';
+  }
+
   /**
    * Logs out after the token expired and could not be renewed, and keeps the
    * client ID and instance URL, never the secret, for the login page. A session
    * whose credentials were rejected keeps that reason.
    */
   logoutExpired(): void {
-    const clientId = this.oidcService.mode === 'oidc' ? undefined : this.getClientId();
+    if (this.oidcService.mode === 'oidc') {
+      // Only here: the provider's session, if it still has one, signs the user in again,
+      // and the in-app login page opens instead of the provider's logout.
+      this.resetRefresh();
+      this.oidcService.clearStorage();
+      return;
+    }
+    const clientId = this.getClientId();
     const baseUrl = this.baseUrl;
     this.logout();
     if (clientId && !this.endedSession) {

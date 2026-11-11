@@ -51,3 +51,82 @@ describe("Oid4vciController notification endpoint", () => {
         expect(await notify(failure)).toBe(failure);
     });
 });
+
+describe("Oid4vciController encrypted request body", () => {
+    function streamingRequest(chunks: Buffer[]) {
+        const listeners: Record<string, ((arg?: unknown) => void)[]> = {};
+        const req = {
+            body: {},
+            headers: {
+                "content-type": "application/openid4vci-credential-request+jwt",
+            },
+            method: "POST",
+            url: "/deferred_credential",
+            destroy: vi.fn(),
+            on(event: string, listener: (arg?: unknown) => void) {
+                (listeners[event] ??= []).push(listener);
+                if (event === "end") {
+                    queueMicrotask(() => {
+                        for (const chunk of chunks) {
+                            for (const onData of listeners.data ?? []) {
+                                onData(chunk);
+                            }
+                        }
+                        for (const onEnd of listeners.end ?? []) onEnd();
+                    });
+                }
+                return req;
+            },
+        };
+        return req;
+    }
+
+    it("stops reading an unparsed body above 10 MB", async () => {
+        const getDeferredCredential = vi.fn();
+        const controller = new Oid4vciController(
+            { getDeferredCredential } as never,
+            {} as never,
+        );
+        const req = streamingRequest([
+            Buffer.alloc(6 * 1024 * 1024),
+            Buffer.alloc(6 * 1024 * 1024),
+        ]);
+
+        const error = await controller
+            .deferredCredential(req as unknown as Request, "tenant", {
+                setHeader: vi.fn(),
+            } as unknown as Response)
+            .catch((rejection: unknown) => rejection);
+
+        expect((error as HttpException).getResponse()).toEqual({
+            error: "invalid_encryption_parameters",
+            error_description: "Encrypted credential request body is too large",
+        });
+        expect(req.destroy).toHaveBeenCalled();
+        expect(getDeferredCredential).not.toHaveBeenCalled();
+    });
+
+    it("reads an unparsed body below the limit", async () => {
+        const getDeferredCredential = vi.fn().mockResolvedValue({
+            deferredCredentialResponse: { credential: "c" },
+        });
+        const controller = new Oid4vciController(
+            { getDeferredCredential } as never,
+            {} as never,
+        );
+
+        await controller.deferredCredential(
+            streamingRequest([
+                Buffer.from("a.b"),
+                Buffer.from(".c.d.e"),
+            ]) as unknown as Request,
+            "tenant",
+            { setHeader: vi.fn() } as unknown as Response,
+        );
+
+        expect(getDeferredCredential).toHaveBeenCalledWith(
+            expect.objectContaining({ body: "a.b.c.d.e" }),
+            "tenant",
+        );
+    });
+});

@@ -1,7 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { Jwk } from "@openid4vc/oauth2";
 import type {
-    CredentialResponse,
     DeferredCredentialResponse,
     IssuerMetadataResult,
 } from "@openid4vc/openid4vci";
@@ -24,7 +23,6 @@ import {
     assertKeyAttestationRequirements,
     type KeyAttestationRequirements,
 } from "./domain/key-attestation-requirements.js";
-import { DeferredCredentialRequestDto } from "./dto/deferred-credential-request.dto.js";
 import {
     CredentialRequestException,
     DeferredCredentialException,
@@ -236,15 +234,19 @@ export class DeferredCredentialService {
      * Handle deferred credential request.
      * Called when wallet polls with transaction_id.
      *
-     * @returns Credential response or throws issuance_pending error
+     * @param buildResponse Builds the HTTP response, for example an encrypted
+     * one, from the issued credential. It runs before the transaction is
+     * marked retrieved, so a failure leaves the credential retrievable.
+     * @returns The built response, or throws issuance_pending error
      */
     @Span("oid4vci.getDeferredCredentialInternal")
-    async getDeferredCredential(
+    async getDeferredCredential<T>(
         req: Oid4vciRequestContext,
-        body: DeferredCredentialRequestDto,
+        transactionId: string,
         tenantId: string,
         issuerMetadata: IssuerMetadataResult,
-    ): Promise<CredentialResponse> {
+        buildResponse: (credential: string) => Promise<T>,
+    ): Promise<T> {
         const issuanceConfig =
             await this.issuanceService.getIssuanceConfiguration(tenantId);
         const tokenPayload = await this.accessTokens.verify(
@@ -256,7 +258,7 @@ export class DeferredCredentialService {
 
         const transaction = await this.transactions.find(
             tenantId,
-            body.transaction_id,
+            transactionId,
         );
         // The token must belong to the session that created the transaction.
         // A mismatch is reported like an unknown id so that transaction ids
@@ -309,10 +311,7 @@ export class DeferredCredentialService {
 
         switch (retrieval.kind) {
             case "expire":
-                await this.transactions.markExpired(
-                    tenantId,
-                    body.transaction_id,
-                );
+                await this.transactions.markExpired(tenantId, transactionId);
                 throw new DeferredCredentialException(
                     "invalid_transaction_id",
                     "The transaction has expired",
@@ -331,11 +330,12 @@ export class DeferredCredentialService {
                     "invalid_transaction_id",
                     retrieval.message,
                 );
-            case "ready":
+            case "ready": {
+                const response = await buildResponse(retrieval.credential);
                 if (
                     !(await this.transactions.markRetrieved(
                         tenantId,
-                        body.transaction_id,
+                        transactionId,
                     ))
                 ) {
                     throw new DeferredCredentialException(
@@ -343,9 +343,8 @@ export class DeferredCredentialService {
                         "The credential has already been retrieved",
                     );
                 }
-                return {
-                    credential: retrieval.credential,
-                } as CredentialResponse;
+                return response;
+            }
         }
     }
 }

@@ -1,6 +1,10 @@
 import { HttpService } from "@nestjs/axios";
 import { Inject, Injectable } from "@nestjs/common";
-import { type Jwk, Oauth2ResourceServer } from "@openid4vc/oauth2";
+import {
+    type DecryptJweCallback,
+    type Jwk,
+    Oauth2ResourceServer,
+} from "@openid4vc/oauth2";
 import { Openid4vciIssuer } from "@openid4vc/openid4vci";
 import { CryptoService } from "../../../crypto/crypto.service.js";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
@@ -34,12 +38,20 @@ export class Oid4vciSdkFactory {
         this.fetch = authorizationServerFetch(http, outboundUrlPolicy);
     }
 
-    issuer(tenantId: string, sessionId?: string): Openid4vciIssuer {
+    /**
+     * @param decryptJwe Decrypts encrypted credential requests; only callers
+     * that parse one need it.
+     */
+    issuer(
+        tenantId: string,
+        sessionId?: string,
+        decryptJwe?: DecryptJweCallback,
+    ): Openid4vciIssuer {
         return new Openid4vciIssuer({
-            callbacks: this.cryptoService.getCallbackContext(
-                tenantId,
-                sessionId,
-            ),
+            callbacks: {
+                ...this.cryptoService.getCallbackContext(tenantId, sessionId),
+                ...(decryptJwe && { decryptJwe }),
+            },
         });
     }
 

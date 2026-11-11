@@ -70,7 +70,15 @@
             <mat-hint>Optional description for this tenant, not visible to the public</mat-hint>
           </mat-form-field>
 
-          @if (!isEditMode) {
+          @if (!isEditMode && providerManagesClients) {
+            <div class="initial-client-section">
+              <h3>Initial Admin Client</h3>
+              <p class="section-hint">
+                No admin client is created: this instance's identity provider manages the clients.
+                Create the tenant's clients there.
+              </p>
+            </div>
+          } @else if (!isEditMode) {
             <div class="initial-client-section">
               <h3>Initial Admin Client</h3>
               <mat-slide-toggle
@@ -101,8 +109,8 @@
                 </mat-form-field>
               } @else {
                 <p id="admin-client-hint" class="section-hint">
-                  No admin client is created. Choose this when your identity provider manages the
-                  clients (OIDC_PROVIDER=generic), and create them there.
+                  No admin client is created. Create the tenant's clients afterwards under API
+                  Clients.
                 </p>
               }
             </div>

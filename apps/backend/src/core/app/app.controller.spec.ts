@@ -1,9 +1,13 @@
 import type { ConfigService } from "@nestjs/config";
 import { describe, expect, it } from "vitest";
+import type { AuthSettings } from "../../auth/auth-settings.js";
 import type { ConfigImportModeService } from "../../platform/config-import/config-import-mode.service.js";
 import { AppController } from "./app.controller.js";
 
-function createController(settings: Record<string, string>) {
+function createController(
+    settings: Record<string, string>,
+    authSettings: AuthSettings = { mode: "builtin" },
+) {
     const configService = {
         get: (key: string, defaultValue?: string) =>
             settings[key] ?? defaultValue,
@@ -17,7 +21,11 @@ function createController(settings: Record<string, string>) {
     const configImportModeService = {
         resolve: () => "disabled",
     } as unknown as ConfigImportModeService;
-    return new AppController(configService, configImportModeService);
+    return new AppController(
+        configService,
+        configImportModeService,
+        authSettings,
+    );
 }
 
 describe("AppController", () => {
@@ -30,6 +38,16 @@ describe("AppController", () => {
             grafana: { url: undefined, tempoUid: "tempo", lokiUid: "loki" },
             configImportMode: "disabled",
             publicUrl: "https://eudiplo.example.com",
+            authMode: "builtin",
         });
+    });
+
+    it("reports the authentication mode, so the web client hides what it cannot manage", () => {
+        const controller = createController(
+            { PUBLIC_URL: "https://eudiplo.example.com" },
+            { mode: "generic" } as AuthSettings,
+        );
+
+        expect(controller.getFrontendConfig().authMode).toBe("generic");
     });
 });

@@ -35,6 +35,7 @@ import {
     type CredentialClaimsProvider,
 } from "../configuration/credentials/domain/credential-claims.js";
 import { IssuanceService } from "../configuration/issuance/issuance.service.js";
+import { IssuerRegistrationCertificateLock } from "../configuration/issuance/issuer-registration-certificate-lock.js";
 import {
     WEBHOOK_ENDPOINT_REPOSITORY,
     type WebhookEndpointRepository,
@@ -56,6 +57,7 @@ import { CredentialsServiceDeferredCredentialIssuer } from "./oid4vci/adapters/c
 import { DeferredTransactionCleanupJob } from "./oid4vci/adapters/deferred-transaction-cleanup.job.js";
 import { HostedAuthorizationServerMetadataAdapter } from "./oid4vci/adapters/hosted-authorization-server-metadata.adapter.js";
 import { HttpExternalAuthorizationServerMetadataResolver } from "./oid4vci/adapters/http-external-authorization-server-metadata-resolver.js";
+import { IssuerRegistrationCertificateRenewalListener } from "./oid4vci/adapters/issuer-registration-certificate-renewal.listener.js";
 import { OpenIdCredentialProofVerifier } from "./oid4vci/adapters/openid-credential-proof-verifier.js";
 import { RegistrarIssuerRegistrationCertificateProvider } from "./oid4vci/adapters/registrar-issuer-registration-certificate-provider.js";
 import { TypeOrmDeferredTransactionRepository } from "./oid4vci/adapters/typeorm-deferred-transaction.repository.js";
@@ -167,6 +169,7 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
         FederationEntityController,
     ],
     providers: [
+        IssuerRegistrationCertificateRenewalListener,
         {
             provide: RetrieveCredentialOffer,
             inject: [SessionStore, ConfigService],
@@ -236,18 +239,21 @@ import { WellKnownService } from "./oid4vci/well-known/well-known.service.js";
                 CredentialsService,
                 IssuanceService,
                 ConfigService,
+                IssuerRegistrationCertificateLock,
             ],
             useFactory: (
                 registrar: RegistrarService,
                 credentials: CredentialsService,
                 issuance: IssuanceService,
                 config: ConfigService,
+                lock: IssuerRegistrationCertificateLock,
             ) =>
                 new RegistrarIssuerRegistrationCertificateProvider(
                     registrar,
                     credentials,
                     issuance,
                     config.getOrThrow<string>("PUBLIC_URL"),
+                    lock,
                 ),
         },
         {

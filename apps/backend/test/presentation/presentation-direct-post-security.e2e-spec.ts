@@ -260,6 +260,64 @@ describe("Presentation - Direct Post Security (Section 13.3)", () => {
         expect(session.body.status).toBe("fetched");
     });
 
+    test.each([
+        ["without state", undefined, /^State missing: /],
+        ["with another state", "other-state", /^State mismatch: /],
+    ])(
+        "a response %s gets 400 and fails the session",
+        async (_kind, state, reason) => {
+            const res = await createPresentationRequest(app, authToken, {
+                response_type: ResponseType.URI,
+                requestId: "pid-no-hook",
+            });
+            const sessionId: string = res.body.session;
+            const authRequest = client.parseOpenid4vpAuthorizationRequest({
+                authorizationRequest: res.body.uri,
+            });
+            const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+                authorizationRequestPayload: authRequest.params,
+                responseMode: { type: "direct_post" },
+            });
+            const payload = resolved.authorizationRequestPayload;
+            const vp_token = await preparePresentation(
+                {
+                    iat: Math.floor(Date.now() / 1000),
+                    aud: payload.client_id as string,
+                    nonce: payload.nonce,
+                },
+                privateIssuerKey,
+                issuerCertChain,
+                statusListService,
+                credentialConfigId,
+            );
+            const response = await new EncryptJWT({
+                vp_token: { pid: [vp_token] },
+                ...(state && { state }),
+            })
+                .setProtectedHeader({ alg: "ECDH-ES", enc: "A128GCM" })
+                .encrypt(payload.client_metadata!.jwks!.keys[0] as JWK);
+
+            await request(app.getHttpServer())
+                .post(new URL(payload.response_uri as string).pathname)
+                .trustLocalhost()
+                .type("form")
+                .send({ response })
+                .expect(400);
+
+            const session = await request(app.getHttpServer())
+                .get(`/session/${sessionId}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            expect(session.body.status).toBe("failed");
+            expect(session.body.errorReason).toMatch(
+                new RegExp(
+                    `^Presentation validation failed: ${reason.source.slice(1)}`,
+                ),
+            );
+        },
+    );
+
     // ─── Frontend polling uses session ID ──────────────────────────────
 
     test("frontend can poll session status using session ID", async () => {

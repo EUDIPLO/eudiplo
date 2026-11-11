@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { APP_INTERCEPTOR } from "@nestjs/core";
 import { OpenTelemetryModule } from "nestjs-otel";
+import { AuthSettingsModule } from "../auth/auth-settings.module.js";
 import { AppController } from "./app/app.controller.js";
 import { HealthModule } from "./health/health.module.js";
 import { TraceIdInterceptor } from "./interceptors/trace-id.interceptor.js";
@@ -22,6 +23,7 @@ import { TraceIdInterceptor } from "./interceptors/trace-id.interceptor.js";
  */
 @Module({
     imports: [
+        AuthSettingsModule,
         HealthModule,
         OpenTelemetryModule.forRoot({
             metrics: {

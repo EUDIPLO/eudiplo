@@ -220,7 +220,10 @@ export class VerifyPresentationResponse {
                         statusCheckMode: query.statusCheckMode,
                         skewSeconds: session.skewSeconds ?? query.skewSeconds,
                     }),
-                    transactionData,
+                    transactionData: transactionData && {
+                        credentialId,
+                        entries: transactionData,
+                    },
                     ts12TransactionData: transactionData?.some(isTs12),
                 };
 

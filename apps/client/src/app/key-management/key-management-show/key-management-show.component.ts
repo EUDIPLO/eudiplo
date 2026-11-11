@@ -30,11 +30,17 @@ import { Subscription } from 'rxjs';
 import { JsonViewDialogComponent } from '../../issuance/credential-config/credential-config-create/json-view-dialog/json-view-dialog.component';
 import { ConfigDocumentService } from '../../config-portability/config-document.service';
 import { ConfigOwnershipDirective } from '../../config-portability/config-ownership.directive';
+import { ConfigOwnershipService } from '../../config-portability/config-ownership.service';
 import { ConfigOwnershipNoticeComponent } from '../../config-portability/config-ownership-notice.component';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { KeyCertificateRequestComponent } from '../key-certificate-request/key-certificate-request.component';
 import { JwtService } from '../../services/jwt.service';
-import { RegistrarService, accessCertificateRefusal } from '../../registrar/registrar.service';
+import {
+  RegistrarService,
+  accessCertificateRefusal,
+  hasRelyingPartyContact,
+  RELYING_PARTY_CONTACT_ANCHOR,
+} from '../../registrar/registrar.service';
 import { getApiErrorMessage, getHttpErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
 import { copyToClipboard } from '../../utils/copy-to-clipboard';
@@ -82,6 +88,12 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
    * read, which does not mean that it is missing.
    */
   registrarConfig: 'checking' | 'unknown' | 'configured' | 'missing' = 'checking';
+  /** The configuration has no relying party contact, which the first enrollment needs. */
+  registrarContactMissing = false;
+  /** Fragment of the registrar page's contact section. */
+  readonly contactAnchor = RELYING_PARTY_CONTACT_ANCHOR;
+  /** The key chain was provisioned from a configuration file, so its enrollment is locked. */
+  private keyChainFileManaged = false;
   /** The key chain whose enrollment is running, so another key's page is not held up. */
   private enrollingKeyId?: string;
 
@@ -97,7 +109,8 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     private readonly dialog: MatDialog,
     private readonly jwtService: JwtService,
     private readonly registrarService: RegistrarService,
-    private readonly configDocuments: ConfigDocumentService
+    private readonly configDocuments: ConfigDocumentService,
+    private readonly configOwnership?: ConfigOwnershipService
   ) {}
 
   ngOnInit(): void {
@@ -121,6 +134,8 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
 
     this.defaultAccess = undefined;
 
+    this.keyChainFileManaged = false;
+    void this.checkFileManaged(id);
     try {
       this.keyChain = await this.keyChainService.getById(id);
     } catch (error) {
@@ -403,6 +418,23 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     );
   }
 
+  /**
+   * Hint at a missing relying party contact where an enrollment can still be
+   * the first: not on a key chain provisioned from a configuration file, whose
+   * **Enroll with Registrar** is locked, and not on one whose active
+   * certificate another issuer signed, since the relying party is then
+   * registered already.
+   */
+  get showRegistrarContactHint(): boolean {
+    const certificate = this.keyChain?.activeCertificate;
+    return (
+      this.canEnrollWithRegistrar &&
+      this.registrarContactMissing &&
+      !this.keyChainFileManaged &&
+      (!certificate || certificate.issuer === certificate.subject)
+    );
+  }
+
   /** The enrollment would be offered once a registrar configuration exists. */
   get needsRegistrarConfig(): boolean {
     return this.isEnrollableKey && this.registrarConfig === 'missing';
@@ -416,10 +448,23 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
     );
   }
 
+  /** The ownership the lock of **Enroll with Registrar** checks; the service caches requests per kind while they run. */
+  private async checkFileManaged(id: string): Promise<void> {
+    try {
+      const ownership = await this.configOwnership?.get('KeyChain', id);
+      if (this.requestedId === id) {
+        this.keyChainFileManaged = ownership?.ownership === 'file-managed';
+      }
+    } catch {
+      // Without ownership data the hint stays; the lock reports its own state.
+    }
+  }
+
   private async checkRegistrarConfig(): Promise<void> {
     try {
       const config = await this.registrarService.getConfig();
       this.registrarConfig = config ? 'configured' : 'missing';
+      this.registrarContactMissing = !!config && !hasRelyingPartyContact(config);
     } catch (error) {
       console.error('Registrar configuration check failed:', error);
       this.registrarConfig = 'unknown';

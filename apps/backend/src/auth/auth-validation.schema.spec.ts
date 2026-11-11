@@ -24,6 +24,7 @@ describe("AUTH_VALIDATION_SCHEMA", () => {
         expect(error).toBeUndefined();
         expect(value.OIDC_PROVIDER).toBe("keycloak");
         expect(value.OIDC_AUDIENCE).toBeUndefined();
+        expect(value.OIDC_UI_CLIENT_ID).toBe("eudiplo-ui");
     });
 
     it("still requires the admin client for Keycloak", () => {
@@ -40,6 +41,14 @@ describe("AUTH_VALIDATION_SCHEMA", () => {
 
         expect(error).toBeUndefined();
         expect(value.OIDC_INTERNAL_ISSUER_URL).toBe(GENERIC.OIDC);
+    });
+
+    it("turns on single sign-on at another provider only with OIDC_UI_CLIENT_ID", () => {
+        expect(validate(GENERIC).value.OIDC_UI_CLIENT_ID).toBeUndefined();
+        expect(
+            validate({ ...GENERIC, OIDC_UI_CLIENT_ID: "eudiplo-console" }).value
+                .OIDC_UI_CLIENT_ID,
+        ).toBe("eudiplo-console");
     });
 
     it("requires an audience for another provider", () => {

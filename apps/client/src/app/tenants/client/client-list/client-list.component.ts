@@ -1,6 +1,5 @@
-import { Component, Input, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { Component, Input, OnInit, ChangeDetectionStrategy, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTableModule } from '@angular/material/table';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -20,11 +19,13 @@ import { SecretDialogComponent } from '../secret-dialog/secret-dialog.component'
 import { ConfigOwnershipDirective } from '../../../config-portability/config-ownership.directive';
 import { JwtService } from '../../../services/jwt.service';
 import { canManageRoles } from '../../../services/role-grants';
-import { getApiErrorMessage } from '../../../utils/error-message';
+import { apiErrorDetail, getApiErrorMessage, hasHttpStatus } from '../../../utils/error-message';
 import { clientDeleteConfirmation } from '../client-delete-confirmation';
 import { clientRotateConfirmation } from '../client-rotate-confirmation';
 import { openErrorSnackBar } from '../../../utils/error-snackbar';
+import { UnavailableCardComponent } from '../../../common/unavailable-card.component';
 import { LoadErrorComponent } from '../../../common/load-error.component';
+import { FrontendConfigService } from '../../../services/frontend-config.service';
 
 @Component({
   selector: 'app-client-list',
@@ -32,7 +33,6 @@ import { LoadErrorComponent } from '../../../common/load-error.component';
     MatTableModule,
     MatIconModule,
     MatButtonModule,
-    MatCardModule,
     RouterModule,
     FlexLayoutModule,
     MatChipsModule,
@@ -40,6 +40,7 @@ import { LoadErrorComponent } from '../../../common/load-error.component';
     MatDialogModule,
     ConfigOwnershipDirective,
     LoadErrorComponent,
+    UnavailableCardComponent,
   ],
   templateUrl: './client-list.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -52,6 +53,8 @@ export class ClientListComponent implements OnInit {
   loading = false;
   /** Set when the list could not be loaded, so it is not shown as empty. */
   loadError = '';
+  /** Why this instance manages no clients, for example because the identity provider does. */
+  unavailableMessage = '';
   hasPermission = false;
 
   displayedColumns: (keyof ClientEntity | 'actions')[] = [
@@ -61,9 +64,22 @@ export class ClientListComponent implements OnInit {
     'actions',
   ];
 
+  /** With another identity provider, records left from an earlier mode get no new secrets. */
+  get rotatesSecrets(): boolean {
+    return this.frontendConfig.authMode !== 'generic';
+  }
+
+  /** A tenant's records without an action to offer get no Actions column. */
+  get columns(): (keyof ClientEntity | 'actions')[] {
+    return this.loadedClients && !this.rotatesSecrets
+      ? this.displayedColumns.filter((column) => column !== 'actions')
+      : this.displayedColumns;
+  }
+
   readonly manageDeniedHint = 'This client has roles you neither hold nor may grant';
   /** Roles of the signed-in caller, read once instead of per row */
   private readonly callerRoles: string[];
+  private readonly frontendConfig = inject(FrontendConfigService);
 
   constructor(
     private readonly snackBar: MatSnackBar,
@@ -90,9 +106,15 @@ export class ClientListComponent implements OnInit {
   async loadClients(): Promise<void> {
     this.loading = true;
     this.loadError = '';
+    this.unavailableMessage = '';
     try {
       this.clients = await clientControllerGetClients<true>().then((res) => res.data);
     } catch (error) {
+      if (hasHttpStatus(error, 501)) {
+        this.unavailableMessage =
+          apiErrorDetail(error) ?? 'This instance does not manage API clients.';
+        return;
+      }
       console.error('Error loading clients:', error);
       this.loadError = getApiErrorMessage(error, 'Failed to load clients');
     } finally {

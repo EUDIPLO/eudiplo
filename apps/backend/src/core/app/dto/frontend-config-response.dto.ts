@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import type { AuthSettings } from "../../../auth/auth-settings.js";
 
 class GrafanaConfigDto {
     @ApiPropertyOptional({
@@ -37,4 +38,12 @@ export class FrontendConfigResponseDto {
         example: "https://eudiplo.example.com",
     })
     publicUrl!: string;
+
+    @ApiProperty({
+        description:
+            "How the management API authenticates: `builtin` issues its own tokens, `keycloak` accepts Keycloak tokens and manages clients and people there, `generic` accepts the tokens of another OpenID Connect provider, which manages clients and people itself.",
+        enum: ["builtin", "keycloak", "generic"],
+        example: "builtin",
+    })
+    authMode!: AuthSettings["mode"];
 }

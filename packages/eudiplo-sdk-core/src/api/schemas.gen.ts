@@ -88,12 +88,23 @@ export const FrontendConfigResponseDtoSchema = {
             type: 'string',
             description: 'Public URL of the instance (PUBLIC_URL). Wallets and other verifiers reach the wallet-facing endpoints, such as trust lists, under this URL, which can differ from the URL the client signed in with.',
             example: 'https://eudiplo.example.com'
+        },
+        authMode: {
+            enum: [
+                'builtin',
+                'keycloak',
+                'generic'
+            ],
+            type: 'string',
+            description: 'How the management API authenticates: `builtin` issues its own tokens, `keycloak` accepts Keycloak tokens and manages clients and people there, `generic` accepts the tokens of another OpenID Connect provider, which manages clients and people itself.',
+            example: 'builtin'
         }
     },
     required: [
         'grafana',
         'configImportMode',
-        'publicUrl'
+        'publicUrl',
+        'authMode'
     ]
 } as const;
 
@@ -11808,6 +11819,16 @@ export const IssuerRegistrationCertificateConfigSchema = {
             type: 'string',
             description: 'Support URI used when generating a registration certificate (optional if registrar defaults are configured).',
             example: 'mailto:support@issuer.example'
+        },
+        renewal: {
+            type: 'string',
+            enum: [
+                'onCredentialConfigChange',
+                'onMetadataRequest',
+                'manual'
+            ],
+            description: 'When a generated certificate is renewed. onCredentialConfigChange (default): in the background after a credential or issuance configuration changes, and when issuer metadata is built. onMetadataRequest: only when issuer metadata is built. manual: only with Regenerate now. In every mode a missing or expired certificate is requested when issuer metadata is built.',
+            default: 'onCredentialConfigChange'
         }
     },
     additionalProperties: false
@@ -12854,14 +12875,33 @@ export const DeferredCredentialRequestDtoSchema = {
     properties: {
         transaction_id: {
             type: 'string',
+            minLength: 1,
             description: 'The transaction identifier previously returned by the Credential Endpoint',
             example: '8xLOxBtZp8'
+        },
+        credential_response_encryption: {
+            type: 'object',
+            properties: {
+                jwk: {
+                    type: 'object',
+                    additionalProperties: true
+                },
+                enc: {
+                    type: 'string'
+                },
+                zip: {
+                    type: 'string'
+                }
+            },
+            required: [
+                'jwk',
+                'enc'
+            ]
         }
     },
     required: [
         'transaction_id'
-    ],
-    additionalProperties: false
+    ]
 } as const;
 
 export const NotificationRequestDtoSchema = {

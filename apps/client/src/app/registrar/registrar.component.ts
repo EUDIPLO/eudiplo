@@ -33,6 +33,8 @@ import {
   RegistrarConfig,
   RegistrarConfigRequest,
   RegistrarService,
+  RELYING_PARTY_CONTACT_ANCHOR,
+  RELYING_PARTY_CONTACT_FIELDS,
   RelyingPartyContact,
 } from './registrar.service';
 import { ConfigOwnershipDirective } from '../config-portability/config-ownership.directive';
@@ -65,7 +67,6 @@ interface RegistrarPreset {
 const FORM_DEFAULTS = ['privacy_policy', 'support_uri', 'intermediary'] as const;
 
 /** Fields of the relying party contact, as the registrar names them. */
-const CONTACT_FIELDS = ['supportUri', 'email', 'phone'] as const;
 
 /** Labels of the form fields that match a field of the request body. */
 const FIELD_LABELS: Record<string, string> = {
@@ -93,7 +94,10 @@ function isHttpsUrl(value: string): boolean {
  * The registrar's rules for contact values, which the backend repeats. The
  * registrar only accepts https support URLs.
  */
-const CONTACT_RULES: Record<(typeof CONTACT_FIELDS)[number], (value: string) => boolean> = {
+const CONTACT_RULES: Record<
+  (typeof RELYING_PARTY_CONTACT_FIELDS)[number],
+  (value: string) => boolean
+> = {
   supportUri: isHttpsUrl,
   email: (value) => /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(value),
   phone: (value) => /^[+0-9()\-\s]{5,40}$/.test(value),
@@ -213,6 +217,11 @@ export class RegistrarComponent implements OnInit {
   /** Holds the fields; Save focuses the first invalid one. */
   @ViewChild('formElement', { read: ElementRef })
   private readonly formElement?: ElementRef<HTMLFormElement>;
+  /** Fragment of the contact section, where "Add a contact" hints land. */
+  readonly contactAnchor = RELYING_PARTY_CONTACT_ANCHOR;
+  /** Where "Add a contact" hints land. */
+  @ViewChild('contactSupportUri', { read: ElementRef })
+  private readonly contactSupportUri?: ElementRef<HTMLInputElement>;
   /** Delete cannot be used once deleted; focus moves from it to the card title. */
   @ViewChild('deleteButton', { read: ElementRef })
   private readonly deleteButton?: ElementRef<HTMLElement>;
@@ -259,7 +268,10 @@ export class RegistrarComponent implements OnInit {
       }),
       relyingPartyContact: this.fb.group(
         Object.fromEntries(
-          CONTACT_FIELDS.map((field) => [field, ['', contactValidator(CONTACT_RULES[field])]])
+          RELYING_PARTY_CONTACT_FIELDS.map((field) => [
+            field,
+            ['', contactValidator(CONTACT_RULES[field])],
+          ])
         )
       ),
     });
@@ -296,7 +308,7 @@ export class RegistrarComponent implements OnInit {
             ])
           ),
           relyingPartyContact: Object.fromEntries(
-            CONTACT_FIELDS.map((field) => [field, contact[field] ?? ''])
+            RELYING_PARTY_CONTACT_FIELDS.map((field) => [field, contact[field] ?? ''])
           ),
         });
         this.updateCredentialValidators();
@@ -304,7 +316,9 @@ export class RegistrarComponent implements OnInit {
         // client rule rejects, shows its error right away.
         for (const control of [
           ...URL_FIELDS.map((field) => this.configForm.get(field)),
-          ...CONTACT_FIELDS.map((field) => this.configForm.get(['relyingPartyContact', field])),
+          ...RELYING_PARTY_CONTACT_FIELDS.map((field) =>
+            this.configForm.get(['relyingPartyContact', field])
+          ),
         ]) {
           if (control?.invalid) control.markAsTouched();
         }
@@ -323,7 +337,26 @@ export class RegistrarComponent implements OnInit {
     }
     if (retrying && !this.loadError) {
       focusAfterRenderIfLost(this.injector, () => this.settingsTitle?.nativeElement);
+    } else if (!this.loadError && this.linkedToContact()) {
+      await this.focusContactUnlessFileManaged();
     }
+  }
+
+  /**
+   * "Add a contact" hints link here; land on the field to fill in. A
+   * configuration provisioned from a file cannot be saved here, so the
+   * ownership notice stays the first thing to read.
+   */
+  private async focusContactUnlessFileManaged(): Promise<void> {
+    const ownership = await this.ownership
+      .get('RegistrarConfig', 'registrar')
+      .catch(() => undefined);
+    if (ownership?.ownership === 'file-managed') return;
+    focusAfterRenderIfLost(this.injector, () => this.contactSupportUri?.nativeElement);
+  }
+
+  private linkedToContact(): boolean {
+    return globalThis.location?.hash === `#${RELYING_PARTY_CONTACT_ANCHOR}`;
   }
 
   /**
@@ -362,14 +395,14 @@ export class RegistrarComponent implements OnInit {
 
   /** The fields whose own errors keep the configuration from saving, in the order of the page. */
   private fieldsBlockingSave(): string[] {
-    return [...CREDENTIAL_FIELDS, ...CONTACT_FIELDS].filter((field) =>
+    return [...CREDENTIAL_FIELDS, ...RELYING_PARTY_CONTACT_FIELDS].filter((field) =>
       blocksSaving(this.fieldControl(field))
     );
   }
 
   /** The control of a field under Registrar Credentials or Relying Party Contact. */
   private fieldControl(name: string): AbstractControl | null {
-    return (CONTACT_FIELDS as readonly string[]).includes(name)
+    return (RELYING_PARTY_CONTACT_FIELDS as readonly string[]).includes(name)
       ? this.configForm.get(['relyingPartyContact', name])
       : this.configForm.get(name);
   }
@@ -378,7 +411,9 @@ export class RegistrarComponent implements OnInit {
   private fieldControls(): AbstractControl[] {
     return [
       ...Object.values(this.configForm.controls),
-      ...CONTACT_FIELDS.map((field) => this.configForm.get(['relyingPartyContact', field])!),
+      ...RELYING_PARTY_CONTACT_FIELDS.map((field) =>
+        this.configForm.get(['relyingPartyContact', field])!
+      ),
     ];
   }
 
@@ -396,7 +431,7 @@ export class RegistrarComponent implements OnInit {
     const among = (fields: readonly string[]) =>
       blocking.filter((field) => (fields as readonly string[]).includes(field));
     const credentials = among(CREDENTIAL_FIELDS);
-    const contact = among(CONTACT_FIELDS);
+    const contact = among(RELYING_PARTY_CONTACT_FIELDS);
     const firstField = blocking[0];
     showFieldsToFix(this.configForm, {
       snackBar: this.snackBar,
@@ -545,10 +580,10 @@ export class RegistrarComponent implements OnInit {
    * removes the stored contact. PATCH and POST replace it as a whole.
    */
   private contactFromForm(
-    fields: Partial<Record<(typeof CONTACT_FIELDS)[number], string | null>>
+    fields: Partial<Record<(typeof RELYING_PARTY_CONTACT_FIELDS)[number], string | null>>
   ): RelyingPartyContact | null {
     const contact: RelyingPartyContact = {};
-    for (const field of CONTACT_FIELDS) {
+    for (const field of RELYING_PARTY_CONTACT_FIELDS) {
       const value = fields[field]?.trim();
       if (value) contact[field] = value;
     }

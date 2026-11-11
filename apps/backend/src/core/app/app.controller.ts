@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from "@nestjs/common";
+import { Controller, Get, Inject, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
     ApiOperation,
@@ -7,6 +7,7 @@ import {
     ApiTags,
 } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../auth/auth.guard.js";
+import { AUTH_SETTINGS, type AuthSettings } from "../../auth/auth-settings.js";
 import { ConfigImportModeService } from "../../platform/config-import/config-import-mode.service.js";
 import { FrontendConfigResponseDto } from "./dto/frontend-config-response.dto.js";
 import { ServiceInfoResponseDto } from "./dto/service-info-response.dto.js";
@@ -21,6 +22,7 @@ export class AppController {
     constructor(
         private readonly configService: ConfigService,
         private readonly configImportModeService: ConfigImportModeService,
+        @Inject(AUTH_SETTINGS) private readonly authSettings: AuthSettings,
     ) {}
 
     /**
@@ -87,6 +89,7 @@ export class AppController {
             },
             configImportMode: this.configImportModeService.resolve(),
             publicUrl: this.configService.getOrThrow<string>("PUBLIC_URL"),
+            authMode: this.authSettings.mode,
         };
     }
 }

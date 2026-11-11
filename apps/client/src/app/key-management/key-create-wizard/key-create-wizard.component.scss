@@ -177,6 +177,19 @@
       color: var(--mat-sys-tertiary, #28a745);
     }
 
+    .status-hint {
+      display: flex;
+      flex-basis: 100%;
+      align-items: center;
+      gap: 6px;
+      color: var(--mat-sys-on-surface-variant);
+
+      a {
+        color: var(--mat-sys-primary);
+        text-decoration: underline;
+      }
+    }
+
     .status-warning {
       color: var(--mat-sys-error);
 

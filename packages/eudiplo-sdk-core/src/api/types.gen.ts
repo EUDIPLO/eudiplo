@@ -54,6 +54,10 @@ export type FrontendConfigResponseDto = {
      * Public URL of the instance (PUBLIC_URL). Wallets and other verifiers reach the wallet-facing endpoints, such as trust lists, under this URL, which can differ from the URL the client signed in with.
      */
     publicUrl: string;
+    /**
+     * How the management API authenticates: `builtin` issues its own tokens, `keycloak` accepts Keycloak tokens and manages clients and people there, `generic` accepts the tokens of another OpenID Connect provider, which manages clients and people itself.
+     */
+    authMode: 'builtin' | 'keycloak' | 'generic';
 };
 
 export type RoleDto = {
@@ -5492,6 +5496,10 @@ export type IssuerRegistrationCertificateConfig = {
      * Support URI used when generating a registration certificate (optional if registrar defaults are configured).
      */
     supportUri?: string;
+    /**
+     * When a generated certificate is renewed. onCredentialConfigChange (default): in the background after a credential or issuance configuration changes, and when issuer metadata is built. onMetadataRequest: only when issuer metadata is built. manual: only with Regenerate now. In every mode a missing or expired certificate is requested when issuer metadata is built.
+     */
+    renewal?: 'onCredentialConfigChange' | 'onMetadataRequest' | 'manual';
 };
 
 export type IssuerRegistrationCertificateCache = {
@@ -6033,6 +6041,13 @@ export type DeferredCredentialRequestDto = {
      * The transaction identifier previously returned by the Credential Endpoint
      */
     transaction_id: string;
+    credential_response_encryption?: {
+        jwk: {
+            [key: string]: unknown;
+        };
+        enc: string;
+        zip?: string;
+    };
 };
 
 export type NotificationRequestDto = {

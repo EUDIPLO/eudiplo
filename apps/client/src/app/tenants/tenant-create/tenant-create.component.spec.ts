@@ -10,7 +10,13 @@ import { client } from '@eudiplo/sdk-core';
 import { of } from 'rxjs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { type AuthMode, FrontendConfigService } from '../../services/frontend-config.service';
 import { TenantCreateComponent } from './tenant-create.component';
+
+/** A frontend config service that reports `authMode` once loaded. */
+function frontendConfig(authMode: AuthMode | null) {
+  return { authMode, getConfig: () => Promise.resolve(null) };
+}
 
 describe('TenantCreateComponent', () => {
   let component: TenantCreateComponent;
@@ -247,13 +253,41 @@ describe('TenantCreateComponent', () => {
   describe('rendered', () => {
     afterEach(() => TestBed.resetTestingModule());
 
+    it('creates no admin client where the identity provider manages the clients', async () => {
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [TenantCreateComponent],
+        providers: [
+          provideRouter([]),
+          { provide: MatSnackBar, useValue: { open: vi.fn() } },
+          { provide: FrontendConfigService, useValue: frontendConfig('generic') },
+        ],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(TenantCreateComponent);
+      fixture.detectChanges();
+      const page = fixture.nativeElement as HTMLElement;
+
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(page.textContent).toContain(
+          "No admin client is created: this instance's identity provider manages the clients."
+        );
+      });
+      expect(fixture.componentInstance.tenantForm.value.createAdminClient).toBe(false);
+      expect(page.querySelector('mat-slide-toggle')).toBeNull();
+    });
+
     it('says which fields keep it from saving, focuses the first one and sends nothing', async () => {
       const snackBar = { open: vi.fn() };
       // The component of the other tests was built with this test module.
       TestBed.resetTestingModule();
       await TestBed.configureTestingModule({
         imports: [TenantCreateComponent],
-        providers: [provideRouter([]), { provide: MatSnackBar, useValue: snackBar }],
+        providers: [
+          provideRouter([]),
+          { provide: MatSnackBar, useValue: snackBar },
+          { provide: FrontendConfigService, useValue: frontendConfig(null) },
+        ],
       }).compileComponents();
       const fixture = TestBed.createComponent(TenantCreateComponent);
       fixture.detectChanges();
@@ -290,7 +324,11 @@ describe('TenantCreateComponent', () => {
       TestBed.resetTestingModule();
       await TestBed.configureTestingModule({
         imports: [TenantCreateComponent],
-        providers: [provideRouter([]), { provide: MatSnackBar, useValue: { open: vi.fn() } }],
+        providers: [
+          provideRouter([]),
+          { provide: MatSnackBar, useValue: { open: vi.fn() } },
+          { provide: FrontendConfigService, useValue: frontendConfig(null) },
+        ],
       }).compileComponents();
       const fixture = TestBed.createComponent(TenantCreateComponent);
       fixture.detectChanges();
