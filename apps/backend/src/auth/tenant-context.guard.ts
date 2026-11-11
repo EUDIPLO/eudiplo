@@ -43,7 +43,7 @@ export class TenantContextGuard implements CanActivate {
         const { user } = context.switchToHttp().getRequest<{
             user: TokenPayload;
         }>();
-        requireTenantContext(user);
-        return true;
+        // Throws the 403 with the reason instead of Nest's generic one.
+        return requireTenantContext(user).length > 0;
     }
 }
