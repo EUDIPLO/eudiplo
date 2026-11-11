@@ -9,6 +9,7 @@ function fakeKeycloak() {
     logout: vi.fn().mockResolvedValue(undefined),
     updateToken: vi.fn(),
     token: undefined as string | undefined,
+    idToken: undefined as string | undefined,
     onAuthRefreshSuccess: undefined as (() => void) | undefined,
   };
 }
@@ -117,11 +118,40 @@ describe('OidcService logout', () => {
     vi.restoreAllMocks();
   });
 
-  it('ends the session at the provider, too', () => {
+  it('ends the session at Keycloak with a POST, keeping the ID token out of the address', () => {
+    keycloak.idToken = 'id-token';
+
+    service.logout('https://console.test/');
+
+    expect(keycloak.logout).toHaveBeenCalledWith({
+      redirectUri: 'https://console.test/',
+      logoutMethod: 'POST',
+    });
+    expect(localStorage.getItem('oidc_config')).toBeNull();
+  });
+
+  it('ends the session at Keycloak with a GET when there is no ID token to send', () => {
     service.logout('https://console.test/');
 
     expect(keycloak.logout).toHaveBeenCalledWith({ redirectUri: 'https://console.test/' });
-    expect(localStorage.getItem('oidc_config')).toBeNull();
+  });
+
+  it('ends the session at another provider with a GET, which all of them accept', async () => {
+    localStorage.setItem(
+      'oidc_config',
+      JSON.stringify({
+        issuerUrl: 'https://idp.test/application/o/eudiplo/',
+        uiClientId: 'ui',
+        apiUrl: 'x',
+        provider: 'generic',
+      })
+    );
+    await service.initialize();
+    keycloak.idToken = 'id-token';
+
+    service.logout('https://console.test/');
+
+    expect(keycloak.logout).toHaveBeenCalledWith({ redirectUri: 'https://console.test/' });
   });
 
   it('still leaves when the provider has no end_session_endpoint', async () => {
