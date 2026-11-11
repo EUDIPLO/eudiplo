@@ -92,11 +92,25 @@ has no expiry". Send `access_token` from Keycloak's token
 response, never `id_token`; the web client, the CLI and `@eudiplo/sdk-core`
 already do.
 
-These checks do not tell the clients of the realm apart: without
-`OIDC_AUDIENCE`, the access token of any client in the realm is accepted, with
-the realm roles it carries. If other applications sign in through the same
-realm, set `OIDC_AUDIENCE` as described above, or give EUDIPLO a realm of its
-own.
+Every client of the realm gets access tokens with `aud: account` and the
+realm roles of the person or service account. Without `OIDC_AUDIENCE`,
+EUDIPLO therefore accepts only access tokens issued to its own clients: the
+token's `azp` (or, without it, `client_id`) must be `eudiplo-ui`
+(`OIDC_UI_CLIENT_ID`), the `AUTH_CLIENT_ID` client (only when
+`AUTH_CLIENT_SECRET` is set too, as EUDIPLO creates it only then), or a client
+EUDIPLO manages, that is one that `GET /api/client` lists for a tenant: created
+through EUDIPLO and not deleted since, also not with its tenant. Tokens of
+other clients in the realm, such as another application, Keycloak's account
+console or `eudiplo-admin`, get `401` "This token was issued to a client of
+the realm that EUDIPLO does not manage". A client you created in Keycloak
+yourself is refused too, even with EUDIPLO roles: create it through EUDIPLO
+instead, or set `OIDC_AUDIENCE` and add the audience to its tokens.
+
+With `OIDC_AUDIENCE` set, the audience alone decides: every client whose
+tokens carry it is accepted. A realm default client scope gives it to every
+client created later in the realm, other applications too, so use one only
+in a realm of EUDIPLO's own, or remove the scope from the clients that must
+not call EUDIPLO.
 
 On every start, EUDIPLO:
 
@@ -183,6 +197,7 @@ and shows only that tenant's data.
 | Keycloak shows "Invalid parameter: redirect_uri" after **Login with SSO** | The web client's URL is not a redirect URI of `eudiplo-ui` | Add it to `OIDC_UI_URL` and restart the backend, or add `<web client URL>/*` as redirect URI of `eudiplo-ui` in Keycloak when `OIDC_UI_URL` is unset |
 | API calls return 401 after login                     | Token `iss` differs from `OIDC_INTERNAL_ISSUER_URL`/`OIDC`, or wrong `OIDC_ALGORITHM` | Compare the `iss` and `alg` of a token with the configuration |
 | API calls return 401 since `OIDC_AUDIENCE` was set   | The token's `aud` lacks the value                           | Add the audience mapper to a realm default client scope, as in [step 2](#2-configure-eudiplo). Clients that existed before the scope became a default need it added in each client's **Client scopes** tab |
+| API calls return 401 "This token was issued to a client of the realm that EUDIPLO does not manage" | Without `OIDC_AUDIENCE`, the token's `azp` is not `eudiplo-ui`, `AUTH_CLIENT_ID` (with `AUTH_CLIENT_SECRET` set) or a client EUDIPLO manages | Get the token with one of these clients, create the client through EUDIPLO, or set `OIDC_AUDIENCE` as in [step 2](#2-configure-eudiplo) |
 | `This endpoint requires a tenant context`            | User token has no `tenant_id` claim, or it names a tenant that does not exist | Add the mapper from [step 3](#3-put-the-tenant-into-user-tokens) and check the user's attribute against the tenant ID |
 | `403` on an endpoint                                 | Missing realm role                                          | Assign the role listed for the endpoint in the [roles reference](../reference/roles.md#endpoints) |
 | `403` "Cannot grant …" or "Cannot manage …"          | The roles involved go beyond the caller's own               | Assign the realm role to the caller in Keycloak ([granting roles](../reference/roles.md#granting-roles)). A target with a `realm-management` role or another client role can only be managed in Keycloak |

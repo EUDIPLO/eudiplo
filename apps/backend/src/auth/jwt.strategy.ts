@@ -16,6 +16,7 @@ import type { ClientData } from "./client/domain/client-data.js";
 import {
     accessTokenTypeRefusal,
     idTokenClaimRefusal,
+    keycloakClientRefusal,
     keycloakTokenTypeRefusal,
 } from "./domain/access-token-shape.js";
 import { claimValue, roleNames } from "./domain/token-claims.js";
@@ -251,12 +252,14 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
     /**
      * Tokens of the identity provider are checked without asking it. People
      * sign in through the web client's public client and the bootstrap client
-     * has no record here, so a token whose client is unknown keeps the roles
-     * of its claims and gets no resource limits. With `OIDC_PROVIDER=generic`
-     * only records left from an earlier mode exist, matched by `azp`,
-     * `client_id` or `sub`. Deleting a client removes it from Keycloak,
-     * which issues no new tokens to it; tokens it already has stay valid
-     * until they expire.
+     * has no record here, so a token whose client has no record keeps the
+     * roles of its claims and gets no resource limits; with Keycloak and
+     * without `OIDC_AUDIENCE`, only these two clients may lack a record. With
+     * `OIDC_PROVIDER=generic` only records left from an earlier mode exist,
+     * matched by `azp`, `client_id` or `sub`. Deleting a client removes it
+     * from Keycloak, which issues no new tokens to it, and its record; with
+     * `OIDC_AUDIENCE` set, tokens it already has stay valid until they
+     * expire.
      */
     private async validateExternalToken(
         payload: InternalTokenPayload,
@@ -280,8 +283,6 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
             | string
             | undefined;
 
-        const tenantEntity = await this.findTenant(tenantId);
-
         // Keycloak puts the client ID into azp (authorized party) or client_id.
         const subject = (payload as any).sub as string | undefined;
         const authorizedParty =
@@ -295,6 +296,21 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
         if (client) {
             JwtStrategy.assertSameTenant(client, tenantId);
         }
+        // With OIDC_AUDIENCE, the operator chose the clients whose tokens
+        // carry it; other providers require it.
+        const clientRefusal =
+            settings.mode === "keycloak" && !settings.audience
+                ? keycloakClientRefusal(
+                      authorizedParty,
+                      [settings.uiClientId, settings.bootstrapClientId],
+                      client?.clientId,
+                  )
+                : undefined;
+        if (clientRefusal) {
+            throw new UnauthorizedException(clientRefusal);
+        }
+
+        const tenantEntity = await this.findTenant(tenantId);
 
         return {
             entity: tenantEntity,

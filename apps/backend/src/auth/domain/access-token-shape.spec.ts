@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
     accessTokenTypeRefusal,
     idTokenClaimRefusal,
+    keycloakClientRefusal,
     keycloakTokenTypeRefusal,
 } from "./access-token-shape.js";
 
@@ -80,4 +81,42 @@ describe("keycloakTokenTypeRefusal", () => {
             "Not an access token: its typ claim is not Bearer, as on Keycloak access tokens; send the access token",
         );
     });
+});
+
+describe("keycloakClientRefusal", () => {
+    const own = ["eudiplo-ui", undefined];
+    const refusal =
+        "This token was issued to a client of the realm that EUDIPLO does not manage";
+
+    it("accepts EUDIPLO's own clients and the managed client named", () => {
+        expect(
+            keycloakClientRefusal("eudiplo-ui", own, undefined),
+        ).toBeUndefined();
+        expect(keycloakClientRefusal("shop", own, "shop")).toBeUndefined();
+    });
+
+    it("refuses other clients of the realm", () => {
+        expect(keycloakClientRefusal("other-app", own, undefined)).toBe(
+            refusal,
+        );
+    });
+
+    it("refuses a managed client that the token does not name", () => {
+        // Found by sub, as the token has no azp or client_id.
+        expect(keycloakClientRefusal(undefined, own, "user-uuid")).toBe(
+            refusal,
+        );
+    });
+
+    it.each([undefined, "", ["eudiplo-ui"], 42])(
+        "refuses the authorized party %j",
+        (authorizedParty) => {
+            expect(keycloakClientRefusal(authorizedParty, own, "")).toBe(
+                refusal,
+            );
+            expect(keycloakClientRefusal(authorizedParty, own, undefined)).toBe(
+                refusal,
+            );
+        },
+    );
 });

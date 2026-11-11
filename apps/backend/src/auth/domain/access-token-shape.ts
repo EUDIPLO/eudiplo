@@ -70,3 +70,28 @@ export function keycloakTokenTypeRefusal(payload: object): string | undefined {
     }
     return "Not an access token: its typ claim is not Bearer, as on Keycloak access tokens; send the access token";
 }
+
+/**
+ * Why EUDIPLO refuses a Keycloak access token by the client it was issued to,
+ * or `undefined`. Every client of the realm gets access tokens with
+ * `aud: account` and the realm roles of its person or service account, so
+ * without `OIDC_AUDIENCE` only tokens whose authorized party (`azp`, or
+ * `client_id`) is one of EUDIPLO's own clients pass: those in
+ * `ownClientIds`, or the managed client the token's authorized party names.
+ * A managed client found by `sub` does not count.
+ */
+export function keycloakClientRefusal(
+    authorizedParty: unknown,
+    ownClientIds: readonly (string | undefined)[],
+    managedClientId: string | undefined,
+): string | undefined {
+    if (
+        typeof authorizedParty === "string" &&
+        authorizedParty !== "" &&
+        (authorizedParty === managedClientId ||
+            ownClientIds.includes(authorizedParty))
+    ) {
+        return undefined;
+    }
+    return "This token was issued to a client of the realm that EUDIPLO does not manage";
+}
