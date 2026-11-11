@@ -19,12 +19,14 @@ describe("ParseAuthorizationResponse", () => {
             useCase.validateState(response, "wallet-state"),
         ).not.toThrow();
     });
+    // OID4VP 1.0 Section 8.1: the client MUST ignore unrecognized parameters.
     it("ignores response parameters it does not use", () => {
         expect(
             useCase.execute({
                 vp_token: { credential: ["vp"] },
                 iss: "https://wallet.example",
                 exp: 1,
+                foo: "bar",
             }),
         ).toEqual({ vp_token: { credential: ["vp"] }, state: undefined });
     });

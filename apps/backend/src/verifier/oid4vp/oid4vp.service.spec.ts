@@ -1,7 +1,10 @@
-import { errors as joseErrors } from "jose";
+import { ConfigService } from "@nestjs/config";
+import { EncryptJWT, errors as joseErrors } from "jose";
 import { describe, expect, it, vi } from "vitest";
 import { EncryptedResponseRejectedError } from "../../crypto/encryption/encrypted-response-rejected.error.js";
+import { EncryptionService } from "../../crypto/encryption/encryption.service.js";
 import { CryptoImplementationService } from "../../crypto/key/crypto-implementation/crypto-implementation.service.js";
+import { KeyChainService } from "../../crypto/key/key-chain.service.js";
 import { SessionStatus } from "../../session/domain/session-state.js";
 import { SessionNotUsable } from "../../session/domain/session-usability.js";
 import {
@@ -17,7 +20,10 @@ import { FailPresentationResponse } from "./application/fail-presentation-respon
 import { ParseAuthorizationResponse } from "./application/parse-authorization-response.js";
 import { ProcessVerifiedPresentation } from "./application/process-verified-presentation.js";
 import { Oid4vpService } from "./oid4vp.service.js";
-import { VerifierMetadataService } from "./verifier-metadata.service.js";
+import {
+    ENCRYPTED_RESPONSE_ENC_VALUES_SUPPORTED,
+    VerifierMetadataService,
+} from "./verifier-metadata.service.js";
 
 describe("OID4VP state mismatch handling", () => {
     it.each([undefined, "https://client.example/complete/{sessionId}"])(
@@ -843,6 +849,80 @@ describe("OID4VP encrypted response rejection", () => {
         await expect(
             service.getResponse({ response: "encrypted" }, "nonce"),
         ).rejects.toBe(keyLookupFailure);
+    });
+
+    // direct_post.jwt and dc_api.jwt responses reach the same getResponse,
+    // so one response mode covers both.
+    describe("with the encryption the request advertised", () => {
+        const encryptionService = new EncryptionService(
+            {} as KeyChainService,
+            { getOrThrow: () => 5 } as unknown as ConfigService,
+        );
+        const decrypted = new Error("decrypted and parsed");
+
+        async function respond(header: { alg: string; enc: string }) {
+            const { publicJwk, privateJwk } =
+                await encryptionService.generateEphemeralEncryptionKeyPair();
+            const service = Object.assign(
+                Object.create(Oid4vpService.prototype) as Oid4vpService,
+                {
+                    resolveSessionByNonce: vi.fn().mockResolvedValue({
+                        id: "session",
+                        tenantId: "tenant",
+                        requestId: "presentation",
+                        consumed: false,
+                        status: SessionStatus.Active,
+                        responseEncryptionPrivateJwk: privateJwk,
+                    }),
+                    logger: { debug: vi.fn() },
+                    traceService: { getSpan: () => undefined },
+                    encryptionService,
+                    parseAuthorizationResponse: {
+                        execute: vi.fn().mockReturnValue({
+                            vp_token: {},
+                        }),
+                    },
+                    settings: {},
+                    presentationConfigService: {
+                        // Stops the flow once the response is decrypted
+                        // and parsed.
+                        getPresentationConfig: vi
+                            .fn()
+                            .mockRejectedValue(decrypted),
+                    },
+                },
+            );
+            // jose refuses a JWK whose alg differs from the header.
+            const response = await new EncryptJWT({ vp_token: {} })
+                .setProtectedHeader(header)
+                .encrypt({ ...publicJwk, alg: header.alg });
+            return service.getResponse({ response }, "nonce");
+        }
+
+        it.each(ENCRYPTED_RESPONSE_ENC_VALUES_SUPPORTED)(
+            "decrypts a response with alg ECDH-ES and enc %s",
+            async (enc) => {
+                await expect(respond({ alg: "ECDH-ES", enc })).rejects.toBe(
+                    decrypted,
+                );
+            },
+        );
+
+        it.each([
+            ["alg ECDH-ES+A128KW", { alg: "ECDH-ES+A128KW", enc: "A128GCM" }],
+            ["alg ECDH-ES+A256KW", { alg: "ECDH-ES+A256KW", enc: "A256GCM" }],
+            ["enc A128CBC-HS256", { alg: "ECDH-ES", enc: "A128CBC-HS256" }],
+        ])(
+            "answers a response with %s, which the request did not advertise, with HTTP 400",
+            async (_case, header) => {
+                const error = await respond(header).catch((error) => error);
+
+                expect(error.getStatus()).toBe(400);
+                expect(error.message).toMatch(
+                    /^Could not decrypt the authorization response: "(alg|enc)" .* not allowed$/,
+                );
+            },
+        );
     });
 });
 

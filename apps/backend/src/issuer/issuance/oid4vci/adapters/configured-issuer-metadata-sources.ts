@@ -1,4 +1,7 @@
-import type { EncryptionService } from "../../../../crypto/encryption/encryption.service.js";
+import {
+    ENCRYPTION_KEY_MANAGEMENT_ALG,
+    type EncryptionService,
+} from "../../../../crypto/encryption/encryption.service.js";
 import type { CredentialsService } from "../../../configuration/credentials/credentials.service.js";
 import type {
     CredentialRequestEncryptionKey,
@@ -27,6 +30,11 @@ export class ConfiguredIssuerMetadataSources implements IssuerMetadataSources {
         // Requests are always decrypted with ECDH-ES, and wallets must use the
         // advertised alg. The stored alg is not used: a signing key chain
         // with usage type encrypt stores its signing alg (ES256).
-        return { ...key, kty: key.kty, kid: key.kid, alg: "ECDH-ES" };
+        return {
+            ...key,
+            kty: key.kty,
+            kid: key.kid,
+            alg: ENCRYPTION_KEY_MANAGEMENT_ALG,
+        };
     }
 }
