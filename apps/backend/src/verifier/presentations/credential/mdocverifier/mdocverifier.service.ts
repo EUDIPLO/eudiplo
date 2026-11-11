@@ -231,7 +231,12 @@ export class MdocverifierService {
             let revocationListUnavailable = false;
             const verificationContext = withFetch(async (input, init) => {
                 try {
-                    return await this.statusListVerifier.mdocFetch(input, init);
+                    return await this.statusListVerifier.mdocFetch(
+                        input,
+                        init,
+                        options.trustListSource?.tenantId ??
+                            options.federationTrustSource?.tenantId,
+                    );
                 } catch (error) {
                     if (error instanceof RevocationListUnavailableError) {
                         revocationListUnavailable = true;

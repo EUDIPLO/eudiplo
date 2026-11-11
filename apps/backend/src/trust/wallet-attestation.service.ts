@@ -155,6 +155,7 @@ export class WalletAttestationService {
             // Check the status list if present in the attestation JWT
             // Pass the matched entity and trust store for signature verification
             await this.validateAttestationStatus(
+                tenantId,
                 clientAttestation.clientAttestationJwt,
                 matchedEntity,
                 trustStore,
@@ -285,6 +286,7 @@ export class WalletAttestationService {
      * the EUDI Wallet, this is the wallet unit attestation; its status list
      * says whether the wallet unit was revoked. The checks are those of a
      * wallet attestation's status list.
+     * @param tenantId The tenant the key attestation was presented to
      * @param keyAttestationJwt The key attestation JWT
      * @param matchedEntity The trusted entity that signed the attestation
      * @param trustStore The trust store the entity was matched in
@@ -299,6 +301,7 @@ export class WalletAttestationService {
      * status list signature
      */
     async checkKeyAttestationStatus(
+        tenantId: string,
         keyAttestationJwt: string,
         matchedEntity: MatchedTrustedEntity,
         trustStore: BuiltTrustStore,
@@ -306,6 +309,7 @@ export class WalletAttestationService {
     ): Promise<StatusListEntry | undefined> {
         try {
             return await this.validateAttestationStatus(
+                tenantId,
                 keyAttestationJwt,
                 matchedEntity,
                 trustStore,
@@ -365,7 +369,10 @@ export class WalletAttestationService {
             );
         }
         const statusListJwt =
-            await this.statusListVerifierService.getStatusListJwt(uri);
+            await this.statusListVerifierService.getStatusListJwt(
+                uri,
+                tenantId,
+            );
         if (
             !(await this.verifyStatusListSignature(
                 statusListJwt,
@@ -406,6 +413,7 @@ export class WalletAttestationService {
      * Also verifies that the status list JWT is signed by a revocation certificate
      * from the same trusted entity that issued the attestation, or by
      * its wallet attestation certificate if it has no revocation certificate.
+     * @param tenantId The tenant the attestation was presented to
      * @param attestationJwt The wallet or key attestation JWT
      * @param matchedEntity The matched trusted entity from certificate validation
      * @param trustStore The trust store used for validation
@@ -416,6 +424,7 @@ export class WalletAttestationService {
      * suspended, or if the status check failed and the mode does not tolerate it
      */
     private async validateAttestationStatus(
+        tenantId: string,
         attestationJwt: string,
         matchedEntity: MatchedTrustedEntity | null,
         trustStore: BuiltTrustStore | null,
@@ -458,6 +467,7 @@ export class WalletAttestationService {
             const statusListJwt =
                 await this.statusListVerifierService.getStatusListJwt(
                     statusEntry.uri,
+                    tenantId,
                 );
 
             // Verify the status list JWT signature against the revocation cert

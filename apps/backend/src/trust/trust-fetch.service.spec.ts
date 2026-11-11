@@ -189,7 +189,7 @@ describe("TrustFetchService", () => {
             const statusLists = new StatusListVerifierService(trustFetch());
 
             const error = await statusLists
-                .getStatusListJwt(`${loopbackIp}/status/1`)
+                .getStatusListJwt(`${loopbackIp}/status/1`, "tenant-a")
                 .catch((e: unknown) => e);
 
             expect(error).toBeInstanceOf(Error);

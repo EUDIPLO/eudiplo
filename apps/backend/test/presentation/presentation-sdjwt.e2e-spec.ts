@@ -467,6 +467,19 @@ describe("Presentation - SD-JWT Credential", () => {
             expect(sessionRes.body.errorReason).toContain(
                 "Status is not valid",
             );
+
+            // The status list is recorded for the verifier's tenant.
+            const statusUri = (
+                decodeJwt(vp_token.split("~")[0]).status as {
+                    status_list: { uri: string };
+                }
+            ).status_list.uri;
+            const stats = await request(app.getHttpServer())
+                .get("/cache/stats")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            expect(stats.body.statusListCache.uris).toContain(statusUri);
         } finally {
             configService.set(
                 "STATUS_IMMEDIATE_UPDATE",

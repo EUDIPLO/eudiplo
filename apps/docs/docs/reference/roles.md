@@ -17,6 +17,10 @@ the roles in the token.
 Most endpoints also act on the tenant in the token and refuse a token without
 one, such as the root client's. Without a tenant, `tenants:manage` works for the
 `/api/tenant` endpoints and for rotating client secrets.
+The `/api/cache` endpoints, except `DELETE /api/cache/trust-list/sequence-numbers`,
+also accept `tenants:manage` and then cover the caches of all tenants; with
+`issuance:manage` or `presentation:manage` they cover only the caller's tenant
+([which entries](../trust/trust-lists.md#caching)).
 `GET /api/config-bundles/resources/:kind` and
 `GET /api/config-bundles/resources/:kind/:id/document` also check the kind
 ([which roles](config-bundle-format.md#management-api)).

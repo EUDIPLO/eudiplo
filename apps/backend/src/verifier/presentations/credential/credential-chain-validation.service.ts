@@ -366,9 +366,13 @@ export class CredentialChainValidationService {
     /**
      * Fetch a status list JWT with caching.
      * Delegates to StatusListVerifierService.
+     * @param tenantId The tenant whose presentation is verified
      */
-    async fetchStatusListJwt(uri: string): Promise<string> {
-        return this.statusListVerifier.getStatusListJwt(uri);
+    async fetchStatusListJwt(
+        uri: string,
+        tenantId: string | undefined,
+    ): Promise<string> {
+        return this.statusListVerifier.getStatusListJwt(uri, tenantId);
     }
 
     /**

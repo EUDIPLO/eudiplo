@@ -15,7 +15,7 @@ export enum Role {
     Clients = "clients:manage",
     // to manage the tenant's human users with the roles the caller may grant
     Users = "users:manage",
-    // platform operator role, needs no tenant: to create, change and delete any tenant, rotate client secrets, and use a tenant's configuration bundles, key export and KMS provider settings
+    // platform operator role, needs no tenant: to create, change and delete any tenant, rotate client secrets, see the cached status lists and clear the trust list, federation and status list caches of all tenants, and use a tenant's configuration bundles, key export and KMS provider settings
     Tenants = "tenants:manage",
     // to manage the current tenant's full configuration: configuration bundles, key export and KMS provider settings; a caller with it may grant every role except tenants:manage and tenant:admin
     TenantAdmin = "tenant:admin",

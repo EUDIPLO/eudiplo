@@ -127,7 +127,11 @@ export class SdjwtvcverifierService {
                 ...(enableStatusCheck
                     ? {
                           statusListFetcher: (uri: string) =>
-                              this.chainValidation.fetchStatusListJwt(uri),
+                              this.chainValidation.fetchStatusListJwt(
+                                  uri,
+                                  options.trustListSource?.tenantId ??
+                                      options.federationTrustSource?.tenantId,
+                              ),
                           statusVerifier: (data: string, signature: string) => {
                               // Verify status list JWT with a key of the same
                               // federation entity, or the revocation cert of
