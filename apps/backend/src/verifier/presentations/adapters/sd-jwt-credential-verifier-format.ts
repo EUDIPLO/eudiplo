@@ -17,6 +17,7 @@ import {
     isClaimSelectionSatisfied,
     sdJwtRequiredClaimKeys,
 } from "../domain/dcql-claim-policy.js";
+import type { TransactionDataKeyBinding } from "../domain/transaction-data-binding.js";
 
 /**
  * SD-JWT VC verifier format. The verifier enforces the requested claims and
@@ -58,7 +59,6 @@ export class SdJwtCredentialVerifierFormat implements CredentialVerifierFormat {
                 keyBindingNonce: binding.sessionNonce!,
                 keyBindingAudience: this.keyBindingAudience(binding),
                 ...context.options,
-                keyBindingResponseMode: binding.request?.response_mode,
             });
         } catch (error) {
             if (!(error instanceof SdJwtVerificationError)) {
@@ -110,6 +110,10 @@ export class SdJwtCredentialVerifierFormat implements CredentialVerifierFormat {
             missingClaims: context.claimSets ? [] : results[0].missing,
             mismatchedClaims: satisfied ? [] : mismatchedClaims(results),
             claimSetSatisfied,
+            // Checked against the request's transaction data once every
+            // credential is verified, since an entry referencing several
+            // credentials needs its hash in only one of them.
+            keyBinding: (result.kb?.payload ?? {}) as TransactionDataKeyBinding,
         };
     }
 

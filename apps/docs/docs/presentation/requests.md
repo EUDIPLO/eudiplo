@@ -23,7 +23,7 @@ A minimal request only names the flow and the configuration:
 
 ### Override rules
 
-`webhook`, `redirectUri`, `transaction_data` and `skewSeconds` in the request replace the values of the presentation configuration for this session only. Values are replaced, not merged: a request `webhook` replaces the configuration's webhook endpoint, and request `transaction_data` replaces the whole configured list. `clientIdScheme`, `expected_origin` and `reference` exist only on requests. ISO 18013-7 requests use only `webhook`, `skewSeconds`, `expected_origin` and `reference` (see [below](#iso-18013-7-annex-c)).
+`webhook`, `redirectUri`, `transaction_data` and `skewSeconds` in the request replace the values of the presentation configuration for this session only. Values are replaced, not merged: a request `webhook` replaces the configuration's webhook endpoint, and request `transaction_data` replaces the whole configured list. `clientIdScheme`, `expected_origin` and `reference` exist only on requests. ISO 18013-7 requests use only `webhook`, `skewSeconds`, `expected_origin` and `reference`, and refuse transaction data (see [below](#iso-18013-7-annex-c)).
 
 `reference` (optional, up to 255 characters) stores an identifier of your system with the session, for example an order or case ID. It is returned with the session, sent in the presentation webhook, and you can [find the session](../concepts/sessions.md#finding-sessions) by it later. It is stored in plaintext and stays when sessions are anonymized, so it must never contain personal data.
 
@@ -47,7 +47,7 @@ The request expires after the configuration's `lifeTime` (default 300 seconds). 
 
 | Status | Cause                                                                                    |
 | ------ | ---------------------------------------------------------------------------------------- |
-| `400`  | The body does not match the schema, `x509_san_dns` was requested for a certificate without DNS name, or `openid_federation` for a tenant without federation verifier entity, or, for `dc-api` and `iso-18013-7`, `expected_origin` is missing (unless `allowedOrigins` lists exactly one origin), not an `http(s)` origin, or not in the configuration's [`allowedOrigins`](configure-verification.md#allowed-origins-digital-credentials-api). |
+| `400`  | The body does not match the schema, `x509_san_dns` was requested for a certificate without DNS name, or `openid_federation` for a tenant without federation verifier entity, or, for `dc-api` and `iso-18013-7`, `expected_origin` is missing (unless `allowedOrigins` lists exactly one origin), not an `http(s)` origin, or not in the configuration's [`allowedOrigins`](configure-verification.md#allowed-origins-digital-credentials-api). Also when a `transaction_data` entry, from the request or else the configuration, breaks the rules in [Which credentials an entry may reference](transaction-data.md#which-credentials-an-entry-may-reference), or an `iso-18013-7` request would carry transaction data. |
 | `403`  | The API client is not allowed to use this `requestId`.                                   |
 | `404`  | No usable access key chain: none exists, `accessKeyChainId` points to none, or its certificate is invalid. |
 | `409`  | No presentation configuration with this `requestId` exists.                              |
@@ -155,7 +155,8 @@ Differences from the OpenID4VP flows:
 - Only the first `mso_mdoc` credential of the DCQL query is requested; its `meta.doctype_value` is required. Other credentials, `credential_sets` and `claim_sets` are ignored.
 - Every element is requested with intent to retain `false`, whatever `intent_to_retain` says.
 - Request at least one claim. Without `claims`, EUDIPLO still sends the request with an empty element list, which ISO 18013-5 does not allow, so wallets may reject it.
-- `redirectUri`, `transaction_data` and `clientIdScheme` from the request are ignored; the configuration's `redirectUri` still applies after a successful presentation.
+- `redirectUri` and `clientIdScheme` from the request are ignored; the configuration's `redirectUri` still applies after a successful presentation.
+- The request cannot carry transaction data, so it answers `400` when the request sets `transaction_data` entries, or the configuration has some and the request does not send `"transaction_data": []`. Otherwise the session would complete without the holder authorizing the transaction.
 - `expected_origin` must equal the origin of the page that calls the DC API, because the session transcript is bound to it. The same rules as for `dc-api` apply: it is required unless the configuration's [`allowedOrigins`](configure-verification.md#allowed-origins-digital-credentials-api) lists exactly one origin, and must be one of them when they are set.
 - Elements the wallet does not return are not rejected separately, and `values` constraints are not checked; check the claims in the result.
 - Set [`readerAuth`](configure-verification.md#reader-authentication-iso-18013-7) to sign the request so the wallet can authenticate the verifier.

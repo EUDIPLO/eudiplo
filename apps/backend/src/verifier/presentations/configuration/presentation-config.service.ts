@@ -22,6 +22,11 @@ import { loadJsonFile } from "../../../shared/utils/config-file-loader.util.js";
 import { unregisteredTrustAnchorsMessage } from "../../../trust/federation-trust-anchor/domain/federation-trust-anchor-errors.js";
 import { FederationTrustAnchorService } from "../../../trust/federation-trust-anchor/federation-trust-anchor.service.js";
 import {
+    type TransactionDataCredentialQuery,
+    type TransactionDataReferences,
+    uncheckableTransactionData,
+} from "../domain/transaction-data-references.js";
+import {
     type CredentialQueryAuthorities,
     federationTrustAnchorIds,
     missingTrustedAuthorities,
@@ -91,6 +96,7 @@ export class PresentationConfigService {
                 deleteExisting: async (tid, data) => {
                     // Reject before deleting, so an invalid file does not
                     // remove the stored config.
+                    requireCheckableTransactionData(data);
                     await this.requireTrustedAuthorities(tid, data);
                     await this.registrationCertificates.validateImported({
                         ...normalizeRegistrationCertFormFields(data),
@@ -152,6 +158,7 @@ export class PresentationConfigService {
         actorToken?: TokenPayload,
         requestMeta?: AuditLogRequestMeta,
     ) {
+        requireCheckableTransactionData(vprequest);
         await this.requireTrustedAuthorities(tenantId, vprequest);
         const normalizedRequest =
             normalizeRegistrationCertFormFields(vprequest);
@@ -209,6 +216,7 @@ export class PresentationConfigService {
             id,
             tenantId,
         } as PresentationConfig;
+        requireCheckableTransactionData(merged);
         await this.requireTrustedAuthorities(tenantId, merged, existing);
 
         // Return quickly; resolve registration-certificate cache asynchronously.
@@ -364,4 +372,23 @@ function sanitizeForLog(config: PresentationConfig): Record<string, unknown> {
         allowedOrigins: config.allowedOrigins,
         readerAuth: config.readerAuth,
     };
+}
+
+/**
+ * Every transaction data entry must reference only `dc+sd-jwt` credential
+ * queries of the DCQL query, the only ones EUDIPLO can check (see
+ * `uncheckableTransactionData`).
+ * @throws BadRequestException naming the entries that break the rule.
+ */
+function requireCheckableTransactionData(config: {
+    transaction_data?: readonly TransactionDataReferences[] | null;
+    dcql_query?: { credentials: readonly TransactionDataCredentialQuery[] };
+}): void {
+    const violation = uncheckableTransactionData(
+        config.transaction_data,
+        config.dcql_query?.credentials ?? [],
+    );
+    if (violation) {
+        throw new BadRequestException(violation);
+    }
 }

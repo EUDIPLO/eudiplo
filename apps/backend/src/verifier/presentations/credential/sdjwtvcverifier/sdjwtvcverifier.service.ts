@@ -1,7 +1,4 @@
-import { createHash } from "node:crypto";
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { Oauth2ServerErrorResponseError } from "@openid4vc/oauth2";
-import { Openid4vpVerifier } from "@openid4vc/openid4vp";
 import { digest } from "@owf/crypto";
 import { SDJwtVcInstance, VerificationResult } from "@sd-jwt/sd-jwt-vc";
 import { decodeJwt, decodeProtectedHeader, JWK } from "jose";
@@ -49,26 +46,6 @@ export class SdJwtVerificationError extends BadRequestException {
     }
 }
 
-const notUsedForTransactionData = (): never => {
-    throw new Error("Not used to verify transaction data");
-};
-
-/**
- * Checks transaction data hashes. `verifyTransactionData` only uses the
- * `hash` callback.
- */
-const transactionDataVerifier = new Openid4vpVerifier({
-    callbacks: {
-        // HashAlgorithm values are sha-256, sha-384 and sha-512.
-        hash: (data, alg) =>
-            createHash(alg.replace("-", "")).update(data).digest(),
-        signJwt: notUsedForTransactionData,
-        verifyJwt: notUsedForTransactionData,
-        encryptJwe: notUsedForTransactionData,
-        decryptJwe: notUsedForTransactionData,
-    },
-});
-
 @Injectable()
 export class SdjwtvcverifierService {
     constructor(
@@ -86,9 +63,9 @@ export class SdjwtvcverifierService {
      * Creates a fresh SDJwtVcInstance per verification to safely capture
      * the matched TrustedEntity for status list verification.
      *
-     * If transaction data is provided in options, this method also validates
-     * that the KB-JWT contains matching transaction_data_hashes.
-     * See OID4VP spec Appendix B.3.3.1 for details.
+     * Transaction data hashes in the KB-JWT are not checked here: an entry
+     * may reference several credentials, so they are checked across the
+     * whole response (see verifyTransactionDataBinding).
      *
      * @param cred
      * @param options
@@ -224,21 +201,6 @@ export class SdjwtvcverifierService {
             this.checkStatusMechanism(result, revocationPolicy.failClosed);
         }
 
-        // Validate transaction data hashes if transaction data was provided
-        if (
-            options.transactionData &&
-            options.transactionData.entries.length > 0
-        ) {
-            await this.validateTransactionDataHashes(
-                result,
-                options.transactionData,
-            );
-        }
-
-        if (options.ts12TransactionData) {
-            this.validateTs12KeyBinding(result, options.keyBindingResponseMode);
-        }
-
         return result;
     }
 
@@ -271,156 +233,6 @@ export class SdjwtvcverifierService {
             throw new BadRequestException(reason);
         }
         this.logger.warn(`${reason}; accepting it in best-effort mode`);
-    }
-
-    /**
-     * Validates that the KB-JWT contains a transaction_data_hashes entry for
-     * every transaction data entry that references the credential (OID4VP
-     * 1.0 Appendix B.3.3.1), with `@openid4vc/openid4vp`: each hash is
-     * calculated over the transaction data string as sent (no base64url
-     * decoding), with the KB-JWT's transaction_data_hashes_alg (default
-     * sha-256), which must be one the entry's transaction_data_hashes_alg
-     * allows (default sha-256). Hashes may come in any order, but each one
-     * matches exactly one entry and the KB-JWT carries no further hashes.
-     *
-     * @param result The verification result containing the KB-JWT payload
-     * @param transactionData The DCQL credential id and the base64url-encoded
-     *   transaction data strings from the request that reference it
-     * @throws BadRequestException if validation fails
-     */
-    private async validateTransactionDataHashes(
-        result: VerificationResult,
-        transactionData: NonNullable<VerifierOptions["transactionData"]>,
-    ): Promise<void> {
-        const { credentialId, entries } = transactionData;
-        const kbPayload = result.kb?.payload as
-            | (Record<string, unknown> & {
-                  transaction_data_hashes?: string[];
-                  transaction_data_hashes_alg?: string;
-              })
-            | undefined;
-
-        if (!kbPayload) {
-            throw new BadRequestException(
-                "Transaction data was provided but KB-JWT is missing",
-            );
-        }
-
-        const receivedHashes = kbPayload.transaction_data_hashes;
-
-        if (!receivedHashes || !Array.isArray(receivedHashes)) {
-            throw new BadRequestException(
-                "Transaction data was provided but KB-JWT does not contain transaction_data_hashes",
-            );
-        }
-
-        if (receivedHashes.length !== entries.length) {
-            throw new BadRequestException(
-                `Transaction data hash count mismatch: expected ${entries.length}, received ${receivedHashes.length}`,
-            );
-        }
-
-        let verified: Awaited<
-            ReturnType<Openid4vpVerifier["verifyTransactionData"]>
-        >;
-        try {
-            verified = await transactionDataVerifier.verifyTransactionData({
-                transactionData: entries,
-                credentials: {
-                    [credentialId]: [
-                        {
-                            transaction_data_hashes: receivedHashes,
-                            transaction_data_hashes_alg:
-                                kbPayload.transaction_data_hashes_alg,
-                        },
-                    ],
-                },
-            });
-        } catch (error) {
-            if (error instanceof Oauth2ServerErrorResponseError) {
-                throw new BadRequestException(
-                    error.errorResponse.error_description ??
-                        "Transaction data hashes do not match",
-                );
-            }
-            throw error;
-        }
-
-        // The library finds each entry's hash anywhere in the list, so two
-        // identical entries could share one hash and leave another unchecked.
-        // Each entry therefore uses up one occurrence of its hash.
-        const unmatched = [...receivedHashes];
-        const oneToOne = verified.every(({ presentations }) =>
-            presentations.every(({ hash }) => {
-                const index = unmatched.indexOf(hash);
-                if (index === -1) return false;
-                unmatched.splice(index, 1);
-                return true;
-            }),
-        );
-        if (!oneToOne) {
-            throw new BadRequestException(
-                "Transaction data hashes do not match the transaction data entries one to one",
-            );
-        }
-
-        this.logger.debug(
-            `Transaction data hashes validated successfully (${entries.length} entries)`,
-        );
-    }
-
-    private validateTs12KeyBinding(
-        result: VerificationResult,
-        expectedResponseMode: string | undefined,
-    ): void {
-        const kbPayload = result.kb?.payload as
-            | {
-                  amr?: unknown;
-                  jti?: unknown;
-                  response_mode?: unknown;
-                  transaction_data_hashes_alg?: unknown;
-              }
-            | undefined;
-
-        if (!kbPayload || typeof kbPayload.jti !== "string" || !kbPayload.jti) {
-            throw new BadRequestException(
-                "TS12 KB-JWT requires a non-empty jti",
-            );
-        }
-        if (kbPayload.response_mode !== expectedResponseMode) {
-            throw new BadRequestException(
-                "TS12 KB-JWT response_mode does not match the request",
-            );
-        }
-        if (kbPayload.transaction_data_hashes_alg !== "sha-256") {
-            throw new BadRequestException(
-                "TS12 KB-JWT requires transaction_data_hashes_alg sha-256",
-            );
-        }
-        if (!Array.isArray(kbPayload.amr)) {
-            throw new BadRequestException("TS12 KB-JWT requires an amr array");
-        }
-
-        const categories = new Set(
-            kbPayload.amr.flatMap((entry) => {
-                if (
-                    !entry ||
-                    typeof entry !== "object" ||
-                    Array.isArray(entry)
-                ) {
-                    return [];
-                }
-                return Object.keys(entry as Record<string, unknown>).filter(
-                    (key) =>
-                        ["knowledge", "possession", "inherence"].includes(key),
-                );
-            }),
-        );
-        if (categories.size < 2) {
-            throw new BadRequestException(
-                "TS12 KB-JWT amr requires at least two distinct SCA factor categories",
-            );
-        }
     }
 
     /**

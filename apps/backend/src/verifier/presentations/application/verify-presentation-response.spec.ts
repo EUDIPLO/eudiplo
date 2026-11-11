@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { base64url } from "jose";
 import { describe, expect, it, vi } from "vitest";
 import type { SessionData } from "../../../session/domain/session-data.js";
@@ -6,6 +7,7 @@ import type {
     CredentialVerifierFormat,
 } from "../domain/credential-verifier-format.js";
 import { UnknownClaimSetReferenceError } from "../domain/dcql-claim-policy.js";
+import { TransactionDataBindingError } from "../domain/transaction-data-binding.js";
 import { InvalidTrustedAuthoritiesError } from "../ports/trust-list-ref-resolver.js";
 import type { PresentationSettings } from "../presentation-settings.js";
 import { CredentialVerifierFormatRegistry } from "./credential-verifier-format-registry.js";
@@ -323,26 +325,137 @@ describe("VerifyPresentationResponse", () => {
         expect(error.code).toBeUndefined();
     });
 
-    it("passes only the transaction data that references the credential", async () => {
-        const forPid = encode({
-            type: "urn:eudi:sca:payment",
-            credential_ids: ["pid"],
+    describe("transaction data", () => {
+        const hash = (encoded: string) =>
+            createHash("sha256").update(encoded).digest("base64url");
+        const shared = encode({
+            type: "payment",
+            credential_ids: ["pid", "card"],
         });
-        const forOther = encode({ type: "other", credential_ids: ["other"] });
-        const { run, format } = setup(
-            [{ id: "pid" }],
-            {},
-            {
-                transaction_data: [forPid, forOther],
-            },
-        );
 
-        await run({ pid: ["vp"] });
-        const { options } = vi.mocked(format.verify).mock.calls[0][1];
-        expect(options.transactionData).toEqual({
-            credentialId: "pid",
-            entries: [forPid],
+        /** Verifies `pid` and `card`, with a KB-JWT per presentation. */
+        const setupTwoCredentials = (
+            keyBindings: Record<string, Record<string, unknown> | undefined>,
+        ) => {
+            const context = setup(
+                [{ id: "pid" }, { id: "card" }],
+                {},
+                { transaction_data: [shared] },
+            );
+            vi.mocked(context.format.verify).mockImplementation(
+                async (credential) => ({
+                    verified: true,
+                    claims: { credential },
+                    missingClaims: [],
+                    mismatchedClaims: [],
+                    keyBinding: keyBindings[credential],
+                }),
+            );
+            return context;
+        };
+
+        it("accepts an entry whose hash only one of its referenced credentials carries", async () => {
+            const { run } = setupTwoCredentials({
+                "pid-vp": {},
+                "card-vp": { transaction_data_hashes: [hash(shared)] },
+            });
+
+            await expect(
+                run({ pid: ["pid-vp"], card: ["card-vp"] }),
+            ).resolves.toEqual([
+                { id: "pid", values: [{ credential: "pid-vp" }] },
+                { id: "card", values: [{ credential: "card-vp" }] },
+            ]);
         });
-        expect(options.ts12TransactionData).toBe(true);
+
+        it("rejects an entry whose hash none of its referenced credentials carries", async () => {
+            const { run } = setupTwoCredentials({
+                "pid-vp": {},
+                "card-vp": {},
+            });
+
+            const error = await run({
+                pid: ["pid-vp"],
+                card: ["card-vp"],
+            }).catch((e) => e);
+            expect(error).toBeInstanceOf(TransactionDataBindingError);
+            expect(error.message).toContain(
+                "any presented credential it references (pid, card)",
+            );
+        });
+
+        it("rejects an entry when only formats without key-binding claims are presented", async () => {
+            // mdoc returns no keyBinding: nothing could authorize the entry.
+            const { run } = setupTwoCredentials({});
+
+            const error = await run({
+                pid: ["pid-vp"],
+                card: ["card-vp"],
+            }).catch((e) => e);
+            expect(error).toBeInstanceOf(TransactionDataBindingError);
+            expect(error.message).toContain(
+                "Transaction data entry 0 references no presented SD-JWT VC (pid, card)",
+            );
+        });
+
+        it("accepts an entry that one presented SD-JWT VC authorizes next to an mdoc", async () => {
+            const { run } = setupTwoCredentials({
+                "card-vp": { transaction_data_hashes: [hash(shared)] },
+            });
+
+            await expect(
+                run({ pid: ["pid-vp"], card: ["card-vp"] }),
+            ).resolves.toHaveLength(2);
+        });
+
+        it("reports credential verification failures before transaction data", async () => {
+            // Neither carries the hash, so the binding check would fail too.
+            const { run, format } = setupTwoCredentials({
+                "pid-vp": {},
+                "card-vp": {},
+            });
+            vi.mocked(format.verify).mockResolvedValueOnce({
+                verified: false,
+                failure: { message: "invalid" },
+            });
+
+            await expect(
+                run({ pid: ["pid-vp"], card: ["card-vp"] }),
+            ).rejects.toBeInstanceOf(CredentialVerificationFailedError);
+        });
+
+        it("checks TS12 claims against the request's response_mode", async () => {
+            const ts12 = encode({
+                type: "urn:eudi:sca:payment:1",
+                credential_ids: ["pid"],
+            });
+            const keyBinding = {
+                jti: "kb-1",
+                transaction_data_hashes: [hash(ts12)],
+                transaction_data_hashes_alg: "sha-256",
+                amr: [{ knowledge: "pin" }, { possession: "device" }],
+            };
+            const runWith = (responseMode: string) => {
+                const { run } = setup(
+                    [{ id: "pid" }],
+                    {
+                        keyBinding: {
+                            ...keyBinding,
+                            response_mode: responseMode,
+                        },
+                    },
+                    {
+                        transaction_data: [ts12],
+                        response_mode: "direct_post.jwt",
+                    },
+                );
+                return run({ pid: ["vp"] });
+            };
+
+            await expect(runWith("direct_post.jwt")).resolves.toHaveLength(1);
+            await expect(runWith("direct_post")).rejects.toThrow(
+                "TS12 KB-JWT response_mode does not match the request",
+            );
+        });
     });
 });

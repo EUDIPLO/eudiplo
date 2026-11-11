@@ -2,6 +2,7 @@ import type { VerificationProvenance } from "../../../session/domain/session-out
 import type { VerifierOptions } from "../../../trust/types.js";
 import type { VerificationFailureType } from "../credential/verification-failure.js";
 import type { DcqlClaimQuery } from "./dcql-claim-policy.js";
+import type { TransactionDataKeyBinding } from "./transaction-data-binding.js";
 
 /** Values of the signed OID4VP request object that bind the wallet response. */
 export interface SignedRequestValues {
@@ -51,7 +52,7 @@ export interface CredentialVerificationContext {
     /** DCQL credential query id, used in messages and logs. */
     credentialId: string;
     binding: PresentationBinding;
-    /** Trust, revocation, clock-skew and transaction-data options. */
+    /** Trust, revocation and clock-skew options. */
     options: VerifierOptions;
     /** Claims requested by the DCQL credential query. */
     claims?: DcqlClaimQuery[];
@@ -88,6 +89,13 @@ export type CredentialVerificationResult =
           mismatchedClaims: string[];
           /** Whether one of the `claimSets` options is disclosed with requested values. Set only with `claimSets`. */
           claimSetSatisfied?: boolean;
+          /**
+           * Key-binding claims the request's transaction data is checked
+           * against once all credentials are verified. Set by formats whose
+           * transaction data EUDIPLO checks (SD-JWT VC, empty without a
+           * KB-JWT); undefined for mdoc.
+           */
+          keyBinding?: TransactionDataKeyBinding;
       }
     | {
           verified: false;

@@ -200,6 +200,11 @@ export class Iso18013Service {
     /**
      * Create an ISO 18013-7 Annex C offer: build DeviceRequest + encryptionInfo
      * and persist a session for the response phase.
+     *
+     * The request carries no transaction data, so the offer is refused when
+     * the request's `transaction_data`, else the configured list, has
+     * entries: the session would complete without the holder authorizing
+     * them.
      */
     async createOffer(
         requestId: string,
@@ -208,12 +213,18 @@ export class Iso18013Service {
         skewSeconds?: number,
         webhook?: WebhookConfig,
         reference?: string,
+        transactionData?: readonly unknown[],
     ): Promise<Iso18013OfferResponse> {
         const config =
             await this.presentationConfigService.getPresentationConfig(
                 requestId,
                 tenantId,
             );
+        if ((transactionData ?? config.transaction_data)?.length) {
+            throw new BadRequestException(
+                "ISO 18013-7 requests cannot carry transaction data; use response_type uri or dc-api, or send transaction_data: [] to create the request without the configured transaction data",
+            );
+        }
         // The session transcript binds the response to this origin, which
         // the wallet compares with the origin of the calling page.
         const origin = allowedExpectedOrigin(
