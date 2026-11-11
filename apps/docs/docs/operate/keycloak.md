@@ -82,6 +82,22 @@ client. On an existing installation, also add the scope to `eudiplo-ui`, the
 client under **Clients**, then **Client scopes > Add client scope**, type
 **Default**. Otherwise their tokens get `401` once `OIDC_AUDIENCE` is set.
 
+Only bearer access tokens are accepted. The realm signs the ID tokens of all
+its clients with the keys of its access tokens, so EUDIPLO answers `401` "Not
+an access token" to a token whose `typ` claim is present and not `Bearer` (ID
+tokens carry `ID`, DPoP-bound access tokens `DPoP`), to one that carries
+`at_hash`, `c_hash` or `s_hash`, and to one whose JWS header names another
+`typ` than `JWT` or `at+jwt`. A token without `exp` gets `401` "Access token
+has no expiry". Send `access_token` from Keycloak's token
+response, never `id_token`; the web client, the CLI and `@eudiplo/sdk-core`
+already do.
+
+These checks do not tell the clients of the realm apart: without
+`OIDC_AUDIENCE`, the access token of any client in the realm is accepted, with
+the realm roles it carries. If other applications sign in through the same
+realm, set `OIDC_AUDIENCE` as described above, or give EUDIPLO a realm of its
+own.
+
 On every start, EUDIPLO:
 
 - creates the missing realm roles (the [EUDIPLO roles](../reference/roles.md)),

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
     accessTokenTypeRefusal,
     idTokenClaimRefusal,
+    keycloakTokenTypeRefusal,
 } from "./access-token-shape.js";
 
 describe("accessTokenTypeRefusal", () => {
@@ -53,5 +54,30 @@ describe("idTokenClaimRefusal", () => {
         expect(
             idTokenClaimRefusal(Object.create({ at_hash: "h" }) as object),
         ).toBeUndefined();
+    });
+});
+
+describe("keycloakTokenTypeRefusal", () => {
+    it.each([{}, { typ: "Bearer" }, { typ: "bearer" }])(
+        "accepts the payload %j",
+        (payload) => {
+            expect(keycloakTokenTypeRefusal(payload)).toBeUndefined();
+        },
+    );
+
+    it.each([
+        { typ: "ID" },
+        { typ: "Refresh" },
+        { typ: "Offline" },
+        { typ: "Logout" },
+        // Bound to a DPoP key, whose proof the management API does not check.
+        { typ: "DPoP" },
+        { typ: "" },
+        { typ: null },
+        { typ: ["Bearer"] },
+    ])("refuses the payload %j", (payload) => {
+        expect(keycloakTokenTypeRefusal(payload)).toBe(
+            "Not an access token: its typ claim is not Bearer, as on Keycloak access tokens; send the access token",
+        );
     });
 });

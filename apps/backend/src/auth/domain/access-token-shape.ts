@@ -39,12 +39,34 @@ export function accessTokenTypeRefusal(header: {
 
 /**
  * Why a token payload is an ID token rather than an access token, or
- * `undefined`. ID tokens whose audience is `OIDC_AUDIENCE` would otherwise
- * pass the signature, issuer and audience checks.
+ * `undefined`. ID tokens are signed with the keys of the access tokens, so
+ * those whose audience is `OIDC_AUDIENCE`, and with Keycloak without it any
+ * of the realm, would otherwise pass the signature, issuer and audience checks.
  */
 export function idTokenClaimRefusal(payload: object): string | undefined {
     const claim = ID_TOKEN_CLAIMS.find((name) => Object.hasOwn(payload, name));
     return claim
         ? `Not an access token: the token carries ${claim}, which only ID tokens carry; send the access token`
         : undefined;
+}
+
+/**
+ * Why a Keycloak token payload is not a bearer access token, or `undefined`:
+ * its own `typ` claim is present and not `Bearer`. Keycloak's ID tokens carry
+ * `ID`, its refresh tokens `Refresh` or `Offline`, its logout tokens `Logout`.
+ * Access tokens bound to a DPoP key (`DPoP`) are refused too: the management
+ * API takes them as bearer tokens and checks no proof. A token without the
+ * claim passes; the other checks still apply to it.
+ */
+export function keycloakTokenTypeRefusal(payload: object): string | undefined {
+    const typ = Object.hasOwn(payload, "typ")
+        ? (payload as { typ: unknown }).typ
+        : undefined;
+    if (typ === undefined) {
+        return undefined;
+    }
+    if (typeof typ === "string" && typ.toLowerCase() === "bearer") {
+        return undefined;
+    }
+    return "Not an access token: its typ claim is not Bearer, as on Keycloak access tokens; send the access token";
 }
