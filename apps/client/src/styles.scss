@@ -1,9 +1,10 @@
 /* You can add global styles to this file, and also import other style files */
 @use '@angular/material' as mat;
 @use 'styles/a11y';
+@use 'styles/theme-colors';
 
 :root {
-  --eudiplo-info: #1976d2;
+  --eudiplo-info: #343dff; // brand primary, tone 40
   --eudiplo-success: #2e7d32;
   --eudiplo-warning: #e65100;
   --eudiplo-danger: #c62828;
@@ -25,8 +26,8 @@ html {
   @include mat.theme(
     (
       color: (
-        primary: mat.$blue-palette,
-        tertiary: mat.$orange-palette,
+        primary: theme-colors.$primary-palette,
+        tertiary: theme-colors.$tertiary-palette,
         theme-type: light,
       ),
       typography: Roboto,
@@ -37,7 +38,7 @@ html {
   &.dark-theme {
     color-scheme: dark;
 
-    --eudiplo-info: #90caf9;
+    --eudiplo-info: #bec2ff; // brand primary, tone 80
     --eudiplo-success: #81c784;
     --eudiplo-warning: #ffb74d;
     --eudiplo-danger: #ef9a9a;
@@ -46,8 +47,8 @@ html {
     @include mat.theme(
       (
         color: (
-          primary: mat.$blue-palette,
-          tertiary: mat.$orange-palette,
+          primary: theme-colors.$primary-palette,
+          tertiary: theme-colors.$tertiary-palette,
           theme-type: dark,
         ),
         typography: Roboto,

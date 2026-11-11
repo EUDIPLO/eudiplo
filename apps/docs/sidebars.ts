@@ -164,6 +164,7 @@ const sidebars: SidebarsConfig = {
       items: ['upgrade/9.x-to-10.0', 'upgrade/8.x-to-9.0', 'upgrade/7.x-to-8.0', 'upgrade/6.x-to-7.0'],
     },
     'showcase',
+    'brand',
   ],
 };
 

@@ -9,6 +9,7 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#eef3fa" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#070f24" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/svg+xml" href="/logo.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -25,12 +26,12 @@
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="640">
-<meta property="og:image:alt" content="The EUDIPLO logo: a handshake inside a wallet.">
+<meta property="og:image:alt" content="The EUDIPLO logo: Diplo the diplodocus, with a credential on its back.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="EUDIPLO · Self-hosted middleware for the EU Digital Identity Wallet">
 <meta name="twitter:description" content="Verify and issue EU Digital Identity Wallet credentials with one API call. Open source, runs on your servers, personal data stays with you.">
 <meta name="twitter:image" content="https://eudiplo.dev/eudiplo.png">
-<meta name="twitter:image:alt" content="The EUDIPLO logo: a handshake inside a wallet.">
+<meta name="twitter:image:alt" content="The EUDIPLO logo: Diplo the diplodocus, with a credential on its back.">
 
 <script type="application/ld+json">
 {
@@ -102,18 +103,21 @@
   --ink-soft: #4b5874;
   --line: #d5deeb;
   --line-strong: #b4c2d8;
-  --brand: #0656b6;
-  --brand-soft: #e2ecfb;
+  --brand: #343dff;
+  --brand-soft: #e0e0ff;
   --brand-on: #ffffff;
+  --fold: #ffdcc7;
+  --diplo-dark-body: #bec2ff;
+  --diplo-dark-fold: #723600;
   --deep: #041f64;
   --deep-ink: #e9f0fc;
   --deep-soft: #a9bbe0;
   --deep-line: rgba(255, 255, 255, 0.14);
   --deep-chip: rgba(255, 255, 255, 0.07);
-  --signal: #f3c300;
-  --signal-ink: #231b00;
-  --signal-soft: #fbf1c4;
-  --signal-text: #6b5300;
+  --signal: #ffb787;
+  --signal-ink: #311300;
+  --signal-soft: #ffdcc7;
+  --signal-text: #964900;
   --ok: #0a7d55;
   --ok-soft: #def4ea;
   --code-bg: #0a1631;
@@ -142,11 +146,10 @@
   --card-mdl-b: #0b3d4f;
   --card-staff-a: #0e8a5f;
   --card-staff-b: #064431;
-  --mark-tile: transparent;
   --header-bg: rgba(238, 243, 250, 0.86);
   --shadow: 0 1px 2px rgba(10, 26, 60, 0.06), 0 14px 34px -14px rgba(10, 26, 60, 0.25);
   --shadow-lg: 0 30px 60px -22px rgba(10, 26, 60, 0.5);
-  --guilloche-rgb: 6, 86, 182;
+  --guilloche-rgb: 52, 61, 255;
   --guilloche-a: 0.16;
 
   --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
@@ -162,22 +165,22 @@
     --ink-soft: #a2b1cd;
     --line: #1f3159;
     --line-strong: #33497a;
-    --brand: #63a8ff;
-    --brand-soft: #14294f;
-    --brand-on: #04122e;
+    --brand: var(--diplo-dark-body);
+    --brand-soft: #1b2160;
+    --brand-on: #00006e;
+    --fold: var(--diplo-dark-fold);
     --deep: #030918;
     --deep-line: rgba(255, 255, 255, 0.1);
-    --signal-soft: #3a3207;
-    --signal-text: #f6d75a;
+    --signal-soft: #502400;
+    --signal-text: #ffb787;
     --ok: #43d39b;
     --ok-soft: #0e3326;
     --code-bg: #040b1d;
     --code-line: rgba(255, 255, 255, 0.08);
-    --mark-tile: #e8eff9;
     --header-bg: rgba(7, 15, 36, 0.82);
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 14px 34px -14px rgba(0, 0, 0, 0.6);
     --shadow-lg: 0 30px 60px -22px rgba(0, 0, 0, 0.75);
-    --guilloche-rgb: 99, 168, 255;
+    --guilloche-rgb: 190, 194, 255;
     --guilloche-a: 0.11;
     color-scheme: dark;
   }
@@ -234,10 +237,10 @@ section { scroll-margin-top: 72px; }
   display: inline-flex; align-items: center; gap: 10px; text-decoration: none;
   font: 750 21px/1 var(--display); letter-spacing: -0.01em;
 }
-.mark {
-  width: 34px; height: 34px; flex: none; border-radius: 9px;
-  background: var(--mark-tile) url("mark.png") center / 86% no-repeat;
-}
+/* Diplo, drawn from the #diplo symbol; 640:404 is its aspect ratio. */
+.mark { width: 46px; height: 29px; flex: none; --mark-body: var(--brand); --mark-fold: var(--fold); }
+/* The core node sits on the deep background in both schemes. */
+.node.core .mark { --mark-body: var(--diplo-dark-body); --mark-fold: var(--diplo-dark-fold); }
 .primary-nav { display: flex; gap: 2px; margin-left: auto; }
 .primary-nav a {
   padding: 8px 12px; border-radius: 8px; text-decoration: none; white-space: nowrap;
@@ -824,9 +827,10 @@ h1 em { font-style: normal; color: var(--brand); }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><symbol id="diplo" viewBox="45 285 640 404"><path style="fill:var(--mark-body)" d="M58 638.5C47.3 638.5 46.1 623.8 56.8 621.9C134.6 608.5 214.4 587.1 224.6 538.1V511.1C224.6 487.5 242.7 468.8 266 468.8H394.8L453.6 500.7C491.2 485.7 506.9 440.4 531.4 377.3C549.7 329.9 565.7 288.8 616.4 288.8H660.1C671.2 288.8 679.7 297.3 679.7 308.6V320.1C679.7 332 671.1 341 658.8 342.4L617.5 346.4C597 348.6 588.1 361.8 583.5 379.1C573.6 428.7 556.8 526.1 536.2 583.6C525.6 612.2 511.3 629.3 485.8 637.6V672.7C485.8 679.8 480.6 685.1 473.3 685.1H432.1C424.7 685.1 419.2 679.8 419.2 672.7V640.7Q419.2 638.5 417 638.5H293.8Q291.5 638.5 291.5 640.8V672.7C291.5 679.8 286.2 685.1 278.9 685.1H237.8C230.7 685.1 225.1 679.8 225.1 672.7V640.8Q225.1 638.5 222.9 638.5Z"/><path style="fill:var(--mark-fold)" d="M391.8 468.6C391.8 463.5 396.4 461 400.6 463.8L514.4 542.1C519.7 545.7 516.9 552.4 511.8 552.4H414.8C401.8 552.4 391.8 542.3 391.8 529.5Z"/></symbol></svg>
 <header class="site-header">
   <div class="wrap">
-    <a class="brand" href="#top" aria-label="EUDIPLO home"><span class="mark" role="img" aria-label="EUDIPLO logo"></span>EUDIPLO</a>
+    <a class="brand" href="#top" aria-label="EUDIPLO home"><svg class="mark" viewBox="0 0 640 404" aria-hidden="true" focusable="false"><use href="#diplo"/></svg>EUDIPLO</a>
     <button class="menu-toggle" id="menu-toggle" type="button" aria-expanded="false" aria-controls="primary-nav" aria-label="Menu"><i aria-hidden="true"></i><span class="menu-label">Menu</span></button>
     <nav class="primary-nav" id="primary-nav" aria-label="Main">
       <a href="#how">How it works</a>
@@ -1300,7 +1304,7 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
         </div>
         <div class="conn" aria-hidden="true"><div class="wire"></div><span>REST · webhooks</span></div>
         <div class="node core">
-          <span class="brand"><span class="mark" aria-hidden="true"></span>EUDIPLO</span>
+          <span class="brand"><svg class="mark" viewBox="0 0 640 404" aria-hidden="true" focusable="false"><use href="#diplo"/></svg>EUDIPLO</span>
           <p>Issuer, verifier and trust anchor in one service, with separate tenants for each organization or product.</p>
           <ul><li>Issuance</li><li>Verification</li><li>Trust lists</li><li>Status lists</li><li>Keys</li><li>Sessions</li><li>Tenants</li></ul>
         </div>
@@ -1428,7 +1432,7 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
   <div class="wrap">
     <div class="foot-grid">
       <div>
-        <a class="brand" href="#top"><span class="mark" aria-hidden="true"></span>EUDIPLO</a>
+        <a class="brand" href="#top"><svg class="mark" viewBox="0 0 640 404" aria-hidden="true" focusable="false"><use href="#diplo"/></svg>EUDIPLO</a>
         <p>Open-source middleware for the EU Digital Identity Wallet. An LF Decentralized Trust project.</p>
       </div>
       <div>
@@ -1452,6 +1456,7 @@ TOKEN=$(<span class="tf">curl</span> -s -X POST https://eudiplo.example.com/api/
         <h4>Project</h4>
         <ul>
           <li><a href="https://docs.eudiplo.dev/showcase">Who uses EUDIPLO</a></li>
+          <li><a href="https://docs.eudiplo.dev/brand">Logo and colors</a></li>
           <li><a href="https://eudiplo.dev/schemas/index.json">Configuration schemas</a></li>
           <li><a href="https://github.com/EUDIPLO/eudiplo/blob/main/LICENSE">License (Apache-2.0)</a></li>
         </ul>
