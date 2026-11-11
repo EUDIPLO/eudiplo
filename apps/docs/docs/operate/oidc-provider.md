@@ -24,6 +24,7 @@ EUDIPLO accepts an access token only when all of this holds:
 | Check | Requirement |
 | ----- | ----------- |
 | Format | A JWT (three parts). Opaque tokens get `401` "Access token is not a JWT" |
+| Token type | The JWS header has no `typ`, or `JWT` or `at+jwt` (also with the `application/` prefix, in any case), and the token carries no `at_hash`, `c_hash` or `s_hash`, which only ID tokens carry. Otherwise `401` "Not an access token: …" |
 | `iss` | Exactly `OIDC`, including a trailing slash |
 | Signature | A key from the discovery document's `jwks_uri` (or `OIDC_JWKS_URI`), algorithm `OIDC_ALGORITHM` |
 | `aud` | Contains `OIDC_AUDIENCE` |
@@ -39,9 +40,10 @@ no roles.
 
 Choose an audience that only EUDIPLO's access tokens carry, such as an API
 identifier. Some providers also put a client ID into ID tokens; with that as
-audience, an ID token of the same client would be accepted as well. Where the
-provider offers no other audience, as in the [Authentik example](#example-authentik),
-keep its token lifetimes short.
+audience, an ID token of the same client passes the audience check. The token
+type check refuses it only when it carries one of the hashes above. Where the
+provider offers no other audience and its ID tokens carry no hash, as in the
+[Authentik example](#example-authentik), keep its token lifetimes short.
 
 ## 2. Configure EUDIPLO
 
@@ -85,7 +87,9 @@ The web client then offers an **SSO** tab and reads the provider's endpoints
 from its discovery document. It requests the scope `openid` only, so the
 provider must put the audience and the claims of step 1 into that access token
 (see the provider notes below). Logging out also ends the session at the
-provider when the provider has an `end_session_endpoint`.
+provider when the provider has an `end_session_endpoint`. The web client opens
+it with a GET, which every provider accepts, so the `id_token_hint` is part of
+the address and can reach the browser history and access logs.
 
 What changes in this mode, such as the hidden **API Clients** and **Users**
 pages, is summarized in
@@ -105,7 +109,7 @@ client or service account. The CLI's `config export`, `plan`, `import`,
 or `EUDIPLO_TOKEN` ([CLI](cli.md#environment-variables)). `EudiploClient` of
 `@eudiplo/sdk-core` and the CLI's other commands fetch tokens only from the
 built-in server, so pass the provider's token yourself
-([API reference](../reference/api.md#authentication)). Which client
+([`@eudiplo/sdk-core`](../reference/api.md#eudiplosdk-core)). Which client
 limits these tokens get is described in
 [Tenants and access](tenants-and-access.md#external-oidc-provider-and-human-users).
 
@@ -133,9 +137,10 @@ limits these tokens get is described in
 5. Set the provider's **Redirect URIs** as in step 3, and set
    `OIDC_UI_CLIENT_ID` to its client ID.
 6. Decode an access token and set `OIDC_AUDIENCE` to its `aud` value. Authentik
-   puts the provider's client ID there, which its ID tokens carry as well, so
-   this audience does not tell them apart: EUDIPLO also accepts the provider's
-   ID tokens as access tokens. When someone logs out, the web client passes the
+   puts the provider's client ID there. Its access token is its ID token plus
+   `azp`, `uid` and `scope`, with the same audience and no hash, so EUDIPLO
+   cannot tell them apart and also accepts the provider's ID tokens as access
+   tokens. When someone logs out, the web client passes the
    ID token to Authentik in the logout address (`id_token_hint`), where it can
    end up in browser history and proxy or access logs. Keep the provider's
    **Access token validity** short, to limit how long such a token can be used.
@@ -181,6 +186,7 @@ in the first four rows.
 | Startup fails after about 60 seconds with a network error, "status code …" or a JSON error | The backend cannot reach the provider at the URL in the error, or something else answers there | Set `OIDC_INTERNAL_ISSUER_URL` to the address the backend reaches, or start the provider first |
 | Startup warns: "The discovery document names the token endpoint … at the internal address" | The provider builds its URLs from the address the backend used (`OIDC_INTERNAL_ISSUER_URL`). EUDIPLO advertises this token endpoint to machine clients, which cannot reach it | Configure the provider's public host name, so its discovery document names public URLs |
 | `401` "Access token is not a JWT…" | The provider issues opaque access tokens | Switch it to JWT access tokens (see the provider notes) |
+| `401` "Not an access token: …" | The caller sent an ID token or another kind of token, or the provider puts another `typ` than `JWT` or `at+jwt` into its access tokens' header | Send the access token of the token response, not the ID token. If real access tokens get this, check their header's `typ` |
 | `401` "Access token has no expiry" | The provider issues access tokens without `exp` | Give the provider's access tokens a lifetime |
 | `401` without a reason | Wrong `aud`, `iss`, key or algorithm | Decode a token and compare it with step 1 |
 | "This endpoint requires a tenant context" | The token has no tenant claim, or the tenant does not exist | Map the claim named by `OIDC_SUB`, and create the tenant |

@@ -6,7 +6,10 @@ import {
     Logger,
     NotFoundException,
 } from "@nestjs/common";
-import { Oauth2ServerErrorResponseError } from "@openid4vc/oauth2";
+import {
+    Oauth2ErrorCodes,
+    Oauth2ServerErrorResponseError,
+} from "@openid4vc/oauth2";
 import {
     CreateCredentialResponseReturn,
     type CredentialRequest,
@@ -19,10 +22,7 @@ import {
 import { errors as joseErrors } from "jose";
 import { Span, TraceService } from "nestjs-otel";
 import { v4 } from "uuid";
-import {
-    ENCRYPTION_KEY_MANAGEMENT_ALG,
-    EncryptionService,
-} from "../../../crypto/encryption/encryption.service.js";
+import { EncryptionService } from "../../../crypto/encryption/encryption.service.js";
 import { ChangeSessionState } from "../../../session/application/change-session-state.js";
 import { ExternalSessionBindingError } from "../../../session/application/resolve-external-authorization-session.js";
 import { SessionNotFound } from "../../../session/application/session-errors.js";
@@ -69,6 +69,10 @@ import { DeferredCredentialService } from "./deferred-credential.service.js";
 import { AuthorizationServerError } from "./domain/authorization-server-errors.js";
 import { InvalidCredentialOffer } from "./domain/credential-offer-errors.js";
 import { InvalidCredentialProof } from "./domain/credential-proof-errors.js";
+import {
+    checkCredentialRequestJweHeader,
+    InvalidCredentialRequestEncryption,
+} from "./domain/credential-request-encryption.js";
 import type { KeyAttestationRequirements } from "./domain/key-attestation-requirements.js";
 import { NotificationRequestDto } from "./dto/notification-request.dto.js";
 import { OfferRequestDto, OfferResponse } from "./dto/offer-request.dto.js";
@@ -338,26 +342,48 @@ export class Oid4vciService {
                 );
             }
             // Decrypted here, before the library checks the JWE header, so the
-            // checks below can answer with their own codes. Only the advertised
-            // alg and enc are decrypted: the answer to any other must not depend
-            // on the plaintext.
-            const encValues =
-                issuerMetadata.credentialIssuer.credential_request_encryption
-                    ?.enc_values_supported ?? [];
+            // checks below can answer with their own codes. The header is
+            // checked first: the answer to a header the issuer refuses must
+            // not depend on the plaintext.
+            const requestEncryption =
+                issuerMetadata.credentialIssuer.credential_request_encryption;
+            try {
+                checkCredentialRequestJweHeader(jweString, requestEncryption);
+            } catch (error) {
+                if (error instanceof InvalidCredentialRequestEncryption) {
+                    throw new CredentialRequestException(
+                        "invalid_encryption_parameters",
+                        error.message,
+                    );
+                }
+                throw error;
+            }
             try {
                 requestBody =
                     await this.encryptionService.decryptJweToJson<CredentialRequest>(
                         jweString,
                         tenantId,
-                        { contentEncryptionAlgorithms: encValues },
+                        {
+                            contentEncryptionAlgorithms:
+                                requestEncryption.enc_values_supported,
+                        },
                     );
             } catch (error) {
-                throw new CredentialRequestException(
-                    "invalid_encryption_parameters",
-                    error instanceof joseErrors.JOSEAlgNotAllowed
-                        ? `Credential request JWE must use alg '${ENCRYPTION_KEY_MANAGEMENT_ALG}' and an enc of ${encValues.map((value) => `'${value}'`).join(", ")}`
-                        : "Failed to decrypt encrypted credential request",
-                );
+                switch (requestDecryptionFailure(error)) {
+                    case "not-json":
+                        throw new CredentialRequestException(
+                            "invalid_credential_request",
+                            "Decrypted credential request is not valid JSON",
+                        );
+                    case "wallet":
+                        throw new CredentialRequestException(
+                            "invalid_encryption_parameters",
+                            "Failed to decrypt encrypted credential request",
+                        );
+                    case "server":
+                        this.logRequestDecryptionFailure(tenantId, error);
+                        throw requestDecryptionServerError(error);
+                }
             }
         } else if (rawBody && typeof rawBody === "object") {
             requestBody = rawBody as CredentialRequest;
@@ -787,6 +813,18 @@ export class Oid4vciService {
     }
 
     /**
+     * Log why a credential request could not be decrypted on the issuer's
+     * side. The error response carries no detail, and the exception filter
+     * does not log the cause.
+     */
+    private logRequestDecryptionFailure(tenantId: string, error: unknown) {
+        this.logger.error(
+            `[${tenantId}] Could not decrypt a credential request: ${error instanceof Error ? error.message : String(error)}`,
+            error instanceof Error ? error.stack : undefined,
+        );
+    }
+
+    /**
      * Handle deferred credential request (OpenID4VCI 1.0 Section 9).
      * Called when wallet polls with transaction_id. The request is parsed by
      * the library with the encryption rules of the credential endpoint, and
@@ -826,23 +864,22 @@ export class Oid4vciService {
                         { contentEncryptionAlgorithms: requestEncValues },
                     );
                 } catch (error) {
-                    // Decrypted, but not JSON: hand the library a payload it
-                    // refuses as an invalid credential request.
-                    if (error instanceof SyntaxError) {
-                        return {
-                            decrypted: true,
-                            decryptionJwk: options.jwk,
-                            payload: "",
-                        };
+                    switch (requestDecryptionFailure(error)) {
+                        // Hand the library a payload it refuses as an
+                        // invalid credential request.
+                        case "not-json":
+                            return {
+                                decrypted: true,
+                                decryptionJwk: options.jwk,
+                                payload: "",
+                            };
+                        case "wallet":
+                            return { decrypted: false };
+                        // The library reports it as a server error.
+                        case "server":
+                            this.logRequestDecryptionFailure(tenantId, error);
+                            throw error;
                     }
-                    // A JWE that does not decrypt with the advertised key is
-                    // the wallet's error. Anything else (no key chain, KMS
-                    // failure) is a server error, which the library reports
-                    // as such.
-                    if (isWalletDecryptionError(error)) {
-                        return { decrypted: false };
-                    }
-                    throw error;
                 }
                 return {
                     decrypted: true,
@@ -926,16 +963,46 @@ export type DeferredCredentialResult = Awaited<
 >;
 
 /**
- * A JWE the tenant key cannot decrypt, or with an alg or enc the issuer did
- * not advertise.
+ * A failure to decrypt a credential request that is not the wallet's (key
+ * lookup or import, KMS failure), reported as the library reports it at the
+ * deferred credential endpoint.
  */
-function isWalletDecryptionError(error: unknown): boolean {
-    return (
+function requestDecryptionServerError(
+    cause: unknown,
+): Oauth2ServerErrorResponseError {
+    return new Oauth2ServerErrorResponseError(
+        {
+            error: Oauth2ErrorCodes.ServerError,
+            error_description: "Unable to decrypt credential request",
+        },
+        {
+            status: 500,
+            cause,
+            internalMessage: "Error decoding encrypted credential request",
+        },
+    );
+}
+
+/**
+ * Why `decryptJweToJson` failed for a credential or deferred credential
+ * request: `not-json` when it decrypted to something that is not JSON;
+ * `wallet` for a JWE the tenant key cannot decrypt, or with an alg or enc the
+ * issuer did not advertise; `server` for anything else (key lookup or import,
+ * KMS failure).
+ */
+function requestDecryptionFailure(
+    error: unknown,
+): "not-json" | "wallet" | "server" {
+    if (error instanceof SyntaxError) return "not-json";
+    if (
         error instanceof joseErrors.JOSEAlgNotAllowed ||
         error instanceof joseErrors.JWEDecryptionFailed ||
         error instanceof joseErrors.JWEInvalid ||
         error instanceof joseErrors.JOSENotSupported
-    );
+    ) {
+        return "wallet";
+    }
+    return "server";
 }
 
 /** True for a JSON object (not an array or null). */

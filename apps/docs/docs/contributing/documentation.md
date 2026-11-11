@@ -28,7 +28,7 @@ The build also writes `llms.txt` (an index of all pages) and `llms-full.txt` (ev
 
 ## Where content goes
 
-The sidebar order is Start, Cookbooks, Issuance, Presentation, Trust, Operate, Reference, Concepts, Contributing, Upgrade.
+The sidebar order is Start, Cookbooks, Issuance, Presentation, Trust, Operate, Reference, Concepts, Contributing, Upgrade, then the project pages.
 
 | Folder | Content | Page type |
 | --- | --- | --- |
@@ -40,6 +40,7 @@ The sidebar order is Start, Cookbooks, Issuance, Presentation, Trust, Operate, R
 | `contributing/` | Working on EUDIPLO itself | How-to |
 | `upgrade/` | Upgrade procedure and one guide per major version | How-to |
 | `troubleshooting.md` | Symptoms shared by several pages | Reference |
+| `showcase.md`, `brand.md` | Project pages: who uses EUDIPLO, logo files and colors | Reference |
 
 Page types:
 

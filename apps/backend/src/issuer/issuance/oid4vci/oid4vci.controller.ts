@@ -17,6 +17,7 @@ import {
     ApiResponse,
     ApiTags,
 } from "@nestjs/swagger";
+import { Oauth2ServerErrorResponseError } from "@openid4vc/oauth2";
 import type {
     CreateCredentialResponseReturn,
     CredentialResponse,
@@ -92,6 +93,15 @@ export class Oid4vciController {
                 console.log(err);
                 // Re-throw if already a spec-compliant CredentialRequestException
                 if (err instanceof CredentialRequestException) {
+                    throw err;
+                }
+                // A decryption failure on the issuer's side (key lookup or
+                // import, KMS) is not the wallet's error; it stays a server
+                // error, as at the deferred credential endpoint.
+                if (
+                    err instanceof Oauth2ServerErrorResponseError &&
+                    err.status >= 500
+                ) {
                     throw err;
                 }
 

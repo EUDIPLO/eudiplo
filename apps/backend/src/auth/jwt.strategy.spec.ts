@@ -260,6 +260,7 @@ describe("JwtStrategy", () => {
         test("accepts a person's token without a stored client", async () => {
             const user = await strategy.validate({
                 tenant_id: "acme",
+                exp: NOW + 300,
                 sub: "user-uuid",
                 azp: "eudiplo-ui",
                 realm_access: { roles: [Role.Issuances] },
@@ -269,6 +270,59 @@ describe("JwtStrategy", () => {
             expect(user.client).toBeUndefined();
             expect(user.entity?.id).toBe("acme");
         });
+
+        test("accepts a bearer access token", async () => {
+            const user = await strategy.validate({
+                tenant_id: "acme",
+                exp: NOW + 300,
+                sub: "user-uuid",
+                typ: "Bearer",
+                azp: "eudiplo-ui",
+                realm_access: { roles: [Role.Issuances] },
+            } as never);
+
+            expect(user.roles).toEqual([Role.Issuances]);
+        });
+
+        test("refuses an ID token, which any client of the realm gets", async () => {
+            // Without OIDC_AUDIENCE, its aud (the client) is not checked.
+            await expect(
+                strategy.validate({
+                    tenant_id: "acme",
+                    exp: NOW + 300,
+                    sub: "user-uuid",
+                    typ: "ID",
+                    azp: "other-app",
+                    aud: "other-app",
+                    at_hash: "h",
+                    realm_access: { roles: [Role.Issuances] },
+                } as never),
+            ).rejects.toThrow(
+                new UnauthorizedException(
+                    "Not an access token: the token carries at_hash, which only ID tokens carry; send the access token",
+                ),
+            );
+            expect(clientsProvider.getClientById).not.toHaveBeenCalled();
+        });
+
+        test.each(["ID", "Refresh", "Offline", "Logout", "DPoP", ""])(
+            "refuses a token whose typ claim is %j",
+            async (typ) => {
+                await expect(
+                    strategy.validate({
+                        tenant_id: "acme",
+                        exp: NOW + 300,
+                        sub: "user-uuid",
+                        typ,
+                        realm_access: { roles: [Role.Issuances] },
+                    } as never),
+                ).rejects.toThrow(
+                    new UnauthorizedException(
+                        "Not an access token: its typ claim is not Bearer, as on Keycloak access tokens; send the access token",
+                    ),
+                );
+            },
+        );
 
         test("keeps the roles of the claims and adds the stored client", async () => {
             clients.set("shop", {
@@ -280,6 +334,7 @@ describe("JwtStrategy", () => {
 
             const user = await strategy.validate({
                 tenant_id: "acme",
+                exp: NOW + 300,
                 azp: "shop",
                 roles: [Role.IssuanceOffer],
             } as never);
@@ -295,6 +350,7 @@ describe("JwtStrategy", () => {
 
             const user = await strategy.validate({
                 tenant_id: "gone",
+                exp: NOW + 300,
                 azp: "eudiplo-ui",
                 realm_access: { roles: [Role.Issuances] },
             } as never);
@@ -310,6 +366,7 @@ describe("JwtStrategy", () => {
             await expect(
                 strategy.validate({
                     tenant_id: "acme",
+                    exp: NOW + 300,
                     azp: "shop",
                     roles: [Role.IssuanceOffer],
                 } as never),
@@ -331,6 +388,7 @@ describe("JwtStrategy", () => {
 
             const user = await withClaim.validate({
                 tenant_id: "acme",
+                exp: NOW + 300,
                 azp: "eudiplo-ui",
                 realm_access: { roles: [Role.Tenants] },
                 resource_access: { eudiplo: { roles: [Role.Issuances] } },
@@ -379,6 +437,7 @@ describe("JwtStrategy", () => {
         test("takes no roles from a roles claim that is a string", async () => {
             const user = await strategy.validate({
                 tenant_id: "acme",
+                exp: NOW + 300,
                 sub: "user-uuid",
                 roles: "not-tenant:admin-really",
             } as never);
@@ -386,14 +445,17 @@ describe("JwtStrategy", () => {
             expect(user.roles).toEqual([]);
         });
 
-        test("accepts a token without expiry, as before", async () => {
-            const user = await strategy.validate({
-                tenant_id: "acme",
-                sub: "user-uuid",
-                realm_access: { roles: [Role.Issuances] },
-            } as never);
-
-            expect(user.roles).toEqual([Role.Issuances]);
+        test("refuses a token without expiry, which would never expire", async () => {
+            // Such as a signed userinfo response, which has no typ claim.
+            await expect(
+                strategy.validate({
+                    tenant_id: "acme",
+                    sub: "user-uuid",
+                    realm_access: { roles: [Role.Issuances] },
+                } as never),
+            ).rejects.toThrow(
+                new UnauthorizedException("Access token has no expiry"),
+            );
         });
 
         test("rejects a token whose client ID now belongs to another tenant", async () => {
@@ -406,6 +468,7 @@ describe("JwtStrategy", () => {
             await expect(
                 strategy.validate({
                     tenant_id: "acme",
+                    exp: NOW + 300,
                     azp: "shop",
                     roles: [Role.IssuanceOffer],
                 } as never),
@@ -452,6 +515,33 @@ describe("JwtStrategy", () => {
             expect(user.entity?.id).toBe("acme");
             expect(user.subject).toBe("person");
             expect(user.client).toBeUndefined();
+        });
+
+        test("ignores a typ claim, which only Keycloak defines", async () => {
+            const user = await strategyFor(settings, metadata).validate({
+                tenant_id: "acme",
+                sub: "person",
+                exp: NOW + 300,
+                typ: "something-else",
+            } as never);
+
+            expect(user.subject).toBe("person");
+        });
+
+        test("refuses an ID token that carries the audience too", async () => {
+            const strategy = strategyFor(settings, metadata);
+
+            await expect(
+                strategy.validate({
+                    tenant_id: "acme",
+                    sub: "person",
+                    exp: NOW + 300,
+                    nonce: "n",
+                    at_hash: "h",
+                } as never),
+            ).rejects.toThrow(
+                "Not an access token: the token carries at_hash, which only ID tokens carry; send the access token",
+            );
         });
 
         describe("client records left from an earlier mode", () => {

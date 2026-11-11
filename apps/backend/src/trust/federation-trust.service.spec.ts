@@ -272,6 +272,75 @@ describe("FederationTrustService", () => {
         expect(resolveEntity).toHaveBeenCalledTimes(2);
     });
 
+    it("clears only the resolutions a tenant used", async () => {
+        const keys = anchorKeys();
+        keys.findPinnedKeys.mockImplementation(
+            async (_tenantId: string, ids: string[]) =>
+                new Map(
+                    ids
+                        .filter((id) => id === TA)
+                        .map((id) => [id, { keys: [taJwk] }]),
+                ),
+        );
+        service = new FederationTrustService({ resolveEntity }, keys);
+        resolveEntity.mockResolvedValue(resolution());
+        const other = { ...source, tenantId: "other" };
+        const issuer = ["openid_credential_issuer"];
+        const authorizationServer = ["oauth_authorization_server"];
+
+        await service.resolveEntity(ENTITY, source, issuer);
+        await service.resolveEntity(ENTITY, other, authorizationServer);
+        service.clearTrustCache("other");
+
+        await service.resolveEntity(ENTITY, source, issuer);
+        expect(resolveEntity).toHaveBeenCalledTimes(2);
+        await service.resolveEntity(ENTITY, other, authorizationServer);
+        expect(resolveEntity).toHaveBeenCalledTimes(3);
+    });
+
+    it("keeps the earlier resolution of a shared entry when a tenant clears it", async () => {
+        const keys = anchorKeys();
+        keys.findPinnedKeys.mockImplementation(
+            async (_tenantId: string, ids: string[]) =>
+                new Map(
+                    ids
+                        .filter((id) => id === TA)
+                        .map((id) => [id, { keys: [taJwk] }]),
+                ),
+        );
+        service = new FederationTrustService({ resolveEntity }, keys);
+        const earlier = resolution();
+        resolveEntity.mockResolvedValueOnce(earlier);
+        const other = { ...source, tenantId: "other" };
+
+        await service.resolveEntity(ENTITY, source);
+        await service.resolveEntity(ENTITY, other);
+        service.clearTrustCache("other");
+
+        resolveEntity.mockRejectedValue(
+            new FederationResolutionError("timeout", "unavailable"),
+        );
+        await expect(service.resolveEntity(ENTITY, source)).resolves.toBe(
+            earlier,
+        );
+        // Resolved again: the shared entry was cleared, its fallback kept.
+        expect(resolveEntity).toHaveBeenCalledTimes(2);
+    });
+
+    it("drops the earlier resolution of an entry only the clearing tenant used", async () => {
+        resolveEntity.mockResolvedValueOnce(resolution());
+
+        await service.resolveEntity(ENTITY, source);
+        service.clearTrustCache("tenant");
+
+        resolveEntity.mockRejectedValue(
+            new FederationResolutionError("timeout", "unavailable"),
+        );
+        await expect(service.resolveEntity(ENTITY, source)).rejects.toThrow(
+            "timeout",
+        );
+    });
+
     it("deduplicates concurrent resolutions", async () => {
         resolveEntity.mockResolvedValue(resolution());
 

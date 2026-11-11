@@ -387,6 +387,44 @@ describe("TrustStoreService list freshness", () => {
         expect(loadVerified).toHaveBeenCalledTimes(4);
     });
 
+    it("lets one tenant fetch an outdated source again after clearing its cache", async () => {
+        vi.useFakeTimers({ now });
+        const loadVerified = vi
+            .fn()
+            .mockResolvedValue(list(new Date(now.getTime() - 60_000)));
+        const { service } = createService(loadVerified);
+        const other = { ...source, tenantId: "other" };
+
+        await expect(service.getTrustStore(source)).rejects.toThrow();
+        await expect(service.getTrustStore(other)).rejects.toThrow();
+        expect(loadVerified).toHaveBeenCalledTimes(4);
+
+        service.clearCache("other");
+        await expect(service.getTrustStore(source)).rejects.toThrow();
+        expect(loadVerified).toHaveBeenCalledTimes(4);
+        await expect(service.getTrustStore(other)).rejects.toThrow();
+        expect(loadVerified).toHaveBeenCalledTimes(6);
+    });
+
+    it("clears only the trust stores of one tenant", async () => {
+        vi.useFakeTimers({ now });
+        const loadVerified = vi
+            .fn()
+            .mockResolvedValue(list(new Date(now.getTime() + 86_400_000)));
+        const { service } = createService(loadVerified);
+        const other = { ...source, tenantId: "other" };
+
+        await service.getTrustStore(source);
+        await service.getTrustStore(other);
+        expect(loadVerified).toHaveBeenCalledTimes(4);
+
+        service.clearCache("other");
+        await service.getTrustStore(source);
+        expect(loadVerified).toHaveBeenCalledTimes(4);
+        await service.getTrustStore(other);
+        expect(loadVerified).toHaveBeenCalledTimes(6);
+    });
+
     it("uses a renewed list fetched after the cached one reached NextUpdate", async () => {
         vi.useFakeTimers({ now });
         const soon = new Date(now.getTime() + 60_000);
@@ -591,10 +629,15 @@ describe("TrustStoreService sequence numbers", () => {
                 { url: "https://trust.example/list", verifierX509Der: "x" },
             ],
         };
+        const other = { ...source, tenantId: "other" };
         await service.getTrustStore(source);
+        await service.getTrustStore(other);
         await service.forgetSequenceNumbers("t");
         expect(numbers.forgetTenant).toHaveBeenCalledWith("t");
         await service.getTrustStore(source);
-        expect(loadVerified).toHaveBeenCalledTimes(2);
+        expect(loadVerified).toHaveBeenCalledTimes(3);
+        // The other tenant's store stays cached.
+        await service.getTrustStore(other);
+        expect(loadVerified).toHaveBeenCalledTimes(3);
     });
 });

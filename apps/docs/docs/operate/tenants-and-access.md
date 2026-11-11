@@ -77,7 +77,9 @@ On the first start, EUDIPLO creates the root client from `AUTH_CLIENT_ID` and
 `AUTH_CLIENT_SECRET`. It has `tenants:manage` and belongs to no tenant, so it
 can create and manage tenants (each new tenant gets a `<tenant>-admin` client)
 and rotate client secrets, but cannot call tenant-scoped endpoints such as
-clients, issuance or presentation configs. Changing the two variables later does not
+clients, issuance or presentation configs. It can also see the cached status lists
+and clear the trust list, federation and status list caches of all tenants
+([roles](../reference/roles.md)). Changing the two variables later does not
 change the stored client; rotate its secret with
 `POST /api/client/<client-id>/rotate-secret` instead.
 
@@ -215,7 +217,12 @@ through Keycloak's admin API. Then:
 Another OpenID Connect provider, such as Authentik, Zitadel, Auth0 or Entra ID,
 works with `OIDC_PROVIDER=generic` for signing in only. EUDIPLO then loads the
 provider's discovery document at startup, checks the issuer, the signing keys
-and the required `OIDC_AUDIENCE`, and accepts only JWT access tokens. The
+and the required `OIDC_AUDIENCE`, and accepts only JWT access tokens; ID
+tokens with that audience are refused when they carry `at_hash`, `c_hash` or
+`s_hash`, and tokens of another `typ` are refused too
+([details](oidc-provider.md#1-plan-the-token-claims)). With Authentik, an ID
+token still works as an access token
+([details](oidc-provider.md#example-authentik)). The
 provider manages clients and people: `/api/client`, `/api/user` and creating a
 tenant with `roles` answer `501` (the web client creates tenants without an
 admin client), and the web client hides **API Clients** and **Users**. Config

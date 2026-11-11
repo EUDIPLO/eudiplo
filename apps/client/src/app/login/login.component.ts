@@ -36,6 +36,7 @@ import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { EnvironmentService } from '../services/environment.service';
 import { ApiService, withoutTrailingSlashes } from '../core';
 import { type OidcProvider, OidcService, oidcProviderOf } from '../core/oidc.service';
+import { DiploLogoComponent } from '../common/diplo-logo.component';
 import { focusFieldToFix, showFieldsToFix } from '../common/field-to-fix.util';
 import { apiErrorDetail, asSentence } from '../utils/error-message';
 import { KEEP_CALLER_FAILURE } from '../services/jwt.service';
@@ -190,6 +191,7 @@ function appPath(returnUrl: unknown): string | undefined {
     MatTabsModule,
     MatTooltipModule,
     FlexLayoutModule,
+    DiploLogoComponent,
   ],
   templateUrl: './login.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,

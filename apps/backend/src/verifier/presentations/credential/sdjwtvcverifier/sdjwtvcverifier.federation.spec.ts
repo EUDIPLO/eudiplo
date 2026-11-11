@@ -81,6 +81,7 @@ function createService(
         {} as any,
         { getCryptoFromJwk: () => ES256 } as any,
         {} as any,
+        {} as any,
         federationTrust as any,
         {
             setContext: vi.fn(),

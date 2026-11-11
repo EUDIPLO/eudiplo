@@ -1,9 +1,13 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { deflateSync } from "node:zlib";
+import { deflateSync, gzipSync } from "node:zlib";
 import { Logger } from "@nestjs/common";
 import { CoseKey, SignatureAlgorithm } from "@owf/mdoc";
-import { StatusList, StatusListCwt } from "@owf/token-status-list";
+import {
+    StatusList,
+    StatusListCbor,
+    StatusListCwt,
+} from "@owf/token-status-list";
 import { base64url, exportJWK } from "jose";
 import {
     afterAll,
@@ -15,8 +19,10 @@ import {
     it,
     vi,
 } from "vitest";
+import { MAX_STATUS_LIST_CAPACITY } from "../issuer/status-list/status-list.service.js";
 import { mdocContext } from "../verifier/presentations/mdoc-context.js";
 import { OutboundUrlPolicyService } from "../webhook/outbound-url-policy.service.js";
+import { MalformedStatusReferenceError } from "./domain/status-list-reference.js";
 import {
     InvalidStatusListTokenError,
     StatusListVerifierService,
@@ -117,10 +123,16 @@ describe("StatusListVerifierService cache", () => {
         ].join(".");
     }
 
-    async function cwt(claims: {
-        ttl?: number;
-        exp?: number;
-    }): Promise<Uint8Array> {
+    async function cwt(
+        claims: {
+            ttl?: number;
+            exp?: number;
+        },
+        statusList: StatusList | StatusListCbor = new StatusList(
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            1,
+        ),
+    ): Promise<Uint8Array> {
         return new StatusListCwt({
             payload: {
                 subject: "status-list",
@@ -129,7 +141,7 @@ describe("StatusListVerifierService cache", () => {
                     ? new Date(claims.exp * 1000)
                     : undefined,
                 timeToLive: claims.ttl,
-                statusList: new StatusList([0, 0, 0, 0, 0, 0, 0, 0], 1),
+                statusList,
             },
             protectedHeaders: new Map<number, unknown>([
                 [1, SignatureAlgorithm.ES256],
@@ -149,13 +161,13 @@ describe("StatusListVerifierService cache", () => {
             token: (claims: { ttl?: number; exp?: number }) =>
                 Promise.resolve(jwt(claims)),
             get: (statusLists: StatusListVerifierService, uri: string) =>
-                statusLists.getStatusListJwt(uri),
+                statusLists.getStatusListJwt(uri, "tenant-a"),
         },
         {
             name: "status list CWTs",
             token: cwt,
             get: (statusLists: StatusListVerifierService, uri: string) =>
-                statusLists.getStatusListCwt(uri),
+                statusLists.getStatusListCwt(uri, "tenant-a"),
         },
     ];
 
@@ -211,22 +223,97 @@ describe("StatusListVerifierService cache", () => {
         });
     });
 
+    describe("status list CWT size", () => {
+        // @owf/mdoc reads these lists itself and turns every status into a
+        // number, so they are refused above 1 MiB decompressed.
+        const mebibyte = 1024 * 1024;
+        const eightBitList = (statuses: number) =>
+            new StatusList(new Array<number>(statuses).fill(0), 8);
+
+        it("accepts the largest list EUDIPLO issues, at eight bits per status", async () => {
+            const statusLists = service();
+            tokens.set(
+                "/max",
+                await cwt({}, eightBitList(MAX_STATUS_LIST_CAPACITY)),
+            );
+
+            await expect(
+                statusLists.getStatusListCwt(`${origin}/max`),
+            ).resolves.toBeInstanceOf(Uint8Array);
+        });
+
+        it("accepts a list that decompresses to exactly 1 MiB", async () => {
+            const statusLists = service();
+            tokens.set("/mebibyte", await cwt({}, eightBitList(mebibyte)));
+
+            await expect(
+                statusLists.getStatusListCwt(`${origin}/mebibyte`),
+            ).resolves.toBeInstanceOf(Uint8Array);
+        });
+
+        it("rejects a gzip-compressed list and does not cache it", async () => {
+            // Token Status List requires the ZLIB format; the library's
+            // decompressor also reads gzip.
+            const statusLists = service();
+            tokens.set(
+                "/gzip",
+                await cwt(
+                    {},
+                    StatusListCbor.create({
+                        statusList: {
+                            bits: 1,
+                            list: gzipSync(new Uint8Array(1)),
+                        },
+                    }),
+                ),
+            );
+
+            await expect(
+                statusLists.getStatusListCwt(`${origin}/gzip`),
+            ).rejects.toThrow(InvalidStatusListTokenError);
+            expect(statusLists.getCacheStats().uris).toEqual([]);
+        });
+
+        it("rejects a larger one before the library reads it and does not cache it", async () => {
+            const statusLists = service();
+            tokens.set("/big", await cwt({}, eightBitList(mebibyte + 1)));
+            const libraryDecompress = vi.spyOn(
+                StatusList,
+                "decompressStatusListFromBytes",
+            );
+
+            const error = await statusLists
+                .getStatusListCwt(`${origin}/big`)
+                .catch((e: unknown) => e);
+
+            expect(error).toBeInstanceOf(InvalidStatusListTokenError);
+            expect((error as Error).message).toContain(
+                `at most ${mebibyte} bytes`,
+            );
+            expect(libraryDecompress).not.toHaveBeenCalled();
+            expect(statusLists.getCacheStats().uris).toEqual([]);
+        });
+    });
+
     it("evicts the least recently used status list beyond 1000 entries", async () => {
         const statusLists = service();
         for (let i = 0; i < 1000; i++) {
-            await statusLists.getStatusListJwt(`${origin}/list/${i}`);
+            await statusLists.getStatusListJwt(
+                `${origin}/list/${i}`,
+                "tenant-a",
+            );
         }
-        await statusLists.getStatusListJwt(`${origin}/list/0`);
+        await statusLists.getStatusListJwt(`${origin}/list/0`, "tenant-a");
         requests = [];
 
-        await statusLists.getStatusListJwt(`${origin}/list/1000`);
+        await statusLists.getStatusListJwt(`${origin}/list/1000`, "tenant-a");
 
         const { jwtCacheSize, uris } = statusLists.getCacheStats();
         expect(jwtCacheSize).toBe(1000);
         expect(uris).toContain(`${origin}/list/0`);
         expect(uris).not.toContain(`${origin}/list/1`);
-        await statusLists.getStatusListJwt(`${origin}/list/0`);
-        await statusLists.getStatusListJwt(`${origin}/list/1`);
+        await statusLists.getStatusListJwt(`${origin}/list/0`, "tenant-a");
+        await statusLists.getStatusListJwt(`${origin}/list/1`, "tenant-a");
         expect(requests).toEqual(["/list/1000", "/list/1"]);
     }, 30_000);
 
@@ -255,10 +342,10 @@ describe("StatusListVerifierService cache", () => {
             uri: `${origin}/a`,
             idx: 0,
         });
-        await statusLists.getStatusListJwt(`${origin}/a`);
-        await statusLists.getStatusListJwt(`${origin}/b`);
+        await statusLists.getStatusListJwt(`${origin}/a`, "tenant-a");
+        await statusLists.getStatusListJwt(`${origin}/b`, "tenant-a");
         tokens.set("/c", await cwt({}));
-        await statusLists.getStatusListCwt(`${origin}/c`);
+        await statusLists.getStatusListCwt(`${origin}/c`, "tenant-a");
 
         statusLists.clearCache(`${origin}/a`);
         expect(statusLists.getCacheStats()).toEqual({
@@ -273,6 +360,33 @@ describe("StatusListVerifierService cache", () => {
             jwtCacheSize: 0,
             uris: [],
         });
+    });
+
+    it("lists and clears only the status lists a tenant used", async () => {
+        const statusLists = service();
+        await statusLists.getStatusListJwt(`${origin}/a`, "tenant-a");
+        await statusLists.getStatusListJwt(`${origin}/b`, "tenant-b");
+        await statusLists.getStatusListJwt(`${origin}/shared`, "tenant-a");
+        await statusLists.getStatusListJwt(`${origin}/shared`, "tenant-b");
+        await statusLists.getStatusListJwt(`${origin}/untracked`, undefined);
+
+        expect(statusLists.getCacheStats("tenant-a")).toEqual({
+            size: 0,
+            jwtCacheSize: 2,
+            uris: [`${origin}/a`, `${origin}/shared`],
+        });
+
+        statusLists.clearTenantCache("tenant-a");
+
+        expect(statusLists.getCacheStats("tenant-a").uris).toEqual([]);
+        // The shared list is fetched again by tenant-b, which then sees it.
+        expect(statusLists.getCacheStats("tenant-b").uris).toEqual([
+            `${origin}/b`,
+        ]);
+        expect(statusLists.getCacheStats().uris).toEqual([
+            `${origin}/b`,
+            `${origin}/untracked`,
+        ]);
     });
 });
 
@@ -432,6 +546,18 @@ describe("StatusListVerifierService.getStatusFromStatusListJwt", () => {
         ).toThrow(/decompressed/);
     });
 
+    it("rejects a gzip-compressed list", () => {
+        const gzip = gzipSync(new Uint8Array(1));
+        expect(() =>
+            statusLists.getStatusFromStatusListJwt(
+                token({
+                    status_list: { bits: 1, lst: base64url.encode(gzip) },
+                }),
+                { uri, idx: 0 },
+            ),
+        ).toThrow(InvalidStatusListTokenError);
+    });
+
     it("decompresses a token once while it is served for the URI", () => {
         const cache = (
             statusLists as unknown as {
@@ -533,10 +659,18 @@ describe("StatusListVerifierService.getStatusEntryFromJwt", () => {
             case: "a fractional idx",
             status: { status_list: { uri: "https://s", idx: 1.5 } },
         },
+        {
+            case: "a relative uri",
+            status: { status_list: { uri: "/status/1", idx: 1 } },
+        },
+        {
+            case: "a uri that is not a URI",
+            status: { status_list: { uri: "not a uri", idx: 1 } },
+        },
     ])("throws for $case", ({ status }) => {
         expect(() =>
             statusLists.getStatusEntryFromJwt(jwtWith({ status })),
-        ).toThrow();
+        ).toThrow(MalformedStatusReferenceError);
     });
 
     it("throws for a token that cannot be decoded", () => {

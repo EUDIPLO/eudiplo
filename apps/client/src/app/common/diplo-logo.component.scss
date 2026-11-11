@@ -1,0 +1,18 @@
+:host {
+  display: inline-block;
+  line-height: 0;
+}
+
+svg {
+  width: 100%;
+  height: 100%;
+}
+
+// Primary and tertiary container give the brand colours in light and dark mode.
+.body {
+  fill: var(--mat-sys-primary);
+}
+
+.fold {
+  fill: var(--mat-sys-tertiary-container);
+}

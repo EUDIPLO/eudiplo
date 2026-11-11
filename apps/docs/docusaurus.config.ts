@@ -248,7 +248,9 @@ const config: Config = {
       title: 'EUDIPLO',
       logo: {
         alt: 'EUDIPLO Logo',
-        src: 'img/logo.svg',
+        // Docusaurus switches between these with its own theme toggle.
+        src: 'img/brand/diplo.svg',
+        srcDark: 'img/brand/diplo-dark.svg',
         href: 'https://eudiplo.dev',
         target: '_self',
       },

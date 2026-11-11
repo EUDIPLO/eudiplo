@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { digest } from "@owf/crypto";
+import { SLException, type StatusListEntry } from "@owf/token-status-list";
+import { Jwt, SDJWTException } from "@sd-jwt/core";
 import { SDJwtVcInstance, VerificationResult } from "@sd-jwt/sd-jwt-vc";
 import { decodeJwt, decodeProtectedHeader, JWK } from "jose";
 import { Span } from "nestjs-otel";
@@ -9,18 +11,24 @@ import {
     CREDENTIAL_ISSUER_METADATA_TYPE,
     findFederationProtocolKey,
 } from "../../../../trust/domain/federation-protocol-keys.js";
+import {
+    MalformedStatusReferenceError,
+    parseStatusListReference,
+} from "../../../../trust/domain/status-list-reference.js";
 import { FederationTrustService } from "../../../../trust/federation-trust.service.js";
 import {
     type FederationResolution,
     FederationResolutionError,
 } from "../../../../trust/ports/federation-resolver.js";
 import {
-    isStatusListUnavailableError,
+    RevocationListUnavailableError,
     resolveRevocationPolicy,
 } from "../../../../trust/revocation-policy.util.js";
+import { StatusListVerifierService } from "../../../../trust/status-list-verifier.service.js";
 import { VerifierOptions } from "../../../../trust/types.js";
 import { MatchedTrustedEntity } from "../../../../trust/x509-validation.service.js";
 import { ResolverService } from "../../../resolver/resolver.service.js";
+import { pidWithoutStatusProblem } from "../../domain/pid-status-requirement.js";
 import { CredentialChainValidationService } from "../credential-chain-validation.service.js";
 import {
     mapChainErrorToFailureType,
@@ -52,6 +60,7 @@ export class SdjwtvcverifierService {
         private readonly resolverService: ResolverService,
         private readonly cryptoService: CryptoImplementationService,
         private readonly chainValidation: CredentialChainValidationService,
+        private readonly statusListVerifier: StatusListVerifierService,
         private readonly federationTrust: FederationTrustService,
         private readonly logger: PinoLogger,
     ) {
@@ -78,106 +87,60 @@ export class SdjwtvcverifierService {
     ): Promise<VerificationResult> {
         const revocationPolicy = resolveRevocationPolicy(options);
 
-        // Why the failure lives out here and matchedEntity does not: the
-        // best-effort branch may call verifyWithStatusMode twice, and the
-        // reason for the first failure must survive into the re-throw below.
         let failure:
             | { failureType: VerificationFailureType; reason?: string }
             | undefined;
+        // The trusted entity the credential matched, or under OpenID
+        // Federation the resolved issuer entity: its status list must be
+        // signed by the same entity.
+        let matchedEntity: MatchedTrustedEntity | null = null;
+        let federationIssuer: FederationResolution | undefined;
+        // Whether the issuer is listed as a PID provider, for the PID rule
+        // of checkStatus.
+        let pidIssuer = false;
 
-        const verifyWithStatusMode = async (
-            enableStatusCheck: boolean,
-        ): Promise<VerificationResult> => {
-            // Closure to capture the matched TrustedEntity during verification
-            let matchedEntity: MatchedTrustedEntity | null = null;
-            // Or, under OpenID Federation, the resolved issuer entity
-            let federationIssuer: FederationResolution | undefined;
-
-            // Create a fresh instance per verification to ensure thread safety
-            const sdjwtInstance = new SDJwtVcInstance({
-                hasher: digest,
-                verifier: async (data: string, signature: string) => {
-                    const result = options.federationTrustSource
-                        ? await this.verifyFederationCredential(
-                              data,
-                              signature,
-                              options,
-                          )
-                        : await this.verifyCredential(data, signature, options);
-                    matchedEntity = result.matchedEntity;
-                    federationIssuer = result.federationIssuer;
-                    if (!result.verified) {
-                        // The library throws a generic error on failure, so the
-                        // structured reason has to be captured here or it is lost.
-                        failure = {
-                            failureType:
-                                result.failureType ?? "verification_error",
-                            reason: result.failureReason,
-                        };
-                    }
-                    return result.verified;
-                },
-                kbVerifier: (data, signature, payload) =>
-                    this.verifyKeyBindingJwt(
-                        data,
-                        signature,
-                        payload,
-                        options.keyBindingAudience,
-                    ),
-                ...(enableStatusCheck
-                    ? {
-                          statusListFetcher: (uri: string) =>
-                              this.chainValidation.fetchStatusListJwt(uri),
-                          statusVerifier: (data: string, signature: string) => {
-                              // Verify status list JWT with a key of the same
-                              // federation entity, or the revocation cert of
-                              // the same trusted entity
-                              return options.federationTrustSource
-                                  ? this.verifyFederationStatusList(
-                                        data,
-                                        signature,
-                                        federationIssuer,
-                                    )
-                                  : this.verifyStatusList(
-                                        data,
-                                        signature,
-                                        options,
-                                        matchedEntity,
-                                    );
-                          },
-                      }
-                    : {}),
-            });
-
-            return sdjwtInstance.verify(cred, options);
-        };
+        // Create a fresh instance per verification to ensure thread safety
+        const sdjwtInstance = new SDJwtVcInstance({
+            hasher: digest,
+            verifier: async (data: string, signature: string) => {
+                const result = options.federationTrustSource
+                    ? await this.verifyFederationCredential(
+                          data,
+                          signature,
+                          options,
+                      )
+                    : await this.verifyCredential(data, signature, options);
+                matchedEntity = result.matchedEntity;
+                federationIssuer = result.federationIssuer;
+                pidIssuer = result.pidIssuer ?? false;
+                if (!result.verified) {
+                    // The library throws a generic error on failure, so the
+                    // structured reason has to be captured here or it is lost.
+                    failure = {
+                        failureType: result.failureType ?? "verification_error",
+                        reason: result.failureReason,
+                    };
+                }
+                return result.verified;
+            },
+            kbVerifier: (data, signature, payload) =>
+                this.verifyKeyBindingJwt(
+                    data,
+                    signature,
+                    payload,
+                    options.keyBindingAudience,
+                ),
+        });
 
         let result: VerificationResult;
         try {
-            if (!revocationPolicy.enabled) {
-                result = await verifyWithStatusMode(false);
-            } else if (revocationPolicy.failClosed) {
-                result = await verifyWithStatusMode(true);
-            } else {
-                try {
-                    result = await verifyWithStatusMode(true);
-                } catch (error) {
-                    if (!isStatusListUnavailableError(error)) {
-                        throw error;
-                    }
-
-                    this.logger.warn(
-                        {
-                            error:
-                                error instanceof Error
-                                    ? error.message
-                                    : String(error),
-                        },
-                        "Status list unavailable in best-effort mode, retrying SD-JWT verification without status check",
-                    );
-                    result = await verifyWithStatusMode(false);
-                }
-            }
+            // The status is checked below, not by the library: it would fetch
+            // the list with the global fetch, outside the outbound URL policy,
+            // and decompress it without a size limit.
+            result = await sdjwtInstance.verify(cred, {
+                ...options,
+                disableStatusVerification: true,
+            });
         } catch (e) {
             // The library throws a generic error when the credential or chain
             // check fails. Re-throw with the captured, machine-readable failure
@@ -198,41 +161,179 @@ export class SdjwtvcverifierService {
         }
 
         if (revocationPolicy.enabled) {
-            this.checkStatusMechanism(result, revocationPolicy.failClosed);
+            await this.checkStatus(
+                result,
+                options,
+                revocationPolicy.failClosed,
+                pidIssuer,
+                // Signed with a key of the same federation entity, or under
+                // a revocation certificate of the same trusted entity
+                (data, signature) =>
+                    options.federationTrustSource
+                        ? this.verifyFederationStatusList(
+                              data,
+                              signature,
+                              federationIssuer,
+                          )
+                        : this.verifyStatusList(
+                              data,
+                              signature,
+                              options,
+                              matchedEntity,
+                          ),
+            );
         }
 
         return result;
     }
 
     /**
-     * The library only checks `status.status_list` and passes any other
-     * `status` claim unchecked. A credential without a `status` claim cannot
-     * be revoked and is accepted, but a `status` claim without a status list
-     * names a status the verifier could not check: strict mode rejects it,
-     * best-effort mode logs it and accepts the credential.
+     * Checks the status of a verified SD-JWT VC (Token Status List Section
+     * 8.3). A malformed `status` claim or `status_list` reference names no
+     * status the verifier could check and is rejected in every mode.
+     *
+     * Two cases leave a status the verifier could not check: strict mode
+     * rejects them, best-effort mode logs them and accepts the credential.
+     * - a `status` object that names only another mechanism;
+     * - no `status` claim on a PID valid for more than 24 hours (see
+     *   {@link pidWithoutStatusProblem}). Its validity runs from `nbf`, else
+     *   `iat`, to `exp`. `iat` may be selectively disclosable: a withheld
+     *   one leaves the start unknown, which counts as longer than 24 hours.
+     *   Other credentials without a `status` claim are left to the policy
+     *   of the relying party (ARF Annex 2 VCR_14) and accepted.
+     *
+     * Best-effort mode also accepts the credential when the status list
+     * cannot be fetched; a list that was fetched but fails its checks,
+     * cannot be read or says the credential is not valid rejects it in every
+     * mode.
+     *
+     * @param pid Whether the issuer is listed as a PID provider
+     * @param verifyListSignature Checks that the status list JWT is signed
+     * by the credential's issuer
      */
-    private checkStatusMechanism(
+    private async checkStatus(
         result: VerificationResult,
+        options: VerifierOptions,
         failClosed: boolean,
-    ): void {
-        const status = (result.payload as Record<string, unknown>).status;
-        if (status === undefined) {
-            return;
+        pid: boolean,
+        verifyListSignature: (
+            data: string,
+            signature: string,
+        ) => Promise<boolean>,
+    ): Promise<void> {
+        const payload = result.payload as Record<string, unknown>;
+        const status = payload.status;
+        let reference: StatusListEntry | undefined;
+        try {
+            reference = parseStatusListReference(status);
+        } catch (error) {
+            if (!(error instanceof MalformedStatusReferenceError)) {
+                throw error;
+            }
+            this.rejectStatus(error.message);
         }
-        const statusList =
-            typeof status === "object" && status !== null
-                ? (status as Record<string, unknown>).status_list
-                : undefined;
-        if (statusList !== undefined) {
+
+        if (!reference) {
+            const reason =
+                status === undefined
+                    ? pidWithoutStatusProblem({
+                          pid,
+                          validFrom:
+                              numericDate(payload.nbf) ??
+                              numericDate(payload.iat),
+                          validUntil: numericDate(payload.exp),
+                      })
+                    : "The credential's status claim contains no supported status mechanism, so its status could not be checked";
+            if (!reason) {
+                return;
+            }
+            if (failClosed) {
+                this.rejectStatus(reason);
+            }
+            this.logger.warn(`${reason}; accepting it in best-effort mode`);
             return;
         }
 
-        const reason =
-            "The credential's status claim contains no supported status mechanism, so its status could not be checked";
-        if (failClosed) {
-            throw new BadRequestException(reason);
+        try {
+            await this.checkStatusListEntry(
+                reference,
+                options,
+                verifyListSignature,
+            );
+        } catch (error) {
+            if (
+                failClosed ||
+                !(error instanceof RevocationListUnavailableError)
+            ) {
+                throw error;
+            }
+            this.logger.warn(
+                { error: error.message },
+                "Status list unavailable in best-effort mode, accepting the SD-JWT VC without status check",
+            );
         }
-        this.logger.warn(`${reason}; accepting it in best-effort mode`);
+    }
+
+    /** Reject the credential for a status it could not be checked by. */
+    private rejectStatus(reason: string): never {
+        this.logger.warn(
+            `SD-JWT-VC verification failed (verification_error): ${reason}`,
+        );
+        throw new SdJwtVerificationError("verification_error", reason);
+    }
+
+    /**
+     * Checks the status a `status_list` reference names (Token Status List
+     * Section 8.3). The status list JWT must be signed by the credential's
+     * issuer; its `alg` and time claims are checked with the signature.
+     * {@link StatusListVerifierService} then checks `typ`, `sub`, `iat` and
+     * `exp` and reads the status: it decompresses the list up to a size
+     * limit and reads the status bits in place. @sd-jwt/sd-jwt-vc
+     * decompresses it without a limit and turns every status into a number,
+     * so a signed list of about a megabyte could take gigabytes.
+     *
+     * @throws RevocationListUnavailableError if the list cannot be fetched
+     */
+    private async checkStatusListEntry(
+        reference: StatusListEntry,
+        options: VerifierOptions,
+        verifyListSignature: (
+            data: string,
+            signature: string,
+        ) => Promise<boolean>,
+    ): Promise<void> {
+        const { uri, idx } = reference;
+        const statusListJwt = await this.statusListVerifier.getStatusListJwt(
+            uri,
+            options.trustListSource?.tenantId ??
+                options.federationTrustSource?.tenantId,
+        );
+
+        const skewSeconds = options.skewSeconds ?? 0;
+        await Jwt.fromEncode(statusListJwt)
+            .verify(verifyListSignature, { skewSeconds })
+            .catch((error: unknown) => {
+                throw Object.assign(
+                    new SLException(
+                        `Status List JWT verification failed: ${error instanceof Error ? error.message : String(error)}`,
+                        { uri },
+                    ),
+                    { cause: error },
+                );
+            });
+
+        const { status, isValid } =
+            this.statusListVerifier.getStatusFromStatusListJwt(
+                statusListJwt,
+                reference,
+                skewSeconds,
+            );
+        if (!isValid) {
+            throw new SDJWTException("Status is not valid", {
+                details: { uri, idx, status },
+                code: "STATUS_INVALID",
+            });
+        }
     }
 
     /**
@@ -250,6 +351,7 @@ export class SdjwtvcverifierService {
         verified: boolean;
         matchedEntity: MatchedTrustedEntity | null;
         federationIssuer?: FederationResolution;
+        pidIssuer?: boolean;
         failureType?: VerificationFailureType;
         failureReason?: string;
     }> {
@@ -306,7 +408,11 @@ export class SdjwtvcverifierService {
                 };
             }
 
-            return { verified: true, matchedEntity: chainResult.matchedEntity };
+            return {
+                verified: true,
+                matchedEntity: chainResult.matchedEntity,
+                pidIssuer: chainResult.pidIssuer,
+            };
         } catch (e: any) {
             this.logger.error(`Error in verifier: ${e?.message ?? e}`);
             return {
@@ -332,6 +438,7 @@ export class SdjwtvcverifierService {
         verified: boolean;
         matchedEntity: null;
         federationIssuer?: FederationResolution;
+        pidIssuer?: boolean;
         failureType?: VerificationFailureType;
         failureReason?: string;
     }> {
@@ -597,6 +704,13 @@ export class SdjwtvcverifierService {
         const verifier = await crypto.getVerifier(jwk);
         return verifier(data, signature);
     }
+}
+
+/** A JWT NumericDate claim, or `undefined` if it is missing or not a number. */
+function numericDate(value: unknown): number | undefined {
+    return typeof value === "number" && Number.isFinite(value)
+        ? value
+        : undefined;
 }
 
 /**

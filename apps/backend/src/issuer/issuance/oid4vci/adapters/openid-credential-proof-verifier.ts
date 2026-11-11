@@ -58,7 +58,13 @@ export class OpenIdCredentialProofVerifier implements CredentialProofVerifier {
         const checkStatus = (
             keyAttestationJwt: string,
             provider: AttestationProofTrust,
-        ) => this.checkStatus(keyAttestationJwt, provider, statusCheckMode);
+        ) =>
+            this.checkStatus(
+                tenantId,
+                keyAttestationJwt,
+                provider,
+                statusCheckMode,
+            );
         return {
             verify: async (
                 proof: string,
@@ -127,6 +133,7 @@ export class OpenIdCredentialProofVerifier implements CredentialProofVerifier {
      * reason is logged
      */
     private async checkStatus(
+        tenantId: string,
         keyAttestationJwt: string,
         provider: AttestationProofTrust,
         statusCheckMode: RevocationCheckMode,
@@ -136,6 +143,7 @@ export class OpenIdCredentialProofVerifier implements CredentialProofVerifier {
         >;
         try {
             entry = await this.walletAttestations.checkKeyAttestationStatus(
+                tenantId,
                 keyAttestationJwt,
                 provider.matchedEntity,
                 provider.trustStore,

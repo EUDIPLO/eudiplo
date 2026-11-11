@@ -810,7 +810,7 @@ export const trustListControllerGetTrustListVersion = <ThrowOnError extends bool
 /**
  * Get cache statistics
  *
- * Returns statistics about the trust list and status list caches.
+ * Returns statistics about the trust list and status list caches. With `issuance:manage` or `presentation:manage`, only the status lists the caller's tenant used; with `tenants:manage`, those of all tenants.
  */
 export const cacheControllerGetStats = <ThrowOnError extends boolean = true>(options?: Options<CacheControllerGetStatsData, ThrowOnError>): RequestResult<CacheControllerGetStatsResponses, unknown, ThrowOnError> => (options?.client ?? client).get<CacheControllerGetStatsResponses, unknown, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -821,7 +821,7 @@ export const cacheControllerGetStats = <ThrowOnError extends boolean = true>(opt
 /**
  * Clear all caches
  *
- * Clears the trust list, OpenID Federation trust and status list caches. Next verification will fetch fresh data.
+ * Clears the trust list, OpenID Federation trust and status list caches. Next verification will fetch fresh data. With `issuance:manage` or `presentation:manage`, only the entries of the caller's tenant: its trust lists, and the status lists and OpenID Federation resolutions it used. Status lists and resolutions are shared, so another tenant that uses one of them too fetches it again. With `tenants:manage`, the entries of all tenants.
  */
 export const cacheControllerClearAllCaches = <ThrowOnError extends boolean = true>(options?: Options<CacheControllerClearAllCachesData, ThrowOnError>): RequestResult<CacheControllerClearAllCachesResponses, unknown, ThrowOnError> => (options?.client ?? client).delete<CacheControllerClearAllCachesResponses, unknown, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -832,7 +832,7 @@ export const cacheControllerClearAllCaches = <ThrowOnError extends boolean = tru
 /**
  * Clear trust list cache
  *
- * Clears the trust list cache and the OpenID Federation trust cache. Next verification will fetch fresh trust lists and re-evaluate federation trust.
+ * Clears the trust list cache and the OpenID Federation trust cache. Next verification will fetch fresh trust lists and re-evaluate federation trust. With `issuance:manage` or `presentation:manage`, only the entries of the caller's tenant: its trust lists, and the status lists and OpenID Federation resolutions it used. Status lists and resolutions are shared, so another tenant that uses one of them too fetches it again. With `tenants:manage`, the entries of all tenants.
  */
 export const cacheControllerClearTrustListCache = <ThrowOnError extends boolean = true>(options?: Options<CacheControllerClearTrustListCacheData, ThrowOnError>): RequestResult<CacheControllerClearTrustListCacheResponses, unknown, ThrowOnError> => (options?.client ?? client).delete<CacheControllerClearTrustListCacheResponses, unknown, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -843,7 +843,7 @@ export const cacheControllerClearTrustListCache = <ThrowOnError extends boolean 
 /**
  * Forget accepted trust list sequence numbers
  *
- * EUDIPLO remembers, per tenant and trust list URL, the highest LoTESequenceNumber it accepted, and discards a list numbered lower as an older version. This forgets the numbers of the caller's tenant and clears the trust list cache, so a list whose publisher numbered it from 1 again is accepted. Until a list is fetched again, an older version of it is accepted too. Lists managed by this EUDIPLO instance are compared with their stored number and are not affected.
+ * EUDIPLO remembers, per tenant and trust list URL, the highest LoTESequenceNumber it accepted, and discards a list numbered lower as an older version. This forgets the numbers of the caller's tenant and clears its trust list cache, so a list whose publisher numbered it from 1 again is accepted. Until a list is fetched again, an older version of it is accepted too. Lists managed by this EUDIPLO instance are compared with their stored number and are not affected.
  */
 export const cacheControllerForgetTrustListSequenceNumbers = <ThrowOnError extends boolean = true>(options?: Options<CacheControllerForgetTrustListSequenceNumbersData, ThrowOnError>): RequestResult<CacheControllerForgetTrustListSequenceNumbersResponses, unknown, ThrowOnError> => (options?.client ?? client).delete<CacheControllerForgetTrustListSequenceNumbersResponses, unknown, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
@@ -854,7 +854,7 @@ export const cacheControllerForgetTrustListSequenceNumbers = <ThrowOnError exten
 /**
  * Clear status list cache
  *
- * Clears the status list (revocation) cache. Next status check will fetch fresh status lists.
+ * Clears the status list (revocation) cache. Next status check will fetch fresh status lists. With `issuance:manage` or `presentation:manage`, only the status lists the caller's tenant used; another tenant that uses one of them too fetches it again. With `tenants:manage`, those of all tenants.
  */
 export const cacheControllerClearStatusListCache = <ThrowOnError extends boolean = true>(options?: Options<CacheControllerClearStatusListCacheData, ThrowOnError>): RequestResult<CacheControllerClearStatusListCacheResponses, unknown, ThrowOnError> => (options?.client ?? client).delete<CacheControllerClearStatusListCacheResponses, unknown, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],

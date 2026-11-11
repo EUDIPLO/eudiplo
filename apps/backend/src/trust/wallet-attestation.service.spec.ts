@@ -609,13 +609,20 @@ describe("WalletAttestationService status check mode", () => {
         (
             service as {
                 validateAttestationStatus(
+                    tenantId: string,
                     jwt: string,
                     entity: null,
                     store: null,
                     mode: RevocationCheckMode,
                 ): Promise<unknown>;
             }
-        ).validateAttestationStatus("attestation", null, null, mode);
+        ).validateAttestationStatus(
+            "tenant-a",
+            "attestation",
+            null,
+            null,
+            mode,
+        );
 
     const unavailable = () =>
         new RevocationListUnavailableError(
@@ -743,6 +750,7 @@ describe("WalletAttestationService status check mode", () => {
             mode: RevocationCheckMode,
         ) =>
             service.checkKeyAttestationStatus(
+                "tenant-a",
                 "key-attestation",
                 {} as never,
                 {} as never,
@@ -750,11 +758,15 @@ describe("WalletAttestationService status check mode", () => {
             );
 
         it("returns the status list reference of a valid key attestation", async () => {
-            const { service } = createService({});
+            const { service, statusListVerifierService } = createService({});
 
             await expect(
                 checkKey(service, RevocationCheckMode.Strict),
             ).resolves.toEqual(statusEntry);
+            // Fetched for the tenant the key attestation was presented to.
+            expect(
+                statusListVerifierService.getStatusListJwt,
+            ).toHaveBeenCalledWith(statusEntry.uri, "tenant-a");
         });
 
         it.each([RevocationCheckMode.Strict, RevocationCheckMode.BestEffort])(
@@ -1130,6 +1142,7 @@ describe("WalletAttestationService wallet unit status", () => {
             [{ entityId: "wp" }],
         );
         expect(getStatusListJwt).toHaveBeenCalledOnce();
+        expect(getStatusListJwt).toHaveBeenCalledWith(uri, "tenant");
         expect(verifyStatusListSignature).toHaveBeenCalledOnce();
         expect(verifyStatusListSignature).toHaveBeenCalledWith(
             "status-list-jwt",

@@ -6,25 +6,29 @@
 
 /* You can override the default Infima variables here. */
 :root {
-  --ifm-color-primary: #2e8555;
-  --ifm-color-primary-dark: #29784c;
-  --ifm-color-primary-darker: #277148;
-  --ifm-color-primary-darkest: #205d3b;
-  --ifm-color-primary-light: #33925d;
-  --ifm-color-primary-lighter: #359962;
-  --ifm-color-primary-lightest: #3cad6e;
+  /* EUDIPLO brand blue #343DFF; shades from its Material 3 palette
+     (tones 25, 30, 35, 50, 60), light is between tones 40 and 50 */
+  --ifm-color-primary: #343dff;
+  --ifm-color-primary-dark: #222af4;
+  --ifm-color-primary-darker: #080bea;
+  --ifm-color-primary-darkest: #0000cd;
+  --ifm-color-primary-light: #4750ff;
+  --ifm-color-primary-lighter: #5a64ff;
+  --ifm-color-primary-lightest: #7c84ff;
   --ifm-code-font-size: 95%;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
 }
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
 [data-theme='dark'] {
-  --ifm-color-primary: #25c2a0;
-  --ifm-color-primary-dark: #21af90;
-  --ifm-color-primary-darker: #1fa588;
-  --ifm-color-primary-darkest: #1a8870;
-  --ifm-color-primary-light: #29d5b0;
-  --ifm-color-primary-lighter: #32d8b4;
-  --ifm-color-primary-lightest: #4fddbf;
+  /* Brand blue for dark backgrounds #BEC2FF (tone 80); shades from tones 60,
+     70, 90, 95, darker and light are between neighbouring tones */
+  --ifm-color-primary: #bec2ff;
+  --ifm-color-primary-dark: #9da3ff;
+  --ifm-color-primary-darker: #8d93ff;
+  --ifm-color-primary-darkest: #7c84ff;
+  --ifm-color-primary-light: #cfd1ff;
+  --ifm-color-primary-lighter: #e0e0ff;
+  --ifm-color-primary-lightest: #f1efff;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
 }

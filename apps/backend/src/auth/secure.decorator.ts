@@ -6,18 +6,29 @@ import { JwtAuthGuard } from "./auth.guard.js";
 import { Role } from "./roles/role.enum.js";
 import { ROLES_KEY, RoleMatch, Roles } from "./roles/roles.decorator.js";
 import { RolesGuard } from "./roles/roles.guard.js";
+import {
+    type TenantContext,
+    TenantContextGuard,
+    TenantContextRequirement,
+} from "./tenant-context.guard.js";
 
 /**
  * Requires a valid access token with `roles`: one of them by default, all of
- * them with `match: "all"`. On a handler it replaces the controller's roles.
+ * them with `match: "all"`. The token must also name an existing tenant,
+ * unless `tenant` is `optional`; without one the route answers 403. On a
+ * handler it replaces the controller's roles and tenant requirement.
  */
 export function Secured(
     roles: Role[],
-    { match = "any" }: { match?: RoleMatch } = {},
+    {
+        match = "any",
+        tenant = "required",
+    }: { match?: RoleMatch; tenant?: TenantContext } = {},
 ) {
     return applyDecorators(
         Roles(roles, match),
-        UseGuards(JwtAuthGuard, RolesGuard),
+        TenantContextRequirement(tenant),
+        UseGuards(JwtAuthGuard, RolesGuard, TenantContextGuard),
         ApiRoleSecurity(roles, match),
     );
 }
