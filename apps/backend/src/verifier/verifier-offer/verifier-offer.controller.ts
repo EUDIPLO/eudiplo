@@ -108,6 +108,7 @@ export class VerifierOfferController {
                 body.skewSeconds,
                 body.webhook,
                 body.reference,
+                body.transaction_data,
             );
             return res.status(201).json(offer);
         }

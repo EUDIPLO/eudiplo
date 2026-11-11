@@ -1004,10 +1004,12 @@ export async function setupPresentationTestApp(): Promise<PresentationTestContex
 }
 
 /**
- * Helper function to encrypt and prepare VP token
+ * Encrypts an OID4VP response. `vp_token` is one presentation for
+ * `credentialId`, or the whole `vp_token` object (then `credentialId` is
+ * ignored).
  */
 export async function encryptVpToken(
-    vp_token: string,
+    vp_token: string | Record<string, string[]>,
     credentialId: string,
     resolved: ResolvedOpenid4vpAuthorizationRequest,
     enc: "A128GCM" | "A256GCM" = "A128GCM",
@@ -1019,7 +1021,10 @@ export async function encryptVpToken(
     )) as CryptoKey;
 
     return new EncryptJWT({
-        vp_token: { [credentialId]: [vp_token] },
+        vp_token:
+            typeof vp_token === "string"
+                ? { [credentialId]: [vp_token] }
+                : vp_token,
         state: resolved.authorizationRequestPayload.state!,
     })
         .setProtectedHeader({

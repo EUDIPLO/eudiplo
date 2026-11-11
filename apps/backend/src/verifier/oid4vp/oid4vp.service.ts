@@ -51,6 +51,8 @@ import type { AuthResponseData } from "../presentations/domain/auth-response.js"
 import { UnsupportedCredentialVerifierFormat } from "../presentations/domain/credential-verifier-format.js";
 import { UnknownClaimSetReferenceError } from "../presentations/domain/dcql-claim-policy.js";
 import { resolveDcqlTenantUrl } from "../presentations/domain/dcql-tenant-url.js";
+import { TransactionDataBindingError } from "../presentations/domain/transaction-data-binding.js";
+import { uncheckableTransactionData } from "../presentations/domain/transaction-data-references.js";
 import { IncompletePresentationException } from "../presentations/exceptions/incomplete-presentation.exception.js";
 import { InvalidTrustedAuthoritiesError } from "../presentations/ports/trust-list-ref-resolver.js";
 import { TrustedAuthoritiesService } from "../presentations/trusted-authorities.service.js";
@@ -341,13 +343,13 @@ export class Oid4vpService {
                 ? await this.federationTrustChain(session.tenantId, clientId)
                 : undefined;
 
-            // Use transaction_data from session (which may have been overridden) or fall back to config
-            const transaction_data =
-                (
-                    session.transaction_data ??
-                    presentationConfig.transaction_data
-                )?.map((td) => base64url.encode(JSON.stringify(td))) ||
-                undefined;
+            // Use transaction_data from session (which may have been overridden) or fall back to config.
+            // An empty list sends no parameter: OID4VP 1.0 §5.1 requires a non-empty array.
+            const entries =
+                session.transaction_data ?? presentationConfig.transaction_data;
+            const transaction_data = entries?.length
+                ? entries.map((td) => base64url.encode(JSON.stringify(td)))
+                : undefined;
 
             const responseEncryptionPublicJwk =
                 await this.responseEncryptionKey(session, federation);
@@ -507,6 +509,14 @@ export class Oid4vpService {
                 requestId,
                 tenantId,
             );
+        // Also checks the configured list, which may predate the rule.
+        const transactionDataProblem = uncheckableTransactionData(
+            values.transaction_data ?? presentationConfig.transaction_data,
+            presentationConfig.dcql_query?.credentials ?? [],
+        );
+        if (transactionDataProblem) {
+            throw new BadRequestException(transactionDataProblem);
+        }
         const browserOrigin = useDcApi
             ? allowedExpectedOrigin(
                   requestId,
@@ -1097,7 +1107,8 @@ function presentationVerificationException(error: unknown): unknown {
     if (
         error instanceof MultiplePresentationsNotAllowedError ||
         error instanceof InvalidTrustedAuthoritiesError ||
-        error instanceof UnknownClaimSetReferenceError
+        error instanceof UnknownClaimSetReferenceError ||
+        error instanceof TransactionDataBindingError
     ) {
         return new BadRequestException(error.message);
     }

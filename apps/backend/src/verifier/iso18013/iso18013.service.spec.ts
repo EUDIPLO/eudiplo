@@ -81,6 +81,83 @@ describe("Iso18013Service.createOffer per-request webhook override", () => {
         );
     });
 
+    describe("transaction data", () => {
+        const entry = {
+            type: "urn:eudi:sca:account_access:1",
+            credential_ids: ["mdl"],
+            payload: { transaction_id: "t-1" },
+        };
+        const withConfiguredEntry = () =>
+            (
+                service as unknown as {
+                    presentationConfigService: {
+                        getPresentationConfig: ReturnType<typeof vi.fn>;
+                    };
+                }
+            ).presentationConfigService.getPresentationConfig.mockResolvedValue(
+                {
+                    dcql_query: {
+                        credentials: [
+                            {
+                                format: "mso_mdoc",
+                                meta: { doctype_value: "eu.europa.ec.av.1" },
+                                claims: [],
+                            },
+                        ],
+                    },
+                    transaction_data: [entry],
+                    allowedOrigins: ["https://origin.example"],
+                },
+            );
+
+        it("refuses request transaction data, which the request cannot carry", async () => {
+            const error = await service
+                .createOffer(
+                    "req",
+                    "tenant",
+                    "https://origin.example",
+                    undefined,
+                    undefined,
+                    undefined,
+                    [entry],
+                )
+                .catch((error) => error);
+
+            expect(error.getStatus()).toBe(400);
+            expect(error.message).toContain(
+                "ISO 18013-7 requests cannot carry transaction data",
+            );
+            expect(sessionCreate).not.toHaveBeenCalled();
+        });
+
+        it("refuses a configuration with transaction data", async () => {
+            withConfiguredEntry();
+
+            await expect(
+                service.createOffer("req", "tenant", "https://origin.example"),
+            ).rejects.toThrow(
+                "ISO 18013-7 requests cannot carry transaction data",
+            );
+            expect(sessionCreate).not.toHaveBeenCalled();
+        });
+
+        it("accepts such a configuration when the request sends an empty list", async () => {
+            withConfiguredEntry();
+
+            await service.createOffer(
+                "req",
+                "tenant",
+                "https://origin.example",
+                undefined,
+                undefined,
+                undefined,
+                [],
+            );
+
+            expect(sessionCreate).toHaveBeenCalled();
+        });
+    });
+
     it("persists the per-request webhook override on the session", async () => {
         await service.createOffer(
             "req",

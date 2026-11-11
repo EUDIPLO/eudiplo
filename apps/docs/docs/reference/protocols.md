@@ -58,7 +58,7 @@ This page lists every standard and feature EUDIPLO implements, grouped by area, 
 | Transaction data                          | ✅     | Hashes checked in the SD-JWT VC key binding JWT; TS12 types (`urn:eudi:sca:*`) are validated                                       | [Transaction data](../presentation/transaction-data.md)       |
 | Registration certificate in the request   | ✅     | Sent as `verifier_info`                                                                                                           | [Registration certificates](../trust/registration-certificates.md) |
 | Digital Credentials API                   | ✅     | `dc_api.jwt` response mode with `expected_origins`                                                                                | [Presentation requests](../presentation/requests.md)          |
-| ISO 18013-7 Annex C                       | ✅     | `org-iso-mdoc` over the Digital Credentials API; ignores `redirectUri`, `transaction_data` and `clientIdScheme`                     | [Presentation requests](../presentation/requests.md)          |
+| ISO 18013-7 Annex C                       | ✅     | `org-iso-mdoc` over the Digital Credentials API; ignores `redirectUri` and `clientIdScheme`, refuses `transaction_data`                     | [Presentation requests](../presentation/requests.md)          |
 | Status check of presented credentials     | ✅     | `statusCheckMode`: `strict` (default), `best_effort` or `disabled`                                                                | [Configure verification](../presentation/configure-verification.md) |
 
 ## Credential formats
