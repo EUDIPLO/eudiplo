@@ -85,7 +85,7 @@ What EUDIPLO adds to the configured DCQL query:
 | `dc-api`                 | Your page passes the request object to the browser's Digital Credentials API; `response_mode` is `dc_api.jwt` and `expected_origins` holds your page's origin | Your page posts the wallet's encrypted response to `response_uri` |
 | `iso-18013-7`            | `device_request`, `encryption_info` and `response_uri` for the `org-iso-mdoc` protocol     | Your page posts to the `response_uri` (`POST /presentations/{walletNonce}/iso-18013-7`) |
 
-The ISO 18013-7 variant uses its own request format (HPKE encryption with the tenant's `encrypt` key chain, mdoc device authentication) and does not use `redirectUri`, `transaction_data` or `clientIdScheme`. Details are in [Presentation requests](../presentation/requests.md).
+The ISO 18013-7 variant uses its own request format (HPKE encryption with the tenant's `encrypt` key chain, mdoc device authentication) and does not use `redirectUri` or `clientIdScheme`; it cannot carry `transaction_data`, so a request with transaction data answers `400`. Details are in [Presentation requests](../presentation/requests.md).
 
 ## Wallet response
 

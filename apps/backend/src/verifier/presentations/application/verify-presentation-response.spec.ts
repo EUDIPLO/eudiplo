@@ -384,9 +384,24 @@ describe("VerifyPresentationResponse", () => {
             );
         });
 
-        it("does not check formats without key-binding claims", async () => {
-            // mdoc returns no keyBinding: its transaction data is not checked.
+        it("rejects an entry when only formats without key-binding claims are presented", async () => {
+            // mdoc returns no keyBinding: nothing could authorize the entry.
             const { run } = setupTwoCredentials({});
+
+            const error = await run({
+                pid: ["pid-vp"],
+                card: ["card-vp"],
+            }).catch((e) => e);
+            expect(error).toBeInstanceOf(TransactionDataBindingError);
+            expect(error.message).toContain(
+                "Transaction data entry 0 references no presented SD-JWT VC (pid, card)",
+            );
+        });
+
+        it("accepts an entry that one presented SD-JWT VC authorizes next to an mdoc", async () => {
+            const { run } = setupTwoCredentials({
+                "card-vp": { transaction_data_hashes: [hash(shared)] },
+            });
 
             await expect(
                 run({ pid: ["pid-vp"], card: ["card-vp"] }),

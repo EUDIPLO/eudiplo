@@ -19,6 +19,7 @@ import { checkRegistrationCertificate } from "../../registrar/domain/registratio
 import { CreateRegistrarConfigSchema } from "../../registrar/schemas/registrar.schema.js";
 import { CreateFederationTrustAnchorSchema } from "../../trust/federation-trust-anchor/schemas/federation-trust-anchor.schema.js";
 import { resolveDcqlTenantUrl } from "../../verifier/presentations/domain/dcql-tenant-url.js";
+import { uncheckableTransactionData } from "../../verifier/presentations/domain/transaction-data-references.js";
 import { missingTrustedAuthorities } from "../../verifier/presentations/domain/trusted-authority-requirement.js";
 import { PresentationConfigCreateSchema } from "../../verifier/presentations/schemas/presentation-config.schema.js";
 import { ConfigMigrationService } from "./config-migration.service.js";
@@ -76,6 +77,9 @@ export class ConfigDocumentValidationService {
         }
         if (document.kind === "PresentationConfig") {
             identityIssues.push(...this.validateTrustedAuthorities(document));
+            identityIssues.push(
+                ...this.validateTransactionDataReferences(document),
+            );
         }
         const schema = this.schema(document.kind, document);
         if (!schema) return identityIssues;
@@ -200,6 +204,60 @@ export class ConfigDocumentValidationService {
                 severity: "error",
                 code: "TRUSTED_AUTHORITY_REQUIRED",
                 path: "/spec/dcql_query/credentials",
+                message: violation,
+                resource: {
+                    kind: document.kind,
+                    id: resourceId(document),
+                },
+            },
+        ];
+    }
+
+    /**
+     * Every transaction data entry must reference only `dc+sd-jwt` credential
+     * queries of the DCQL query, so the plan reports what apply would
+     * reject. The schema has not validated the document
+     * yet, so malformed entries are left to it.
+     */
+    private validateTransactionDataReferences(
+        document: ConfigDocument,
+    ): ConfigMigrationIssue[] {
+        const spec = document.spec as Record<string, any>;
+        const transactionData = spec.transaction_data;
+        const credentials = spec.dcql_query?.credentials;
+        if (!Array.isArray(transactionData) || !Array.isArray(credentials)) {
+            return [];
+        }
+        const isStringArray = (value: unknown): value is string[] =>
+            Array.isArray(value) &&
+            value.every((item) => typeof item === "string");
+        if (
+            !transactionData.every(
+                (entry) =>
+                    entry &&
+                    typeof entry === "object" &&
+                    isStringArray(entry.credential_ids),
+            ) ||
+            !credentials.every(
+                (credential) =>
+                    credential &&
+                    typeof credential === "object" &&
+                    typeof credential.id === "string" &&
+                    typeof credential.format === "string",
+            )
+        ) {
+            return [];
+        }
+        const violation = uncheckableTransactionData(
+            transactionData,
+            credentials,
+        );
+        if (!violation) return [];
+        return [
+            {
+                severity: "error",
+                code: "TRANSACTION_DATA_UNCHECKABLE",
+                path: "/spec/transaction_data",
                 message: violation,
                 resource: {
                     kind: document.kind,

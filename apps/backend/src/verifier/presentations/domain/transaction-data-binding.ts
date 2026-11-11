@@ -96,9 +96,13 @@ interface Holder {
  *   checked;
  * - every presentation that carries the hash of a TS12 entry
  *   (`urn:eudi:sca:` types) needs the TS12 key-binding claims;
- * - an entry that references no presentation given here (for example only
- *   mdoc credentials, which carry no transaction data hashes in EUDIPLO) is
- *   not checked.
+ * - an entry that references no presentation given here fails the response:
+ *   it references only credentials the wallet did not present (for example
+ *   one a `credential_sets` alternative leaves out), mdoc credentials, whose
+ *   transaction data EUDIPLO cannot check (OID4VP 1.0 Appendix B.2.1 leaves
+ *   it to each type), or ids that are not in the query. Otherwise such an
+ *   entry, for example a TS12 payment, would pass without the holder
+ *   authorizing it.
  *
  * Throws `TransactionDataBindingError` when a rule is broken.
  *
@@ -117,28 +121,31 @@ export async function verifyTransactionDataBinding({
     presentations: TransactionDataPresentation[];
     responseMode: string | undefined;
 }): Promise<void> {
-    if (!transactionData?.length || presentations.length === 0) {
+    if (!transactionData?.length) {
         return;
     }
 
-    const referenced = transactionData.map(referencedCredentialIds);
+    const entries = transactionData.map(parseEntry);
     // Credentials no entry references are not checked at all.
     const holders = presentations
         .filter(({ credentialId }) =>
-            referenced.some((ids) => ids.includes(credentialId)),
+            entries.some(({ credential_ids }) =>
+                credential_ids.includes(credentialId),
+            ),
         )
         .map(toHolder);
 
     for (const [index, encoded] of transactionData.entries()) {
-        const credentialIds = referenced[index];
+        const entry = entries[index];
         const candidates = holders.filter(({ presentation }) =>
-            credentialIds.includes(presentation.credentialId),
+            entry.credential_ids.includes(presentation.credentialId),
         );
         if (candidates.length === 0) {
-            continue;
+            throw new TransactionDataBindingError(
+                `Transaction data entry ${index} references no presented SD-JWT VC (${entry.credential_ids.join(", ")}), so nothing authorizes it; EUDIPLO checks transaction data only in SD-JWT VC key binding JWTs`,
+            );
         }
 
-        const entry = parseEntry(encoded, index);
         const allowedAlgs = entry.transaction_data_hashes_alg ?? [
             HashAlgorithm.Sha256,
         ];
@@ -319,25 +326,6 @@ function parseEntry(encoded: string, index: number): TransactionDataEntry {
         throw new TransactionDataBindingError(
             `Transaction data entry ${index} cannot be parsed`,
         );
-    }
-}
-
-/**
- * The `credential_ids` of an entry, read leniently so an entry that
- * references no presented credential is skipped even when malformed.
- */
-function referencedCredentialIds(encoded: string): string[] {
-    try {
-        const { credential_ids } = JSON.parse(
-            Buffer.from(encoded, "base64url").toString(),
-        ) as { credential_ids?: unknown };
-        return Array.isArray(credential_ids)
-            ? credential_ids.filter(
-                  (id): id is string => typeof id === "string",
-              )
-            : [];
-    } catch {
-        return [];
     }
 }
 

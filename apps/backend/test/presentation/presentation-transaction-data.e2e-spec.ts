@@ -685,6 +685,195 @@ describe("Presentation - Transaction Data", () => {
         });
     });
 
+    describe("an entry no presented SD-JWT VC can authorize", () => {
+        const requestId = "pid-either-credential";
+        const payment = {
+            type: "urn:eudi:sca:payment:1",
+            credential_ids: ["pid"],
+            payload: {
+                transaction_id: "order-4712",
+                payee: { name: "Example Shop", id: "merchant-001" },
+                currency: "EUR",
+                amount: 49.99,
+            },
+        };
+        const pidQuery = (id: string) => ({
+            id,
+            format: "dc+sd-jwt" as const,
+            meta: {
+                vct_values: [
+                    `${host}/issuers/demo/credentials-metadata/vct/pid`,
+                ],
+            },
+            claims: [{ path: ["address", "locality"] }],
+            trusted_authorities: FIXTURE_TRUSTED_AUTHORITIES,
+        });
+        const mdlQuery = {
+            id: "mdl",
+            format: "mso_mdoc" as const,
+            meta: { doctype_value: "org.iso.18013.5.1.mDL" },
+            trusted_authorities: FIXTURE_TRUSTED_AUTHORITIES,
+        };
+
+        beforeAll(async () => {
+            // The wallet may answer with either credential.
+            await request(app.getHttpServer())
+                .post("/verifier/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    id: requestId,
+                    description: "PID or second PID",
+                    dcql_query: {
+                        credentials: [pidQuery("pid"), pidQuery("pid_second")],
+                        credential_sets: [
+                            { options: [["pid"], ["pid_second"]] },
+                        ],
+                    },
+                } satisfies PresentationConfigCreateDto)
+                .expect(201);
+        });
+
+        test.each([
+            [
+                "an id outside the DCQL query",
+                ["pid", "iban"],
+                "transaction_data[0].credential_ids names ids that are not in the DCQL query: iban",
+            ],
+            [
+                "an mdoc query",
+                ["pid", "mdl"],
+                "transaction_data[0].credential_ids names credential queries that are not dc+sd-jwt: mdl; EUDIPLO checks transaction data only in SD-JWT VC presentations",
+            ],
+        ])(
+            "refuses a configuration whose transaction data references %s",
+            async (_, credentialIds, message) => {
+                const res = await request(app.getHttpServer())
+                    .post("/verifier/config")
+                    .trustLocalhost()
+                    .set("Authorization", `Bearer ${authToken}`)
+                    .send({
+                        id: "pid-uncheckable-transaction-data",
+                        dcql_query: {
+                            credentials: [pidQuery("pid"), mdlQuery],
+                        },
+                        transaction_data: [
+                            { ...payment, credential_ids: credentialIds },
+                        ],
+                    } satisfies PresentationConfigCreateDto)
+                    .expect(400);
+
+                expect(res.body.message).toBe(message);
+            },
+        );
+
+        test("refuses an offer whose transaction data names an id outside the DCQL query", async () => {
+            const res = await createPresentationRequest(app, authToken, {
+                response_type: ResponseType.URI,
+                requestId,
+                transaction_data: [{ ...payment, credential_ids: ["iban"] }],
+            }).expect(400);
+
+            expect(res.body.message).toBe(
+                "transaction_data[0].credential_ids names ids that are not in the DCQL query: iban",
+            );
+        });
+
+        test("refuses an ISO 18013-7 offer, which cannot carry the configured transaction data", async () => {
+            const res = await createPresentationRequest(app, authToken, {
+                response_type: ResponseType.ISO_18013_7,
+                requestId: "pid-with-transaction-data",
+                expected_origin: "https://shop.example",
+            }).expect(400);
+
+            expect(res.body.message).toContain(
+                "ISO 18013-7 requests cannot carry transaction data",
+            );
+        });
+
+        test("refuses an ISO 18013-7 offer with request transaction data", async () => {
+            const res = await createPresentationRequest(app, authToken, {
+                response_type: ResponseType.ISO_18013_7,
+                requestId: "pid-de",
+                expected_origin: "https://shop.example",
+                transaction_data: [{ ...payment, credential_ids: ["pid"] }],
+            }).expect(400);
+
+            expect(res.body.message).toContain(
+                "ISO 18013-7 requests cannot carry transaction data",
+            );
+        });
+
+        test("rejects a TS12 payment when the wallet presents only the credential it does not reference", async () => {
+            const res = await createPresentationRequest(app, authToken, {
+                response_type: ResponseType.URI,
+                requestId,
+                transaction_data: [payment],
+            }).expect(201);
+            const authRequest = client.parseOpenid4vpAuthorizationRequest({
+                authorizationRequest: res.body.uri,
+            });
+            const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+                authorizationRequestPayload: authRequest.params,
+                responseMode: { type: "direct_post" },
+            });
+            const encodedPayment = (
+                resolved.authorizationRequestPayload as {
+                    transaction_data: string[];
+                }
+            ).transaction_data[0];
+
+            // pid_second satisfies the credential set; the payment
+            // references only pid. Its KB-JWT even carries the payment's
+            // hash and the TS12 claims, which must not count.
+            const vpToken = await preparePresentationWithTransactionData(
+                {
+                    iat: Math.floor(Date.now() / 1000),
+                    aud: resolved.authorizationRequestPayload
+                        .client_id as string,
+                    nonce: resolved.authorizationRequestPayload.nonce,
+                    jti: crypto.randomUUID(),
+                    response_mode: "direct_post.jwt",
+                    amr: [{ knowledge: "pin" }, { possession: "device" }],
+                    transaction_data_hashes: [
+                        computeTransactionDataHash(encodedPayment),
+                    ],
+                    transaction_data_hashes_alg: "sha-256",
+                } as Omit<kbPayload, "sd_hash">,
+                privateIssuerKey,
+                issuerCertChain,
+                statusListService,
+                credentialConfigId,
+            );
+            const jwt = await encryptVpToken(vpToken, "pid_second", resolved);
+            const authorizationResponse =
+                await client.createOpenid4vpAuthorizationResponse({
+                    authorizationRequestPayload: authRequest.params,
+                    authorizationResponsePayload: { response: jwt },
+                    ...callbacks,
+                });
+            const submitRes = await client.submitOpenid4vpAuthorizationResponse(
+                {
+                    authorizationResponsePayload:
+                        authorizationResponse.authorizationResponsePayload,
+                    authorizationRequestPayload:
+                        resolved.authorizationRequestPayload as Openid4vpAuthorizationRequest,
+                },
+            );
+
+            expect(submitRes.response.status).toBe(400);
+            const session = await request(app.getHttpServer())
+                .get(`/session/${res.body.session}`)
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
+            expect(session.body.status).toBe("failed");
+            expect(session.body.errorReason).toContain(
+                "Transaction data entry 0 references no presented SD-JWT VC (pid)",
+            );
+        });
+    });
+
     test("should accept presentation without transaction data", async () => {
         // Normal presentation without any transaction data
         const { submitRes } = await submitPresentationWithTransactionData({

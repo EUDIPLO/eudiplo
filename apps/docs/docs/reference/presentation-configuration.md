@@ -22,7 +22,7 @@ The table is generated at build time from the Zod schema the backend validates w
 | `skewSeconds`           | `60`. Clock skew tolerance for credential time checks; a request can override it.                                                                                                                                                         |
 | `statusCheckMode`       | `strict`: status lists are checked and verification fails if a status list cannot be fetched or validated, or if an SD-JWT VC's `status` claim has no `status_list`. Credentials without status information are accepted. `best_effort`: verification continues without the status result when the status list is unavailable. `disabled`: no status check. Applies to SD-JWT VC and mDOC, including ISO 18013-7. |
 | `dcql_query`            | See [DCQL](../presentation/dcql.md). `<TENANT_URL>` anywhere in the query is replaced with `<PUBLIC_URL>/issuers/<tenant>`.                                                                                                               |
-| `transaction_data`      | Sent with every request unless the request sets its own `transaction_data`. Ignored for ISO 18013-7. See [Transaction Data](../presentation/transaction-data.md).                                                                          |
+| `transaction_data`      | Sent with every request unless the request sets its own `transaction_data`. An ISO 18013-7 request answers `400` unless it sends `"transaction_data": []`. See [Transaction Data](../presentation/transaction-data.md).                                                                          |
 | `registration_cert`     | Strategies `jwt`, `id`, `body`. `id` and `body` need a registrar configuration; `jwt` does not. See [Registration Certificates](../trust/registration-certificates.md).                                                                        |
 | `registrationCert*`     | Flat form fields used by the Web Client. They are converted into `registration_cert` (only when `registration_cert` is not sent) and are not stored.                                                                                      |
 | `webhookEndpointId`     | ID of a [webhook endpoint](webhooks.md) that receives results. A request can override it with an inline `webhook`.                                                                                                                        |
@@ -42,6 +42,7 @@ Rules that the table cannot show:
 - Every ID in `claim_sets` must reference the `id` of a claim in the same credential query; claim IDs are unique.
 - Each `allowedOrigins` entry is an origin in serialized form: `https` or `http` scheme, lower-case host, a port only if it is not the default (`443`, `80`), no path, query, credentials or trailing slash. At most 100 entries.
 - `transaction_data` entries whose `type` starts with `urn:eudi:sca:` must be a supported [TS12 type with a valid payload](../presentation/transaction-data.md#ts12-sca-transaction-data).
+- `transaction_data` entries must name in `credential_ids` only `dc+sd-jwt` queries of the DCQL query ([Which credentials an entry may reference](../presentation/transaction-data.md#which-credentials-an-entry-may-reference)).
 
 ## Server-managed fields
 

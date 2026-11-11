@@ -288,6 +288,109 @@ describe("PresentationConfigService imported registration certificate", () => {
     });
 });
 
+describe("PresentationConfigService transaction data", () => {
+    const mdl = {
+        id: "mdl",
+        format: "mso_mdoc",
+        meta: { doctype_value: "org.iso.18013.5.1.mDL" },
+        trusted_authorities: trustedPid.trusted_authorities,
+    };
+    const payment = (credential_ids: string[]) => ({
+        type: "urn:eudi:sca:payment:1",
+        credential_ids,
+        payload: {
+            transaction_id: "t-1",
+            payee: { name: "Shop", id: "shop" },
+            currency: "EUR",
+            amount: 1,
+        },
+    });
+
+    it("stores transaction data referencing SD-JWT VC queries", async () => {
+        const { service, repository } = setup();
+
+        await service.storePresentationConfig("tenant", {
+            id: "pid",
+            dcql_query: { credentials: [trustedPid, mdl] },
+            transaction_data: [payment(["pid"])],
+        } as any);
+
+        expect(repository.save).toHaveBeenCalled();
+    });
+
+    it.each([
+        [
+            "an id outside the DCQL query",
+            ["pid", "card"],
+            "transaction_data[0].credential_ids names ids that are not in the DCQL query: card",
+        ],
+        [
+            "only mdoc queries",
+            ["mdl"],
+            "transaction_data[0].credential_ids names credential queries that are not dc+sd-jwt: mdl; EUDIPLO checks transaction data only in SD-JWT VC presentations",
+        ],
+        [
+            "an mdoc query next to an SD-JWT VC query",
+            ["pid", "mdl"],
+            "transaction_data[0].credential_ids names credential queries that are not dc+sd-jwt: mdl; EUDIPLO checks transaction data only in SD-JWT VC presentations",
+        ],
+        [
+            "no query",
+            [],
+            "transaction_data[0].credential_ids names no credential query",
+        ],
+    ])(
+        "rejects transaction data that references %s",
+        async (_, credentialIds, message) => {
+            const { service, repository } = setup();
+
+            await expect(
+                service.storePresentationConfig("tenant", {
+                    id: "pid",
+                    dcql_query: { credentials: [trustedPid, mdl] },
+                    transaction_data: [payment(credentialIds)],
+                } as any),
+            ).rejects.toThrow(new BadRequestException(message));
+            expect(repository.save).not.toHaveBeenCalled();
+        },
+    );
+
+    it("rejects an update that removes the query the stored transaction data references", async () => {
+        const { service, repository } = setup();
+        repository.findOneByOrFail.mockResolvedValue({
+            id: "pid",
+            tenantId: "tenant",
+            dcql_query: { credentials: [trustedPid] },
+            transaction_data: [payment(["pid"])],
+        });
+
+        await expect(
+            service.updatePresentationConfig("pid", "tenant", {
+                dcql_query: { credentials: [mdl] },
+            } as any),
+        ).rejects.toThrow(
+            "transaction_data[0].credential_ids names ids that are not in the DCQL query: pid",
+        );
+        expect(repository.save).not.toHaveBeenCalled();
+    });
+
+    it("rejects a startup import file before deleting the stored config", async () => {
+        const { service, configImportService, repository } = setup();
+        await (service as any).importForTenant("tenant");
+        const [, options] = configImportService.importConfigsForTenant.mock
+            .calls[0] as [string, { deleteExisting: Function }];
+
+        await expect(
+            options.deleteExisting("tenant", {
+                id: "pid",
+                dcql_query: { credentials: [trustedPid, mdl] },
+                transaction_data: [payment(["mdl"])],
+            }),
+        ).rejects.toThrow(BadRequestException);
+        expect(repository.delete).not.toHaveBeenCalled();
+    });
+});
+
 describe("PresentationConfigService audit log", () => {
     it("records a change of allowedOrigins and readerAuth", async () => {
         const { service, auditLogService } = setup();

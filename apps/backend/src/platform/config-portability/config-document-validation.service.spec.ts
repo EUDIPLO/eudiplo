@@ -262,6 +262,78 @@ describe("ConfigDocumentValidationService", () => {
             expect(service.validate(presentation())).toEqual([]);
         });
 
+        describe("transaction data", () => {
+            const withTransactionData = (transaction_data: unknown) => {
+                const document = presentation([
+                    {
+                        type: "etsi_tl",
+                        values: [{ trustListId: "pid-issuers" }],
+                    },
+                ]);
+                return {
+                    ...document,
+                    spec: { ...document.spec, transaction_data },
+                };
+            };
+            const entry = (credential_ids: string[]) => ({
+                type: "urn:eudi:sca:account_access:1",
+                credential_ids,
+                payload: { transaction_id: "t-1" },
+            });
+
+            it("accepts entries that reference an SD-JWT VC query", () => {
+                expect(
+                    service.validate(withTransactionData([entry(["pid"])])),
+                ).toEqual([]);
+            });
+
+            it("reports entries that name ids outside the DCQL query", () => {
+                expect(
+                    service.validate(
+                        withTransactionData([entry(["pid", "iban"])]),
+                    ),
+                ).toEqual([
+                    expect.objectContaining({
+                        severity: "error",
+                        code: "TRANSACTION_DATA_UNCHECKABLE",
+                        path: "/spec/transaction_data",
+                        message:
+                            "transaction_data[0].credential_ids names ids that are not in the DCQL query: iban",
+                        resource: { kind: "PresentationConfig", id: "pid" },
+                    }),
+                ]);
+            });
+
+            it("leaves malformed credential queries to the schema", () => {
+                const document = withTransactionData([entry(["pid"])]);
+                const issues = service.validate({
+                    ...document,
+                    spec: {
+                        ...document.spec,
+                        dcql_query: { credentials: [{ id: "pid" }] },
+                    },
+                });
+                expect(
+                    issues.some(
+                        (issue) =>
+                            issue.code === "TRANSACTION_DATA_UNCHECKABLE",
+                    ),
+                ).toBe(false);
+            });
+
+            it("leaves malformed entries to the schema", () => {
+                const issues = service.validate(
+                    withTransactionData([{ type: "x", credential_ids: "pid" }]),
+                );
+                expect(
+                    issues.some(
+                        (issue) =>
+                            issue.code === "TRANSACTION_DATA_UNCHECKABLE",
+                    ),
+                ).toBe(false);
+            });
+        });
+
         describe("imported registration certificates", () => {
             const unsignedJwt = (payload: Record<string, unknown>) => {
                 const encode = (value: unknown) =>

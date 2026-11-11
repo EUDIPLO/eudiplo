@@ -210,17 +210,71 @@ describe("verifyTransactionDataBinding", () => {
         });
     });
 
-    it("skips an entry that references no presented credential", async () => {
-        const other = encode({ type: "other", credential_ids: ["mdl"] });
-        await expect(
-            verify([other], [presentation("pid", {})]),
-        ).resolves.toBeUndefined();
+    describe("an entry no presented SD-JWT VC authorizes", () => {
+        const forMdl = encode({ type: "payment", credential_ids: ["mdl"] });
+
+        it("rejects an entry that references only a credential not presented", async () => {
+            await expect(
+                verify(
+                    [forMdl],
+                    [
+                        presentation("pid", {
+                            transaction_data_hashes: [hash(forMdl)],
+                        }),
+                    ],
+                ),
+            ).rejects.toEqual(
+                rejection(
+                    "Transaction data entry 0 references no presented SD-JWT VC (mdl), so nothing authorizes it; EUDIPLO checks transaction data only in SD-JWT VC key binding JWTs",
+                ),
+            );
+        });
+
+        it("rejects transaction data when no SD-JWT VC is presented at all", async () => {
+            await expect(verify([payment], [])).rejects.toEqual(
+                rejection(/entry 0 references no presented SD-JWT VC \(pid\)/),
+            );
+        });
+
+        it("rejects a TS12 entry whose referenced credentials were left out", async () => {
+            // The wallet chose a credential_sets alternative with neither.
+            await expect(
+                verify(
+                    [ts12],
+                    [
+                        presentation("other", {
+                            ...ts12KeyBinding,
+                            transaction_data_hashes: [hash(ts12)],
+                        }),
+                    ],
+                ),
+            ).rejects.toEqual(
+                rejection(
+                    /entry 0 references no presented SD-JWT VC \(pid, card\)/,
+                ),
+            );
+        });
+
+        it("rejects such an entry even when another entry is authorized", async () => {
+            await expect(
+                verify(
+                    [payment, forMdl],
+                    [
+                        presentation("pid", {
+                            transaction_data_hashes: [hash(payment)],
+                        }),
+                    ],
+                ),
+            ).rejects.toEqual(rejection(/entry 1 references no presented/));
+        });
     });
 
-    it("skips an entry that cannot be decoded, and reads string credential_ids leniently", async () => {
+    it("parses every entry before any binding check", async () => {
         await expect(
-            verify(["not-base64-json"], [presentation("pid", {})]),
-        ).resolves.toBeUndefined();
+            verify([payment, "not-base64-json"], [presentation("pid", {})]),
+        ).rejects.toEqual(
+            rejection("Transaction data entry 1 cannot be parsed"),
+        );
         await expect(
             verify(
                 [encode({ type: "payment", credential_ids: ["pid", 1] })],

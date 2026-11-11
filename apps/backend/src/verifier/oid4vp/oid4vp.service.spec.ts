@@ -949,6 +949,82 @@ describe("OID4VP request creation", () => {
         expect(error.message).toContain("openid_credential_verifier");
     });
 
+    describe("transaction data references", () => {
+        const dcql_query = {
+            credentials: [
+                { id: "pid", format: "dc+sd-jwt" },
+                { id: "mdl", format: "mso_mdoc" },
+            ],
+        };
+        const entry = (credential_ids: string[]) => ({
+            type: "urn:eudi:sca:account_access:1",
+            credential_ids,
+            payload: { transaction_id: "t-1" },
+        });
+
+        it("refuses request transaction data naming an id outside the DCQL query", async () => {
+            const service = createService(vi.fn(), { dcql_query });
+
+            const error = await service
+                .createRequest(
+                    "presentation",
+                    { transaction_data: [entry(["pid", "card"])] },
+                    "tenant",
+                    false,
+                )
+                .catch((error) => error);
+
+            expect(error.getStatus()).toBe(400);
+            expect(error.message).toBe(
+                "transaction_data[0].credential_ids names ids that are not in the DCQL query: card",
+            );
+        });
+
+        it("refuses configured transaction data that references an mdoc query", async () => {
+            const service = createService(vi.fn(), {
+                dcql_query,
+                transaction_data: [entry(["mdl"])],
+            });
+
+            const error = await service
+                .createRequest("presentation", {}, "tenant", false)
+                .catch((error) => error);
+
+            expect(error.getStatus()).toBe(400);
+            expect(error.message).toContain(
+                "transaction_data[0].credential_ids names credential queries that are not dc+sd-jwt: mdl",
+            );
+        });
+
+        it("checks request transaction data instead of the configured list it replaces", async () => {
+            const service = createService(
+                vi.fn().mockResolvedValue(undefined),
+                {
+                    dcql_query,
+                    transaction_data: [entry(["mdl"])],
+                },
+            );
+            const createSession = (
+                service as unknown as {
+                    createSession: { execute: ReturnType<typeof vi.fn> };
+                }
+            ).createSession.execute;
+
+            await service.createRequest(
+                "presentation",
+                { transaction_data: [entry(["pid"])] },
+                "tenant",
+                false,
+            );
+
+            expect(createSession).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    transaction_data: [entry(["pid"])],
+                }),
+            );
+        });
+    });
+
     it("returns the offer only after the request object is stored", async () => {
         let storeRequestObject!: () => void;
         const updateForTenant = vi.fn(
@@ -1328,6 +1404,32 @@ describe("OID4VP request object signing key", () => {
         ).rejects.toThrow("no longer configured");
         expect(signJWT).not.toHaveBeenCalled();
     });
+
+    it.each([
+        [
+            "an empty request list replaces the configured one",
+            [],
+            [{ type: "x" }],
+        ],
+        ["the configured list is empty", undefined, []],
+    ])(
+        "sends no transaction_data when %s",
+        async (_, sessionTransactionData, configuredTransactionData) => {
+            const { service, signJWT } = createService(
+                {
+                    clientId: "x509_hash:hash-of-access-a",
+                    accessKeyChainId: "access-a",
+                    transaction_data: sessionTransactionData,
+                },
+                { transaction_data: configuredTransactionData },
+            );
+
+            await service.createAuthorizationRequest("session");
+
+            const [payload] = signJWT.mock.calls[0];
+            expect(payload.transaction_data).toBeUndefined();
+        },
+    );
 
     it("signs with the access key chain stored with the client_id, not the current default", async () => {
         const { service, find, signJWT } = createService({

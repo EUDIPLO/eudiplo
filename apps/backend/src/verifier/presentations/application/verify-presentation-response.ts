@@ -122,8 +122,10 @@ export class CredentialVerificationFailedError extends Error {
  * presented value is verified by its format and must disclose the requested
  * claims (or one claim set) with one of their requested `values`. A value
  * mismatch is reported before missing claims. Once every credential is
- * verified, the request's transaction data must be authorized by the
- * presentations it references (see `verifyTransactionDataBinding`).
+ * verified, each entry of the request's transaction data must be authorized
+ * by a presented SD-JWT VC it references; an entry that references none of
+ * the presented SD-JWT VCs fails the response (see
+ * `verifyTransactionDataBinding`).
  *
  * Throws the errors above, `UnknownClaimSetReferenceError`,
  * `TransactionDataBindingError`,
