@@ -125,7 +125,9 @@ export async function verifyTransactionDataBinding({
         return;
     }
 
-    const entries = transactionData.map(parseEntry);
+    const entries = transactionData.map((encoded, index) =>
+        parseEntry(encoded, index),
+    );
     // Credentials no entry references are not checked at all.
     const holders = presentations
         .filter(({ credentialId }) =>
@@ -135,83 +137,10 @@ export async function verifyTransactionDataBinding({
         )
         .map(toHolder);
 
+    // One entry after the other: each uses up hash occurrences the next
+    // entries must not count again.
     for (const [index, encoded] of transactionData.entries()) {
-        const entry = entries[index];
-        const candidates = holders.filter(({ presentation }) =>
-            entry.credential_ids.includes(presentation.credentialId),
-        );
-        if (candidates.length === 0) {
-            throw new TransactionDataBindingError(
-                `Transaction data entry ${index} references no presented SD-JWT VC (${entry.credential_ids.join(", ")}), so nothing authorizes it; EUDIPLO checks transaction data only in SD-JWT VC key binding JWTs`,
-            );
-        }
-
-        const allowedAlgs = entry.transaction_data_hashes_alg ?? [
-            HashAlgorithm.Sha256,
-        ];
-        const reasons: string[] = [];
-        // Per referenced credential id, the entry's hash in each of its
-        // presentations (undefined where a presentation lacks it).
-        const groups = new Map<
-            string,
-            Array<{ holder: Holder; hash: string | undefined }>
-        >();
-        for (const holder of candidates) {
-            const hash = await entryHash(encoded, holder, allowedAlgs, reasons);
-            if (hash) {
-                holder.known.add(hash);
-            }
-            const { credentialId } = holder.presentation;
-            groups.set(credentialId, [
-                ...(groups.get(credentialId) ?? []),
-                { holder, hash },
-            ]);
-        }
-
-        // A credential id authorizes the entry when every one of its
-        // presentations carries the hash: with `multiple`, the result does
-        // not tell which presentation authorized it. One that carries it in
-        // only some presentations is ambiguous and rejected.
-        const carriers: Array<Array<{ holder: Holder; hash: string }>> = [];
-        for (const [credentialId, group] of groups) {
-            const missing = group.filter(({ hash }) => !hash);
-            if (missing.length === 0) {
-                carriers.push(group as Array<{ holder: Holder; hash: string }>);
-            } else if (missing.length < group.length) {
-                throw new TransactionDataBindingError(
-                    `Transaction data entry ${index} has its hash in only some presentations of '${credentialId}': ${missing.map(({ holder }) => describe(holder)).join(", ")} lack it`,
-                );
-            }
-        }
-
-        if (carriers.length === 0) {
-            throw new TransactionDataBindingError(
-                `Transaction data entry ${index} has no matching hash in the key binding JWT of any presented credential it references (${[...groups.keys()].join(", ")})${reasons.length > 0 ? `: ${reasons.join("; ")}` : ""}`,
-            );
-        }
-
-        // The library finds an entry's hash anywhere in the list, so two
-        // identical entries could share one hash. Each entry uses up one
-        // occurrence of its hash in every presentation that authorizes it.
-        const carrier = carriers.find((group) =>
-            group.every(({ holder, hash }) => holder.unused.includes(hash)),
-        );
-        if (!carrier) {
-            throw new TransactionDataBindingError(
-                "Transaction data hashes do not match the transaction data entries one to one",
-            );
-        }
-        for (const { holder, hash } of carrier) {
-            holder.unused.splice(holder.unused.indexOf(hash), 1);
-        }
-
-        if (entry.type.startsWith("urn:eudi:sca:")) {
-            for (const group of groups.values()) {
-                for (const { holder, hash } of group) {
-                    if (hash) holder.ts12 = true;
-                }
-            }
-        }
+        await authorizeEntry(index, encoded, entries[index], holders);
     }
 
     for (const holder of holders) {
@@ -227,6 +156,130 @@ export async function verifyTransactionDataBinding({
             );
         }
     }
+}
+
+/** A presentation and the entry's hash in its KB-JWT, if it carries it. */
+interface Carried {
+    holder: Holder;
+    hash: string | undefined;
+}
+
+/** A presentation that carries the entry's hash. */
+type Carrier = Carried & { hash: string };
+
+/**
+ * Checks that one presented credential the entry references authorizes it
+ * and uses up one occurrence of its hash in each of its presentations.
+ */
+async function authorizeEntry(
+    index: number,
+    encoded: string,
+    entry: TransactionDataEntry,
+    holders: Holder[],
+): Promise<void> {
+    const candidates = holders.filter(({ presentation }) =>
+        entry.credential_ids.includes(presentation.credentialId),
+    );
+    if (candidates.length === 0) {
+        throw new TransactionDataBindingError(
+            `Transaction data entry ${index} references no presented SD-JWT VC (${entry.credential_ids.join(", ")}), so nothing authorizes it; EUDIPLO checks transaction data only in SD-JWT VC key binding JWTs`,
+        );
+    }
+
+    const reasons: string[] = [];
+    const groups = await hashesPerCredential(
+        encoded,
+        candidates,
+        entry.transaction_data_hashes_alg ?? [HashAlgorithm.Sha256],
+        reasons,
+    );
+    const carriers = authorizingCredentials(index, groups);
+    if (carriers.length === 0) {
+        const detail = reasons.length > 0 ? `: ${reasons.join("; ")}` : "";
+        const ids = [...groups.keys()].join(", ");
+        throw new TransactionDataBindingError(
+            `Transaction data entry ${index} has no matching hash in the key binding JWT of any presented credential it references (${ids})${detail}`,
+        );
+    }
+
+    // The library finds an entry's hash anywhere in the list, so two
+    // identical entries could share one hash. Each entry uses up one
+    // occurrence of its hash in every presentation that authorizes it.
+    const carrier = carriers.find((group) =>
+        group.every(({ holder, hash }) => holder.unused.includes(hash)),
+    );
+    if (!carrier) {
+        throw new TransactionDataBindingError(
+            "Transaction data hashes do not match the transaction data entries one to one",
+        );
+    }
+    for (const { holder, hash } of carrier) {
+        holder.unused.splice(holder.unused.indexOf(hash), 1);
+    }
+
+    if (entry.type.startsWith("urn:eudi:sca:")) {
+        for (const { holder, hash } of [...groups.values()].flat()) {
+            if (hash) holder.ts12 = true;
+        }
+    }
+}
+
+/**
+ * Per referenced credential id, the entry's hash in each of its
+ * presentations (undefined where a presentation lacks it). Records each
+ * found hash as known to its presentation.
+ */
+async function hashesPerCredential(
+    encoded: string,
+    candidates: Holder[],
+    allowedAlgs: string[],
+    reasons: string[],
+): Promise<Map<string, Carried[]>> {
+    const hashes = await Promise.all(
+        candidates.map((holder) =>
+            entryHash(encoded, holder, allowedAlgs, reasons),
+        ),
+    );
+    const groups = new Map<string, Carried[]>();
+    candidates.forEach((holder, position) => {
+        const hash = hashes[position];
+        if (hash) {
+            holder.known.add(hash);
+        }
+        const { credentialId } = holder.presentation;
+        groups.set(credentialId, [
+            ...(groups.get(credentialId) ?? []),
+            { holder, hash },
+        ]);
+    });
+    return groups;
+}
+
+/**
+ * The credential ids that authorize the entry: every one of their
+ * presentations carries the hash, since with `multiple` the result does not
+ * tell which presentation authorized it. One that carries it in only some
+ * presentations is ambiguous and rejected.
+ */
+function authorizingCredentials(
+    index: number,
+    groups: Map<string, Carried[]>,
+): Carrier[][] {
+    const carriers: Carrier[][] = [];
+    for (const [credentialId, group] of groups) {
+        const missing = group.filter(({ hash }) => !hash);
+        if (missing.length === 0) {
+            carriers.push(group as Carrier[]);
+        } else if (missing.length < group.length) {
+            const lacking = missing
+                .map(({ holder }) => describe(holder))
+                .join(", ");
+            throw new TransactionDataBindingError(
+                `Transaction data entry ${index} has its hash in only some presentations of '${credentialId}': ${lacking} lack it`,
+            );
+        }
+    }
+    return carriers;
 }
 
 function toHolder(presentation: TransactionDataPresentation): Holder {

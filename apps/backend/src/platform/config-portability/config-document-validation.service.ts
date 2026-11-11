@@ -76,8 +76,8 @@ export class ConfigDocumentValidationService {
             identityIssues.push(...this.validatePortableKeyChain(document));
         }
         if (document.kind === "PresentationConfig") {
-            identityIssues.push(...this.validateTrustedAuthorities(document));
             identityIssues.push(
+                ...this.validateTrustedAuthorities(document),
                 ...this.validateTransactionDataReferences(document),
             );
         }

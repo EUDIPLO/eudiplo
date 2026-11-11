@@ -9,11 +9,11 @@ const credentials = [
 
 describe("uncheckableTransactionData", () => {
     it("accepts no transaction data", () => {
-        expect(uncheckableTransactionData(undefined, credentials)).toBe(
-            undefined,
-        );
-        expect(uncheckableTransactionData(null, credentials)).toBe(undefined);
-        expect(uncheckableTransactionData([], [])).toBe(undefined);
+        expect(
+            uncheckableTransactionData(undefined, credentials),
+        ).toBeUndefined();
+        expect(uncheckableTransactionData(null, credentials)).toBeUndefined();
+        expect(uncheckableTransactionData([], [])).toBeUndefined();
     });
 
     it("accepts entries that reference only SD-JWT VC queries", () => {
@@ -25,7 +25,7 @@ describe("uncheckableTransactionData", () => {
                 ],
                 credentials,
             ),
-        ).toBe(undefined);
+        ).toBeUndefined();
     });
 
     it("rejects an entry naming no credential query", () => {
