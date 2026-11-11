@@ -3,7 +3,6 @@ import * as x509 from "@peculiar/x509";
 import { PinoLogger } from "nestjs-pino";
 import { getRevocationServices } from "../../../trust/domain/status-list-signers.js";
 import { describeDiscardedTrustLists } from "../../../trust/domain/trust-list-freshness.js";
-import { StatusListVerifierService } from "../../../trust/status-list-verifier.service.js";
 import {
     BuiltTrustStore,
     TrustStoreService,
@@ -105,7 +104,6 @@ export class CredentialChainValidationService {
     constructor(
         private readonly trustStore: TrustStoreService,
         private readonly x509v: X509ValidationService,
-        private readonly statusListVerifier: StatusListVerifierService,
         private readonly logger: PinoLogger,
     ) {
         this.logger.setContext(CredentialChainValidationService.name);
@@ -361,14 +359,6 @@ export class CredentialChainValidationService {
             `Status list is not signed under a ${signerTypes.join(" or ")} certificate of TrustedEntity ${entityId} matched with ${matchedEntity.issuanceServiceType}. Status list leaf: ${leafThumb}, path end: ${endThumb}`,
         );
         return false;
-    }
-
-    /**
-     * Fetch a status list JWT with caching.
-     * Delegates to StatusListVerifierService.
-     */
-    async fetchStatusListJwt(uri: string): Promise<string> {
-        return this.statusListVerifier.getStatusListJwt(uri);
     }
 
     /**

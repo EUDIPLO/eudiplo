@@ -2,6 +2,7 @@ import { inflateSync } from "node:zlib";
 import { Injectable, Logger } from "@nestjs/common";
 import {
     StatusListCwt,
+    StatusListCwtClaimKey,
     StatusListEntry,
     StatusType,
 } from "@owf/token-status-list";
@@ -44,11 +45,22 @@ const CACHE_MAX_ENTRIES = 1000;
 const TOKEN_CACHE_MAX_BYTES = 32 * 1024 * 1024;
 
 /**
- * Upper bound for the decompressed `lst` of a status list token, 128 million
+ * Upper bound for the decompressed `lst` of a status list JWT, 128 million
  * statuses at one bit each. DEFLATE compresses a list of equal statuses about
  * a thousandfold, so the compressed size does not bound this.
  */
 const STATUS_LIST_MAX_INFLATED_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Upper bound for the decompressed `lst` of a status list CWT, 8,388,608
+ * statuses at one bit each. @owf/mdoc reads the status of a CWT itself, with
+ * @owf/token-status-list, which decompresses the whole list and turns every
+ * status into a number: about 64 bytes of memory per decompressed byte at one
+ * bit per status, so about 70 MB for this limit and 1 GiB for the JWT one.
+ * A list EUDIPLO issues with the largest STATUS_CAPACITY (1,000,000) fits,
+ * even at eight bits per status.
+ */
+const STATUS_LIST_CWT_MAX_INFLATED_BYTES = 1024 * 1024;
 
 const STATUS_LIST_JWT_TYPES = new Set([
     "statuslist+jwt",
@@ -75,6 +87,24 @@ export class InvalidStatusListTokenError extends Error {}
 
 /** The index a referenced token names is outside its status list. */
 export class StatusListIndexOutOfRange extends InvalidStatusListTokenError {}
+
+/**
+ * The decompressed `lst` of a status list token. Decompression stops once the
+ * output exceeds `maxBytes`, so a list that decompresses to more never takes
+ * more memory than that.
+ *
+ * @throws InvalidStatusListTokenError if `lst` cannot be decompressed or
+ * decompresses to more than `maxBytes`
+ */
+function inflateStatusList(lst: Uint8Array, maxBytes: number): Uint8Array {
+    try {
+        return inflateSync(lst, { maxOutputLength: maxBytes });
+    } catch (error: any) {
+        throw new InvalidStatusListTokenError(
+            `Status list cannot be decompressed (at most ${maxBytes} bytes): ${error?.message ?? error}`,
+        );
+    }
+}
 
 /**
  * The status at `index` of a decompressed status list: `bits` bits per
@@ -121,8 +151,8 @@ export class StatusListVerifierService {
     private readonly logger = new Logger(StatusListVerifierService.name);
 
     /**
-     * Cache of raw status list JWTs keyed by URI.
-     * Used by statusListFetcher interface for SD-JWT SDK.
+     * Cache of raw status list JWTs keyed by URI, for the SD-JWT VC verifier
+     * and wallet and key attestations, see {@link getStatusListJwt}.
      */
     private readonly cachedJwts = new BoundedTtlCache<string>({
         maxEntries: CACHE_MAX_ENTRIES,
@@ -275,16 +305,10 @@ export class StatusListVerifierService {
             return cached.bytes;
         }
 
-        let bytes: Uint8Array;
-        try {
-            bytes = inflateSync(base64url.decode(lst), {
-                maxOutputLength: STATUS_LIST_MAX_INFLATED_BYTES,
-            });
-        } catch (error: any) {
-            throw new InvalidStatusListTokenError(
-                `Status list cannot be decompressed (at most ${STATUS_LIST_MAX_INFLATED_BYTES} bytes): ${error?.message ?? error}`,
-            );
-        }
+        const bytes = inflateStatusList(
+            base64url.decode(lst),
+            STATUS_LIST_MAX_INFLATED_BYTES,
+        );
 
         // The token is counted too: it stays in memory through this entry
         // after getStatusListJwt's cache evicts it.
@@ -328,8 +352,7 @@ export class StatusListVerifierService {
             return response.body.trim();
         } catch (error: any) {
             // Marks the list as unavailable for the best-effort revocation
-            // policy: the message on the SD-JWT path
-            // (isStatusListUnavailableError), the class on the mDOC path.
+            // policy.
             throw new RevocationListUnavailableError(
                 `Failed to fetch status list from ${uri}: ${error?.message || error}`,
             );
@@ -404,7 +427,6 @@ export class StatusListVerifierService {
 
     /**
      * Get a status list JWT from cache or fetch it.
-     * This is useful when you need the raw JWT string (e.g., for SDK's statusListFetcher).
      * The JWT is cached based on its TTL/exp claims.
      *
      * @param uri The URI of the status list JWT
@@ -451,6 +473,8 @@ export class StatusListVerifierService {
      *
      * @param uri The URI of the status list CWT
      * @returns The raw CWT bytes
+     * @throws InvalidStatusListTokenError if its list cannot be decompressed
+     * or decompresses to more than {@link STATUS_LIST_CWT_MAX_INFLATED_BYTES}
      */
     async getStatusListCwt(uri: string): Promise<Uint8Array> {
         const cached = this.cachedCwts.get(uri);
@@ -472,6 +496,15 @@ export class StatusListVerifierService {
         }
 
         const { payload } = StatusListCwt.fromToken(token);
+        // @owf/mdoc decompresses the list without a limit once it has
+        // verified the token, so an oversized list is refused before it gets
+        // there. The token is not verified yet, but decompressing it here
+        // takes at most the limit.
+        inflateStatusList(
+            payload.getClaim(StatusListCwtClaimKey.StatusList)
+                .compressedStatusList,
+            STATUS_LIST_CWT_MAX_INFLATED_BYTES,
+        );
         this.cachedCwts.set(
             uri,
             token,
@@ -501,7 +534,10 @@ export class StatusListVerifierService {
      * `uri` as a string, but passes any string here: a `uri` that is not an
      * absolute URI is thrown as {@link MalformedStatusReferenceError} and
      * not fetched, so best-effort mode does not take it for an unavailable
-     * list.
+     * list. A status list CWT whose list decompresses to more than
+     * {@link STATUS_LIST_CWT_MAX_INFLATED_BYTES} is thrown as
+     * {@link InvalidStatusListTokenError}, which rejects the credential in
+     * every mode.
      */
     readonly mdocFetch: typeof fetch = async (input, init) => {
         const uri = input instanceof Request ? input.url : input.toString();

@@ -47,7 +47,6 @@ describe("CredentialChainValidationService — trust list availability", () => {
         service = new CredentialChainValidationService(
             trustStore as any,
             x509v as any,
-            {} as any, // statusListVerifier — unused on these paths
             logger as any,
         );
     });
@@ -85,7 +84,6 @@ describe("CredentialChainValidationService — trust list availability", () => {
         const withRealStore = new CredentialChainValidationService(
             store,
             x509v as any,
-            {} as any,
             logger as any,
         );
 
@@ -206,7 +204,6 @@ describe("CredentialChainValidationService — status list signer", () => {
         return new CredentialChainValidationService(
             { getTrustStore: vi.fn().mockResolvedValue(store) } as any,
             new X509ValidationService(),
-            {} as any,
             {
                 setContext: vi.fn(),
                 error: vi.fn(),
@@ -271,7 +268,6 @@ describe("CredentialChainValidationService — status list signer", () => {
             const service = new CredentialChainValidationService(
                 store,
                 new X509ValidationService(),
-                {} as any,
                 {
                     setContext: vi.fn(),
                     error: vi.fn(),
@@ -675,7 +671,6 @@ describe("CredentialChainValidationService — status list signer", () => {
                     }),
                 } as any,
                 new X509ValidationService(),
-                {} as any,
                 {
                     setContext: vi.fn(),
                     error: vi.fn(),

@@ -45,31 +45,7 @@ export function resolveRevocationPolicy(
  * A status list or identifier list could not be fetched: the request failed,
  * timed out, returned a non-2xx status or was blocked by the outbound URL
  * policy. The best-effort revocation mode then verifies without the status
- * check.
+ * check. It is recognised by its class, never by its message: a list's URI
+ * in a message can read like an availability problem.
  */
 export class RevocationListUnavailableError extends Error {}
-
-export function isStatusListUnavailableError(error: unknown): boolean {
-    const message = String(
-        (error as Error | undefined)?.message ?? error ?? "",
-    ).toLowerCase();
-
-    const statusListRelated =
-        message.includes("status list") ||
-        message.includes("statuslist") ||
-        message.includes("revocation");
-
-    const availabilityRelated =
-        message.includes("timed out") ||
-        message.includes("timeout") ||
-        message.includes("failed to fetch") ||
-        message.includes("unavailable") ||
-        message.includes("network") ||
-        message.includes("econn") ||
-        message.includes("enotfound") ||
-        message.includes("eai_again") ||
-        message.includes("canceled") ||
-        message.includes("cancelled");
-
-    return statusListRelated && availabilityRelated;
-}

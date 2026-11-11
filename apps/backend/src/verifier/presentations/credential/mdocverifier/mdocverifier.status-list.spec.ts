@@ -28,7 +28,6 @@ import {
     it,
     vi,
 } from "vitest";
-import { isStatusListUnavailableError } from "../../../../trust/revocation-policy.util.js";
 import { StatusListVerifierService } from "../../../../trust/status-list-verifier.service.js";
 import { TrustFetchService } from "../../../../trust/trust-fetch.service.js";
 import { OutboundUrlPolicyService } from "../../../../webhook/outbound-url-policy.service.js";
@@ -127,6 +126,14 @@ describe("MdocverifierService status list fetch", () => {
                 statuses: [0, 1, 0, 0, 0, 0, 0, 0],
             }),
         });
+        published.set("/status/oversized", {
+            contentType: "application/statuslist+cwt",
+            // Decompresses to 1 MiB and one byte.
+            token: await signStatusListCwt(`${loopbackIp}/status/oversized`, {
+                statuses: new Array<number>(1024 * 1024 + 1).fill(0),
+                bits: 8,
+            }),
+        });
         published.set("/status/unprotected-x5chain", {
             contentType: "application/statuslist+cwt",
             token: await signStatusListCwt(
@@ -159,10 +166,12 @@ describe("MdocverifierService status list fetch", () => {
         uri: string,
         {
             statuses = [0, 0, 0, 0, 0, 0, 0, 0],
+            bits = 1,
             unprotectedX5Chain = false,
             signer = { jwk: issuerJwk, certificate: issuerCertificate },
         }: {
             statuses?: number[];
+            bits?: 1 | 2 | 4 | 8;
             unprotectedX5Chain?: boolean;
             signer?: SigningCertificate;
         } = {},
@@ -175,7 +184,7 @@ describe("MdocverifierService status list fetch", () => {
                 issuedAt: new Date((now - 60) * 1000),
                 expirationTime: new Date((now + 3600) * 1000),
                 timeToLive: 300,
-                statusList: new StatusList(statuses, 1),
+                statusList: new StatusList(statuses, bits),
             },
             protectedHeaders: new Map<number, unknown>([
                 [1, SignatureAlgorithm.ES256],
@@ -420,6 +429,36 @@ describe("MdocverifierService status list fetch", () => {
             const result = await verify(service, statusListAt(uri), failClosed);
             expect(result.verified).toBe(false);
             expect(result.failureReason).toContain("is not Valid");
+        }
+    });
+
+    // RP_PP_SM_Revocation_016b_UF of the RP conformance suite.
+    it("rejects a status list that decompresses to more than 1 MiB before the library reads it", async () => {
+        const service = verifier(policy(), loopbackIp);
+        const uri = `${loopbackIp}/status/oversized`;
+        const libraryDecompress = vi.spyOn(
+            StatusList,
+            "decompressStatusListFromBytes",
+        );
+
+        try {
+            for (const failClosed of [true, false]) {
+                const result = await verify(
+                    service,
+                    statusListAt(uri),
+                    failClosed,
+                );
+                expect(result).toMatchObject({
+                    verified: false,
+                    failureType: "verification_error",
+                    failureReason: expect.stringContaining(
+                        "cannot be decompressed",
+                    ),
+                });
+            }
+            expect(libraryDecompress).not.toHaveBeenCalled();
+        } finally {
+            libraryDecompress.mockRestore();
         }
     });
 
@@ -763,10 +802,9 @@ describe("MdocverifierService status list fetch", () => {
             const blocked = verifier(policy({ OUTBOUND_URL_ALLOW_HTTP: true }));
             const uri = `${loopbackIp}/status/1`;
 
-            const strict = await verify(blocked, statusListAt(uri));
-            expect(
-                isStatusListUnavailableError(new Error(strict.failureReason)),
-            ).toBe(true);
+            await expect(
+                verify(blocked, statusListAt(uri)),
+            ).resolves.toMatchObject({ verified: false });
 
             await expect(
                 verify(blocked, statusListAt(uri), false),
@@ -787,8 +825,8 @@ describe("MdocverifierService status list fetch", () => {
 
         it("rejects a credential its identifier list revokes", async () => {
             // The error names the list's URI, which here reads like an
-            // availability problem; the list was fetched, so it must not be
-            // treated as unavailable.
+            // availability problem. The list was fetched, so best-effort mode
+            // must not treat it as unavailable.
             const result = await verify(
                 verifier(policy(), loopbackIp),
                 identifierListAt(
@@ -801,9 +839,6 @@ describe("MdocverifierService status list fetch", () => {
             expect(result.verified).toBe(false);
             expect(result.failureReason).toContain(
                 "found in the revoked identifier list",
-            );
-            expect(isStatusListUnavailableError(result.failureReason)).toBe(
-                true,
             );
         });
     });

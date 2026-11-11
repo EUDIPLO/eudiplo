@@ -18,7 +18,10 @@ import {
     RevocationListUnavailableError,
     resolveRevocationPolicy,
 } from "../../../../trust/revocation-policy.util.js";
-import { StatusListVerifierService } from "../../../../trust/status-list-verifier.service.js";
+import {
+    InvalidStatusListTokenError,
+    StatusListVerifierService,
+} from "../../../../trust/status-list-verifier.service.js";
 import { VerifierOptions } from "../../../../trust/types.js";
 import { mdocContext, withFetch } from "../../mdoc-context.js";
 import {
@@ -231,10 +234,11 @@ export class MdocverifierService {
             // unavailable list is recorded here instead of being recognised by
             // the message.
             let revocationListUnavailable = false;
-            // A list uri that is not a URI is not fetched. The library wraps
-            // that error in one that reads like an unavailable status list,
-            // so it is recorded here too.
-            let malformedListUri: string | undefined;
+            // A list uri that is not a URI is not fetched, and a status list
+            // that cannot be decompressed within its size limit is refused.
+            // The library wraps these errors in one that reads like an
+            // unavailable status list, so they are recorded here too.
+            let refusedListReason: string | undefined;
             const verificationContext = withFetch(async (input, init) => {
                 try {
                     return await this.statusListVerifier.mdocFetch(input, init);
@@ -242,8 +246,11 @@ export class MdocverifierService {
                     if (error instanceof RevocationListUnavailableError) {
                         revocationListUnavailable = true;
                     }
-                    if (error instanceof MalformedStatusReferenceError) {
-                        malformedListUri = error.message;
+                    if (
+                        error instanceof MalformedStatusReferenceError ||
+                        error instanceof InvalidStatusListTokenError
+                    ) {
+                        refusedListReason = error.message;
                     }
                     throw error;
                 }
@@ -293,9 +300,9 @@ export class MdocverifierService {
                     verificationContext,
                 );
             } catch (error) {
-                if (malformedListUri) {
+                if (refusedListReason) {
                     this.logger.warn(
-                        `mDOC verification failed: ${malformedListUri}`,
+                        `mDOC verification failed: ${refusedListReason}`,
                     );
                     return {
                         verified: false,
@@ -303,7 +310,7 @@ export class MdocverifierService {
                         payload: vp,
                         docType,
                         failureType: "verification_error",
-                        failureReason: malformedListUri,
+                        failureReason: refusedListReason,
                     };
                 }
                 if (
