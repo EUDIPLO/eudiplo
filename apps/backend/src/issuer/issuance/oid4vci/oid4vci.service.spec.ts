@@ -43,7 +43,7 @@ function service(overrides: Record<string, unknown>): Oid4vciService {
     return Object.assign(
         Object.create(Oid4vciService.prototype) as Oid4vciService,
         {
-            logger: { debug: vi.fn(), warn: vi.fn() },
+            logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
             traceService: { getSpan: () => undefined },
             sdk: { issuer: vi.fn() },
             buildIssuerMetadata: {
@@ -76,6 +76,44 @@ describe("Oid4vciService credential request error mapping", () => {
         contentType: "application/json",
         body: { credential_configuration_id: "pid", proofs: {} },
     };
+
+    const encryptedRequestMetadata = {
+        ...issuerMetadata,
+        credentialIssuer: {
+            ...issuerMetadata.credentialIssuer,
+            credential_request_encryption: {
+                jwks: { keys: [{ kty: "EC", kid: "enc", alg: "ECDH-ES" }] },
+                enc_values_supported: ["A128GCM", "A256GCM"],
+                encryption_required: false,
+            },
+        },
+    };
+
+    /**
+     * A compact JWE to the advertised key; `header` overrides its protected
+     * header. Decryption itself is stubbed.
+     */
+    function encryptedJwe(header: Record<string, unknown> = {}): string {
+        const protectedHeader = Buffer.from(
+            JSON.stringify({
+                alg: "ECDH-ES",
+                enc: "A128GCM",
+                kid: "enc",
+                ...header,
+            }),
+        ).toString("base64url");
+        return `${protectedHeader}..iv.ciphertext.tag`;
+    }
+
+    function encryptedRequest(
+        header: Record<string, unknown> = {},
+    ): Oid4vciRequestContext {
+        return {
+            ...request,
+            contentType: "application/jwt",
+            body: encryptedJwe(header),
+        };
+    }
 
     function setup(overrides: {
         resolveSession?: () => Promise<unknown>;
@@ -205,101 +243,151 @@ describe("Oid4vciService credential request error mapping", () => {
     });
 
     it("decrypts an encrypted request with the advertised enc values only", async () => {
-        const jwe = "header.key.iv.ciphertext.tag";
         const decryptJweToJson = vi.fn().mockResolvedValue({
             credential_configuration_id: "pid",
             proofs: {},
         });
 
         await setup({
-            metadata: {
-                ...issuerMetadata,
-                credentialIssuer: {
-                    ...issuerMetadata.credentialIssuer,
-                    credential_request_encryption: {
-                        jwks: { keys: [] },
-                        enc_values_supported: ["A128GCM", "A256GCM"],
-                    },
-                },
-            },
+            metadata: encryptedRequestMetadata,
             decryptJweToJson,
-        }).getCredential(
-            { ...request, contentType: "application/jwt", body: jwe },
-            "tenant",
-        );
+        }).getCredential(encryptedRequest(), "tenant");
 
-        expect(decryptJweToJson).toHaveBeenCalledWith(jwe, "tenant", {
-            contentEncryptionAlgorithms: ["A128GCM", "A256GCM"],
-        });
+        expect(decryptJweToJson).toHaveBeenCalledWith(
+            encryptedJwe(),
+            "tenant",
+            { contentEncryptionAlgorithms: ["A128GCM", "A256GCM"] },
+        );
     });
 
-    it("allows no enc when the issuer advertises no credential_request_encryption", async () => {
-        const decryptJweToJson = vi
-            .fn()
-            .mockRejectedValue(new joseErrors.JOSEAlgNotAllowed("enc"));
+    it("refuses an encrypted request without decrypting it when the issuer advertises no credential_request_encryption", async () => {
+        const decryptJweToJson = vi.fn();
 
-        await rejection(
+        const error = await rejection(
             setup({ decryptJweToJson }).getCredential(
-                { ...request, contentType: "application/jwt", body: "jwe" },
+                encryptedRequest(),
                 "tenant",
             ),
         );
 
-        expect(decryptJweToJson).toHaveBeenCalledWith("jwe", "tenant", {
-            contentEncryptionAlgorithms: [],
+        expect(protocolError(error)).toEqual({
+            error: "invalid_encryption_parameters",
+            error_description: "Credential request encryption is not supported",
         });
+        expect(decryptJweToJson).not.toHaveBeenCalled();
     });
 
     // That the refusal comes before the credential_configuration_id check is
-    // shown end to end in credential-request-encryption.e2e-spec.ts.
-    it("names the advertised alg and enc when it refuses an alg or enc", async () => {
+    // shown end to end in credential-request-encryption.e2e-spec.ts. Every
+    // rule is covered in domain/credential-request-encryption.spec.ts.
+    it.each<[string, Record<string, unknown>, string]>([
+        [
+            "without kid",
+            { kid: undefined },
+            "Credential request is not encrypted to a key advertised by the issuer",
+        ],
+        [
+            "with an unknown kid",
+            { kid: "unknown" },
+            "Credential request is not encrypted to a key advertised by the issuer",
+        ],
+        [
+            "with another alg",
+            { alg: "ECDH-ES+A128KW" },
+            "Credential request JWE 'alg' must match the advertised key algorithm 'ECDH-ES'",
+        ],
+        [
+            "with another enc",
+            { enc: "A128CBC-HS256" },
+            "Credential request JWE 'enc' must be one of 'A128GCM', 'A256GCM'",
+        ],
+        [
+            "with zip",
+            { zip: "DEF" },
+            "Compressed credential requests are not supported",
+        ],
+        [
+            "with crit",
+            { crit: ["x-ext"], "x-ext": true },
+            "Credential request JWE must not contain a critical ('crit') header parameter",
+        ],
+    ])(
+        "refuses a JWE %s with invalid_encryption_parameters before decrypting it",
+        async (_case, header, description) => {
+            const decryptJweToJson = vi.fn();
+
+            const error = await rejection(
+                setup({
+                    metadata: encryptedRequestMetadata,
+                    decryptJweToJson,
+                }).getCredential(encryptedRequest(header), "tenant"),
+            );
+
+            expect(protocolError(error)).toEqual({
+                error: "invalid_encryption_parameters",
+                error_description: description,
+            });
+            expect(decryptJweToJson).not.toHaveBeenCalled();
+        },
+    );
+
+    it.each([
+        new joseErrors.JWEDecryptionFailed(),
+        new joseErrors.JWEInvalid("invalid"),
+        new joseErrors.JOSEAlgNotAllowed("not allowed"),
+        new joseErrors.JOSENotSupported("not supported"),
+    ])(
+        "answers a JWE that does not decrypt ($name) with invalid_encryption_parameters",
+        async (failure) => {
+            const error = await rejection(
+                setup({
+                    metadata: encryptedRequestMetadata,
+                    decryptJweToJson: vi.fn().mockRejectedValue(failure),
+                }).getCredential(encryptedRequest(), "tenant"),
+            );
+
+            expect(protocolError(error)).toEqual({
+                error: "invalid_encryption_parameters",
+                error_description:
+                    "Failed to decrypt encrypted credential request",
+            });
+        },
+    );
+
+    it("answers plaintext that is not JSON with invalid_credential_request", async () => {
         const error = await rejection(
             setup({
-                metadata: {
-                    ...issuerMetadata,
-                    credentialIssuer: {
-                        ...issuerMetadata.credentialIssuer,
-                        credential_request_encryption: {
-                            jwks: { keys: [] },
-                            enc_values_supported: ["A128GCM", "A256GCM"],
-                        },
-                    },
-                },
+                metadata: encryptedRequestMetadata,
                 decryptJweToJson: vi
                     .fn()
-                    .mockRejectedValue(
-                        new joseErrors.JOSEAlgNotAllowed(
-                            '"enc" (Encryption Algorithm) Header Parameter value not allowed',
-                        ),
-                    ),
-            }).getCredential(
-                { ...request, contentType: "application/jwt", body: "jwe" },
-                "tenant",
-            ),
+                    .mockRejectedValue(new SyntaxError("Unexpected token")),
+            }).getCredential(encryptedRequest(), "tenant"),
         );
 
         expect(protocolError(error)).toEqual({
-            error: "invalid_encryption_parameters",
-            error_description:
-                "Credential request JWE must use alg 'ECDH-ES' and an enc of 'A128GCM', 'A256GCM'",
+            error: "invalid_credential_request",
+            error_description: "Decrypted credential request is not valid JSON",
         });
     });
 
-    it("answers a JWE that does not decrypt with invalid_encryption_parameters", async () => {
+    it("rethrows a decryption failure that is not the wallet's as a server error", async () => {
+        const failure = new Error("KMS unavailable");
+
         const error = await rejection(
             setup({
-                decryptJweToJson: vi
-                    .fn()
-                    .mockRejectedValue(new joseErrors.JWEDecryptionFailed()),
-            }).getCredential(
-                { ...request, contentType: "application/jwt", body: "jwe" },
-                "tenant",
-            ),
+                metadata: encryptedRequestMetadata,
+                decryptJweToJson: vi.fn().mockRejectedValue(failure),
+            }).getCredential(encryptedRequest(), "tenant"),
         );
 
-        expect(protocolError(error)).toEqual({
-            error: "invalid_encryption_parameters",
-            error_description: "Failed to decrypt encrypted credential request",
+        expect(error).toBeInstanceOf(Oauth2ServerErrorResponseError);
+        expect(error).toMatchObject({
+            status: 500,
+            cause: failure,
+            errorResponse: {
+                error: "server_error",
+                error_description: "Unable to decrypt credential request",
+            },
         });
     });
 
@@ -337,7 +425,7 @@ describe("Oid4vciService credential request error mapping", () => {
     });
 
     it("hands an encrypted request to the parser as sent and returns the rewritten request from its decrypt callback", async () => {
-        const jwe = "header.key.iv.ciphertext.tag";
+        const jwe = encryptedJwe();
         const responseJwk = { kty: "EC", crv: "P-256", alg: "ECDH-ES" };
         let decryptJwe:
             | ((
@@ -349,9 +437,9 @@ describe("Oid4vciService credential request error mapping", () => {
 
         await setup({
             metadata: {
-                ...issuerMetadata,
+                ...encryptedRequestMetadata,
                 credentialIssuer: {
-                    ...issuerMetadata.credentialIssuer,
+                    ...encryptedRequestMetadata.credentialIssuer,
                     credential_response_encryption: {
                         alg_values_supported: ["ECDH-ES"],
                         enc_values_supported: ["A128GCM"],
