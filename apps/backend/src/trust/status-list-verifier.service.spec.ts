@@ -1,9 +1,13 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { deflateSync } from "node:zlib";
+import { deflateSync, gzipSync } from "node:zlib";
 import { Logger } from "@nestjs/common";
 import { CoseKey, SignatureAlgorithm } from "@owf/mdoc";
-import { StatusList, StatusListCwt } from "@owf/token-status-list";
+import {
+    StatusList,
+    StatusListCbor,
+    StatusListCwt,
+} from "@owf/token-status-list";
 import { base64url, exportJWK } from "jose";
 import {
     afterAll,
@@ -15,6 +19,7 @@ import {
     it,
     vi,
 } from "vitest";
+import { MAX_STATUS_LIST_CAPACITY } from "../issuer/status-list/status-list.service.js";
 import { mdocContext } from "../verifier/presentations/mdoc-context.js";
 import { OutboundUrlPolicyService } from "../webhook/outbound-url-policy.service.js";
 import { MalformedStatusReferenceError } from "./domain/status-list-reference.js";
@@ -118,10 +123,16 @@ describe("StatusListVerifierService cache", () => {
         ].join(".");
     }
 
-    async function cwt(claims: {
-        ttl?: number;
-        exp?: number;
-    }): Promise<Uint8Array> {
+    async function cwt(
+        claims: {
+            ttl?: number;
+            exp?: number;
+        },
+        statusList: StatusList | StatusListCbor = new StatusList(
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            1,
+        ),
+    ): Promise<Uint8Array> {
         return new StatusListCwt({
             payload: {
                 subject: "status-list",
@@ -130,7 +141,7 @@ describe("StatusListVerifierService cache", () => {
                     ? new Date(claims.exp * 1000)
                     : undefined,
                 timeToLive: claims.ttl,
-                statusList: new StatusList([0, 0, 0, 0, 0, 0, 0, 0], 1),
+                statusList,
             },
             protectedHeaders: new Map<number, unknown>([
                 [1, SignatureAlgorithm.ES256],
@@ -209,6 +220,78 @@ describe("StatusListVerifierService cache", () => {
             expect(statusLists.getCacheStats().uris).toEqual([
                 `${origin}/long`,
             ]);
+        });
+    });
+
+    describe("status list CWT size", () => {
+        // @owf/mdoc reads these lists itself and turns every status into a
+        // number, so they are refused above 1 MiB decompressed.
+        const mebibyte = 1024 * 1024;
+        const eightBitList = (statuses: number) =>
+            new StatusList(new Array<number>(statuses).fill(0), 8);
+
+        it("accepts the largest list EUDIPLO issues, at eight bits per status", async () => {
+            const statusLists = service();
+            tokens.set(
+                "/max",
+                await cwt({}, eightBitList(MAX_STATUS_LIST_CAPACITY)),
+            );
+
+            await expect(
+                statusLists.getStatusListCwt(`${origin}/max`),
+            ).resolves.toBeInstanceOf(Uint8Array);
+        });
+
+        it("accepts a list that decompresses to exactly 1 MiB", async () => {
+            const statusLists = service();
+            tokens.set("/mebibyte", await cwt({}, eightBitList(mebibyte)));
+
+            await expect(
+                statusLists.getStatusListCwt(`${origin}/mebibyte`),
+            ).resolves.toBeInstanceOf(Uint8Array);
+        });
+
+        it("rejects a gzip-compressed list and does not cache it", async () => {
+            // Token Status List requires the ZLIB format; the library's
+            // decompressor also reads gzip.
+            const statusLists = service();
+            tokens.set(
+                "/gzip",
+                await cwt(
+                    {},
+                    StatusListCbor.create({
+                        statusList: {
+                            bits: 1,
+                            list: gzipSync(new Uint8Array(1)),
+                        },
+                    }),
+                ),
+            );
+
+            await expect(
+                statusLists.getStatusListCwt(`${origin}/gzip`),
+            ).rejects.toThrow(InvalidStatusListTokenError);
+            expect(statusLists.getCacheStats().uris).toEqual([]);
+        });
+
+        it("rejects a larger one before the library reads it and does not cache it", async () => {
+            const statusLists = service();
+            tokens.set("/big", await cwt({}, eightBitList(mebibyte + 1)));
+            const libraryDecompress = vi.spyOn(
+                StatusList,
+                "decompressStatusListFromBytes",
+            );
+
+            const error = await statusLists
+                .getStatusListCwt(`${origin}/big`)
+                .catch((e: unknown) => e);
+
+            expect(error).toBeInstanceOf(InvalidStatusListTokenError);
+            expect((error as Error).message).toContain(
+                `at most ${mebibyte} bytes`,
+            );
+            expect(libraryDecompress).not.toHaveBeenCalled();
+            expect(statusLists.getCacheStats().uris).toEqual([]);
         });
     });
 
@@ -431,6 +514,18 @@ describe("StatusListVerifierService.getStatusFromStatusListJwt", () => {
                 { uri, idx: 0 },
             ),
         ).toThrow(/decompressed/);
+    });
+
+    it("rejects a gzip-compressed list", () => {
+        const gzip = gzipSync(new Uint8Array(1));
+        expect(() =>
+            statusLists.getStatusFromStatusListJwt(
+                token({
+                    status_list: { bits: 1, lst: base64url.encode(gzip) },
+                }),
+                { uri, idx: 0 },
+            ),
+        ).toThrow(InvalidStatusListTokenError);
     });
 
     it("decompresses a token once while it is served for the URI", () => {

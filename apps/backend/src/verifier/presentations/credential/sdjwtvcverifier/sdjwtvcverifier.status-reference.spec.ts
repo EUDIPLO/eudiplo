@@ -1,7 +1,20 @@
 import { deflateSync } from "node:zlib";
 import { ES256 } from "@owf/crypto";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { StatusList } from "@owf/token-status-list";
+import {
+    afterEach,
+    beforeAll,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    vi,
+} from "vitest";
 import { RevocationListUnavailableError } from "../../../../trust/revocation-policy.util.js";
+import {
+    InvalidStatusListTokenError,
+    StatusListVerifierService,
+} from "../../../../trust/status-list-verifier.service.js";
 import type { VerifierOptions } from "../../../../trust/types.js";
 import {
     SdJwtVerificationError,
@@ -9,8 +22,9 @@ import {
 } from "./sdjwtvcverifier.service.js";
 
 /**
- * The status reference of a presented SD-JWT VC, checked with the real
- * @sd-jwt/sd-jwt-vc library (the other spec mocks it). The issuer is
+ * The status of a presented SD-JWT VC, verified with the real
+ * @sd-jwt/sd-jwt-vc library (the other spec mocks it) and read with the real
+ * StatusListVerifierService; only fetching the list is stubbed. The issuer is
  * resolved through OpenID Federation, so no certificate chain is needed.
  */
 
@@ -77,19 +91,38 @@ async function credential(
     return `${jwt}~`;
 }
 
-/** Status list token for {@link STATUS_URI} in which every status is valid. */
-function statusList(issuer: Issuer): Promise<string> {
+/**
+ * Status list token signed by `signer`, by default for {@link STATUS_URI}
+ * with 128 statuses that are all valid.
+ */
+function statusList(
+    signer: Issuer,
+    {
+        list = new Uint8Array(16),
+        lst = deflateSync(list),
+        sub = STATUS_URI,
+        iat = Math.floor(Date.now() / 1000) - 600,
+        nbf,
+        exp,
+    }: {
+        list?: Uint8Array;
+        lst?: Uint8Array;
+        sub?: string;
+        iat?: number;
+        nbf?: number;
+        exp?: number;
+    } = {},
+): Promise<string> {
     return signJwt(
-        issuer,
+        signer,
         { alg: "ES256", typ: "statuslist+jwt", kid: KID },
         {
-            sub: STATUS_URI,
-            iat: Math.floor(Date.now() / 1000) - 60,
+            sub,
+            iat,
+            ...(nbf === undefined ? {} : { nbf }),
+            ...(exp === undefined ? {} : { exp }),
             ttl: 300,
-            status_list: {
-                bits: 1,
-                lst: b64url(deflateSync(new Uint8Array(16))),
-            },
+            status_list: { bits: 1, lst: b64url(lst) },
         },
     );
 }
@@ -105,14 +138,15 @@ async function setup() {
         },
         expiresAt: new Date(Date.now() + 60_000).toISOString(),
     };
-    const list = await statusList(issuer);
-    const chainValidation = {
-        fetchStatusListJwt: vi.fn().mockResolvedValue(list),
-    };
+    const statusLists = new StatusListVerifierService({} as any);
+    const getStatusListJwt = vi
+        .spyOn(statusLists, "getStatusListJwt")
+        .mockResolvedValue(await statusList(issuer));
     const service = new SdjwtvcverifierService(
         {} as any,
         { getCryptoFromJwk: () => ES256 } as any,
-        chainValidation as any,
+        {} as any,
+        statusLists,
         {
             resolveCredentialIssuerKey: vi
                 .fn()
@@ -148,26 +182,27 @@ async function setup() {
                 requireX5c: false,
                 revocation: { enabled, failClosed },
             },
+            skewSeconds: 60,
         } as VerifierOptions);
-    return { verify, fetchStatusListJwt: chainValidation.fetchStatusListJwt };
+    return { verify, issuer, getStatusListJwt };
 }
 
 describe("SdjwtvcverifierService status reference", () => {
     it("checks a well-formed status_list reference", async () => {
-        const { verify, fetchStatusListJwt } = await setup();
+        const { verify, getStatusListJwt } = await setup();
 
         const result = await verify({
             status_list: { uri: STATUS_URI, idx: 7 },
         });
 
         expect(result.payload).toMatchObject({ given_name: "Erika" });
-        expect(fetchStatusListJwt).toHaveBeenCalledExactlyOnceWith(STATUS_URI);
+        expect(getStatusListJwt).toHaveBeenCalledExactlyOnceWith(STATUS_URI);
     });
 
     it("checks the reference only after the credential itself", async () => {
         // Token Status List Section 8.3: an expired credential fails for its
         // expiry, whatever its status reference says.
-        const { verify, fetchStatusListJwt } = await setup();
+        const { verify, getStatusListJwt } = await setup();
 
         const error = await verify(
             { status_list: { uri: STATUS_URI, idx: "7" } },
@@ -176,7 +211,7 @@ describe("SdjwtvcverifierService status reference", () => {
 
         expect(error).not.toBeInstanceOf(SdJwtVerificationError);
         expect(String(error)).toMatch(/expired/i);
-        expect(fetchStatusListJwt).not.toHaveBeenCalled();
+        expect(getStatusListJwt).not.toHaveBeenCalled();
     });
 
     describe("without a status check", () => {
@@ -193,7 +228,7 @@ describe("SdjwtvcverifierService status reference", () => {
         });
 
         it("neither checks nor fetches the reference when disabled", async () => {
-            const { verify, fetchStatusListJwt } = await setup();
+            const { verify, getStatusListJwt } = await setup();
 
             const result = await verify(
                 { status_list: { uri: STATUS_URI, idx: "7" } },
@@ -201,7 +236,7 @@ describe("SdjwtvcverifierService status reference", () => {
             );
 
             expect(result.payload).toMatchObject({ given_name: "Erika" });
-            expect(fetchStatusListJwt).not.toHaveBeenCalled();
+            expect(getStatusListJwt).not.toHaveBeenCalled();
             expect(globalFetch).not.toHaveBeenCalled();
         });
 
@@ -218,9 +253,9 @@ describe("SdjwtvcverifierService status reference", () => {
             });
         });
 
-        it("does not fetch the list again when best-effort mode retries", async () => {
-            const { verify, fetchStatusListJwt } = await setup();
-            fetchStatusListJwt.mockRejectedValue(
+        it("does not fetch the list again when best-effort mode skips it", async () => {
+            const { verify, getStatusListJwt } = await setup();
+            getStatusListJwt.mockRejectedValue(
                 new RevocationListUnavailableError(
                     `Failed to fetch status list from ${STATUS_URI}: blocked`,
                 ),
@@ -232,7 +267,7 @@ describe("SdjwtvcverifierService status reference", () => {
             );
 
             expect(result.payload).toMatchObject({ given_name: "Erika" });
-            expect(fetchStatusListJwt).toHaveBeenCalledOnce();
+            expect(getStatusListJwt).toHaveBeenCalledOnce();
             expect(globalFetch).not.toHaveBeenCalled();
         });
     });
@@ -256,7 +291,7 @@ describe("SdjwtvcverifierService status reference", () => {
         ])(
             "rejects a reference with %s without fetching a status list",
             async (_, status) => {
-                const { verify, fetchStatusListJwt } = await setup();
+                const { verify, getStatusListJwt } = await setup();
 
                 const error = await verify(status, { failClosed }).catch(
                     (e: unknown) => e,
@@ -267,8 +302,167 @@ describe("SdjwtvcverifierService status reference", () => {
                     failureType: "verification_error",
                     verboseReason: expect.stringMatching(/^The status/),
                 });
-                expect(fetchStatusListJwt).not.toHaveBeenCalled();
+                expect(getStatusListJwt).not.toHaveBeenCalled();
             },
         );
+    });
+
+    describe.each([
+        ["strict", true],
+        ["best-effort", false],
+    ])("status list checks in %s mode", (_, failClosed) => {
+        const reference = { status_list: { uri: STATUS_URI, idx: 7 } };
+
+        it("rejects a credential its status list revokes", async () => {
+            const { verify, issuer, getStatusListJwt } = await setup();
+            const list = new Uint8Array(16);
+            list[0] = 0b1000_0000; // idx 7
+            getStatusListJwt.mockResolvedValue(
+                await statusList(issuer, { list }),
+            );
+
+            await expect(verify(reference, { failClosed })).rejects.toThrow(
+                "Status is not valid",
+            );
+        });
+
+        it("rejects a status list signed by another key", async () => {
+            const { verify, getStatusListJwt } = await setup();
+            getStatusListJwt.mockResolvedValue(
+                await statusList(await createIssuer()),
+            );
+
+            await expect(verify(reference, { failClosed })).rejects.toThrow(
+                "Status List JWT verification failed",
+            );
+        });
+
+        it("rejects a status list for another URI", async () => {
+            const { verify, issuer, getStatusListJwt } = await setup();
+            getStatusListJwt.mockResolvedValue(
+                await statusList(issuer, { sub: `${STATUS_URI}/other` }),
+            );
+
+            await expect(verify(reference, { failClosed })).rejects.toThrow(
+                "does not match the status list URI",
+            );
+        });
+
+        it("rejects an index outside the list", async () => {
+            const { verify } = await setup();
+
+            await expect(
+                verify(
+                    { status_list: { uri: STATUS_URI, idx: 128 } },
+                    { failClosed },
+                ),
+            ).rejects.toThrow("outside the list");
+        });
+
+        it("accepts a status list that expired within the clock skew", async () => {
+            const { verify, issuer, getStatusListJwt } = await setup();
+            getStatusListJwt.mockResolvedValue(
+                await statusList(issuer, {
+                    exp: Math.floor(Date.now() / 1000) - 30,
+                }),
+            );
+
+            await expect(
+                verify(reference, { failClosed }),
+            ).resolves.toMatchObject({ payload: { given_name: "Erika" } });
+        });
+
+        it.each([
+            ["iat", { iat: Math.floor(Date.now() / 1000) + 120 }],
+            ["nbf", { nbf: Math.floor(Date.now() / 1000) + 120 }],
+        ])(
+            "rejects a status list whose %s is beyond the clock skew",
+            async (_, claims) => {
+                const { verify, issuer, getStatusListJwt } = await setup();
+                getStatusListJwt.mockResolvedValue(
+                    await statusList(issuer, claims),
+                );
+
+                await expect(verify(reference, { failClosed })).rejects.toThrow(
+                    "Status List JWT verification failed",
+                );
+            },
+        );
+
+        it("rejects a status list that expired before the clock skew", async () => {
+            const { verify, issuer, getStatusListJwt } = await setup();
+            getStatusListJwt.mockResolvedValue(
+                await statusList(issuer, {
+                    exp: Math.floor(Date.now() / 1000) - 120,
+                }),
+            );
+
+            await expect(verify(reference, { failClosed })).rejects.toThrow(
+                /expired/,
+            );
+        });
+    });
+
+    // RP_PP_SM_Revocation_016a_UF of the RP conformance suite serves a signed
+    // status list of about a megabyte that decompresses to 1 GiB; this one
+    // decompresses to 64 MiB.
+    describe("status list that decompresses to more than 16 MiB", () => {
+        const inflatedBytes = 64 * 1024 * 1024;
+        let bomb: Uint8Array;
+        let libraryDecompress: ReturnType<typeof vi.spyOn>;
+
+        beforeAll(() => {
+            bomb = deflateSync(new Uint8Array(inflatedBytes));
+        });
+        beforeEach(() => {
+            libraryDecompress = vi.spyOn(
+                StatusList,
+                "decompressStatusListFromBytes",
+            );
+        });
+        afterEach(() => {
+            libraryDecompress.mockRestore();
+        });
+
+        it.each([
+            ["strict", true],
+            ["best-effort", false],
+        ])(
+            "rejects the credential in %s mode without decompressing the list",
+            async (_, failClosed) => {
+                const { verify, issuer, getStatusListJwt } = await setup();
+                getStatusListJwt.mockResolvedValue(
+                    await statusList(issuer, { lst: bomb }),
+                );
+
+                const error = await verify(
+                    { status_list: { uri: STATUS_URI, idx: 7 } },
+                    { failClosed },
+                ).catch((e: unknown) => e);
+
+                // Decompression stopped at the limit, and the library, which
+                // turns every status into a number, never saw the list.
+                expect(error).toBeInstanceOf(InvalidStatusListTokenError);
+                expect((error as Error).message).toContain(
+                    `at most ${16 * 1024 * 1024} bytes`,
+                );
+                expect(libraryDecompress).not.toHaveBeenCalled();
+            },
+        );
+
+        it("still checks the next credential's status list", async () => {
+            const { verify, issuer, getStatusListJwt } = await setup();
+            getStatusListJwt
+                .mockResolvedValueOnce(await statusList(issuer, { lst: bomb }))
+                .mockResolvedValueOnce(await statusList(issuer));
+            const reference = { status_list: { uri: STATUS_URI, idx: 7 } };
+
+            await expect(verify(reference)).rejects.toBeInstanceOf(
+                InvalidStatusListTokenError,
+            );
+            await expect(verify(reference)).resolves.toMatchObject({
+                payload: { given_name: "Erika" },
+            });
+        });
     });
 });
