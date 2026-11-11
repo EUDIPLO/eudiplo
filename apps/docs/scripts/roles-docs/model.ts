@@ -107,17 +107,15 @@ function securedMatch(decorator: ts.Decorator, options: ts.Expression | undefine
     const values: Record<string, string> = {};
     if (ts.isObjectLiteralExpression(options)) {
         for (const property of options.properties) {
-            const name = ts.isPropertyAssignment(property) ? property.name.getText() : undefined;
-            if (
-                !name ||
-                !Object.hasOwn(allowed, name) ||
-                name in values ||
-                !ts.isStringLiteral(property.initializer) ||
-                !allowed[name].includes(property.initializer.text)
-            ) {
+            if (!ts.isPropertyAssignment(property) || !ts.isStringLiteral(property.initializer)) {
                 throw new Error(`Unsupported @Secured options: ${decorator.getText()}`);
             }
-            values[name] = property.initializer.text;
+            const name = property.name.getText();
+            const value = property.initializer.text;
+            if (!Object.hasOwn(allowed, name) || name in values || !allowed[name].includes(value)) {
+                throw new Error(`Unsupported @Secured options: ${decorator.getText()}`);
+            }
+            values[name] = value;
         }
         return (values.match ?? "any") as RoleMatch;
     }
