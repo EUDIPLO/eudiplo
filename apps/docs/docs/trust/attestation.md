@@ -46,7 +46,7 @@ EUDIPLO verifies both signatures, builds a certificate path from `x5c` to a wall
 | `best_effort` (default) | Rejected             | Accepted, with a warning in the log                                          | Rejected                                       |
 | `disabled`              | Accepted             | Accepted, the list is not fetched                                            | Accepted                                       |
 
-A status list signed by another key is rejected unless the mode is `disabled`, and so is a malformed `status` claim: one that is not a JSON object, an empty object, or one whose `status_list` is not an object with a non-empty string `uri` and a non-negative integer `idx`. An attestation without a `status` claim is accepted in every mode, as is one whose `status` claim has no `status_list` (another status mechanism, which EUDIPLO does not check).
+A status list signed by another key is rejected unless the mode is `disabled`, and so is a malformed `status` claim: one that is not a JSON object, an empty object, or one whose `status_list` is not an object with a `uri` that is an absolute URI and a non-negative integer `idx`. An attestation without a `status` claim is accepted in every mode, as is one whose `status` claim has no `status_list` (another status mechanism, which EUDIPLO does not check).
 
 Each EUDIPLO-managed authorization server resolves three settings independently:
 
@@ -108,7 +108,7 @@ A wallet provider revokes a wallet unit attestation when the wallet unit can no 
 In the Web Client, turn on **Revoke with Wallet Unit** under **Credential Features** in the credential configuration's settings. While it is on, **Status Management** and **Require Key Attestation** stay on and cannot be turned off.
 
 - Requires `statusManagement: true` and `config.keyAttestationsRequired`; the API and the configuration import reject it otherwise.
-- At issuance, EUDIPLO stores the status list reference (`status.status_list`) and the `x5c` of the key attestation with the status entry of every credential issued for the keys it attests. A key attestation without `status_list` is not followed.
+- At issuance, EUDIPLO stores the status list reference (`status.status_list`) and the `x5c` of the key attestation with the status entry of every credential issued for the keys it attests. A key attestation without `status_list`, or with a malformed `status` claim, is not followed.
 - Every `WALLET_UNIT_STATUS_CHECK_INTERVAL` seconds (default 3600, `0` turns the check off), and once after startup, EUDIPLO reads the status of every followed wallet unit. The provider must still be in the issuance configuration's `walletProviderTrustLists`, and its status list must pass the checks above. A fetched list is reused for its `ttl` (5 minutes without one), at most one hour and not past its `exp`.
 - When the status is revoked (`1`), EUDIPLO revokes the credentials issued under that wallet unit attestation and sends the [wallet unit revocation webhook](../reference/webhooks.md#wallet-unit-revocation-webhook). Within a run, a status list is verified once per attestation certificate chain and batch of up to 500 credentials. Revocation is final. Other values, such as suspended (`2`), are logged and change nothing.
 - When the status cannot be read (the list cannot be fetched or verified, or the provider is no longer in the trust lists), nothing is revoked: the reason is logged as a warning and the next run tries again.

@@ -13,6 +13,7 @@ import {
     ItemsRequest,
     SessionTranscript,
     SignatureAlgorithm,
+    Status,
     type StatusOptions,
 } from "@owf/mdoc";
 import { StatusList, StatusListCwt } from "@owf/token-status-list";
@@ -633,6 +634,127 @@ describe("MdocverifierService status list fetch", () => {
                 verify(service, identifierListAt(uri(), revokedId)),
             ).resolves.toMatchObject({ verified: false });
             expect(requests).toEqual([identifierListPath, identifierListPath]);
+        });
+    });
+
+    // RP_WS_SM_Revocation_005a_UF of the RP conformance suite, for mDOCs.
+    describe("malformed status references", () => {
+        // CBOR of the text strings "idx" and "uri", and of the integer 1.
+        const IDX = [0x63, 0x69, 0x64, 0x78];
+        const URI = [0x63, 0x75, 0x72, 0x69];
+
+        /**
+         * `vp` with `from` replaced by `to` of the same length. Neither
+         * @owf/token-status-list nor the holder creates a malformed status
+         * reference, so it is written into the presented bytes. That breaks
+         * the MSO signature, but @owf/mdoc decodes the reference first.
+         */
+        const patched = (vp: string, from: number[], to: number[]) => {
+            const bytes = Buffer.from(vp, "base64url");
+            const at = bytes.indexOf(Buffer.from(from));
+            expect(at).toBeGreaterThan(-1);
+            Buffer.from(to).copy(bytes, at);
+            return bytes.toString("base64url");
+        };
+
+        it.each([
+            ["no idx", [...IDX, 0x01], [0x63, 0x69, 0x64, 0x79, 0x01]],
+            ["no uri", URI, [0x63, 0x75, 0x72, 0x6a]],
+            ["a negative idx", [...IDX, 0x01], [...IDX, 0x20]],
+            ["a string idx", [...IDX, 0x01], [...IDX, 0x60]],
+        ])("rejects a status list reference with %s", async (_, from, to) => {
+            const service = verifier(policy(), loopbackIp);
+            const { vp, sessionTranscript } = await presentation(
+                statusListAt(`${loopbackIp}/status/1`),
+            );
+
+            for (const failClosed of [true, false]) {
+                const result = await service.verify(
+                    patched(vp, from, to),
+                    { protocol: "iso-18013-7", sessionTranscript },
+                    {
+                        trustListSource: { lotes: [] },
+                        policy: { revocation: { enabled: true, failClosed } },
+                    } as never,
+                    [[namespace, "given_name"]],
+                );
+                expect(result.verified).toBe(false);
+                expect(result.failureReason).toContain(
+                    "Error decoding StatusListInfo",
+                );
+            }
+            expect(requests).toEqual([]);
+        });
+
+        it.each([
+            ["a status list", statusListAt("not a uri")],
+            ["an identifier list", identifierListAt("not a uri")],
+        ])(
+            "rejects %s uri that is not a URI without fetching it",
+            async (_, status) => {
+                const service = verifier(policy(), loopbackIp);
+                const get = vi.spyOn(TrustFetchService.prototype, "get");
+
+                try {
+                    for (const failClosed of [true, false]) {
+                        const result = await verify(
+                            service,
+                            status,
+                            failClosed,
+                        );
+                        expect(result).toMatchObject({
+                            verified: false,
+                            failureType: "verification_error",
+                            failureReason: expect.stringContaining(
+                                "not an absolute URI",
+                            ),
+                        });
+                    }
+                    expect(get).not.toHaveBeenCalled();
+                } finally {
+                    get.mockRestore();
+                }
+            },
+        );
+    });
+
+    describe("MSO status without a status list or identifier list", () => {
+        it("rejects an empty one in strict and best-effort mode", async () => {
+            const service = verifier(policy(), loopbackIp);
+
+            for (const failClosed of [true, false]) {
+                const result = await verify(
+                    service,
+                    Status.create({}) as never,
+                    failClosed,
+                );
+                expect(result).toMatchObject({
+                    verified: false,
+                    failureType: "verification_error",
+                    failureReason: "The MSO's status names no status mechanism",
+                });
+            }
+        });
+
+        it("rejects one with only another mechanism in strict mode only", async () => {
+            const service = verifier(policy(), loopbackIp);
+            const otherMechanism = () =>
+                Status.fromEncodedStructure(
+                    new Map([["other_mechanism", { id: 1 }]]),
+                ) as never;
+
+            await expect(
+                verify(service, otherMechanism(), true),
+            ).resolves.toMatchObject({
+                verified: false,
+                failureType: "verification_error",
+                failureReason: expect.stringContaining(
+                    "no supported status mechanism",
+                ),
+            });
+            await expect(
+                verify(service, otherMechanism(), false),
+            ).resolves.toMatchObject({ verified: true });
         });
     });
 

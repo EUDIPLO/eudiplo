@@ -8,6 +8,11 @@ import {
 import { base64url, decodeJwt, decodeProtectedHeader } from "jose";
 import { BoundedTtlCache } from "../shared/utils/bounded-ttl-cache.js";
 import { toBuffer } from "../shared/utils/buffer.util.js";
+import {
+    isAbsoluteUri,
+    MalformedStatusReferenceError,
+    parseStatusListReference,
+} from "./domain/status-list-reference.js";
 import { RevocationListUnavailableError } from "./revocation-policy.util.js";
 import { TrustFetchService } from "./trust-fetch.service.js";
 
@@ -59,11 +64,6 @@ const PARSED_CACHE_MAX_BYTES = 64 * 1024 * 1024;
  */
 function tokenBytes(token: string | Uint8Array): number {
     return typeof token === "string" ? token.length * 2 : token.byteLength;
-}
-
-/** A JSON object, not an array or null. */
-function isJsonObject(value: unknown): value is Record<string, unknown> {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -154,52 +154,17 @@ export class StatusListVerifierService {
 
     /**
      * Get the `status_list` reference (uri and idx) of a JWT's `status`
-     * claim (draft-ietf-oauth-status-list Section 6.1).
-     *
-     * A `status` claim without `status_list` uses another status mechanism
-     * and counts as no reference.
+     * claim, see {@link parseStatusListReference}.
      *
      * @param jwt The JWT that may contain a status claim
      * @returns The status list entry reference, or undefined if the JWT has
      * no `status_list` reference
-     * @throws Error if the JWT cannot be decoded, or its `status` claim or
-     * `status_list` reference is malformed
+     * @throws Error if the JWT cannot be decoded, and
+     * MalformedStatusReferenceError if its `status` claim or `status_list`
+     * reference is malformed
      */
     getStatusEntryFromJwt(jwt: string): StatusListEntry | undefined {
-        const payload = decodeJwt(jwt);
-        if (payload.status === undefined) {
-            return undefined;
-        }
-        // draft-ietf-oauth-status-list Section 6.2: the claim is an object
-        // with at least one status mechanism.
-        if (
-            !isJsonObject(payload.status) ||
-            Object.keys(payload.status).length === 0
-        ) {
-            throw new Error(
-                "The status claim is not a JSON object with a status mechanism",
-            );
-        }
-        const entry = payload.status.status_list;
-        if (entry === undefined) {
-            return undefined;
-        }
-        if (!isJsonObject(entry)) {
-            throw new Error("The status_list claim is not a JSON object");
-        }
-        if (typeof entry.uri !== "string" || entry.uri === "") {
-            throw new Error("The status_list claim has no uri");
-        }
-        if (
-            typeof entry.idx !== "number" ||
-            !Number.isSafeInteger(entry.idx) ||
-            entry.idx < 0
-        ) {
-            throw new Error(
-                "The status_list claim has no non-negative integer idx",
-            );
-        }
-        return { uri: entry.uri, idx: entry.idx };
+        return parseStatusListReference(decodeJwt(jwt).status);
     }
 
     /**
@@ -532,9 +497,19 @@ export class StatusListVerifierService {
      * A list that cannot be fetched, including a non-2xx response, is thrown
      * as {@link RevocationListUnavailableError} rather than returned, so the
      * best-effort revocation mode can tell it from an invalid or revoking list.
+     * @owf/mdoc decodes a status list `idx` as a non-negative integer and a
+     * `uri` as a string, but passes any string here: a `uri` that is not an
+     * absolute URI is thrown as {@link MalformedStatusReferenceError} and
+     * not fetched, so best-effort mode does not take it for an unavailable
+     * list.
      */
     readonly mdocFetch: typeof fetch = async (input, init) => {
         const uri = input instanceof Request ? input.url : input.toString();
+        if (!isAbsoluteUri(uri)) {
+            throw new MalformedStatusReferenceError(
+                "The MSO references a status list or identifier list whose uri is not an absolute URI",
+            );
+        }
         const accept = new Headers(init?.headers).get("accept") ?? "";
 
         if (accept.includes(STATUS_LIST_CWT)) {

@@ -17,6 +17,7 @@ import {
 } from "vitest";
 import { mdocContext } from "../verifier/presentations/mdoc-context.js";
 import { OutboundUrlPolicyService } from "../webhook/outbound-url-policy.service.js";
+import { MalformedStatusReferenceError } from "./domain/status-list-reference.js";
 import {
     InvalidStatusListTokenError,
     StatusListVerifierService,
@@ -533,10 +534,18 @@ describe("StatusListVerifierService.getStatusEntryFromJwt", () => {
             case: "a fractional idx",
             status: { status_list: { uri: "https://s", idx: 1.5 } },
         },
+        {
+            case: "a relative uri",
+            status: { status_list: { uri: "/status/1", idx: 1 } },
+        },
+        {
+            case: "a uri that is not a URI",
+            status: { status_list: { uri: "not a uri", idx: 1 } },
+        },
     ])("throws for $case", ({ status }) => {
         expect(() =>
             statusLists.getStatusEntryFromJwt(jwtWith({ status })),
-        ).toThrow();
+        ).toThrow(MalformedStatusReferenceError);
     });
 
     it("throws for a token that cannot be decoded", () => {

@@ -9,6 +9,10 @@ import {
     CREDENTIAL_ISSUER_METADATA_TYPE,
     findFederationProtocolKey,
 } from "../../../../trust/domain/federation-protocol-keys.js";
+import {
+    MalformedStatusReferenceError,
+    parseStatusListReference,
+} from "../../../../trust/domain/status-list-reference.js";
 import { FederationTrustService } from "../../../../trust/federation-trust.service.js";
 import {
     type FederationResolution,
@@ -126,8 +130,32 @@ export class SdjwtvcverifierService {
                     ),
                 ...(enableStatusCheck
                     ? {
-                          statusListFetcher: (uri: string) =>
-                              this.chainValidation.fetchStatusListJwt(uri),
+                          statusListFetcher: (uri: string) => {
+                              // The library fetches the list a status_list
+                              // names and reads any idx, a string included.
+                              // It calls this once the credential and its key
+                              // binding are validated, where Token Status
+                              // List Section 8.3 checks the reference.
+                              try {
+                                  parseStatusListReference(
+                                      issuerStatusClaim(cred),
+                                  );
+                              } catch (error) {
+                                  if (
+                                      error instanceof
+                                      MalformedStatusReferenceError
+                                  ) {
+                                      failure = {
+                                          failureType: "verification_error",
+                                          reason: error.message,
+                                      };
+                                  }
+                                  throw error;
+                              }
+                              return this.chainValidation.fetchStatusListJwt(
+                                  uri,
+                              );
+                          },
                           statusVerifier: (data: string, signature: string) => {
                               // Verify status list JWT with a key of the same
                               // federation entity, or the revocation cert of
@@ -162,7 +190,12 @@ export class SdjwtvcverifierService {
                 try {
                     result = await verifyWithStatusMode(true);
                 } catch (error) {
-                    if (!isStatusListUnavailableError(error)) {
+                    // No malformed reference reads as unavailable today; the
+                    // class check keeps a future message from doing so.
+                    if (
+                        error instanceof MalformedStatusReferenceError ||
+                        !isStatusListUnavailableError(error)
+                    ) {
                         throw error;
                     }
 
@@ -205,25 +238,36 @@ export class SdjwtvcverifierService {
     }
 
     /**
-     * The library only checks `status.status_list` and passes any other
-     * `status` claim unchecked. A credential without a `status` claim cannot
-     * be revoked and is accepted, but a `status` claim without a status list
-     * names a status the verifier could not check: strict mode rejects it,
-     * best-effort mode logs it and accepts the credential.
+     * The library only checks a `status.status_list` it can read and passes
+     * any other `status` claim unchecked. A credential without a `status`
+     * claim cannot be revoked and is accepted. A malformed claim the library
+     * passed, such as `status_list: null` or a `status` that is not an
+     * object, is rejected like one the status list fetcher refused. A
+     * `status` object that names only another mechanism names a status the
+     * verifier could not check: strict mode rejects it, best-effort mode logs
+     * it and accepts the credential.
      */
     private checkStatusMechanism(
         result: VerificationResult,
         failClosed: boolean,
     ): void {
         const status = (result.payload as Record<string, unknown>).status;
-        if (status === undefined) {
-            return;
+        let reference: ReturnType<typeof parseStatusListReference>;
+        try {
+            reference = parseStatusListReference(status);
+        } catch (error) {
+            if (!(error instanceof MalformedStatusReferenceError)) {
+                throw error;
+            }
+            this.logger.warn(
+                `SD-JWT-VC verification failed (verification_error): ${error.message}`,
+            );
+            throw new SdJwtVerificationError(
+                "verification_error",
+                error.message,
+            );
         }
-        const statusList =
-            typeof status === "object" && status !== null
-                ? (status as Record<string, unknown>).status_list
-                : undefined;
-        if (statusList !== undefined) {
+        if (status === undefined || reference) {
             return;
         }
 
@@ -597,6 +641,15 @@ export class SdjwtvcverifierService {
         const verifier = await crypto.getVerifier(jwk);
         return verifier(data, signature);
     }
+}
+
+/**
+ * The `status` claim of the issuer-signed JWT of the SD-JWT VC `cred`. The
+ * library rejects a selectively disclosed `status`, so this is the claim it
+ * checks.
+ */
+function issuerStatusClaim(cred: string): unknown {
+    return decodeJwt(cred.split("~", 1)[0]).status;
 }
 
 /**

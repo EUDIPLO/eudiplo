@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import { createHash } from "node:crypto";
+import { join, resolve } from "node:path";
 import { INestApplication } from "@nestjs/common";
 import {
     Openid4vpAuthorizationRequest,
@@ -15,6 +16,7 @@ import {
     PresentationRequest,
     ResponseType,
 } from "../../src/verifier/oid4vp/dto/presentation-request.dto.js";
+import { PresentationConfigCreateDto } from "../../src/verifier/presentations/dto/presentation-config-create.dto.js";
 import { AuthConfig } from "../../src/webhook/webhook.dto.js";
 import {
     callbacks,
@@ -24,6 +26,7 @@ import {
     FIXTURE_TRUSTED_AUTHORITIES,
     PresentationTestContext,
     prepareMdocPresentation,
+    readConfig,
     setupPresentationTestApp,
 } from "../utils.js";
 
@@ -295,6 +298,80 @@ describe("Presentation - mDOC Credential", () => {
         });
 
         expect(submitRes.response.status).toBe(200);
+    });
+
+    // RP_WS_SM_Revocation_005a_UF of the RP conformance suite, for mDOCs.
+    test("rejects an mso mdoc credential whose status list uri is not a URI", async () => {
+        // pid-de does not check status; this copy does.
+        const config = readConfig<PresentationConfigCreateDto>(
+            join(
+                resolve(__dirname, "../fixtures"),
+                "haip/presentation/pid-de.json",
+            ),
+        );
+        await request(app.getHttpServer())
+            .post("/verifier/config")
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                ...config,
+                id: "pid-de-strict-status",
+                statusCheckMode: "strict",
+            })
+            .expect(201);
+
+        const res = await createPresentationRequest(app, authToken, {
+            response_type: ResponseType.URI,
+            requestId: "pid-de-strict-status",
+        });
+        const authRequest = client.parseOpenid4vpAuthorizationRequest({
+            authorizationRequest: res.body.uri,
+        });
+        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+            authorizationRequestPayload: authRequest.params,
+            responseMode: { type: "direct_post" },
+        });
+
+        const vp_token = await prepareMdocPresentation(
+            resolved.authorizationRequestPayload.nonce,
+            privateIssuerKey,
+            issuerCert,
+            resolved.authorizationRequestPayload.client_id!,
+            resolved.authorizationRequestPayload.response_uri as string,
+            resolved.authorizationRequestPayload.response_mode ??
+                "direct_post.jwt",
+            computeJwkThumbprint(
+                resolved.authorizationRequestPayload.client_metadata?.jwks,
+            ),
+            { statusList: { idx: 1, uri: "not a uri" } },
+        );
+        const authorizationResponse =
+            await client.createOpenid4vpAuthorizationResponse({
+                authorizationRequestPayload: authRequest.params,
+                authorizationResponsePayload: {
+                    response: await encryptVpToken(
+                        vp_token,
+                        "pid-mso-mdoc",
+                        resolved,
+                    ),
+                },
+                ...callbacks,
+            });
+        const submitRes = await client.submitOpenid4vpAuthorizationResponse({
+            authorizationResponsePayload:
+                authorizationResponse.authorizationResponsePayload,
+            authorizationRequestPayload:
+                resolved.authorizationRequestPayload as Openid4vpAuthorizationRequest,
+        });
+
+        expect(submitRes.response.status).toBe(400);
+        const session = await request(app.getHttpServer())
+            .get(`/session/${res.body.session}`)
+            .trustLocalhost()
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(200);
+        expect(session.body.status).toBe("failed");
+        expect(session.body.failureCode).toBe("verification_error");
     });
 
     test("present mso mdoc credential using claim_sets preference order", async () => {
