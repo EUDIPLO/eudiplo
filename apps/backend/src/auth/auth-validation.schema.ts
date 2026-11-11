@@ -32,7 +32,7 @@ export const AUTH_VALIDATION_SCHEMA: Joi.ObjectSchema = Joi.object({
     OIDC_AUDIENCE: Joi.string()
         .when("OIDC_PROVIDER", { is: "generic", then: Joi.required() })
         .description(
-            "Value the `aud` claim of access tokens must contain. Required with `OIDC_PROVIDER=generic`, so that tokens the provider issues for other applications are refused; use an audience that only EUDIPLO's access tokens carry, such as an API identifier, not a client ID that ID tokens carry too. With Keycloak it is checked only when set; Keycloak access tokens carry `aud: account` unless an audience mapper adds this value, also for the clients EUDIPLO creates",
+            "Value the `aud` claim of access tokens must contain. Required with `OIDC_PROVIDER=generic`, so that tokens the provider issues for other applications are refused; use an audience that only EUDIPLO's access tokens carry, such as an API identifier, not a client ID that ID tokens carry too. With `generic`, tokens that carry `at_hash`, `c_hash` or `s_hash`, which only ID tokens carry, and tokens whose JWS header names another `typ` than `at+jwt` or `JWT` (also with the `application/` prefix, in any case; a token without `typ` passes) are refused as well. With Keycloak it is checked only when set; Keycloak access tokens carry `aud: account` unless an audience mapper adds this value, also for the clients EUDIPLO creates",
         )
         .meta({ group: "auth", order: 16 }),
 

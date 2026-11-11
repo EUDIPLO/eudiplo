@@ -39,7 +39,12 @@ describe("Generic OIDC provider (e2e)", () => {
     let configFolder: string;
     let sign: (
         claims: JWTPayload,
-        options?: { audience?: string; issuer?: string; foreignKey?: boolean },
+        options?: {
+            audience?: string;
+            issuer?: string;
+            foreignKey?: boolean;
+            typ?: string;
+        },
     ) => Promise<string>;
 
     const as = (token: string) => ({
@@ -91,7 +96,11 @@ describe("Generic OIDC provider (e2e)", () => {
         issuer = `${base}/application/o/eudiplo/`;
         sign = (claims, options = {}) =>
             new SignJWT(claims)
-                .setProtectedHeader({ alg: "RS256", kid: "key-1" })
+                .setProtectedHeader({
+                    alg: "RS256",
+                    kid: "key-1",
+                    ...(options.typ && { typ: options.typ }),
+                })
                 .setIssuer(options.issuer ?? issuer)
                 .setAudience(options.audience ?? AUDIENCE)
                 .setIssuedAt()
@@ -296,6 +305,70 @@ describe("Generic OIDC provider (e2e)", () => {
         const response = await as(token).get("/session/stats");
 
         expect(response.status).toBe(401);
+    });
+
+    test("accepts an RFC 9068 access token", async () => {
+        const token = await sign(
+            {
+                sub: "person-1",
+                tenant_id: TENANT,
+                eudiplo: { roles: [Role.SessionsRead] },
+            },
+            { typ: "at+jwt" },
+        );
+
+        const response = await as(token).get("/auth/me").expect(200);
+
+        expect(response.body).toEqual({
+            subject: "person-1",
+            tenantId: TENANT,
+            roles: [Role.SessionsRead],
+        });
+    });
+
+    test("refuses an ID token that carries the audience too", async () => {
+        // Zitadel puts the project ID into the audience of both tokens.
+        const token = await sign(
+            {
+                sub: "person-1",
+                tenant_id: TENANT,
+                eudiplo: { roles: [Role.SessionsRead] },
+                nonce: "n-0S6_WzA2Mj",
+                at_hash: "77QmUPtjPfzWtF2AnpK9RQ",
+            },
+            { typ: "JWT" },
+        );
+
+        const response = await as(token).get("/session/stats").expect(401);
+
+        expect(response.body.message).toBe(
+            "Not an access token: the token carries at_hash, which only ID tokens carry; send the access token",
+        );
+    });
+
+    test("refuses a token whose type is not an access token's", async () => {
+        const token = await sign(
+            {
+                sub: "person-1",
+                tenant_id: TENANT,
+                eudiplo: { roles: [Role.SessionsRead] },
+            },
+            { typ: "logout+jwt" },
+        );
+
+        const response = await as(token).get("/session/stats").expect(401);
+
+        expect(response.body.message).toBe(
+            "Not an access token: its header names another typ than at+jwt or JWT",
+        );
+    });
+
+    test("refuses a token whose header does not decode with the generic reason", async () => {
+        const response = await as("not-base64!.e30.sig")
+            .get("/session/stats")
+            .expect(401);
+
+        expect(response.body.message).toBe("Unauthorized");
     });
 
     test("refuses a token of another issuer, also one without the trailing slash", async () => {
