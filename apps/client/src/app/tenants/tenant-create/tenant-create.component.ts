@@ -33,6 +33,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Role, roles } from '../../services/jwt.service';
 import { SecretDialogComponent } from '../client/secret-dialog/secret-dialog.component';
+import { FrontendConfigService } from '../../services/frontend-config.service';
 import { ApiService } from '../../core';
 import { getApiErrorMessage } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
@@ -78,6 +79,9 @@ export class TenantCreateComponent implements OnInit {
   @ViewChild('formElement', { read: ElementRef })
   private readonly formElement?: ElementRef<HTMLFormElement>;
   private readonly injector = inject(Injector);
+  private readonly frontendConfig = inject(FrontendConfigService);
+  /** With another identity provider (OIDC_PROVIDER=generic), that provider manages the clients. */
+  providerManagesClients = false;
 
   constructor(
     private readonly fb: FormBuilder,
@@ -112,7 +116,17 @@ export class TenantCreateComponent implements OnInit {
     if (id) {
       this.isEditMode = true;
       this.loadTenant(id);
+    } else {
+      void this.offerAdminClientIfManagedHere();
     }
+  }
+
+  /** Turns off the admin client where the identity provider manages the clients, which would refuse it. */
+  private async offerAdminClientIfManagedHere(): Promise<void> {
+    await this.frontendConfig.getConfig();
+    if (this.frontendConfig.authMode !== 'generic') return;
+    this.providerManagesClients = true;
+    this.tenantForm.get('createAdminClient')!.setValue(false);
   }
 
   /** Loads the tenant again after a failed load. */

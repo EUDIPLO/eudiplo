@@ -1,29 +1,20 @@
 <div fxLayout="row" fxLayoutAlign="space-between center">
   <h2>Users</h2>
-  <button
-    matIconButton
-    [routerLink]="['create']"
-    matTooltip="Create New User"
-    aria-label="Create New User"
-    [disabled]="isUnavailable"
-  >
-    <mat-icon>person_add</mat-icon>
-  </button>
+  @if (!isUnavailable) {
+    <button
+      matIconButton
+      [routerLink]="['create']"
+      matTooltip="Create New User"
+      aria-label="Create New User"
+    >
+      <mat-icon>person_add</mat-icon>
+    </button>
+  }
 </div>
 
 @if (!loading) {
   @if (isUnavailable) {
-    <mat-card class="mat-elevation-z2">
-      <mat-card-content>
-        <div fxLayout="column" fxLayoutGap="8px">
-          <div fxLayout="row" fxLayoutAlign="start center" fxLayoutGap="8px">
-            <mat-icon color="warn">info</mat-icon>
-            <strong>User management is unavailable</strong>
-          </div>
-          <p>{{ unavailableMessage }}</p>
-        </div>
-      </mat-card-content>
-    </mat-card>
+    <app-unavailable-card heading="User management is unavailable" [message]="unavailableMessage" />
   } @else if (loadError) {
     <app-load-error [message]="loadError" (retry)="loadUsers()" />
   } @else {

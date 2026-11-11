@@ -1,3 +1,5 @@
+import type { ExternalAuthSettings } from "../auth-settings.js";
+
 /**
  * Data Transfer Object for OIDC Discovery Response.
  * Based on OpenID Connect Discovery 1.0 specification.
@@ -9,9 +11,17 @@ export interface OidcDiscoveryDto {
     issuer: string;
 
     /**
-     * Public client ID for the Angular UI (Authorization Code + PKCE). Only present with Keycloak (`OIDC_PROVIDER=keycloak`).
+     * Public client ID for the Angular UI (Authorization Code + PKCE). Only present in OIDC mode,
+     * and with `generic` only when `OIDC_UI_CLIENT_ID` is set.
      */
     ui_client_id?: string;
+
+    /**
+     * How the Angular UI signs in with `ui_client_id`: `keycloak` through the
+     * Keycloak realm, `generic` through the discovery document of `issuer`.
+     * Only present in OIDC mode.
+     */
+    oidc_provider?: ExternalAuthSettings["mode"];
 
     /**
      * URL of the OP's OAuth 2.0 Authorization Endpoint.

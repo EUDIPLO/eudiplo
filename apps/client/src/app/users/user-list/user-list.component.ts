@@ -1,6 +1,5 @@
 import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -15,8 +14,9 @@ import {
 } from '@eudiplo/sdk-core';
 import { JwtService } from '../../services/jwt.service';
 import { canManageRoles } from '../../services/role-grants';
-import { getApiErrorMessage } from '../../utils/error-message';
+import { apiErrorDetail, getApiErrorMessage, hasHttpStatus } from '../../utils/error-message';
 import { openErrorSnackBar } from '../../utils/error-snackbar';
+import { UnavailableCardComponent } from '../../common/unavailable-card.component';
 import { LoadErrorComponent } from '../../common/load-error.component';
 
 @Component({
@@ -25,12 +25,12 @@ import { LoadErrorComponent } from '../../common/load-error.component';
     MatTableModule,
     MatIconModule,
     MatButtonModule,
-    MatCardModule,
     RouterModule,
     FlexLayoutModule,
     MatChipsModule,
     MatTooltipModule,
     LoadErrorComponent,
+    UnavailableCardComponent,
   ],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './user-list.component.html',
@@ -78,11 +78,9 @@ export class UserListComponent implements OnInit {
     try {
       this.users = await userControllerGetUsers<true>().then((res) => res.data);
     } catch (error) {
-      const message = this.getErrorMessage(error);
-
-      if (this.isUnavailableError(message, error)) {
+      if (hasHttpStatus(error, 501)) {
         this.isUnavailable = true;
-        this.unavailableMessage = message;
+        this.unavailableMessage = apiErrorDetail(error) ?? 'This instance does not manage people.';
         this.users = [];
       } else {
         console.error('Error loading users:', error);
@@ -91,69 +89,6 @@ export class UserListComponent implements OnInit {
     } finally {
       this.loading = false;
     }
-  }
-
-  private getErrorMessage(error: unknown): string {
-    if (error instanceof Error && error.message) {
-      return error.message;
-    }
-
-    if (typeof error === 'string') {
-      return error;
-    }
-
-    if (typeof error === 'object' && error !== null) {
-      const maybeMessage = (error as { message?: unknown }).message;
-      if (typeof maybeMessage === 'string') {
-        return maybeMessage;
-      }
-
-      const maybeBody = (error as { body?: unknown }).body;
-      if (typeof maybeBody === 'string') {
-        return maybeBody;
-      }
-
-      if (typeof maybeBody === 'object' && maybeBody !== null) {
-        const bodyMessage = (maybeBody as { message?: unknown }).message;
-        if (typeof bodyMessage === 'string') {
-          return bodyMessage;
-        }
-      }
-    }
-
-    return 'Failed to load users';
-  }
-
-  private isUnavailableError(message: string, error: unknown): boolean {
-    const errorText = `${message} ${this.getErrorDetails(error)}`.toLowerCase();
-
-    return (
-      errorText.includes('human user management') ||
-      errorText.includes('external oidc provider') ||
-      errorText.includes('not implemented') ||
-      (typeof error === 'object' &&
-        error !== null &&
-        'status' in error &&
-        (error as { status?: number }).status === 501)
-    );
-  }
-
-  private getErrorDetails(error: unknown): string {
-    if (typeof error !== 'object' || error === null) {
-      return '';
-    }
-
-    const maybeBody = (error as { body?: unknown }).body;
-    if (typeof maybeBody === 'string') {
-      return maybeBody;
-    }
-
-    if (typeof maybeBody === 'object' && maybeBody !== null) {
-      const bodyText = JSON.stringify(maybeBody);
-      return bodyText;
-    }
-
-    return '';
   }
 
   async deleteUser(user: ManagedUserDto): Promise<void> {

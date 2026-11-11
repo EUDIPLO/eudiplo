@@ -35,7 +35,7 @@ import { map, merge, Subscription, take } from 'rxjs';
 import { FlexLayoutModule } from 'ngx-flexible-layout';
 import { EnvironmentService } from '../services/environment.service';
 import { ApiService, withoutTrailingSlashes } from '../core';
-import { OidcService } from '../core/oidc.service';
+import { type OidcProvider, OidcService, oidcProviderOf } from '../core/oidc.service';
 import { focusFieldToFix, showFieldsToFix } from '../common/field-to-fix.util';
 import { apiErrorDetail, asSentence } from '../utils/error-message';
 import { KEEP_CALLER_FAILURE } from '../services/jwt.service';
@@ -57,6 +57,111 @@ type LinkedInstanceReceives = 'token' | 'secret' | 'link-client';
 interface InstanceCheck {
   readonly url: string;
   done?: Promise<void>;
+}
+
+/**
+ * The error codes of a token endpoint that refuses a request (RFC 6749, section 5.2), with
+ * what to check at the identity provider. `invalid_client` counts as wrong credentials.
+ */
+const TOKEN_ERROR_HINTS = new Map<string, string>([
+  ['invalid_request', 'Check the client at the identity provider.'],
+  ['invalid_grant', 'Check the client at the identity provider.'],
+  [
+    'unauthorized_client',
+    'Check that this client may use the client credentials grant at the identity provider.',
+  ],
+  [
+    'unsupported_grant_type',
+    'Check that the identity provider offers the client credentials grant.',
+  ],
+  ['invalid_scope', 'Check the scopes this client may request at the identity provider.'],
+]);
+
+/**
+ * Why a sign-in with client credentials failed and what to check, with the
+ * token endpoint's own reason when it gives one. The built-in server answers a
+ * wrong secret with a Nest body (`error: "Unauthorized"`), another identity
+ * provider with an RFC 6749 error code, so the status decides first.
+ */
+function signInFailure(error: unknown): string {
+  const http = error instanceof OAuth2HttpError ? error : undefined;
+  const other = error as { status?: unknown; message?: unknown; name?: unknown } | undefined;
+  const status = http ? http.httpCode : other?.status;
+  const message = http ? '' : String(other?.message ?? '');
+  const code = http?.oauth2Code ?? undefined;
+  const detail = http ? apiErrorDetail(http.parsedBody) : undefined;
+  const reason = detail && detail !== code ? ` The token endpoint says: ${asSentence(detail)}` : '';
+
+  if (!http && (message.includes('fetch') || other?.name === 'TypeError')) {
+    return 'Could not connect to EUDIPLO. Check if the instance URL is correct and the server is running.';
+  }
+  if (status === 401 || code === 'invalid_client' || message.includes('401')) {
+    return `Invalid credentials. Please check your Client ID and Client Secret.${reason}`;
+  }
+  if (status === 404 || message.includes('404')) {
+    return 'Endpoint not found. Please verify the EUDIPLO instance URL.';
+  }
+  const hint = code ? TOKEN_ERROR_HINTS.get(code) : undefined;
+  if (code && hint) {
+    return `The token endpoint refused the sign-in (${code}).${reason} ${hint}`;
+  }
+  if (typeof status === 'number' && status >= 500) {
+    return `The token endpoint failed with status ${status}. Try again later.${reason}`;
+  }
+  return 'Please check your credentials and instance URL.';
+}
+
+const SSO_RETURN_URL_KEY = 'oidc_return_url';
+
+/** Keeps the page to open after an SSO sign-in for this tab, or forgets an older one. */
+function keepSsoReturnUrl(returnUrl: string | undefined): void {
+  try {
+    if (returnUrl) sessionStorage.setItem(SSO_RETURN_URL_KEY, returnUrl);
+    else sessionStorage.removeItem(SSO_RETURN_URL_KEY);
+  } catch {
+    // Without storage the dashboard opens after the sign-in.
+  }
+}
+
+/** The page kept by {@link keepSsoReturnUrl}, which is then forgotten. */
+function takeSsoReturnUrl(): string | undefined {
+  try {
+    const returnUrl = sessionStorage.getItem(SSO_RETURN_URL_KEY) ?? undefined;
+    sessionStorage.removeItem(SSO_RETURN_URL_KEY);
+    return returnUrl;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Why an SSO sign-in could not start. keycloak-js needs the Web Crypto API, which browsers
+ * offer only on secure pages, and with another provider it first loads that provider's
+ * discovery document in the browser.
+ */
+function ssoStartFailure(error: unknown, issuer: string, provider?: OidcProvider): string {
+  if (globalThis.isSecureContext === false) {
+    return 'Single sign-on needs a secure page: open the Web Client over HTTPS or on localhost.';
+  }
+  if (provider === 'generic') {
+    const response = (error as { response?: unknown } | null)?.response;
+    if (response instanceof Response) {
+      return (
+        `The identity provider at ${issuer} answered the request for its sign-in settings ` +
+        `with status ${response.status}. Check OIDC on the backend.`
+      );
+    }
+    if (error instanceof TypeError) {
+      return (
+        `Could not load the sign-in settings of the identity provider at ${issuer}. ` +
+        `Check that it is reachable and allows requests from ${globalThis.location.origin}.`
+      );
+    }
+  }
+  const detail = error instanceof Error ? error.message : undefined;
+  return detail
+    ? `Single sign-on could not start: ${asSentence(detail)}`
+    : 'Single sign-on could not start.';
 }
 
 /** The return path if it stays inside the client and does not lead back to the login page. */
@@ -99,6 +204,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   selectedLoginMode: 'sso' | 'client' = 'sso';
   private discoveredIssuer?: string;
   private discoveredUiClientId?: string;
+  private discoveredProvider?: OidcProvider;
   /** The kept session this page waits for instead of showing the form. */
   readonly keptSession = signal<PreviousSession | null>(null);
   /**
@@ -139,8 +245,10 @@ export class LoginComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.isDevelopmentMode = this.environmentService.isDevelopment();
 
-    // Check if user is already authenticated
-    this.returnUrl = appPath(this.route.snapshot.queryParams['returnUrl']);
+    // Check if user is already authenticated. An SSO sign-in returns to the login page
+    // without its query, so the page to open was kept for the tab.
+    const keptReturnUrl = takeSsoReturnUrl();
+    this.returnUrl = appPath(this.route.snapshot.queryParams['returnUrl'] ?? keptReturnUrl);
     if (this.apiService.getAuthenticationStatus()) {
       void this.continueToApp();
       return;
@@ -448,6 +556,7 @@ export class LoginComponent implements OnInit, OnDestroy {
         this.selectedLoginMode = this.keepClientCredentialsTab && sameInstance ? 'client' : 'sso';
         this.discoveredIssuer = discovery.issuer;
         this.discoveredUiClientId = discovery.ui_client_id;
+        this.discoveredProvider = oidcProviderOf(discovery.oidc_provider);
       } else {
         this.detectedMode = 'local';
         this.selectedLoginMode = 'client';
@@ -551,11 +660,25 @@ export class LoginComponent implements OnInit, OnDestroy {
           throw new Error('OIDC mode detected but discovery metadata is incomplete.');
         }
 
-        await this.oidcService.redirectToLogin({
-          issuerUrl,
-          uiClientId,
-          apiUrl: normalizedUrl,
-        });
+        keepSsoReturnUrl(this.returnUrl);
+        try {
+          await this.oidcService.redirectToLogin({
+            issuerUrl,
+            uiClientId,
+            apiUrl: normalizedUrl,
+            provider: this.discoveredProvider,
+          });
+        } catch (error) {
+          console.error('SSO sign-in failed:', error);
+          takeSsoReturnUrl();
+          openErrorSnackBar(
+            this.snackBar,
+            `Login failed. ${ssoStartFailure(error, issuerUrl, this.discoveredProvider)}`,
+            'Close',
+            { panelClass: ['error-snackbar'] }
+          );
+          this.isLoading = false;
+        }
         return;
       }
 
@@ -586,24 +709,10 @@ export class LoginComponent implements OnInit, OnDestroy {
         this.returnUrl = undefined;
       }
       signedIn = true;
-    } catch (error: any) {
+    } catch (error) {
       console.error('Login failed:', error);
 
-      // Provide specific error messages based on the error type
-      let errorMessage = 'Login failed. ';
-      if (error?.message?.includes('fetch') || error?.name === 'TypeError') {
-        errorMessage +=
-          'Could not connect to EUDIPLO. Check if the instance URL is correct and the server is running.';
-      } else if (error?.status === 401 || error?.message?.includes('401')) {
-        errorMessage += 'Invalid credentials. Please check your Client ID and Client Secret.';
-      } else if (error?.status === 404 || error?.message?.includes('404')) {
-        errorMessage += 'Endpoint not found. Please verify the EUDIPLO instance URL.';
-      } else {
-        errorMessage += 'Please check your credentials and instance URL.';
-      }
-
-      this.snackBar.open(errorMessage, 'Close', {
-        duration: 8000,
+      openErrorSnackBar(this.snackBar, `Login failed. ${signInFailure(error)}`, 'Close', {
         panelClass: ['error-snackbar'],
       });
     }

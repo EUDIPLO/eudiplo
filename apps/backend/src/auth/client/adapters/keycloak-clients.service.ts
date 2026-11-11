@@ -16,6 +16,7 @@ import { ConfigImportService } from "../../../platform/config-import/config-impo
 import { splitCommaSeparatedList } from "../../../shared/domain/comma-separated-list.js";
 import { keycloakAuthorizationRoles } from "../../keycloak-authorization-roles.js";
 import { syncEudiploRealmRoles } from "../../keycloak-realm-roles.js";
+import { OIDC_DEFAULTS } from "../../auth-settings.js";
 import { allRoles, Role } from "../../roles/role.enum.js";
 import { ClientsProvider } from "../client.provider.js";
 import {
@@ -187,7 +188,8 @@ export class KeycloakClientsProvider
     /** The public Keycloak client the web client signs in with. */
     private uiClientId(): string {
         return (
-            this.configService.get<string>("OIDC_UI_CLIENT_ID") ?? "eudiplo-ui"
+            this.configService.get<string>("OIDC_UI_CLIENT_ID") ??
+            OIDC_DEFAULTS.uiClientId
         );
     }
 
@@ -309,6 +311,8 @@ export class KeycloakClientsProvider
             directAccessGrantsEnabled: false,
             enabled: true,
             ...addresses,
+            // Logging out returns to the web client: "+" allows the redirect URIs.
+            attributes: { "post.logout.redirect.uris": "+" },
         };
 
         if (existing?.id) {

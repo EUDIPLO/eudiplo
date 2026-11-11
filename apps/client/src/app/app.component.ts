@@ -5,6 +5,7 @@ import {
   type OnDestroy,
   type OnInit,
   ChangeDetectionStrategy,
+  inject,
   ViewChild,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
@@ -24,6 +25,7 @@ import { filter } from 'rxjs/operators';
 import { JwtService, Role } from './services/jwt.service';
 import { ThemeService } from './services/theme.service';
 import { VersionService } from './services/version.service';
+import { FrontendConfigService } from './services/frontend-config.service';
 import { RoleChangeService } from './services/role-change.service';
 import { TokenExpiryService } from './services/token-expiry.service';
 import { NavSectionsService } from './services/nav-sections.service';
@@ -64,6 +66,8 @@ export class AppComponent implements OnInit, OnDestroy {
   @ViewChild('mainContent', { read: ElementRef }) private mainContent?: ElementRef<HTMLElement>;
   private routerSubscription?: Subscription;
   private breakpointSubscription?: Subscription;
+
+  private readonly frontendConfig = inject(FrontendConfigService);
 
   constructor(
     private router: Router,
@@ -128,7 +132,29 @@ export class AppComponent implements OnInit, OnDestroy {
   private checkBackendVersion(): void {
     if (this.shouldShowToolbar && this.apiService.getAuthenticationStatus()) {
       this.versionService.check(this.apiService.getBaseUrl());
+      // Tells which accounts this instance manages.
+      void this.frontendConfig.getConfig();
     }
+  }
+
+  /** Whether the Administration section has an entry for the caller on this instance. */
+  get hasAdministration(): boolean {
+    // Activity Logs is open to clients:manage, also where the provider manages the clients.
+    return (
+      this.hasRole(['tenants:manage', 'clients:manage', 'audit:read']) ||
+      (this.hasRole('users:manage') && this.managesUsers)
+    );
+  }
+
+  /** People are managed here only with Keycloak; until the mode is known the entry stays. */
+  get managesUsers(): boolean {
+    const mode = this.frontendConfig.authMode;
+    return mode === null || mode === 'keycloak';
+  }
+
+  /** With another identity provider, that provider manages the API clients. */
+  get managesClients(): boolean {
+    return this.frontendConfig.authMode !== 'generic';
   }
 
   /**

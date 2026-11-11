@@ -54,6 +54,10 @@ export type FrontendConfigResponseDto = {
      * Public URL of the instance (PUBLIC_URL). Wallets and other verifiers reach the wallet-facing endpoints, such as trust lists, under this URL, which can differ from the URL the client signed in with.
      */
     publicUrl: string;
+    /**
+     * How the management API authenticates: `builtin` issues its own tokens, `keycloak` accepts Keycloak tokens and manages clients and people there, `generic` accepts the tokens of another OpenID Connect provider, which manages clients and people itself.
+     */
+    authMode: 'builtin' | 'keycloak' | 'generic';
 };
 
 export type RoleDto = {

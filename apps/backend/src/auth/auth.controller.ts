@@ -115,15 +115,14 @@ export class AuthController {
     }
 
     /**
-     * OIDC Discovery endpoint for client credentials flow.
-     * This endpoint provides the OpenID Connect configuration for applications
-     * that need to authenticate using client_id and client_secret.
+     * Discovery of the management API: where API clients get tokens, and in
+     * OIDC mode how the Web Client signs people in.
      */
     @Get(".well-known/oauth-authorization-server")
     @ApiOperation({
         summary: "OIDC Discovery Configuration",
         description:
-            "Returns the OpenID Connect discovery configuration for client credentials authentication.",
+            "Returns where API clients get access tokens for the management API (issuer, token endpoint, key set). In OIDC mode it also names the identity provider (`oidc_provider`) and, when single sign-on is set up, the Web Client's public client (`ui_client_id`).",
     })
     @ApiResponse({
         status: 200,
