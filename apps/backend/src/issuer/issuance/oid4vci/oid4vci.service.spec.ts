@@ -204,6 +204,105 @@ describe("Oid4vciService credential request error mapping", () => {
         });
     });
 
+    it("decrypts an encrypted request with the advertised enc values only", async () => {
+        const jwe = "header.key.iv.ciphertext.tag";
+        const decryptJweToJson = vi.fn().mockResolvedValue({
+            credential_configuration_id: "pid",
+            proofs: {},
+        });
+
+        await setup({
+            metadata: {
+                ...issuerMetadata,
+                credentialIssuer: {
+                    ...issuerMetadata.credentialIssuer,
+                    credential_request_encryption: {
+                        jwks: { keys: [] },
+                        enc_values_supported: ["A128GCM", "A256GCM"],
+                    },
+                },
+            },
+            decryptJweToJson,
+        }).getCredential(
+            { ...request, contentType: "application/jwt", body: jwe },
+            "tenant",
+        );
+
+        expect(decryptJweToJson).toHaveBeenCalledWith(jwe, "tenant", {
+            contentEncryptionAlgorithms: ["A128GCM", "A256GCM"],
+        });
+    });
+
+    it("allows no enc when the issuer advertises no credential_request_encryption", async () => {
+        const decryptJweToJson = vi
+            .fn()
+            .mockRejectedValue(new joseErrors.JOSEAlgNotAllowed("enc"));
+
+        await rejection(
+            setup({ decryptJweToJson }).getCredential(
+                { ...request, contentType: "application/jwt", body: "jwe" },
+                "tenant",
+            ),
+        );
+
+        expect(decryptJweToJson).toHaveBeenCalledWith("jwe", "tenant", {
+            contentEncryptionAlgorithms: [],
+        });
+    });
+
+    // That the refusal comes before the credential_configuration_id check is
+    // shown end to end in credential-request-encryption.e2e-spec.ts.
+    it("names the advertised alg and enc when it refuses an alg or enc", async () => {
+        const error = await rejection(
+            setup({
+                metadata: {
+                    ...issuerMetadata,
+                    credentialIssuer: {
+                        ...issuerMetadata.credentialIssuer,
+                        credential_request_encryption: {
+                            jwks: { keys: [] },
+                            enc_values_supported: ["A128GCM", "A256GCM"],
+                        },
+                    },
+                },
+                decryptJweToJson: vi
+                    .fn()
+                    .mockRejectedValue(
+                        new joseErrors.JOSEAlgNotAllowed(
+                            '"enc" (Encryption Algorithm) Header Parameter value not allowed',
+                        ),
+                    ),
+            }).getCredential(
+                { ...request, contentType: "application/jwt", body: "jwe" },
+                "tenant",
+            ),
+        );
+
+        expect(protocolError(error)).toEqual({
+            error: "invalid_encryption_parameters",
+            error_description:
+                "Credential request JWE must use alg 'ECDH-ES' and an enc of 'A128GCM', 'A256GCM'",
+        });
+    });
+
+    it("answers a JWE that does not decrypt with invalid_encryption_parameters", async () => {
+        const error = await rejection(
+            setup({
+                decryptJweToJson: vi
+                    .fn()
+                    .mockRejectedValue(new joseErrors.JWEDecryptionFailed()),
+            }).getCredential(
+                { ...request, contentType: "application/jwt", body: "jwe" },
+                "tenant",
+            ),
+        );
+
+        expect(protocolError(error)).toEqual({
+            error: "invalid_encryption_parameters",
+            error_description: "Failed to decrypt encrypted credential request",
+        });
+    });
+
     it("maps other request parser errors to invalid_credential_request", async () => {
         const error = await rejection(
             setup({
@@ -990,6 +1089,16 @@ describe("Oid4vciService.getDeferredCredential", () => {
         });
         const { instance, parseOptions, decryptJwe } = setup({
             decryptJweToJson,
+            metadata: {
+                ...issuerMetadata,
+                credentialIssuer: {
+                    ...issuerMetadata.credentialIssuer,
+                    credential_request_encryption: {
+                        jwks: { keys: [] },
+                        enc_values_supported: ["A128GCM", "A256GCM"],
+                    },
+                },
+            },
         });
         await instance.getDeferredCredential(
             { ...plain, contentType: "application/jwt", body: jwe },
@@ -1002,7 +1111,10 @@ describe("Oid4vciService.getDeferredCredential", () => {
 
         const advertisedJwk = { kty: "EC", kid: "enc", alg: "ECDH-ES" };
         const decrypted = await decryptJwe()?.(jwe, { jwk: advertisedJwk });
-        expect(decryptJweToJson).toHaveBeenCalledWith(jwe, "tenant");
+        // Only the advertised enc values are decrypted.
+        expect(decryptJweToJson).toHaveBeenCalledWith(jwe, "tenant", {
+            contentEncryptionAlgorithms: ["A128GCM", "A256GCM"],
+        });
         expect(decrypted?.decrypted).toBe(true);
         expect(decrypted?.decryptionJwk).toBe(advertisedJwk);
         // zip is not advertised, so it is dropped.
@@ -1109,6 +1221,8 @@ describe("Oid4vciService.getDeferredCredential", () => {
     it.each([
         ["JWEInvalid", new joseErrors.JWEInvalid()],
         ["JOSENotSupported", new joseErrors.JOSENotSupported()],
+        // An alg or enc that is not advertised.
+        ["JOSEAlgNotAllowed", new joseErrors.JOSEAlgNotAllowed()],
     ])("reports %s as not decrypted", async (_name, error) => {
         const { instance, decryptJwe } = setup({
             decryptJweToJson: vi.fn().mockRejectedValue(error),

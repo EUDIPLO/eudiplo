@@ -146,20 +146,23 @@ describe("Issuance - credential request encryption", () => {
         expect(key).not.toHaveProperty("d");
     });
 
-    test("issues for an encrypted request to the advertised key", async () => {
-        const { issuerMetadata, accessToken, body } =
-            await prepareCredentialRequest();
+    test.each(["A128GCM", "A256GCM"])(
+        "issues for an encrypted request to the advertised key with enc %s",
+        async (enc) => {
+            const { issuerMetadata, accessToken, body } =
+                await prepareCredentialRequest();
 
-        const response = await postCredential(
-            issuerMetadata,
-            accessToken,
-            "application/jwt",
-            await encrypt(issuerMetadata, body),
-        );
+            const response = await postCredential(
+                issuerMetadata,
+                accessToken,
+                "application/jwt",
+                await encrypt(issuerMetadata, body, { enc }),
+            );
 
-        expect(response.status).toBe(200);
-        expect(response.body.credentials).toHaveLength(1);
-    });
+            expect(response.status).toBe(200);
+            expect(response.body.credentials).toHaveLength(1);
+        },
+    );
 
     test("returns an encrypted response for an encrypted request that asks for one", async () => {
         const { issuerMetadata, accessToken, body } =
@@ -193,6 +196,7 @@ describe("Issuance - credential request encryption", () => {
         ["without kid", { kid: undefined }],
         ["with an unknown kid", { kid: "unknown" }],
         ["with another alg", { alg: "ECDH-ES+A128KW" }],
+        ["with another enc", { enc: "A128CBC-HS256" }],
     ])("rejects an encrypted request %s", async (_case, header) => {
         const { issuerMetadata, accessToken, body } =
             await prepareCredentialRequest();
@@ -209,6 +213,43 @@ describe("Issuance - credential request encryption", () => {
             error: "invalid_encryption_parameters",
         });
     });
+
+    // The request is decrypted before its credential_configuration_id is
+    // checked. A JWE with an alg or enc the issuer did not advertise must be
+    // refused before that, so the answer does not depend on the plaintext.
+    test.each<[string, string, Partial<CompactJWEHeaderParameters>]>([
+        ["the advertised alg and enc", "unknown_credential_configuration", {}],
+        [
+            "another alg",
+            "invalid_encryption_parameters",
+            { alg: "ECDH-ES+A128KW" },
+        ],
+        [
+            "another enc",
+            "invalid_encryption_parameters",
+            { enc: "A128CBC-HS256" },
+        ],
+    ])(
+        "answers an encrypted request with %s for an unknown configuration with %s",
+        async (_case, error, header) => {
+            const { issuerMetadata, accessToken, body } =
+                await prepareCredentialRequest();
+
+            const response = await postCredential(
+                issuerMetadata,
+                accessToken,
+                "application/jwt",
+                await encrypt(
+                    issuerMetadata,
+                    { ...body, credential_configuration_id: "unknown" },
+                    header,
+                ),
+            );
+
+            expect(response.status).toBe(400);
+            expect(response.body).toMatchObject({ error });
+        },
+    );
 
     test("rejects a plain request that asks for an encrypted response", async () => {
         const { issuerMetadata, accessToken, body } =
