@@ -13,6 +13,7 @@ import {
     ItemsRequest,
     SessionTranscript,
     SignatureAlgorithm,
+    Status,
     type StatusOptions,
 } from "@owf/mdoc";
 import { StatusList, StatusListCwt } from "@owf/token-status-list";
@@ -27,9 +28,9 @@ import {
     it,
     vi,
 } from "vitest";
-import { isStatusListUnavailableError } from "../../../../trust/revocation-policy.util.js";
 import { StatusListVerifierService } from "../../../../trust/status-list-verifier.service.js";
 import { TrustFetchService } from "../../../../trust/trust-fetch.service.js";
+import { ServiceTypeIdentifiers } from "../../../../trust/types.js";
 import { OutboundUrlPolicyService } from "../../../../webhook/outbound-url-policy.service.js";
 import { mdocContext } from "../../mdoc-context.js";
 import type { MdocTrustedCertificates } from "../credential-chain-validation.service.js";
@@ -97,7 +98,8 @@ describe("MdocverifierService status list fetch", () => {
                 serialNumber: "01",
                 name: "C=DE, CN=Self-signed Wallet Issuer",
                 notBefore: new Date(Date.now() - 60_000),
-                notAfter: new Date(Date.now() + 3_600_000),
+                // Covers the 30-day MSOs of the PID tests.
+                notAfter: new Date(Date.now() + 60 * 24 * 3_600_000),
                 signingAlgorithm: { name: "ECDSA", hash: "SHA-256" },
                 keys: issuerKeys,
             });
@@ -124,6 +126,14 @@ describe("MdocverifierService status list fetch", () => {
             contentType: "application/statuslist+cwt",
             token: await signStatusListCwt(`${loopbackIp}/status/revoked`, {
                 statuses: [0, 1, 0, 0, 0, 0, 0, 0],
+            }),
+        });
+        published.set("/status/oversized", {
+            contentType: "application/statuslist+cwt",
+            // Decompresses to 1 MiB and one byte.
+            token: await signStatusListCwt(`${loopbackIp}/status/oversized`, {
+                statuses: new Array<number>(1024 * 1024 + 1).fill(0),
+                bits: 8,
             }),
         });
         published.set("/status/unprotected-x5chain", {
@@ -158,10 +168,12 @@ describe("MdocverifierService status list fetch", () => {
         uri: string,
         {
             statuses = [0, 0, 0, 0, 0, 0, 0, 0],
+            bits = 1,
             unprotectedX5Chain = false,
             signer = { jwk: issuerJwk, certificate: issuerCertificate },
         }: {
             statuses?: number[];
+            bits?: 1 | 2 | 4 | 8;
             unprotectedX5Chain?: boolean;
             signer?: SigningCertificate;
         } = {},
@@ -174,7 +186,7 @@ describe("MdocverifierService status list fetch", () => {
                 issuedAt: new Date((now - 60) * 1000),
                 expirationTime: new Date((now + 3600) * 1000),
                 timeToLive: 300,
-                statusList: new StatusList(statuses, 1),
+                statusList: new StatusList(statuses, bits),
             },
             protectedHeaders: new Map<number, unknown>([
                 [1, SignatureAlgorithm.ES256],
@@ -224,16 +236,17 @@ describe("MdocverifierService status list fetch", () => {
      * issuer certificate unless `signer` is given.
      */
     async function presentation(
-        status: StatusOptions,
+        status: StatusOptions | undefined,
         signer: SigningCertificate = {
             jwk: issuerJwk,
             certificate: issuerCertificate,
         },
+        validForMs = 3_600_000,
     ) {
         const issuer = new Issuer(docType, mdocContext);
         issuer.addIssuerNamespace(namespace, { given_name: "Erika" });
         const now = new Date();
-        const validUntil = new Date(now.getTime() + 3_600_000);
+        const validUntil = new Date(now.getTime() + validForMs);
         const issuerSigned = await issuer.sign({
             signingKey: CoseKey.fromJwk(signer.jwk),
             certificates: [signer.certificate],
@@ -319,6 +332,10 @@ describe("MdocverifierService status list fetch", () => {
         outboundUrlPolicy: OutboundUrlPolicyService,
         publicUrl = "https://eudiplo.example",
         trustedEntries: MdocTrustedCertificates[] = [],
+        /** Trust list service type the issuer chain matches, if any. */
+        issuanceServiceType?: string,
+        /** Whether the chain also matches a PID issuance service. */
+        pidIssuer = issuanceServiceType === ServiceTypeIdentifiers.PIDIssuance,
     ) => {
         const logger = {
             setContext: vi.fn(),
@@ -330,9 +347,17 @@ describe("MdocverifierService status list fetch", () => {
             getTrustedCertificateEntries: vi
                 .fn()
                 .mockResolvedValue(trustedEntries),
-            validateChain: vi
-                .fn()
-                .mockResolvedValue({ verified: true, matchedEntity: null }),
+            validateChain: vi.fn().mockResolvedValue({
+                verified: true,
+                pidIssuer,
+                matchedEntity: issuanceServiceType
+                    ? {
+                          entity: { entityId: "issuer" },
+                          issuanceServiceType,
+                          matchMode: "leaf-pinned",
+                      }
+                    : null,
+            }),
             discardedTrustListsDetail: vi.fn().mockResolvedValue(undefined),
         };
         const statusLists = new StatusListVerifierService(
@@ -419,6 +444,36 @@ describe("MdocverifierService status list fetch", () => {
             const result = await verify(service, statusListAt(uri), failClosed);
             expect(result.verified).toBe(false);
             expect(result.failureReason).toContain("is not Valid");
+        }
+    });
+
+    // RP_PP_SM_Revocation_016b_UF of the RP conformance suite.
+    it("rejects a status list that decompresses to more than 1 MiB before the library reads it", async () => {
+        const service = verifier(policy(), loopbackIp);
+        const uri = `${loopbackIp}/status/oversized`;
+        const libraryDecompress = vi.spyOn(
+            StatusList,
+            "decompressStatusListFromBytes",
+        );
+
+        try {
+            for (const failClosed of [true, false]) {
+                const result = await verify(
+                    service,
+                    statusListAt(uri),
+                    failClosed,
+                );
+                expect(result).toMatchObject({
+                    verified: false,
+                    failureType: "verification_error",
+                    failureReason: expect.stringContaining(
+                        "cannot be decompressed",
+                    ),
+                });
+            }
+            expect(libraryDecompress).not.toHaveBeenCalled();
+        } finally {
+            libraryDecompress.mockRestore();
         }
     });
 
@@ -636,15 +691,250 @@ describe("MdocverifierService status list fetch", () => {
         });
     });
 
+    // RP_WS_SM_Revocation_005a_UF of the RP conformance suite, for mDOCs.
+    describe("malformed status references", () => {
+        // CBOR of the text strings "idx" and "uri", and of the integer 1.
+        const IDX = [0x63, 0x69, 0x64, 0x78];
+        const URI = [0x63, 0x75, 0x72, 0x69];
+
+        /**
+         * `vp` with `from` replaced by `to` of the same length. Neither
+         * @owf/token-status-list nor the holder creates a malformed status
+         * reference, so it is written into the presented bytes. That breaks
+         * the MSO signature, but @owf/mdoc decodes the reference first.
+         */
+        const patched = (vp: string, from: number[], to: number[]) => {
+            const bytes = Buffer.from(vp, "base64url");
+            const at = bytes.indexOf(Buffer.from(from));
+            expect(at).toBeGreaterThan(-1);
+            Buffer.from(to).copy(bytes, at);
+            return bytes.toString("base64url");
+        };
+
+        it.each([
+            ["no idx", [...IDX, 0x01], [0x63, 0x69, 0x64, 0x79, 0x01]],
+            ["no uri", URI, [0x63, 0x75, 0x72, 0x6a]],
+            ["a negative idx", [...IDX, 0x01], [...IDX, 0x20]],
+            ["a string idx", [...IDX, 0x01], [...IDX, 0x60]],
+        ])("rejects a status list reference with %s", async (_, from, to) => {
+            const service = verifier(policy(), loopbackIp);
+            const { vp, sessionTranscript } = await presentation(
+                statusListAt(`${loopbackIp}/status/1`),
+            );
+
+            for (const failClosed of [true, false]) {
+                const result = await service.verify(
+                    patched(vp, from, to),
+                    { protocol: "iso-18013-7", sessionTranscript },
+                    {
+                        trustListSource: { lotes: [] },
+                        policy: { revocation: { enabled: true, failClosed } },
+                    } as never,
+                    [[namespace, "given_name"]],
+                );
+                expect(result.verified).toBe(false);
+                expect(result.failureReason).toContain(
+                    "Error decoding StatusListInfo",
+                );
+            }
+            expect(requests).toEqual([]);
+        });
+
+        it.each([
+            ["a status list", statusListAt("not a uri")],
+            ["an identifier list", identifierListAt("not a uri")],
+        ])(
+            "rejects %s uri that is not a URI without fetching it",
+            async (_, status) => {
+                const service = verifier(policy(), loopbackIp);
+                const get = vi.spyOn(TrustFetchService.prototype, "get");
+
+                try {
+                    for (const failClosed of [true, false]) {
+                        const result = await verify(
+                            service,
+                            status,
+                            failClosed,
+                        );
+                        expect(result).toMatchObject({
+                            verified: false,
+                            failureType: "verification_error",
+                            failureReason: expect.stringContaining(
+                                "not an absolute URI",
+                            ),
+                        });
+                    }
+                    expect(get).not.toHaveBeenCalled();
+                } finally {
+                    get.mockRestore();
+                }
+            },
+        );
+    });
+
+    describe("MSO status without a status list or identifier list", () => {
+        it("rejects an empty one in strict and best-effort mode", async () => {
+            const service = verifier(policy(), loopbackIp);
+
+            for (const failClosed of [true, false]) {
+                const result = await verify(
+                    service,
+                    Status.create({}) as never,
+                    failClosed,
+                );
+                expect(result).toMatchObject({
+                    verified: false,
+                    failureType: "verification_error",
+                    failureReason: "The MSO's status names no status mechanism",
+                });
+            }
+        });
+
+        it("rejects one with only another mechanism in strict mode only", async () => {
+            const service = verifier(policy(), loopbackIp);
+            const otherMechanism = () =>
+                Status.fromEncodedStructure(
+                    new Map([["other_mechanism", { id: 1 }]]),
+                ) as never;
+
+            await expect(
+                verify(service, otherMechanism(), true),
+            ).resolves.toMatchObject({
+                verified: false,
+                failureType: "verification_error",
+                failureReason: expect.stringContaining(
+                    "no supported status mechanism",
+                ),
+            });
+            await expect(
+                verify(service, otherMechanism(), false),
+            ).resolves.toMatchObject({ verified: true });
+        });
+    });
+
+    // RP_WS_SM_Revocation_008b_UF of the RP conformance suite: a PID valid
+    // for more than 24 hours needs status information (ARF Annex 2 VCR_01).
+    describe("PID without status", () => {
+        const DAY_MS = 24 * 3_600_000;
+        const PID = ServiceTypeIdentifiers.PIDIssuance;
+        const EAA = ServiceTypeIdentifiers.EaaIssuance;
+        const BEST_EFFORT_WARNING = expect.stringContaining(
+            "accepting it in best-effort mode",
+        );
+
+        /** Verify an mDOC of an issuer the chain check reports as listed. */
+        const verifyMdoc = async ({
+            issuanceServiceType = PID,
+            pidIssuer,
+            validForMs = 30 * DAY_MS,
+            status,
+            enabled = true,
+            failClosed = true,
+        }: {
+            issuanceServiceType?: string;
+            pidIssuer?: boolean;
+            validForMs?: number;
+            status?: StatusOptions;
+            enabled?: boolean;
+            failClosed?: boolean;
+        } = {}) => {
+            const service = verifier(
+                policy(),
+                loopbackIp,
+                [],
+                issuanceServiceType,
+                pidIssuer,
+            );
+            const { vp, sessionTranscript } = await presentation(
+                status,
+                undefined,
+                validForMs,
+            );
+            const result = await service.verify(
+                vp,
+                { protocol: "iso-18013-7", sessionTranscript },
+                {
+                    trustListSource: { lotes: [] },
+                    policy: { revocation: { enabled, failClosed } },
+                } as never,
+                [[namespace, "given_name"]],
+            );
+            const { logger } = service as unknown as {
+                logger: { warn: ReturnType<typeof vi.fn> };
+            };
+            return { result, logger };
+        };
+
+        it("rejects a PID valid for 30 days in strict mode", async () => {
+            const { result } = await verifyMdoc();
+
+            expect(result).toMatchObject({
+                verified: false,
+                failureType: "verification_error",
+                failureReason: expect.stringMatching(
+                    /PID carries no status information/,
+                ),
+            });
+        });
+
+        it("accepts it with a warning in best-effort mode", async () => {
+            const { result, logger } = await verifyMdoc({ failClosed: false });
+
+            expect(result).toMatchObject({ verified: true });
+            expect(logger.warn).toHaveBeenCalledWith(BEST_EFFORT_WARNING);
+        });
+
+        it("does not check it when the status check is disabled", async () => {
+            const { result, logger } = await verifyMdoc({
+                enabled: false,
+                failClosed: false,
+            });
+
+            expect(result).toMatchObject({ verified: true });
+            expect(logger.warn).not.toHaveBeenCalledWith(BEST_EFFORT_WARNING);
+        });
+
+        it("rejects an mDOC whose certificate is also listed as PID issuer", async () => {
+            const { result } = await verifyMdoc({
+                issuanceServiceType: EAA,
+                pidIssuer: true,
+            });
+
+            expect(result).toMatchObject({
+                verified: false,
+                failureType: "verification_error",
+            });
+        });
+
+        it("accepts a PID valid for 30 days with a status list", async () => {
+            const { result } = await verifyMdoc({
+                status: statusListAt(`${loopbackIp}/status/1`),
+            });
+
+            expect(result).toMatchObject({ verified: true });
+        });
+
+        it("accepts a PID valid for 24 hours", async () => {
+            const { result } = await verifyMdoc({ validForMs: DAY_MS });
+
+            expect(result).toMatchObject({ verified: true });
+        });
+
+        it("accepts an EAA valid for 30 days", async () => {
+            const { result } = await verifyMdoc({ issuanceServiceType: EAA });
+
+            expect(result).toMatchObject({ verified: true });
+        });
+    });
+
     describe("best-effort revocation", () => {
         it("treats a blocked status list as unavailable, as for SD-JWT VC", async () => {
             const blocked = verifier(policy({ OUTBOUND_URL_ALLOW_HTTP: true }));
             const uri = `${loopbackIp}/status/1`;
 
-            const strict = await verify(blocked, statusListAt(uri));
-            expect(
-                isStatusListUnavailableError(new Error(strict.failureReason)),
-            ).toBe(true);
+            await expect(
+                verify(blocked, statusListAt(uri)),
+            ).resolves.toMatchObject({ verified: false });
 
             await expect(
                 verify(blocked, statusListAt(uri), false),
@@ -665,8 +955,8 @@ describe("MdocverifierService status list fetch", () => {
 
         it("rejects a credential its identifier list revokes", async () => {
             // The error names the list's URI, which here reads like an
-            // availability problem; the list was fetched, so it must not be
-            // treated as unavailable.
+            // availability problem. The list was fetched, so best-effort mode
+            // must not treat it as unavailable.
             const result = await verify(
                 verifier(policy(), loopbackIp),
                 identifierListAt(
@@ -679,9 +969,6 @@ describe("MdocverifierService status list fetch", () => {
             expect(result.verified).toBe(false);
             expect(result.failureReason).toContain(
                 "found in the revoked identifier list",
-            );
-            expect(isStatusListUnavailableError(result.failureReason)).toBe(
-                true,
             );
         });
     });

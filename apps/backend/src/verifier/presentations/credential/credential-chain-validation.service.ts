@@ -3,7 +3,6 @@ import * as x509 from "@peculiar/x509";
 import { PinoLogger } from "nestjs-pino";
 import { getRevocationServices } from "../../../trust/domain/status-list-signers.js";
 import { describeDiscardedTrustLists } from "../../../trust/domain/trust-list-freshness.js";
-import { StatusListVerifierService } from "../../../trust/status-list-verifier.service.js";
 import {
     BuiltTrustStore,
     TrustStoreService,
@@ -11,6 +10,7 @@ import {
 import {
     credentialIssuerServiceTypes,
     isCredentialIssuerServiceType,
+    ServiceTypeIdentifiers,
     TrustedEntity,
     TrustListSource,
 } from "../../../trust/types.js";
@@ -88,6 +88,12 @@ export interface ChainValidationResult {
      * entity of the trust list.
      */
     path?: x509.X509Certificate[];
+    /**
+     * Whether the path matches a PID issuance service of the trust lists,
+     * also when `matchedEntity` is another service the same certificate is
+     * listed with. A credential under it counts as a PID.
+     */
+    pidIssuer?: boolean;
 }
 
 /**
@@ -105,7 +111,6 @@ export class CredentialChainValidationService {
     constructor(
         private readonly trustStore: TrustStoreService,
         private readonly x509v: X509ValidationService,
-        private readonly statusListVerifier: StatusListVerifierService,
         private readonly logger: PinoLogger,
     ) {
         this.logger.setContext(CredentialChainValidationService.name);
@@ -283,7 +288,78 @@ export class CredentialChainValidationService {
             `Certificate chain validated successfully. Matched entity: ${matchedEntity.entity.entityId ?? "unknown"}, mode: ${matchedEntity.matchMode}`,
         );
 
-        return { verified: true, matchedEntity, path };
+        // The first matching service decides the status list signers; a
+        // certificate listed as PID and as EAA issuer still issues PIDs.
+        const pidIssuer =
+            matchedEntity.issuanceServiceType ===
+                ServiceTypeIdentifiers.PIDIssuance ||
+            (serviceTypeFilter.includes(ServiceTypeIdentifiers.PIDIssuance) &&
+                (await this.leadsToPidIssuer(
+                    leaf,
+                    presented,
+                    store,
+                    pinnedCertMode,
+                )));
+
+        return { verified: true, matchedEntity, path, pidIssuer };
+    }
+
+    /**
+     * Whether `leaf` also chains to a certificate listed with a PID issuance
+     * service. The path is built again with those certificates first in the
+     * pool, ahead of the presented ones: two certificates can share subject
+     * and key, for example a CA listed once as EAA and once as PID issuer,
+     * and the path built for the match could end at the EAA copy, also one
+     * the wallet put in an mDOC's unprotected `x5chain`. The chain is
+     * already trusted; this only classifies the issuer, so a PID-listed
+     * certificate counts also outside its validity period.
+     */
+    private async leadsToPidIssuer(
+        leaf: x509.X509Certificate,
+        presented: x509.X509Certificate[],
+        store: BuiltTrustStore,
+        pinnedCertMode: "leaf" | "pathEnd",
+    ): Promise<boolean> {
+        const pidTypes = [ServiceTypeIdentifiers.PIDIssuance];
+        // Only PID services whose certificate parses: one that does not can
+        // end no path, and matching it would throw and reject a credential
+        // that already matched another service.
+        const pidEntities = store.entities.map((entity) => ({
+            ...entity,
+            services: entity.services.filter(
+                (service) =>
+                    service.serviceTypeIdentifier ===
+                        ServiceTypeIdentifiers.PIDIssuance &&
+                    this.x509v.parseTrustAnchors([service]).length === 1,
+            ),
+        }));
+        const pidCertificates = this.x509v.parseTrustAnchors(
+            pidEntities.flatMap((entity) => entity.services),
+        );
+        if (pidCertificates.length === 0) {
+            return false;
+        }
+        let path: x509.X509Certificate[];
+        try {
+            path = await this.x509v.buildPath(
+                leaf,
+                [],
+                [...pidCertificates, ...presented],
+            );
+        } catch (error) {
+            this.logger.debug(
+                `No path to a PID issuance certificate: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            return false;
+        }
+        return (
+            (await this.x509v.pathMatchesTrustedEntities(
+                path,
+                pidEntities,
+                pinnedCertMode,
+                pidTypes,
+            )) !== null
+        );
     }
 
     /**
@@ -361,14 +437,6 @@ export class CredentialChainValidationService {
             `Status list is not signed under a ${signerTypes.join(" or ")} certificate of TrustedEntity ${entityId} matched with ${matchedEntity.issuanceServiceType}. Status list leaf: ${leafThumb}, path end: ${endThumb}`,
         );
         return false;
-    }
-
-    /**
-     * Fetch a status list JWT with caching.
-     * Delegates to StatusListVerifierService.
-     */
-    async fetchStatusListJwt(uri: string): Promise<string> {
-        return this.statusListVerifier.getStatusListJwt(uri);
     }
 
     /**

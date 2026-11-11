@@ -165,7 +165,7 @@ Handles interactive authorization requests during credential issuance.
     })
     @ApiResponse({
         status: 403,
-        description: "The token belongs to another tenant",
+        description: "The token names no tenant or belongs to another tenant",
     })
     @ApiResponse({
         status: 404,

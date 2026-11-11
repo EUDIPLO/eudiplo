@@ -1,7 +1,8 @@
-import { Controller, ForbiddenException, Get, Query } from "@nestjs/common";
+import { Controller, Get, Query } from "@nestjs/common";
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Role } from "../auth/roles/role.enum.js";
 import { Secured } from "../auth/secure.decorator.js";
+import { requireTenantContext } from "../auth/tenant-context.util.js";
 import { Token, TokenPayload } from "../auth/token.decorator.js";
 import { AuditLogService } from "./audit-log.service.js";
 import { AuditLogResponseDto } from "./dto/audit-log-response.dto.js";
@@ -30,12 +31,10 @@ export class AuditLogController {
         @Token() user: TokenPayload,
         @Query("limit") limit?: string,
     ): Promise<AuditLogResponseDto[]> {
-        if (!user.entity?.id) {
-            throw new ForbiddenException(
-                "This endpoint requires a tenant context.",
-            );
-        }
         const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
-        return this.auditLogService.listByTenant(user.entity.id, parsedLimit);
+        return this.auditLogService.listByTenant(
+            requireTenantContext(user),
+            parsedLimit,
+        );
     }
 }
