@@ -19,7 +19,10 @@ import {
 import { errors as joseErrors } from "jose";
 import { Span, TraceService } from "nestjs-otel";
 import { v4 } from "uuid";
-import { EncryptionService } from "../../../crypto/encryption/encryption.service.js";
+import {
+    ENCRYPTION_KEY_MANAGEMENT_ALG,
+    EncryptionService,
+} from "../../../crypto/encryption/encryption.service.js";
 import { ChangeSessionState } from "../../../session/application/change-session-state.js";
 import { ExternalSessionBindingError } from "../../../session/application/resolve-external-authorization-session.js";
 import { SessionNotFound } from "../../../session/application/session-errors.js";
@@ -334,16 +337,26 @@ export class Oid4vciService {
                     "Encrypted credential request body is empty",
                 );
             }
+            // Decrypted here, before the library checks the JWE header, so the
+            // checks below can answer with their own codes. Only the advertised
+            // alg and enc are decrypted: the answer to any other must not depend
+            // on the plaintext.
+            const encValues =
+                issuerMetadata.credentialIssuer.credential_request_encryption
+                    ?.enc_values_supported ?? [];
             try {
                 requestBody =
                     await this.encryptionService.decryptJweToJson<CredentialRequest>(
                         jweString,
                         tenantId,
+                        { contentEncryptionAlgorithms: encValues },
                     );
-            } catch {
+            } catch (error) {
                 throw new CredentialRequestException(
                     "invalid_encryption_parameters",
-                    "Failed to decrypt encrypted credential request",
+                    error instanceof joseErrors.JOSEAlgNotAllowed
+                        ? `Credential request JWE must use alg '${ENCRYPTION_KEY_MANAGEMENT_ALG}' and an enc of ${encValues.map((value) => `'${value}'`).join(", ")}`
+                        : "Failed to decrypt encrypted credential request",
                 );
             }
         } else if (rawBody && typeof rawBody === "object") {
@@ -792,6 +805,9 @@ export class Oid4vciService {
         const zipValuesSupported =
             issuerMetadata.credentialIssuer.credential_response_encryption
                 ?.zip_values_supported;
+        const requestEncValues =
+            issuerMetadata.credentialIssuer.credential_request_encryption
+                ?.enc_values_supported ?? [];
 
         // Unlike the credential endpoint, nothing has to be checked before
         // parsing, so the library verifies the JWE header against the
@@ -807,6 +823,7 @@ export class Oid4vciService {
                     request = await this.encryptionService.decryptJweToJson(
                         jwe,
                         tenantId,
+                        { contentEncryptionAlgorithms: requestEncValues },
                     );
                 } catch (error) {
                     // Decrypted, but not JSON: hand the library a payload it
@@ -908,9 +925,13 @@ export type DeferredCredentialResult = Awaited<
     ReturnType<Openid4vciIssuer["createDeferredCredentialResponse"]>
 >;
 
-/** A JWE the tenant key cannot decrypt. */
+/**
+ * A JWE the tenant key cannot decrypt, or with an alg or enc the issuer did
+ * not advertise.
+ */
 function isWalletDecryptionError(error: unknown): boolean {
     return (
+        error instanceof joseErrors.JOSEAlgNotAllowed ||
         error instanceof joseErrors.JWEDecryptionFailed ||
         error instanceof joseErrors.JWEInvalid ||
         error instanceof joseErrors.JOSENotSupported

@@ -210,25 +210,34 @@ describe("Issuance - deferred credential request encryption", () => {
         expect(response.body).toMatchObject({ error: "issuance_pending" });
     });
 
-    test("returns a plain credential for an encrypted request without response encryption", async () => {
-        const { issuerMetadata, accessToken, transactionId } =
-            await prepareDeferredTransaction();
-        await complete(transactionId, "Hamburg");
+    test.each(["A128GCM", "A256GCM"])(
+        "returns a plain credential for an encrypted request with enc %s without response encryption",
+        async (enc) => {
+            const { issuerMetadata, accessToken, transactionId } =
+                await prepareDeferredTransaction();
+            await complete(transactionId, "Hamburg");
 
-        const response = await postDeferred(
-            issuerMetadata,
-            accessToken,
-            "application/jwt",
-            await encrypt(issuerMetadata, { transaction_id: transactionId }),
-        );
+            const response = await postDeferred(
+                issuerMetadata,
+                accessToken,
+                "application/jwt",
+                await encrypt(
+                    issuerMetadata,
+                    { transaction_id: transactionId },
+                    { enc },
+                ),
+            );
 
-        expect(response.status).toBe(200);
-        expect(response.headers["content-type"]).toMatch(/^application\/json/);
-        const claims = await sdjwt.getClaims(
-            response.body.credentials[0].credential,
-        );
-        expect(claims.town).toBe("Hamburg");
-    });
+            expect(response.status).toBe(200);
+            expect(response.headers["content-type"]).toMatch(
+                /^application\/json/,
+            );
+            const claims = await sdjwt.getClaims(
+                response.body.credentials[0].credential,
+            );
+            expect(claims.town).toBe("Hamburg");
+        },
+    );
 
     test("returns an encrypted credential for an encrypted request that asks for one", async () => {
         const { issuerMetadata, accessToken, transactionId } =
@@ -266,6 +275,7 @@ describe("Issuance - deferred credential request encryption", () => {
         ["without kid", { kid: undefined }],
         ["with an unknown kid", { kid: "unknown" }],
         ["with another alg", { alg: "ECDH-ES+A128KW" }],
+        ["with another enc", { enc: "A128CBC-HS256" }],
     ])("rejects an encrypted request %s", async (_case, header) => {
         const { issuerMetadata, accessToken, transactionId } =
             await prepareDeferredTransaction();

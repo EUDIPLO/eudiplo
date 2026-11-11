@@ -15,6 +15,13 @@ import { KeyUsageType } from "../key/types/key-usage-type.js";
 import { EncryptedResponseRejectedError } from "./encrypted-response-rejected.error.js";
 
 /**
+ * The JWE key management algorithm of every encryption key EUDIPLO publishes
+ * (HAIP Section 5): the tenant encryption key and the ephemeral keys of OID4VP
+ * requests. Encrypted responses must use it.
+ */
+export const ENCRYPTION_KEY_MANAGEMENT_ALG = "ECDH-ES";
+
+/**
  * Service for handling encryption and decryption operations.
  */
 @Injectable()
@@ -150,15 +157,29 @@ export class EncryptionService {
     }
 
     /**
-     * Decrypts a JWE (JSON Web Encryption) compact token and returns the plaintext
-     * parsed as JSON. Use this when the JWE payload is raw JSON (not a nested JWT).
+     * Decrypts a JWE (JSON Web Encryption) compact token with the tenant
+     * encryption key and returns the plaintext parsed as JSON. Use this when
+     * the JWE payload is raw JSON (not a nested JWT), such as an encrypted
+     * OID4VCI credential or deferred credential request.
+     * Only what the issuer advertised is accepted: `alg`
+     * {@link ENCRYPTION_KEY_MANAGEMENT_ALG}, the `alg` the tenant encryption
+     * key is published with, and an `enc` of `contentEncryptionAlgorithms`.
      * @param jwe - The JWE compact serialization string.
      * @param tenantId - The ID of the tenant.
+     * @param options.contentEncryptionAlgorithms - The `enc` values the
+     *   issuer advertised.
      * @returns The decrypted payload parsed as a JSON object.
+     * @throws errors.JOSEAlgNotAllowed for another `alg` or `enc`, before
+     *   anything is decrypted; other jose errors when the JWE does not
+     *   decrypt; SyntaxError when the plaintext is not JSON.
      */
     async decryptJweToJson<T = Record<string, unknown>>(
         jwe: string,
         tenantId: string,
+        options: {
+            /** The `enc` values the issuer advertised. */
+            contentEncryptionAlgorithms: readonly string[];
+        },
     ): Promise<T> {
         const keyChain = await this.keyChainService.findByUsageType(
             tenantId,
@@ -167,10 +188,15 @@ export class EncryptionService {
 
         const privateEncryptionKey = (await importJWK(
             keyChain.activeJwk,
-            "ECDH-ES",
+            ENCRYPTION_KEY_MANAGEMENT_ALG,
         )) as CryptoKey;
 
-        const { plaintext } = await compactDecrypt(jwe, privateEncryptionKey);
+        const { plaintext } = await compactDecrypt(jwe, privateEncryptionKey, {
+            keyManagementAlgorithms: [ENCRYPTION_KEY_MANAGEMENT_ALG],
+            contentEncryptionAlgorithms: [
+                ...options.contentEncryptionAlgorithms,
+            ],
+        });
         return JSON.parse(new TextDecoder().decode(plaintext)) as T;
     }
 }
