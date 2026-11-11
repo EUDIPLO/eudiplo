@@ -246,25 +246,40 @@ export class TrustStoreService {
     }
 
     /**
-     * Clear the cached trust store.
+     * Clear the cached trust stores, of one tenant or of all.
      * Useful for testing or when trust lists are known to have changed.
+     *
+     * @param tenantId Clear only this tenant's trust stores; each tenant
+     * builds its own
      */
-    clearCache(): void {
-        this.cache.clear();
-        this.outdated.clear();
+    clearCache(tenantId?: string): void {
+        if (tenantId === undefined) {
+            this.cache.clear();
+            this.outdated.clear();
+            return;
+        }
+        for (const map of [this.cache, this.outdated]) {
+            for (const key of map.keys()) {
+                if (tenantOfCacheKey(key) === tenantId) {
+                    map.delete(key);
+                }
+            }
+        }
     }
 
     /**
      * Forget the sequence numbers of the lists the tenant accepted, then
      * clear the cache so the lists are fetched again: a list whose operator
      * numbered it from 1 again is accepted. Until a list is accepted again,
-     * an older version of it is accepted too.
+     * an older version of it is accepted too. Other tenants' trust stores
+     * are kept.
      */
     async forgetSequenceNumbers(tenantId: string): Promise<void> {
         await this.sequenceNumbers.forgetTenant(tenantId);
-        this.clearCache();
+        this.clearCache(tenantId);
     }
 
+    /** The key of a source's trust store; see {@link tenantOfCacheKey}. */
     private buildCacheKey(source: LoadedTrustListSource): string {
         return JSON.stringify({
             tenantId: source.tenantId,
@@ -280,4 +295,9 @@ export class TrustStoreService {
             acceptedServiceTypes: source.acceptedServiceTypes ?? [],
         });
     }
+}
+
+/** The tenant of a key from {@link TrustStoreService.buildCacheKey}. */
+function tenantOfCacheKey(key: string): string {
+    return (JSON.parse(key) as { tenantId: string }).tenantId;
 }

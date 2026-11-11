@@ -8836,14 +8836,14 @@ export const StatusListCacheStatsDtoSchema = {
     properties: {
         size: {
             type: 'number',
-            description: 'Number of cached status list entries'
+            description: 'Number of cached status list entries: those the caller\'s tenant used, or all for `tenants:manage`'
         },
         jwtCacheSize: {
             type: 'number',
-            description: 'Number of cached JWT status list entries'
+            description: 'Number of cached JWT status list entries: those the caller\'s tenant used, or all for `tenants:manage`'
         },
         uris: {
-            description: 'Cached status list URIs',
+            description: 'Cached status list URIs: those the caller\'s tenant used, or all for `tenants:manage`',
             type: 'array',
             items: {
                 type: 'string'

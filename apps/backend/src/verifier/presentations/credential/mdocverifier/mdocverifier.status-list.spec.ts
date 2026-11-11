@@ -381,7 +381,7 @@ describe("MdocverifierService status list fetch", () => {
             vp,
             { protocol: "iso-18013-7", sessionTranscript },
             {
-                trustListSource: { lotes: [] },
+                trustListSource: { lotes: [], tenantId: "tenant-a" },
                 policy: { revocation: { enabled: true, failClosed } },
             } as never,
             [[namespace, "given_name"]],
@@ -434,6 +434,19 @@ describe("MdocverifierService status list fetch", () => {
             verify(service, statusListAt(`${loopbackIp}/status/1`)),
         ).resolves.toMatchObject({ verified: true });
         expect(requests).toEqual(["/status/1"]);
+
+        // Recorded for the tenant of the presentation.
+        const statusLists = (
+            service as unknown as {
+                statusListVerifier: StatusListVerifierService;
+            }
+        ).statusListVerifier;
+        expect(statusLists.getCacheStats("tenant-a").uris).toEqual([
+            `${loopbackIp}/status/1`,
+        ]);
+        expect(statusLists.getCacheStats("tenant-b").uris).toEqual([]);
+        statusLists.clearTenantCache("tenant-a");
+        expect(statusLists.getCacheStats().uris).toEqual([]);
     });
 
     it("rejects a credential its status list revokes", async () => {

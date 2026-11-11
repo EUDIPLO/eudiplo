@@ -41,6 +41,12 @@ const MAX_CACHE_TTL_MS = 60 * 60 * 1000;
  */
 const CACHE_MAX_ENTRIES = 1000;
 
+/**
+ * URIs kept in {@link StatusListVerifierService.tenantsByUri} before those no
+ * longer cached are dropped: the three caches together hold at most this many.
+ */
+const TENANT_USES_MAX_ENTRIES = 3 * CACHE_MAX_ENTRIES;
+
 /** Byte budget of each raw token cache, counted by {@link tokenBytes}. */
 const TOKEN_CACHE_MAX_BYTES = 32 * 1024 * 1024;
 
@@ -179,6 +185,13 @@ export class StatusListVerifierService {
         maxEntries: CACHE_MAX_ENTRIES,
         maxBytes: PARSED_CACHE_MAX_BYTES,
     });
+
+    /**
+     * The tenants that used each status list URI since its entries were last
+     * cleared. The caches are shared, so a tenant sees and clears only the
+     * lists it used itself ({@link getCacheStats}, {@link clearTenantCache}).
+     */
+    private readonly tenantsByUri = new Map<string, Set<string>>();
 
     constructor(private readonly trustFetch: TrustFetchService) {}
 
@@ -398,31 +411,87 @@ export class StatusListVerifierService {
             this.cachedJwts.delete(uri);
             this.cachedCwts.delete(uri);
             this.inflatedLists.delete(uri);
+            this.tenantsByUri.delete(uri);
         } else {
             this.cachedJwts.clear();
             this.cachedCwts.clear();
             this.inflatedLists.clear();
+            this.tenantsByUri.clear();
+        }
+    }
+
+    /**
+     * Clear the status lists the tenant used. Another tenant that uses one
+     * of them too fetches it again on its next check.
+     */
+    clearTenantCache(tenantId: string): void {
+        for (const [uri, tenants] of this.tenantsByUri) {
+            if (tenants.has(tenantId)) {
+                this.clearCache(uri);
+            }
         }
     }
 
     /**
      * Get cache statistics for monitoring. Expired entries are not counted.
+     *
+     * @param tenantId Count only the status lists this tenant used; without
+     * it, all of them
      */
-    getCacheStats(): { size: number; jwtCacheSize: number; uris: string[] } {
+    getCacheStats(tenantId?: string): {
+        size: number;
+        jwtCacheSize: number;
+        uris: string[];
+    } {
+        const uris = this.cachedUris();
+        const visible = (uri: string) =>
+            tenantId === undefined ||
+            this.tenantsByUri.get(uri)?.has(tenantId) === true;
+        const count = (keys: IterableIterator<string>) =>
+            Array.from(keys).filter(visible).length;
+        return {
+            size: count(this.inflatedLists.keys()),
+            jwtCacheSize: count(this.cachedJwts.keys()),
+            uris: Array.from(uris).filter(visible),
+        };
+    }
+
+    /** The URIs of all unexpired entries. */
+    private cachedUris(): Set<string> {
         this.cachedJwts.deleteExpired();
         this.cachedCwts.deleteExpired();
         this.inflatedLists.deleteExpired();
-        return {
-            size: this.inflatedLists.size,
-            jwtCacheSize: this.cachedJwts.size,
-            uris: Array.from(
-                new Set([
-                    ...this.cachedJwts.keys(),
-                    ...this.cachedCwts.keys(),
-                    ...this.inflatedLists.keys(),
-                ]),
-            ),
-        };
+        return new Set([
+            ...this.cachedJwts.keys(),
+            ...this.cachedCwts.keys(),
+            ...this.inflatedLists.keys(),
+        ]);
+    }
+
+    /**
+     * Remember that the tenant used the status list at `uri`, after it was
+     * served from or put in the cache. URIs no longer cached are dropped once
+     * {@link TENANT_USES_MAX_ENTRIES} are kept, so the map does not grow with
+     * every URI a presented credential names.
+     */
+    private recordUse(uri: string, tenantId: string | undefined): void {
+        if (tenantId === undefined) {
+            return;
+        }
+        let tenants = this.tenantsByUri.get(uri);
+        if (!tenants) {
+            if (this.tenantsByUri.size >= TENANT_USES_MAX_ENTRIES) {
+                const cached = this.cachedUris();
+                for (const known of this.tenantsByUri.keys()) {
+                    if (!cached.has(known)) {
+                        this.tenantsByUri.delete(known);
+                    }
+                }
+            }
+            tenants = new Set();
+            this.tenantsByUri.set(uri, tenants);
+        }
+        tenants.add(tenantId);
     }
 
     /**
@@ -430,13 +499,19 @@ export class StatusListVerifierService {
      * The JWT is cached based on its TTL/exp claims.
      *
      * @param uri The URI of the status list JWT
+     * @param tenantId The tenant whose check needs the list. Without one,
+     * the list is only listed and cleared for the whole instance.
      * @returns The raw JWT string
      */
-    async getStatusListJwt(uri: string): Promise<string> {
+    async getStatusListJwt(
+        uri: string,
+        tenantId: string | undefined,
+    ): Promise<string> {
         // Check if we have a valid cached entry
         const cached = this.cachedJwts.get(uri);
         if (cached) {
             this.logger.debug(`Using cached status list JWT for ${uri}`);
+            this.recordUse(uri, tenantId);
             return cached;
         }
 
@@ -463,6 +538,8 @@ export class StatusListVerifierService {
             tokenBytes(jwt),
             this.cacheExpiresAt(ttl, exp),
         );
+        // Once cached, so pruning the uses cannot drop the URI.
+        this.recordUse(uri, tenantId);
 
         return jwt;
     }
@@ -472,14 +549,20 @@ export class StatusListVerifierService {
      * The CWT is cached based on its ttl/exp claims.
      *
      * @param uri The URI of the status list CWT
+     * @param tenantId The tenant whose check needs the list, see
+     * {@link getStatusListJwt}
      * @returns The raw CWT bytes
      * @throws InvalidStatusListTokenError if its list cannot be decompressed
      * or decompresses to more than {@link STATUS_LIST_CWT_MAX_INFLATED_BYTES}
      */
-    async getStatusListCwt(uri: string): Promise<Uint8Array> {
+    async getStatusListCwt(
+        uri: string,
+        tenantId: string | undefined,
+    ): Promise<Uint8Array> {
         const cached = this.cachedCwts.get(uri);
         if (cached) {
             this.logger.debug(`Using cached status list CWT for ${uri}`);
+            this.recordUse(uri, tenantId);
             return cached;
         }
 
@@ -516,6 +599,7 @@ export class StatusListVerifierService {
                     : undefined,
             ),
         );
+        this.recordUse(uri, tenantId);
 
         return token;
     }
@@ -530,6 +614,7 @@ export class StatusListVerifierService {
      * A list that cannot be fetched, including a non-2xx response, is thrown
      * as {@link RevocationListUnavailableError} rather than returned, so the
      * best-effort revocation mode can tell it from an invalid or revoking list.
+     *
      * @owf/mdoc decodes a status list `idx` as a non-negative integer and a
      * `uri` as a string, but passes any string here: a `uri` that is not an
      * absolute URI is thrown as {@link MalformedStatusReferenceError} and
@@ -538,8 +623,15 @@ export class StatusListVerifierService {
      * {@link STATUS_LIST_CWT_MAX_INFLATED_BYTES} is thrown as
      * {@link InvalidStatusListTokenError}, which rejects the credential in
      * every mode.
+     *
+     * @param tenantId The tenant whose presentation is verified, see
+     * {@link getStatusListJwt}
      */
-    readonly mdocFetch: typeof fetch = async (input, init) => {
+    readonly mdocFetch = async (
+        input: Parameters<typeof fetch>[0],
+        init: Parameters<typeof fetch>[1],
+        tenantId: string | undefined,
+    ): Promise<Response> => {
         const uri = input instanceof Request ? input.url : input.toString();
         if (!isAbsoluteUri(uri)) {
             throw new MalformedStatusReferenceError(
@@ -549,7 +641,7 @@ export class StatusListVerifierService {
         const accept = new Headers(init?.headers).get("accept") ?? "";
 
         if (accept.includes(STATUS_LIST_CWT)) {
-            const cwt = await this.getStatusListCwt(uri);
+            const cwt = await this.getStatusListCwt(uri, tenantId);
             return new Response(toBuffer(cwt), {
                 headers: { "content-type": STATUS_LIST_CWT },
             });

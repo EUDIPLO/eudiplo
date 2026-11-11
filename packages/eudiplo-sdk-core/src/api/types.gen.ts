@@ -3984,15 +3984,15 @@ export type TrustListCacheStatsDto = {
 
 export type StatusListCacheStatsDto = {
     /**
-     * Number of cached status list entries
+     * Number of cached status list entries: those the caller's tenant used, or all for `tenants:manage`
      */
     size: number;
     /**
-     * Number of cached JWT status list entries
+     * Number of cached JWT status list entries: those the caller's tenant used, or all for `tenants:manage`
      */
     jwtCacheSize: number;
     /**
-     * Cached status list URIs
+     * Cached status list URIs: those the caller's tenant used, or all for `tenants:manage`
      */
     uris: Array<string>;
 };

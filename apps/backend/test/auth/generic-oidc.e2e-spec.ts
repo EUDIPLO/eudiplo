@@ -260,10 +260,10 @@ describe("Generic OIDC provider (e2e)", () => {
         },
     );
 
-    test("serves the instance's routes to a token without a tenant", async () => {
+    test("serves the cache routes to tenants:manage without a tenant", async () => {
         const token = await sign({
             sub: "person-1",
-            eudiplo: { roles: [Role.Issuances] },
+            eudiplo: { roles: [Role.Tenants] },
         });
 
         await as(token).get("/cache/stats").expect(200);
@@ -271,14 +271,28 @@ describe("Generic OIDC provider (e2e)", () => {
             .delete("/cache/trust-list")
             .set("Authorization", `Bearer ${token}`)
             .expect(204);
-        // Forgetting sequence numbers acts on the caller's tenant.
-        const response = await request(app.getHttpServer())
-            .delete("/cache/trust-list/sequence-numbers")
-            .set("Authorization", `Bearer ${token}`)
-            .expect(403);
-        expect(response.body.message).toBe(
-            "This endpoint requires a tenant context. Use a tenant-bound account.",
-        );
+    });
+
+    test("refuses the cache routes to tenant roles without a tenant", async () => {
+        const token = await sign({
+            sub: "person-1",
+            eudiplo: { roles: [Role.Issuances] },
+        });
+
+        // The caches are scoped to the caller's tenant for these roles.
+        for (const path of [
+            "/cache/trust-list",
+            "/cache/trust-list/sequence-numbers",
+        ]) {
+            const response = await request(app.getHttpServer())
+                .delete(path)
+                .set("Authorization", `Bearer ${token}`)
+                .expect(403);
+            expect(response.body.message).toBe(
+                "This endpoint requires a tenant context. Use a tenant-bound account.",
+            );
+        }
+        await as(token).get("/cache/stats").expect(403);
     });
 
     test("tells the Web Client no subject for a token without sub", async () => {

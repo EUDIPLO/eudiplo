@@ -65,7 +65,7 @@ To accept the issuers of an external List of Trusted Entities (LoTE), edit `memb
 { "type": "etsi_tl", "values": [{ "url": "https://trust.example.org/lists/members", "verifierX509Der": "MIIB..." }] }
 ```
 
-Without verification material, EUDIPLO cannot check the list's signature, and verification fails with `trust_list_unavailable`. EUDIPLO caches fetched lists for 5 minutes; `DELETE /api/cache/trust-list` clears the cache after the publisher changes a list. To try the variant without a second organization, enter the **Trust List URL** of `membership-issuers` from [chapter 3](first-presentation.md). For the certificate, open `Membership trust list signing` under **Keys**, choose **Copy PEM** under **Active Certificate**, and paste it without the `-----BEGIN CERTIFICATE-----` and `-----END CERTIFICATE-----` lines.
+Without verification material, EUDIPLO cannot check the list's signature, and verification fails with `trust_list_unavailable`. EUDIPLO caches fetched lists for 5 minutes; `DELETE /api/cache/trust-list` clears your tenant's cached lists after the publisher changes a list. To try the variant without a second organization, enter the **Trust List URL** of `membership-issuers` from [chapter 3](first-presentation.md). For the certificate, open `Membership trust list signing` under **Keys**, choose **Copy PEM** under **Active Certificate**, and paste it without the `-----BEGIN CERTIFICATE-----` and `-----END CERTIFICATE-----` lines.
 
 **Checkpoint:** presenting `Membership` completes the session as in chapter 3, and `Untrusted membership` is rejected as in step 2.
 

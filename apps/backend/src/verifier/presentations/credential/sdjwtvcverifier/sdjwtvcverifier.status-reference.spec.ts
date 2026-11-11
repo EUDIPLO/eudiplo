@@ -190,6 +190,7 @@ async function setup() {
     ) =>
         service.verify(await credential(issuer, status, expiresIn), {
             federationTrustSource: {
+                tenantId: "tenant-a",
                 mode: "federation-only",
                 trustAnchors: [
                     {
@@ -254,7 +255,7 @@ async function setupX509(
             (await sdJwtVc(issuer, { x5c: ["AA"] }, { iat: now, ...claims })) +
                 disclosures.map((d) => `${d}~`).join(""),
             {
-                trustListSource: { lotes: [] },
+                trustListSource: { lotes: [], tenantId: "tenant-a" },
                 policy: { requireX5c: true, revocation },
             } as VerifierOptions,
         );
@@ -270,7 +271,10 @@ describe("SdjwtvcverifierService status reference", () => {
         });
 
         expect(result.payload).toMatchObject({ given_name: "Erika" });
-        expect(getStatusListJwt).toHaveBeenCalledExactlyOnceWith(STATUS_URI);
+        expect(getStatusListJwt).toHaveBeenCalledExactlyOnceWith(
+            STATUS_URI,
+            "tenant-a",
+        );
     });
 
     it("checks the reference only after the credential itself", async () => {

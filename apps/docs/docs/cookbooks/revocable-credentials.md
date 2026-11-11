@@ -96,7 +96,7 @@ curl -s -X POST "$EUDIPLO/api/session/revoke" \
   -w '%{http_code}\n'
 ```
 
-`status` is `0` for valid, `1` for revoked and `2` for suspended. Without `credentialConfigurationId`, every credential of the session changes. The call needs the role `credentials:status` or `issuance:manage` and returns `204`. Then clear the cached status lists of the verifier, so you do not have to wait for the TTL. The Web Client has no button for this:
+`status` is `0` for valid, `1` for revoked and `2` for suspended. Without `credentialConfigurationId`, every credential of the session changes. The call needs the role `credentials:status` or `issuance:manage` and returns `204`. Then clear the status lists your tenant's verifier cached, so you do not have to wait for the TTL. The Web Client has no button for this:
 
 ```bash
 curl -s -X DELETE "$EUDIPLO/api/cache/status-list" -H "Authorization: Bearer $ADMIN_TOKEN" -w '%{http_code}\n'

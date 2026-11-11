@@ -303,8 +303,11 @@ export class SdjwtvcverifierService {
         ) => Promise<boolean>,
     ): Promise<void> {
         const { uri, idx } = reference;
-        const statusListJwt =
-            await this.statusListVerifier.getStatusListJwt(uri);
+        const statusListJwt = await this.statusListVerifier.getStatusListJwt(
+            uri,
+            options.trustListSource?.tenantId ??
+                options.federationTrustSource?.tenantId,
+        );
 
         const skewSeconds = options.skewSeconds ?? 0;
         await Jwt.fromEncode(statusListJwt)

@@ -135,6 +135,9 @@ describe("Tenant context (e2e)", () => {
             })
             .expect(201);
         expect(upgraded.body.document).toBeDefined();
+
+        const stats = await as(rootToken).get("/cache/stats").expect(200);
+        expect(stats.body.statusListCache).toBeDefined();
     });
 
     test("refuses the root client on a tenant's routes with 403", async () => {

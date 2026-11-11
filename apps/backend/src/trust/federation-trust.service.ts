@@ -79,17 +79,50 @@ export class FederationTrustService {
         string,
         Promise<FederationResolution>
     >();
+    /**
+     * The tenants that used each cache key since it was last cleared.
+     * Tenants with the same trust anchors and keys share entries, so a
+     * tenant clears only the entries it used itself. It holds more keys than
+     * the cache, so a cached key keeps its tenants.
+     */
+    private readonly tenantsByKey = new Map<string, Set<string>>();
 
     private readonly trustHitsCounter;
     private readonly trustMissesCounter;
     private readonly trustStaleCounter;
     private readonly trustFetchesCounter;
 
-    clearTrustCache(): void {
-        this.cache.clear();
-        this.lastResolutions.clear();
-        this.inFlight.clear();
-        this.unpinnedWarnings.clear();
+    /**
+     * Clear cached resolutions, of all tenants or only those `tenantId`
+     * used. A resolution another tenant shares is resolved again for it too.
+     * The last successful resolution, the fallback while the federation
+     * cannot be reached, is dropped too once no other tenant uses it; a
+     * tenant that shares it keeps its fallback.
+     */
+    clearTrustCache(tenantId?: string): void {
+        if (tenantId === undefined) {
+            this.cache.clear();
+            this.lastResolutions.clear();
+            this.inFlight.clear();
+            this.unpinnedWarnings.clear();
+            this.tenantsByKey.clear();
+            return;
+        }
+        for (const [key, tenants] of this.tenantsByKey) {
+            if (tenants.delete(tenantId)) {
+                this.cache.delete(key);
+                if (tenants.size === 0) {
+                    this.lastResolutions.delete(key);
+                    this.inFlight.delete(key);
+                    this.tenantsByKey.delete(key);
+                }
+            }
+        }
+        for (const warning of this.unpinnedWarnings.keys()) {
+            if ((JSON.parse(warning) as unknown[])[0] === tenantId) {
+                this.unpinnedWarnings.delete(warning);
+            }
+        }
     }
 
     constructor(
@@ -273,6 +306,16 @@ export class FederationTrustService {
             metadataTypes ?? [],
         ]);
         const labels = { entity: entityId };
+        if (source!.tenantId !== undefined) {
+            const tenants = this.tenantsByKey.get(key) ?? new Set<string>();
+            tenants.add(source!.tenantId);
+            setBounded(
+                this.tenantsByKey,
+                key,
+                tenants,
+                2 * FEDERATION_CACHE_MAX_ENTRIES,
+            );
+        }
 
         const now = Date.now();
         const ttlMs = Math.max(5, source!.cacheTtlSeconds ?? 300) * 1000;
@@ -389,11 +432,16 @@ function reasonOf(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
 
-/** `map.set` that drops the oldest entries above the size bound. */
-function setBounded<V>(map: Map<string, V>, key: string, value: V): void {
+/** `map.set` that drops the oldest entries above `maxEntries`. */
+function setBounded<V>(
+    map: Map<string, V>,
+    key: string,
+    value: V,
+    maxEntries = FEDERATION_CACHE_MAX_ENTRIES,
+): void {
     map.delete(key);
     map.set(key, value);
-    while (map.size > FEDERATION_CACHE_MAX_ENTRIES) {
+    while (map.size > maxEntries) {
         map.delete(map.keys().next().value as string);
     }
 }

@@ -161,13 +161,13 @@ describe("StatusListVerifierService cache", () => {
             token: (claims: { ttl?: number; exp?: number }) =>
                 Promise.resolve(jwt(claims)),
             get: (statusLists: StatusListVerifierService, uri: string) =>
-                statusLists.getStatusListJwt(uri),
+                statusLists.getStatusListJwt(uri, "tenant-a"),
         },
         {
             name: "status list CWTs",
             token: cwt,
             get: (statusLists: StatusListVerifierService, uri: string) =>
-                statusLists.getStatusListCwt(uri),
+                statusLists.getStatusListCwt(uri, "tenant-a"),
         },
     ];
 
@@ -298,19 +298,22 @@ describe("StatusListVerifierService cache", () => {
     it("evicts the least recently used status list beyond 1000 entries", async () => {
         const statusLists = service();
         for (let i = 0; i < 1000; i++) {
-            await statusLists.getStatusListJwt(`${origin}/list/${i}`);
+            await statusLists.getStatusListJwt(
+                `${origin}/list/${i}`,
+                "tenant-a",
+            );
         }
-        await statusLists.getStatusListJwt(`${origin}/list/0`);
+        await statusLists.getStatusListJwt(`${origin}/list/0`, "tenant-a");
         requests = [];
 
-        await statusLists.getStatusListJwt(`${origin}/list/1000`);
+        await statusLists.getStatusListJwt(`${origin}/list/1000`, "tenant-a");
 
         const { jwtCacheSize, uris } = statusLists.getCacheStats();
         expect(jwtCacheSize).toBe(1000);
         expect(uris).toContain(`${origin}/list/0`);
         expect(uris).not.toContain(`${origin}/list/1`);
-        await statusLists.getStatusListJwt(`${origin}/list/0`);
-        await statusLists.getStatusListJwt(`${origin}/list/1`);
+        await statusLists.getStatusListJwt(`${origin}/list/0`, "tenant-a");
+        await statusLists.getStatusListJwt(`${origin}/list/1`, "tenant-a");
         expect(requests).toEqual(["/list/1000", "/list/1"]);
     }, 30_000);
 
@@ -339,10 +342,10 @@ describe("StatusListVerifierService cache", () => {
             uri: `${origin}/a`,
             idx: 0,
         });
-        await statusLists.getStatusListJwt(`${origin}/a`);
-        await statusLists.getStatusListJwt(`${origin}/b`);
+        await statusLists.getStatusListJwt(`${origin}/a`, "tenant-a");
+        await statusLists.getStatusListJwt(`${origin}/b`, "tenant-a");
         tokens.set("/c", await cwt({}));
-        await statusLists.getStatusListCwt(`${origin}/c`);
+        await statusLists.getStatusListCwt(`${origin}/c`, "tenant-a");
 
         statusLists.clearCache(`${origin}/a`);
         expect(statusLists.getCacheStats()).toEqual({
@@ -357,6 +360,33 @@ describe("StatusListVerifierService cache", () => {
             jwtCacheSize: 0,
             uris: [],
         });
+    });
+
+    it("lists and clears only the status lists a tenant used", async () => {
+        const statusLists = service();
+        await statusLists.getStatusListJwt(`${origin}/a`, "tenant-a");
+        await statusLists.getStatusListJwt(`${origin}/b`, "tenant-b");
+        await statusLists.getStatusListJwt(`${origin}/shared`, "tenant-a");
+        await statusLists.getStatusListJwt(`${origin}/shared`, "tenant-b");
+        await statusLists.getStatusListJwt(`${origin}/untracked`, undefined);
+
+        expect(statusLists.getCacheStats("tenant-a")).toEqual({
+            size: 0,
+            jwtCacheSize: 2,
+            uris: [`${origin}/a`, `${origin}/shared`],
+        });
+
+        statusLists.clearTenantCache("tenant-a");
+
+        expect(statusLists.getCacheStats("tenant-a").uris).toEqual([]);
+        // The shared list is fetched again by tenant-b, which then sees it.
+        expect(statusLists.getCacheStats("tenant-b").uris).toEqual([
+            `${origin}/b`,
+        ]);
+        expect(statusLists.getCacheStats().uris).toEqual([
+            `${origin}/b`,
+            `${origin}/untracked`,
+        ]);
     });
 });
 

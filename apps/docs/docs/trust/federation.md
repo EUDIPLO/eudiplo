@@ -131,7 +131,7 @@ One local resolution follows at most 8 superiors and 10 distinct `authority_hint
 
 ## Caching
 
-A resolution is cached for `cacheTtlSeconds` of the issuance configuration (default 300, at least 5 seconds), never beyond the `exp` of its trust chain; DCQL queries use the default. Tenants with the same trust anchors and the same registered keys share the cache, and each uses a resolution only within its own `cacheTtlSeconds`. A failed resolution is retried after 10 seconds.
+A resolution is cached for `cacheTtlSeconds` of the issuance configuration (default 300, at least 5 seconds), never beyond the `exp` of its trust chain; DCQL queries use the default. Tenants with the same trust anchors and the same registered keys share the cache, and each uses a resolution only within its own `cacheTtlSeconds`. A failed resolution is retried after 10 seconds. `DELETE /api/cache/trust-list` and `DELETE /api/cache` clear the resolutions your tenant used, also for the tenants that share them; with `tenants:manage`, they clear all. A resolution another tenant still uses stays available to it as the fallback described below, for your tenant too.
 
 When the federation cannot be reached (a timeout, a failed request, a `429` or `5xx` answer), the last successful resolution is used for at most 15 minutes after it was obtained, and only while its chain is valid. A chain that fails validation (a signature, an expired statement, an entity the superior does not list) is rejected and never replaced by an earlier resolution.
 
@@ -296,6 +296,6 @@ Common reasons:
 | `has no key '<kid>'`                                     | The credential's `kid` must be in the `jwks` of the issuer's `openid_credential_issuer` metadata.                         |
 | Your entity is not trusted by a verifier                 | Fetch `{entityId}/.well-known/openid-federation` and check `iss`, `authority_hints` and the keys; the trust anchor's subordinate statement must list the public key of your federation key chain. |
 | A federation verifier rejects your credential's `kid`    | The `kid` must be in `openid_credential_issuer.jwks` of your entity configuration; it is renewed at most a minute after a key chain is created or rotated. |
-| A changed federation still gives the old decision        | Resolutions are cached (see [Caching](#caching)). Clear the cache with `DELETE /api/cache/trust-list` or `DELETE /api/cache`. |
+| A changed federation still gives the old decision        | Resolutions are cached (see [Caching](#caching)). Clear your tenant's resolutions with `DELETE /api/cache/trust-list` or `DELETE /api/cache`. |
 
 Cache activity is reported as the OpenTelemetry counters `federation_trust_cache_hits_total`, `federation_trust_cache_misses_total`, `federation_trust_cache_stale_total` and `federation_trust_fetches_total`.
