@@ -21,7 +21,16 @@ import nock from "nock";
 import request from "supertest";
 import { App } from "supertest/types";
 import { Agent, setGlobalDispatcher } from "undici";
-import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
+import {
+    afterAll,
+    afterEach,
+    beforeAll,
+    describe,
+    expect,
+    test,
+    vi,
+} from "vitest";
+import { EncryptionService } from "../../src/crypto/encryption/encryption.service.js";
 import {
     callbacks,
     getSignJwtCallback,
@@ -30,6 +39,7 @@ import {
 import {
     encryptRequest as encrypt,
     responseEncryption,
+    withoutEpkCurve,
 } from "./request-encryption-helpers.js";
 
 setGlobalDispatcher(
@@ -271,41 +281,57 @@ describe("Issuance - deferred credential request encryption", () => {
         expect(claims.town).toBe("Berlin");
     });
 
-    test.each<[string, Partial<CompactJWEHeaderParameters>]>([
+    // The zip and crit rows also pin the descriptions the credential
+    // endpoint uses, so its own copy of these rules cannot drift apart.
+    test.each<[string, Partial<CompactJWEHeaderParameters>, string?]>([
         ["without kid", { kid: undefined }],
         ["with an unknown kid", { kid: "unknown" }],
         ["with another alg", { alg: "ECDH-ES+A128KW" }],
         ["with another enc", { enc: "A128CBC-HS256" }],
-    ])("rejects an encrypted request %s", async (_case, header) => {
-        const { issuerMetadata, accessToken, transactionId } =
-            await prepareDeferredTransaction();
-        await complete(transactionId, "Berlin");
+        [
+            "with zip",
+            { zip: "DEF" },
+            "Compressed credential requests are not supported",
+        ],
+        [
+            "with crit",
+            { crit: ["x-ext"], "x-ext": true },
+            "Credential request JWE must not contain a critical ('crit') header parameter",
+        ],
+    ])(
+        "rejects an encrypted request %s",
+        async (_case, header, description) => {
+            const { issuerMetadata, accessToken, transactionId } =
+                await prepareDeferredTransaction();
+            await complete(transactionId, "Berlin");
 
-        const response = await postDeferred(
-            issuerMetadata,
-            accessToken,
-            "application/jwt",
-            await encrypt(
+            const response = await postDeferred(
                 issuerMetadata,
+                accessToken,
+                "application/jwt",
+                await encrypt(
+                    issuerMetadata,
+                    { transaction_id: transactionId },
+                    header,
+                ),
+            );
+
+            expect(response.status).toBe(400);
+            expect(response.body).toMatchObject({
+                error: "invalid_encryption_parameters",
+                ...(description && { error_description: description }),
+            });
+
+            // A refused request does not use up the credential.
+            const retry = await postDeferred(
+                issuerMetadata,
+                accessToken,
+                "application/json",
                 { transaction_id: transactionId },
-                header,
-            ),
-        );
-
-        expect(response.status).toBe(400);
-        expect(response.body).toMatchObject({
-            error: "invalid_encryption_parameters",
-        });
-
-        // A refused request does not use up the credential.
-        const retry = await postDeferred(
-            issuerMetadata,
-            accessToken,
-            "application/json",
-            { transaction_id: transactionId },
-        );
-        expect(retry.status).toBe(200);
-    });
+            );
+            expect(retry.status).toBe(200);
+        },
+    );
 
     test("rejects a plain request that asks for an encrypted response", async () => {
         const { issuerMetadata, accessToken, transactionId } =
@@ -401,6 +427,54 @@ describe("Issuance - deferred credential request encryption", () => {
             { transaction_id: transactionId },
         );
         expect(retry.status).toBe(200);
+    });
+
+    test("answers a decryption failure on the issuer's side with HTTP 500", async () => {
+        const { issuerMetadata, accessToken, transactionId } =
+            await prepareDeferredTransaction();
+        const decrypt = vi
+            .spyOn(app.get(EncryptionService), "decryptJweToJson")
+            .mockRejectedValueOnce(new Error("KMS unavailable"));
+
+        try {
+            const response = await postDeferred(
+                issuerMetadata,
+                accessToken,
+                "application/jwt",
+                await encrypt(issuerMetadata, {
+                    transaction_id: transactionId,
+                }),
+            );
+
+            expect(decrypt).toHaveBeenCalledOnce();
+            expect(response.status).toBe(500);
+            expect(JSON.stringify(response.body)).not.toContain(
+                "KMS unavailable",
+            );
+        } finally {
+            decrypt.mockRestore();
+        }
+    });
+
+    test("rejects a JWE whose epk cannot be imported with invalid_encryption_parameters", async () => {
+        const { issuerMetadata, accessToken, transactionId } =
+            await prepareDeferredTransaction();
+
+        const response = await postDeferred(
+            issuerMetadata,
+            accessToken,
+            "application/jwt",
+            withoutEpkCurve(
+                await encrypt(issuerMetadata, {
+                    transaction_id: transactionId,
+                }),
+            ),
+        );
+
+        expect(response.status).toBe(400);
+        expect(response.body).toMatchObject({
+            error: "invalid_encryption_parameters",
+        });
     });
 
     test("rejects a response encryption key that cannot be used and keeps the credential", async () => {

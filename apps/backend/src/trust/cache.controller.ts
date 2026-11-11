@@ -2,6 +2,7 @@ import { Controller, Delete, Get, HttpCode, HttpStatus } from "@nestjs/common";
 import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { Role } from "../auth/roles/role.enum.js";
 import { Secured } from "../auth/secure.decorator.js";
+import { requireTenantContext } from "../auth/tenant-context.util.js";
 import { Token, type TokenPayload } from "../auth/token.decorator.js";
 import { CacheStatsResponseDto } from "./dto/cache-stats-response.dto.js";
 import { FederationTrustService } from "./federation-trust.service.js";
@@ -19,7 +20,8 @@ import { TrustStoreService } from "./trust-store.service.js";
  */
 @ApiTags("Cache Management")
 @Controller("cache")
-@Secured([Role.Issuances, Role.Presentations])
+// The caches are the instance's, not a tenant's.
+@Secured([Role.Issuances, Role.Presentations], { tenant: "optional" })
 export class CacheController {
     constructor(
         private readonly trustStoreService: TrustStoreService,
@@ -99,6 +101,8 @@ export class CacheController {
      * Forget the trust list sequence numbers the caller's tenant accepted.
      */
     @Delete("trust-list/sequence-numbers")
+    // Same roles as the controller, but this one acts on the caller's tenant.
+    @Secured([Role.Issuances, Role.Presentations])
     @HttpCode(HttpStatus.NO_CONTENT)
     @ApiOperation({
         summary: "Forget accepted trust list sequence numbers",
@@ -110,7 +114,9 @@ export class CacheController {
         description: "Sequence numbers forgotten",
     })
     async forgetTrustListSequenceNumbers(@Token() token: TokenPayload) {
-        await this.trustStoreService.forgetSequenceNumbers(token.entity!.id);
+        await this.trustStoreService.forgetSequenceNumbers(
+            requireTenantContext(token),
+        );
     }
 
     /**

@@ -34,7 +34,8 @@ import { TenantService } from "./tenant.service.js";
  */
 @ApiExtraModels(ImportTenantDto)
 @ApiTags("Tenant")
-@Secured([Role.Tenants])
+// Tenant management is the operator's, who has no tenant.
+@Secured([Role.Tenants], { tenant: "optional" })
 @Controller("tenant")
 export class TenantController {
     constructor(private readonly tenantService: TenantService) {}

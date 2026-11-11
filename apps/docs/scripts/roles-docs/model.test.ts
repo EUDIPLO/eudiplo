@@ -76,10 +76,28 @@ export class ProfileController {
     assert.deepEqual(endpoints, [{ method: "GET", path: "/api/profile", roles: [], match: "any" }]);
 });
 
+test("accepts the tenant option, which leaves the role check as it is", () => {
+    for (const [secured, match] of [
+        [`@Secured([Role.Issuances], { tenant: "optional" })`, "any"],
+        [`@Secured([Role.Issuances], {})`, "any"],
+        [`@Secured([Role.Issuances], { match: "all", tenant: "required" })`, "all"],
+    ] as const) {
+        const [endpoint] = readEndpoints(
+            "example.controller.ts",
+            controller(`    @Post()\n    ${secured}\n    create() {}`),
+            roleValues,
+        );
+        assert.equal(endpoint.match, match);
+    }
+});
+
 test("rejects options and role lists the guard would read differently", () => {
     for (const secured of [
         `@Secured([Role.Issuances], { match: "some" })`,
         `@Secured([Role.Issuances], { match: "all", other: true })`,
+        `@Secured([Role.Issuances], { tenant: "none" })`,
+        `@Secured([Role.Issuances], { toString: "any" })`,
+        `@Secured([Role.Issuances], { match: "all", match: "any" })`,
         `@Secured([Role.Issuances], { match })`,
         `@Secured([Role.Issuances], options)`,
         `@Secured([], { match: "all" })`,

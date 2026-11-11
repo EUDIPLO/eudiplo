@@ -25,24 +25,49 @@ export function advertisedKey(issuerMetadata: IssuerMetadataResult) {
 
 /**
  * Encrypt a request payload to the advertised key with ECDH-ES and A128GCM.
- * `header` overrides the protected header; `recipient` encrypts to another
- * public key while the header still names the advertised kid.
+ * A string payload is encrypted as it is, an object as JSON.
+ * `header` overrides the protected header; extension parameters it lists in
+ * `crit` are accepted. `recipient` encrypts to another public key while the
+ * header still names the advertised kid.
  */
 export async function encryptRequest(
     issuerMetadata: IssuerMetadataResult,
-    payload: Record<string, unknown>,
+    payload: Record<string, unknown> | string,
     header: Partial<CompactJWEHeaderParameters> = {},
     recipient?: JWK,
 ): Promise<string> {
     const key = advertisedKey(issuerMetadata);
-    return new CompactEncrypt(new TextEncoder().encode(JSON.stringify(payload)))
+    const plaintext =
+        typeof payload === "string" ? payload : JSON.stringify(payload);
+    return new CompactEncrypt(new TextEncoder().encode(plaintext))
         .setProtectedHeader({
             alg: "ECDH-ES",
             enc: "A128GCM",
             kid: key.kid,
             ...header,
         })
-        .encrypt(await importJWK(recipient ?? (key as JWK), "ECDH-ES"));
+        .encrypt(
+            await importJWK(recipient ?? (key as JWK), "ECDH-ES"),
+            header.crit && {
+                crit: Object.fromEntries(
+                    header.crit.map((name) => [name, true]),
+                ),
+            },
+        );
+}
+
+/**
+ * The JWE with `crv` removed from the `epk` in its protected header, a header
+ * that passes the header checks but whose `epk` cannot be imported.
+ */
+export function withoutEpkCurve(jwe: string): string {
+    const [header, ...rest] = jwe.split(".");
+    const decoded = JSON.parse(Buffer.from(header, "base64url").toString());
+    delete decoded.epk.crv;
+    return [
+        Buffer.from(JSON.stringify(decoded)).toString("base64url"),
+        ...rest,
+    ].join(".");
 }
 
 /**
