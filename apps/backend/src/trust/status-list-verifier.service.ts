@@ -2,12 +2,18 @@ import { inflateSync } from "node:zlib";
 import { Injectable, Logger } from "@nestjs/common";
 import {
     StatusListCwt,
+    StatusListCwtClaimKey,
     StatusListEntry,
     StatusType,
 } from "@owf/token-status-list";
 import { base64url, decodeJwt, decodeProtectedHeader } from "jose";
 import { BoundedTtlCache } from "../shared/utils/bounded-ttl-cache.js";
 import { toBuffer } from "../shared/utils/buffer.util.js";
+import {
+    isAbsoluteUri,
+    MalformedStatusReferenceError,
+    parseStatusListReference,
+} from "./domain/status-list-reference.js";
 import { RevocationListUnavailableError } from "./revocation-policy.util.js";
 import { TrustFetchService } from "./trust-fetch.service.js";
 
@@ -45,11 +51,22 @@ const TENANT_USES_MAX_ENTRIES = 3 * CACHE_MAX_ENTRIES;
 const TOKEN_CACHE_MAX_BYTES = 32 * 1024 * 1024;
 
 /**
- * Upper bound for the decompressed `lst` of a status list token, 128 million
+ * Upper bound for the decompressed `lst` of a status list JWT, 128 million
  * statuses at one bit each. DEFLATE compresses a list of equal statuses about
  * a thousandfold, so the compressed size does not bound this.
  */
 const STATUS_LIST_MAX_INFLATED_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Upper bound for the decompressed `lst` of a status list CWT, 8,388,608
+ * statuses at one bit each. @owf/mdoc reads the status of a CWT itself, with
+ * @owf/token-status-list, which decompresses the whole list and turns every
+ * status into a number: about 64 bytes of memory per decompressed byte at one
+ * bit per status, so about 70 MB for this limit and 1 GiB for the JWT one.
+ * A list EUDIPLO issues with the largest STATUS_CAPACITY (1,000,000) fits,
+ * even at eight bits per status.
+ */
+const STATUS_LIST_CWT_MAX_INFLATED_BYTES = 1024 * 1024;
 
 const STATUS_LIST_JWT_TYPES = new Set([
     "statuslist+jwt",
@@ -67,11 +84,6 @@ function tokenBytes(token: string | Uint8Array): number {
     return typeof token === "string" ? token.length * 2 : token.byteLength;
 }
 
-/** A JSON object, not an array or null. */
-function isJsonObject(value: unknown): value is Record<string, unknown> {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 /**
  * A status list token that must not be used: its claims do not meet
  * draft-ietf-oauth-status-list Section 8.3 for the referenced token, or its
@@ -81,6 +93,24 @@ export class InvalidStatusListTokenError extends Error {}
 
 /** The index a referenced token names is outside its status list. */
 export class StatusListIndexOutOfRange extends InvalidStatusListTokenError {}
+
+/**
+ * The decompressed `lst` of a status list token. Decompression stops once the
+ * output exceeds `maxBytes`, so a list that decompresses to more never takes
+ * more memory than that.
+ *
+ * @throws InvalidStatusListTokenError if `lst` cannot be decompressed or
+ * decompresses to more than `maxBytes`
+ */
+function inflateStatusList(lst: Uint8Array, maxBytes: number): Uint8Array {
+    try {
+        return inflateSync(lst, { maxOutputLength: maxBytes });
+    } catch (error: any) {
+        throw new InvalidStatusListTokenError(
+            `Status list cannot be decompressed (at most ${maxBytes} bytes): ${error?.message ?? error}`,
+        );
+    }
+}
 
 /**
  * The status at `index` of a decompressed status list: `bits` bits per
@@ -127,8 +157,8 @@ export class StatusListVerifierService {
     private readonly logger = new Logger(StatusListVerifierService.name);
 
     /**
-     * Cache of raw status list JWTs keyed by URI.
-     * Used by statusListFetcher interface for SD-JWT SDK.
+     * Cache of raw status list JWTs keyed by URI, for the SD-JWT VC verifier
+     * and wallet and key attestations, see {@link getStatusListJwt}.
      */
     private readonly cachedJwts = new BoundedTtlCache<string>({
         maxEntries: CACHE_MAX_ENTRIES,
@@ -167,52 +197,17 @@ export class StatusListVerifierService {
 
     /**
      * Get the `status_list` reference (uri and idx) of a JWT's `status`
-     * claim (draft-ietf-oauth-status-list Section 6.1).
-     *
-     * A `status` claim without `status_list` uses another status mechanism
-     * and counts as no reference.
+     * claim, see {@link parseStatusListReference}.
      *
      * @param jwt The JWT that may contain a status claim
      * @returns The status list entry reference, or undefined if the JWT has
      * no `status_list` reference
-     * @throws Error if the JWT cannot be decoded, or its `status` claim or
-     * `status_list` reference is malformed
+     * @throws Error if the JWT cannot be decoded, and
+     * MalformedStatusReferenceError if its `status` claim or `status_list`
+     * reference is malformed
      */
     getStatusEntryFromJwt(jwt: string): StatusListEntry | undefined {
-        const payload = decodeJwt(jwt);
-        if (payload.status === undefined) {
-            return undefined;
-        }
-        // draft-ietf-oauth-status-list Section 6.2: the claim is an object
-        // with at least one status mechanism.
-        if (
-            !isJsonObject(payload.status) ||
-            Object.keys(payload.status).length === 0
-        ) {
-            throw new Error(
-                "The status claim is not a JSON object with a status mechanism",
-            );
-        }
-        const entry = payload.status.status_list;
-        if (entry === undefined) {
-            return undefined;
-        }
-        if (!isJsonObject(entry)) {
-            throw new Error("The status_list claim is not a JSON object");
-        }
-        if (typeof entry.uri !== "string" || entry.uri === "") {
-            throw new Error("The status_list claim has no uri");
-        }
-        if (
-            typeof entry.idx !== "number" ||
-            !Number.isSafeInteger(entry.idx) ||
-            entry.idx < 0
-        ) {
-            throw new Error(
-                "The status_list claim has no non-negative integer idx",
-            );
-        }
-        return { uri: entry.uri, idx: entry.idx };
+        return parseStatusListReference(decodeJwt(jwt).status);
     }
 
     /**
@@ -323,16 +318,10 @@ export class StatusListVerifierService {
             return cached.bytes;
         }
 
-        let bytes: Uint8Array;
-        try {
-            bytes = inflateSync(base64url.decode(lst), {
-                maxOutputLength: STATUS_LIST_MAX_INFLATED_BYTES,
-            });
-        } catch (error: any) {
-            throw new InvalidStatusListTokenError(
-                `Status list cannot be decompressed (at most ${STATUS_LIST_MAX_INFLATED_BYTES} bytes): ${error?.message ?? error}`,
-            );
-        }
+        const bytes = inflateStatusList(
+            base64url.decode(lst),
+            STATUS_LIST_MAX_INFLATED_BYTES,
+        );
 
         // The token is counted too: it stays in memory through this entry
         // after getStatusListJwt's cache evicts it.
@@ -376,8 +365,7 @@ export class StatusListVerifierService {
             return response.body.trim();
         } catch (error: any) {
             // Marks the list as unavailable for the best-effort revocation
-            // policy: the message on the SD-JWT path
-            // (isStatusListUnavailableError), the class on the mDOC path.
+            // policy.
             throw new RevocationListUnavailableError(
                 `Failed to fetch status list from ${uri}: ${error?.message || error}`,
             );
@@ -508,7 +496,6 @@ export class StatusListVerifierService {
 
     /**
      * Get a status list JWT from cache or fetch it.
-     * This is useful when you need the raw JWT string (e.g., for SDK's statusListFetcher).
      * The JWT is cached based on its TTL/exp claims.
      *
      * @param uri The URI of the status list JWT
@@ -565,6 +552,8 @@ export class StatusListVerifierService {
      * @param tenantId The tenant whose check needs the list, see
      * {@link getStatusListJwt}
      * @returns The raw CWT bytes
+     * @throws InvalidStatusListTokenError if its list cannot be decompressed
+     * or decompresses to more than {@link STATUS_LIST_CWT_MAX_INFLATED_BYTES}
      */
     async getStatusListCwt(
         uri: string,
@@ -590,6 +579,15 @@ export class StatusListVerifierService {
         }
 
         const { payload } = StatusListCwt.fromToken(token);
+        // @owf/mdoc decompresses the list without a limit once it has
+        // verified the token, so an oversized list is refused before it gets
+        // there. The token is not verified yet, but decompressing it here
+        // takes at most the limit.
+        inflateStatusList(
+            payload.getClaim(StatusListCwtClaimKey.StatusList)
+                .compressedStatusList,
+            STATUS_LIST_CWT_MAX_INFLATED_BYTES,
+        );
         this.cachedCwts.set(
             uri,
             token,
@@ -617,6 +615,15 @@ export class StatusListVerifierService {
      * as {@link RevocationListUnavailableError} rather than returned, so the
      * best-effort revocation mode can tell it from an invalid or revoking list.
      *
+     * @owf/mdoc decodes a status list `idx` as a non-negative integer and a
+     * `uri` as a string, but passes any string here: a `uri` that is not an
+     * absolute URI is thrown as {@link MalformedStatusReferenceError} and
+     * not fetched, so best-effort mode does not take it for an unavailable
+     * list. A status list CWT whose list decompresses to more than
+     * {@link STATUS_LIST_CWT_MAX_INFLATED_BYTES} is thrown as
+     * {@link InvalidStatusListTokenError}, which rejects the credential in
+     * every mode.
+     *
      * @param tenantId The tenant whose presentation is verified, see
      * {@link getStatusListJwt}
      */
@@ -626,6 +633,11 @@ export class StatusListVerifierService {
         tenantId: string | undefined,
     ): Promise<Response> => {
         const uri = input instanceof Request ? input.url : input.toString();
+        if (!isAbsoluteUri(uri)) {
+            throw new MalformedStatusReferenceError(
+                "The MSO references a status list or identifier list whose uri is not an absolute URI",
+            );
+        }
         const accept = new Headers(init?.headers).get("accept") ?? "";
 
         if (accept.includes(STATUS_LIST_CWT)) {

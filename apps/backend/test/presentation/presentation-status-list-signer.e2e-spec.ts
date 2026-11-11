@@ -32,18 +32,44 @@ import {
 type Signer = Awaited<ReturnType<typeof generateSelfSignedCertificate>>;
 
 /**
+ * Outcome of a credential valid for 30 days without status information: a
+ * PID needs it (ARF Annex 2 VCR_01, VCR_01b), the others are left to the
+ * relying party's policy (VCR_14) and accepted.
+ */
+const WITHOUT_STATUS: Record<
+    string,
+    { http: number; session: string; failureCode?: string }
+> = {
+    "http://uri.etsi.org/19602/SvcType/PID/Issuance": {
+        http: 400,
+        session: "failed",
+        failureCode: "verification_error",
+    },
+    "http://uri.etsi.org/19602/SvcType/EAA/Issuance": {
+        http: 200,
+        session: "completed",
+    },
+    "http://uri.etsi.org/19602/SvcType/PubEAA/Issuance": {
+        http: 200,
+        session: "completed",
+    },
+};
+
+/**
+ * Status checks of credentials whose issuer is trusted through a trust list.
  * The status list of a presented credential must be signed under the
  * revocation service of the issuer's trusted entity. An issuer listed without
  * a revocation service must sign it under the certificate it is listed with:
  * any other signer could serve a list in which a revoked credential is valid.
- * Issuers listed as EAA and as Pub-EAA providers (ETSI TS 119 602 Annex H)
- * are both trusted.
+ * Issuers listed as PID, EAA and Pub-EAA providers (ETSI TS 119 602 Annex
+ * D and H) are all trusted.
  */
 describe.each([
+    "http://uri.etsi.org/19602/SvcType/PID/Issuance",
     "http://uri.etsi.org/19602/SvcType/EAA/Issuance",
     "http://uri.etsi.org/19602/SvcType/PubEAA/Issuance",
 ])(
-    "Presentation - status list signer of an issuer listed as %s without revocation service",
+    "Presentation - status checks of an issuer listed as %s without revocation service",
     (issuanceServiceType) => {
         let app: INestApplication<App>;
         let authToken: string;
@@ -152,12 +178,21 @@ describe.each([
 
         /**
          * Present a credential of the issuer whose status names a status list
-         * served signed by `statusListSigner`, and return the session.
+         * served signed by `statusListSigner`, and return the session and
+         * whether the list was fetched. `status` gives the credential's
+         * `status` claim for the list's URI; `extra` is passed on to
+         * {@link preparePresentation}.
          */
-        async function presentWithStatusListSignedBy(statusListSigner: Signer) {
+        async function presentWithStatusListSignedBy(
+            statusListSigner: Signer,
+            status: (uri: string) => unknown = (uri) => ({
+                status_list: { idx: 3, uri },
+            }),
+            extra: Parameters<typeof preparePresentation>[7] = {},
+        ) {
             const statusListPath = `/status-list-${randomUUID()}`;
             const statusListUri = `http://localhost:8787${statusListPath}`;
-            nock("http://localhost:8787")
+            const statusListServer = nock("http://localhost:8787")
                 .get(statusListPath)
                 .reply(
                     200,
@@ -190,10 +225,13 @@ describe.each([
                 [issuer.certificate.toString("base64")],
                 {
                     createEntry: async () => ({
-                        status: { status_list: { idx: 3, uri: statusListUri } },
+                        status: status(statusListUri),
                     }),
                 } as unknown as StatusListService,
                 "pid",
+                undefined,
+                undefined,
+                extra,
             );
             const authorizationResponse =
                 await client.createOpenid4vpAuthorizationResponse({
@@ -221,15 +259,20 @@ describe.each([
                 .trustLocalhost()
                 .set("Authorization", `Bearer ${authToken}`)
                 .expect(200);
-            return { status: submitRes.response.status, session: session.body };
+            return {
+                status: submitRes.response.status,
+                session: session.body,
+                statusListFetched: statusListServer.isDone(),
+            };
         }
 
         test("accepts a status list signed with the issuer's certificate", async () => {
-            const { status, session } =
+            const { status, session, statusListFetched } =
                 await presentWithStatusListSignedBy(issuer);
 
             expect(status).toBe(200);
             expect(session.status).toBe("completed");
+            expect(statusListFetched).toBe(true);
         });
 
         test("rejects a status list signed by another key", async () => {
@@ -243,6 +286,61 @@ describe.each([
             expect(session.errorReason).toContain(
                 "Status List JWT verification failed",
             );
+        });
+
+        // RP_WS_SM_Revocation_005a_UF of the RP conformance suite.
+        test.each<[string, (uri: string) => unknown]>([
+            ["no idx", (uri) => ({ status_list: { uri } })],
+            ["no uri", () => ({ status_list: { idx: 3 } })],
+            ["a negative idx", (uri) => ({ status_list: { idx: -1, uri } })],
+            ["a string idx", (uri) => ({ status_list: { idx: "3", uri } })],
+            [
+                "a uri that is not a URI",
+                () => ({ status_list: { idx: 3, uri: "not a uri" } }),
+            ],
+            // Not malformed, but strict mode cannot check it either.
+            [
+                "only another status mechanism",
+                () => ({ other_mechanism: { id: "x" } }),
+            ],
+        ])(
+            "rejects a status reference with %s without fetching the status list",
+            async (_, status) => {
+                const {
+                    status: httpStatus,
+                    session,
+                    statusListFetched,
+                } = await presentWithStatusListSignedBy(issuer, status);
+
+                expect(httpStatus).toBe(400);
+                expect(session.status).toBe("failed");
+                // 9.x failed some of these too, but on the fetch, without a
+                // structured failure.
+                expect(session.failureCode).toBe("verification_error");
+                expect(statusListFetched).toBe(false);
+            },
+        );
+
+        // RP_WS_SM_Revocation_008a_UF of the RP conformance suite.
+        test("checks a credential valid for 30 days without status information", async () => {
+            const now = Math.floor(Date.now() / 1000);
+
+            const { status, session } = await presentWithStatusListSignedBy(
+                issuer,
+                undefined,
+                {
+                    withStatus: false,
+                    claims: { iat: now, exp: now + 30 * 24 * 3600 },
+                },
+            );
+
+            expect({
+                http: status,
+                session: session.status,
+                ...(session.failureCode
+                    ? { failureCode: session.failureCode }
+                    : {}),
+            }).toEqual(WITHOUT_STATUS[issuanceServiceType]);
         });
     },
 );

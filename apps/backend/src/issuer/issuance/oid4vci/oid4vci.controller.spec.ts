@@ -1,4 +1,5 @@
 import { HttpException } from "@nestjs/common";
+import { Oauth2ServerErrorResponseError } from "@openid4vc/oauth2";
 import type { Request, Response } from "express";
 import { describe, expect, it, vi } from "vitest";
 import { CredentialNotificationNotFound } from "./application/record-credential-notification.js";
@@ -49,6 +50,67 @@ describe("Oid4vciController notification endpoint", () => {
     it("passes other errors through", async () => {
         const failure = new Error("database unavailable");
         expect(await notify(failure)).toBe(failure);
+    });
+});
+
+describe("Oid4vciController credential endpoint errors", () => {
+    function requestCredential(error: unknown): Promise<unknown> {
+        const controller = new Oid4vciController(
+            { getCredential: vi.fn().mockRejectedValue(error) } as never,
+            {} as never,
+        );
+        return controller
+            .credential(
+                {
+                    body: {},
+                    headers: { "content-type": "application/json" },
+                    method: "POST",
+                    url: "/credential",
+                } as Request,
+                { setHeader: vi.fn() } as unknown as Response,
+                "tenant",
+            )
+            .then(
+                () => {
+                    throw new Error("expected a rejection");
+                },
+                (rejection: unknown) => rejection,
+            );
+    }
+
+    it("passes a server error through", async () => {
+        const failure = new Oauth2ServerErrorResponseError(
+            {
+                error: "server_error",
+                error_description: "Unable to decrypt credential request",
+            },
+            { status: 500 },
+        );
+        expect(await requestCredential(failure)).toBe(failure);
+    });
+
+    it("answers an OAuth error below 500 with invalid_credential_request", async () => {
+        const error = await requestCredential(
+            new Oauth2ServerErrorResponseError(
+                { error: "invalid_request", error_description: "bad" },
+                { status: 400, internalMessage: "bad request" },
+            ),
+        );
+        expect(error).toBeInstanceOf(HttpException);
+        expect((error as HttpException).getStatus()).toBe(400);
+        expect((error as HttpException).getResponse()).toMatchObject({
+            error: "invalid_credential_request",
+        });
+    });
+
+    it("answers other errors with invalid_credential_request", async () => {
+        const error = await requestCredential(new Error("malformed"));
+        expect(error).toBeInstanceOf(HttpException);
+        expect((error as HttpException).getStatus()).toBe(400);
+        expect((error as HttpException).getResponse()).toEqual({
+            error: "invalid_credential_request",
+            error_description: "malformed",
+        });
     });
 });
 

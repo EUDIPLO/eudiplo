@@ -5,6 +5,7 @@ import {
     DeviceResponse,
     DocRequest,
     ItemsRequest,
+    type MobileSecurityObject,
     SessionTranscript,
     Verifier,
 } from "@owf/mdoc";
@@ -12,12 +13,17 @@ import * as x509 from "@peculiar/x509";
 import { Span } from "nestjs-otel";
 import { PinoLogger } from "nestjs-pino";
 import { VerificationProvenance } from "../../../../session/domain/session-outcome.js";
+import { MalformedStatusReferenceError } from "../../../../trust/domain/status-list-reference.js";
 import {
     RevocationListUnavailableError,
     resolveRevocationPolicy,
 } from "../../../../trust/revocation-policy.util.js";
-import { StatusListVerifierService } from "../../../../trust/status-list-verifier.service.js";
+import {
+    InvalidStatusListTokenError,
+    StatusListVerifierService,
+} from "../../../../trust/status-list-verifier.service.js";
 import { VerifierOptions } from "../../../../trust/types.js";
+import { pidWithoutStatusProblem } from "../../domain/pid-status-requirement.js";
 import { mdocContext, withFetch } from "../../mdoc-context.js";
 import {
     ChainValidationResult,
@@ -229,6 +235,11 @@ export class MdocverifierService {
             // unavailable list is recorded here instead of being recognised by
             // the message.
             let revocationListUnavailable = false;
+            // A list uri that is not a URI is not fetched, and a status list
+            // that cannot be decompressed within its size limit is refused.
+            // The library wraps these errors in one that reads like an
+            // unavailable status list, so they are recorded here too.
+            let refusedListReason: string | undefined;
             const verificationContext = withFetch(async (input, init) => {
                 try {
                     return await this.statusListVerifier.mdocFetch(
@@ -240,6 +251,12 @@ export class MdocverifierService {
                 } catch (error) {
                     if (error instanceof RevocationListUnavailableError) {
                         revocationListUnavailable = true;
+                    }
+                    if (
+                        error instanceof MalformedStatusReferenceError ||
+                        error instanceof InvalidStatusListTokenError
+                    ) {
+                        refusedListReason = error.message;
                     }
                     throw error;
                 }
@@ -289,6 +306,19 @@ export class MdocverifierService {
                     verificationContext,
                 );
             } catch (error) {
+                if (refusedListReason) {
+                    this.logger.warn(
+                        `mDOC verification failed: ${refusedListReason}`,
+                    );
+                    return {
+                        verified: false,
+                        claims: {},
+                        payload: vp,
+                        docType,
+                        failureType: "verification_error",
+                        failureReason: refusedListReason,
+                    };
+                }
                 if (
                     !includeStatusCheck ||
                     revocationPolicy.failClosed ||
@@ -352,6 +382,25 @@ export class MdocverifierService {
                 };
             }
 
+            const statusProblem = includeStatusCheck
+                ? this.checkStatusMechanism(
+                      mdocDocument,
+                      revocationPolicy.failClosed,
+                      chainResult.pidIssuer ?? false,
+                  )
+                : undefined;
+            if (statusProblem) {
+                this.logger.warn(`mDOC verification failed: ${statusProblem}`);
+                return {
+                    verified: false,
+                    claims: {},
+                    payload: vp,
+                    docType,
+                    failureType: "verification_error",
+                    failureReason: statusProblem,
+                };
+            }
+
             this.logger.debug(
                 `MDL device response verified successfully for docType: ${docType}`,
             );
@@ -366,6 +415,54 @@ export class MdocverifierService {
         } catch (error: any) {
             return this.handleVerificationError(vp, error, options);
         }
+    }
+
+    /**
+     * @owf/mdoc checks only the status list and identifier list of the MSO's
+     * `status` and skips a `status` that names neither, as the SD-JWT VC
+     * library does. An empty one is malformed (Token Status List Section
+     * 6.3) and is rejected in every mode that checks status.
+     *
+     * Two cases leave a status the verifier could not check: strict mode
+     * rejects them, best-effort mode logs them and accepts the credential.
+     * - a `status` that names only another mechanism;
+     * - no `status` in the MSO of a PID valid for more than 24 hours (see
+     *   {@link pidWithoutStatusProblem}), from `validFrom` to `validUntil`.
+     *   Other mDOCs without `status` cannot be revoked and are accepted.
+     *
+     * @param pid Whether the issuer is listed as a PID provider
+     * @returns Why the credential is rejected, or `undefined`
+     */
+    private checkStatusMechanism(
+        mdocDocument: any,
+        failClosed: boolean,
+        pid: boolean,
+    ): string | undefined {
+        const mso: MobileSecurityObject | undefined =
+            mdocDocument?.issuerSigned?.issuerAuth?.mobileSecurityObject;
+        const status = mso?.status;
+        if (status?.statusList || status?.identifierList) {
+            return undefined;
+        }
+        if (status?.encodedStructure.size === 0) {
+            return "The MSO's status names no status mechanism";
+        }
+        const reason = status
+            ? "The MSO's status contains no supported status mechanism, so its status could not be checked"
+            : mso &&
+              pidWithoutStatusProblem({
+                  pid,
+                  validFrom: epochSeconds(mso.validityInfo.validFrom),
+                  validUntil: epochSeconds(mso.validityInfo.validUntil),
+              });
+        if (!reason) {
+            return undefined;
+        }
+        if (failClosed) {
+            return reason;
+        }
+        this.logger.warn(`${reason}; accepting it in best-effort mode`);
+        return undefined;
     }
 
     /**
@@ -779,4 +876,9 @@ export class MdocverifierService {
             ],
         });
     }
+}
+
+/** A date as epoch seconds. */
+function epochSeconds(date: Date): number {
+    return Math.floor(date.getTime() / 1000);
 }

@@ -18,7 +18,8 @@ import {
 import request from "supertest";
 import { App } from "supertest/types";
 import { Agent, setGlobalDispatcher } from "undici";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
+import { EncryptionService } from "../../src/crypto/encryption/encryption.service.js";
 import {
     callbacks,
     getSignJwtCallback,
@@ -28,6 +29,7 @@ import {
     advertisedKey,
     encryptRequest as encrypt,
     responseEncryption as walletResponseEncryption,
+    withoutEpkCurve,
 } from "./request-encryption-helpers.js";
 
 setGlobalDispatcher(
@@ -214,24 +216,119 @@ describe("Issuance - credential request encryption", () => {
         });
     });
 
+    test("answers an encrypted request whose plaintext is not JSON with invalid_credential_request", async () => {
+        const { issuerMetadata, accessToken } =
+            await prepareCredentialRequest();
+
+        const response = await postCredential(
+            issuerMetadata,
+            accessToken,
+            "application/jwt",
+            await encrypt(issuerMetadata, "not json"),
+        );
+
+        expect(response.status).toBe(400);
+        expect(response.body).toMatchObject({
+            error: "invalid_credential_request",
+            error_description: "Decrypted credential request is not valid JSON",
+        });
+    });
+
+    test("answers a decryption failure on the issuer's side with HTTP 500, without its cause", async () => {
+        const { issuerMetadata, accessToken, body } =
+            await prepareCredentialRequest();
+        const decrypt = vi
+            .spyOn(app.get(EncryptionService), "decryptJweToJson")
+            .mockRejectedValueOnce(new Error("KMS unavailable"));
+
+        try {
+            const response = await postCredential(
+                issuerMetadata,
+                accessToken,
+                "application/jwt",
+                await encrypt(issuerMetadata, body),
+            );
+
+            expect(decrypt).toHaveBeenCalledOnce();
+            expect(response.status).toBe(500);
+            expect(response.body).not.toHaveProperty("error");
+            expect(JSON.stringify(response.body)).not.toContain(
+                "KMS unavailable",
+            );
+        } finally {
+            decrypt.mockRestore();
+        }
+    });
+
+    test("rejects an encrypted request whose epk cannot be imported with invalid_encryption_parameters", async () => {
+        const { issuerMetadata, accessToken, body } =
+            await prepareCredentialRequest();
+
+        const response = await postCredential(
+            issuerMetadata,
+            accessToken,
+            "application/jwt",
+            withoutEpkCurve(await encrypt(issuerMetadata, body)),
+        );
+
+        expect(response.status).toBe(400);
+        expect(response.body).toMatchObject({
+            error: "invalid_encryption_parameters",
+        });
+    });
+
     // The request is decrypted before its credential_configuration_id is
-    // checked. A JWE with an alg or enc the issuer did not advertise must be
-    // refused before that, so the answer does not depend on the plaintext.
-    test.each<[string, string, Partial<CompactJWEHeaderParameters>]>([
-        ["the advertised alg and enc", "unknown_credential_configuration", {}],
+    // checked. A JWE header the issuer refuses (OpenID4VCI 1.0 Section 10)
+    // must be refused before that, so the answer does not depend on the
+    // plaintext.
+    const notAdvertisedKey =
+        "Credential request is not encrypted to a key advertised by the issuer";
+    test.each<[string, string, string, Partial<CompactJWEHeaderParameters>]>([
+        [
+            "the advertised alg and enc",
+            "unknown_credential_configuration",
+            "Credential configuration 'unknown' is not supported",
+            {},
+        ],
         [
             "another alg",
             "invalid_encryption_parameters",
+            "Credential request JWE 'alg' must match the advertised key algorithm 'ECDH-ES'",
             { alg: "ECDH-ES+A128KW" },
         ],
         [
             "another enc",
             "invalid_encryption_parameters",
+            "Credential request JWE 'enc' must be one of 'A128GCM', 'A256GCM'",
             { enc: "A128CBC-HS256" },
+        ],
+        [
+            "no kid",
+            "invalid_encryption_parameters",
+            notAdvertisedKey,
+            { kid: undefined },
+        ],
+        [
+            "an unknown kid",
+            "invalid_encryption_parameters",
+            notAdvertisedKey,
+            { kid: "unknown" },
+        ],
+        [
+            "zip",
+            "invalid_encryption_parameters",
+            "Compressed credential requests are not supported",
+            { zip: "DEF" },
+        ],
+        [
+            "crit",
+            "invalid_encryption_parameters",
+            "Credential request JWE must not contain a critical ('crit') header parameter",
+            { crit: ["x-ext"], "x-ext": true },
         ],
     ])(
         "answers an encrypted request with %s for an unknown configuration with %s",
-        async (_case, error, header) => {
+        async (_case, error, description, header) => {
             const { issuerMetadata, accessToken, body } =
                 await prepareCredentialRequest();
 
@@ -247,7 +344,10 @@ describe("Issuance - credential request encryption", () => {
             );
 
             expect(response.status).toBe(400);
-            expect(response.body).toMatchObject({ error });
+            expect(response.body).toMatchObject({
+                error,
+                error_description: description,
+            });
         },
     );
 

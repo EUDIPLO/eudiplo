@@ -11,7 +11,7 @@ import {
 } from "vitest";
 import { OutboundUrlPolicyService } from "../webhook/outbound-url-policy.service.js";
 import { LocalFederationResolver } from "./adapters/local-federation-resolver.js";
-import { isStatusListUnavailableError } from "./revocation-policy.util.js";
+import { RevocationListUnavailableError } from "./revocation-policy.util.js";
 import { StatusListVerifierService } from "./status-list-verifier.service.js";
 import { TrustFetchService } from "./trust-fetch.service.js";
 import { TrustListJwtService } from "./trustlist-jwt.service.js";
@@ -197,7 +197,7 @@ describe("TrustFetchService", () => {
                 "Failed to fetch status list",
             );
             // The best-effort revocation policy treats it as unavailable.
-            expect(isStatusListUnavailableError(error)).toBe(true);
+            expect(error).toBeInstanceOf(RevocationListUnavailableError);
             expect(requests).toEqual([]);
         });
 

@@ -93,6 +93,63 @@ describe("EncryptionService.decryptJweToJson", () => {
         ).rejects.toBeInstanceOf(errors.JWEDecryptionFailed);
     });
 
+    // jose throws a plain TypeError when the wallet's epk cannot be imported.
+    it.each<[string, (epk: Record<string, unknown>) => void]>([
+        ["without crv", (epk) => delete epk.crv],
+        ["with key_ops that is not an array", (epk) => (epk.key_ops = "x")],
+        ["with an unknown key_ops value", (epk) => (epk.key_ops = ["x"])],
+    ])("rejects a JWE whose epk is %s as JWEInvalid", async (_case, mutate) => {
+        const { service, publicJwk } = await serviceWithTenantKey();
+        const [header, ...rest] = (await encryptedRequest(publicJwk)).split(
+            ".",
+        );
+        const decoded = JSON.parse(
+            Buffer.from(header, "base64url").toString("utf8"),
+        );
+        mutate(decoded.epk);
+        const jwe = [
+            Buffer.from(JSON.stringify(decoded)).toString("base64url"),
+            ...rest,
+        ].join(".");
+
+        const error = await service
+            .decryptJweToJson(jwe, "tenant", {
+                contentEncryptionAlgorithms: ADVERTISED_ENC,
+            })
+            .catch((error) => error);
+
+        expect(error).toBeInstanceOf(errors.JWEInvalid);
+        expect(error.cause).toBeInstanceOf(TypeError);
+    });
+
+    // Both are a plain TypeError from jose; this one is the issuer's.
+    it("throws a failure of the tenant key unchanged, not as the wallet's", async () => {
+        const { service, publicJwk } = await serviceWithTenantKey();
+        const jwe = await encryptedRequest(publicJwk);
+        const publicOnly = new EncryptionService(
+            {
+                findByUsageType: vi
+                    .fn()
+                    .mockResolvedValue({ activeJwk: publicJwk }),
+            } as unknown as KeyChainService,
+            { getOrThrow: () => 5 } as unknown as ConfigService,
+        );
+        await expect(
+            service.decryptJweToJson(jwe, "tenant", {
+                contentEncryptionAlgorithms: ADVERTISED_ENC,
+            }),
+        ).resolves.toBeDefined();
+
+        const error = await publicOnly
+            .decryptJweToJson(jwe, "tenant", {
+                contentEncryptionAlgorithms: ADVERTISED_ENC,
+            })
+            .catch((error) => error);
+
+        expect(error).toBeInstanceOf(TypeError);
+        expect(error).not.toBeInstanceOf(errors.JOSEError);
+    });
+
     // The deferred credential endpoint tells these apart from a JWE that
     // does not decrypt.
     it("throws a SyntaxError for plaintext that is not JSON", async () => {
