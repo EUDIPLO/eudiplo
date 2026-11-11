@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
+import { certificateValidityAt } from "../shared/utils/certificate-validity.util.js";
 import {
     getRevocationCert,
     getStatusListSigners,
@@ -173,11 +174,12 @@ export class X509ValidationService {
     }
 
     /**
-     * Basic time validity check (you may rely on chain builder already doing this,
-     * but keeping it explicit is sometimes useful).
+     * Whether `now` lies in the certificate's validity period, both ends
+     * included. The chain builder does not check it. The mDOC chain check in
+     * `mdoc-context.ts` applies the same rule.
      */
     isTimeValid(cert: x509.X509Certificate, now = new Date()): boolean {
-        return cert.notBefore <= now && now <= cert.notAfter;
+        return certificateValidityAt(cert, now) === "valid";
     }
 
     /**

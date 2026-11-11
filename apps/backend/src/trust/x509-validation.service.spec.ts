@@ -307,3 +307,22 @@ describe("X509ValidationService.matchesStatusListSigner", () => {
         ).resolves.toBe(false);
     });
 });
+
+describe("X509ValidationService.isTimeValid", () => {
+    const second = 1000;
+
+    it("accepts both ends of the validity period and nothing outside it", async () => {
+        const service = new X509ValidationService();
+        const cert = await selfSigned("Issuer", false);
+        const { notBefore, notAfter } = cert;
+
+        expect(service.isTimeValid(cert, notBefore)).toBe(true);
+        expect(service.isTimeValid(cert, notAfter)).toBe(true);
+        expect(
+            service.isTimeValid(cert, new Date(notBefore.getTime() - second)),
+        ).toBe(false);
+        expect(
+            service.isTimeValid(cert, new Date(notAfter.getTime() + second)),
+        ).toBe(false);
+    });
+});
