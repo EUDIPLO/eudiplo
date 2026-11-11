@@ -36,6 +36,12 @@ export interface ExternalAuthSettings {
      * a default; with `generic`, single sign-on is offered only when it is set.
      */
     uiClientId?: string;
+    /**
+     * Client that EUDIPLO creates in Keycloak with `tenants:manage`
+     * (`AUTH_CLIENT_ID`), which it does only when `AUTH_CLIENT_SECRET` is
+     * set too. Keycloak mode only.
+     */
+    bootstrapClientId?: string;
 }
 
 /** How the management API authenticates; `builtin` issues its own tokens. */
@@ -69,5 +75,9 @@ export function readAuthSettings(configService: ConfigService): AuthSettings {
             mode === "generic"
                 ? uiClientId
                 : (uiClientId ?? OIDC_DEFAULTS.uiClientId),
+        bootstrapClientId:
+            mode === "keycloak" && configService.get("AUTH_CLIENT_SECRET")
+                ? configService.get<string>("AUTH_CLIENT_ID")
+                : undefined,
     };
 }

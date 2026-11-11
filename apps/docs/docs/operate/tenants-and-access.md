@@ -189,11 +189,18 @@ secret without interrupting an integration, create a second client, switch the
 integration to it, then delete the first one.
 
 With Keycloak, EUDIPLO checks tokens without asking Keycloak. Deleting a client
-also deletes it in Keycloak, which then issues no new tokens to it, but the
-tokens it already has stay valid until they expire (the realm's access token
-lifespan, 5 minutes by default), as they do after a new secret, and during that
-time its config limits no longer apply. Keep that lifespan short. Changes to
-the limits apply at once, role changes in Keycloak with the next token.
+also deletes it in Keycloak, which then issues no new tokens to it. Without
+`OIDC_AUDIENCE`, the tokens it already has get `401` at once, as EUDIPLO
+accepts only tokens of the clients it manages
+([details](keycloak.md#2-configure-eudiplo)); creating a client with the same
+ID again makes those that have not expired valid again. Deleting a tenant
+leaves its clients in Keycloak, but without `OIDC_AUDIENCE` their tokens get
+`401` too; delete them in Keycloak. With `OIDC_AUDIENCE` set, the tokens of a
+deleted client stay valid until they expire (the realm's access token
+lifespan, 5 minutes by default), without the client's config limits. After a new secret, the tokens
+a client already has stay valid until they expire in both cases. Keep that
+lifespan short. Changes to the limits apply at once, role changes in Keycloak
+with the next token.
 
 ## External OIDC provider and human users
 
@@ -211,6 +218,10 @@ through Keycloak's admin API. Then:
 - Access tokens must carry the tenant ID in the claim named by `OIDC_SUB`
   (default `tenant_id`) and the roles in `roles` or `realm_access.roles`, or in
   the claim named by `OIDC_ROLES_CLAIM`.
+- Without `OIDC_AUDIENCE`, only access tokens issued to the web client's
+  client (`OIDC_UI_CLIENT_ID`), the `AUTH_CLIENT_ID` client (with
+  `AUTH_CLIENT_SECRET` set) or a client EUDIPLO manages are accepted; tokens of other clients in the realm get
+  `401` ([details](keycloak.md#2-configure-eudiplo)).
 
 Another OpenID Connect provider, such as Authentik, Zitadel, Auth0 or Entra ID,
 works with `OIDC_PROVIDER=generic` for signing in only. EUDIPLO then loads the

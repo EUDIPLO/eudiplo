@@ -439,6 +439,7 @@ describe("JwtStrategy", () => {
                 tenant_id: "acme",
                 exp: NOW + 300,
                 sub: "user-uuid",
+                azp: "eudiplo-ui",
                 roles: "not-tenant:admin-really",
             } as never);
 
@@ -456,6 +457,183 @@ describe("JwtStrategy", () => {
             ).rejects.toThrow(
                 new UnauthorizedException("Access token has no expiry"),
             );
+        });
+
+        describe("clients of the realm", () => {
+            const keycloak = {
+                OIDC: "https://keycloak.example.com/realms/eudiplo",
+                OIDC_INTERNAL_ISSUER_URL:
+                    "https://keycloak.example.com/realms/eudiplo",
+                OIDC_SUB: "tenant_id",
+                OIDC_ALGORITHM: "RS256",
+            };
+            /** An access token Keycloak issued to the client `azp`. */
+            const accessTokenOf = (azp?: string, claims: object = {}) =>
+                ({
+                    tenant_id: "acme",
+                    exp: NOW + 300,
+                    sub: "user-uuid",
+                    typ: "Bearer",
+                    aud: "account",
+                    ...(azp !== undefined && { azp }),
+                    realm_access: { roles: [Role.Tenants] },
+                    ...claims,
+                }) as never;
+            const refusal = new UnauthorizedException(
+                "This token was issued to a client of the realm that EUDIPLO does not manage",
+            );
+
+            test("refuse the access token of a client EUDIPLO does not manage", async () => {
+                await expect(
+                    strategy.validate(accessTokenOf("other-app")),
+                ).rejects.toThrow(refusal);
+                expect(clientsProvider.getClientById).toHaveBeenCalledWith(
+                    "other-app",
+                );
+                expect(tenantService.getTenant).not.toHaveBeenCalled();
+            });
+
+            test("refuse a token that names no client", async () => {
+                // Not even when sub happens to be the ID of a managed client.
+                clients.set("user-uuid", {
+                    clientId: "user-uuid",
+                    tenantId: "acme",
+                    roles: [],
+                });
+
+                await expect(
+                    strategy.validate(accessTokenOf(undefined)),
+                ).rejects.toThrow(refusal);
+                await expect(
+                    strategy.validate(accessTokenOf("")),
+                ).rejects.toThrow(refusal);
+            });
+
+            test("refuse an empty client_id when sub names a managed client", async () => {
+                // The lookup falls back to sub, which is no authorized party.
+                clients.set("user-uuid", {
+                    clientId: "user-uuid",
+                    tenantId: "acme",
+                    roles: [],
+                });
+
+                await expect(
+                    strategy.validate(
+                        accessTokenOf(undefined, { client_id: "" }),
+                    ),
+                ).rejects.toThrow(refusal);
+                expect(clientsProvider.getClientById).toHaveBeenCalledWith(
+                    "user-uuid",
+                );
+            });
+
+            test("refuse an azp that is not a string, even if a lookup finds it", async () => {
+                const anyClient = strategyFor(keycloak, null, {
+                    getClientById: async () => ({
+                        clientId: "shop",
+                        tenantId: "acme",
+                        roles: [],
+                    }),
+                });
+
+                await expect(
+                    anyClient.validate(
+                        accessTokenOf(undefined, { azp: ["shop"] }),
+                    ),
+                ).rejects.toThrow(refusal);
+            });
+
+            test("accept the web client's token", async () => {
+                const user = await strategy.validate(
+                    accessTokenOf("eudiplo-ui"),
+                );
+
+                expect(user.roles).toEqual([Role.Tenants]);
+                expect(user.client).toBeUndefined();
+                expect(user.authorizedParty).toBe("eudiplo-ui");
+            });
+
+            test("accept the web client of OIDC_UI_CLIENT_ID instead of eudiplo-ui", async () => {
+                const custom = strategyFor(
+                    { ...keycloak, OIDC_UI_CLIENT_ID: "console" },
+                    null,
+                );
+
+                await expect(
+                    custom.validate(accessTokenOf("console")),
+                ).resolves.toMatchObject({ authorizedParty: "console" });
+                await expect(
+                    custom.validate(accessTokenOf("eudiplo-ui")),
+                ).rejects.toThrow(refusal);
+            });
+
+            test("accept the bootstrap client of AUTH_CLIENT_ID", async () => {
+                const withBootstrap = strategyFor(
+                    {
+                        ...keycloak,
+                        AUTH_CLIENT_ID: "root",
+                        AUTH_CLIENT_SECRET: "secret",
+                    },
+                    null,
+                );
+
+                const user = await withBootstrap.validate(
+                    accessTokenOf("root", { tenant_id: undefined }),
+                );
+
+                expect(user.roles).toEqual([Role.Tenants]);
+                expect(user.entity).toBeUndefined();
+                await expect(
+                    strategy.validate(accessTokenOf("root")),
+                ).rejects.toThrow(refusal);
+            });
+
+            test("refuse AUTH_CLIENT_ID without AUTH_CLIENT_SECRET, as EUDIPLO did not create it", async () => {
+                const idOnly = strategyFor(
+                    { ...keycloak, AUTH_CLIENT_ID: "root" },
+                    null,
+                );
+
+                await expect(
+                    idOnly.validate(accessTokenOf("root")),
+                ).rejects.toThrow(refusal);
+            });
+
+            test("accept a client EUDIPLO manages, also by client_id", async () => {
+                clients.set("shop", {
+                    clientId: "shop",
+                    tenantId: "acme",
+                    roles: [],
+                });
+
+                const user = await strategy.validate(
+                    accessTokenOf(undefined, { client_id: "shop" }),
+                );
+
+                expect(user.client?.clientId).toBe("shop");
+            });
+
+            test("refuse a client without a record, such as a deleted one", async () => {
+                // Deleting a client removes its record; Keycloak's tokens live on.
+                await expect(
+                    strategy.validate(accessTokenOf("shop")),
+                ).rejects.toThrow(refusal);
+            });
+
+            test("accept any client of the realm when OIDC_AUDIENCE is set", async () => {
+                // The audience mapper decides which clients' tokens carry it.
+                const withAudience = strategyFor(
+                    { ...keycloak, OIDC_AUDIENCE: "eudiplo" },
+                    null,
+                );
+
+                const user = await withAudience.validate(
+                    accessTokenOf("other-app", { aud: ["eudiplo", "account"] }),
+                );
+
+                expect(user.roles).toEqual([Role.Tenants]);
+                expect(user.authorizedParty).toBe("other-app");
+            });
         });
 
         test("rejects a token whose client ID now belongs to another tenant", async () => {

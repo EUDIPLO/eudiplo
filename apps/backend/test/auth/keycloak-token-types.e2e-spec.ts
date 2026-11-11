@@ -16,8 +16,9 @@ import { createAppValidationPipe } from "../../src/shared/common/zod/zod-schema.
 /**
  * EUDIPLO with Keycloak (`OIDC` set, `OIDC_PROVIDER` left at its default) and
  * no `OIDC_AUDIENCE`: the realm signs the ID tokens of every client with the
- * keys of its access tokens. The admin API adapters are replaced, as no
- * Keycloak runs; the realm's keys come from a local server at Keycloak's path.
+ * keys of its access tokens, and gives the access tokens of every client
+ * `aud: account`. The admin API adapters are replaced, as no Keycloak runs;
+ * the realm's keys come from a local server at Keycloak's path.
  */
 describe("Keycloak token types (e2e)", () => {
     let app: INestApplication<App>;
@@ -76,6 +77,8 @@ describe("Keycloak token types (e2e)", () => {
         vi.stubEnv("OIDC", issuer);
         vi.stubEnv("OIDC_CLIENT_ID", "eudiplo-admin");
         vi.stubEnv("OIDC_CLIENT_SECRET", "unused");
+        vi.stubEnv("AUTH_CLIENT_ID", "root");
+        vi.stubEnv("AUTH_CLIENT_SECRET", "unused");
         vi.stubEnv("CONFIG_IMPORT_MODE", "disabled");
         // AppModule reads the environment when it is imported.
         const { AppModule } = await import("../../src/app.module.js");
@@ -83,7 +86,13 @@ describe("Keycloak token types (e2e)", () => {
             imports: [AppModule],
         })
             .overrideProvider(CLIENTS_PROVIDER)
-            .useValue({ getClientById: async () => null })
+            .useValue({
+                // A client EUDIPLO manages; the tokens here name no tenant.
+                getClientById: async (id: string) =>
+                    id === "shop"
+                        ? { clientId: "shop", tenantId: undefined, roles: [] }
+                        : null,
+            })
             .overrideProvider(USERS_PROVIDER)
             .useValue({})
             .compile();
@@ -165,5 +174,35 @@ describe("Keycloak token types (e2e)", () => {
         expect(response.body.message).toBe(
             "Not an access token: its header names another typ than at+jwt or JWT",
         );
+    });
+
+    test("refuses the access token of another client of the realm", async () => {
+        // The person's realm roles are in it, as in the web client's tokens.
+        const token = await sign({
+            ...person,
+            typ: "Bearer",
+            azp: "other-app",
+        });
+
+        const response = await me(token).expect(401);
+
+        expect(response.body.message).toBe(
+            "This token was issued to a client of the realm that EUDIPLO does not manage",
+        );
+    });
+
+    test("accepts the bootstrap client and the clients EUDIPLO manages", async () => {
+        for (const azp of ["root", "shop"]) {
+            const token = await sign({
+                sub: `service-account-${azp}`,
+                typ: "Bearer",
+                azp,
+                realm_access: { roles: [Role.SessionsRead] },
+            });
+
+            const response = await me(token).expect(200);
+
+            expect(response.body.roles).toEqual([Role.SessionsRead]);
+        }
     });
 });
