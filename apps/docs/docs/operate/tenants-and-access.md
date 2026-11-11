@@ -221,15 +221,8 @@ tenant with `roles` answer `501` (the web client creates tenants without an
 admin client), and the web client hides **API Clients** and **Users**. Config
 folders and bundles carry no clients either
 ([details](../reference/config-bundle-format.md#clients-with-another-identity-provider)).
-The settings are listed in the
-[environment variable reference](../reference/environment-variables.md#authentication).
-
-For single sign-on (an **SSO** tab on the login page), create a public client
-with Authorization Code and PKCE, set `OIDC_UI_CLIENT_ID` to its client ID, and
-register `<web client URL>/login` and `<web client URL>/silent-check-sso.html`
-as redirect URIs, the web client's URL as post-logout redirect URI, and its
-origin for CORS. The browser reads the provider's discovery document; logging
-out ends the provider's session only when it has an `end_session_endpoint`.
+The setup, including single sign-on in the web client and machine clients, is
+described in [Other OIDC providers](oidc-provider.md).
 
 Tokens get no client limits (`allowedIssuanceConfigs`,
 `allowedPresentationConfigs`), except where a client record is left from an

@@ -8,6 +8,8 @@ Use Keycloak as the identity provider of the management API: people sign in to
 the web client with their Keycloak account, and EUDIPLO creates tenant service
 clients and users in Keycloak. What changes in this mode is summarized in
 [Tenants and access](tenants-and-access.md#external-oidc-provider-and-human-users).
+For another provider, such as Authentik, Zitadel, Auth0 or Entra ID, see
+[Other OIDC providers](oidc-provider.md).
 
 Keycloak as the login for *wallet users* during credential issuance (chained
 authorization server) is a different setup, configured per tenant in the
