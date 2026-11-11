@@ -45,7 +45,10 @@ function cacheScope(token: TokenPayload): string | undefined {
  */
 @ApiTags("Cache Management")
 @Controller("cache")
-@Secured([Role.Issuances, Role.Presentations, Role.Tenants])
+// tenants:manage needs no tenant; cacheScope requires one for the other roles.
+@Secured([Role.Issuances, Role.Presentations, Role.Tenants], {
+    tenant: "optional",
+})
 export class CacheController {
     constructor(
         private readonly trustStoreService: TrustStoreService,
@@ -126,6 +129,7 @@ export class CacheController {
      * Forget the trust list sequence numbers the caller's tenant accepted.
      */
     @Delete("trust-list/sequence-numbers")
+    // Tenant roles only: this one acts on the caller's tenant.
     @Secured([Role.Issuances, Role.Presentations])
     @HttpCode(HttpStatus.NO_CONTENT)
     @ApiOperation({
@@ -138,7 +142,9 @@ export class CacheController {
         description: "Sequence numbers forgotten",
     })
     async forgetTrustListSequenceNumbers(@Token() token: TokenPayload) {
-        await this.trustStoreService.forgetSequenceNumbers(token.entity!.id);
+        await this.trustStoreService.forgetSequenceNumbers(
+            requireTenantContext(token),
+        );
     }
 
     /**

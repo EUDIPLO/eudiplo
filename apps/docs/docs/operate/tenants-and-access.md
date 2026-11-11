@@ -217,7 +217,13 @@ through Keycloak's admin API. Then:
 Another OpenID Connect provider, such as Authentik, Zitadel, Auth0 or Entra ID,
 works with `OIDC_PROVIDER=generic` for signing in only. EUDIPLO then loads the
 provider's discovery document at startup, checks the issuer, the signing keys
-and the required `OIDC_AUDIENCE`, and accepts only JWT access tokens. The
+and the required `OIDC_AUDIENCE`, and accepts only JWT access tokens; ID
+tokens with that audience are refused when they carry `at_hash`, `c_hash` or
+`s_hash`, and tokens of another `typ` are refused too
+([details](../reference/environment-variables.md#authentication)).
+Authentik's access token is its ID token plus `azp`, `uid` and `scope`, with
+the same audience and no hash, so there an ID token works as an access token:
+keep its lifetime short. The
 provider manages clients and people: `/api/client`, `/api/user` and creating a
 tenant with `roles` answer `501` (the web client creates tenants without an
 admin client), and the web client hides **API Clients** and **Users**. Config
@@ -232,6 +238,9 @@ register `<web client URL>/login` and `<web client URL>/silent-check-sso.html`
 as redirect URIs, the web client's URL as post-logout redirect URI, and its
 origin for CORS. The browser reads the provider's discovery document; logging
 out ends the provider's session only when it has an `end_session_endpoint`.
+The web client opens it with a GET, which every provider accepts, so the
+`id_token_hint` is part of the address and can reach the browser history and
+access logs.
 
 Tokens get no client limits (`allowedIssuanceConfigs`,
 `allowedPresentationConfigs`), except where a client record is left from an

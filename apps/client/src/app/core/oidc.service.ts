@@ -160,12 +160,22 @@ export class OidcService {
    * Ends the session here and at the provider, which then returns to the web
    * client's base URL, also when it is served under a path. A provider without
    * an `end_session_endpoint` keeps its session; the page still leaves.
+   *
+   * Keycloak gets the ID token in a form POST, so that it stays out of the
+   * address bar, the browser history and access logs; Keycloak finds the
+   * session by the token's `sid` even without its cookie. Other providers get
+   * the GET that every one of them supports: Authentik, for example, accepts
+   * no cross-site POST there and ends only the session of the cookie, which a
+   * cross-site POST does not carry over HTTP.
    */
   logout(redirectUri?: string): void {
     const keycloak = this.keycloak;
     const target = redirectUri ?? document.baseURI;
+    const post = this._config?.provider !== 'generic' && !!keycloak?.idToken;
     this.clearStorage();
-    keycloak?.logout({ redirectUri: target }).catch(() => this.leaveTo(target));
+    keycloak
+      ?.logout(post ? { redirectUri: target, logoutMethod: 'POST' } : { redirectUri: target })
+      .catch(() => this.leaveTo(target));
   }
 
   /** Opens `url` in place of the web client. */
