@@ -5,8 +5,8 @@ import {
     DeviceResponse,
     DocRequest,
     ItemsRequest,
+    type MobileSecurityObject,
     SessionTranscript,
-    type Status,
     Verifier,
 } from "@owf/mdoc";
 import * as x509 from "@peculiar/x509";
@@ -23,6 +23,7 @@ import {
     StatusListVerifierService,
 } from "../../../../trust/status-list-verifier.service.js";
 import { VerifierOptions } from "../../../../trust/types.js";
+import { pidWithoutStatusProblem } from "../../domain/pid-status-requirement.js";
 import { mdocContext, withFetch } from "../../mdoc-context.js";
 import {
     ChainValidationResult,
@@ -344,24 +345,6 @@ export class MdocverifierService {
                 );
             }
 
-            const statusProblem = includeStatusCheck
-                ? this.checkStatusMechanism(
-                      mdocDocument,
-                      revocationPolicy.failClosed,
-                  )
-                : undefined;
-            if (statusProblem) {
-                this.logger.warn(`mDOC verification failed: ${statusProblem}`);
-                return {
-                    verified: false,
-                    claims: {},
-                    payload: vp,
-                    docType,
-                    failureType: "verification_error",
-                    failureReason: statusProblem,
-                };
-            }
-
             // 6) Validate certificate chain using shared CredentialChainValidationService
             // This ensures consistent trust validation with SD-JWT-VC and other formats
             const chainResult = await this.validateIssuerCertificateChain(
@@ -394,6 +377,25 @@ export class MdocverifierService {
                 };
             }
 
+            const statusProblem = includeStatusCheck
+                ? this.checkStatusMechanism(
+                      mdocDocument,
+                      revocationPolicy.failClosed,
+                      chainResult.pidIssuer ?? false,
+                  )
+                : undefined;
+            if (statusProblem) {
+                this.logger.warn(`mDOC verification failed: ${statusProblem}`);
+                return {
+                    verified: false,
+                    claims: {},
+                    payload: vp,
+                    docType,
+                    failureType: "verification_error",
+                    failureReason: statusProblem,
+                };
+            }
+
             this.logger.debug(
                 `MDL device response verified successfully for docType: ${docType}`,
             );
@@ -414,28 +416,43 @@ export class MdocverifierService {
      * @owf/mdoc checks only the status list and identifier list of the MSO's
      * `status` and skips a `status` that names neither, as the SD-JWT VC
      * library does. An empty one is malformed (Token Status List Section
-     * 6.3) and is rejected in every mode that checks status. One that names
-     * only another mechanism names a status the verifier could not check:
-     * strict mode rejects it, best-effort mode logs it and accepts the
-     * credential.
+     * 6.3) and is rejected in every mode that checks status.
      *
+     * Two cases leave a status the verifier could not check: strict mode
+     * rejects them, best-effort mode logs them and accepts the credential.
+     * - a `status` that names only another mechanism;
+     * - no `status` in the MSO of a PID valid for more than 24 hours (see
+     *   {@link pidWithoutStatusProblem}), from `validFrom` to `validUntil`.
+     *   Other mDOCs without `status` cannot be revoked and are accepted.
+     *
+     * @param pid Whether the issuer is listed as a PID provider
      * @returns Why the credential is rejected, or `undefined`
      */
     private checkStatusMechanism(
         mdocDocument: any,
         failClosed: boolean,
+        pid: boolean,
     ): string | undefined {
-        const status: Status | undefined =
-            mdocDocument?.issuerSigned?.issuerAuth?.mobileSecurityObject
-                ?.status;
-        if (!status || status.statusList || status.identifierList) {
+        const mso: MobileSecurityObject | undefined =
+            mdocDocument?.issuerSigned?.issuerAuth?.mobileSecurityObject;
+        const status = mso?.status;
+        if (status?.statusList || status?.identifierList) {
             return undefined;
         }
-        if (status.encodedStructure.size === 0) {
+        if (status?.encodedStructure.size === 0) {
             return "The MSO's status names no status mechanism";
         }
-        const reason =
-            "The MSO's status contains no supported status mechanism, so its status could not be checked";
+        const reason = status
+            ? "The MSO's status contains no supported status mechanism, so its status could not be checked"
+            : mso &&
+              pidWithoutStatusProblem({
+                  pid,
+                  validFrom: epochSeconds(mso.validityInfo.validFrom),
+                  validUntil: epochSeconds(mso.validityInfo.validUntil),
+              });
+        if (!reason) {
+            return undefined;
+        }
         if (failClosed) {
             return reason;
         }
@@ -854,4 +871,9 @@ export class MdocverifierService {
             ],
         });
     }
+}
+
+/** A date as epoch seconds. */
+function epochSeconds(date: Date): number {
+    return Math.floor(date.getTime() / 1000);
 }

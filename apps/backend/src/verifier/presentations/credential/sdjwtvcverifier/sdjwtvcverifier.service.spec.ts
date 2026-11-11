@@ -157,9 +157,12 @@ describe("SdjwtvcverifierService revocation mode", () => {
                 },
             });
 
-            await expect(verifyWith(true)).rejects.toThrow(
-                "no supported status mechanism",
-            );
+            await expect(verifyWith(true)).rejects.toMatchObject({
+                failureType: "verification_error",
+                verboseReason: expect.stringContaining(
+                    "no supported status mechanism",
+                ),
+            });
         });
 
         it("accepts it with a warning in best-effort mode", async () => {

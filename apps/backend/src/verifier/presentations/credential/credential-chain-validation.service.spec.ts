@@ -476,6 +476,189 @@ describe("CredentialChainValidationService — status list signer", () => {
         });
     });
 
+    // ARF Annex 2 VCR_01: a credential under a certificate listed with a PID
+    // issuance service is a PID, whichever service the chain matched first.
+    describe("PID issuer", () => {
+        it.each<[string, string[][], boolean]>([
+            ["a PID issuer", [[PID_ISSUANCE]], true],
+            ["an EAA issuer", [[ISSUANCE]], false],
+            [
+                "an EAA and, later, a PID issuer",
+                [[ISSUANCE, PID_ISSUANCE]],
+                true,
+            ],
+            [
+                "an EAA issuer in one entity and a PID issuer in a later one",
+                [[ISSUANCE], [PID_ISSUANCE]],
+                true,
+            ],
+        ])("reports a CA listed as %s", async (_, entities, pidIssuer) => {
+            const ca = await selfSigned("Issuer CA", true);
+            const service = serviceWith(
+                entities.map((types, i) => ({
+                    entityId: `issuer-${i}`,
+                    services: types.map((serviceTypeIdentifier) => ({
+                        serviceTypeIdentifier,
+                        cert: ca,
+                    })),
+                })),
+            );
+
+            const result = await service.validateChain(
+                [b64(await issuedBy(ca, "Credential"))],
+                LOTE_SOURCE,
+            );
+
+            expect(result).toMatchObject({
+                verified: true,
+                pidIssuer,
+                // The first match still decides the status list signers.
+                matchedEntity: { issuanceServiceType: entities[0][0] },
+            });
+        });
+    });
+
+    describe("CA listed as EAA issuer and, as another certificate with the same key, as PID issuer", () => {
+        let eaaCopy: Cert;
+        let pidCopy: Cert;
+        let service: CredentialChainValidationService;
+
+        beforeEach(async () => {
+            // Two self-signed roots with the same subject and key: a path
+            // can end at either.
+            const keys = await generateKeys();
+            const root = (
+                serialNumber: string,
+                notAfter = Date.now() + 3_600_000,
+            ) =>
+                x509.X509CertificateGenerator.createSelfSigned({
+                    serialNumber,
+                    name: "CN=Provider CA",
+                    notBefore: new Date(Date.now() - 7_200_000),
+                    notAfter: new Date(notAfter),
+                    keys,
+                    signingAlgorithm: algorithm,
+                    extensions: [
+                        new x509.BasicConstraintsExtension(
+                            true,
+                            undefined,
+                            true,
+                        ),
+                    ],
+                });
+            eaaCopy = { cert: await root("a1"), keys };
+            // Expired: the listing still makes the issuer a PID provider.
+            pidCopy = { cert: await root("a2", Date.now() - 3_600_000), keys };
+            service = serviceWith([
+                {
+                    entityId: "eaa-list-entry",
+                    services: [
+                        { serviceTypeIdentifier: ISSUANCE, cert: eaaCopy },
+                    ],
+                },
+                {
+                    entityId: "pid-list-entry",
+                    services: [
+                        { serviceTypeIdentifier: PID_ISSUANCE, cert: pidCopy },
+                    ],
+                },
+            ]);
+        });
+
+        it.each([
+            ["only the leaf", false],
+            ["the EAA copy after the leaf", true],
+        ])(
+            "reports a PID issuer when the chain carries %s",
+            async (_, withCopy) => {
+                const leaf = await issuedBy(eaaCopy, "PID");
+
+                const result = await service.validateChain(
+                    [b64(leaf), ...(withCopy ? [b64(eaaCopy)] : [])],
+                    LOTE_SOURCE,
+                );
+
+                expect(result).toMatchObject({
+                    verified: true,
+                    pidIssuer: true,
+                    matchedEntity: { issuanceServiceType: ISSUANCE },
+                });
+            },
+        );
+    });
+
+    it("reports a pinned end-entity certificate listed as EAA and as PID issuer", async () => {
+        const pinned = await selfSigned("Document Signer", false);
+        const service = serviceWith([
+            {
+                entityId: "issuer",
+                services: [
+                    { serviceTypeIdentifier: ISSUANCE, cert: pinned },
+                    { serviceTypeIdentifier: PID_ISSUANCE, cert: pinned },
+                ],
+            },
+        ]);
+
+        const result = await service.validateChain([b64(pinned)], LOTE_SOURCE);
+
+        expect(result).toMatchObject({
+            verified: true,
+            pidIssuer: true,
+            matchedEntity: { issuanceServiceType: ISSUANCE },
+        });
+    });
+
+    it("is not thrown off by a PID certificate that does not parse", async () => {
+        const eaaCa = await selfSigned("EAA Issuer CA", true);
+        const unparseable = {
+            cert: { rawData: new Uint8Array(3) },
+        } as unknown as Cert;
+        const service = serviceWith([
+            {
+                entityId: "eaa-provider",
+                services: [{ serviceTypeIdentifier: ISSUANCE, cert: eaaCa }],
+            },
+            {
+                entityId: "pid-provider",
+                services: [
+                    { serviceTypeIdentifier: PID_ISSUANCE, cert: unparseable },
+                ],
+            },
+        ]);
+
+        const result = await service.validateChain(
+            [b64(await issuedBy(eaaCa, "Credential"))],
+            LOTE_SOURCE,
+        );
+
+        expect(result).toMatchObject({ verified: true, pidIssuer: false });
+    });
+
+    it("does not report a CA listed as EAA issuer when another CA of the entity is a PID issuer", async () => {
+        const eaaCa = await selfSigned("EAA Issuer CA", true);
+        const pidCa = await selfSigned("PID Issuer CA", true);
+        const service = serviceWith([
+            {
+                entityId: "multi-role-provider",
+                services: [
+                    { serviceTypeIdentifier: ISSUANCE, cert: eaaCa },
+                    { serviceTypeIdentifier: PID_ISSUANCE, cert: pidCa },
+                ],
+            },
+        ]);
+
+        const result = await service.validateChain(
+            [b64(await issuedBy(eaaCa, "Credential"))],
+            LOTE_SOURCE,
+        );
+
+        expect(result).toMatchObject({
+            verified: true,
+            pidIssuer: false,
+            matchedEntity: { issuanceServiceType: ISSUANCE },
+        });
+    });
+
     describe("entity that also lists a wallet solution", () => {
         let pidCa: Cert;
         let pidRevocationCa: Cert;

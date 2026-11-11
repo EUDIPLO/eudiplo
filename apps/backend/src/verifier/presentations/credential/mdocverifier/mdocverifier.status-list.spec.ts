@@ -30,6 +30,7 @@ import {
 } from "vitest";
 import { StatusListVerifierService } from "../../../../trust/status-list-verifier.service.js";
 import { TrustFetchService } from "../../../../trust/trust-fetch.service.js";
+import { ServiceTypeIdentifiers } from "../../../../trust/types.js";
 import { OutboundUrlPolicyService } from "../../../../webhook/outbound-url-policy.service.js";
 import { mdocContext } from "../../mdoc-context.js";
 import type { MdocTrustedCertificates } from "../credential-chain-validation.service.js";
@@ -97,7 +98,8 @@ describe("MdocverifierService status list fetch", () => {
                 serialNumber: "01",
                 name: "C=DE, CN=Self-signed Wallet Issuer",
                 notBefore: new Date(Date.now() - 60_000),
-                notAfter: new Date(Date.now() + 3_600_000),
+                // Covers the 30-day MSOs of the PID tests.
+                notAfter: new Date(Date.now() + 60 * 24 * 3_600_000),
                 signingAlgorithm: { name: "ECDSA", hash: "SHA-256" },
                 keys: issuerKeys,
             });
@@ -234,16 +236,17 @@ describe("MdocverifierService status list fetch", () => {
      * issuer certificate unless `signer` is given.
      */
     async function presentation(
-        status: StatusOptions,
+        status: StatusOptions | undefined,
         signer: SigningCertificate = {
             jwk: issuerJwk,
             certificate: issuerCertificate,
         },
+        validForMs = 3_600_000,
     ) {
         const issuer = new Issuer(docType, mdocContext);
         issuer.addIssuerNamespace(namespace, { given_name: "Erika" });
         const now = new Date();
-        const validUntil = new Date(now.getTime() + 3_600_000);
+        const validUntil = new Date(now.getTime() + validForMs);
         const issuerSigned = await issuer.sign({
             signingKey: CoseKey.fromJwk(signer.jwk),
             certificates: [signer.certificate],
@@ -329,6 +332,10 @@ describe("MdocverifierService status list fetch", () => {
         outboundUrlPolicy: OutboundUrlPolicyService,
         publicUrl = "https://eudiplo.example",
         trustedEntries: MdocTrustedCertificates[] = [],
+        /** Trust list service type the issuer chain matches, if any. */
+        issuanceServiceType?: string,
+        /** Whether the chain also matches a PID issuance service. */
+        pidIssuer = issuanceServiceType === ServiceTypeIdentifiers.PIDIssuance,
     ) => {
         const logger = {
             setContext: vi.fn(),
@@ -340,9 +347,17 @@ describe("MdocverifierService status list fetch", () => {
             getTrustedCertificateEntries: vi
                 .fn()
                 .mockResolvedValue(trustedEntries),
-            validateChain: vi
-                .fn()
-                .mockResolvedValue({ verified: true, matchedEntity: null }),
+            validateChain: vi.fn().mockResolvedValue({
+                verified: true,
+                pidIssuer,
+                matchedEntity: issuanceServiceType
+                    ? {
+                          entity: { entityId: "issuer" },
+                          issuanceServiceType,
+                          matchMode: "leaf-pinned",
+                      }
+                    : null,
+            }),
             discardedTrustListsDetail: vi.fn().mockResolvedValue(undefined),
         };
         const statusLists = new StatusListVerifierService(
@@ -794,6 +809,121 @@ describe("MdocverifierService status list fetch", () => {
             await expect(
                 verify(service, otherMechanism(), false),
             ).resolves.toMatchObject({ verified: true });
+        });
+    });
+
+    // RP_WS_SM_Revocation_008b_UF of the RP conformance suite: a PID valid
+    // for more than 24 hours needs status information (ARF Annex 2 VCR_01).
+    describe("PID without status", () => {
+        const DAY_MS = 24 * 3_600_000;
+        const PID = ServiceTypeIdentifiers.PIDIssuance;
+        const EAA = ServiceTypeIdentifiers.EaaIssuance;
+        const BEST_EFFORT_WARNING = expect.stringContaining(
+            "accepting it in best-effort mode",
+        );
+
+        /** Verify an mDOC of an issuer the chain check reports as listed. */
+        const verifyMdoc = async ({
+            issuanceServiceType = PID,
+            pidIssuer,
+            validForMs = 30 * DAY_MS,
+            status,
+            enabled = true,
+            failClosed = true,
+        }: {
+            issuanceServiceType?: string;
+            pidIssuer?: boolean;
+            validForMs?: number;
+            status?: StatusOptions;
+            enabled?: boolean;
+            failClosed?: boolean;
+        } = {}) => {
+            const service = verifier(
+                policy(),
+                loopbackIp,
+                [],
+                issuanceServiceType,
+                pidIssuer,
+            );
+            const { vp, sessionTranscript } = await presentation(
+                status,
+                undefined,
+                validForMs,
+            );
+            const result = await service.verify(
+                vp,
+                { protocol: "iso-18013-7", sessionTranscript },
+                {
+                    trustListSource: { lotes: [] },
+                    policy: { revocation: { enabled, failClosed } },
+                } as never,
+                [[namespace, "given_name"]],
+            );
+            const { logger } = service as unknown as {
+                logger: { warn: ReturnType<typeof vi.fn> };
+            };
+            return { result, logger };
+        };
+
+        it("rejects a PID valid for 30 days in strict mode", async () => {
+            const { result } = await verifyMdoc();
+
+            expect(result).toMatchObject({
+                verified: false,
+                failureType: "verification_error",
+                failureReason: expect.stringMatching(
+                    /PID carries no status information/,
+                ),
+            });
+        });
+
+        it("accepts it with a warning in best-effort mode", async () => {
+            const { result, logger } = await verifyMdoc({ failClosed: false });
+
+            expect(result).toMatchObject({ verified: true });
+            expect(logger.warn).toHaveBeenCalledWith(BEST_EFFORT_WARNING);
+        });
+
+        it("does not check it when the status check is disabled", async () => {
+            const { result, logger } = await verifyMdoc({
+                enabled: false,
+                failClosed: false,
+            });
+
+            expect(result).toMatchObject({ verified: true });
+            expect(logger.warn).not.toHaveBeenCalledWith(BEST_EFFORT_WARNING);
+        });
+
+        it("rejects an mDOC whose certificate is also listed as PID issuer", async () => {
+            const { result } = await verifyMdoc({
+                issuanceServiceType: EAA,
+                pidIssuer: true,
+            });
+
+            expect(result).toMatchObject({
+                verified: false,
+                failureType: "verification_error",
+            });
+        });
+
+        it("accepts a PID valid for 30 days with a status list", async () => {
+            const { result } = await verifyMdoc({
+                status: statusListAt(`${loopbackIp}/status/1`),
+            });
+
+            expect(result).toMatchObject({ verified: true });
+        });
+
+        it("accepts a PID valid for 24 hours", async () => {
+            const { result } = await verifyMdoc({ validForMs: DAY_MS });
+
+            expect(result).toMatchObject({ verified: true });
+        });
+
+        it("accepts an EAA valid for 30 days", async () => {
+            const { result } = await verifyMdoc({ issuanceServiceType: EAA });
+
+            expect(result).toMatchObject({ verified: true });
         });
     });
 

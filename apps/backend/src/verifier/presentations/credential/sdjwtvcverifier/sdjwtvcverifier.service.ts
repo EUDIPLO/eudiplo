@@ -28,6 +28,7 @@ import { StatusListVerifierService } from "../../../../trust/status-list-verifie
 import { VerifierOptions } from "../../../../trust/types.js";
 import { MatchedTrustedEntity } from "../../../../trust/x509-validation.service.js";
 import { ResolverService } from "../../../resolver/resolver.service.js";
+import { pidWithoutStatusProblem } from "../../domain/pid-status-requirement.js";
 import { CredentialChainValidationService } from "../credential-chain-validation.service.js";
 import {
     mapChainErrorToFailureType,
@@ -94,6 +95,9 @@ export class SdjwtvcverifierService {
         // signed by the same entity.
         let matchedEntity: MatchedTrustedEntity | null = null;
         let federationIssuer: FederationResolution | undefined;
+        // Whether the issuer is listed as a PID provider, for the PID rule
+        // of checkStatus.
+        let pidIssuer = false;
 
         // Create a fresh instance per verification to ensure thread safety
         const sdjwtInstance = new SDJwtVcInstance({
@@ -108,6 +112,7 @@ export class SdjwtvcverifierService {
                     : await this.verifyCredential(data, signature, options);
                 matchedEntity = result.matchedEntity;
                 federationIssuer = result.federationIssuer;
+                pidIssuer = result.pidIssuer ?? false;
                 if (!result.verified) {
                     // The library throws a generic error on failure, so the
                     // structured reason has to be captured here or it is lost.
@@ -160,6 +165,7 @@ export class SdjwtvcverifierService {
                 result,
                 options,
                 revocationPolicy.failClosed,
+                pidIssuer,
                 // Signed with a key of the same federation entity, or under
                 // a revocation certificate of the same trusted entity
                 (data, signature) =>
@@ -183,16 +189,25 @@ export class SdjwtvcverifierService {
 
     /**
      * Checks the status of a verified SD-JWT VC (Token Status List Section
-     * 8.3). A credential without a `status` claim cannot be revoked and is
-     * accepted. A malformed `status` claim or `status_list` reference names
-     * no status the verifier could check and is rejected in every mode. A
-     * `status` object that names only another mechanism names a status the
-     * verifier could not check: strict mode rejects it, best-effort mode logs
-     * it and accepts the credential. Best-effort mode also accepts it when
-     * the status list cannot be fetched; a list that was fetched but fails
-     * its checks, cannot be read or says the credential is not valid rejects
-     * it in every mode.
+     * 8.3). A malformed `status` claim or `status_list` reference names no
+     * status the verifier could check and is rejected in every mode.
      *
+     * Two cases leave a status the verifier could not check: strict mode
+     * rejects them, best-effort mode logs them and accepts the credential.
+     * - a `status` object that names only another mechanism;
+     * - no `status` claim on a PID valid for more than 24 hours (see
+     *   {@link pidWithoutStatusProblem}). Its validity runs from `nbf`, else
+     *   `iat`, to `exp`. `iat` may be selectively disclosable: a withheld
+     *   one leaves the start unknown, which counts as longer than 24 hours.
+     *   Other credentials without a `status` claim are left to the policy
+     *   of the relying party (ARF Annex 2 VCR_14) and accepted.
+     *
+     * Best-effort mode also accepts the credential when the status list
+     * cannot be fetched; a list that was fetched but fails its checks,
+     * cannot be read or says the credential is not valid rejects it in every
+     * mode.
+     *
+     * @param pid Whether the issuer is listed as a PID provider
      * @param verifyListSignature Checks that the status list JWT is signed
      * by the credential's issuer
      */
@@ -200,12 +215,14 @@ export class SdjwtvcverifierService {
         result: VerificationResult,
         options: VerifierOptions,
         failClosed: boolean,
+        pid: boolean,
         verifyListSignature: (
             data: string,
             signature: string,
         ) => Promise<boolean>,
     ): Promise<void> {
-        const status = (result.payload as Record<string, unknown>).status;
+        const payload = result.payload as Record<string, unknown>;
+        const status = payload.status;
         let reference: StatusListEntry | undefined;
         try {
             reference = parseStatusListReference(status);
@@ -213,23 +230,25 @@ export class SdjwtvcverifierService {
             if (!(error instanceof MalformedStatusReferenceError)) {
                 throw error;
             }
-            this.logger.warn(
-                `SD-JWT-VC verification failed (verification_error): ${error.message}`,
-            );
-            throw new SdJwtVerificationError(
-                "verification_error",
-                error.message,
-            );
+            this.rejectStatus(error.message);
         }
 
         if (!reference) {
-            if (status === undefined) {
+            const reason =
+                status === undefined
+                    ? pidWithoutStatusProblem({
+                          pid,
+                          validFrom:
+                              numericDate(payload.nbf) ??
+                              numericDate(payload.iat),
+                          validUntil: numericDate(payload.exp),
+                      })
+                    : "The credential's status claim contains no supported status mechanism, so its status could not be checked";
+            if (!reason) {
                 return;
             }
-            const reason =
-                "The credential's status claim contains no supported status mechanism, so its status could not be checked";
             if (failClosed) {
-                throw new BadRequestException(reason);
+                this.rejectStatus(reason);
             }
             this.logger.warn(`${reason}; accepting it in best-effort mode`);
             return;
@@ -253,6 +272,14 @@ export class SdjwtvcverifierService {
                 "Status list unavailable in best-effort mode, accepting the SD-JWT VC without status check",
             );
         }
+    }
+
+    /** Reject the credential for a status it could not be checked by. */
+    private rejectStatus(reason: string): never {
+        this.logger.warn(
+            `SD-JWT-VC verification failed (verification_error): ${reason}`,
+        );
+        throw new SdJwtVerificationError("verification_error", reason);
     }
 
     /**
@@ -321,6 +348,7 @@ export class SdjwtvcverifierService {
         verified: boolean;
         matchedEntity: MatchedTrustedEntity | null;
         federationIssuer?: FederationResolution;
+        pidIssuer?: boolean;
         failureType?: VerificationFailureType;
         failureReason?: string;
     }> {
@@ -377,7 +405,11 @@ export class SdjwtvcverifierService {
                 };
             }
 
-            return { verified: true, matchedEntity: chainResult.matchedEntity };
+            return {
+                verified: true,
+                matchedEntity: chainResult.matchedEntity,
+                pidIssuer: chainResult.pidIssuer,
+            };
         } catch (e: any) {
             this.logger.error(`Error in verifier: ${e?.message ?? e}`);
             return {
@@ -403,6 +435,7 @@ export class SdjwtvcverifierService {
         verified: boolean;
         matchedEntity: null;
         federationIssuer?: FederationResolution;
+        pidIssuer?: boolean;
         failureType?: VerificationFailureType;
         failureReason?: string;
     }> {
@@ -668,6 +701,13 @@ export class SdjwtvcverifierService {
         const verifier = await crypto.getVerifier(jwk);
         return verifier(data, signature);
     }
+}
+
+/** A JWT NumericDate claim, or `undefined` if it is missing or not a number. */
+function numericDate(value: unknown): number | undefined {
+    return typeof value === "number" && Number.isFinite(value)
+        ? value
+        : undefined;
 }
 
 /**
