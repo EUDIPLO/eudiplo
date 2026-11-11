@@ -89,10 +89,10 @@ describe("keycloakClientRefusal", () => {
         "This token was issued to a client of the realm that EUDIPLO does not manage";
 
     it("accepts EUDIPLO's own clients and the managed client named", () => {
-        expect(keycloakClientRefusal("eudiplo-ui", own, undefined)).toBe(
-            undefined,
-        );
-        expect(keycloakClientRefusal("shop", own, "shop")).toBe(undefined);
+        expect(
+            keycloakClientRefusal("eudiplo-ui", own, undefined),
+        ).toBeUndefined();
+        expect(keycloakClientRefusal("shop", own, "shop")).toBeUndefined();
     });
 
     it("refuses other clients of the realm", () => {
