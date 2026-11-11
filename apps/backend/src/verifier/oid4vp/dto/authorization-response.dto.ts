@@ -22,7 +22,7 @@ const AuthorizationResponseSchema = z
         error_uri: z.string().optional(),
         state: z.string().optional(),
     })
-    .strict();
+    .strip();
 
 export class AuthorizationResponse extends createZodDto(
     AuthorizationResponseSchema,
