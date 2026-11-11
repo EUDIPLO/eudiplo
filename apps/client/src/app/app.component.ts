@@ -30,6 +30,7 @@ import { RoleChangeService } from './services/role-change.service';
 import { TokenExpiryService } from './services/token-expiry.service';
 import { NavSectionsService } from './services/nav-sections.service';
 import { NavSectionComponent } from './common/nav-section/nav-section.component';
+import { DiploLogoComponent } from './common/diplo-logo.component';
 import { ApiService } from './core';
 import { KEY_CHAIN_ROLES } from './key-management/key-chain.service';
 
@@ -50,6 +51,7 @@ import { KEY_CHAIN_ROLES } from './key-management/key-chain.service';
     MatDividerModule,
     RouterModule,
     NavSectionComponent,
+    DiploLogoComponent,
   ],
   templateUrl: './app.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,

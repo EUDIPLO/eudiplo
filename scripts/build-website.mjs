@@ -48,7 +48,6 @@ for (const file of [
   "install.sh",
   "logo.svg",
   "eudiplo.png",
-  "mark.png",
   "favicon-32.png",
   "icon-192.png",
   "apple-touch-icon.png",

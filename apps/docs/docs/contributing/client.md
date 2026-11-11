@@ -64,10 +64,12 @@ apps/client/src/
 │   ├── registrar/, schema/, webhook-endpoint/, config-portability/
 │   ├── tenants/, users/, admin/   # tenants and clients, users, activity log
 │   └── types/
-├── styles/                  # shared Sass mixins, e.g. _a11y.scss behind the global .visually-hidden class
+├── styles/                  # shared Sass: _a11y.scss (global .visually-hidden), _theme-colors.scss (palettes)
 ├── environments/
 └── test-setup.ts            # shared unit-test setup
 ```
+
+`_theme-colors.scss` holds the Material 3 palettes of the theme, generated from the [brand colors](../brand.md) with `ng generate @angular/material:theme-color --primary-color='#343DFF' --tertiary-color='#964900'`. After regenerating, set primary tone 80 back to `#bec2ff` (the generator gives `#bfc2ff`).
 
 Features follow a list / show / create pattern (`*-list/`, `*-show/`, `*-create/`) with routes in a `*.routes.ts` file and a feature service that wraps the SDK calls. Forms use Reactive Forms.
 
