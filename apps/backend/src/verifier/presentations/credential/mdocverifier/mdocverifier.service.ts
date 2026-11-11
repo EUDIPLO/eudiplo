@@ -6,17 +6,22 @@ import {
     DocRequest,
     ItemsRequest,
     SessionTranscript,
+    type Status,
     Verifier,
 } from "@owf/mdoc";
 import * as x509 from "@peculiar/x509";
 import { Span } from "nestjs-otel";
 import { PinoLogger } from "nestjs-pino";
 import { VerificationProvenance } from "../../../../session/domain/session-outcome.js";
+import { MalformedStatusReferenceError } from "../../../../trust/domain/status-list-reference.js";
 import {
     RevocationListUnavailableError,
     resolveRevocationPolicy,
 } from "../../../../trust/revocation-policy.util.js";
-import { StatusListVerifierService } from "../../../../trust/status-list-verifier.service.js";
+import {
+    InvalidStatusListTokenError,
+    StatusListVerifierService,
+} from "../../../../trust/status-list-verifier.service.js";
 import { VerifierOptions } from "../../../../trust/types.js";
 import { mdocContext, withFetch } from "../../mdoc-context.js";
 import {
@@ -229,12 +234,23 @@ export class MdocverifierService {
             // unavailable list is recorded here instead of being recognised by
             // the message.
             let revocationListUnavailable = false;
+            // A list uri that is not a URI is not fetched, and a status list
+            // that cannot be decompressed within its size limit is refused.
+            // The library wraps these errors in one that reads like an
+            // unavailable status list, so they are recorded here too.
+            let refusedListReason: string | undefined;
             const verificationContext = withFetch(async (input, init) => {
                 try {
                     return await this.statusListVerifier.mdocFetch(input, init);
                 } catch (error) {
                     if (error instanceof RevocationListUnavailableError) {
                         revocationListUnavailable = true;
+                    }
+                    if (
+                        error instanceof MalformedStatusReferenceError ||
+                        error instanceof InvalidStatusListTokenError
+                    ) {
+                        refusedListReason = error.message;
                     }
                     throw error;
                 }
@@ -284,6 +300,19 @@ export class MdocverifierService {
                     verificationContext,
                 );
             } catch (error) {
+                if (refusedListReason) {
+                    this.logger.warn(
+                        `mDOC verification failed: ${refusedListReason}`,
+                    );
+                    return {
+                        verified: false,
+                        claims: {},
+                        payload: vp,
+                        docType,
+                        failureType: "verification_error",
+                        failureReason: refusedListReason,
+                    };
+                }
                 if (
                     !includeStatusCheck ||
                     revocationPolicy.failClosed ||
@@ -313,6 +342,24 @@ export class MdocverifierService {
                     },
                     verificationContext,
                 );
+            }
+
+            const statusProblem = includeStatusCheck
+                ? this.checkStatusMechanism(
+                      mdocDocument,
+                      revocationPolicy.failClosed,
+                  )
+                : undefined;
+            if (statusProblem) {
+                this.logger.warn(`mDOC verification failed: ${statusProblem}`);
+                return {
+                    verified: false,
+                    claims: {},
+                    payload: vp,
+                    docType,
+                    failureType: "verification_error",
+                    failureReason: statusProblem,
+                };
             }
 
             // 6) Validate certificate chain using shared CredentialChainValidationService
@@ -361,6 +408,39 @@ export class MdocverifierService {
         } catch (error: any) {
             return this.handleVerificationError(vp, error, options);
         }
+    }
+
+    /**
+     * @owf/mdoc checks only the status list and identifier list of the MSO's
+     * `status` and skips a `status` that names neither, as the SD-JWT VC
+     * library does. An empty one is malformed (Token Status List Section
+     * 6.3) and is rejected in every mode that checks status. One that names
+     * only another mechanism names a status the verifier could not check:
+     * strict mode rejects it, best-effort mode logs it and accepts the
+     * credential.
+     *
+     * @returns Why the credential is rejected, or `undefined`
+     */
+    private checkStatusMechanism(
+        mdocDocument: any,
+        failClosed: boolean,
+    ): string | undefined {
+        const status: Status | undefined =
+            mdocDocument?.issuerSigned?.issuerAuth?.mobileSecurityObject
+                ?.status;
+        if (!status || status.statusList || status.identifierList) {
+            return undefined;
+        }
+        if (status.encodedStructure.size === 0) {
+            return "The MSO's status names no status mechanism";
+        }
+        const reason =
+            "The MSO's status contains no supported status mechanism, so its status could not be checked";
+        if (failClosed) {
+            return reason;
+        }
+        this.logger.warn(`${reason}; accepting it in best-effort mode`);
+        return undefined;
     }
 
     /**

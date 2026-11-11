@@ -152,12 +152,19 @@ describe.each([
 
         /**
          * Present a credential of the issuer whose status names a status list
-         * served signed by `statusListSigner`, and return the session.
+         * served signed by `statusListSigner`, and return the session and
+         * whether the list was fetched. `status` gives the credential's
+         * `status` claim for the list's URI.
          */
-        async function presentWithStatusListSignedBy(statusListSigner: Signer) {
+        async function presentWithStatusListSignedBy(
+            statusListSigner: Signer,
+            status: (uri: string) => unknown = (uri) => ({
+                status_list: { idx: 3, uri },
+            }),
+        ) {
             const statusListPath = `/status-list-${randomUUID()}`;
             const statusListUri = `http://localhost:8787${statusListPath}`;
-            nock("http://localhost:8787")
+            const statusListServer = nock("http://localhost:8787")
                 .get(statusListPath)
                 .reply(
                     200,
@@ -190,7 +197,7 @@ describe.each([
                 [issuer.certificate.toString("base64")],
                 {
                     createEntry: async () => ({
-                        status: { status_list: { idx: 3, uri: statusListUri } },
+                        status: status(statusListUri),
                     }),
                 } as unknown as StatusListService,
                 "pid",
@@ -221,15 +228,20 @@ describe.each([
                 .trustLocalhost()
                 .set("Authorization", `Bearer ${authToken}`)
                 .expect(200);
-            return { status: submitRes.response.status, session: session.body };
+            return {
+                status: submitRes.response.status,
+                session: session.body,
+                statusListFetched: statusListServer.isDone(),
+            };
         }
 
         test("accepts a status list signed with the issuer's certificate", async () => {
-            const { status, session } =
+            const { status, session, statusListFetched } =
                 await presentWithStatusListSignedBy(issuer);
 
             expect(status).toBe(200);
             expect(session.status).toBe("completed");
+            expect(statusListFetched).toBe(true);
         });
 
         test("rejects a status list signed by another key", async () => {
@@ -244,5 +256,33 @@ describe.each([
                 "Status List JWT verification failed",
             );
         });
+
+        // RP_WS_SM_Revocation_005a_UF of the RP conformance suite.
+        test.each<[string, (uri: string) => unknown]>([
+            ["no idx", (uri) => ({ status_list: { uri } })],
+            ["no uri", () => ({ status_list: { idx: 3 } })],
+            ["a negative idx", (uri) => ({ status_list: { idx: -1, uri } })],
+            ["a string idx", (uri) => ({ status_list: { idx: "3", uri } })],
+            [
+                "a uri that is not a URI",
+                () => ({ status_list: { idx: 3, uri: "not a uri" } }),
+            ],
+        ])(
+            "rejects a status reference with %s without fetching the status list",
+            async (_, status) => {
+                const {
+                    status: httpStatus,
+                    session,
+                    statusListFetched,
+                } = await presentWithStatusListSignedBy(issuer, status);
+
+                expect(httpStatus).toBe(400);
+                expect(session.status).toBe("failed");
+                // 9.x failed some of these too, but on the fetch, without a
+                // structured failure.
+                expect(session.failureCode).toBe("verification_error");
+                expect(statusListFetched).toBe(false);
+            },
+        );
     },
 );
