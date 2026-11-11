@@ -1,6 +1,7 @@
 import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PassportStrategy } from "@nestjs/passport";
+import { decodeProtectedHeader } from "jose";
 import { passportJwtSecret } from "jwks-rsa";
 import { ExtractJwt, Strategy } from "passport-jwt";
 import { OutboundUrlPolicyService } from "../webhook/outbound-url-policy.service.js";
@@ -12,6 +13,10 @@ import {
 } from "./auth-settings.js";
 import { CLIENTS_PROVIDER, ClientsProvider } from "./client/client.provider.js";
 import type { ClientData } from "./client/domain/client-data.js";
+import {
+    accessTokenTypeRefusal,
+    idTokenClaimRefusal,
+} from "./domain/access-token-shape.js";
 import { claimValue, roleNames } from "./domain/token-claims.js";
 import { ACCESS_TOKEN_LIFETIME_SECONDS } from "./jwt.service.js";
 import {
@@ -32,6 +37,22 @@ export interface ExternalTokenChecks {
     algorithms: string[];
     /** Origins the operator configured, which skip the outbound URL policy. */
     trustedOrigins: string[];
+    /**
+     * Refuse tokens whose `typ` or claims mark them as another kind of token
+     * than an access token, such as ID tokens that carry the audience too.
+     */
+    accessTokensOnly: boolean;
+}
+
+/**
+ * Whether tokens whose `typ` or claims mark them as another kind of token
+ * than an access token are refused: with other providers than Keycloak, whose
+ * ID tokens can carry `OIDC_AUDIENCE` too.
+ */
+function acceptsAccessTokensOnly(
+    settings: ExternalAuthSettings,
+): boolean {
+    return settings.mode === "generic";
 }
 
 /**
@@ -59,6 +80,7 @@ export function externalTokenChecks(
             audience: settings.audience,
             algorithms,
             trustedOrigins,
+            accessTokensOnly: acceptsAccessTokensOnly(settings),
         };
     }
     if (!issuerMetadata) {
@@ -72,6 +94,7 @@ export function externalTokenChecks(
         audience: settings.audience,
         algorithms,
         trustedOrigins,
+        accessTokensOnly: acceptsAccessTokensOnly(settings),
     };
 }
 
@@ -115,32 +138,54 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
         checks: ExternalTokenChecks,
         outboundUrlPolicy: OutboundUrlPolicyService,
     ) {
+        const keyProvider = passportJwtSecret({
+            cache: true,
+            rateLimit: true,
+            jwksRequestsPerMinute: 5,
+            jwksUri: checks.jwksUri,
+            fetcher: jwksFetcher(outboundUrlPolicy, checks.trustedOrigins),
+            handleSigningKeyError: (err, cb) => {
+                console.error("❌ JWKS error of the identity provider:", err);
+                if (err instanceof Error) {
+                    return cb(err);
+                }
+                return cb(
+                    new Error(
+                        "Could not get the signing key from the identity provider",
+                    ),
+                );
+            },
+        });
         return {
-            secretOrKeyProvider: passportJwtSecret({
-                cache: true,
-                rateLimit: true,
-                jwksRequestsPerMinute: 5,
-                jwksUri: checks.jwksUri,
-                fetcher: jwksFetcher(outboundUrlPolicy, checks.trustedOrigins),
-                handleSigningKeyError: (err, cb) => {
-                    console.error(
-                        "❌ JWKS error of the identity provider:",
-                        err,
-                    );
-                    if (err instanceof Error) {
-                        return cb(err);
-                    }
-                    return cb(
-                        new Error(
-                            "Could not get the signing key from the identity provider",
-                        ),
-                    );
-                },
-            }),
+            secretOrKeyProvider: checks.accessTokensOnly
+                ? JwtStrategy.refusingOtherTokenTypes(keyProvider)
+                : keyProvider,
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
             algorithms: checks.algorithms,
             issuer: checks.issuer,
             ...(checks.audience && { audience: checks.audience }),
+        };
+    }
+
+    /**
+     * Refuses a token whose JWS header names another type than an access
+     * token before its key is looked up. The guard answers with the reason.
+     */
+    private static refusingOtherTokenTypes(
+        keyProvider: ReturnType<typeof passportJwtSecret>,
+    ): ReturnType<typeof passportJwtSecret> {
+        return (request, rawJwtToken, done) => {
+            let header: { typ?: unknown } | undefined;
+            try {
+                header = decodeProtectedHeader(rawJwtToken as string);
+            } catch {
+                // Malformed tokens fail in the signature check, as before.
+            }
+            const refusal = header && accessTokenTypeRefusal(header);
+            if (refusal) {
+                return done(new UnauthorizedException(refusal));
+            }
+            return keyProvider(request, rawJwtToken, done);
         };
     }
 
@@ -236,6 +281,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, "jwt") {
         // The signature check accepts tokens without exp, which never expire.
         if (settings.mode === "generic" && typeof payload.exp !== "number") {
             throw new UnauthorizedException("Access token has no expiry");
+        }
+        const refusal =
+            acceptsAccessTokensOnly(settings) && idTokenClaimRefusal(payload);
+        if (refusal) {
+            throw new UnauthorizedException(refusal);
         }
         const tenantId = (payload as any)[settings.tenantClaim] as
             | string
