@@ -67,7 +67,7 @@ const SIGNING_ALGORITHM_LABELS: Record<SigningAlgorithm, string> = {
 };
 
 /** Whether the external certificate comes with its key, or is requested for a key EUDIPLO creates. */
-export type ExternalCertificateSource = 'import' | 'csr';
+type ExternalCertificateSource = 'import' | 'csr';
 
 /** Why a registrar enrollment was refused, shown next to Create & Enroll. */
 export interface EnrollmentError {

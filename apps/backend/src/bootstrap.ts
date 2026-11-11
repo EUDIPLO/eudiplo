@@ -10,6 +10,7 @@ import { AllExceptionsFilter } from "./all-exceptions.filter.js";
 import { AppModule } from "./app.module.js";
 import { AUTH_SETTINGS, type AuthSettings } from "./auth/auth-settings.js";
 import {
+    configureBodyParsers,
     configureCors,
     filterOpenApiPaths,
     GLOBAL_PREFIX_EXCLUSIONS,
@@ -45,14 +46,7 @@ async function bootstrap() {
         httpsOptions: tlsOptions,
     });
 
-    // Set explicit body size limits (security best practice)
-    // Parse encrypted credential requests sent as application/jwt (JWE compact serialization)
-    // Must be registered BEFORE the JSON parser so it takes precedence for this content type
-    app.useBodyParser("text", {
-        type: "application/jwt",
-        limit: "10mb",
-    });
-    app.useBodyParser("json", { limit: "10mb" });
+    configureBodyParsers(app);
 
     // Global route prefix: all management endpoints under /api/,
     // protocol endpoints (wallet-facing) stay at root for compliance

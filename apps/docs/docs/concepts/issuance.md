@@ -71,7 +71,7 @@ A presentation step is verified like any OID4VP response, and the verified crede
 `POST /issuers/{tenant}/vci/credential` runs these steps for each request:
 
 1. **Decrypt.** An encrypted request (`application/jwt`) is decrypted with the tenant's `encrypt` key chain, whose public key is published in the issuer metadata.
-2. **Validate the request.** The `credential_configuration_id` must exist and requested response encryption must use a supported algorithm.
+2. **Validate the request.** The `credential_configuration_id` must exist, and requested response encryption must use a supported algorithm and is accepted only in an encrypted request. The JWE header of an encrypted request must name the published key by `kid` and use its `alg` (`ECDH-ES`) and an `enc` of `A128GCM` or `A256GCM`; with `credentialRequestEncryption`, plain requests are rejected (see [Encryption flags](../issuance/issuance-configuration.md#encryption-flags)).
 3. **Verify the access token.** Signature against the issuing server's keys, audience, expiry, and the DPoP proof. With `dPopRequired`, bearer tokens are rejected.
 4. **Authorize the credential.** A token with `authorization_details` covers only the configurations listed there (a `credential_identifier` is resolved the same way), and the proof type must be one of the configuration's `proofTypesSupported`.
 5. **Find the session and resolve claims.** The session comes from the token (see the table above). Claims come from the offer, a claims webhook or the attribute provider, together with the user identity from the token; [Claims](../issuance/claims.md) explains the order.
@@ -118,7 +118,7 @@ sequenceDiagram
     E-->>W: credential
 ```
 
-When the claim source answers `deferred`, EUDIPLO verifies the key proof, consumes its nonce and stores a transaction with the holder key, valid for 24 hours. Deferred issuance binds exactly one holder key. Your backend later completes the transaction with the claims, which signs the credential immediately, or fails it. The wallet polls `POST /issuers/{tenant}/vci/deferred_credential` with an access token of the same session and can retrieve a ready credential once. A transaction moves from `pending` to `ready` and `retrieved`, or ends as `failed` or `expired`. Steps and API: [Deferred issuance](../issuance/deferred-issuance.md).
+When the claim source answers `deferred`, EUDIPLO verifies the key proof, consumes its nonce and stores a transaction with the holder key, valid for 24 hours. Deferred issuance binds exactly one holder key. Your backend later completes the transaction with the claims, which signs the credential immediately, or fails it. The wallet polls `POST /issuers/{tenant}/vci/deferred_credential` with an access token of the same session and can retrieve a ready credential once. The poll follows the encryption rules of the credential endpoint ([Encryption flags](../issuance/issuance-configuration.md#encryption-flags)). A transaction moves from `pending` to `ready` and `retrieved`, or ends as `failed` or `expired`. Steps and API: [Deferred issuance](../issuance/deferred-issuance.md).
 
 ## Session states
 

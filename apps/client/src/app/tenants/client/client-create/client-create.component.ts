@@ -63,7 +63,7 @@ interface ConfigSourceInfo {
   roles: Role[];
 }
 
-export const configSources: Record<ConfigSource, ConfigSourceInfo> = {
+const configSources: Record<ConfigSource, ConfigSourceInfo> = {
   presentationConfigs: {
     control: 'allowedPresentationConfigs',
     title: 'Allowed Presentation Configurations',

@@ -36,7 +36,11 @@ function setup(config: Partial<IssuanceConfiguration>) {
             credentialConfigurationsSupported: async () => ({
                 pid: { format: "dc+sd-jwt" } as never,
             }),
-            credentialRequestEncryptionKey: async () => ({ kid: "enc" }),
+            credentialRequestEncryptionKey: async () => ({
+                kty: "EC",
+                kid: "enc",
+                alg: "ECDH-ES",
+            }),
         },
         certificates,
         "https://issuer.example",

@@ -10,12 +10,13 @@ import { Oauth2ServerErrorResponseError } from "@openid4vc/oauth2";
 import {
     CreateCredentialResponseReturn,
     type CredentialRequest,
-    type CredentialResponse,
+    type DeferredCredentialRequest,
     DeferredCredentialResponse,
     type IssuerMetadataResult,
     type Openid4vciIssuer,
     ParseCredentialRequestReturn,
 } from "@openid4vc/openid4vci";
+import { errors as joseErrors } from "jose";
 import { Span, TraceService } from "nestjs-otel";
 import { v4 } from "uuid";
 import { EncryptionService } from "../../../crypto/encryption/encryption.service.js";
@@ -66,7 +67,6 @@ import { AuthorizationServerError } from "./domain/authorization-server-errors.j
 import { InvalidCredentialOffer } from "./domain/credential-offer-errors.js";
 import { InvalidCredentialProof } from "./domain/credential-proof-errors.js";
 import type { KeyAttestationRequirements } from "./domain/key-attestation-requirements.js";
-import { DeferredCredentialRequestDto } from "./dto/deferred-credential-request.dto.js";
 import { NotificationRequestDto } from "./dto/notification-request.dto.js";
 import { OfferRequestDto, OfferResponse } from "./dto/offer-request.dto.js";
 import { CredentialRequestException } from "./exceptions/index.js";
@@ -320,9 +320,9 @@ export class Oid4vciService {
         );
 
         let requestBody: CredentialRequest;
+        let jweString: string | undefined;
         if (isJwtContentType || typeof rawBody === "string") {
             // Encrypted credential request - need to read and decrypt JWE
-            let jweString: string;
             if (typeof rawBody === "string") {
                 // Text body parser successfully set req.body as string
                 jweString = rawBody;
@@ -396,19 +396,45 @@ export class Oid4vciService {
             }
         }
 
+        const preparedRequest = addLegacyCredentialResponseEncryptionAlg(
+            dropUnsupportedCredentialResponseCompression(
+                requestBody,
+                issuerMetadata.credentialIssuer.credential_response_encryption
+                    ?.zip_values_supported,
+            ),
+        );
+
+        // The request was decrypted above so the checks and compatibility
+        // rewrites see the plaintext. The library still gets the body as sent,
+        // so it applies the rules of its transport: the advertised key and enc
+        // for an encrypted request, encryption_required and "response
+        // encryption only in an encrypted request" for a plain one. Its
+        // decrypt callback returns the rewritten request. The library passes
+        // the advertised key it matched by kid; without one, refuse.
+        const parsingIssuer = this.sdk.issuer(
+            tenantId,
+            undefined,
+            (_jwe, options) =>
+                options?.jwk
+                    ? {
+                          decrypted: true,
+                          decryptionJwk: options.jwk,
+                          payload: JSON.stringify(preparedRequest),
+                      }
+                    : { decrypted: false },
+        );
+
         let parsedCredentialRequest: ParseCredentialRequestReturn;
         try {
-            parsedCredentialRequest = issuer.parseCredentialRequest({
-                issuerMetadata,
-                credentialRequest: addLegacyCredentialResponseEncryptionAlg(
-                    dropUnsupportedCredentialResponseCompression(
-                        requestBody,
-                        issuerMetadata.credentialIssuer
-                            .credential_response_encryption
-                            ?.zip_values_supported,
-                    ),
-                ),
-            });
+            parsedCredentialRequest =
+                await parsingIssuer.parseCredentialRequest({
+                    issuerMetadata,
+                    contentType:
+                        jweString === undefined
+                            ? "application/json"
+                            : "application/jwt",
+                    credentialRequest: jweString ?? preparedRequest,
+                });
         } catch (err) {
             // Keep the code so a wallet can tell it has to retry encrypted
             // (OpenID4VCI 1.0 Section 8.3.1.2).
@@ -748,37 +774,152 @@ export class Oid4vciService {
     }
 
     /**
-     * Handle deferred credential request.
-     * Called when wallet polls with transaction_id.
+     * Handle deferred credential request (OpenID4VCI 1.0 Section 9).
+     * Called when wallet polls with transaction_id. The request is parsed by
+     * the library with the encryption rules of the credential endpoint, and
+     * the response is encrypted when the request asks for it.
      * @param req The request
-     * @param body The deferred credential request DTO
      * @param tenantId The tenant ID
      * @returns Credential response or issuance_pending error
      */
     @Span("oid4vci.getDeferredCredential")
     async getDeferredCredential(
         req: Oid4vciRequestContext,
-        body: DeferredCredentialRequestDto,
         tenantId: string,
-    ): Promise<CredentialResponse> {
+    ): Promise<DeferredCredentialResult> {
+        const issuer = this.sdk.issuer(tenantId);
+        const issuerMetadata = await this.issuerMetadata(tenantId, issuer);
+        const zipValuesSupported =
+            issuerMetadata.credentialIssuer.credential_response_encryption
+                ?.zip_values_supported;
+
+        // Unlike the credential endpoint, nothing has to be checked before
+        // parsing, so the library verifies the JWE header against the
+        // advertised key first and only then asks to decrypt. A JWE that does
+        // not decrypt is the wallet's error, not a server failure.
+        const parsingIssuer = this.sdk.issuer(
+            tenantId,
+            undefined,
+            async (jwe, options) => {
+                if (!options?.jwk) return { decrypted: false };
+                let request: unknown;
+                try {
+                    request = await this.encryptionService.decryptJweToJson(
+                        jwe,
+                        tenantId,
+                    );
+                } catch (error) {
+                    // Decrypted, but not JSON: hand the library a payload it
+                    // refuses as an invalid credential request.
+                    if (error instanceof SyntaxError) {
+                        return {
+                            decrypted: true,
+                            decryptionJwk: options.jwk,
+                            payload: "",
+                        };
+                    }
+                    // A JWE that does not decrypt with the advertised key is
+                    // the wallet's error. Anything else (no key chain, KMS
+                    // failure) is a server error, which the library reports
+                    // as such.
+                    if (isWalletDecryptionError(error)) {
+                        return { decrypted: false };
+                    }
+                    throw error;
+                }
+                return {
+                    decrypted: true,
+                    decryptionJwk: options.jwk,
+                    payload: JSON.stringify(
+                        isPlainObject(request)
+                            ? dropUnsupportedCredentialResponseCompression(
+                                  request,
+                                  zipValuesSupported,
+                              )
+                            : request,
+                    ),
+                };
+            },
+        );
+
+        let deferredCredentialRequest: DeferredCredentialRequest;
+        try {
+            ({ deferredCredentialRequest } =
+                await parsingIssuer.parseDeferredCredentialRequest({
+                    issuerMetadata,
+                    contentType:
+                        typeof req.body === "string"
+                            ? "application/jwt"
+                            : "application/json",
+                    deferredCredentialRequest: req.body,
+                }));
+        } catch (err) {
+            if (
+                err instanceof Oauth2ServerErrorResponseError &&
+                (err.errorResponse.error === "invalid_encryption_parameters" ||
+                    err.errorResponse.error === "invalid_credential_request")
+            ) {
+                throw new CredentialRequestException(
+                    err.errorResponse.error,
+                    err.errorResponse.error_description,
+                );
+            }
+            throw err;
+        }
+
         // Add context to span for trace correlation
         const span = this.traceService.getSpan();
         span?.setAttributes({
-            "oid4vci.transactionId": body.transaction_id,
+            "oid4vci.transactionId": deferredCredentialRequest.transaction_id,
             "session.tenantId": tenantId,
         });
 
-        const issuerMetadata = await this.issuerMetadata(
-            tenantId,
-            this.sdk.issuer(tenantId),
-        );
         return this.deferredCredentialService.getDeferredCredential(
             req,
-            body,
+            deferredCredentialRequest.transaction_id,
             tenantId,
             issuerMetadata,
+            async (credential) => {
+                const credentialResponseEncryption =
+                    deferredCredentialRequest.credential_response_encryption;
+                try {
+                    return await issuer.createDeferredCredentialResponse({
+                        credentials: [{ credential }],
+                        credentialResponseEncryption,
+                    });
+                } catch (error) {
+                    // The parser checked alg and enc but not the key itself;
+                    // the only key used here is the wallet's.
+                    if (credentialResponseEncryption) {
+                        throw new CredentialRequestException(
+                            "invalid_encryption_parameters",
+                            "The response cannot be encrypted to the jwk in credential_response_encryption",
+                        );
+                    }
+                    throw error;
+                }
+            },
         );
     }
+}
+
+/** The deferred credential response, with its JWE when it is encrypted. */
+export type DeferredCredentialResult = Awaited<
+    ReturnType<Openid4vciIssuer["createDeferredCredentialResponse"]>
+>;
+
+/** A JWE the tenant key cannot decrypt. */
+function isWalletDecryptionError(error: unknown): boolean {
+    return (
+        error instanceof joseErrors.JWEDecryptionFailed ||
+        error instanceof joseErrors.JWEInvalid ||
+        error instanceof joseErrors.JOSENotSupported
+    );
+}
+
+/** True for a JSON object (not an array or null). */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Authorization-server configuration and discovery problems are client errors. */

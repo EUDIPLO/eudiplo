@@ -3,7 +3,29 @@ import type {
     CorsOptions,
     CorsOptionsDelegate,
 } from "@nestjs/common/interfaces/external/cors-options.interface.js";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { OpenAPIObject } from "@nestjs/swagger";
+
+/** Media types of encrypted (JWE) credential and deferred credential requests. */
+const ENCRYPTED_REQUEST_MEDIA_TYPES = [
+    "application/jwt",
+    "application/openid4vci-credential-request+jwt",
+];
+
+/**
+ * Register the body parsers with explicit size limits. Encrypted credential
+ * requests (JWE compact serialization) are read as text; this parser is
+ * registered before the JSON parser so it takes precedence for these types.
+ */
+export function configureBodyParsers(
+    app: Pick<NestExpressApplication, "useBodyParser">,
+): void {
+    app.useBodyParser("text", {
+        type: ENCRYPTED_REQUEST_MEDIA_TYPES,
+        limit: "10mb",
+    });
+    app.useBodyParser("json", { limit: "10mb" });
+}
 
 /**
  * Routes excluded from the automatic `/api` global prefix.

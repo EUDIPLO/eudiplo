@@ -2,8 +2,9 @@ import { Controller, Get, INestApplication, Post } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { App } from "supertest/types";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+    configureBodyParsers,
     configureCors,
     GLOBAL_PREFIX_EXCLUSIONS,
     isManagementApiPath,
@@ -130,5 +131,25 @@ describe("configureCors", () => {
             .set("Origin", OTHER);
         expect(post.status).toBe(201);
         expect(post.headers["access-control-allow-origin"]).toBe("*");
+    });
+});
+
+describe("configureBodyParsers", () => {
+    it("reads both encrypted request media types as text before JSON, with a 10 MB limit", () => {
+        const useBodyParser = vi.fn();
+        configureBodyParsers({ useBodyParser } as never);
+        expect(useBodyParser.mock.calls).toEqual([
+            [
+                "text",
+                {
+                    type: [
+                        "application/jwt",
+                        "application/openid4vci-credential-request+jwt",
+                    ],
+                    limit: "10mb",
+                },
+            ],
+            ["json", { limit: "10mb" }],
+        ]);
     });
 });

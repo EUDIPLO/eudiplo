@@ -63,10 +63,10 @@
         "@nestjs/typeorm": "^12.0.2",
         "@noble/curves": "^2.4.0",
         "@noble/hashes": "^2.4.0",
-        "@openid4vc/oauth2": "0.8.2",
-        "@openid4vc/openid4vci": "0.8.2",
-        "@openid4vc/openid4vp": "0.8.2",
-        "@openid4vc/utils": "0.8.2",
+        "@openid4vc/oauth2": "0.9.1",
+        "@openid4vc/openid4vci": "0.9.1",
+        "@openid4vc/openid4vp": "0.9.1",
+        "@openid4vc/utils": "0.9.1",
         "@opentelemetry/api": "^1.10.0",
         "@opentelemetry/auto-instrumentations-node": "^0.82.0",
         "@opentelemetry/exporter-logs-otlp-proto": "^0.300.0",
@@ -79,7 +79,7 @@
         "@opentelemetry/semantic-conventions": "^1.43.0",
         "@owf/cose": "^0.6.0",
         "@owf/crypto": "^0.6.0",
-        "@owf/eudi-attestation-schema": "0.5.2",
+        "@owf/eudi-attestation-schema": "0.5.4",
         "@owf/eudi-lote": "^0.5.2",
         "@owf/identity-common": "^0.6.0",
         "@owf/mdoc": "^0.9.1",
@@ -88,9 +88,9 @@
         "@panva/hkdf": "^1.2.1",
         "@peculiar/asn1-schema": "^3.0.0",
         "@peculiar/asn1-x509": "^3.0.0",
-        "@peculiar/x509": "^2.2.0",
-        "@sd-jwt/core": "^0.23.2",
-        "@sd-jwt/sd-jwt-vc": "^0.23.2",
+        "@peculiar/x509": "^3.1.0",
+        "@sd-jwt/core": "^0.24.1",
+        "@sd-jwt/sd-jwt-vc": "^0.24.1",
         "ajv": "^8.20.0",
         "axios": "^1.21.0",
         "bcrypt": "^6.0.0",
@@ -118,7 +118,7 @@
         "zod": "^4.6.7"
     },
     "devDependencies": {
-        "@biomejs/biome": "2.6.3",
+        "@biomejs/biome": "2.6.4",
         "@hey-api/openapi-ts": "^0.99.0",
         "@nestjs/cli": "^12.0.11",
         "@nestjs/schematics": "^12.0.11",
@@ -147,7 +147,7 @@
         "typescript": "^6.0.0",
         "undici": "^8.12.3",
         "unplugin-swc": "^2.0.0",
-        "vitest": "5.0.5"
+        "vitest": "5.1.0"
     },
     "packageManager": "pnpm@10.13.1"
 }

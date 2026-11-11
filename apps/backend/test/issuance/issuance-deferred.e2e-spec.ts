@@ -247,11 +247,11 @@ describe("Issuance - Deferred Credential Flow", () => {
             );
         }
         expect(deferredResult2.statusCode).toBe(200);
-        expect(deferredResult2.body.credential).toBeDefined();
+        expect(deferredResult2.body.credentials).toHaveLength(1);
 
         // Verify the credential claims
         const claims = await sdjwt.getClaims(
-            deferredResult2.body.credential as string,
+            deferredResult2.body.credentials[0].credential as string,
         );
         expect(claims.town).toBe(town);
 
@@ -404,10 +404,10 @@ describe("Issuance - Deferred Credential Flow", () => {
                 transactionId,
             );
             expect(deferredResult2.statusCode).toBe(200);
-            expect(deferredResult2.body.credential).toBeDefined();
+            expect(deferredResult2.body.credentials).toHaveLength(1);
 
             const claims = await sdjwt.getClaims(
-                deferredResult2.body.credential as string,
+                deferredResult2.body.credentials[0].credential as string,
             );
             expect(claims.town).toBe(town);
 
@@ -698,7 +698,7 @@ describe("Issuance - Deferred Credential Flow", () => {
             transactionId,
         );
         expect(firstRetrieval.statusCode).toBe(200);
-        expect(firstRetrieval.body.credential).toBeDefined();
+        expect(firstRetrieval.body.credentials).toHaveLength(1);
 
         // Second retrieval should fail with invalid_transaction_id (already retrieved)
         const secondRetrieval = await retrieveDeferredCredential(
