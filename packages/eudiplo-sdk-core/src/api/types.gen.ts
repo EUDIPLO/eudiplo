@@ -6033,6 +6033,13 @@ export type DeferredCredentialRequestDto = {
      * The transaction identifier previously returned by the Credential Endpoint
      */
     transaction_id: string;
+    credential_response_encryption?: {
+        jwk: {
+            [key: string]: unknown;
+        };
+        enc: string;
+        zip?: string;
+    };
 };
 
 export type NotificationRequestDto = {

@@ -118,7 +118,7 @@ sequenceDiagram
     E-->>W: credential
 ```
 
-When the claim source answers `deferred`, EUDIPLO verifies the key proof, consumes its nonce and stores a transaction with the holder key, valid for 24 hours. Deferred issuance binds exactly one holder key. Your backend later completes the transaction with the claims, which signs the credential immediately, or fails it. The wallet polls `POST /issuers/{tenant}/vci/deferred_credential` with an access token of the same session and can retrieve a ready credential once. A transaction moves from `pending` to `ready` and `retrieved`, or ends as `failed` or `expired`. Steps and API: [Deferred issuance](../issuance/deferred-issuance.md).
+When the claim source answers `deferred`, EUDIPLO verifies the key proof, consumes its nonce and stores a transaction with the holder key, valid for 24 hours. Deferred issuance binds exactly one holder key. Your backend later completes the transaction with the claims, which signs the credential immediately, or fails it. The wallet polls `POST /issuers/{tenant}/vci/deferred_credential` with an access token of the same session and can retrieve a ready credential once. The poll follows the encryption rules of the credential endpoint ([Encryption flags](../issuance/issuance-configuration.md#encryption-flags)). A transaction moves from `pending` to `ready` and `retrieved`, or ends as `failed` or `expired`. Steps and API: [Deferred issuance](../issuance/deferred-issuance.md).
 
 ## Session states
 

@@ -10,12 +10,10 @@ import {
     Openid4vciClient,
 } from "@openid4vc/openid4vci";
 import {
-    CompactEncrypt,
     type CompactJWEHeaderParameters,
+    compactDecrypt,
     exportJWK,
     generateKeyPair,
-    importJWK,
-    type JWK,
 } from "jose";
 import request from "supertest";
 import { App } from "supertest/types";
@@ -26,6 +24,11 @@ import {
     getSignJwtCallback,
     setupIssuanceTestApp,
 } from "../utils.js";
+import {
+    advertisedKey,
+    encryptRequest as encrypt,
+    responseEncryption as walletResponseEncryption,
+} from "./request-encryption-helpers.js";
 
 setGlobalDispatcher(
     new Agent({
@@ -117,32 +120,6 @@ describe("Issuance - credential request encryption", () => {
         };
     }
 
-    function advertisedKey(issuerMetadata: IssuerMetadataResult) {
-        const key =
-            issuerMetadata.credentialIssuer.credential_request_encryption?.jwks
-                .keys[0];
-        if (!key) throw new Error("no credential request encryption key");
-        return key;
-    }
-
-    async function encrypt(
-        issuerMetadata: IssuerMetadataResult,
-        payload: Record<string, unknown>,
-        header: Partial<CompactJWEHeaderParameters> = {},
-    ): Promise<string> {
-        const key = advertisedKey(issuerMetadata);
-        return new CompactEncrypt(
-            new TextEncoder().encode(JSON.stringify(payload)),
-        )
-            .setProtectedHeader({
-                alg: "ECDH-ES",
-                enc: "A128GCM",
-                kid: key.kid,
-                ...header,
-            })
-            .encrypt(await importJWK(key as JWK, "ECDH-ES"));
-    }
-
     function postCredential(
         issuerMetadata: IssuerMetadataResult,
         accessToken: string,
@@ -158,16 +135,6 @@ describe("Issuance - credential request encryption", () => {
             .set("Authorization", `Bearer ${accessToken}`)
             .set("Content-Type", contentType)
             .send(body);
-    }
-
-    async function responseEncryption() {
-        const { publicKey } = await generateKeyPair("ECDH-ES", {
-            extractable: true,
-        });
-        return {
-            jwk: { ...(await exportJWK(publicKey)), alg: "ECDH-ES" },
-            enc: "A128GCM",
-        };
     }
 
     test("advertises the encryption key with kid and alg ECDH-ES, without the private part", async () => {
@@ -198,18 +165,28 @@ describe("Issuance - credential request encryption", () => {
         const { issuerMetadata, accessToken, body } =
             await prepareCredentialRequest();
 
+        const { privateKey, parameters } = await walletResponseEncryption();
         const response = await postCredential(
             issuerMetadata,
             accessToken,
             "application/jwt",
             await encrypt(issuerMetadata, {
                 ...body,
-                credential_response_encryption: await responseEncryption(),
+                credential_response_encryption: parameters,
             }),
         );
 
         expect(response.status).toBe(200);
         expect(response.headers["content-type"]).toMatch(/^application\/jwt/);
+        // The wallet key has no kid, so the JWE names none.
+        const { plaintext, protectedHeader } = await compactDecrypt(
+            response.text,
+            privateKey,
+        );
+        expect(protectedHeader.kid).toBeUndefined();
+        expect(
+            JSON.parse(new TextDecoder().decode(plaintext)).credentials,
+        ).toHaveLength(1);
     });
 
     test.each<[string, Partial<CompactJWEHeaderParameters>]>([
@@ -243,7 +220,9 @@ describe("Issuance - credential request encryption", () => {
             "application/json",
             {
                 ...body,
-                credential_response_encryption: await responseEncryption(),
+                credential_response_encryption: (
+                    await walletResponseEncryption()
+                ).parameters,
             },
         );
 

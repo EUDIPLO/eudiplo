@@ -5,6 +5,7 @@ import {
     HttpException,
 } from "@nestjs/common";
 import { Oauth2ServerErrorResponseError } from "@openid4vc/oauth2";
+import { errors as joseErrors } from "jose";
 import { describe, expect, it, vi } from "vitest";
 import { ExternalSessionBindingError } from "../../../session/application/resolve-external-authorization-session.js";
 import { SessionNotFound } from "../../../session/application/session-errors.js";
@@ -843,5 +844,330 @@ describe("OID4VCI notification endpoint session resolution", () => {
             { id: "notification", credentialConfigurationId: "pid" },
         ]);
         expect(test.changeState).not.toHaveBeenCalled();
+    });
+});
+
+describe("Oid4vciService.getDeferredCredential", () => {
+    const plain: Oid4vciRequestContext = {
+        method: "POST",
+        url: "/issuers/tenant/vci/deferred_credential",
+        headers: { authorization: "DPoP access-token" },
+        contentType: "application/json",
+        body: { transaction_id: "tx" },
+    };
+
+    function setup(overrides: {
+        parse?: (options: Record<string, unknown>) => unknown;
+        decryptJweToJson?: ReturnType<typeof vi.fn>;
+        metadata?: unknown;
+    }) {
+        let decryptJwe:
+            | ((
+                  jwe: string,
+                  options?: { jwk?: Record<string, unknown> },
+              ) => Promise<{
+                  decrypted: boolean;
+                  decryptionJwk?: unknown;
+                  payload?: string;
+              }>)
+            | undefined;
+        const parseOptions: Record<string, unknown>[] = [];
+        const createDeferredCredentialResponse = vi.fn(
+            async (options: { credentials: unknown }) => ({
+                deferredCredentialResponse: {
+                    credentials: options.credentials,
+                },
+            }),
+        );
+        const getDeferredCredential = vi.fn(
+            async (
+                _req: unknown,
+                _transactionId: string,
+                _tenantId: string,
+                _metadata: unknown,
+                buildResponse: (credential: string) => Promise<unknown>,
+            ) => buildResponse("credential-jwt"),
+        );
+        const instance = service({
+            ...(overrides.metadata !== undefined && {
+                buildIssuerMetadata: {
+                    execute: vi.fn().mockResolvedValue(overrides.metadata),
+                },
+            }),
+            encryptionService: {
+                decryptJweToJson: overrides.decryptJweToJson ?? vi.fn(),
+            },
+            sdk: {
+                issuer: (
+                    _tenantId: string,
+                    _sessionId?: string,
+                    callback?: typeof decryptJwe,
+                ) => {
+                    if (callback) decryptJwe = callback;
+                    return {
+                        parseDeferredCredentialRequest: async (
+                            options: Record<string, unknown>,
+                        ) => {
+                            parseOptions.push(options);
+                            return overrides.parse
+                                ? overrides.parse(options)
+                                : {
+                                      deferredCredentialRequest: {
+                                          transaction_id: "tx",
+                                      },
+                                  };
+                        },
+                        createDeferredCredentialResponse,
+                    };
+                },
+            },
+            deferredCredentialService: { getDeferredCredential },
+        });
+        return {
+            instance,
+            parseOptions,
+            createDeferredCredentialResponse,
+            getDeferredCredential,
+            decryptJwe: () => decryptJwe,
+        };
+    }
+
+    it("hands a plain request to the parser as application/json and retrieves its transaction", async () => {
+        const { instance, parseOptions, getDeferredCredential } = setup({});
+        await expect(
+            instance.getDeferredCredential(plain, "tenant"),
+        ).resolves.toEqual({
+            deferredCredentialResponse: {
+                credentials: [{ credential: "credential-jwt" }],
+            },
+        });
+        expect(parseOptions[0]).toMatchObject({
+            contentType: "application/json",
+            deferredCredentialRequest: plain.body,
+        });
+        expect(getDeferredCredential).toHaveBeenCalledWith(
+            plain,
+            "tx",
+            "tenant",
+            issuerMetadata,
+            expect.any(Function),
+        );
+    });
+
+    it("encrypts the response with the requested parameters", async () => {
+        const credentialResponseEncryption = {
+            jwk: { kty: "EC", alg: "ECDH-ES" },
+            enc: "A128GCM",
+        };
+        const { instance, createDeferredCredentialResponse } = setup({
+            parse: () => ({
+                deferredCredentialRequest: {
+                    transaction_id: "tx",
+                    credential_response_encryption:
+                        credentialResponseEncryption,
+                },
+            }),
+        });
+        await instance.getDeferredCredential(
+            { ...plain, contentType: "application/jwt", body: "a.b.c.d.e" },
+            "tenant",
+        );
+        expect(createDeferredCredentialResponse).toHaveBeenCalledWith({
+            credentials: [{ credential: "credential-jwt" }],
+            credentialResponseEncryption,
+        });
+    });
+
+    it("hands an encrypted request to the parser as sent and decrypts it in the callback", async () => {
+        const jwe = "header.key.iv.ciphertext.tag";
+        const decryptJweToJson = vi.fn().mockResolvedValue({
+            transaction_id: "tx",
+            credential_response_encryption: {
+                jwk: { kty: "EC", alg: "ECDH-ES" },
+                enc: "A128GCM",
+                zip: "DEF",
+            },
+        });
+        const { instance, parseOptions, decryptJwe } = setup({
+            decryptJweToJson,
+        });
+        await instance.getDeferredCredential(
+            { ...plain, contentType: "application/jwt", body: jwe },
+            "tenant",
+        );
+        expect(parseOptions[0]).toMatchObject({
+            contentType: "application/jwt",
+            deferredCredentialRequest: jwe,
+        });
+
+        const advertisedJwk = { kty: "EC", kid: "enc", alg: "ECDH-ES" };
+        const decrypted = await decryptJwe()?.(jwe, { jwk: advertisedJwk });
+        expect(decryptJweToJson).toHaveBeenCalledWith(jwe, "tenant");
+        expect(decrypted?.decrypted).toBe(true);
+        expect(decrypted?.decryptionJwk).toBe(advertisedJwk);
+        // zip is not advertised, so it is dropped.
+        expect(JSON.parse(decrypted?.payload ?? "")).toEqual({
+            transaction_id: "tx",
+            credential_response_encryption: {
+                jwk: { kty: "EC", alg: "ECDH-ES" },
+                enc: "A128GCM",
+            },
+        });
+    });
+
+    it("keeps a zip the issuer advertises", async () => {
+        const encryption = {
+            jwk: { kty: "EC", alg: "ECDH-ES" },
+            enc: "A128GCM",
+            zip: "DEF",
+        };
+        const { instance, decryptJwe } = setup({
+            metadata: {
+                ...issuerMetadata,
+                credentialIssuer: {
+                    ...issuerMetadata.credentialIssuer,
+                    credential_response_encryption: {
+                        alg_values_supported: ["ECDH-ES"],
+                        enc_values_supported: ["A128GCM"],
+                        zip_values_supported: ["DEF"],
+                    },
+                },
+            },
+            decryptJweToJson: vi.fn().mockResolvedValue({
+                transaction_id: "tx",
+                credential_response_encryption: encryption,
+            }),
+        });
+        await instance.getDeferredCredential(plain, "tenant");
+        const decrypted = await decryptJwe()?.("jwe", {
+            jwk: { kty: "EC", kid: "enc" },
+        });
+        expect(
+            JSON.parse(decrypted?.payload ?? "").credential_response_encryption,
+        ).toEqual(encryption);
+    });
+
+    it("hands non-JSON plaintext to the library as an invalid payload", async () => {
+        const { instance, decryptJwe } = setup({
+            decryptJweToJson: vi
+                .fn()
+                .mockRejectedValue(new SyntaxError("Unexpected token")),
+        });
+        await instance.getDeferredCredential(plain, "tenant");
+        const jwk = { kty: "EC", kid: "enc" };
+        await expect(decryptJwe()?.("jwe", { jwk })).resolves.toEqual({
+            decrypted: true,
+            decryptionJwk: jwk,
+            payload: "",
+        });
+    });
+
+    it("rethrows a decryption failure that is not the wallet's", async () => {
+        const failure = new Error("KMS unavailable");
+        const { instance, decryptJwe } = setup({
+            decryptJweToJson: vi.fn().mockRejectedValue(failure),
+        });
+        await instance.getDeferredCredential(plain, "tenant");
+        await expect(
+            decryptJwe()?.("jwe", { jwk: { kty: "EC", kid: "enc" } }),
+        ).rejects.toBe(failure);
+    });
+
+    it("answers a wallet key the response cannot be encrypted to with invalid_encryption_parameters", async () => {
+        const { instance, createDeferredCredentialResponse } = setup({
+            parse: () => ({
+                deferredCredentialRequest: {
+                    transaction_id: "tx",
+                    credential_response_encryption: {
+                        jwk: { kty: "EC", alg: "ECDH-ES" },
+                        enc: "A128GCM",
+                    },
+                },
+            }),
+        });
+        createDeferredCredentialResponse.mockRejectedValue(
+            new TypeError("Invalid key"),
+        );
+        expect(
+            protocolError(
+                await rejection(
+                    instance.getDeferredCredential(plain, "tenant"),
+                ),
+            ),
+        ).toMatchObject({ error: "invalid_encryption_parameters" });
+    });
+
+    it("passes a response failure without encryption through", async () => {
+        const failure = new Error("validation");
+        const { instance, createDeferredCredentialResponse } = setup({});
+        createDeferredCredentialResponse.mockRejectedValue(failure);
+        expect(
+            await rejection(instance.getDeferredCredential(plain, "tenant")),
+        ).toBe(failure);
+    });
+
+    it.each([
+        ["JWEInvalid", new joseErrors.JWEInvalid()],
+        ["JOSENotSupported", new joseErrors.JOSENotSupported()],
+    ])("reports %s as not decrypted", async (_name, error) => {
+        const { instance, decryptJwe } = setup({
+            decryptJweToJson: vi.fn().mockRejectedValue(error),
+        });
+        await instance.getDeferredCredential(plain, "tenant");
+        await expect(
+            decryptJwe()?.("jwe", { jwk: { kty: "EC", kid: "enc" } }),
+        ).resolves.toEqual({ decrypted: false });
+    });
+
+    it("reports a JWE that does not decrypt or names no advertised key as not decrypted", async () => {
+        const { instance, decryptJwe } = setup({
+            decryptJweToJson: vi
+                .fn()
+                .mockRejectedValue(new joseErrors.JWEDecryptionFailed()),
+        });
+        await instance.getDeferredCredential(plain, "tenant");
+        await expect(
+            decryptJwe()?.("jwe", { jwk: { kty: "EC", kid: "enc" } }),
+        ).resolves.toEqual({ decrypted: false });
+        await expect(decryptJwe()?.("jwe", {})).resolves.toEqual({
+            decrypted: false,
+        });
+    });
+
+    it.each(["invalid_encryption_parameters", "invalid_credential_request"])(
+        "answers a %s parser error in OAuth format",
+        async (code) => {
+            const { instance, getDeferredCredential } = setup({
+                parse: () => {
+                    throw new Oauth2ServerErrorResponseError({
+                        error: code,
+                        error_description: "refused",
+                    });
+                },
+            });
+            expect(
+                protocolError(
+                    await rejection(
+                        instance.getDeferredCredential(plain, "tenant"),
+                    ),
+                ),
+            ).toEqual({ error: code, error_description: "refused" });
+            expect(getDeferredCredential).not.toHaveBeenCalled();
+        },
+    );
+
+    it("passes a server error of the parser through", async () => {
+        const failure = new Oauth2ServerErrorResponseError(
+            { error: "server_error" },
+            { status: 500 },
+        );
+        const { instance } = setup({
+            parse: () => {
+                throw failure;
+            },
+        });
+        expect(
+            await rejection(instance.getDeferredCredential(plain, "tenant")),
+        ).toBe(failure);
     });
 });

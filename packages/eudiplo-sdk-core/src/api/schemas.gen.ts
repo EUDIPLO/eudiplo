@@ -12854,14 +12854,33 @@ export const DeferredCredentialRequestDtoSchema = {
     properties: {
         transaction_id: {
             type: 'string',
+            minLength: 1,
             description: 'The transaction identifier previously returned by the Credential Endpoint',
             example: '8xLOxBtZp8'
+        },
+        credential_response_encryption: {
+            type: 'object',
+            properties: {
+                jwk: {
+                    type: 'object',
+                    additionalProperties: true
+                },
+                enc: {
+                    type: 'string'
+                },
+                zip: {
+                    type: 'string'
+                }
+            },
+            required: [
+                'jwk',
+                'enc'
+            ]
         }
     },
     required: [
         'transaction_id'
-    ],
-    additionalProperties: false
+    ]
 } as const;
 
 export const NotificationRequestDtoSchema = {

@@ -84,7 +84,7 @@ Wallets call these from phones on mobile networks, so:
 | `/issuers/{tenant}/vci/credential-offers/{offerId}`                                                                                      | GET       | –                                                                  | Wallets                       |
 | `/issuers/{tenant}/vci/nonce`                                                                                                            | POST      | Empty                                                              | Wallets                       |
 | `/issuers/{tenant}/vci/credential`                                                                                                       | POST      | JSON, or `application/jwt` when the wallet encrypts the request    | Wallets                       |
-| `/issuers/{tenant}/vci/deferred_credential`                                                                                              | POST      | JSON                                                               | Wallets                       |
+| `/issuers/{tenant}/vci/deferred_credential`                                                                                              | POST      | JSON, or `application/jwt` when the wallet encrypts the request    | Wallets                       |
 | `/issuers/{tenant}/vci/notification`                                                                                                     | POST      | JSON                                                               | Wallets                       |
 | `/issuers/{tenant}/authorize/par`, `…/token`, `…/challenge`, and `par`, `token` under `chained-as/` and `authorization-servers/{id}/`     | POST      | Form; `challenge` has no body                                      | Wallets                       |
 | `/issuers/{tenant}/authorize/interactive`                                                                                                | POST      | Form or JSON                                                       | Wallets                       |
@@ -123,7 +123,7 @@ without exclusions:
 
 | Request                                                                                                  | Paranoia level 1 (default)          | Added at paranoia level 2                        |
 | -------------------------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------ |
-| Encrypted credential request (`Content-Type: application/jwt`)                                           | 920420, every request               | –                                                |
+| Encrypted credential or deferred credential request (`Content-Type: application/jwt`)                    | 920420, every request               | –                                                |
 | Encrypted presentation response (JWE), from the wallet or your DC API page                               | –                                   | 942440 (`--`) in more than half of the requests; 942430 |
 | JSON in a form field: `vp_token`, `wallet_metadata`, `authorization_details`, `openid4vp_response`        | –                                   | 942200, 942340, 942370, 942430                   |
 | ISO 18013-7 response                                                                                     | 942100, rarely (1 of 400)           | 942430                                           |
@@ -165,8 +165,8 @@ SecRule REQUEST_FILENAME "@beginsWith /api/" \
     ctl:ruleRemoveByTag=attack-rfi,\
     ctl:ruleRemoveById=920272"
 
-# Encrypted credential requests are sent as application/jwt.
-SecRule REQUEST_FILENAME "@rx ^/issuers/[^/]+/vci/credential$" \
+# Encrypted credential and deferred credential requests are sent as application/jwt.
+SecRule REQUEST_FILENAME "@rx ^/issuers/[^/]+/vci/(?:credential|deferred_credential)$" \
     "id:10020,phase:1,pass,nolog,t:none,\
     setvar:'tx.allowed_request_content_type=|application/json| |application/jwt|'"
 
