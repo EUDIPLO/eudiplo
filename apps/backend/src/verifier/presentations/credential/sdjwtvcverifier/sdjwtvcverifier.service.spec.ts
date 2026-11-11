@@ -120,6 +120,9 @@ describe("SdjwtvcverifierService revocation mode", () => {
         expect(verifyMock).toHaveBeenCalledTimes(1);
         expect(instanceConfigs[0].statusListFetcher).toBeUndefined();
         expect(instanceConfigs[0].statusVerifier).toBeUndefined();
+        expect(verifyMock.mock.calls[0][1]).toMatchObject({
+            disableStatusVerification: true,
+        });
     });
 
     describe("status claim without a status list", () => {

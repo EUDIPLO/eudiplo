@@ -177,7 +177,13 @@ export class SdjwtvcverifierService {
                     : {}),
             });
 
-            return sdjwtInstance.verify(cred, options);
+            // Without a statusListFetcher the library would still fetch the
+            // list, with the global fetch outside the outbound URL policy, and
+            // check it with the credential verifier.
+            return sdjwtInstance.verify(cred, {
+                ...options,
+                disableStatusVerification: !enableStatusCheck,
+            });
         };
 
         let result: VerificationResult;

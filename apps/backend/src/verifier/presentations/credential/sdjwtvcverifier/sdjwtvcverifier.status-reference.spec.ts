@@ -1,6 +1,7 @@
 import { deflateSync } from "node:zlib";
 import { ES256 } from "@owf/crypto";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { RevocationListUnavailableError } from "../../../../trust/revocation-policy.util.js";
 import type { VerifierOptions } from "../../../../trust/types.js";
 import {
     SdJwtVerificationError,
@@ -126,8 +127,11 @@ async function setup() {
     );
     const verify = async (
         status: unknown,
-        failClosed = true,
-        expiresIn?: number,
+        {
+            enabled = true,
+            failClosed = true,
+            expiresIn,
+        }: { enabled?: boolean; failClosed?: boolean; expiresIn?: number } = {},
     ) =>
         service.verify(await credential(issuer, status, expiresIn), {
             federationTrustSource: {
@@ -142,7 +146,7 @@ async function setup() {
             },
             policy: {
                 requireX5c: false,
-                revocation: { enabled: true, failClosed },
+                revocation: { enabled, failClosed },
             },
         } as VerifierOptions);
     return { verify, fetchStatusListJwt: chainValidation.fetchStatusListJwt };
@@ -167,13 +171,70 @@ describe("SdjwtvcverifierService status reference", () => {
 
         const error = await verify(
             { status_list: { uri: STATUS_URI, idx: "7" } },
-            true,
-            -3600,
+            { expiresIn: -3600 },
         ).catch((e: unknown) => e);
 
         expect(error).not.toBeInstanceOf(SdJwtVerificationError);
         expect(String(error)).toMatch(/expired/i);
         expect(fetchStatusListJwt).not.toHaveBeenCalled();
+    });
+
+    describe("without a status check", () => {
+        // Without a statusListFetcher the library would fetch the list with
+        // the global fetch, outside the outbound URL policy.
+        let globalFetch: ReturnType<typeof vi.spyOn>;
+        beforeEach(() => {
+            globalFetch = vi
+                .spyOn(globalThis, "fetch")
+                .mockRejectedValue(new Error("global fetch used"));
+        });
+        afterEach(() => {
+            globalFetch.mockRestore();
+        });
+
+        it("neither checks nor fetches the reference when disabled", async () => {
+            const { verify, fetchStatusListJwt } = await setup();
+
+            const result = await verify(
+                { status_list: { uri: STATUS_URI, idx: "7" } },
+                { enabled: false, failClosed: false },
+            );
+
+            expect(result.payload).toMatchObject({ given_name: "Erika" });
+            expect(fetchStatusListJwt).not.toHaveBeenCalled();
+            expect(globalFetch).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ["a status claim that is a string", "valid"],
+            ["a status_list that is null", { status_list: null }],
+        ])("accepts %s when disabled", async (_, status) => {
+            const { verify } = await setup();
+
+            await expect(
+                verify(status, { enabled: false, failClosed: false }),
+            ).resolves.toMatchObject({
+                payload: expect.objectContaining({ given_name: "Erika" }),
+            });
+        });
+
+        it("does not fetch the list again when best-effort mode retries", async () => {
+            const { verify, fetchStatusListJwt } = await setup();
+            fetchStatusListJwt.mockRejectedValue(
+                new RevocationListUnavailableError(
+                    `Failed to fetch status list from ${STATUS_URI}: blocked`,
+                ),
+            );
+
+            const result = await verify(
+                { status_list: { uri: STATUS_URI, idx: 7 } },
+                { failClosed: false },
+            );
+
+            expect(result.payload).toMatchObject({ given_name: "Erika" });
+            expect(fetchStatusListJwt).toHaveBeenCalledOnce();
+            expect(globalFetch).not.toHaveBeenCalled();
+        });
     });
 
     // RP_WS_SM_Revocation_005a_UF of the RP conformance suite.
@@ -197,7 +258,7 @@ describe("SdjwtvcverifierService status reference", () => {
             async (_, status) => {
                 const { verify, fetchStatusListJwt } = await setup();
 
-                const error = await verify(status, failClosed).catch(
+                const error = await verify(status, { failClosed }).catch(
                     (e: unknown) => e,
                 );
 
