@@ -425,7 +425,7 @@ export class StatusListVerifierService {
      * of them too fetches it again on its next check.
      */
     clearTenantCache(tenantId: string): void {
-        for (const [uri, tenants] of [...this.tenantsByUri]) {
+        for (const [uri, tenants] of this.tenantsByUri) {
             if (tenants.has(tenantId)) {
                 this.clearCache(uri);
             }
@@ -482,7 +482,7 @@ export class StatusListVerifierService {
         if (!tenants) {
             if (this.tenantsByUri.size >= TENANT_USES_MAX_ENTRIES) {
                 const cached = this.cachedUris();
-                for (const known of [...this.tenantsByUri.keys()]) {
+                for (const known of this.tenantsByUri.keys()) {
                     if (!cached.has(known)) {
                         this.tenantsByUri.delete(known);
                     }

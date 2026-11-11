@@ -259,7 +259,7 @@ export class TrustStoreService {
             return;
         }
         for (const map of [this.cache, this.outdated]) {
-            for (const key of [...map.keys()]) {
+            for (const key of map.keys()) {
                 if (tenantOfCacheKey(key) === tenantId) {
                     map.delete(key);
                 }

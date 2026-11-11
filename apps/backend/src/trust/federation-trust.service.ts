@@ -108,7 +108,7 @@ export class FederationTrustService {
             this.tenantsByKey.clear();
             return;
         }
-        for (const [key, tenants] of [...this.tenantsByKey]) {
+        for (const [key, tenants] of this.tenantsByKey) {
             if (tenants.delete(tenantId)) {
                 this.cache.delete(key);
                 if (tenants.size === 0) {
@@ -118,7 +118,7 @@ export class FederationTrustService {
                 }
             }
         }
-        for (const warning of [...this.unpinnedWarnings.keys()]) {
+        for (const warning of this.unpinnedWarnings.keys()) {
             if ((JSON.parse(warning) as unknown[])[0] === tenantId) {
                 this.unpinnedWarnings.delete(warning);
             }

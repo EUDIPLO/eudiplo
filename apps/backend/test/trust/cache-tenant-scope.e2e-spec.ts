@@ -219,18 +219,30 @@ describe("Cache management per tenant", () => {
     });
 
     test("refuses callers without a cache management role", async () => {
-        await clear("/cache", offerToken).expect(403);
-        await clear("/cache/status-list", offerToken).expect(403);
-        await request(app.getHttpServer())
-            .get("/cache/stats")
-            .set("Authorization", `Bearer ${offerToken}`)
-            .expect(403);
+        const statuses = [
+            (await clear("/cache", offerToken)).status,
+            (await clear("/cache/status-list", offerToken)).status,
+            (
+                await request(app.getHttpServer())
+                    .get("/cache/stats")
+                    .set("Authorization", `Bearer ${offerToken}`)
+            ).status,
+        ];
+
+        expect(statuses).toEqual([403, 403, 403]);
     });
 
     test("keeps forgetting sequence numbers for tenant roles only", async () => {
-        await clear("/cache/trust-list/sequence-numbers", tokenA).expect(204);
-        await clear("/cache/trust-list/sequence-numbers", operatorToken).expect(
-            403,
+        const tenant = await clear(
+            "/cache/trust-list/sequence-numbers",
+            tokenA,
         );
+        const operator = await clear(
+            "/cache/trust-list/sequence-numbers",
+            operatorToken,
+        );
+
+        expect(tenant.status).toBe(204);
+        expect(operator.status).toBe(403);
     });
 });
