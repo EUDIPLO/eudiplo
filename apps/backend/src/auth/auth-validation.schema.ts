@@ -38,7 +38,7 @@ export const AUTH_VALIDATION_SCHEMA: Joi.ObjectSchema = Joi.object({
 
     OIDC_ROLES_CLAIM: Joi.string()
         .description(
-            "Claim with the EUDIPLO roles in OIDC mode: a claim name, or a dot path into nested claims such as `resource_access.eudiplo.roles`. A claim with exactly this name wins over a path, so namespaced names such as `https://eudiplo.example.com/roles` work. The claim holds an array of role names or an object whose keys are role names (Zitadel, which ignores the organizations in its values, so request tokens for one organization). Without it, the roles come from `roles` or `realm_access.roles`. With Keycloak, the clients EUDIPLO creates carry only these two claims",
+            "Claim with the EUDIPLO roles in OIDC mode: a claim name, or a dot path into nested claims such as `resource_access.eudiplo.roles`. A claim with exactly this name wins over a path, so namespaced names such as `https://eudiplo.example.com/roles` work. The claim holds an array of role names or an object whose keys are role names (Zitadel; the organizations in its values are ignored, so grant the roles only in the organization that maps to the tenant). Without it, the roles come from `roles` or `realm_access.roles`. With Keycloak, the clients EUDIPLO creates carry only these two claims",
         )
         .meta({ group: "auth", order: 17 }),
 

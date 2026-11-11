@@ -39,7 +39,9 @@ no roles.
 
 Choose an audience that only EUDIPLO's access tokens carry, such as an API
 identifier. Some providers also put a client ID into ID tokens; with that as
-audience, an ID token of the same client would be accepted as well.
+audience, an ID token of the same client would be accepted as well. Where the
+provider offers no other audience, as in the [Authentik example](#example-authentik),
+keep its token lifetimes short.
 
 ## 2. Configure EUDIPLO
 
@@ -51,22 +53,23 @@ PUBLIC_URL=https://eudiplo.example.com
 MASTER_SECRET=<random, 32+ characters>   # derives the default encryption key
 # Optional
 # OIDC_INTERNAL_ISSUER_URL=     # where the backend loads the discovery document, if not from OIDC
-# OIDC_JWKS_URI=                # where the backend loads the signing keys, if not from the document's jwks_uri
+# OIDC_JWKS_URI=                # where the backend loads the signing keys, if not from the document's jwks_uri; HTTPS, or HTTP only inside a private network
 # OIDC_SUB=tenant_id            # claim with the tenant
 # OIDC_ROLES_CLAIM=             # claim or dot path with the roles
 # OIDC_ALGORITHM=RS256          # RS256, PS256 or ES256
-# OIDC_UI_CLIENT_ID=eudiplo-ui  # public client of the web client (step 3)
+# OIDC_UI_CLIENT_ID=            # public client of the web client; no default, SSO only when set (step 3)
 ```
 
 At startup, EUDIPLO loads `<OIDC_INTERNAL_ISSUER_URL or OIDC>/.well-known/openid-configuration`,
 retrying for up to 60 seconds while the provider starts. It does not follow
 redirects. Startup fails when the document names another issuer than `OIDC`,
 lacks `issuer`, `jwks_uri` or `token_endpoint`, or names a key set over plain
-HTTP at another host. `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_UI_URL`,
+HTTP at another origin (scheme, host and port) than the discovery document;
+setting `OIDC_JWKS_URI` skips that last check. `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_UI_URL`,
 `AUTH_CLIENT_ID` and `AUTH_CLIENT_SECRET` are not used. All variables are listed
 in the [environment variable reference](../reference/environment-variables.md#authentication).
 
-**Checkpoint:** the backend log shows `Mode: External OIDC (generic)`, and
+**Checkpoint:** the backend log shows `External OIDC (generic)` as the mode, and
 `GET /.well-known/oauth-authorization-server` names the provider's
 `token_endpoint`.
 
@@ -84,9 +87,8 @@ provider must put the audience and the claims of step 1 into that access token
 (see the provider notes below). Logging out also ends the session at the
 provider when the provider has an `end_session_endpoint`.
 
-The web client hides **API Clients** and **Users**: `/api/client`, `/api/user`
-and creating a tenant with `roles` answer `501` in this mode. What else changes
-is summarized in
+What changes in this mode, such as the hidden **API Clients** and **Users**
+pages, is summarized in
 [Tenants and access](tenants-and-access.md#external-oidc-provider-and-human-users).
 
 **Checkpoint:** sign in with SSO as a person of a tenant. The menu shows the
@@ -98,11 +100,14 @@ Backends and scripts get tokens with the client credentials grant at the
 provider's token endpoint (advertised as `token_endpoint` in
 `/.well-known/oauth-authorization-server`). Those tokens need the same audience,
 tenant and roles claims as people's tokens; map them on the provider's machine
-client or service account. The CLI and `EudiploClient` of `@eudiplo/sdk-core`
-fetch tokens only from the built-in server, so pass the provider's token
-yourself ([API reference](../reference/api.md#authentication)). These tokens get
-no [client limits](tenants-and-access.md#api-clients-with-least-privilege),
-unless a client record is left from an earlier mode.
+client or service account. The CLI's `config export`, `plan`, `import`,
+`operations` and `recover` commands take the provider's token through `--token`
+or `EUDIPLO_TOKEN` ([CLI](cli.md#environment-variables)). `EudiploClient` of
+`@eudiplo/sdk-core` and the CLI's other commands fetch tokens only from the
+built-in server, so pass the provider's token yourself
+([API reference](../reference/api.md#authentication)). Which client
+limits these tokens get is described in
+[Tenants and access](tenants-and-access.md#external-oidc-provider-and-human-users).
 
 ## Example: Authentik
 
@@ -127,7 +132,13 @@ unless a client record is left from an earlier mode.
    userinfo endpoint, not the access token.
 5. Set the provider's **Redirect URIs** as in step 3, and set
    `OIDC_UI_CLIENT_ID` to its client ID.
-6. Decode an access token and set `OIDC_AUDIENCE` to its `aud` value.
+6. Decode an access token and set `OIDC_AUDIENCE` to its `aud` value. Authentik
+   puts the provider's client ID there, which its ID tokens carry as well, so
+   this audience does not tell them apart: EUDIPLO also accepts the provider's
+   ID tokens as access tokens. When someone logs out, the web client passes the
+   ID token to Authentik in the logout address (`id_token_hint`), where it can
+   end up in browser history and proxy or access logs. Keep the provider's
+   **Access token validity** short, to limit how long such a token can be used.
 
 For machine clients, create a service account with the `tenant_id` and
 `eudiplo_roles` attributes and an app password. It gets tokens with
@@ -141,8 +152,10 @@ the mapping (`scope=eudiplo`). The details are in Authentik's
 - **Zitadel** issues opaque access tokens by default: set the application's token
   type to JWT. Project roles arrive in `urn:zitadel:iam:org:project:roles` when
   the project asserts roles on authentication; set `OIDC_ROLES_CLAIM` to that
-  name. EUDIPLO ignores the organizations in that claim, so request tokens for
-  one organization. Add the tenant claim with an action.
+  name. EUDIPLO reads only the role names in that claim and ignores the
+  organizations that granted them, so a role granted in any organization counts
+  for the token's tenant. Grant the project's roles only in the organization
+  that maps to that tenant, and add the tenant claim with an action.
 - **Auth0** issues a JWT access token only for an API audience. Create an API,
   set its identifier as `OIDC_AUDIENCE` and as the tenant's default audience,
   because the web client sends no `audience` parameter. Custom claims must have
@@ -156,13 +169,20 @@ the mapping (`scope=eudiplo`). The details are in Authentik's
 
 ## Troubleshooting
 
+When startup fails at the discovery document, the error starts with "Could not
+load the OIDC discovery document from `<URL>`:", followed by one of the reasons
+in the first four rows.
+
 | Symptom | Cause | Fix |
 | ------- | ----- | --- |
 | Startup fails: "the document names the issuer '…', but OIDC is '…'" | `OIDC` differs from the provider's issuer, often by the trailing slash | Copy `issuer` from the discovery document into `OIDC` |
-| Startup fails: "…neither HTTPS nor at the origin of the discovery document" | The provider names its keys over plain HTTP at another host | Set `OIDC_JWKS_URI` to a URL the backend reaches |
-| Startup fails: "Could not load the OIDC discovery document…" | The backend cannot reach the provider within 60 seconds | Set `OIDC_INTERNAL_ISSUER_URL` to the address the backend reaches |
+| Startup fails: "…neither HTTPS nor at the origin of the discovery document" | The provider names its keys over plain HTTP at another origin (scheme, host and port) than the discovery document | Set `OIDC_JWKS_URI` to an HTTPS URL of the key set, or a plain HTTP URL only inside the deployment's private network (such as a Compose service name). Setting it skips the check, and whoever can change the keys on the way can sign tokens for any tenant |
+| Startup fails: "the document has no valid issuer, jwks_uri, token_endpoint" (the missing values) | The URL in the error does not serve the provider's discovery document, or the document lacks these values | Check `OIDC`, or `OIDC_INTERNAL_ISSUER_URL` when set; the backend appends `/.well-known/openid-configuration` itself |
+| Startup fails after about 60 seconds with a network error, "status code …" or a JSON error | The backend cannot reach the provider at the URL in the error, or something else answers there | Set `OIDC_INTERNAL_ISSUER_URL` to the address the backend reaches, or start the provider first |
+| Startup warns: "The discovery document names the token endpoint … at the internal address" | The provider builds its URLs from the address the backend used (`OIDC_INTERNAL_ISSUER_URL`). EUDIPLO advertises this token endpoint to machine clients, which cannot reach it | Configure the provider's public host name, so its discovery document names public URLs |
 | `401` "Access token is not a JWT…" | The provider issues opaque access tokens | Switch it to JWT access tokens (see the provider notes) |
-| `401` without a reason | Wrong `aud`, `iss`, key or algorithm, or no `exp` | Decode a token and compare it with step 1 |
+| `401` "Access token has no expiry" | The provider issues access tokens without `exp` | Give the provider's access tokens a lifetime |
+| `401` without a reason | Wrong `aud`, `iss`, key or algorithm | Decode a token and compare it with step 1 |
 | "This endpoint requires a tenant context" | The token has no tenant claim, or the tenant does not exist | Map the claim named by `OIDC_SUB`, and create the tenant |
 | `403` on an endpoint | The roles claim lacks the role, or is not where `OIDC_ROLES_CLAIM` points | Check `GET /api/auth/me`, then the claim mapping |
 | **Login with SSO** ends at the provider with an unknown client or redirect URI | `OIDC_UI_CLIENT_ID` is not the provider's public client, or its redirect URIs lack the web client's pages | Compare `ui_client_id` in `/.well-known/oauth-authorization-server` with the provider's client, and register the redirect URIs of step 3 |

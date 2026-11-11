@@ -235,7 +235,8 @@ The web client does not read roles or the tenant from the token itself. It asks
 the backend (`GET /api/auth/me`), so its menus follow `OIDC_ROLES_CLAIM` and
 `OIDC_SUB` and show what the API allows.
 
-The variables and the Keycloak setup are described in [Keycloak SSO](keycloak.md).
+The variables and the setup are described in [Keycloak SSO](keycloak.md) or, for
+another provider, in [Other OIDC providers](oidc-provider.md).
 `MASTER_SECRET` is optional in OIDC mode, but the default encryption key is
 derived from it; set it, or use another
 [encryption key source](encryption-keys.md).
