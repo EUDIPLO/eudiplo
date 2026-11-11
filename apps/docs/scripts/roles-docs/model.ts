@@ -97,19 +97,29 @@ function stringArgument(args: readonly ts.Expression[]): string {
     throw new Error(`Unsupported route argument: ${first.getText()}`);
 }
 
-/** `match` of `@Secured([...], { match: "all" })`, `any` when the options are absent. */
+/**
+ * `match` of `@Secured([...], { match: "all" })`, `any` when absent. The
+ * `tenant` option does not change the role check and is only validated.
+ */
 function securedMatch(decorator: ts.Decorator, options: ts.Expression | undefined): RoleMatch {
     if (!options) return "any";
-    if (ts.isObjectLiteralExpression(options) && options.properties.length === 1) {
-        const [property] = options.properties;
-        if (
-            ts.isPropertyAssignment(property) &&
-            property.name.getText() === "match" &&
-            ts.isStringLiteral(property.initializer) &&
-            (property.initializer.text === "any" || property.initializer.text === "all")
-        ) {
-            return property.initializer.text;
+    const allowed: Record<string, string[]> = { match: ["any", "all"], tenant: ["required", "optional"] };
+    const values: Record<string, string> = {};
+    if (ts.isObjectLiteralExpression(options)) {
+        for (const property of options.properties) {
+            const name = ts.isPropertyAssignment(property) ? property.name.getText() : undefined;
+            if (
+                !name ||
+                !Object.hasOwn(allowed, name) ||
+                name in values ||
+                !ts.isStringLiteral(property.initializer) ||
+                !allowed[name].includes(property.initializer.text)
+            ) {
+                throw new Error(`Unsupported @Secured options: ${decorator.getText()}`);
+            }
+            values[name] = property.initializer.text;
         }
+        return (values.match ?? "any") as RoleMatch;
     }
     throw new Error(`Unsupported @Secured options: ${decorator.getText()}`);
 }
