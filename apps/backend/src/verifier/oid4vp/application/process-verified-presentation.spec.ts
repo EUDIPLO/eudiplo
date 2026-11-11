@@ -106,13 +106,29 @@ describe("presentation completion and publication", () => {
         await expect(f.useCase.execute(input)).rejects.toThrow("storage");
         expect(f.publish).not.toHaveBeenCalled();
     });
-    it("supports absent state and no webhook", async () => {
+    it("rejects an absent state when the request carried one", async () => {
         const f = fixture();
         await expect(
             f.useCase.execute({
                 ...input,
+                response: { vp_token: { pid: ["raw"] } },
+            }),
+        ).rejects.toMatchObject({
+            name: "PresentationResponseValidationError",
+            message:
+                "State missing: the response does not return the state of the request",
+        });
+        expect(f.update).not.toHaveBeenCalled();
+        expect(f.publish).not.toHaveBeenCalled();
+    });
+    it("supports absent state over the DC API and no webhook", async () => {
+        const f = fixture();
+        await expect(
+            f.useCase.execute({
+                ...input,
+                session: { ...session, useDcApi: true } as SessionData,
                 webhook: undefined,
-                response: { vp_token: {} },
+                response: { vp_token: { pid: ["raw"] } },
             }),
         ).resolves.toEqual({
             redirectUri: session.redirectUri,

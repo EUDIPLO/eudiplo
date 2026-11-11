@@ -6,6 +6,10 @@ import {
     Injectable,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
+import {
+    type Openid4vpAuthorizationErrorResponse,
+    zOpenid4vpAuthorizationErrorResponse,
+} from "@openid4vc/openid4vp";
 import { base64url, type JWK } from "jose";
 import { Span, TraceService } from "nestjs-otel";
 import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
@@ -43,10 +47,10 @@ import { allowedExpectedOrigin } from "../presentations/configuration/allowed-ex
 import { PresentationConfigService } from "../presentations/configuration/presentation-config.service.js";
 import { PresentationRegistrationCertificateService } from "../presentations/configuration/presentation-registration-certificate.service.js";
 import { verificationFailureDetails } from "../presentations/credential/verification-failure.js";
+import type { AuthResponseData } from "../presentations/domain/auth-response.js";
 import { UnsupportedCredentialVerifierFormat } from "../presentations/domain/credential-verifier-format.js";
 import { UnknownClaimSetReferenceError } from "../presentations/domain/dcql-claim-policy.js";
 import { resolveDcqlTenantUrl } from "../presentations/domain/dcql-tenant-url.js";
-import { AuthResponse } from "../presentations/dto/auth-response.dto.js";
 import { IncompletePresentationException } from "../presentations/exceptions/incomplete-presentation.exception.js";
 import { InvalidTrustedAuthoritiesError } from "../presentations/ports/trust-list-ref-resolver.js";
 import { TrustedAuthoritiesService } from "../presentations/trusted-authorities.service.js";
@@ -64,6 +68,7 @@ import {
     isFederationClientId,
 } from "./client-id.util.js";
 import { applyTrustedAuthoritiesPolicy } from "./dcql-trusted-authorities.util.js";
+import { presentationRequestState } from "./domain/presentation-request-state.js";
 import { AuthorizationResponse } from "./dto/authorization-response.dto.js";
 import {
     ClientIdScheme,
@@ -381,7 +386,7 @@ export class Oid4vpService {
                         encrypted_response_enc_values_supported:
                             ENCRYPTED_RESPONSE_ENC_VALUES_SUPPORTED,
                     },
-                    state: session.useDcApi ? undefined : walletFacingId,
+                    state: presentationRequestState(session),
                     transaction_data,
                     //TODO: check if this value is correct accroding to https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-aud-of-a-request-object
                     aud: clientId.startsWith(`${ClientIdScheme.X509_SAN_DNS}:`)
@@ -785,10 +790,10 @@ export class Oid4vpService {
             );
         }
 
-        let decrypted: AuthResponse;
+        let decrypted: unknown;
         try {
             decrypted =
-                await this.encryptionService.decryptJweWithPrivateJwk<AuthResponse>(
+                await this.encryptionService.decryptJweWithPrivateJwk<unknown>(
                     body.response,
                     session.tenantId,
                     session.responseEncryptionPrivateJwk as
@@ -822,7 +827,7 @@ export class Oid4vpService {
             return this.handleWalletError(session, decrypted);
         }
 
-        let res: AuthResponse;
+        let res: AuthResponseData;
         try {
             res = this.parseAuthorizationResponse.execute(decrypted);
         } catch (error) {
@@ -837,8 +842,6 @@ export class Oid4vpService {
                 "[TRACE] Decrypted OID4VP authorization response",
             );
         }
-
-        //for dc api the state is no longer included in the res, see: https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-request
 
         // Create audit logging context
         const logContext: AuditLogContext = {
@@ -1033,7 +1036,7 @@ export class Oid4vpService {
      */
     @Span("presentations.parseResponse")
     private async verifyPresentation(
-        res: AuthResponse,
+        res: AuthResponseData,
         presentationConfig: PresentationQuery,
         session: SessionData,
     ): Promise<VerifiedPresentation> {
@@ -1134,18 +1137,12 @@ function classifyVerificationFailure(error: unknown) {
 }
 
 /** OAuth 2.0 Authorization Error Response sent by the wallet (OID4VP 1.0 §8.5). */
-interface WalletErrorResponse {
-    error: string;
-    error_description?: string;
-}
+type WalletErrorResponse = Openid4vpAuthorizationErrorResponse;
 
-/** True when a decrypted authorization response is an error response instead of a vp_token. */
+/**
+ * True when the body or the decrypted response is an error response instead
+ * of a `vp_token`, as `@openid4vc/openid4vp` defines it.
+ */
 function isWalletErrorResponse(value: unknown): value is WalletErrorResponse {
-    if (!value || typeof value !== "object") return false;
-    const { error, error_description } = value as Record<string, unknown>;
-    return (
-        typeof error === "string" &&
-        (error_description === undefined ||
-            typeof error_description === "string")
-    );
+    return zOpenid4vpAuthorizationErrorResponse.safeParse(value).success;
 }
