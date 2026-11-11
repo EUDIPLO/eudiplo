@@ -3,6 +3,7 @@ import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
     compactDecrypt,
+    decodeProtectedHeader,
     errors,
     exportJWK,
     generateKeyPair,
@@ -191,7 +192,9 @@ export class EncryptionService {
      * @returns The decrypted payload parsed as a JSON object.
      * @throws errors.JOSEAlgNotAllowed for another `alg` or `enc`, before
      *   anything is decrypted; other jose errors when the JWE does not
-     *   decrypt; SyntaxError when the plaintext is not JSON.
+     *   decrypt, also JWEInvalid for an `epk` that cannot be imported;
+     *   SyntaxError when the plaintext is not JSON. Failures of the tenant
+     *   key (lookup, import, no private part) are thrown unchanged.
      */
     async decryptJweToJson<T = Record<string, unknown>>(
         jwe: string,
@@ -211,12 +214,41 @@ export class EncryptionService {
             ENCRYPTION_KEY_MANAGEMENT_ALG,
         )) as CryptoKey;
 
-        const { plaintext } = await compactDecrypt(jwe, privateEncryptionKey, {
-            keyManagementAlgorithms: [ENCRYPTION_KEY_MANAGEMENT_ALG],
-            contentEncryptionAlgorithms: [
-                ...options.contentEncryptionAlgorithms,
-            ],
-        });
+        let plaintext: Uint8Array;
+        try {
+            ({ plaintext } = await compactDecrypt(jwe, privateEncryptionKey, {
+                keyManagementAlgorithms: [ENCRYPTION_KEY_MANAGEMENT_ALG],
+                contentEncryptionAlgorithms: [
+                    ...options.contentEncryptionAlgorithms,
+                ],
+            }));
+        } catch (error) {
+            // jose passes some failures on as a plain TypeError: from
+            // importing the wallet's `epk` (for example one without `crv`),
+            // which is the JWE's fault, or from the tenant key (for example
+            // one without its private part), which is the issuer's.
+            if (
+                error instanceof errors.JOSEError ||
+                (await importsEphemeralKey(jwe))
+            ) {
+                throw error;
+            }
+            throw new errors.JWEInvalid(
+                'The JWE "epk" (Ephemeral Public Key) cannot be imported',
+                { cause: error },
+            );
+        }
         return JSON.parse(new TextDecoder().decode(plaintext)) as T;
+    }
+}
+
+/** True when the `epk` in the JWE's protected header imports as an ECDH key. */
+async function importsEphemeralKey(jwe: string): Promise<boolean> {
+    try {
+        const { epk } = decodeProtectedHeader(jwe);
+        await importJWK(epk as JWK, ENCRYPTION_KEY_MANAGEMENT_ALG);
+        return true;
+    } catch {
+        return false;
     }
 }
