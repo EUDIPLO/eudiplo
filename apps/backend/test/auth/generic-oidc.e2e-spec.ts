@@ -216,6 +216,62 @@ describe("Generic OIDC provider (e2e)", () => {
         });
     });
 
+    test.each([
+        ["without a tenant claim", undefined],
+        ["whose tenant does not exist", "no-such-tenant"],
+    ])(
+        "refuses tenant endpoints with 403 for a token %s",
+        async (_, tenant) => {
+            const token = await sign({
+                sub: "person-1",
+                ...(tenant && { tenant_id: tenant }),
+                eudiplo: {
+                    roles: [Role.Issuances, Role.SessionsRead, Role.Keys],
+                },
+            });
+
+            for (const path of [
+                "/issuer/credentials",
+                "/session/stats",
+                "/key-chain",
+            ]) {
+                const response = await as(token).get(path);
+
+                expect({
+                    path,
+                    status: response.status,
+                    message: response.body.message,
+                }).toEqual({
+                    path,
+                    status: 403,
+                    message:
+                        "This endpoint requires a tenant context. Use a tenant-bound account.",
+                });
+            }
+        },
+    );
+
+    test("serves the instance's routes to a token without a tenant", async () => {
+        const token = await sign({
+            sub: "person-1",
+            eudiplo: { roles: [Role.Issuances] },
+        });
+
+        await as(token).get("/cache/stats").expect(200);
+        await request(app.getHttpServer())
+            .delete("/cache/trust-list")
+            .set("Authorization", `Bearer ${token}`)
+            .expect(204);
+        // Forgetting sequence numbers acts on the caller's tenant.
+        const response = await request(app.getHttpServer())
+            .delete("/cache/trust-list/sequence-numbers")
+            .set("Authorization", `Bearer ${token}`)
+            .expect(403);
+        expect(response.body.message).toBe(
+            "This endpoint requires a tenant context. Use a tenant-bound account.",
+        );
+    });
+
     test("tells the Web Client no subject for a token without sub", async () => {
         const token = await sign({
             tenant_id: TENANT,

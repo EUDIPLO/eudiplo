@@ -92,7 +92,8 @@ export class ClientController {
      * @param user
      * @returns The new client secret (displayed only once)
      */
-    @Secured([Role.Clients, Role.Tenants])
+    // The operator, who has no tenant, rotates the secrets of any tenant.
+    @Secured([Role.Clients, Role.Tenants], { tenant: "optional" })
     @ApiResponse({ status: 403, description: MANAGE_DENIED })
     @ApiResponse({ status: 404, description: "Client not found" })
     @Post(":id/rotate-secret")

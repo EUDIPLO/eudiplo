@@ -15,8 +15,13 @@ built-in OAuth2 server these are the client's current roles
 ([revoke access](../operate/tenants-and-access.md#revoke-access)), with Keycloak
 the roles in the token.
 Most endpoints also act on the tenant in the token and refuse a token without
-one, such as the root client's. Without a tenant, `tenants:manage` works for the
-`/api/tenant` endpoints and for rotating client secrets.
+one, such as the root client's, with `403` "This endpoint requires a tenant
+context". A token whose tenant does not exist counts as one without. Without a
+tenant, `tenants:manage` works for the `/api/tenant` endpoints and for rotating
+client secrets, `tenants:manage` or `tenant:admin` for
+`POST /api/config-bundles/documents/upgrade`, and
+`issuance:manage` or `presentation:manage` for the instance-wide cache
+endpoints under `/api/cache` (not `DELETE /api/cache/trust-list/sequence-numbers`).
 `GET /api/config-bundles/resources/:kind` and
 `GET /api/config-bundles/resources/:kind/:id/document` also check the kind
 ([which roles](config-bundle-format.md#management-api)).
