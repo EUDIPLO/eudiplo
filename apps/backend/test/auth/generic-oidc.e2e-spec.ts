@@ -261,7 +261,13 @@ describe("Generic OIDC provider (e2e)", () => {
             { typ: "at+jwt" },
         );
 
-        await as(token).get("/session/stats").expect(200);
+        const response = await as(token).get("/auth/me").expect(200);
+
+        expect(response.body).toEqual({
+            subject: "person-1",
+            tenantId: TENANT,
+            roles: [Role.SessionsRead],
+        });
     });
 
     test("refuses an ID token that carries the audience too", async () => {
