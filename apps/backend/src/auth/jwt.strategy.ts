@@ -49,9 +49,7 @@ export interface ExternalTokenChecks {
  * than an access token are refused: with other providers than Keycloak, whose
  * ID tokens can carry `OIDC_AUDIENCE` too.
  */
-function acceptsAccessTokensOnly(
-    settings: ExternalAuthSettings,
-): boolean {
+function acceptsAccessTokensOnly(settings: ExternalAuthSettings): boolean {
     return settings.mode === "generic";
 }
 
