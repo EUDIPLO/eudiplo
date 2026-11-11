@@ -300,6 +300,8 @@ export class ConfigPortabilityController {
     }
 
     @Post("documents/upgrade")
+    // Upgrading a document reads no tenant.
+    @Secured([Role.Tenants, Role.TenantAdmin], { tenant: "optional" })
     @ApiOperation({ summary: "Upgrade one configuration document" })
     upgrade(@Body() input: ConfigFile) {
         const result = this.migrationService.upgrade(input);

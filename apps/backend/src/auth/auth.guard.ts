@@ -48,6 +48,10 @@ export class JwtAuthGuard extends AuthGuard("jwt") {
             if (token && token.split(".").length !== 3) {
                 throw new UnauthorizedException(NOT_A_JWT_MESSAGE);
             }
+            // A reason of the strategy, such as a token of another type.
+            if (!err && info instanceof UnauthorizedException) {
+                throw info;
+            }
         }
         return super.handleRequest(err, user, info, context, status);
     }

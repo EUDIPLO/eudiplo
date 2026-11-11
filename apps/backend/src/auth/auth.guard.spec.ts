@@ -51,6 +51,41 @@ describe("JwtAuthGuard", () => {
         );
     });
 
+    it("passes on the strategy's reason for refusing a token", () => {
+        const reason = new UnauthorizedException("Not an access token");
+        expect(() =>
+            guard.handleRequest(
+                undefined,
+                false,
+                reason,
+                contextWith("Bearer header.payload.signature"),
+            ),
+        ).toThrow(reason);
+    });
+
+    it("prefers an error of the strategy over its reason", () => {
+        const error = new UnauthorizedException("Access token has no expiry");
+        expect(() =>
+            guard.handleRequest(
+                error,
+                false,
+                new UnauthorizedException("Not an access token"),
+                contextWith("Bearer header.payload.signature"),
+            ),
+        ).toThrow(error);
+    });
+
+    it("keeps the generic refusal for errors of the token library", () => {
+        expect(() =>
+            guard.handleRequest(
+                undefined,
+                false,
+                new Error("jwt audience invalid. expected: eudiplo-api"),
+                contextWith("Bearer header.payload.signature"),
+            ),
+        ).toThrow(new UnauthorizedException());
+    });
+
     it("lets a verified token through", () => {
         const user = { roles: [] };
         expect(

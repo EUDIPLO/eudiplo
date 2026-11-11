@@ -270,6 +270,17 @@ describe("JwtStrategy", () => {
             expect(user.entity?.id).toBe("acme");
         });
 
+        test("accepts a token with at_hash, as before", async () => {
+            const user = await strategy.validate({
+                tenant_id: "acme",
+                sub: "user-uuid",
+                at_hash: "h",
+                realm_access: { roles: [Role.Issuances] },
+            } as never);
+
+            expect(user.roles).toEqual([Role.Issuances]);
+        });
+
         test("keeps the roles of the claims and adds the stored client", async () => {
             clients.set("shop", {
                 clientId: "shop",
@@ -362,6 +373,7 @@ describe("JwtStrategy", () => {
                     "https://keycloak.example.com",
                     "http://keycloak:8080",
                 ],
+                accessTokensOnly: false,
             });
             expect(
                 externalTokenChecks(
@@ -454,6 +466,22 @@ describe("JwtStrategy", () => {
             expect(user.client).toBeUndefined();
         });
 
+        test("refuses an ID token that carries the audience too", async () => {
+            const strategy = strategyFor(settings, metadata);
+
+            await expect(
+                strategy.validate({
+                    tenant_id: "acme",
+                    sub: "person",
+                    exp: NOW + 300,
+                    nonce: "n",
+                    at_hash: "h",
+                } as never),
+            ).rejects.toThrow(
+                "Not an access token: the token carries at_hash, which only ID tokens carry; send the access token",
+            );
+        });
+
         describe("client records left from an earlier mode", () => {
             /** A record the built-in server or Keycloak mode created. */
             const leftover = (tenantId: string | null) =>
@@ -536,6 +564,8 @@ describe("JwtStrategy", () => {
                     "https://auth.example.com",
                     "http://authentik:9000",
                 ],
+                // Refuses ID tokens that carry OIDC_AUDIENCE too.
+                accessTokensOnly: true,
             });
         });
 
