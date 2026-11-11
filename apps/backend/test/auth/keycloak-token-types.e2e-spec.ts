@@ -117,7 +117,9 @@ describe("Keycloak token types (e2e)", () => {
             { typ: "at+jwt" },
         );
 
-        await me(token).expect(200);
+        const response = await me(token).expect(200);
+
+        expect(response.body.roles).toEqual([Role.SessionsRead]);
     });
 
     test("refuses the ID token of another client of the realm", async () => {
