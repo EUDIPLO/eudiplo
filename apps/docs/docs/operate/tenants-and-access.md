@@ -231,27 +231,16 @@ provider's discovery document at startup, checks the issuer, the signing keys
 and the required `OIDC_AUDIENCE`, and accepts only JWT access tokens; ID
 tokens with that audience are refused when they carry `at_hash`, `c_hash` or
 `s_hash`, and tokens of another `typ` are refused too
-([details](../reference/environment-variables.md#authentication)).
-Authentik's access token is its ID token plus `azp`, `uid` and `scope`, with
-the same audience and no hash, so there an ID token works as an access token:
-keep its lifetime short. The
+([details](oidc-provider.md#1-plan-the-token-claims)). With Authentik, an ID
+token still works as an access token
+([details](oidc-provider.md#example-authentik)). The
 provider manages clients and people: `/api/client`, `/api/user` and creating a
 tenant with `roles` answer `501` (the web client creates tenants without an
 admin client), and the web client hides **API Clients** and **Users**. Config
 folders and bundles carry no clients either
 ([details](../reference/config-bundle-format.md#clients-with-another-identity-provider)).
-The settings are listed in the
-[environment variable reference](../reference/environment-variables.md#authentication).
-
-For single sign-on (an **SSO** tab on the login page), create a public client
-with Authorization Code and PKCE, set `OIDC_UI_CLIENT_ID` to its client ID, and
-register `<web client URL>/login` and `<web client URL>/silent-check-sso.html`
-as redirect URIs, the web client's URL as post-logout redirect URI, and its
-origin for CORS. The browser reads the provider's discovery document; logging
-out ends the provider's session only when it has an `end_session_endpoint`.
-The web client opens it with a GET, which every provider accepts, so the
-`id_token_hint` is part of the address and can reach the browser history and
-access logs.
+The setup, including single sign-on in the web client and machine clients, is
+described in [Other OIDC providers](oidc-provider.md).
 
 Tokens get no client limits (`allowedIssuanceConfigs`,
 `allowedPresentationConfigs`), except where a client record is left from an
@@ -264,7 +253,8 @@ The web client does not read roles or the tenant from the token itself. It asks
 the backend (`GET /api/auth/me`), so its menus follow `OIDC_ROLES_CLAIM` and
 `OIDC_SUB` and show what the API allows.
 
-The variables and the Keycloak setup are described in [Keycloak SSO](keycloak.md).
+The variables and the setup are described in [Keycloak SSO](keycloak.md) or, for
+another provider, in [Other OIDC providers](oidc-provider.md).
 `MASTER_SECRET` is optional in OIDC mode, but the default encryption key is
 derived from it; set it, or use another
 [encryption key source](encryption-keys.md).

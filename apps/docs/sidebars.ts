@@ -91,6 +91,7 @@ const sidebars: SidebarsConfig = {
         'operate/configuration-as-code',
         'operate/tenants-and-access',
         'operate/keycloak',
+        'operate/oidc-provider',
         'operate/database',
         'operate/encryption-keys',
         'operate/object-storage',
