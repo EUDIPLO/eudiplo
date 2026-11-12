@@ -24,7 +24,11 @@ import {
 } from "../../../../trust/status-list-verifier.service.js";
 import { VerifierOptions } from "../../../../trust/types.js";
 import { pidWithoutStatusProblem } from "../../domain/pid-status-requirement.js";
-import { mdocContext, withFetch } from "../../mdoc-context.js";
+import {
+    CERTIFICATE_VALIDITY_FAILURE,
+    mdocContext,
+    withFetch,
+} from "../../mdoc-context.js";
 import {
     ChainValidationResult,
     CredentialChainValidationService,
@@ -222,7 +226,10 @@ export class MdocverifierService {
                 }));
 
             // 5) Verify the device response (signature, device binding, etc.)
-            // Certificate chain validation is disabled here - we do it separately via CredentialChainValidationService
+            // @owf/mdoc validates the issuer chain and the status list or
+            // identifier list signer chain with mdocContext: signatures and
+            // validity periods. Step 6 checks the issuer chain against the
+            // trust list entries again via CredentialChainValidationService.
             // @owf/mdoc requires trusted status certificates when status validation data
             // is present in the credential. We attach status anchors unconditionally and
             // use revocation policy only to control fail-open/fail-closed behavior.
@@ -621,6 +628,13 @@ export class MdocverifierService {
 
     private classifyVerificationError(error: any): VerificationFailureType {
         const message = String(error?.message ?? error).toLowerCase();
+
+        // A certificate of the issuer or status list path outside its
+        // validity period. Checked first: the message also carries the
+        // certificate subjects, whose words would decide otherwise.
+        if (CERTIFICATE_VALIDITY_FAILURE.test(message)) {
+            return "certificate_expired";
+        }
 
         if (message.includes("signature")) {
             return "signature_invalid";

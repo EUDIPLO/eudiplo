@@ -559,6 +559,31 @@ describe("classifyVerificationError", () => {
         );
     });
 
+    it.each([
+        ["expired", "Certificate has expired"],
+        ["not yet valid", "Certificate is not yet valid"],
+    ])(
+        "classifies a %s certificate as certificate_expired, whatever its subject says",
+        (_validity, cause) => {
+            expect(
+                classify(
+                    `X.509 chain verification failed at index=1. current={"subject":"C=DE, CN=Trusted status list signature service"} cause=${cause}: notBefore=2025-11-11T00:00:00.000Z notAfter=2026-11-10T00:00:00.000Z checkedAt=2026-11-11T00:00:00.000Z`,
+                ),
+            ).toBe("certificate_expired");
+        },
+    );
+
+    it.each(["certificate has expired", "certificate is not yet valid"])(
+        "keeps a status list fetch that fails with TLS error %s unavailable",
+        (tlsError) => {
+            expect(
+                classify(
+                    `Could not fetch either a JWT or CWT as status list. Failed to fetch status list from https://status.example/1: ${tlsError}`,
+                ),
+            ).toBe("trust_list_unavailable");
+        },
+    );
+
     it("leaves a genuinely unrecognised failure generic", () => {
         expect(
             classify("The MSO must be valid at the time of verification"),
