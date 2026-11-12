@@ -19,7 +19,9 @@ const positionNames: Record<AttestationCertificatePosition, string> = {
 /**
  * A certificate of a wallet or key attestation's path, from the certificate
  * that signs the attestation to the one listed in the wallet-provider trust
- * list, is outside its validity period at the time of the check.
+ * list, is outside its validity period at the time of the check. The same
+ * for the path of the attestation's status list, from the certificate that
+ * signs the list to the provider's status list signer.
  *
  * The message names the certificate by its place in the path and gives its
  * period, not its subject: it reaches the wallet as an OAuth
