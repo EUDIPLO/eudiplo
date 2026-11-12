@@ -86,10 +86,20 @@ in the [environment variable reference](../reference/environment-variables.md#au
 The web client then offers an **SSO** tab and reads the provider's endpoints
 from its discovery document. It requests the scope `openid` only, so the
 provider must put the audience and the claims of step 1 into that access token
-(see the provider notes below). Logging out also ends the session at the
-provider when the provider has an `end_session_endpoint`. The web client opens
-it with a GET, which every provider accepts, so the `id_token_hint` is part of
-the address and can reach the browser history and access logs.
+(see the provider notes below). Most providers issue a refresh token only for
+the scope `offline_access`, which the web client does not request, so it cannot
+renew that token: when it expires, the web client says that the session has
+expired, and **Log in** signs the person in again and returns to the page,
+without asking while their session at the provider lasts. The access token
+lifetime is therefore also the longest the web client stays signed in.
+
+When the provider has an `end_session_endpoint`, logging out also goes there,
+and the provider sends the browser back to the web client if its URL is
+registered as a post-logout redirect URI. Whether the provider's own session
+ends depends on its settings (for Authentik, see step 6 of the example). The
+web client opens it with a GET, which every provider accepts, so the
+`id_token_hint` is part of the address and can reach the browser history and
+access logs.
 
 What changes in this mode, such as the hidden **API Clients** and **Users**
 pages, is summarized in
@@ -118,11 +128,17 @@ limits these tokens get is described in
 1. Create an **OAuth2/OpenID Provider** with an application, for example with the
    slug `eudiplo`. The issuer is
    `https://auth.example.com/application/o/eudiplo/`, with the trailing slash.
+   Set **Client type** to **Public**, and under **Allowed grant types** select
+   **Authorization code**, plus **Client credentials** for machine clients.
+   Authentik refuses every grant type that is not selected; the browser then
+   returns to the web client with `invalid_request`.
 2. Select a **Signing Key**. Without one, Authentik signs with HS256 and the
    client secret, and publishes no keys.
-3. Create a property mapping of type **OAuth2/OIDC scope mapping**, for example
-   with the scope name `eudiplo`, that returns the tenant and the roles of the
-   user, for example from user attributes:
+3. Create a property mapping of type **OAuth2/OIDC scope mapping** with the scope
+   name `openid` that returns the tenant and the roles of the user, for example
+   from user attributes. Of the scopes that carry claims, the web client
+   requests only `openid`, so a mapping under another scope name never reaches
+   its tokens. Authentik merges it with its built-in `openid` mapping.
 
    ```python
    return {
@@ -134,9 +150,16 @@ limits these tokens get is described in
 4. Add the mapping to the provider's scopes and enable
    **Include claims in id_token**; without it, the claims reach only the
    userinfo endpoint, not the access token.
-5. Set the provider's **Redirect URIs** as in step 3, and set
-   `OIDC_UI_CLIENT_ID` to its client ID.
-6. Decode an access token and set `OIDC_AUDIENCE` to its `aud` value. Authentik
+5. Add the provider's **Redirect URIs** of step 3: `<web client URL>/login`
+   and `<web client URL>/silent-check-sso.html` of the type **Authorization**,
+   and the web client's URL, with the trailing slash, of the type **Logout**.
+   Without the logout entry, logging out ends on an Authentik page instead of
+   the web client. Set `OIDC_UI_CLIENT_ID` to the provider's client ID.
+6. Set the provider's **Invalidation flow** to `default-invalidation-flow`
+   (**Logout**). The preset `default-provider-invalidation-flow` only logs out
+   of the application and keeps the Authentik session, so the next
+   **Login with SSO** signs the person in again without asking.
+7. Decode an access token and set `OIDC_AUDIENCE` to its `aud` value. Authentik
    puts the provider's client ID there. Its access token is its ID token plus
    `azp`, `uid` and `scope`, with the same audience and no hash, so EUDIPLO
    cannot tell them apart and also accepts the provider's ID tokens as access
@@ -144,12 +167,14 @@ limits these tokens get is described in
    ID token to Authentik in the logout address (`id_token_hint`), where it can
    end up in browser history and proxy or access logs. Keep the provider's
    **Access token validity** short, to limit how long such a token can be used.
+   When it expires, the web client asks the person to log in again, which
+   happens without a password prompt while their Authentik session lasts.
 
 For machine clients, create a service account with the `tenant_id` and
 `eudiplo_roles` attributes and an app password. It gets tokens with
 `grant_type=client_credentials`, the provider's `client_id`, the service
-account's name as `username`, the app password as `password`, and the scope of
-the mapping (`scope=eudiplo`). The details are in Authentik's
+account's name as `username`, the app password as `password`, and
+`scope=openid`. The details are in Authentik's
 [machine-to-machine documentation](https://docs.goauthentik.io/add-secure-apps/providers/oauth2/machine_to_machine/).
 
 ## Provider notes
@@ -191,4 +216,9 @@ in the first four rows.
 | `401` without a reason | Wrong `aud`, `iss`, key or algorithm | Decode a token and compare it with step 1 |
 | "This endpoint requires a tenant context" | The token has no tenant claim, or the tenant does not exist | Map the claim named by `OIDC_SUB`, and create the tenant |
 | `403` on an endpoint | The roles claim lacks the role, or is not where `OIDC_ROLES_CLAIM` points | Check `GET /api/auth/me`, then the claim mapping |
+| **Login with SSO** returns to the web client with `invalid_request` | The provider does not allow the authorization code grant for this client | Allow it on the provider's client; in Authentik, under **Allowed grant types** |
+| Signed in, but `GET /api/auth/me` shows no tenant or roles | The provider adds the claims only for a scope the web client does not request | Add them for the scope `openid`, as in step 3 of the Authentik example |
+| **Login with SSO** comes back from the provider to the login page; the browser console shows "Unable to decode token, payload not found" | The provider sent a refresh token that is not a JWT, which the web client cannot read | Do not let the web client's provider client issue refresh tokens, for example by not granting it `offline_access` |
+| "Your session has expired" each time the access token expires | The provider issues the web client no refresh token (step 3) | Select **Log in**. A longer access token lifetime keeps people signed in longer, and keeps a leaked token usable longer too |
+| After logging out, **Login with SSO** signs in without asking | Logging out ended only the web client's session, not the provider's | Make the provider end its session at its `end_session_endpoint`; in Authentik, with step 6 of the example |
 | **Login with SSO** ends at the provider with an unknown client or redirect URI | `OIDC_UI_CLIENT_ID` is not the provider's public client, or its redirect URIs lack the web client's pages | Compare `ui_client_id` in `/.well-known/oauth-authorization-server` with the provider's client, and register the redirect URIs of step 3 |
