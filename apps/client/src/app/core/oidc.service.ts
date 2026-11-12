@@ -37,6 +37,8 @@ export class OidcService {
   private keycloak?: Keycloak;
   private _mode: 'local' | 'oidc' = 'local';
   private _config?: OidcConfig;
+  /** The token expired and could not be renewed; the session waits for a new sign-in. */
+  private expired = false;
   private readonly refreshed = new Subject<void>();
   /** Emits when keycloak-js got a new token, for example before the previous one expired. */
   readonly tokenRefreshed$ = this.refreshed.asObservable();
@@ -46,11 +48,11 @@ export class OidcService {
   }
 
   get token(): string {
-    return this.keycloak?.token ?? '';
+    return this.expired ? '' : (this.keycloak?.token ?? '');
   }
 
   get authenticated(): boolean {
-    return this.keycloak?.authenticated ?? false;
+    return !this.expired && (this.keycloak?.authenticated ?? false);
   }
 
   get apiUrl(): string | undefined {
@@ -109,6 +111,7 @@ export class OidcService {
    */
   private async restoreSession(config: OidcConfig): Promise<boolean> {
     this._config = config;
+    this.expired = false;
 
     const keycloak = this.createKeycloakInstance(config);
     this.keycloak = keycloak;
@@ -120,6 +123,14 @@ export class OidcService {
     };
     keycloak.onAuthLogout = () => this.clearStorage();
     keycloak.onTokenExpired = () => {
+      if (!keycloak.refreshToken) {
+        // Most providers other than Keycloak issue no refresh token to the web client, and
+        // keycloak-js keeps an expired token it cannot renew. Hiding it lets the web client
+        // report the expiry; the stored config stays until the user logs in again, so the
+        // next SSO sign-in returns to the same page (TokenExpiryService).
+        this.expired = true;
+        return;
+      }
       keycloak
         .updateToken(-1)
         .catch(() => console.warn('OidcService: Token refresh after expiry failed'));
@@ -152,7 +163,9 @@ export class OidcService {
    * @param minValidity seconds of validity remaining before triggering a refresh
    */
   async updateToken(minValidity = 30): Promise<boolean> {
-    if (!this.keycloak) return false;
+    // Without a refresh token keycloak-js cannot renew the token and throws; it stays
+    // valid until it expires, when onTokenExpired ends the session.
+    if (!this.keycloak?.refreshToken) return false;
     return this.keycloak.updateToken(minValidity);
   }
 
@@ -206,6 +219,7 @@ export class OidcService {
     this._mode = 'local';
     this._config = undefined;
     this.keycloak = undefined;
+    this.expired = false;
   }
 
   private createKeycloakInstance(config: OidcConfig): Keycloak {
@@ -225,7 +239,7 @@ export class OidcService {
 
   private scheduleTokenRefresh(): void {
     const exp = this.keycloak?.tokenParsed?.exp;
-    if (!exp) return;
+    if (!exp || !this.keycloak?.refreshToken) return;
     const delay = Math.max(0, exp * 1000 - Date.now() - 30_000);
     setTimeout(() => {
       this.keycloak

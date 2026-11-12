@@ -7,12 +7,93 @@ function fakeKeycloak() {
   return {
     init: vi.fn().mockResolvedValue(false),
     logout: vi.fn().mockResolvedValue(undefined),
-    updateToken: vi.fn(),
+    updateToken: vi.fn().mockResolvedValue(true),
+    authenticated: false,
     token: undefined as string | undefined,
+    refreshToken: undefined as string | undefined,
     idToken: undefined as string | undefined,
     onAuthRefreshSuccess: undefined as (() => void) | undefined,
+    onTokenExpired: undefined as (() => void) | undefined,
   };
 }
+
+describe('OidcService token expiry', () => {
+  let keycloak: ReturnType<typeof fakeKeycloak>;
+  let service: OidcService;
+
+  beforeEach(async () => {
+    keycloak = fakeKeycloak();
+    keycloak.init.mockResolvedValue(true);
+    const prototype = OidcService.prototype as unknown as {
+      createKeycloakInstance: () => unknown;
+    };
+    vi.spyOn(prototype, 'createKeycloakInstance').mockReturnValue(keycloak);
+    localStorage.setItem(
+      'oidc_config',
+      JSON.stringify({
+        issuerUrl: 'https://auth.test/application/o/eudiplo/',
+        uiClientId: 'ui',
+        apiUrl: 'x',
+        provider: 'generic',
+      })
+    );
+    service = TestBed.inject(OidcService);
+    await service.initialize();
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it('ends a session without a refresh token when its token expires, keeping its config for the next sign-in', () => {
+    keycloak.token = 'expired-token';
+    keycloak.authenticated = true;
+
+    keycloak.onTokenExpired?.();
+
+    expect(service.token).toBe('');
+    expect(service.authenticated).toBe(false);
+    expect(keycloak.updateToken).not.toHaveBeenCalled();
+    // TokenExpiryService reports the expiry and, on "Log in", keeps the page for the SSO sign-in.
+    expect(service.mode).toBe('oidc');
+    expect(localStorage.getItem('oidc_config')).not.toBeNull();
+  });
+
+  it('starts a restored session as not expired', async () => {
+    keycloak.token = 'token';
+    keycloak.authenticated = true;
+    keycloak.onTokenExpired?.();
+
+    await service.initialize();
+
+    expect(service.token).toBe('token');
+  });
+
+  it('renews an expired token with the refresh token', () => {
+    keycloak.token = 'token';
+    keycloak.refreshToken = 'refresh-token';
+
+    keycloak.onTokenExpired?.();
+
+    expect(keycloak.updateToken).toHaveBeenCalledWith(-1);
+    expect(service.token).toBe('token');
+  });
+
+  it('does not try to renew a token without a refresh token', async () => {
+    await expect(service.updateToken(30)).resolves.toBe(false);
+
+    expect(keycloak.updateToken).not.toHaveBeenCalled();
+  });
+
+  it('renews a token with a refresh token', async () => {
+    keycloak.refreshToken = 'refresh-token';
+
+    await expect(service.updateToken(30)).resolves.toBe(true);
+
+    expect(keycloak.updateToken).toHaveBeenCalledWith(30);
+  });
+});
 
 describe('OidcService under a base href', () => {
   let base: HTMLBaseElement;
