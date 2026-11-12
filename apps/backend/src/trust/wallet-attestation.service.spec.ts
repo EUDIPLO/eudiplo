@@ -12,6 +12,7 @@ import {
 import {
     chainBelow,
     chainCa,
+    sameSubjectCertificates,
 } from "../../test/trust/certificate-chain.fixture.js";
 import type { ValidityPeriod } from "../shared/utils/certificate-validity.util.js";
 import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
@@ -665,6 +666,34 @@ describe("WalletAttestationService status list signer", () => {
                 "Status list JWT signature verification failed - certificate chain is not valid: x5c holds 11 certificates; at most 10 are accepted",
             );
         });
+    });
+
+    // Every listed certificate is in the path builder's pool, and each one
+    // with the issuer's subject costs a signature check.
+    it("rejects a status list after 64 signature checks when the provider lists 100 certificates with its issuer's subject", async () => {
+        const attestationCa = await ca("Provider CA");
+        const revocationCa = await chainCa("CN=Provider Status CA");
+        const { chain, signingKeys } = await chainBelow(revocationCa, 1);
+        const { matchedEntity, trustStore } = await providerWithRevocation(
+            attestationCa.cert,
+            [
+                ...(await sameSubjectCertificates(
+                    revocationCa.cert.subject,
+                    100,
+                )),
+                revocationCa.cert,
+            ],
+        );
+
+        await expect(
+            statusListService().statusListSignatureFailure(
+                await signStatusList(signingKeys, chain),
+                matchedEntity,
+                trustStore,
+            ),
+        ).resolves.toBe(
+            "Status list JWT signature verification failed - certificate chain is not valid: Certificate path not found within 64 signature checks",
+        );
     });
 
     // Neither the chain builder nor jose checks validity periods. A list
@@ -1383,6 +1412,33 @@ describe("WalletAttestationService wallet attestation signer", () => {
         await expect(rejected).rejects.toBeInstanceOf(UnauthorizedException);
         await expect(rejected).rejects.toThrow(
             "Wallet attestation certificate chain is not valid: x5c holds 11 certificates; at most 10 are accepted",
+        );
+    });
+
+    it("rejects with 401 a wallet attestation after 64 signature checks when the list holds 100 certificates with its issuer's subject", async () => {
+        const attestationCa = await chainCa("CN=Wallet Provider Root CA");
+        const { x5c } = await chainBelow(attestationCa, 1);
+        const header = Buffer.from(
+            JSON.stringify({ alg: "ES256", x5c }),
+        ).toString("base64url");
+
+        const rejected = validate(
+            `${header}.e30.c2ln`,
+            [
+                ...(await sameSubjectCertificates(
+                    attestationCa.cert.subject,
+                    100,
+                )),
+                attestationCa.cert,
+            ].map((cert) => ({
+                serviceTypeIdentifier:
+                    ServiceTypeIdentifiers.WalletSolutionIssuance,
+                certValue: der(cert),
+            })),
+        );
+        await expect(rejected).rejects.toBeInstanceOf(UnauthorizedException);
+        await expect(rejected).rejects.toThrow(
+            "Wallet attestation certificate chain is not valid: Certificate path not found within 64 signature checks",
         );
     });
 

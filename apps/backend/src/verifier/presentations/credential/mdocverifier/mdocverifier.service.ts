@@ -14,6 +14,7 @@ import { Span } from "nestjs-otel";
 import { PinoLogger } from "nestjs-pino";
 import { VerificationProvenance } from "../../../../session/domain/session-outcome.js";
 import { assertCertificateChainLength } from "../../../../shared/utils/certificate-chain-length.util.js";
+import { CERTIFICATE_PATH_LIMIT_FAILURE } from "../../../../shared/utils/certificate-path.util.js";
 import { MalformedStatusReferenceError } from "../../../../trust/domain/status-list-reference.js";
 import {
     RevocationListUnavailableError,
@@ -638,6 +639,13 @@ export class MdocverifierService {
         // certificate subjects, whose words would decide otherwise.
         if (CERTIFICATE_VALIDITY_FAILURE.test(message)) {
             return "certificate_expired";
+        }
+
+        // A path past MAX_CERTIFICATE_PATH_LENGTH or MAX_PATH_SIGNATURE_CHECKS
+        // is a chain that cannot be built, not an invalid signature, which
+        // the words "signature checks" would decide otherwise.
+        if (CERTIFICATE_PATH_LIMIT_FAILURE.test(message)) {
+            return "verification_error";
         }
 
         if (message.includes("signature")) {

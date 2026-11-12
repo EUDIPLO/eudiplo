@@ -1,4 +1,8 @@
 import {
+    addTrustListCertificates,
+    MAX_TRUST_LIST_CERTIFICATES,
+} from "../domain/trust-list-certificate-limit.js";
+import {
     type DiscardedTrustList,
     isTrustListCurrent,
     OutdatedTrustListsError,
@@ -13,7 +17,7 @@ import type {
     VerifiedTrustList,
 } from "../ports/trust-list-provider.js";
 import {
-    serviceTypeMatches,
+    offersAcceptedService,
     type TrustedEntity,
     type TrustListRef,
     type TrustListSource,
@@ -64,8 +68,14 @@ export class CollectTrustedEntities {
      * accepted before from the same URL by the source's tenant (an older
      * version, possibly replayed). An accepted list raises the number
      * remembered for its URL. A list that cannot be loaded or verified still
-     * fails the whole source.
+     * fails the whole source, and so do lists that together hold more than
+     * {@link MAX_TRUST_LIST_CERTIFICATES} certificates for the entities kept;
+     * the lists after the one that goes over the limit are not loaded. The
+     * number of that list is remembered all the same: it is signed, so an
+     * older version of the list cannot be replayed once the source fits again.
      * @throws OutdatedTrustListsError when every list was discarded
+     * @throws TooManyTrustListCertificatesError when the entities kept hold
+     * more than {@link MAX_TRUST_LIST_CERTIFICATES} certificates
      */
     async execute(
         source: LoadedTrustListSource,
@@ -73,6 +83,7 @@ export class CollectTrustedEntities {
         const entities: TrustedEntity[] = [];
         const discarded: DiscardedTrustList[] = [];
         let nextUpdate: string | undefined;
+        let certificates = 0;
         for (const ref of source.lotes) {
             // One list at a time: a source's lists come from tenant
             // configuration without a count limit, so this bounds the
@@ -99,20 +110,15 @@ export class CollectTrustedEntities {
             ) {
                 nextUpdate = list.nextUpdate;
             }
-            entities.push(
-                ...list.entities.filter(
-                    (entity) =>
-                        !source.acceptedServiceTypes ||
-                        entity.services.some((service) =>
-                            source.acceptedServiceTypes!.some((accepted) =>
-                                serviceTypeMatches(
-                                    service.serviceTypeIdentifier,
-                                    accepted,
-                                ),
-                            ),
-                        ),
-                ),
+            const kept = list.entities.filter((entity) =>
+                offersAcceptedService(entity, source.acceptedServiceTypes),
             );
+            certificates = addTrustListCertificates(
+                certificates,
+                ref.url,
+                kept,
+            );
+            entities.push(...kept);
         }
         if (discarded.length > 0 && discarded.length === source.lotes.length) {
             throw new OutdatedTrustListsError(discarded);

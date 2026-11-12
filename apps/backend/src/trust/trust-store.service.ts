@@ -9,6 +9,11 @@ import {
     type LoadedTrustListSource,
 } from "./application/collect-trusted-entities.js";
 import {
+    addTrustListCertificates,
+    MAX_TRUST_LIST_CERTIFICATES,
+    TooManyTrustListCertificatesError,
+} from "./domain/trust-list-certificate-limit.js";
+import {
     type DiscardedTrustList,
     describeDiscardedTrustLists,
     isTrustListCurrent,
@@ -23,7 +28,13 @@ import {
     TRUST_STORE_SETTINGS,
     type TrustStoreSettings,
 } from "./trust-store-settings.js";
-import { TrustedEntity, TrustListRef, TrustListSource } from "./types.js";
+import {
+    credentialIssuerServiceTypes,
+    offersAcceptedService,
+    TrustedEntity,
+    TrustListRef,
+    TrustListSource,
+} from "./types.js";
 
 /**
  * Built trust store with TrustedEntities preserving service groupings, the
@@ -34,10 +45,11 @@ import { TrustedEntity, TrustListRef, TrustListSource } from "./types.js";
 export type BuiltTrustStore = CollectedTrustedEntities & { fetchedAt: number };
 
 /**
- * How long a source whose lists are all outdated is answered without fetching
- * them again, so lapsed lists are not fetched once per request.
+ * How long a source whose lists are all outdated, or hold more than
+ * `MAX_TRUST_LIST_CERTIFICATES` certificates, is answered without fetching
+ * them again, so such lists are not fetched once per request.
  */
-const OUTDATED_RETRY_MS = 60 * 1000;
+const REFUSED_RETRY_MS = 60 * 1000;
 
 /** Logged with lists numbered lower than one the tenant accepted before. */
 const supersededHint = (tenantId: string) =>
@@ -47,9 +59,12 @@ const supersededHint = (tenantId: string) =>
 export class TrustStoreService {
     private readonly logger = new Logger(TrustStoreService.name);
     private readonly cache = new Map<string, BuiltTrustStore>();
-    private readonly outdated = new Map<
+    private readonly refused = new Map<
         string,
-        { error: OutdatedTrustListsError; until: number }
+        {
+            error: OutdatedTrustListsError | TooManyTrustListCertificatesError;
+            until: number;
+        }
     >();
 
     constructor(
@@ -67,10 +82,12 @@ export class TrustStoreService {
      * for `cacheTtlMs` while its current lists stay current. Outdated lists,
      * also those numbered lower than a list accepted before, are left out
      * ({@link BuiltTrustStore.discarded}) and logged. A source whose lists
-     * are all outdated is rejected for one minute without fetching them
-     * again.
-     * @throws when a list cannot be fetched or verified, or when every list
-     * is outdated (`OutdatedTrustListsError`); callers must fail closed
+     * are all outdated, or hold more than {@link MAX_TRUST_LIST_CERTIFICATES}
+     * certificates, is rejected for one minute without fetching them again.
+     * @throws when a list cannot be fetched or verified, when every list is
+     * outdated (`OutdatedTrustListsError`), or when the lists hold too many
+     * certificates (`TooManyTrustListCertificatesError`); callers must fail
+     * closed
      */
     async getTrustStore(
         source: TrustListSource,
@@ -101,9 +118,9 @@ export class TrustStoreService {
             return cached;
         }
 
-        const outdated = this.outdated.get(cacheKey);
-        if (outdated && Date.now() < outdated.until) {
-            throw outdated.error;
+        const refused = this.refused.get(cacheKey);
+        if (refused && Date.now() < refused.until) {
+            throw refused.error;
         }
 
         let result: CollectedTrustedEntities;
@@ -116,11 +133,14 @@ export class TrustStoreService {
                     error.discarded,
                     "no current list is left",
                 );
-                this.rememberOutdated(cacheKey, error);
+                this.rememberRefused(cacheKey, error);
+            }
+            if (error instanceof TooManyTrustListCertificatesError) {
+                this.rememberRefused(cacheKey, error);
             }
             throw error;
         }
-        this.outdated.delete(cacheKey);
+        this.refused.delete(cacheKey);
         if (result.discarded.length > 0) {
             this.warnDiscarded(
                 loaded.tenantId,
@@ -188,20 +208,29 @@ export class TrustStoreService {
     }
 
     /**
-     * Trusted entities of a single trust list, for hints that do not decide
-     * trust (DCQL `trusted_authorities` sent to the wallet). Managed lists are
-     * read from their stored content; external lists are fetched and their
-     * signature verified like in {@link getTrustStore}, sharing its cache.
-     * Either way an outdated list throws {@link OutdatedTrustListsError}, so
-     * no hint names issuers that verification leaves out with the list.
+     * The entities of a single trust list that offer a credential issuer
+     * service ({@link credentialIssuerServiceTypes}), as verification keeps
+     * them, for hints that do not decide trust (DCQL `trusted_authorities`
+     * sent to the wallet). Managed lists are read from their stored content;
+     * external lists are fetched and their signature verified like in
+     * {@link getTrustStore}, sharing its cache. Either way an outdated list
+     * throws {@link OutdatedTrustListsError}, and one whose kept entities
+     * hold more than {@link MAX_TRUST_LIST_CERTIFICATES} certificates
+     * {@link TooManyTrustListCertificatesError}, so no hint names issuers
+     * that verification leaves out with the list.
      */
     async getListedEntities(
         ref: TrustListRef,
         tenantId: string,
     ): Promise<TrustedEntity[]> {
         if (ref.trustListId === undefined) {
-            return (await this.getTrustStore({ tenantId, lotes: [ref] }))
-                .entities;
+            return (
+                await this.getTrustStore({
+                    tenantId,
+                    lotes: [ref],
+                    acceptedServiceTypes: [...credentialIssuerServiceTypes],
+                })
+            ).entities;
         }
         const id = ref.trustListId.trim();
         const { data } = await this.trustListService.findOne(tenantId, id);
@@ -213,7 +242,13 @@ export class TrustStoreService {
             // The caller logs the error with the list it names.
             throw new OutdatedTrustListsError([{ list: id, nextUpdate }]);
         }
-        return this.loteParser.parse(lote).entities;
+        const entities = this.loteParser
+            .parse(lote)
+            .entities.filter((entity) =>
+                offersAcceptedService(entity, credentialIssuerServiceTypes),
+            );
+        addTrustListCertificates(0, id, entities);
+        return entities;
     }
 
     /**
@@ -237,12 +272,15 @@ export class TrustStoreService {
     }
 
     /** Remember a rejected source, dropping entries that have run out. */
-    private rememberOutdated(cacheKey: string, error: OutdatedTrustListsError) {
+    private rememberRefused(
+        cacheKey: string,
+        error: OutdatedTrustListsError | TooManyTrustListCertificatesError,
+    ) {
         const now = Date.now();
-        for (const [key, entry] of this.outdated) {
-            if (entry.until <= now) this.outdated.delete(key);
+        for (const [key, entry] of this.refused) {
+            if (entry.until <= now) this.refused.delete(key);
         }
-        this.outdated.set(cacheKey, { error, until: now + OUTDATED_RETRY_MS });
+        this.refused.set(cacheKey, { error, until: now + REFUSED_RETRY_MS });
     }
 
     /**
@@ -255,10 +293,10 @@ export class TrustStoreService {
     clearCache(tenantId?: string): void {
         if (tenantId === undefined) {
             this.cache.clear();
-            this.outdated.clear();
+            this.refused.clear();
             return;
         }
-        for (const map of [this.cache, this.outdated]) {
+        for (const map of [this.cache, this.refused]) {
             for (const key of map.keys()) {
                 if (tenantOfCacheKey(key) === tenantId) {
                     map.delete(key);

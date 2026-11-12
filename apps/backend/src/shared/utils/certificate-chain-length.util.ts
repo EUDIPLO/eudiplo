@@ -4,13 +4,13 @@
  * attestation, or a status list. HAIP chains hold the signing certificate and
  * a few intermediates; the trust anchor is not part of them.
  *
- * `@peculiar/x509`'s `X509ChainBuilder.build` has no depth limit. At every
- * step it scans the whole pool for issuers, verifies a signature for every
- * certificate with the issuer's name, and hashes every certificate already in
- * the chain, so a long chain costs work that grows with the square of its
- * length. A status list from a host the attacker controls, or a key
- * attestation in a request body, could otherwise keep the server busy for
- * minutes with one chain.
+ * The chain is refused before a certificate path is built from it, and
+ * before more than its first certificate is parsed. The path is bounded on
+ * its own (`MAX_CERTIFICATE_PATH_LENGTH`,
+ * `MAX_PATH_SIGNATURE_CHECKS` in `certificate-path.util.ts`); without this
+ * limit, a status list from a host the attacker controls, or a key
+ * attestation in a request body, would still have every one of up to
+ * thousands of certificates parsed, and fail with a less telling reason.
  */
 export const MAX_CERTIFICATE_CHAIN_LENGTH = 10;
 

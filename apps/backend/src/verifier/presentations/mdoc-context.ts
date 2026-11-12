@@ -17,6 +17,7 @@ import {
 } from "../../crypto/key/domain/signing-algs.js";
 import { toBuffer } from "../../shared/utils/buffer.util.js";
 import { assertCertificateChainLength } from "../../shared/utils/certificate-chain-length.util.js";
+import { CertificatePathBuilder } from "../../shared/utils/certificate-path.util.js";
 import {
     certificateValidityAt,
     formatCertificateDate,
@@ -483,14 +484,14 @@ export const mdocContext: Omit<MdocContext, "fetch"> = {
                 ...(trustedCertificates ?? []),
             ]);
 
-            const certificateChainBuilder = new x509.X509ChainBuilder({
-                certificates: certificatesToBuildChain,
-            });
-            const chain = await certificateChainBuilder.build(
-                parsedLeafCertificate,
-            );
+            // Within MAX_CERTIFICATE_PATH_LENGTH and
+            // MAX_PATH_SIGNATURE_CHECKS, whatever the trust list holds.
+            const chain = await new CertificatePathBuilder(
+                certificatesToBuildChain,
+            ).build(parsedLeafCertificate);
 
-            // x5c is leaf-first, but chain builder returns root-first.
+            // The path is leaf-first, like x5chain; the checks below go
+            // root-first.
             let parsedChain = chain.reverse();
 
             if (parsedChain.length < certificateChain.length) {

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { assertCertificateChainLength } from "../shared/utils/certificate-chain-length.util.js";
+import { CertificatePathBuilder } from "../shared/utils/certificate-path.util.js";
 import { certificateValidityAt } from "../shared/utils/certificate-validity.util.js";
 import { assertAttestationPathValidAt } from "./domain/attestation-certificate-validity.js";
 import {
@@ -178,8 +179,10 @@ export class X509ValidationService {
         certs: x509.X509Certificate[],
         now: Date,
     ): x509.X509Certificate[] {
-        const valid = certs.filter((cert) => this.isTimeValid(cert, now));
-        return [...valid, ...certs.filter((cert) => !valid.includes(cert))];
+        const valid = new Set(
+            certs.filter((cert) => this.isTimeValid(cert, now)),
+        );
+        return [...valid, ...certs.filter((cert) => !valid.has(cert))];
     }
 
     /**
@@ -189,6 +192,9 @@ export class X509ValidationService {
      * output of {@link parseX5c}; the only input whose length is checked
      * @throws CertificateChainTooLong if `presentedChain` holds more than
      * `MAX_CERTIFICATE_CHAIN_LENGTH` certificates
+     * @throws CertificatePathLimitExceeded if the path is longer than
+     * `MAX_CERTIFICATE_PATH_LENGTH` or not found within
+     * `MAX_PATH_SIGNATURE_CHECKS` signature checks
      */
     async buildPath(
         leaf: x509.X509Certificate,
@@ -198,8 +204,7 @@ export class X509ValidationService {
     ): Promise<x509.X509Certificate[]> {
         assertCertificateChainLength(presentedChain);
         const pool = [...presentedChain, ...extraIntermediates, ...anchors];
-        const builder = new x509.X509ChainBuilder({ certificates: pool });
-        return await builder.build(leaf);
+        return await new CertificatePathBuilder(pool).build(leaf);
     }
 
     /**
@@ -254,6 +259,9 @@ export class X509ValidationService {
      * provider is matched again later
      * @throws CertificateChainTooLong if `x5c` holds more certificates than
      * `MAX_CERTIFICATE_CHAIN_LENGTH`
+     * @throws CertificatePathLimitExceeded if the path is longer than
+     * `MAX_CERTIFICATE_PATH_LENGTH` or not found within
+     * `MAX_PATH_SIGNATURE_CHECKS` signature checks
      * @throws if no certificate path to a listed certificate can be built
      * @throws AttestationCertificateNotValid if a certificate of the matched
      * path is outside its validity period
@@ -294,6 +302,9 @@ export class X509ValidationService {
      * presented chain; then the other listed certificates.
      * @throws CertificateChainTooLong, before parsing, if `x5c` holds more
      * certificates than `MAX_CERTIFICATE_CHAIN_LENGTH`
+     * @throws CertificatePathLimitExceeded if the path is longer than
+     * `MAX_CERTIFICATE_PATH_LENGTH` or not found within
+     * `MAX_PATH_SIGNATURE_CHECKS` signature checks
      * @throws if no certificate path can be built
      */
     private buildAttestationPath(
@@ -303,13 +314,11 @@ export class X509ValidationService {
         now: Date,
     ): Promise<x509.X509Certificate[]> {
         const chain = this.parseX5c(x5c);
-        return new x509.X509ChainBuilder({
-            certificates: [
-                ...this.validFirst(this.parseTrustAnchors(signers), now),
-                ...chain,
-                ...this.parseTrustAnchors(others),
-            ],
-        }).build(chain[0]);
+        return new CertificatePathBuilder([
+            ...this.validFirst(this.parseTrustAnchors(signers), now),
+            ...chain,
+            ...this.parseTrustAnchors(others),
+        ]).build(chain[0]);
     }
 
     /**
@@ -462,6 +471,9 @@ export class X509ValidationService {
      * one of the provider's status list signers
      * @throws CertificateChainTooLong if `x5c` holds more certificates than
      * `MAX_CERTIFICATE_CHAIN_LENGTH`
+     * @throws CertificatePathLimitExceeded if the path is longer than
+     * `MAX_CERTIFICATE_PATH_LENGTH` or not found within
+     * `MAX_PATH_SIGNATURE_CHECKS` signature checks
      * @throws if no certificate path can be built
      * @throws AttestationCertificateNotValid if the path matched and a
      * certificate of it is outside its validity period

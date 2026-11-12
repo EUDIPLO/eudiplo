@@ -2,6 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { acceptedSequenceNumbersFake } from "../../test/trust/accepted-trust-list-sequence-numbers.fake.js";
 import { VerifiedLoteProvider } from "./adapters/verified-lote-provider.js";
 import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
+import {
+    MAX_TRUST_LIST_CERTIFICATES,
+    TooManyTrustListCertificatesError,
+} from "./domain/trust-list-certificate-limit.js";
 import { OutdatedTrustListsError } from "./domain/trust-list-freshness.js";
 import { TrustStoreService } from "./trust-store.service.js";
 
@@ -19,7 +23,7 @@ describe("TrustStoreService cache isolation", () => {
             Object.create(TrustStoreService.prototype),
             {
                 cache: new Map(),
-                outdated: new Map(),
+                refused: new Map(),
                 logger: { debug: vi.fn() },
                 settings: { publicUrl: "https://public.example" },
                 collectTrustedEntities: new CollectTrustedEntities(
@@ -79,7 +83,7 @@ describe("TrustStoreService cache isolation", () => {
         }) =>
             Object.assign(Object.create(TrustStoreService.prototype), {
                 cache: new Map(),
-                outdated: new Map(),
+                refused: new Map(),
                 logger: { debug: vi.fn() },
                 settings,
                 collectTrustedEntities: new CollectTrustedEntities(
@@ -144,16 +148,21 @@ describe("TrustStoreService.getListedEntities", () => {
         TrustedEntitiesList: [],
     };
 
-    function createService(data: object | undefined) {
+    function createService(
+        data: object | undefined,
+        listed: typeof entities = entities,
+    ) {
         const fetchJwt = vi.fn();
         const findOne = vi.fn().mockResolvedValue({ data });
-        const parse = vi.fn().mockReturnValue({ info: CURRENT, entities });
+        const parse = vi
+            .fn()
+            .mockReturnValue({ info: CURRENT, entities: listed });
         const logger = { debug: vi.fn(), warn: vi.fn() };
         const service = Object.assign(
             Object.create(TrustStoreService.prototype),
             {
                 cache: new Map(),
-                outdated: new Map(),
+                refused: new Map(),
                 logger,
                 settings: { publicUrl: "https://public.example" },
                 trustListService: { findOne },
@@ -231,6 +240,98 @@ describe("TrustStoreService.getListedEntities", () => {
         expect(fetchJwt).toHaveBeenCalledWith(ref.url);
         expect(findOne).not.toHaveBeenCalled();
     });
+
+    // Verification refuses such a list, so the request names none of its
+    // issuers either.
+    describe(`with more than ${MAX_TRUST_LIST_CERTIFICATES} certificates`, () => {
+        const crowded = (certificates: number) => [
+            {
+                entityId: "Issuer",
+                services: Array.from({ length: certificates }, (_, i) => ({
+                    serviceTypeIdentifier:
+                        "http://uri.etsi.org/19602/SvcType/EAA/Issuance",
+                    certValue: `cert-${i}`,
+                })),
+            },
+        ];
+
+        it(`counts and returns only credential issuers, as verification keeps them, not ${MAX_TRUST_LIST_CERTIFICATES} wallet-provider certificates`, async () => {
+            const walletProvider = {
+                entityId: "Wallet Provider",
+                services: Array.from(
+                    { length: MAX_TRUST_LIST_CERTIFICATES },
+                    (_, i) => ({
+                        serviceTypeIdentifier:
+                            "http://uri.etsi.org/19602/SvcType/WalletSolution/Issuance",
+                        certValue: `wallet-${i}`,
+                    }),
+                ),
+            };
+            for (const ref of [
+                { trustListId: "list-1", url: "" },
+                {
+                    url: "https://trust.example/list",
+                    verifierX509Der: "certificate",
+                },
+            ]) {
+                const { service } = createService({ LoTE: lote }, [
+                    ...entities,
+                    walletProvider,
+                ]);
+
+                await expect(
+                    service.getListedEntities(ref, "t"),
+                ).resolves.toEqual(entities);
+            }
+        });
+
+        it(`reads a managed list of ${MAX_TRUST_LIST_CERTIFICATES} certificates`, async () => {
+            const listed = crowded(MAX_TRUST_LIST_CERTIFICATES);
+            const { service } = createService({ LoTE: lote }, listed);
+
+            await expect(
+                service.getListedEntities(
+                    { trustListId: "list-1", url: "" },
+                    "t",
+                ),
+            ).resolves.toEqual(listed);
+        });
+
+        it(`rejects a managed list of ${MAX_TRUST_LIST_CERTIFICATES + 1} certificates`, async () => {
+            const { service } = createService(
+                { LoTE: lote },
+                crowded(MAX_TRUST_LIST_CERTIFICATES + 1),
+            );
+
+            const listed = service.getListedEntities(
+                { trustListId: "list-1", url: "" },
+                "t",
+            );
+            await expect(listed).rejects.toBeInstanceOf(
+                TooManyTrustListCertificatesError,
+            );
+            await expect(listed).rejects.toThrow(
+                "Trust list list-1 brings the certificates of its source to 1001; at most 1000 are accepted",
+            );
+        });
+
+        it(`rejects an external list of ${MAX_TRUST_LIST_CERTIFICATES + 1} certificates`, async () => {
+            const { service } = createService(
+                undefined,
+                crowded(MAX_TRUST_LIST_CERTIFICATES + 1),
+            );
+
+            await expect(
+                service.getListedEntities(
+                    {
+                        url: "https://trust.example/list",
+                        verifierX509Der: "certificate",
+                    },
+                    "t",
+                ),
+            ).rejects.toBeInstanceOf(TooManyTrustListCertificatesError);
+        });
+    });
 });
 
 describe("TrustStoreService list freshness", () => {
@@ -262,13 +363,13 @@ describe("TrustStoreService list freshness", () => {
         );
         const internals = service as unknown as {
             logger: { warn: () => void; debug: () => void };
-            outdated: Map<string, unknown>;
+            refused: Map<string, unknown>;
         };
         vi.spyOn(internals.logger, "debug").mockImplementation(() => {});
         const warn = vi
             .spyOn(internals.logger, "warn")
             .mockImplementation(() => {});
-        return { service, logger: { warn }, outdated: internals.outdated };
+        return { service, logger: { warn }, refused: internals.refused };
     }
 
     afterEach(() => {
@@ -340,6 +441,44 @@ describe("TrustStoreService list freshness", () => {
         expect(loadVerified).toHaveBeenCalledTimes(4);
     });
 
+    it(`answers a source of more than ${MAX_TRUST_LIST_CERTIFICATES} certificates for a minute without fetching its lists again`, async () => {
+        vi.useFakeTimers({ now });
+        const later = new Date(now.getTime() + 86_400_000);
+        const crowded = {
+            ...list(later),
+            entities: [
+                {
+                    services: Array.from(
+                        { length: MAX_TRUST_LIST_CERTIFICATES + 1 },
+                        (_, i) => ({
+                            serviceTypeIdentifier: "urn:test/Issuance",
+                            certValue: `cert-${i}`,
+                        }),
+                    ),
+                },
+            ],
+        };
+        const loadVerified = vi.fn().mockResolvedValue(crowded);
+        const { service } = createService(loadVerified);
+
+        await expect(service.getTrustStore(source)).rejects.toBeInstanceOf(
+            TooManyTrustListCertificatesError,
+        );
+        expect(loadVerified).toHaveBeenCalledTimes(1);
+        vi.setSystemTime(now.getTime() + 59_000);
+        await expect(service.getTrustStore(source)).rejects.toBeInstanceOf(
+            TooManyTrustListCertificatesError,
+        );
+        expect(loadVerified).toHaveBeenCalledTimes(1);
+
+        loadVerified.mockResolvedValue(list(later));
+        vi.setSystemTime(now.getTime() + 61_000);
+        await expect(service.getTrustStore(source)).resolves.toMatchObject({
+            nextUpdate: later.toISOString(),
+        });
+        expect(loadVerified).toHaveBeenCalledTimes(3);
+    });
+
     it("fetches a source again at once after an error that is not about freshness", async () => {
         vi.useFakeTimers({ now });
         const later = new Date(now.getTime() + 86_400_000);
@@ -364,14 +503,14 @@ describe("TrustStoreService list freshness", () => {
         const loadVerified = vi
             .fn()
             .mockResolvedValue(list(new Date(now.getTime() - 60_000)));
-        const { service, outdated } = createService(loadVerified);
+        const { service, refused } = createService(loadVerified);
         const other = { tenantId: "t", lotes: [source.lotes[0]] };
 
         await expect(service.getTrustStore(source)).rejects.toThrow();
-        expect(outdated.size).toBe(1);
+        expect(refused.size).toBe(1);
         vi.setSystemTime(now.getTime() + 61_000);
         await expect(service.getTrustStore(other)).rejects.toThrow();
-        expect(outdated.size).toBe(1);
+        expect(refused.size).toBe(1);
     });
 
     it("fetches an outdated source again at once after the cache is cleared", async () => {

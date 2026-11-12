@@ -9,8 +9,15 @@ import {
 import {
     chainBelow,
     chainCa,
+    sameSubjectCertificates,
 } from "../../test/trust/certificate-chain.fixture.js";
 import { CertificateChainTooLong } from "../shared/utils/certificate-chain-length.util.js";
+import {
+    CertificatePathBuilder,
+    CertificatePathLimitExceeded,
+    MAX_CERTIFICATE_PATH_LENGTH,
+    MAX_PATH_SIGNATURE_CHECKS,
+} from "../shared/utils/certificate-path.util.js";
 import type { ValidityPeriod } from "../shared/utils/certificate-validity.util.js";
 import {
     credentialIssuerServiceTypes,
@@ -1056,7 +1063,7 @@ describe("X509ValidationService x5c length limit", () => {
         vi.restoreAllMocks();
     });
 
-    const buildSpy = () => vi.spyOn(x509.X509ChainBuilder.prototype, "build");
+    const buildSpy = () => vi.spyOn(CertificatePathBuilder.prototype, "build");
 
     /** A provider whose CA is listed as `serviceType`, and the matched entity. */
     async function provider(serviceType: string) {
@@ -1163,6 +1170,189 @@ describe("X509ValidationService x5c length limit", () => {
                 ),
             ).rejects.toThrow(tooLong);
             expect(build).not.toHaveBeenCalled();
+        });
+    });
+});
+
+// Every listed certificate is in the path builder's pool. Whoever controls a
+// trust list decides how many of them share a subject, each one costing a
+// signature check for a chain naming that subject as issuer, and how long a
+// path through listed certificates is.
+describe("X509ValidationService path limits with trust-list certificates", () => {
+    const service = new X509ValidationService();
+    const tooManyChecks = `Certificate path not found within ${MAX_PATH_SIGNATURE_CHECKS} signature checks`;
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    const signatureChecks = () =>
+        vi.spyOn(x509.X509Certificate.prototype, "verify");
+
+    /**
+     * A provider whose CA is listed as an attestation signer after `decoys`
+     * certificates with its subject, which do not verify its certificates.
+     */
+    async function providerAfter(decoys: number) {
+        const providerCa = await chainCa("CN=Wallet Provider CA");
+        const listed = [
+            ...(await sameSubjectCertificates(providerCa.cert.subject, decoys)),
+            providerCa.cert,
+        ];
+        const entities = [
+            entity(
+                "provider",
+                listed.map((cert) => [
+                    ServiceTypeIdentifiers.WalletSolutionIssuance,
+                    der(cert),
+                ]),
+            ),
+        ];
+        return { providerCa, entities };
+    }
+
+    it("matches a wallet attestation whose CA is listed after ten certificates with its subject", async () => {
+        const { providerCa, entities } = await providerAfter(10);
+        const { x5c } = await chainBelow(providerCa, 1);
+
+        await expect(
+            service.matchAttestationSigner(x5c, entities),
+        ).resolves.toMatchObject({ matchMode: "ca" });
+    });
+
+    it(`rejects a wallet attestation after ${MAX_PATH_SIGNATURE_CHECKS} signature checks when 200 listed signers share its issuer's subject`, async () => {
+        const { providerCa, entities } = await providerAfter(200);
+        const { x5c } = await chainBelow(providerCa, 1);
+        const verify = signatureChecks();
+
+        const matched = service.matchAttestationSigner(x5c, entities);
+        await expect(matched).rejects.toBeInstanceOf(
+            CertificatePathLimitExceeded,
+        );
+        await expect(matched).rejects.toThrow(tooManyChecks);
+        expect(verify).toHaveBeenCalledTimes(MAX_PATH_SIGNATURE_CHECKS);
+    });
+
+    it(`rejects a wallet attestation after ${MAX_PATH_SIGNATURE_CHECKS} signature checks when 200 other listed certificates carry its issuer's name`, async () => {
+        const providerCa = await chainCa("CN=Wallet Provider CA");
+        const unlisted = await chainCa("CN=Decoy CA");
+        const decoys = await sameSubjectCertificates(
+            unlisted.cert.subject,
+            200,
+        );
+        const entities = [
+            entity("provider", [
+                [
+                    ServiceTypeIdentifiers.WalletSolutionIssuance,
+                    der(providerCa.cert),
+                ],
+                ...decoys.map((cert): [string, string] => [
+                    ServiceTypeIdentifiers.WalletSolutionRevocation,
+                    der(cert),
+                ]),
+            ]),
+        ];
+        const { x5c } = await chainBelow(unlisted, 1);
+        const verify = signatureChecks();
+
+        await expect(
+            service.matchAttestationSigner(x5c, entities),
+        ).rejects.toThrow(tooManyChecks);
+        expect(verify).toHaveBeenCalledTimes(MAX_PATH_SIGNATURE_CHECKS);
+    });
+
+    it(`rejects an attestation's status list after ${MAX_PATH_SIGNATURE_CHECKS} signature checks when 200 listed certificates share its issuer's subject`, async () => {
+        const attestationCa = await chainCa("CN=Wallet Provider CA");
+        const revocationCa = await chainCa("CN=Wallet Provider Status CA");
+        const decoys = await sameSubjectCertificates(
+            revocationCa.cert.subject,
+            200,
+        );
+        const entities = [
+            entity("provider", [
+                [
+                    ServiceTypeIdentifiers.WalletSolutionIssuance,
+                    der(attestationCa.cert),
+                ],
+                ...[...decoys, revocationCa.cert].map(
+                    (cert): [string, string] => [
+                        ServiceTypeIdentifiers.WalletSolutionRevocation,
+                        der(cert),
+                    ],
+                ),
+            ]),
+        ];
+        const matched = await service.pathMatchesTrustedEntities(
+            [attestationCa.cert],
+            entities,
+            "leaf",
+            walletAttestationSignerServiceTypes,
+        );
+        const { x5c } = await chainBelow(revocationCa, 1);
+        const verify = signatureChecks();
+
+        await expect(
+            service.matchAttestationStatusListSigner(x5c, matched!, entities),
+        ).rejects.toThrow(tooManyChecks);
+        expect(verify).toHaveBeenCalledTimes(MAX_PATH_SIGNATURE_CHECKS);
+    });
+
+    it(`rejects a credential chain in buildPath after ${MAX_PATH_SIGNATURE_CHECKS} signature checks when 200 anchors share its issuer's subject`, async () => {
+        const issuerCa = await chainCa("CN=Issuer CA");
+        const anchors = [
+            ...(await sameSubjectCertificates(issuerCa.cert.subject, 200)),
+            issuerCa.cert,
+        ];
+        const { chain } = await chainBelow(issuerCa, 1);
+        const verify = signatureChecks();
+
+        await expect(
+            service.buildPath(chain[0], chain, anchors),
+        ).rejects.toThrow(tooManyChecks);
+        expect(verify).toHaveBeenCalledTimes(MAX_PATH_SIGNATURE_CHECKS);
+    });
+
+    describe("with intermediates listed below the provider's root", () => {
+        /**
+         * A provider that lists its root and the `length` - 1 CAs below it
+         * as attestation signers, and the attestation's x5c with only the
+         * signing certificate below them: a path of `length` + 1.
+         */
+        async function listedPath(length: number) {
+            const root = await chainCa("CN=Wallet Provider Root CA");
+            const { chain, x5c } = await chainBelow(root, length);
+            const entities = [
+                entity(
+                    "provider",
+                    [...chain.slice(1), root.cert].map((cert) => [
+                        ServiceTypeIdentifiers.WalletSolutionIssuance,
+                        der(cert),
+                    ]),
+                ),
+            ];
+            return { x5c: x5c.slice(0, 1), entities };
+        }
+
+        it(`matches a path of ${MAX_CERTIFICATE_PATH_LENGTH} certificates`, async () => {
+            const { x5c, entities } = await listedPath(
+                MAX_CERTIFICATE_PATH_LENGTH - 1,
+            );
+
+            await expect(
+                service.matchAttestationSigner(x5c, entities),
+            ).resolves.toMatchObject({ matchMode: "ca" });
+        });
+
+        it(`rejects a path of ${MAX_CERTIFICATE_PATH_LENGTH + 1} certificates`, async () => {
+            const { x5c, entities } = await listedPath(
+                MAX_CERTIFICATE_PATH_LENGTH,
+            );
+
+            await expect(
+                service.matchAttestationSigner(x5c, entities),
+            ).rejects.toThrow(
+                `Certificate path is longer than ${MAX_CERTIFICATE_PATH_LENGTH} certificates`,
+            );
         });
     });
 });

@@ -162,6 +162,25 @@ export type TrustedEntity = {
     services: TrustedEntityServiceCert[];
 };
 
+/**
+ * Whether `entity` offers a service of one of `acceptedServiceTypes`
+ * ({@link serviceTypeMatches}); without a filter, every entity does. The
+ * trust store keeps such entities with all their services.
+ */
+export function offersAcceptedService(
+    entity: TrustedEntity,
+    acceptedServiceTypes?: readonly ServiceTypeIdentifier[],
+): boolean {
+    return (
+        !acceptedServiceTypes ||
+        entity.services.some((service) =>
+            acceptedServiceTypes.some((accepted) =>
+                serviceTypeMatches(service.serviceTypeIdentifier, accepted),
+            ),
+        )
+    );
+}
+
 export type FederationTrustMode = "federation-only" | "lote-only" | "hybrid";
 
 type FederationTrustAnchorRef = {

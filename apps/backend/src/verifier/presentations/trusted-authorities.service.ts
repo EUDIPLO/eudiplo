@@ -5,8 +5,13 @@ import {
     credentialIssuerAuthorityKeyIdentifiers,
     type IssuerAuthorityKeyIdentifiers,
 } from "../../trust/domain/authority-key-identifiers.js";
+import {
+    addTrustListCertificates,
+    TooManyTrustListCertificatesError,
+} from "../../trust/domain/trust-list-certificate-limit.js";
 import { OutdatedTrustListsError } from "../../trust/domain/trust-list-freshness.js";
 import { TrustStoreService } from "../../trust/trust-store.service.js";
+import type { TrustedEntity } from "../../trust/types.js";
 import {
     TrustedAuthorityType,
     TrustListRef,
@@ -158,7 +163,12 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
      * `aki` entry with the key identifiers of all lists, and an `etsi_tl` entry
      * with the URLs of the lists they do not fully cover. Outdated lists are
      * left out, as verification discards them; only when every list of the
-     * entry is outdated are their URLs sent, so the entry is not empty.
+     * entry is outdated are their URLs sent, so the entry is not empty. When
+     * the lists hold more certificates together than verification accepts
+     * (`MAX_TRUST_LIST_CERTIFICATES`), verification refuses every credential
+     * of the query, also when one list alone holds more: only the URLs of
+     * all lists are sent, and the lists after the one that goes over the
+     * limit are not loaded.
      */
     private async toWalletAuthorities(
         refs: TrustListRef[],
@@ -166,11 +176,32 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
         tenantHost: string,
     ): Promise<WalletTrustedAuthority[]> {
         const lists: Array<ListKeyIdentifiers & { ref: TrustListRef }> = [];
+        let certificates = 0;
         for (const ref of refs) {
             // One list at a time, like verification (CollectTrustedEntities):
             // bounds outbound requests and memory per request.
-            const keyIds = await this.authorityKeyIdentifiers(ref, tenantId); // NOSONAR: sequential on purpose, see above
-            lists.push({ ref, ...keyIds });
+            try {
+                const { entities, ...keyIds } =
+                    await this.authorityKeyIdentifiers(ref, tenantId); // NOSONAR: sequential on purpose, see above
+                certificates = addTrustListCertificates(
+                    certificates,
+                    ref.trustListId ?? ref.url,
+                    entities,
+                );
+                lists.push({ ref, ...keyIds });
+            } catch (err: unknown) {
+                if (!(err instanceof TooManyTrustListCertificatesError)) {
+                    throw err;
+                }
+                this.logger.warn(
+                    { tenantId, err },
+                    "The trust lists of an etsi_tl entry hold too many certificates together for verification; sending only their URLs",
+                );
+                const urls = refs
+                    .map((each) => trustListUrl(each, tenantHost))
+                    .filter((url): url is string => !!url);
+                return [{ type: TrustedAuthorityType.ETSI_TL, values: urls }];
+            }
         }
         const akiValues = new Set(lists.flatMap((list) => list.values));
         const allOutdated = lists.every((list) => list.outdated);
@@ -200,16 +231,28 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
         return authorities;
     }
 
-    /** Key identifiers of the credential issuers listed in one trust list. */
+    /**
+     * Key identifiers of the credential issuers listed in one trust list,
+     * and the entities they come from; none when the list cannot be used.
+     * @throws TooManyTrustListCertificatesError when the list alone holds
+     * more certificates than verification accepts, which concerns its whole
+     * `etsi_tl` entry
+     */
     private async authorityKeyIdentifiers(
         ref: TrustListRef,
         tenantId: string,
-    ): Promise<ListKeyIdentifiers> {
+    ): Promise<ListKeyIdentifiers & { entities: TrustedEntity[] }> {
         try {
-            return credentialIssuerAuthorityKeyIdentifiers(
-                await this.trustStore.getListedEntities(ref, tenantId),
+            const entities = await this.trustStore.getListedEntities(
+                ref,
+                tenantId,
             );
+            return {
+                ...credentialIssuerAuthorityKeyIdentifiers(entities),
+                entities,
+            };
         } catch (err: unknown) {
+            if (err instanceof TooManyTrustListCertificatesError) throw err;
             const outdated = err instanceof OutdatedTrustListsError;
             this.logger.warn(
                 { tenantId, trustListId: ref.trustListId, url: ref.url, err },
@@ -217,7 +260,7 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
                     ? "Trust list is outdated; its issuers are left out of trusted_authorities"
                     : "Failed to load trust list for AKI extraction",
             );
-            return { values: [], complete: false, outdated };
+            return { values: [], complete: false, outdated, entities: [] };
         }
     }
 }

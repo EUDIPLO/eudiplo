@@ -78,3 +78,33 @@ export async function chainBelow(
         x5c: chain.map((cert) => Buffer.from(cert.rawData).toString("base64")),
     };
 }
+
+/**
+ * `count` CA certificates with the subject `name`, self-signed with one key
+ * of their own and without a subject key identifier, as someone who
+ * controls a trust list could list them. For a certificate that names `name`
+ * as its issuer, the path builder checks its signature against each of them
+ * (`MAX_PATH_SIGNATURE_CHECKS`), and none verifies it.
+ */
+export async function sameSubjectCertificates(
+    name: string,
+    count: number,
+): Promise<x509.X509Certificate[]> {
+    const decoyKeys = await keys();
+    const certificates: x509.X509Certificate[] = [];
+    for (let i = 0; i < count; i++) {
+        certificates.push(
+            await x509.X509CertificateGenerator.createSelfSigned({
+                serialNumber: (i + 0x100).toString(16),
+                name,
+                ...currentPeriod(),
+                keys: decoyKeys,
+                signingAlgorithm: algorithm,
+                extensions: [
+                    new x509.BasicConstraintsExtension(true, undefined, true),
+                ],
+            }),
+        );
+    }
+    return certificates;
+}
