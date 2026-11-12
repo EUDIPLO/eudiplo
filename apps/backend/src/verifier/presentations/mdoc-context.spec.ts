@@ -7,7 +7,11 @@ import {
 import { CoseKey } from "@owf/mdoc";
 import * as x509 from "@peculiar/x509";
 import { exportJWK, generateKeyPair } from "jose";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+    chainBelow,
+    chainCa,
+} from "../../../test/trust/certificate-chain.fixture.js";
 import { coseReadyJwk } from "../../shared/utils/cose-key-jwk.util.js";
 import { mdocContext } from "./mdoc-context.js";
 
@@ -459,5 +463,42 @@ describe("mdocContext.x509.verifyCertificateChain", () => {
                 x5chain: [new Uint8Array(cert.rawData)],
             }),
         ).rejects.toThrow(/cause=Certificate signature is invalid/);
+    });
+});
+
+// The chain builder's work grows with the square of the chain's length. The
+// wallet decides how long an issuer's x5chain is, the issuer's status list
+// host how long a status list's is.
+describe("mdocContext.x509.verifyCertificateChain x5chain length limit", () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    const der = (cert: x509.X509Certificate) => new Uint8Array(cert.rawData);
+
+    it("accepts an x5chain of ten certificates", async () => {
+        const ca = await chainCa();
+        const { chain } = await chainBelow(ca, 10);
+
+        await expect(
+            mdocContext.x509.verifyCertificateChain({
+                trustedCertificates: [der(ca.cert)],
+                x5chain: chain.map(der),
+            }),
+        ).resolves.toMatchObject({ chain: expect.any(Array) });
+    });
+
+    it("refuses an x5chain of eleven certificates before parsing them", async () => {
+        const build = vi.spyOn(x509.X509ChainBuilder.prototype, "build");
+
+        await expect(
+            mdocContext.x509.verifyCertificateChain({
+                trustedCertificates: [new Uint8Array([1])],
+                x5chain: new Array(11).fill(new Uint8Array([1])),
+            }),
+        ).rejects.toThrow(
+            "x5chain holds 11 certificates; at most 10 are accepted",
+        );
+        expect(build).not.toHaveBeenCalled();
     });
 });

@@ -82,7 +82,7 @@ The same codes are used for SD-JWT VC and mDOC, in OpenID4VP and ISO 18013-7 flo
 | `trust_list_unavailable`  | The trusted list could not be loaded, so the credential could not be validated. | A configured trust list could not be fetched, parsed or signature-checked, or every configured list is outdated: no valid `NextUpdate` or one that has passed, or no valid `LoTESequenceNumber` or a lower one than a list accepted before; or, under OpenID Federation, the federation statements or the trust engine could not be reached. EUDIPLO fails closed. This is a verifier-side problem. |
 | `certificate_expired`     | The credential issuer certificate is expired or not yet valid.                  | A certificate in the path is outside its validity period. For an mDOC, also a certificate from its status list or identifier list signer up to the certificate the trust list requires it to be signed under. |
 | `x5c_missing`             | The credential is missing its issuer certificate chain.                         | The credential carries no `x5c` certificate chain.                                                                     |
-| `verification_error`      | The credential could not be verified.                                            | Any other verification error, including a malformed `x5c`, an SD-JWT VC without `iss` or `kid` under OpenID Federation, and an mDOC whose only trusted authority is an OpenID Federation.                              |
+| `verification_error`      | The credential could not be verified.                                            | Any other verification error, including a malformed `x5c`, an `x5c` or `x5chain` of more than 10 certificates (the credential's, or an mDOC status list's or identifier list's), an SD-JWT VC without `iss` or `kid` under OpenID Federation, and an mDOC whose only trusted authority is an OpenID Federation.                              |
 
 ### DCQL claim values
 
@@ -113,7 +113,7 @@ Only the first event finishes the session: it moves a `fetched` session to `comp
 Some failures have no code; `failureCode` and `outcome.error` are absent and `errorReason` describes the problem. Examples:
 
 - `Missing required credentials: ...` or `Missing required claims for credential '...': ...`: the response does not satisfy the DCQL query.
-- `Presentation validation failed: ...`: for example a transaction data hash mismatch, an invalid key binding, or several presentations for a query without `multiple`.
+- `Presentation validation failed: ...`: for example a transaction data hash mismatch, an invalid key binding, an SD-JWT VC status list that does not verify (`Status List JWT verification failed: ...`, also for an `x5c` of more than 10 certificates), or several presentations for a query without `multiple`.
 - `HPKE decryption failed`: an ISO 18013-7 response that cannot be decrypted.
 
 ### What the wallet or browser receives

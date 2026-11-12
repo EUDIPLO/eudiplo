@@ -13,7 +13,7 @@ import { Span } from "nestjs-otel";
 import { CryptoService } from "../crypto/crypto.service.js";
 import { CryptoImplementationService } from "../crypto/key/crypto-implementation/crypto-implementation.service.js";
 import { TrustListRef } from "../verifier/presentations/entities/presentation-config.entity.js";
-import { AttestationCertificateNotValid } from "./domain/attestation-certificate-validity.js";
+import { isAttestationChainRejection } from "./domain/attestation-certificate-validity.js";
 import { AttestationStatusRejected } from "./domain/attestation-status-rejected.js";
 import {
     discardedTrustListsNote,
@@ -280,7 +280,7 @@ export class WalletAttestationService {
             if (err instanceof UnauthorizedException) {
                 throw err;
             }
-            if (err instanceof AttestationCertificateNotValid) {
+            if (isAttestationChainRejection(err)) {
                 throw new UnauthorizedException(
                     `Wallet attestation certificate chain is not valid: ${err.message}`,
                 );
@@ -576,7 +576,8 @@ export class WalletAttestationService {
      * answers it, or undefined if it is accepted
      * ({@link verifyStatusListSignature}). The reason for a certificate
      * outside its validity period names its place in the path and its
-     * period, not its subject: it reaches the wallet.
+     * period, not its subject, and the one for an `x5c` with too many
+     * certificates names their number: it reaches the wallet.
      */
     private async statusListSignatureFailure(
         statusListJwt: string,
@@ -595,7 +596,7 @@ export class WalletAttestationService {
             }
             return `${STATUS_LIST_SIGNATURE_FAILED} - not signed by the wallet provider's trusted revocation or wallet attestation certificate`;
         } catch (err) {
-            if (err instanceof AttestationCertificateNotValid) {
+            if (isAttestationChainRejection(err)) {
                 return `${STATUS_LIST_SIGNATURE_FAILED} - certificate chain is not valid: ${err.message}`;
             }
             throw err;
@@ -614,6 +615,8 @@ export class WalletAttestationService {
      * @throws AttestationCertificateNotValid if the list is signed under
      * that certificate, but a certificate of its path, from the one that
      * signs the list to the trusted signer, is outside its validity period
+     * @throws CertificateChainTooLong if the list's `x5c` holds more
+     * certificates than `MAX_CERTIFICATE_CHAIN_LENGTH`
      */
     private async verifyStatusListSignature(
         statusListJwt: string,
@@ -687,7 +690,7 @@ export class WalletAttestationService {
                         trustStore.entities,
                     ));
             } catch (e: any) {
-                if (e instanceof AttestationCertificateNotValid) throw e;
+                if (isAttestationChainRejection(e)) throw e;
                 this.logger.debug(
                     `Status list chain build failed: ${e?.message ?? e}`,
                 );
@@ -718,7 +721,7 @@ export class WalletAttestationService {
             );
             return true;
         } catch (e: any) {
-            if (e instanceof AttestationCertificateNotValid) throw e;
+            if (isAttestationChainRejection(e)) throw e;
             this.logger.error(
                 `Error verifying status list signature: ${e?.message ?? e}`,
             );

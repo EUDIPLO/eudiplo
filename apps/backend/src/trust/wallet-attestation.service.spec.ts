@@ -9,6 +9,10 @@ import {
     outsideStates,
     periodsOutside,
 } from "../../test/trust/attestation-certificate-periods.fixture.js";
+import {
+    chainBelow,
+    chainCa,
+} from "../../test/trust/certificate-chain.fixture.js";
 import type { ValidityPeriod } from "../shared/utils/certificate-validity.util.js";
 import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
 import { AttestationStatusRejected } from "./domain/attestation-status-rejected.js";
@@ -554,6 +558,20 @@ describe("WalletAttestationService status list signer", () => {
         };
     }
 
+    /** A service that checks status list signatures with real certificates. */
+    function statusListService() {
+        return Object.assign(
+            Object.create(WalletAttestationService.prototype),
+            {
+                logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+                cryptoImplementationService: {
+                    getCryptoFromJwk: () => ES256,
+                },
+                x509ValidationService: new X509ValidationService(),
+            },
+        );
+    }
+
     /** Verify against a provider that lists `revocationCas` as revocation services. */
     async function verifyWithRevocation(
         jwt: string,
@@ -564,17 +582,7 @@ describe("WalletAttestationService status list signer", () => {
             attestationCa,
             revocationCas,
         );
-        const service = Object.assign(
-            Object.create(WalletAttestationService.prototype),
-            {
-                logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
-                cryptoImplementationService: {
-                    getCryptoFromJwk: () => ES256,
-                },
-                x509ValidationService: new X509ValidationService(),
-            },
-        );
-        return service.verifyStatusListSignature(
+        return statusListService().verifyStatusListSignature(
             jwt,
             matchedEntity,
             trustStore,
@@ -619,6 +627,44 @@ describe("WalletAttestationService status list signer", () => {
                 otherCa.cert,
             ),
         ).resolves.toBe(false);
+    });
+
+    // The chain builder's work grows with the square of the chain's length,
+    // and the provider's status list host decides how long the x5c is.
+    describe("with an x5c of more than ten certificates", () => {
+        it("accepts a status list whose x5c holds ten certificates", async () => {
+            const attestationCa = await ca("Provider CA");
+            const revocationCa = await chainCa("CN=Provider Status CA");
+            const { chain, signingKeys } = await chainBelow(revocationCa, 10);
+
+            await expect(
+                verifyWithRevocation(
+                    await signStatusList(signingKeys, chain),
+                    attestationCa.cert,
+                    [revocationCa.cert],
+                ),
+            ).resolves.toBe(true);
+        });
+
+        it("rejects a status list whose x5c holds eleven certificates, with the number in the answer", async () => {
+            const attestationCa = await ca("Provider CA");
+            const revocationCa = await chainCa("CN=Provider Status CA");
+            const { chain, signingKeys } = await chainBelow(revocationCa, 11);
+            const { matchedEntity, trustStore } = await providerWithRevocation(
+                attestationCa.cert,
+                [revocationCa.cert],
+            );
+
+            await expect(
+                statusListService().statusListSignatureFailure(
+                    await signStatusList(signingKeys, chain),
+                    matchedEntity,
+                    trustStore,
+                ),
+            ).resolves.toBe(
+                "Status list JWT signature verification failed - certificate chain is not valid: x5c holds 11 certificates; at most 10 are accepted",
+            );
+        });
     });
 
     // Neither the chain builder nor jose checks validity periods. A list
@@ -1318,6 +1364,26 @@ describe("WalletAttestationService wallet attestation signer", () => {
                 },
             ]),
         ).rejects.toThrow("Wallet provider certificate is not trusted");
+    });
+
+    it("rejects with 401 a wallet attestation whose x5c holds more than ten certificates", async () => {
+        const attestationCa = await chainCa("CN=Wallet Provider Root CA");
+        const { x5c } = await chainBelow(attestationCa, 11);
+        const header = Buffer.from(
+            JSON.stringify({ alg: "ES256", x5c }),
+        ).toString("base64url");
+
+        const rejected = validate(`${header}.e30.c2ln`, [
+            {
+                serviceTypeIdentifier:
+                    ServiceTypeIdentifiers.WalletSolutionIssuance,
+                certValue: der(attestationCa.cert),
+            },
+        ]);
+        await expect(rejected).rejects.toBeInstanceOf(UnauthorizedException);
+        await expect(rejected).rejects.toThrow(
+            "Wallet attestation certificate chain is not valid: x5c holds 11 certificates; at most 10 are accepted",
+        );
     });
 
     // A replayed older provider list keeps its valid signature; its passed

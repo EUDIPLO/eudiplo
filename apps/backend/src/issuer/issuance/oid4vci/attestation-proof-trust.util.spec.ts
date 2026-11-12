@@ -8,6 +8,10 @@ import {
     outsideStates,
     periodsOutside,
 } from "../../../../test/trust/attestation-certificate-periods.fixture.js";
+import {
+    chainBelow,
+    chainCa,
+} from "../../../../test/trust/certificate-chain.fixture.js";
 import type { ValidityPeriod } from "../../../shared/utils/certificate-validity.util.js";
 import { CollectTrustedEntities } from "../../../trust/application/collect-trusted-entities.js";
 import { TrustStoreService } from "../../../trust/trust-store.service.js";
@@ -328,6 +332,25 @@ describe("credential proof attestation trust with real certificates", () => {
                 error_description: expect.stringContaining(
                     "signer is not trusted",
                 ),
+            },
+        });
+    });
+
+    it("rejects with invalid_proof a key attestation whose x5c holds more than ten certificates", async () => {
+        const providerCa = await chainCa("CN=Wallet Provider CA");
+        const { x5c } = await chainBelow(providerCa, 11);
+
+        await expect(
+            validate(
+                jwt({ x5c }),
+                ServiceTypeIdentifiers.WalletSolutionIssuance,
+                der(providerCa.cert),
+            ),
+        ).rejects.toMatchObject({
+            response: {
+                error: "invalid_proof",
+                error_description:
+                    "Attestation proof certificate chain is not valid: x5c holds 11 certificates; at most 10 are accepted",
             },
         });
     });

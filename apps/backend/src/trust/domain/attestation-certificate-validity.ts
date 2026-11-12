@@ -1,3 +1,4 @@
+import { CertificateChainTooLong } from "../../shared/utils/certificate-chain-length.util.js";
 import {
     certificateValidityAt,
     formatCertificateDate,
@@ -42,6 +43,22 @@ export class AttestationCertificateNotValid extends Error {
         );
         this.name = "AttestationCertificateNotValid";
     }
+}
+
+/**
+ * Whether `error` rejects the certificate chain of a wallet or key
+ * attestation, or of its status list, for a reason the wallet may read: a
+ * certificate outside its validity period ({@link AttestationCertificateNotValid})
+ * or an `x5c` with too many certificates ({@link CertificateChainTooLong}).
+ * Neither message names a subject, URL or address.
+ */
+export function isAttestationChainRejection(
+    error: unknown,
+): error is AttestationCertificateNotValid | CertificateChainTooLong {
+    return (
+        error instanceof AttestationCertificateNotValid ||
+        error instanceof CertificateChainTooLong
+    );
 }
 
 /**

@@ -1,6 +1,6 @@
 import { Logger } from "@nestjs/common";
 import { decodeProtectedHeader } from "jose";
-import { AttestationCertificateNotValid } from "../../../trust/domain/attestation-certificate-validity.js";
+import { isAttestationChainRejection } from "../../../trust/domain/attestation-certificate-validity.js";
 import {
     type DiscardedTrustList,
     discardedTrustListsNote,
@@ -53,7 +53,9 @@ const ATTESTATION_PROOF_NOT_VALIDATED =
  * fixed `invalid_proof` text, since the reason can name a trust list URL or
  * an internal address; the reason is logged with the tenant instead. A
  * certificate of the attestation's path outside its validity period answers
- * `invalid_proof` with the certificate's place in the path and its period.
+ * `invalid_proof` with the certificate's place in the path and its period,
+ * an `x5c` with more certificates than `MAX_CERTIFICATE_CHAIN_LENGTH` with
+ * their number.
  */
 export async function validateAttestationProofTrust(
     keyAttestationJwt: string,
@@ -113,7 +115,7 @@ export async function validateAttestationProofTrust(
         if (error instanceof CredentialRequestException) {
             throw error;
         }
-        if (error instanceof AttestationCertificateNotValid) {
+        if (isAttestationChainRejection(error)) {
             throw new CredentialRequestException(
                 "invalid_proof",
                 `Attestation proof certificate chain is not valid: ${error.message}`,

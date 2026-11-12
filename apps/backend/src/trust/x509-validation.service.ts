@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
+import { assertCertificateChainLength } from "../shared/utils/certificate-chain-length.util.js";
 import { certificateValidityAt } from "../shared/utils/certificate-validity.util.js";
 import { assertAttestationPathValidAt } from "./domain/attestation-certificate-validity.js";
 import {
@@ -83,7 +84,13 @@ export type MatchedTrustedEntity = {
 export class X509ValidationService {
     private readonly logger = new Logger(X509ValidationService.name);
 
+    /**
+     * Parse an `x5c` that a wallet or a remote host sent.
+     * @throws CertificateChainTooLong, before parsing, if it holds more than
+     * `MAX_CERTIFICATE_CHAIN_LENGTH` certificates
+     */
     parseX5c(x5c: X5cInput): x509.X509Certificate[] {
+        assertCertificateChainLength(x5c);
         return x5c.map((b64) => new x509.X509Certificate(b64));
     }
 
@@ -178,6 +185,10 @@ export class X509ValidationService {
     /**
      * Build a validated path from leaf using provided chain + anchors.
      * Returns path leaf..anchor if successful.
+     * @param presentedChain The chain a wallet or remote host sent, the
+     * output of {@link parseX5c}; the only input whose length is checked
+     * @throws CertificateChainTooLong if `presentedChain` holds more than
+     * `MAX_CERTIFICATE_CHAIN_LENGTH` certificates
      */
     async buildPath(
         leaf: x509.X509Certificate,
@@ -185,6 +196,7 @@ export class X509ValidationService {
         anchors: x509.X509Certificate[],
         extraIntermediates: x509.X509Certificate[] = [],
     ): Promise<x509.X509Certificate[]> {
+        assertCertificateChainLength(presentedChain);
         const pool = [...presentedChain, ...extraIntermediates, ...anchors];
         const builder = new x509.X509ChainBuilder({ certificates: pool });
         return await builder.build(leaf);
@@ -240,6 +252,8 @@ export class X509ValidationService {
      * @param options.ignoreValidityPeriods Leave the periods unchecked, for
      * an attestation that was checked when it was presented and whose
      * provider is matched again later
+     * @throws CertificateChainTooLong if `x5c` holds more certificates than
+     * `MAX_CERTIFICATE_CHAIN_LENGTH`
      * @throws if no certificate path to a listed certificate can be built
      * @throws AttestationCertificateNotValid if a certificate of the matched
      * path is outside its validity period
@@ -278,6 +292,8 @@ export class X509ValidationService {
      * {@link matchAttestationSigner} explains: the certificates the path
      * should end at (`signers`), those valid at `now` first; then the
      * presented chain; then the other listed certificates.
+     * @throws CertificateChainTooLong, before parsing, if `x5c` holds more
+     * certificates than `MAX_CERTIFICATE_CHAIN_LENGTH`
      * @throws if no certificate path can be built
      */
     private buildAttestationPath(
@@ -444,6 +460,8 @@ export class X509ValidationService {
      * @param options.now The time to check at; default: the current time
      * @returns The path, signing certificate first, and whether it matched
      * one of the provider's status list signers
+     * @throws CertificateChainTooLong if `x5c` holds more certificates than
+     * `MAX_CERTIFICATE_CHAIN_LENGTH`
      * @throws if no certificate path can be built
      * @throws AttestationCertificateNotValid if the path matched and a
      * certificate of it is outside its validity period
