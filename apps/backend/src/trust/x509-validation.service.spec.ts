@@ -1,6 +1,13 @@
 import * as x509 from "@peculiar/x509";
 import { describe, expect, it } from "vitest";
 import {
+    certificateFailure,
+    currentPeriod,
+    outsideStates,
+    periodsOutside,
+} from "../../test/trust/attestation-certificate-periods.fixture.js";
+import type { ValidityPeriod } from "../shared/utils/certificate-validity.util.js";
+import {
     credentialIssuerServiceTypes,
     ServiceTypeIdentifiers,
     type TrustedEntity,
@@ -324,5 +331,384 @@ describe("X509ValidationService.isTimeValid", () => {
         expect(
             service.isTimeValid(cert, new Date(notAfter.getTime() + second)),
         ).toBe(false);
+    });
+});
+
+describe("X509ValidationService.matchAttestationSigner validity periods", () => {
+    const service = new X509ValidationService();
+    const second = 1000;
+    const hour = 3_600_000;
+
+    async function keys() {
+        return (await crypto.subtle.generateKey(algorithm, true, [
+            "sign",
+            "verify",
+        ])) as CryptoKeyPair;
+    }
+
+    function ca(
+        serialNumber: string,
+        caKeys: CryptoKeyPair,
+        period: ValidityPeriod = currentPeriod(),
+        name = "CN=Wallet Provider CA",
+    ) {
+        return x509.X509CertificateGenerator.createSelfSigned({
+            serialNumber,
+            name,
+            ...period,
+            keys: caKeys,
+            signingAlgorithm: algorithm,
+            extensions: [new x509.BasicConstraintsExtension(true, 0, true)],
+        });
+    }
+
+    async function issued(
+        serialNumber: string,
+        subject: string,
+        issuer: x509.X509Certificate,
+        issuerKeys: CryptoKeyPair,
+        period: ValidityPeriod = currentPeriod(),
+        isCa = false,
+    ) {
+        const subjectKeys = await keys();
+        const cert = await x509.X509CertificateGenerator.create({
+            serialNumber,
+            subject,
+            issuer: issuer.subject,
+            ...period,
+            publicKey: subjectKeys.publicKey,
+            signingKey: issuerKeys.privateKey,
+            signingAlgorithm: algorithm,
+            extensions: isCa
+                ? [new x509.BasicConstraintsExtension(true, 0, true)]
+                : [],
+        });
+        return { cert, keys: subjectKeys };
+    }
+
+    /** A provider CA, listed as WalletSolution/Issuance, and a signing certificate under it. */
+    async function provider(
+        options: {
+            caPeriod?: ValidityPeriod;
+            leafPeriod?: ValidityPeriod;
+        } = {},
+    ) {
+        const caKeys = await keys();
+        const providerCa = await ca("01", caKeys, options.caPeriod);
+        const { cert: leaf } = await issued(
+            "02",
+            "CN=Wallet Attestation Signer",
+            providerCa,
+            caKeys,
+            options.leafPeriod,
+        );
+        return { providerCa, caKeys, leaf };
+    }
+
+    const listed = (...certs: x509.X509Certificate[]) => [
+        entity(
+            "provider",
+            certs.map((cert): [string, string] => [
+                ServiceTypeIdentifiers.WalletSolutionIssuance,
+                der(cert),
+            ]),
+        ),
+    ];
+
+    const thumbprint = async (cert: x509.X509Certificate) =>
+        Buffer.from(await cert.getThumbprint("SHA-256")).toString("hex");
+
+    it("accepts a path whose certificates are all valid", async () => {
+        const { providerCa, leaf } = await provider();
+
+        await expect(
+            service.matchAttestationSigner([der(leaf)], listed(providerCa)),
+        ).resolves.toMatchObject({ matchMode: "ca" });
+    });
+
+    for (const state of outsideStates) {
+        it(`rejects a signing certificate that is ${state}`, async () => {
+            const { providerCa, leaf } = await provider({
+                leafPeriod: periodsOutside[state](),
+            });
+
+            await expect(
+                service.matchAttestationSigner([der(leaf)], listed(providerCa)),
+            ).rejects.toThrow(certificateFailure("Signing", state));
+        });
+
+        it(`rejects a listed CA that is ${state}`, async () => {
+            const { providerCa, leaf } = await provider({
+                caPeriod: periodsOutside[state](),
+            });
+
+            await expect(
+                service.matchAttestationSigner([der(leaf)], listed(providerCa)),
+            ).rejects.toThrow(certificateFailure("Trust list", state));
+        });
+
+        it(`rejects an intermediate certificate that is ${state}`, async () => {
+            const rootKeys = await keys();
+            const root = await ca("01", rootKeys);
+            const intermediate = await issued(
+                "02",
+                "CN=Wallet Provider Intermediate CA",
+                root,
+                rootKeys,
+                periodsOutside[state](),
+                true,
+            );
+            const { cert: leaf } = await issued(
+                "03",
+                "CN=Wallet Attestation Signer",
+                intermediate.cert,
+                intermediate.keys,
+            );
+
+            await expect(
+                service.matchAttestationSigner(
+                    [der(leaf), der(intermediate.cert)],
+                    listed(root),
+                ),
+            ).rejects.toThrow(certificateFailure("Intermediate", state));
+        });
+
+        it(`rejects a pinned signing certificate that is ${state}`, async () => {
+            const pinned = await x509.X509CertificateGenerator.createSelfSigned(
+                {
+                    serialNumber: "01",
+                    name: "CN=Pinned Wallet Attestation Signer",
+                    ...periodsOutside[state](),
+                    keys: await keys(),
+                    signingAlgorithm: algorithm,
+                    extensions: [
+                        new x509.BasicConstraintsExtension(false, 0, true),
+                    ],
+                },
+            );
+
+            await expect(
+                service.matchAttestationSigner([der(pinned)], listed(pinned)),
+            ).rejects.toThrow(certificateFailure("Signing", state));
+        });
+    }
+
+    it("names the period and the time of the check", async () => {
+        const { providerCa, leaf } = await provider({
+            caPeriod: {
+                notBefore: new Date("2025-01-01T00:00:00Z"),
+                notAfter: new Date("2030-01-01T00:00:00Z"),
+            },
+            leafPeriod: {
+                notBefore: new Date("2026-01-01T00:00:00Z"),
+                notAfter: new Date("2026-06-01T00:00:00Z"),
+            },
+        });
+
+        await expect(
+            service.matchAttestationSigner([der(leaf)], listed(providerCa), {
+                now: new Date("2026-07-01T00:00:00Z"),
+            }),
+        ).rejects.toThrow(
+            "Signing certificate has expired (notAfter 2026-06-01T00:00:00.000Z, checked at 2026-07-01T00:00:00.000Z)",
+        );
+        await expect(
+            service.matchAttestationSigner([der(leaf)], listed(providerCa), {
+                now: new Date("2025-12-01T00:00:00Z"),
+            }),
+        ).rejects.toThrow(
+            "Signing certificate is not yet valid (notBefore 2026-01-01T00:00:00.000Z, checked at 2025-12-01T00:00:00.000Z)",
+        );
+    });
+
+    it("accepts both ends of a validity period", async () => {
+        // The CA's period is wider, so only the signing certificate's ends
+        // are at stake.
+        const { providerCa, leaf } = await provider({
+            caPeriod: {
+                notBefore: new Date(Date.now() - 2 * hour),
+                notAfter: new Date(Date.now() + 2 * hour),
+            },
+        });
+        const match = (now: Date) =>
+            service.matchAttestationSigner([der(leaf)], listed(providerCa), {
+                now,
+            });
+
+        await expect(match(leaf.notBefore)).resolves.not.toBeNull();
+        await expect(match(leaf.notAfter)).resolves.not.toBeNull();
+        await expect(
+            match(new Date(leaf.notBefore.getTime() - second)),
+        ).rejects.toThrow("Signing certificate is not yet valid");
+        await expect(
+            match(new Date(leaf.notAfter.getTime() + second)),
+        ).rejects.toThrow("Signing certificate has expired");
+    });
+
+    it("does not check a certificate above a pinned signing certificate", async () => {
+        const caKeys = await keys();
+        const expiredCa = await ca("01", caKeys, periodsOutside.expired());
+        const { cert: leaf } = await issued(
+            "02",
+            "CN=Wallet Attestation Signer",
+            expiredCa,
+            caKeys,
+        );
+
+        await expect(
+            service.matchAttestationSigner(
+                [der(leaf), der(expiredCa)],
+                listed(leaf),
+            ),
+        ).resolves.toMatchObject({ matchMode: "leaf-pinned" });
+    });
+
+    describe("with a CA renewed with the same subject and key", () => {
+        async function renewal() {
+            const caKeys = await keys();
+            const expiredCa = await ca("01", caKeys, periodsOutside.expired());
+            const renewedCa = await ca("02", caKeys);
+            const { cert: leaf } = await issued(
+                "03",
+                "CN=Wallet Attestation Signer",
+                renewedCa,
+                caKeys,
+            );
+            return { expiredCa, renewedCa, leaf };
+        }
+
+        for (const order of ["expired first", "renewed first"] as const) {
+            for (const x5c of ["without the CA", "with the expired CA"]) {
+                it(`ends the path at the renewed CA while the expired one is still listed (${order}, x5c ${x5c})`, async () => {
+                    const { expiredCa, renewedCa, leaf } = await renewal();
+
+                    const matched = await service.matchAttestationSigner(
+                        x5c === "with the expired CA"
+                            ? [der(leaf), der(expiredCa)]
+                            : [der(leaf)],
+                        listed(
+                            ...(order === "expired first"
+                                ? [expiredCa, renewedCa]
+                                : [renewedCa, expiredCa]),
+                        ),
+                    );
+
+                    expect(matched?.issuanceThumbprint).toBe(
+                        await thumbprint(renewedCa),
+                    );
+                });
+            }
+        }
+
+        it("ends the path at the listed renewal when x5c carries the expired CA the list no longer names", async () => {
+            const { expiredCa, renewedCa, leaf } = await renewal();
+
+            const matched = await service.matchAttestationSigner(
+                [der(leaf), der(expiredCa)],
+                listed(renewedCa),
+            );
+
+            expect(matched?.issuanceThumbprint).toBe(
+                await thumbprint(renewedCa),
+            );
+        });
+    });
+
+    it("rejects an expired attestation CA although a revocation CA with its subject and key is valid", async () => {
+        const { providerCa, caKeys, leaf } = await provider({
+            caPeriod: periodsOutside.expired(),
+        });
+        const revocationCa = await ca("09", caKeys);
+
+        await expect(
+            service.matchAttestationSigner(
+                [der(leaf)],
+                [
+                    entity("provider", [
+                        [
+                            ServiceTypeIdentifiers.WalletSolutionRevocation,
+                            der(revocationCa),
+                        ],
+                        [
+                            ServiceTypeIdentifiers.WalletSolutionIssuance,
+                            der(providerCa),
+                        ],
+                    ]),
+                ],
+            ),
+        ).rejects.toThrow(certificateFailure("Trust list", "expired"));
+    });
+
+    it("does not let a revocation CA with the subject and key of a presented intermediate take its place", async () => {
+        const rootKeys = await keys();
+        const root = await ca("01", rootKeys);
+        const intermediate = await issued(
+            "02",
+            "CN=Wallet Provider Intermediate CA",
+            root,
+            rootKeys,
+            currentPeriod(),
+            true,
+        );
+        const revocationTwin = await ca(
+            "03",
+            intermediate.keys,
+            currentPeriod(),
+            intermediate.cert.subject,
+        );
+        const { cert: leaf } = await issued(
+            "04",
+            "CN=Wallet Attestation Signer",
+            intermediate.cert,
+            intermediate.keys,
+        );
+
+        const matched = await service.matchAttestationSigner(
+            [der(leaf), der(intermediate.cert)],
+            [
+                entity("provider", [
+                    [ServiceTypeIdentifiers.WalletSolutionIssuance, der(root)],
+                    [
+                        ServiceTypeIdentifiers.WalletSolutionRevocation,
+                        der(revocationTwin),
+                    ],
+                ]),
+            ],
+        );
+
+        expect(matched?.issuanceThumbprint).toBe(await thumbprint(root));
+    });
+
+    it("skips listed certificates that cannot be parsed when it orders the anchors", async () => {
+        const { providerCa, leaf } = await provider();
+
+        await expect(
+            service.matchAttestationSigner(
+                [der(leaf)],
+                [
+                    ...listed(providerCa),
+                    entity("other", [
+                        [ServiceTypeIdentifiers.WalletSolutionIssuance, ""],
+                        [
+                            ServiceTypeIdentifiers.WalletSolutionRevocation,
+                            "AAAA",
+                        ],
+                    ]),
+                ],
+            ),
+        ).resolves.toMatchObject({ matchMode: "ca" });
+    });
+
+    it("leaves the periods unchecked when told to", async () => {
+        const { providerCa, leaf } = await provider({
+            caPeriod: periodsOutside.expired(),
+            leafPeriod: periodsOutside.expired(),
+        });
+
+        await expect(
+            service.matchAttestationSigner([der(leaf)], listed(providerCa), {
+                ignoreValidityPeriods: true,
+            }),
+        ).resolves.toMatchObject({ matchMode: "ca" });
     });
 });

@@ -32,6 +32,10 @@ import { buildClaims } from "../../src/issuer/configuration/credentials/utils/de
 import { IssuanceDto } from "../../src/issuer/configuration/issuance/dto/issuance.dto.js";
 import { Session } from "../../src/session/entities/session.entity.js";
 import {
+    certificateFailure,
+    periodsOutside,
+} from "../trust/attestation-certificate-periods.fixture.js";
+import {
     callbacks,
     getSignJwtCallback,
     IssuanceTestContext,
@@ -740,6 +744,9 @@ describe("Issuance - Pre-authorized Code Flow", () => {
         async (proofType) => {
             const trustListUrl =
                 "http://localhost:8787/key-attestation-trust-list";
+            // A second list names a provider whose certificate has expired.
+            const expiredListUrl =
+                "http://localhost:8787/key-attestation-trust-list-expired";
             const trustListSigningCert = await generateSelfSignedCertificate();
             const currentConfig = await request(app.getHttpServer())
                 .get("/issuer/config")
@@ -754,14 +761,13 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                 .send({
                     ...currentConfig.body,
                     walletProviderTrustLists: [
-                        {
-                            url: trustListUrl,
-                            verifierX509Der:
-                                trustListSigningCert.certificate.toString(
-                                    "base64",
-                                ),
-                        },
-                    ],
+                        trustListUrl,
+                        expiredListUrl,
+                    ].map((url) => ({
+                        url,
+                        verifierX509Der:
+                            trustListSigningCert.certificate.toString("base64"),
+                    })),
                 } as IssuanceDto)
                 .expect(201);
 
@@ -770,6 +776,10 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                     await generateSelfSignedCertificate();
                 const untrustedWalletProviderCert =
                     await generateSelfSignedCertificate();
+                const expiredWalletProviderCert =
+                    await generateSelfSignedCertificate(
+                        periodsOutside.expired(),
+                    );
                 const trustListJwt = await createMockTrustListJwt(
                     trustListSigningCert,
                     trustedWalletProviderCert.certificate,
@@ -781,6 +791,17 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                     .reply(200, trustListJwt, {
                         "Content-Type": "application/jwt",
                     });
+                nock("http://localhost:8787")
+                    .persist()
+                    .get("/key-attestation-trust-list-expired")
+                    .reply(
+                        200,
+                        await createMockTrustListJwt(
+                            trustListSigningCert,
+                            expiredWalletProviderCert.certificate,
+                        ),
+                        { "Content-Type": "application/jwt" },
+                    );
 
                 const issueCredentialWithAttestation = async (attestationCert: {
                     certificate: X509Certificate;
@@ -906,6 +927,24 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                 await expect(
                     issueCredentialWithAttestation(untrustedWalletProviderCert),
                 ).rejects.toThrow();
+                await expect(
+                    issueCredentialWithAttestation(
+                        expiredWalletProviderCert,
+                    ).then(
+                        () => {
+                            throw new Error(
+                                "Expected the credential request to fail",
+                            );
+                        },
+                        (error: Openid4vciRetrieveCredentialsError) =>
+                            error.response.credentialErrorResponseResult?.data,
+                    ),
+                ).resolves.toEqual({
+                    error: "invalid_proof",
+                    error_description: expect.stringContaining(
+                        `Attestation proof certificate chain is not valid: ${certificateFailure("Signing", "expired")}`,
+                    ),
+                });
 
                 const credentialResponse = await issueCredentialWithAttestation(
                     trustedWalletProviderCert,

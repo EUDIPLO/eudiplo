@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { certificateValidityAt } from "./certificate-validity.util.js";
+import {
+    certificateValidityAt,
+    formatCertificateDate,
+} from "./certificate-validity.util.js";
 
 describe("certificateValidityAt", () => {
     const period = {
@@ -30,5 +33,14 @@ describe("certificateValidityAt", () => {
             certificateValidityAt({ ...period, notAfter: invalid }, new Date()),
         ).toBe("expired");
         expect(certificateValidityAt(period, invalid)).toBe("not_yet_valid");
+    });
+});
+
+describe("formatCertificateDate", () => {
+    it("writes ISO 8601, and invalid for a date that is not a number", () => {
+        expect(formatCertificateDate(new Date("2026-01-01T00:00:00Z"))).toBe(
+            "2026-01-01T00:00:00.000Z",
+        );
+        expect(formatCertificateDate(new Date(Number.NaN))).toBe("invalid");
     });
 });

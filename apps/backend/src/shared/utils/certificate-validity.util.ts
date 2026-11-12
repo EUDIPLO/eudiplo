@@ -21,3 +21,11 @@ export function certificateValidityAt(
     }
     return "valid";
 }
+
+/**
+ * A certificate date for messages: ISO 8601, or "invalid" for a date that is
+ * not a number, which `toISOString` would throw on.
+ */
+export function formatCertificateDate(date: Date): string {
+    return Number.isNaN(date.getTime()) ? "invalid" : date.toISOString();
+}

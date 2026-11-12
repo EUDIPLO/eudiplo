@@ -7,7 +7,7 @@ import {
 } from "@openid4vc/oauth2";
 import { Openid4vciClient } from "@openid4vc/openid4vci";
 import { BitsPerStatus, StatusList } from "@owf/token-status-list";
-import { X509Certificate, X509CertificateGenerator } from "@peculiar/x509";
+import { X509Certificate } from "@peculiar/x509";
 import { exportJWK, generateKeyPair, importPKCS8, SignJWT } from "jose";
 import nock from "nock";
 import request from "supertest";
@@ -27,11 +27,16 @@ import { IssuanceDto } from "../../src/issuer/configuration/issuance/dto/issuanc
 import { StatusListVerifierService } from "../../src/trust/status-list-verifier.service.js";
 import { TrustStoreService } from "../../src/trust/trust-store.service.js";
 import {
+    certificateFailure,
+    periodsOutside,
+} from "../trust/attestation-certificate-periods.fixture.js";
+import {
     callbacks,
     getSignJwtCallback,
     IssuanceTestContext,
     setupIssuanceTestApp,
 } from "../utils.js";
+import { generateSelfSignedCertificate } from "./attestation-trust-helpers.js";
 
 setGlobalDispatcher(
     new Agent({
@@ -40,47 +45,6 @@ setGlobalDispatcher(
         },
     }),
 );
-
-/**
- * Helper to generate a self-signed certificate for testing.
- * Returns both the certificate and its private key.
- */
-async function generateSelfSignedCertificate() {
-    // Generate EC key pair
-    const keyPair = await globalThis.crypto.subtle.generateKey(
-        {
-            name: "ECDSA",
-            namedCurve: "P-256",
-        },
-        true,
-        ["sign", "verify"],
-    );
-
-    const alg = {
-        name: "ECDSA",
-        hash: "SHA-256",
-    };
-
-    // Pass webcrypto instead of setting the global provider, which the
-    // backend replaced with its KMS provider for key chain certificates.
-    const cert = await X509CertificateGenerator.createSelfSigned(
-        {
-            serialNumber: "01",
-            name: "CN=Test Wallet Provider",
-            notBefore: new Date(),
-            notAfter: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
-            signingAlgorithm: alg,
-            keys: keyPair,
-        },
-        globalThis.crypto,
-    );
-
-    return {
-        certificate: cert,
-        privateKey: keyPair.privateKey,
-        publicKey: keyPair.publicKey,
-    };
-}
 
 /**
  * Creates a mock LoTE trust list JWT containing the given certificate.
@@ -845,128 +809,153 @@ describe("Issuance - Wallet Attestation", () => {
         ).rejects.toThrow();
     });
 
-    test("should fail when the wallet provider certificate is listed only as WalletSolution/Revocation", async () => {
-        nock.cleanAll();
-        const trustListUrl =
-            "http://trust-list.example.com/wallet-providers-revocation-only";
-        const trustListRef = {
-            url: trustListUrl,
-            verifierX509Der:
-                trustListSigningCert.certificate.toString("base64"),
-        };
+    test.each([
+        {
+            // The provider's own certificate, but listed only as the service
+            // that signs its status lists: it does not sign wallet attestations.
+            case: "is listed only as WalletSolution/Revocation",
+            path: "/wallet-providers-revocation-only",
+            serviceType:
+                "http://uri.etsi.org/19602/SvcType/WalletSolution/Revocation",
+            provider: () => walletProviderCert,
+            answer: "Wallet provider certificate is not trusted",
+        },
+        {
+            case: "has expired",
+            path: "/wallet-providers-expired",
+            serviceType:
+                "http://uri.etsi.org/19602/SvcType/WalletSolution/Issuance",
+            provider: () =>
+                generateSelfSignedCertificate(periodsOutside.expired()),
+            answer: `Wallet attestation certificate chain is not valid: ${certificateFailure("Signing", "expired")}`,
+        },
+    ])(
+        "should fail when the wallet provider certificate $case",
+        async ({ path, serviceType, provider: providerFor, answer }) => {
+            nock.cleanAll();
+            const provider = await providerFor();
+            const trustListUrl = `http://trust-list.example.com${path}`;
+            const trustListRef = {
+                url: trustListUrl,
+                verifierX509Der:
+                    trustListSigningCert.certificate.toString("base64"),
+            };
 
-        const currentConfig = await request(app.getHttpServer())
-            .get("/issuer/config")
-            .trustLocalhost()
-            .set("Authorization", `Bearer ${authToken}`)
-            .expect(200);
+            const currentConfig = await request(app.getHttpServer())
+                .get("/issuer/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .expect(200);
 
-        await request(app.getHttpServer())
-            .post("/issuer/config")
-            .trustLocalhost()
-            .set("Authorization", `Bearer ${authToken}`)
-            .send({
-                ...currentConfig.body,
-                walletAttestationRequired: true,
-                walletProviderTrustLists: [trustListRef],
-                authorizationServers:
-                    currentConfig.body.authorizationServers.map(
-                        (server: { type: string }) => ({
-                            ...server,
-                            ...(server.type === "built-in"
-                                ? {
-                                      walletAttestationRequired: true,
-                                      walletProviderTrustLists: [trustListRef],
-                                  }
-                                : {}),
+            await request(app.getHttpServer())
+                .post("/issuer/config")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    ...currentConfig.body,
+                    walletAttestationRequired: true,
+                    walletProviderTrustLists: [trustListRef],
+                    authorizationServers:
+                        currentConfig.body.authorizationServers.map(
+                            (server: { type: string }) => ({
+                                ...server,
+                                ...(server.type === "built-in"
+                                    ? {
+                                          walletAttestationRequired: true,
+                                          walletProviderTrustLists: [
+                                              trustListRef,
+                                          ],
+                                      }
+                                    : {}),
+                            }),
+                        ),
+                } as IssuanceDto)
+                .expect(201);
+
+            const trustListJwt = await createMockTrustListJwt(
+                trustListSigningCert,
+                provider.certificate,
+                serviceType,
+            );
+            nock("http://trust-list.example.com")
+                .get(path)
+                .reply(200, trustListJwt, { "Content-Type": "application/jwt" })
+                .persist();
+
+            const offerResponse = await request(app.getHttpServer())
+                .post("/issuer/offer")
+                .trustLocalhost()
+                .set("Authorization", `Bearer ${authToken}`)
+                .send({
+                    response_type: "uri",
+                    credentialConfigurationIds: ["pid-no-key"],
+                    flow: "pre_authorized_code",
+                })
+                .expect(201);
+
+            const holderKeyPair = await generateKeyPair("ES256", {
+                extractable: true,
+            });
+            const holderPrivateKeyJwk = await exportJWK(
+                holderKeyPair.privateKey,
+            );
+            const holderPublicKeyJwk = await exportJWK(holderKeyPair.publicKey);
+            holderPublicKeyJwk.alg = "ES256";
+            holderPublicKeyJwk.use = "sig";
+
+            const client = new Openid4vciClient({
+                callbacks: {
+                    ...callbacks,
+                    clientAuthentication: clientAuthenticationAnonymous(),
+                    signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                },
+            });
+            const credentialOffer = await client.resolveCredentialOffer(
+                offerResponse.body.uri,
+            );
+            const issuerMetadata = await client.resolveIssuerMetadata(
+                credentialOffer.credential_issuer,
+            );
+            const authServer =
+                issuerMetadata.authorizationServers?.[0].issuer ||
+                credentialOffer.credential_issuer;
+
+            const clientAttestationJwt = await createWalletAttestationJwt({
+                walletProviderCert: provider.certificate,
+                walletProviderKey: provider.privateKey,
+                holderPublicKey: holderPublicKeyJwk as Jwk,
+                authorizationServer: authServer,
+            });
+            const clientWithAttestation = new Openid4vciClient({
+                callbacks: {
+                    ...callbacks,
+                    clientAuthentication:
+                        clientAuthenticationClientAttestationJwt({
+                            clientAttestationJwt,
+                            callbacks: {
+                                signJwt: getSignJwtCallback([
+                                    holderPrivateKeyJwk as Jwk,
+                                ]),
+                                generateRandom: callbacks.generateRandom,
+                            },
                         }),
-                    ),
-            } as IssuanceDto)
-            .expect(201);
+                    signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                },
+            });
 
-        // The provider's own certificate, but listed only as the service that
-        // signs its status lists: it does not sign wallet attestations.
-        const trustListJwt = await createMockTrustListJwt(
-            trustListSigningCert,
-            walletProviderCert.certificate,
-            "http://uri.etsi.org/19602/SvcType/WalletSolution/Revocation",
-        );
-        nock("http://trust-list.example.com")
-            .get("/wallet-providers-revocation-only")
-            .reply(200, trustListJwt, { "Content-Type": "application/jwt" })
-            .persist();
-
-        const offerResponse = await request(app.getHttpServer())
-            .post("/issuer/offer")
-            .trustLocalhost()
-            .set("Authorization", `Bearer ${authToken}`)
-            .send({
-                response_type: "uri",
-                credentialConfigurationIds: ["pid-no-key"],
-                flow: "pre_authorized_code",
-            })
-            .expect(201);
-
-        const holderKeyPair = await generateKeyPair("ES256", {
-            extractable: true,
-        });
-        const holderPrivateKeyJwk = await exportJWK(holderKeyPair.privateKey);
-        const holderPublicKeyJwk = await exportJWK(holderKeyPair.publicKey);
-        holderPublicKeyJwk.alg = "ES256";
-        holderPublicKeyJwk.use = "sig";
-
-        const client = new Openid4vciClient({
-            callbacks: {
-                ...callbacks,
-                clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
-            },
-        });
-        const credentialOffer = await client.resolveCredentialOffer(
-            offerResponse.body.uri,
-        );
-        const issuerMetadata = await client.resolveIssuerMetadata(
-            credentialOffer.credential_issuer,
-        );
-        const authServer =
-            issuerMetadata.authorizationServers?.[0].issuer ||
-            credentialOffer.credential_issuer;
-
-        const clientAttestationJwt = await createWalletAttestationJwt({
-            walletProviderCert: walletProviderCert.certificate,
-            walletProviderKey: walletProviderCert.privateKey,
-            holderPublicKey: holderPublicKeyJwk as Jwk,
-            authorizationServer: authServer,
-        });
-        const clientWithAttestation = new Openid4vciClient({
-            callbacks: {
-                ...callbacks,
-                clientAuthentication: clientAuthenticationClientAttestationJwt({
-                    clientAttestationJwt,
-                    callbacks: {
-                        signJwt: getSignJwtCallback([
-                            holderPrivateKeyJwk as Jwk,
-                        ]),
-                        generateRandom: callbacks.generateRandom,
-                    },
-                }),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
-            },
-        });
-
-        await expect(
-            clientWithAttestation.retrievePreAuthorizedCodeAccessTokenFromOffer(
-                { credentialOffer, issuerMetadata },
-            ),
-        ).rejects.toMatchObject({
-            errorResponse: {
-                error_description: expect.stringContaining(
-                    "Wallet provider certificate is not trusted",
+            await expect(
+                clientWithAttestation.retrievePreAuthorizedCodeAccessTokenFromOffer(
+                    { credentialOffer, issuerMetadata },
                 ),
-            },
-        });
-        nock.cleanAll();
-    });
+            ).rejects.toMatchObject({
+                errorResponse: {
+                    error: "invalid_client",
+                    error_description: expect.stringContaining(answer),
+                },
+            });
+            nock.cleanAll();
+        },
+    );
 
     test("should succeed when wallet attestation is not required", async () => {
         // Clean up any pending nock mocks
