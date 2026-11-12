@@ -53,10 +53,10 @@ export const ServiceStatuses = {
 } as const;
 
 /** Statuses saying that a service is no longer approved, in any list. */
-const withdrawnServiceStatuses: readonly string[] = [
+const withdrawnServiceStatuses: ReadonlySet<string> = new Set([
     ServiceStatuses.PubEAAWithdrawn,
     ServiceStatuses.SchemeApprovalWithdrawn,
-];
+]);
 
 export interface LoteProfileRules {
     /**
@@ -167,7 +167,7 @@ export function serviceStatusVerdict(
             : { keep: true };
     }
     if (rules.approvingStatuses.includes(status)) return { keep: true };
-    if (withdrawnServiceStatuses.includes(status)) {
+    if (withdrawnServiceStatuses.has(status)) {
         return { keep: false, note: "status-withdrawn" };
     }
     return {

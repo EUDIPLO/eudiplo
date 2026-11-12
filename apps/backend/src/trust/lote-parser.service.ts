@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import type { LoTE } from "@owf/eudi-lote";
 import {
     effectiveServiceType,
+    type LoteProfileRules,
     type LoteServiceNote,
     loteProfileRules,
     serviceStatusVerdict,
@@ -78,6 +79,54 @@ function describeServices(services: NotedService[]): string {
     return more > 0 ? `${named}; and ${more} more` : named;
 }
 
+type LoteService = NonNullable<
+    NonNullable<LoTE["TrustedEntitiesList"]>[number]["TrustedEntityServices"]
+>[number];
+
+/** What reading the services of one list needs, and where notes go. */
+type ServiceReading = {
+    rules: LoteProfileRules;
+    listHasTypedServices: boolean;
+    leftOut: NotedService[];
+    keptWithWarning: NotedService[];
+};
+
+/**
+ * The certificates of one service, with the type it is read with; none when
+ * the list's rules leave it out. Notes the service when it is left out or
+ * read with a warning.
+ */
+function readService(
+    svc: LoteService,
+    entityId: string | undefined,
+    { rules, listHasTypedServices, leftOut, keptWithWarning }: ServiceReading,
+): TrustedEntityServiceCert[] {
+    const svcInfo = svc.ServiceInformation;
+    const status = svcInfo?.ServiceStatus;
+    const resolved = effectiveServiceType(
+        rules,
+        svcInfo?.ServiceTypeIdentifier,
+        listHasTypedServices,
+    );
+    if (resolved.type === undefined) {
+        leftOut.push({ entityId, status, note: resolved.note });
+        return [];
+    }
+    const serviceTypeIdentifier = resolved.type;
+    const noted = { entityId, serviceType: serviceTypeIdentifier, status };
+
+    const verdict = serviceStatusVerdict(rules, status);
+    if (!verdict.keep) {
+        leftOut.push({ ...noted, note: verdict.note });
+        return [];
+    }
+    if (verdict.note) keptWithWarning.push({ ...noted, note: verdict.note });
+
+    return (svcInfo?.ServiceDigitalIdentity?.X509Certificates ?? []).flatMap(
+        (x) => (x.val ? [{ serviceTypeIdentifier, certValue: x.val }] : []),
+    );
+}
+
 @Injectable()
 export class LoteParserService {
     private readonly logger = new Logger(LoteParserService.name);
@@ -114,50 +163,14 @@ export class LoteParserService {
         const leftOut: NotedService[] = [];
         const keptWithWarning: NotedService[] = [];
 
+        const read = { rules, listHasTypedServices, leftOut, keptWithWarning };
+
         for (const te of rawEntities) {
             // The first name identifies the entity.
             const entityId = te.TrustedEntityInformation?.TEName?.[0]?.value;
-            const entityServices: TrustedEntityServiceCert[] = [];
-
-            for (const svc of te.TrustedEntityServices ?? []) {
-                const svcInfo = svc.ServiceInformation;
-                const status = svcInfo?.ServiceStatus;
-                const resolved = effectiveServiceType(
-                    rules,
-                    svcInfo?.ServiceTypeIdentifier,
-                    listHasTypedServices,
-                );
-                if (resolved.type === undefined) {
-                    leftOut.push({ entityId, status, note: resolved.note });
-                    continue;
-                }
-                const serviceTypeIdentifier = resolved.type;
-
-                const verdict = serviceStatusVerdict(rules, status);
-                const noted = {
-                    entityId,
-                    serviceType: serviceTypeIdentifier,
-                    status,
-                };
-                if (!verdict.keep) {
-                    leftOut.push({ ...noted, note: verdict.note });
-                    continue;
-                }
-                if (verdict.note) {
-                    keptWithWarning.push({ ...noted, note: verdict.note });
-                }
-
-                for (const x of svcInfo?.ServiceDigitalIdentity
-                    ?.X509Certificates ?? []) {
-                    if (x.val) {
-                        entityServices.push({
-                            serviceTypeIdentifier,
-                            certValue: x.val,
-                        });
-                    }
-                }
-            }
-
+            const entityServices = (te.TrustedEntityServices ?? []).flatMap(
+                (svc) => readService(svc, entityId, read),
+            );
             if (entityServices.length > 0) {
                 entities.push({ entityId, services: entityServices });
             }
