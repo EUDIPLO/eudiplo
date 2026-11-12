@@ -5,8 +5,9 @@ import {
     SignatureAlgorithm,
 } from "@owf/cose";
 import { CoseKey } from "@owf/mdoc";
+import * as x509 from "@peculiar/x509";
 import { exportJWK, generateKeyPair } from "jose";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { coseReadyJwk } from "../../shared/utils/cose-key-jwk.util.js";
 import { mdocContext } from "./mdoc-context.js";
 
@@ -237,5 +238,226 @@ describe("mdocContext COSE_Sign1", () => {
                 algorithm: SignatureAlgorithm.ES256,
             }),
         ).rejects.toThrow(/does not match the P-384 key/);
+    });
+});
+
+describe("mdocContext.x509.verifyCertificateChain", () => {
+    const hour = 3_600_000;
+    const keyAlgorithm = { name: "ECDSA", namedCurve: "P-256" };
+    const signingAlgorithm = { name: "ECDSA", hash: "SHA-256" };
+    let serial = 1;
+
+    type Period = { notBefore: Date; notAfter: Date };
+    type Issued = {
+        cert: x509.X509Certificate;
+        keys: CryptoKeyPair;
+        der: Uint8Array;
+    };
+
+    /** `hours` either side of now, moved by `offset` hours. */
+    const period = (offset = 0, hours = 1): Period => ({
+        notBefore: new Date(Date.now() + (offset - hours) * hour),
+        notAfter: new Date(Date.now() + (offset + hours) * hour),
+    });
+    const expired = () => period(-2);
+    const notYetValid = () => period(2);
+
+    async function keyPair(): Promise<CryptoKeyPair> {
+        return (await crypto.subtle.generateKey(keyAlgorithm, true, [
+            "sign",
+            "verify",
+        ])) as CryptoKeyPair;
+    }
+
+    const issued = (cert: x509.X509Certificate, keys: CryptoKeyPair) => ({
+        cert,
+        keys,
+        der: new Uint8Array(cert.rawData),
+    });
+
+    async function ca(name: string, validity: Period = period()) {
+        const keys = await keyPair();
+        const cert = await x509.X509CertificateGenerator.createSelfSigned({
+            serialNumber: String(serial++),
+            name: `C=DE, CN=${name}`,
+            ...validity,
+            signingAlgorithm,
+            keys,
+            extensions: [
+                new x509.BasicConstraintsExtension(true, undefined, true),
+            ],
+        });
+        return issued(cert, keys);
+    }
+
+    async function issuedBy(
+        parent: Issued,
+        name: string,
+        validity: Period = period(),
+    ) {
+        const keys = await keyPair();
+        const cert = await x509.X509CertificateGenerator.create({
+            serialNumber: String(serial++),
+            subject: `C=DE, CN=${name}`,
+            issuer: parent.cert.subject,
+            ...validity,
+            signingAlgorithm,
+            publicKey: keys.publicKey,
+            signingKey: parent.keys.privateKey,
+        });
+        return issued(cert, keys);
+    }
+
+    /** The leaf presented in an x5chain, validated against `anchor`. */
+    const verifyChain = (leaf: Issued, anchor: Issued, now?: Date) =>
+        mdocContext.x509.verifyCertificateChain({
+            trustedCertificates: [anchor.der],
+            x5chain: [leaf.der],
+            now,
+        });
+
+    beforeAll(() => {
+        x509.cryptoProvider.set(crypto);
+    });
+
+    it("accepts a valid document signer under a valid IACA, leaf first", async () => {
+        const iaca = await ca("IACA");
+        const documentSigner = await issuedBy(iaca, "Document Signer");
+
+        const { chain } = await verifyChain(documentSigner, iaca);
+
+        expect(chain).toEqual([documentSigner.der, iaca.der]);
+    });
+
+    /**
+     * The check knows no roles: a status list signer and the status anchor
+     * it is validated against are checked as a document signer and its IACA
+     * are. `mdocverifier.status-list.spec.ts` covers them through the
+     * verifier. The index is the position in the path, anchor first.
+     */
+    describe.each([
+        [
+            "document signer",
+            1,
+            async (validity: Period) => {
+                const iaca = await ca("IACA");
+                return [
+                    await issuedBy(iaca, "Document Signer", validity),
+                    iaca,
+                ];
+            },
+        ],
+        [
+            "IACA",
+            0,
+            async (validity: Period) => {
+                const iaca = await ca("IACA", validity);
+                return [await issuedBy(iaca, "Document Signer"), iaca];
+            },
+        ],
+    ])("with an invalid %s", (_role, index, chainWith) => {
+        it.each([
+            ["has expired", expired],
+            ["is not yet valid", notYetValid],
+        ])("rejects it when it %s", async (reason, validity) => {
+            const [leaf, anchor] = await chainWith(validity());
+
+            await expect(verifyChain(leaf, anchor)).rejects.toThrow(
+                new RegExp(
+                    `index=${index}\\..*cause=Certificate ${reason}: notBefore=`,
+                ),
+            );
+        });
+    });
+
+    it("checks the validity period at the given time, both ends included", async () => {
+        // The IACA's period contains the document signer's, so only the
+        // document signer decides.
+        const iaca = await ca("IACA", period(0, 2));
+        const documentSigner = await issuedBy(iaca, "Document Signer");
+        const { notBefore, notAfter } = documentSigner.cert;
+        const second = 1000;
+
+        for (const now of [notBefore, notAfter]) {
+            await expect(
+                verifyChain(documentSigner, iaca, now),
+            ).resolves.toEqual({ chain: [documentSigner.der, iaca.der] });
+        }
+        await expect(
+            verifyChain(
+                documentSigner,
+                iaca,
+                new Date(notAfter.getTime() + second),
+            ),
+        ).rejects.toThrow(/index=1\..*cause=Certificate has expired/);
+        await expect(
+            verifyChain(
+                documentSigner,
+                iaca,
+                new Date(notBefore.getTime() - second),
+            ),
+        ).rejects.toThrow(/index=1\..*cause=Certificate is not yet valid/);
+    });
+
+    it("rejects a document signer that names a trusted IACA but is signed by another key", async () => {
+        const iaca = await ca("IACA");
+        const impostor = await ca("IACA");
+        const forged = await issuedBy(impostor, "Document Signer");
+
+        await expect(verifyChain(forged, iaca)).rejects.toThrow(
+            /No trusted certificate was found/,
+        );
+    });
+
+    it("rejects a certificate whose signature check throws, even without a message", async () => {
+        const iaca = await ca("IACA");
+        const documentSigner = await issuedBy(iaca, "Document Signer");
+        const verify = x509.X509Certificate.prototype.verify;
+        // The path builder verifies with a CryptoKey; the chain check with
+        // the issuer's PublicKey, which is the call that throws here.
+        const spy = vi
+            .spyOn(x509.X509Certificate.prototype, "verify")
+            .mockImplementation(function (
+                this: x509.X509Certificate,
+                ...args: Parameters<typeof verify>
+            ) {
+                if (args[0]?.publicKey instanceof x509.PublicKey) {
+                    return Promise.reject(new Error(""));
+                }
+                return verify.apply(this, args);
+            });
+
+        try {
+            await expect(verifyChain(documentSigner, iaca)).rejects.toThrow(
+                /index=1\..*cause=Certificate signature could not be verified: Error$/,
+            );
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    it("rejects a certificate whose signature does not verify", async () => {
+        // @owf/mdoc always passes trust anchors, and the path builder links
+        // only certificates whose signature verifies. Without anchors the
+        // path starts at the presented certificate, which must then verify
+        // under its own key: the one way to reach a `false` signature result.
+        const keys = await keyPair();
+        const otherKeys = await keyPair();
+        const cert = await x509.X509CertificateGenerator.create({
+            serialNumber: String(serial++),
+            subject: "C=DE, CN=Not Self-signed",
+            issuer: "C=DE, CN=Not Self-signed",
+            ...period(),
+            signingAlgorithm,
+            publicKey: keys.publicKey,
+            signingKey: otherKeys.privateKey,
+        });
+
+        await expect(
+            mdocContext.x509.verifyCertificateChain({
+                trustedCertificates: undefined as never,
+                x5chain: [new Uint8Array(cert.rawData)],
+            }),
+        ).rejects.toThrow(/cause=Certificate signature is invalid/);
     });
 });

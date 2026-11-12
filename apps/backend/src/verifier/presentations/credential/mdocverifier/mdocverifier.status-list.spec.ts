@@ -538,13 +538,19 @@ describe("MdocverifierService status list fetch", () => {
             };
         }
 
-        async function ca(name: string): Promise<Issued> {
+        async function ca(
+            name: string,
+            {
+                notBefore = new Date(Date.now() - 60_000),
+                notAfter = new Date(Date.now() + 3_600_000),
+            }: { notBefore?: Date; notAfter?: Date } = {},
+        ): Promise<Issued> {
             const keys = await keyPair();
             const cert = await x509.X509CertificateGenerator.createSelfSigned({
                 serialNumber: String(serial++),
                 name: `C=DE, CN=${name}`,
-                notBefore: new Date(Date.now() - 60_000),
-                notAfter: new Date(Date.now() + 3_600_000),
+                notBefore,
+                notAfter,
                 signingAlgorithm,
                 keys,
                 extensions: [
@@ -554,14 +560,21 @@ describe("MdocverifierService status list fetch", () => {
             return issued(cert, keys);
         }
 
-        async function issuedBy(parent: Issued, name: string): Promise<Issued> {
+        async function issuedBy(
+            parent: Issued,
+            name: string,
+            {
+                notBefore = new Date(Date.now() - 60_000),
+                notAfter = new Date(Date.now() + 3_600_000),
+            }: { notBefore?: Date; notAfter?: Date } = {},
+        ): Promise<Issued> {
             const keys = await keyPair();
             const cert = await x509.X509CertificateGenerator.create({
                 serialNumber: String(serial++),
                 subject: `C=DE, CN=${name}`,
                 issuer: parent.cert.subject,
-                notBefore: new Date(Date.now() - 60_000),
-                notAfter: new Date(Date.now() + 3_600_000),
+                notBefore,
+                notAfter,
                 signingAlgorithm,
                 publicKey: keys.publicKey,
                 signingKey: parent.keys.privateKey,
@@ -599,6 +612,38 @@ describe("MdocverifierService status list fetch", () => {
                     signer: await issuedBy(revocationCa, "PID Status Signer"),
                 }),
             });
+            published.set("/status/expired-signer", {
+                contentType: "application/statuslist+cwt",
+                token: await signStatusListCwt(
+                    `${loopbackIp}/status/expired-signer`,
+                    {
+                        signer: await issuedBy(
+                            revocationCa,
+                            "Expired Status Signer",
+                            {
+                                notBefore: new Date(Date.now() - 7_200_000),
+                                notAfter: new Date(Date.now() - 3_600_000),
+                            },
+                        ),
+                    },
+                ),
+            });
+            published.set("/status/future-signer", {
+                contentType: "application/statuslist+cwt",
+                token: await signStatusListCwt(
+                    `${loopbackIp}/status/future-signer`,
+                    {
+                        signer: await issuedBy(
+                            revocationCa,
+                            "Future Status Signer",
+                            {
+                                notBefore: new Date(Date.now() + 3_600_000),
+                                notAfter: new Date(Date.now() + 7_200_000),
+                            },
+                        ),
+                    },
+                ),
+            });
             published.set("/status/other-issuer", {
                 contentType: "application/statuslist+cwt",
                 token: await signStatusListCwt(
@@ -623,6 +668,123 @@ describe("MdocverifierService status list fetch", () => {
 
             expect(result).toMatchObject({ verified: true });
             expect(requests).toEqual(["/status/paired"]);
+        });
+
+        it.each([
+            ["expired", "expired-signer", "Certificate has expired"],
+            ["not yet valid", "future-signer", "Certificate is not yet valid"],
+        ])(
+            "rejects a status list whose signer certificate is %s, also in best-effort mode",
+            async (_validity, path, reason) => {
+                const service = verifier(policy(), loopbackIp, entries);
+
+                // The list was fetched, so it does not count as unavailable.
+                for (const failClosed of [true, false]) {
+                    const result = await verify(
+                        service,
+                        statusListAt(`${loopbackIp}/status/${path}`),
+                        failClosed,
+                        documentSigner,
+                    );
+
+                    expect(result).toMatchObject({
+                        verified: false,
+                        failureType: "certificate_expired",
+                    });
+                    expect(result.failureReason).toContain(reason);
+                }
+                expect(requests).toContain(`/status/${path}`);
+            },
+        );
+
+        it("rejects a status list signed under a listed revocation CA that has expired, also in best-effort mode", async () => {
+            const expiredRevocationCa = await ca("Expired PID Status CA", {
+                notBefore: new Date(Date.now() - 7_200_000),
+                notAfter: new Date(Date.now() - 3_600_000),
+            });
+            published.set("/status/expired-anchor", {
+                contentType: "application/statuslist+cwt",
+                token: await signStatusListCwt(
+                    `${loopbackIp}/status/expired-anchor`,
+                    {
+                        signer: await issuedBy(
+                            expiredRevocationCa,
+                            "PID Status Signer",
+                        ),
+                    },
+                ),
+            });
+            const service = verifier(policy(), loopbackIp, [
+                {
+                    issuance: [issuerCa.certificate],
+                    status: [expiredRevocationCa.certificate],
+                },
+            ]);
+
+            for (const failClosed of [true, false]) {
+                const result = await verify(
+                    service,
+                    statusListAt(`${loopbackIp}/status/expired-anchor`),
+                    failClosed,
+                    documentSigner,
+                );
+
+                expect(result).toMatchObject({
+                    verified: false,
+                    failureType: "certificate_expired",
+                });
+                expect(result.failureReason).toMatch(
+                    /index=0\..*Certificate has expired/,
+                );
+            }
+        });
+
+        it("rejects a credential whose document signer certificate has expired", async () => {
+            const expiredSigner = await issuedBy(
+                issuerCa,
+                "Expired Document Signer",
+                {
+                    notBefore: new Date(Date.now() - 7_200_000),
+                    notAfter: new Date(Date.now() - 3_600_000),
+                },
+            );
+
+            const result = await verify(
+                verifier(policy(), loopbackIp, entries),
+                statusListAt(`${loopbackIp}/status/paired`),
+                true,
+                expiredSigner,
+            );
+
+            expect(result).toMatchObject({
+                verified: false,
+                failureType: "certificate_expired",
+            });
+            expect(result.failureReason).toContain("Certificate has expired");
+            expect(requests).toEqual([]);
+        });
+
+        it("rejects an expired self-signed issuer certificate without a trust list", async () => {
+            // Without trust list entries the presented x5chain is the
+            // anchor; its validity period is still checked.
+            const expiredIssuer = await ca("Expired Self-signed Issuer", {
+                notBefore: new Date(Date.now() - 7_200_000),
+                notAfter: new Date(Date.now() - 3_600_000),
+            });
+
+            const result = await verify(
+                verifier(policy(), loopbackIp),
+                statusListAt(`${loopbackIp}/status/1`),
+                true,
+                expiredIssuer,
+            );
+
+            expect(result).toMatchObject({
+                verified: false,
+                failureType: "certificate_expired",
+            });
+            expect(result.failureReason).toContain("Certificate has expired");
+            expect(requests).toEqual([]);
         });
 
         it("rejects a status list signed under another issuer's revocation CA", async () => {

@@ -2,6 +2,13 @@ import type { Logger } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { acceptedSequenceNumbersFake } from "../../../../test/trust/accepted-trust-list-sequence-numbers.fake.js";
+import {
+    certificateFailure,
+    currentPeriod,
+    outsideStates,
+    periodsOutside,
+} from "../../../../test/trust/attestation-certificate-periods.fixture.js";
+import type { ValidityPeriod } from "../../../shared/utils/certificate-validity.util.js";
 import { CollectTrustedEntities } from "../../../trust/application/collect-trusted-entities.js";
 import { TrustStoreService } from "../../../trust/trust-store.service.js";
 import { ServiceTypeIdentifiers } from "../../../trust/types.js";
@@ -233,7 +240,9 @@ describe("credential proof attestation trust with real certificates", () => {
         Buffer.from(cert.rawData).toString("base64");
 
     /** A provider CA and a key attestation header chained to it. */
-    async function provider() {
+    async function provider(
+        periods: { ca?: ValidityPeriod; leaf?: ValidityPeriod } = {},
+    ) {
         const caKeys = (await crypto.subtle.generateKey(algorithm, true, [
             "sign",
             "verify",
@@ -241,8 +250,7 @@ describe("credential proof attestation trust with real certificates", () => {
         const ca = await x509.X509CertificateGenerator.createSelfSigned({
             serialNumber: "01",
             name: "CN=Wallet Provider CA",
-            notBefore: new Date(Date.now() - 60_000),
-            notAfter: new Date(Date.now() + 3_600_000),
+            ...(periods.ca ?? currentPeriod()),
             keys: caKeys,
             signingAlgorithm: algorithm,
             extensions: [new x509.BasicConstraintsExtension(true, 0, true)],
@@ -255,8 +263,7 @@ describe("credential proof attestation trust with real certificates", () => {
             serialNumber: "02",
             subject: "CN=Key Attestation Signer",
             issuer: ca.subject,
-            notBefore: new Date(Date.now() - 60_000),
-            notAfter: new Date(Date.now() + 3_600_000),
+            ...(periods.leaf ?? currentPeriod()),
             publicKey: leafKeys.publicKey,
             signingKey: caKeys.privateKey,
             signingAlgorithm: algorithm,
@@ -323,6 +330,35 @@ describe("credential proof attestation trust with real certificates", () => {
                 ),
             },
         });
+    });
+
+    describe("with a certificate outside its validity period", () => {
+        const positions = { leaf: "Signing", ca: "Trust list" } as const;
+
+        for (const state of outsideStates) {
+            for (const cert of ["leaf", "ca"] as const) {
+                it(`rejects with invalid_proof a key attestation whose ${cert === "leaf" ? "signing certificate" : "WalletSolution/Issuance CA"} is ${state}`, async () => {
+                    const { ca, attestation } = await provider({
+                        [cert]: periodsOutside[state](),
+                    });
+
+                    await expect(
+                        validate(
+                            attestation,
+                            ServiceTypeIdentifiers.WalletSolutionIssuance,
+                            der(ca),
+                        ),
+                    ).rejects.toMatchObject({
+                        response: {
+                            error: "invalid_proof",
+                            error_description: expect.stringContaining(
+                                `Attestation proof certificate chain is not valid: ${certificateFailure(positions[cert], state)}`,
+                            ),
+                        },
+                    });
+                });
+            }
+        }
     });
 
     // A replayed older provider list keeps its valid signature; its passed

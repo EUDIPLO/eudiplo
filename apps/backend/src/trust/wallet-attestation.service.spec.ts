@@ -3,6 +3,13 @@ import { ES256 } from "@owf/crypto";
 import * as x509 from "@peculiar/x509";
 import { describe, expect, it, vi } from "vitest";
 import { acceptedSequenceNumbersFake } from "../../test/trust/accepted-trust-list-sequence-numbers.fake.js";
+import {
+    certificateFailure,
+    currentPeriod,
+    outsideStates,
+    periodsOutside,
+} from "../../test/trust/attestation-certificate-periods.fixture.js";
+import type { ValidityPeriod } from "../shared/utils/certificate-validity.util.js";
 import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
 import { AttestationStatusRejected } from "./domain/attestation-status-rejected.js";
 import { OutdatedTrustListsError } from "./domain/trust-list-freshness.js";
@@ -834,12 +841,15 @@ describe("WalletAttestationService wallet attestation signer", () => {
         ])) as CryptoKeyPair;
     }
 
-    function selfSignedCa(serialNumber: string, caKeys: CryptoKeyPair) {
+    function selfSignedCa(
+        serialNumber: string,
+        caKeys: CryptoKeyPair,
+        period: ValidityPeriod = currentPeriod(),
+    ) {
         return x509.X509CertificateGenerator.createSelfSigned({
             serialNumber,
             name: "CN=Wallet Provider Root CA",
-            notBefore: new Date(Date.now() - 60_000),
-            notAfter: new Date(Date.now() + 3_600_000),
+            ...period,
             keys: caKeys,
             signingAlgorithm: algorithm,
             extensions: [new x509.BasicConstraintsExtension(true, 0, true)],
@@ -851,17 +861,18 @@ describe("WalletAttestationService wallet attestation signer", () => {
      * key, and a wallet attestation signed below them. Only the header is
      * read here; signatures are checked elsewhere.
      */
-    async function provider() {
+    async function provider(
+        periods: { ca?: ValidityPeriod; leaf?: ValidityPeriod } = {},
+    ) {
         const caKeys = await keys();
-        const attestationCa = await selfSignedCa("01", caKeys);
+        const attestationCa = await selfSignedCa("01", caKeys, periods.ca);
         const revocationCa = await selfSignedCa("02", caKeys);
         const leafKeys = await keys();
         const leaf = await x509.X509CertificateGenerator.create({
             serialNumber: "03",
             subject: "CN=Wallet Attestation Signer",
             issuer: attestationCa.subject,
-            notBefore: new Date(Date.now() - 60_000),
-            notAfter: new Date(Date.now() + 3_600_000),
+            ...(periods.leaf ?? currentPeriod()),
             publicKey: leafKeys.publicKey,
             signingKey: caKeys.privateKey,
             signingAlgorithm: algorithm,
@@ -929,6 +940,34 @@ describe("WalletAttestationService wallet attestation signer", () => {
             );
         });
     }
+
+    describe("with a certificate outside its validity period", () => {
+        const positions = { leaf: "Signing", ca: "Trust list" } as const;
+
+        for (const state of outsideStates) {
+            for (const cert of ["leaf", "ca"] as const) {
+                it(`rejects with 401 a wallet attestation whose ${cert === "leaf" ? "signing certificate" : "WalletSolution/Issuance CA"} is ${state}`, async () => {
+                    const { attestationCa, jwt } = await provider({
+                        [cert]: periodsOutside[state](),
+                    });
+
+                    const rejected = validate(jwt, [
+                        {
+                            serviceTypeIdentifier:
+                                ServiceTypeIdentifiers.WalletSolutionIssuance,
+                            certValue: der(attestationCa),
+                        },
+                    ]);
+                    await expect(rejected).rejects.toBeInstanceOf(
+                        UnauthorizedException,
+                    );
+                    await expect(rejected).rejects.toThrow(
+                        `Wallet attestation certificate chain is not valid: ${certificateFailure(positions[cert], state)}`,
+                    );
+                });
+            }
+        }
+    });
 
     it("rejects an attestation under a CA listed only as WalletSolution/Revocation", async () => {
         const { attestationCa, jwt } = await provider();
@@ -1137,9 +1176,12 @@ describe("WalletAttestationService wallet unit status", () => {
                 [3, 1],
             ]),
         );
+        // The attestation's certificates were checked at issuance; once they
+        // expire, the wallet unit can still be revoked.
         expect(matchAttestationSigner).toHaveBeenCalledWith(
             ["leaf"],
             [{ entityId: "wp" }],
+            { ignoreValidityPeriods: true },
         );
         expect(getStatusListJwt).toHaveBeenCalledOnce();
         expect(getStatusListJwt).toHaveBeenCalledWith(uri, "tenant");
@@ -1194,6 +1236,83 @@ describe("WalletAttestationService wallet unit status", () => {
         await expect(read(service, [1])).rejects.toThrow(
             "Status list JWT signature verification failed",
         );
+    });
+
+    it("reads the status of a wallet unit whose attestation certificates have expired", async () => {
+        const algorithm = {
+            name: "ECDSA",
+            namedCurve: "P-256",
+            hash: "SHA-256",
+        };
+        const keys = () =>
+            crypto.subtle.generateKey(algorithm, true, [
+                "sign",
+                "verify",
+            ]) as Promise<CryptoKeyPair>;
+        const der = (cert: x509.X509Certificate) =>
+            Buffer.from(cert.rawData).toString("base64");
+        const caKeys = await keys();
+        const ca = await x509.X509CertificateGenerator.createSelfSigned({
+            serialNumber: "01",
+            name: "CN=Wallet Provider CA",
+            ...periodsOutside.expired(),
+            keys: caKeys,
+            signingAlgorithm: algorithm,
+            extensions: [new x509.BasicConstraintsExtension(true, 0, true)],
+        });
+        const leaf = await x509.X509CertificateGenerator.create({
+            serialNumber: "02",
+            subject: "CN=Wallet Unit Attestation Signer",
+            issuer: ca.subject,
+            ...periodsOutside.expired(),
+            publicKey: (await keys()).publicKey,
+            signingKey: caKeys.privateKey,
+            signingAlgorithm: algorithm,
+        });
+        const service = Object.assign(
+            Object.create(WalletAttestationService.prototype),
+            {
+                logger: { warn: vi.fn(), debug: vi.fn() },
+                trustStoreService: {
+                    getTrustStore: async () => ({
+                        entities: [
+                            {
+                                entityId: "wp",
+                                services: [
+                                    {
+                                        serviceTypeIdentifier:
+                                            ServiceTypeIdentifiers.WalletSolutionIssuance,
+                                        certValue: der(ca),
+                                    },
+                                ],
+                            },
+                        ],
+                        discarded: [],
+                    }),
+                },
+                x509ValidationService: new X509ValidationService(),
+                statusListVerifierService: {
+                    getStatusListJwt: async () => "status-list-jwt",
+                    getStatusFromStatusListJwt: () => ({
+                        status: 1,
+                        isValid: false,
+                        description: "",
+                    }),
+                },
+                settings: { cryptoToleranceSeconds: 5 },
+                verifyStatusListSignature: async () => true,
+            },
+        ) as WalletAttestationService;
+
+        await expect(
+            service.readWalletUnitStatuses(
+                "tenant",
+                [der(leaf)],
+                uri,
+                [3],
+                trustLists,
+            ),
+        ).resolves.toEqual(new Map([[3, 1]]));
     });
 
     it("refuses without wallet provider trust lists", async () => {

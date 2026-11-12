@@ -16,6 +16,10 @@ import {
     signingAlgForCurve,
 } from "../../crypto/key/domain/signing-algs.js";
 import { toBuffer } from "../../shared/utils/buffer.util.js";
+import {
+    certificateValidityAt,
+    formatCertificateDate,
+} from "../../shared/utils/certificate-validity.util.js";
 import { coseReadyJwk } from "../../shared/utils/cose-key-jwk.util.js";
 
 const NOBLE_CURVES = { ES256: p256, ES384: p384, ES512: p521 } as const;
@@ -237,10 +241,47 @@ const trimChainToTrustedAnchor = async (
     };
 };
 
-const verifyChainSignatures = async (
+/**
+ * Matches the cause that {@link mdocContext}'s `verifyCertificateChain`
+ * gives for a certificate outside its validity period. @owf/mdoc passes on
+ * only the message, so callers classify the failure by it. Anchored to the
+ * `cause=` and the period that follows: Node.js reports an expired TLS
+ * certificate, as when a status list cannot be fetched, with the same words.
+ */
+export const CERTIFICATE_VALIDITY_FAILURE =
+    /cause=certificate (?:has expired|is not yet valid): notbefore=/i;
+
+/**
+ * Why `cert` is not valid at `now`, or undefined if it is, by the rule the
+ * SD-JWT VC chain check uses too ({@link certificateValidityAt}). Checked
+ * here rather than with @peculiar/x509's `verify({ date })`, which excludes
+ * both ends of the period and reports a date outside it only as `false`.
+ */
+const validityPeriodFailure = (
+    cert: X509Certificate,
+    now: Date,
+): string | undefined => {
+    const validity = certificateValidityAt(cert, now);
+    if (validity === "valid") {
+        return undefined;
+    }
+    const period = `notBefore=${formatCertificateDate(cert.notBefore)} notAfter=${formatCertificateDate(cert.notAfter)} checkedAt=${formatCertificateDate(now)}`;
+    return validity === "expired"
+        ? `Certificate has expired: ${period}`
+        : `Certificate is not yet valid: ${period}`;
+};
+
+/**
+ * Check every certificate of a root-first path: its signature against the
+ * key of the certificate before it, and its validity period against `now`.
+ * The trusted anchor at the start is not signature-checked, but its validity
+ * period is. @peculiar/x509 reports an invalid signature as `false`, not as
+ * an exception, so the result is checked as well.
+ */
+const verifyChainCertificates = async (
     parsedChain: X509Certificate[],
     trustedCertificates: Uint8Array[] | undefined,
-    now: Date | undefined,
+    now: Date,
     startingPreviousCertificate: X509Certificate | undefined,
 ) => {
     let previousCertificate = startingPreviousCertificate;
@@ -252,25 +293,32 @@ const verifyChainSignatures = async (
         const skipSignatureVerification =
             i === 0 && Boolean(trustedCertificates) && !publicKey;
 
-        if (!skipSignatureVerification) {
-            try {
-                await cert.verify({
-                    publicKey,
-                    date: now ?? new Date(),
-                });
-            } catch (error: any) {
-                const [currentCert, previousCert, links] = await Promise.all([
-                    certificateIdentifiers(cert),
-                    previousCertificate
-                        ? certificateIdentifiers(previousCertificate)
-                        : Promise.resolve(undefined),
-                    chainLinkDiagnostics(parsedChain),
-                ]);
-
-                throw new Error(
-                    `X.509 chain verification failed at index=${i}. current=${JSON.stringify(currentCert)} previous=${JSON.stringify(previousCert)} links=${JSON.stringify(links)} cause=${error?.message ?? error}`,
-                );
+        let cause: string | undefined;
+        try {
+            if (
+                !skipSignatureVerification &&
+                !(await cert.verify({ publicKey, signatureOnly: true }))
+            ) {
+                cause = "Certificate signature is invalid";
             }
+        } catch (error: any) {
+            // Never empty, so that the check below cannot pass it.
+            cause = `Certificate signature could not be verified: ${error?.message || String(error)}`;
+        }
+        cause ??= validityPeriodFailure(cert, now);
+
+        if (cause) {
+            const [currentCert, previousCert, links] = await Promise.all([
+                certificateIdentifiers(cert),
+                previousCertificate
+                    ? certificateIdentifiers(previousCertificate)
+                    : Promise.resolve(undefined),
+                chainLinkDiagnostics(parsedChain),
+            ]);
+
+            throw new Error(
+                `X.509 chain verification failed at index=${i}. current=${JSON.stringify(currentCert)} previous=${JSON.stringify(previousCert)} links=${JSON.stringify(links)} cause=${cause}`,
+            );
         }
 
         previousCertificate = cert;
@@ -453,10 +501,10 @@ export const mdocContext: Omit<MdocContext, "fetch"> = {
             );
             parsedChain = trimmed.parsedChain;
 
-            await verifyChainSignatures(
+            await verifyChainCertificates(
                 parsedChain,
                 trustedCertificates,
-                now,
+                now ?? new Date(),
                 trimmed.previousCertificate,
             );
 
