@@ -3,6 +3,7 @@ import { ServiceTypeIdentifiers } from "../types.js";
 import {
     effectiveServiceType,
     LoteTypes,
+    listHasTypedServices,
     loteProfileRules,
     ServiceStatuses,
     serviceStatusVerdict,
@@ -119,6 +120,22 @@ describe("serviceStatusVerdict", () => {
                 note,
             });
         });
+    });
+});
+
+describe("listHasTypedServices", () => {
+    it("is true when any service has a type", () => {
+        expect(
+            listHasTypedServices([
+                undefined,
+                ServiceTypeIdentifiers.PIDIssuance,
+            ]),
+        ).toBe(true);
+    });
+
+    it("is false when no service has a type, or the list has none", () => {
+        expect(listHasTypedServices([undefined, ""])).toBe(false);
+        expect(listHasTypedServices([])).toBe(false);
     });
 });
 

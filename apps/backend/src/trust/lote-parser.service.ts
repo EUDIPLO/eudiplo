@@ -4,6 +4,7 @@ import {
     effectiveServiceType,
     type LoteProfileRules,
     type LoteServiceNote,
+    listHasTypedServices,
     loteProfileRules,
     serviceStatusVerdict,
 } from "./domain/lote-profiles.js";
@@ -83,48 +84,49 @@ type LoteService = NonNullable<
     NonNullable<LoTE["TrustedEntitiesList"]>[number]["TrustedEntityServices"]
 >[number];
 
-/** What reading the services of one list needs, and where notes go. */
-type ServiceReading = {
-    rules: LoteProfileRules;
-    listHasTypedServices: boolean;
-    leftOut: NotedService[];
-    keptWithWarning: NotedService[];
-};
+/** One service as read: its certificates, or why it was left out or warned about. */
+type ServiceRead =
+    | { certs: TrustedEntityServiceCert[]; warning?: NotedService }
+    | { certs: []; leftOut: NotedService };
 
 /**
  * The certificates of one service, with the type it is read with; none when
- * the list's rules leave it out. Notes the service when it is left out or
- * read with a warning.
+ * the list's rules leave it out.
  */
 function readService(
     svc: LoteService,
     entityId: string | undefined,
-    { rules, listHasTypedServices, leftOut, keptWithWarning }: ServiceReading,
-): TrustedEntityServiceCert[] {
+    rules: LoteProfileRules,
+    typedList: boolean,
+): ServiceRead {
     const svcInfo = svc.ServiceInformation;
     const status = svcInfo?.ServiceStatus;
     const resolved = effectiveServiceType(
         rules,
         svcInfo?.ServiceTypeIdentifier,
-        listHasTypedServices,
+        typedList,
     );
     if (resolved.type === undefined) {
-        leftOut.push({ entityId, status, note: resolved.note });
-        return [];
+        return {
+            certs: [],
+            leftOut: { entityId, status, note: resolved.note },
+        };
     }
     const serviceTypeIdentifier = resolved.type;
     const noted = { entityId, serviceType: serviceTypeIdentifier, status };
 
     const verdict = serviceStatusVerdict(rules, status);
     if (!verdict.keep) {
-        leftOut.push({ ...noted, note: verdict.note });
-        return [];
+        return { certs: [], leftOut: { ...noted, note: verdict.note } };
     }
-    if (verdict.note) keptWithWarning.push({ ...noted, note: verdict.note });
-
-    return (svcInfo?.ServiceDigitalIdentity?.X509Certificates ?? []).flatMap(
-        (x) => (x.val ? [{ serviceTypeIdentifier, certValue: x.val }] : []),
+    const certs = (
+        svcInfo?.ServiceDigitalIdentity?.X509Certificates ?? []
+    ).flatMap((x) =>
+        x.val ? [{ serviceTypeIdentifier, certValue: x.val }] : [],
     );
+    return verdict.note
+        ? { certs, warning: { ...noted, note: verdict.note } }
+        : { certs };
 }
 
 @Injectable()
@@ -154,23 +156,29 @@ export class LoteParserService {
 
         const rules = loteProfileRules(schemeInfo.LoTEType);
         const rawEntities = root.TrustedEntitiesList ?? [];
-        const listHasTypedServices = rawEntities.some((te) =>
-            (te.TrustedEntityServices ?? []).some(
-                (svc) => svc.ServiceInformation?.ServiceTypeIdentifier,
-            ),
+        const typedList = listHasTypedServices(
+            (function* () {
+                for (const te of rawEntities) {
+                    for (const svc of te.TrustedEntityServices ?? []) {
+                        yield svc.ServiceInformation?.ServiceTypeIdentifier;
+                    }
+                }
+            })(),
         );
         const entities: TrustedEntity[] = [];
         const leftOut: NotedService[] = [];
         const keptWithWarning: NotedService[] = [];
 
-        const read = { rules, listHasTypedServices, leftOut, keptWithWarning };
-
         for (const te of rawEntities) {
             // The first name identifies the entity.
             const entityId = te.TrustedEntityInformation?.TEName?.[0]?.value;
-            const entityServices = (te.TrustedEntityServices ?? []).flatMap(
-                (svc) => readService(svc, entityId, read),
-            );
+            const entityServices: TrustedEntityServiceCert[] = [];
+            for (const svc of te.TrustedEntityServices ?? []) {
+                const read = readService(svc, entityId, rules, typedList);
+                if ("leftOut" in read) leftOut.push(read.leftOut);
+                else if (read.warning) keptWithWarning.push(read.warning);
+                entityServices.push(...read.certs);
+            }
             if (entityServices.length > 0) {
                 entities.push({ entityId, services: entityServices });
             }

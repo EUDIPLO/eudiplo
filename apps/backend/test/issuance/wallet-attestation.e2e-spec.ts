@@ -92,13 +92,16 @@ async function createMockTrustListJwt(
         privateKey: CryptoKey;
     },
     walletProviderCert: X509Certificate,
-    serviceType: string,
+    /** `undefined` leaves the wallet provider service's type out. */
+    serviceType: string | undefined,
     revocationCert?: X509Certificate,
     revocationServiceType = "http://uri.etsi.org/19602/SvcType/EAA/Revocation",
     /** `null` leaves `NextUpdate` out. */
     nextUpdate: string | null = new Date(
         Date.now() + 365 * 24 * 60 * 60 * 1000,
     ).toISOString(),
+    /** The list's `LoTEType`, and a `ServiceStatus` for the wallet provider service. */
+    list: { loteType?: string; serviceStatus?: string } = {},
 ): Promise<string> {
     // Export the private key for jose signing
     const privateKeyArrayBuffer = await globalThis.crypto.subtle.exportKey(
@@ -115,10 +118,13 @@ async function createMockTrustListJwt(
     const walletCertBase64 = walletProviderCert.toString("base64");
 
     // Build services list
-    const services = [
+    const services: Array<{ ServiceInformation: Record<string, unknown> }> = [
         {
             ServiceInformation: {
-                ServiceTypeIdentifier: serviceType,
+                ...(serviceType ? { ServiceTypeIdentifier: serviceType } : {}),
+                ...(list.serviceStatus
+                    ? { ServiceStatus: list.serviceStatus }
+                    : {}),
                 ServiceName: [
                     {
                         lang: "en",
@@ -157,6 +163,7 @@ async function createMockTrustListJwt(
                 LoTEVersionIdentifier: 1,
                 LoTESequenceNumber: 1,
                 LoTEType:
+                    list.loteType ??
                     "http://uri.etsi.org/19602/LoTEType/EUEAAProvidersList",
                 StatusDeterminationApproach:
                     "http://uri.etsi.org/19602/EUEAAProvidersList/StatusDetn/EU",
@@ -968,6 +975,59 @@ describe("Issuance - Wallet Attestation", () => {
         nock.cleanAll();
     });
 
+    describe("wallet-provider lists read by the rules of their LoTEType", () => {
+        const walletProvidersList =
+            "http://uri.etsi.org/19602/LoTEType/EUWalletProvidersList";
+
+        test("accepts an attestation under an untyped service of an EUWalletProvidersList", async () => {
+            const trustListJwt = await createMockTrustListJwt(
+                trustListSigningCert,
+                walletProviderCert.certificate,
+                undefined,
+                undefined,
+                undefined,
+                undefined,
+                { loteType: walletProvidersList },
+            );
+
+            const token = await requestTokenWithAttestation({
+                trustListUrl:
+                    "http://trust-list.example.com/wallet-providers-untyped",
+                trustListJwt,
+            });
+
+            expect(token.accessTokenResponse.access_token).toBeDefined();
+        });
+
+        test("rejects an attestation under a service with a ServiceStatus in an EUWalletProvidersList", async () => {
+            const trustListJwt = await createMockTrustListJwt(
+                trustListSigningCert,
+                walletProviderCert.certificate,
+                "http://uri.etsi.org/19602/SvcType/WalletSolution/Issuance",
+                undefined,
+                undefined,
+                undefined,
+                {
+                    loteType: walletProvidersList,
+                    serviceStatus:
+                        "http://uri.etsi.org/19602/commons/schemeApprovalGranted",
+                },
+            );
+
+            await expect(
+                requestTokenWithAttestation({
+                    trustListUrl:
+                        "http://trust-list.example.com/wallet-providers-with-status",
+                    trustListJwt,
+                }),
+            ).rejects.toMatchObject(
+                rejectedWith(
+                    "No trusted wallet providers found in configured trust lists",
+                ),
+            );
+        });
+    });
+
     test("should succeed when wallet attestation is not required", async () => {
         // Clean up any pending nock mocks
         nock.cleanAll();
@@ -1689,22 +1749,18 @@ describe("Issuance - Wallet Attestation", () => {
     }, 30000);
 
     /**
-     * Configure a trust list naming the wallet provider, serve it and the
-     * given status list JWT, and request a token with a wallet attestation
-     * that references index `idx` of the status list at `path`.
+     * Configure the list at `trustListUrl`, served as `trustListJwt`, as the
+     * only wallet-provider trust list, and request a token with a wallet
+     * attestation of the provider, carrying `status` when given.
      */
-    async function requestTokenWithStatusList(options: {
-        path: string;
-        statusListJwt: string;
-        idx?: number;
-        withRevocationCert?: boolean;
-        revocationServiceType?: string;
+    async function requestTokenWithAttestation(options: {
+        trustListUrl: string;
+        trustListJwt: string;
+        status?: unknown;
     }) {
-        const trustListPath = `/wallet-providers${options.path}`;
-        const statusListUrl = `http://localhost:8787${options.path}`;
         const trustLists = [
             {
-                url: `http://localhost:8787${trustListPath}`,
+                url: options.trustListUrl,
                 verifierX509Der:
                     trustListSigningCert.certificate.toString("base64"),
             },
@@ -1738,23 +1794,11 @@ describe("Issuance - Wallet Attestation", () => {
             } as IssuanceDto)
             .expect(201);
 
-        const trustListJwt = await createMockTrustListJwt(
-            trustListSigningCert,
-            walletProviderCert.certificate,
-            "http://uri.etsi.org/19602/SvcType/WalletSolution",
-            options.withRevocationCert === false
-                ? undefined
-                : revocationCert.certificate,
-            options.revocationServiceType,
-        );
-        nock("http://localhost:8787")
-            .get(trustListPath)
-            .reply(200, trustListJwt, {
+        const trustListUrl = new URL(options.trustListUrl);
+        nock(trustListUrl.origin)
+            .get(trustListUrl.pathname)
+            .reply(200, options.trustListJwt, {
                 "Content-Type": "application/jwt",
-            })
-            .get(options.path)
-            .reply(200, options.statusListJwt, {
-                "Content-Type": "application/statuslist+jwt",
             });
 
         const offerResponse = await request(app.getHttpServer())
@@ -1798,12 +1842,7 @@ describe("Issuance - Wallet Attestation", () => {
             walletProviderKey: walletProviderCert.privateKey,
             holderPublicKey: holderPublicKeyJwk as Jwk,
             authorizationServer: authServerUrl,
-            status: {
-                status_list: {
-                    idx: options.idx ?? 0,
-                    uri: statusListUrl,
-                },
-            },
+            ...(options.status ? { status: options.status } : {}),
         });
 
         return new Openid4vciClient({
@@ -1823,6 +1862,42 @@ describe("Issuance - Wallet Attestation", () => {
         }).retrievePreAuthorizedCodeAccessTokenFromOffer({
             credentialOffer,
             issuerMetadata,
+        });
+    }
+
+    /**
+     * Configure a trust list naming the wallet provider, serve it and the
+     * given status list JWT, and request a token with a wallet attestation
+     * that references index `idx` of the status list at `path`.
+     */
+    async function requestTokenWithStatusList(options: {
+        path: string;
+        statusListJwt: string;
+        idx?: number;
+        withRevocationCert?: boolean;
+        revocationServiceType?: string;
+    }) {
+        const statusListUrl = `http://localhost:8787${options.path}`;
+        nock("http://localhost:8787")
+            .get(options.path)
+            .reply(200, options.statusListJwt, {
+                "Content-Type": "application/statuslist+jwt",
+            });
+
+        return requestTokenWithAttestation({
+            trustListUrl: `http://localhost:8787/wallet-providers${options.path}`,
+            trustListJwt: await createMockTrustListJwt(
+                trustListSigningCert,
+                walletProviderCert.certificate,
+                "http://uri.etsi.org/19602/SvcType/WalletSolution",
+                options.withRevocationCert === false
+                    ? undefined
+                    : revocationCert.certificate,
+                options.revocationServiceType,
+            ),
+            status: {
+                status_list: { idx: options.idx ?? 0, uri: statusListUrl },
+            },
         });
     }
 

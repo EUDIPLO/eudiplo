@@ -9,14 +9,19 @@ import { ServiceTypeIdentifiers } from "../types.js";
  *   list where no service has a type, each service gets the issuance type of
  *   the list's profile. Each of Annexes D to H allows an issuance and a
  *   revocation type, and a list of one type lists the providers' issuing
- *   services.
+ *   services. NOTE 2 does not name the type, so this is an assumption: an
+ *   untyped list of revocation services only would make their certificates
+ *   issuance anchors. Typed lists, which every EUDIPLO list is, are read by
+ *   their types alone.
  * - **Service status.** `ServiceStatus` is optional too; when it is absent,
  *   "all services have the same approval status" (NOTE 1). Annexes D, E, F, G
  *   and I say "The ServiceStatus component shall not be used", so any value
  *   there leaves the service out. Annex H (Table H.3) says it "shall be
  *   present" and allows `notified` and `withdrawn` "to the exclusion of any
- *   other". A Pub-EAA service without a status is still read, since the list
- *   is signed and an absent status cannot mean withdrawn. Other lists accept
+ *   other". A Pub-EAA service without a status is still read, with a warning:
+ *   the list is signed, an absent status cannot mean withdrawn (NOTE 1), and
+ *   `@owf/eudi-lote` (0.5) forbids the component in its Pub-EAA schema, so
+ *   lists built with it carry none. Other lists accept
  *   no status, Annex H's `notified` and the profile-independent
  *   `commons/schemeApprovalGranted` (draft ETSI EN 319 602 V1.1.3).
  *
@@ -180,13 +185,25 @@ export function serviceStatusVerdict(
 }
 
 /**
+ * Whether any service of the list has a `ServiceTypeIdentifier`; untyped
+ * services then get no implied type. Counted before statuses are checked, so
+ * a typed service that is left out still makes the list a mixed one.
+ */
+export function listHasTypedServices(
+    serviceTypes: Iterable<string | undefined>,
+): boolean {
+    for (const type of serviceTypes) if (type) return true;
+    return false;
+}
+
+/**
  * The type a service is read with: its own, or the type the list implies
- * when no service of the list has one.
+ * when no service of the list has one ({@link listHasTypedServices}).
  */
 export function effectiveServiceType(
     rules: LoteProfileRules,
     serviceType: string | undefined,
-    listHasTypedServices: boolean,
+    typedList: boolean,
 ):
     | { type: string }
     | {
@@ -194,7 +211,7 @@ export function effectiveServiceType(
           note: "untyped-in-mixed-list" | "untyped-without-implied-type";
       } {
     if (serviceType) return { type: serviceType };
-    if (listHasTypedServices) return { note: "untyped-in-mixed-list" };
+    if (typedList) return { note: "untyped-in-mixed-list" };
     return rules.impliedServiceType
         ? { type: rules.impliedServiceType }
         : { note: "untyped-without-implied-type" };

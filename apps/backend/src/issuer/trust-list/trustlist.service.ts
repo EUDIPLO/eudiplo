@@ -35,6 +35,7 @@ import {
     ImportPhase,
 } from "../../platform/config-import/config-import-orchestrator.service.js";
 import { loadConfigDto } from "../../shared/utils/config-file-loader.util.js";
+import { LoteTypes } from "../../trust/domain/lote-profiles.js";
 import { TrustListReferences } from "./application/trust-list-references.js";
 import {
     entityKeyChainReferences,
@@ -920,8 +921,8 @@ export class TrustListService {
                     },
                 ],
                 LoTEType: walletProviders
-                    ? "http://uri.etsi.org/19602/LoTEType/EUWalletProvidersList" // NOSONAR: ETSI identifier URI, not fetched
-                    : "http://uri.etsi.org/19602/LoTEType/EUEAAProvidersList", // NOSONAR: ETSI identifier URI, not fetched
+                    ? LoteTypes.WalletProviders
+                    : LoteTypes.EAAProviders,
                 StatusDeterminationApproach: walletProviders
                     ? "http://uri.etsi.org/19602/WalletProvidersList/StatusDetn/EU" // NOSONAR: ETSI identifier URI, not fetched
                     : "http://uri.etsi.org/19602/EUEAAProvidersList/StatusDetn/EU", // NOSONAR: ETSI identifier URI, not fetched

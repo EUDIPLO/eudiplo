@@ -219,7 +219,7 @@ describe("TrustStoreService.getListedEntities", () => {
     });
 
     it("fetches and verifies external lists", async () => {
-        const { service, fetchJwt, findOne } = createService(undefined);
+        const { service, fetchJwt, findOne, parse } = createService(undefined);
         const ref = {
             url: "https://trust.example/list",
             verifierX509Der: "certificate",
@@ -229,6 +229,7 @@ describe("TrustStoreService.getListedEntities", () => {
             entities,
         );
         expect(fetchJwt).toHaveBeenCalledWith(ref.url);
+        expect(parse).toHaveBeenCalledWith(lote, ref.url);
         expect(findOne).not.toHaveBeenCalled();
     });
 });

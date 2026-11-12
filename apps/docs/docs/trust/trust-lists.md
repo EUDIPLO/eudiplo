@@ -28,9 +28,9 @@ A service whose `ServiceStatus` does not approve it is ignored, and so is an ent
 
 A status URI a scheme defines itself (§6.6.4) is not known to EUDIPLO, so services carrying it are ignored.
 
-A service without `ServiceTypeIdentifier` is read only in a list where no service has a type (§6.6.0, NOTE 2). It then gets the issuance type of the list's profile: `SvcType/PID/Issuance` in a PID providers list, `SvcType/WalletSolution/Issuance` in a wallet providers list, `SvcType/PubEAA/Issuance` in a Pub-EAA providers list and `SvcType/EAA/Issuance` in an `EUEAAProvidersList`. In a list whose other services have a type, or whose type implies none, it is ignored.
+A service without `ServiceTypeIdentifier` is read only in a list where no service has a type (§6.6.0, NOTE 2). It then gets the issuance type of the list's profile: `SvcType/PID/Issuance` in a PID providers list, `SvcType/WalletSolution/Issuance` in a wallet providers list, `SvcType/PubEAA/Issuance` in a Pub-EAA providers list and `SvcType/EAA/Issuance` in an `EUEAAProvidersList`. NOTE 2 does not say which type that is; EUDIPLO assumes the providers' issuing services, which is what a list of one type lists. If a publisher lists only revocation services without a type, their certificates are trusted to sign credentials or attestations, so ask it to set `ServiceTypeIdentifier`. In a list whose other services have a type, or whose type implies none, it is ignored.
 
-For each list, one warning in the log names the services ignored or read despite a missing status (at most ten of each, then a count), with entity, service type, status and reason (`Trust list <url or ID>: left out ... service(s): ...`). Lists managed in EUDIPLO always set the type and no status, so they produce no warning.
+For each list, one warning in the log names the services ignored or read despite a missing status (at most ten of each, then a count), with entity, service type, status and reason: `Trust list <url or ID>: left out N service(s): ...`, `Trust list <url or ID>: read N service(s) despite: ...`, or both parts in one line. Lists managed in EUDIPLO always set the type and no status, so they produce no warning.
 
 ### Older versions of a list
 

@@ -346,6 +346,78 @@ describe("LoteParserService.parse", () => {
         );
 
         expect(entities).toEqual([]);
+        // It gets the implied PID type and has no status, so nothing is noted.
+        expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("counts a typed service that is left out when deciding that a list is mixed", () => {
+        const { entities } = parser.parse(
+            lote(LoteTypes.PIDProviders, {
+                name: "Provider",
+                services: [
+                    service(
+                        ServiceTypeIdentifiers.PIDIssuance,
+                        "typed",
+                        ServiceStatuses.SchemeApprovalWithdrawn,
+                    ),
+                    service(undefined, "untyped"),
+                ],
+            }),
+            LIST,
+        );
+
+        expect(entities).toEqual([]);
+        expect(warning()).toBe(
+            `Trust list ${LIST}: left out 2 service(s): ` +
+                `entity "Provider", type "${ServiceTypeIdentifiers.PIDIssuance}", status "${ServiceStatuses.SchemeApprovalWithdrawn}": its ServiceStatus withdraws it; ` +
+                `entity "Provider", type (none): no ServiceTypeIdentifier, while other services of the list have one`,
+        );
+    });
+
+    it("names services left out and read with a warning in one line", () => {
+        parser.parse(
+            lote(LoteTypes.PubEAAProviders, {
+                name: "Body",
+                services: [
+                    service(
+                        ServiceTypeIdentifiers.PubEaaIssuance,
+                        "a",
+                        ServiceStatuses.PubEAAWithdrawn,
+                    ),
+                    service(ServiceTypeIdentifiers.PubEaaIssuance, "b"),
+                ],
+            }),
+            LIST,
+        );
+
+        expect(warning()).toBe(
+            `Trust list ${LIST}: left out 1 service(s): ` +
+                `entity "Body", type "${ServiceTypeIdentifiers.PubEaaIssuance}", status "${ServiceStatuses.PubEAAWithdrawn}": its ServiceStatus withdraws it. ` +
+                `read 1 service(s) despite: ` +
+                `entity "Body", type "${ServiceTypeIdentifiers.PubEaaIssuance}": no ServiceStatus, which the list type requires`,
+        );
+    });
+
+    it("names an entity without TEName as (no name)", () => {
+        parser.parse(
+            {
+                ListAndSchemeInformation: { LoTEType: LoteTypes.PIDProviders },
+                TrustedEntitiesList: [
+                    {
+                        TrustedEntityServices: [
+                            service(
+                                ServiceTypeIdentifiers.PIDIssuance,
+                                "c",
+                                ServiceStatuses.SchemeApprovalWithdrawn,
+                            ),
+                        ],
+                    },
+                ],
+            } as unknown as LoTE,
+            LIST,
+        );
+
+        expect(warning()).toContain('entity "(no name)"');
     });
 
     it("names at most ten services per kind in the warning", () => {
