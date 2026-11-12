@@ -51,6 +51,16 @@ function discardedDetail(store: BuiltTrustStore): string[] {
 }
 
 /**
+ * Error detail for an `x5c` that `parseX5c` refused: the length limit's own
+ * message, or why a certificate could not be parsed.
+ */
+function invalidX5cDetail(error: any): string {
+    return error instanceof CertificateChainTooLong
+        ? error.message
+        : `Failed to parse x5c chain: ${error?.message ?? error}`;
+}
+
+/**
  * Policy options for certificate chain validation.
  */
 export interface ChainValidationPolicy {
@@ -181,10 +191,7 @@ export class CredentialChainValidationService {
                 verified: false,
                 matchedEntity: null,
                 error: "invalid_x5c",
-                errorDetails:
-                    e instanceof CertificateChainTooLong
-                        ? e.message
-                        : `Failed to parse x5c chain: ${e?.message ?? e}`,
+                errorDetails: invalidX5cDetail(e),
             };
         }
 
