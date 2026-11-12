@@ -1,5 +1,6 @@
 import { Logger } from "@nestjs/common";
 import { decodeProtectedHeader } from "jose";
+import { AttestationCertificateNotValid } from "../../../trust/domain/attestation-certificate-validity.js";
 import {
     type DiscardedTrustList,
     discardedTrustListsNote,
@@ -50,7 +51,9 @@ const ATTESTATION_PROOF_NOT_VALIDATED =
  * When the provider cannot be decided (a trust list or reference that cannot
  * be loaded, a header or certificate that cannot be read), the wallet gets a
  * fixed `invalid_proof` text, since the reason can name a trust list URL or
- * an internal address; the reason is logged with the tenant instead.
+ * an internal address; the reason is logged with the tenant instead. A
+ * certificate of the attestation's path outside its validity period answers
+ * `invalid_proof` with the certificate's place in the path and its period.
  */
 export async function validateAttestationProofTrust(
     keyAttestationJwt: string,
@@ -109,6 +112,12 @@ export async function validateAttestationProofTrust(
     } catch (error) {
         if (error instanceof CredentialRequestException) {
             throw error;
+        }
+        if (error instanceof AttestationCertificateNotValid) {
+            throw new CredentialRequestException(
+                "invalid_proof",
+                `Attestation proof certificate chain is not valid: ${error.message}`,
+            );
         }
         const { message, cause, outdated } = walletSafeTrustFailure(
             error,

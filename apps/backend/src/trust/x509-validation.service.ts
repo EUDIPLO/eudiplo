@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { certificateValidityAt } from "../shared/utils/certificate-validity.util.js";
+import { assertAttestationPathValidAt } from "./domain/attestation-certificate-validity.js";
 import {
     getRevocationCert,
     getStatusListSigners,
@@ -130,6 +131,25 @@ export class X509ValidationService {
         entities: TrustedEntity[],
         serviceTypeFilter: ServiceTypeFilter,
     ): Array<{ certValue: string }> {
+        const { preferred, others } = this.anchorCertValueGroups(
+            entities,
+            serviceTypeFilter,
+        );
+        return [...preferred, ...others];
+    }
+
+    /**
+     * The certificates of all trust-list services, those of services
+     * matching `serviceTypeFilter` apart from the others, each in trust-list
+     * order.
+     */
+    private anchorCertValueGroups(
+        entities: TrustedEntity[],
+        serviceTypeFilter: ServiceTypeFilter,
+    ): {
+        preferred: Array<{ certValue: string }>;
+        others: Array<{ certValue: string }>;
+    } {
         const preferred: Array<{ certValue: string }> = [];
         const others: Array<{ certValue: string }> = [];
         for (const entity of entities) {
@@ -143,7 +163,16 @@ export class X509ValidationService {
                 ).push({ certValue: svc.certValue });
             }
         }
-        return [...preferred, ...others];
+        return { preferred, others };
+    }
+
+    /** `certs` with those valid at `now` first, each part in its order. */
+    private validFirst(
+        certs: x509.X509Certificate[],
+        now: Date,
+    ): x509.X509Certificate[] {
+        const valid = certs.filter((cert) => this.isTimeValid(cert, now));
+        return [...valid, ...certs.filter((cert) => !valid.includes(cert))];
     }
 
     /**
@@ -187,29 +216,67 @@ export class X509ValidationService {
      * wallet-provider entities: the path must end at a certificate listed as
      * a service that signs attestations
      * ({@link walletAttestationSignerServiceTypes}), not at one that only
-     * signs status lists. Those certificates are tried first as anchors, so
-     * the path ends there when an issuance and a revocation anchor share
-     * subject and key.
+     * signs status lists.
+     *
+     * The chain builder takes the first certificate whose subject matches
+     * the issuer and whose key verifies the signature, so the order of its
+     * pool decides between certificates that share subject and key:
+     * 1. the listed signer certificates, those valid at `now` first. A
+     *    service can list a CA and its renewal with the same subject and key;
+     *    the path ends at the one still valid, whichever the list names
+     *    first, also when `x5c` carries the other one;
+     * 2. the presented chain;
+     * 3. the other listed certificates, such as revocation CAs, in
+     *    trust-list order. After the signers, so the path ends at the
+     *    issuance anchor when an issuance and a revocation anchor share
+     *    subject and key; after the presented chain, so they do not take the
+     *    place of a presented intermediate.
+     *
+     * Every certificate from the signing certificate to the listed one must
+     * be valid at `now`, both ends of its period included
+     * ({@link assertAttestationPathValidAt}). Neither the chain builder nor
+     * `jose` checks validity periods.
+     * @param options.now The time to check at; default: the current time
+     * @param options.ignoreValidityPeriods Leave the periods unchecked, for
+     * an attestation that was checked when it was presented and whose
+     * provider is matched again later
      * @throws if no certificate path to a listed certificate can be built
+     * @throws AttestationCertificateNotValid if a certificate of the matched
+     * path is outside its validity period
      */
     async matchAttestationSigner(
         x5c: X5cInput,
         entities: TrustedEntity[],
+        options: { now?: Date; ignoreValidityPeriods?: boolean } = {},
     ): Promise<MatchedTrustedEntity | null> {
+        const now = options.now ?? new Date();
         const chain = this.parseX5c(x5c);
-        const anchors = this.parseTrustAnchors(
-            this.anchorCertValuesFor(
-                entities,
-                walletAttestationSignerServiceTypes,
-            ),
+        const { preferred, others } = this.anchorCertValueGroups(
+            entities,
+            walletAttestationSignerServiceTypes,
         );
-        const path = await this.buildPath(chain[0], chain, anchors);
-        return this.pathMatchesTrustedEntities(
+        const signers = this.validFirst(this.parseTrustAnchors(preferred), now);
+        const path = await new x509.X509ChainBuilder({
+            certificates: [
+                ...signers,
+                ...chain,
+                ...this.parseTrustAnchors(others),
+            ],
+        }).build(chain[0]);
+        const matched = await this.pathMatchesTrustedEntities(
             path,
             entities,
             "leaf",
             walletAttestationSignerServiceTypes,
         );
+        if (matched && !options.ignoreValidityPeriods) {
+            assertAttestationPathValidAt(
+                path,
+                matched.matchMode === "leaf-pinned" ? 0 : path.length - 1,
+                now,
+            );
+        }
+        return matched;
     }
 
     /**

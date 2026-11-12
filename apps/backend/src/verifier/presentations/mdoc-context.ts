@@ -16,7 +16,10 @@ import {
     signingAlgForCurve,
 } from "../../crypto/key/domain/signing-algs.js";
 import { toBuffer } from "../../shared/utils/buffer.util.js";
-import { certificateValidityAt } from "../../shared/utils/certificate-validity.util.js";
+import {
+    certificateValidityAt,
+    formatCertificateDate,
+} from "../../shared/utils/certificate-validity.util.js";
 import { coseReadyJwk } from "../../shared/utils/cose-key-jwk.util.js";
 
 const NOBLE_CURVES = { ES256: p256, ES384: p384, ES512: p521 } as const;
@@ -248,9 +251,6 @@ const trimChainToTrustedAnchor = async (
 export const CERTIFICATE_VALIDITY_FAILURE =
     /cause=certificate (?:has expired|is not yet valid): notbefore=/i;
 
-const isoOrInvalid = (date: Date) =>
-    Number.isNaN(date.getTime()) ? "invalid" : date.toISOString();
-
 /**
  * Why `cert` is not valid at `now`, or undefined if it is, by the rule the
  * SD-JWT VC chain check uses too ({@link certificateValidityAt}). Checked
@@ -265,7 +265,7 @@ const validityPeriodFailure = (
     if (validity === "valid") {
         return undefined;
     }
-    const period = `notBefore=${isoOrInvalid(cert.notBefore)} notAfter=${isoOrInvalid(cert.notAfter)} checkedAt=${isoOrInvalid(now)}`;
+    const period = `notBefore=${formatCertificateDate(cert.notBefore)} notAfter=${formatCertificateDate(cert.notAfter)} checkedAt=${formatCertificateDate(now)}`;
     return validity === "expired"
         ? `Certificate has expired: ${period}`
         : `Certificate is not yet valid: ${period}`;

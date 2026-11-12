@@ -10,6 +10,7 @@ import { decodeJwt, decodeProtectedHeader, importPKCS8, SignJWT } from "jose";
 import nock from "nock";
 import request from "supertest";
 import type { App } from "supertest/types";
+import type { ValidityPeriod } from "../../src/shared/utils/certificate-validity.util.js";
 
 /** Configure an authenticated provider list for a test, restoring the prior config afterwards. */
 export async function configureTrustedAttestationProvider(
@@ -58,7 +59,13 @@ export async function configureTrustedAttestationProvider(
     };
 }
 
-export async function generateSelfSignedCertificate(): Promise<{
+/** A self-signed wallet provider certificate, valid for a year from now unless `period` says otherwise. */
+export async function generateSelfSignedCertificate(
+    period: ValidityPeriod = {
+        notBefore: new Date(),
+        notAfter: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+    },
+): Promise<{
     certificate: X509Certificate;
     privateKey: CryptoKey;
     publicKey: CryptoKey;
@@ -75,8 +82,7 @@ export async function generateSelfSignedCertificate(): Promise<{
         {
             serialNumber: "01",
             name: "CN=Test Wallet Provider",
-            notBefore: new Date(),
-            notAfter: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+            ...period,
             signingAlgorithm: { name: "ECDSA", hash: "SHA-256" },
             keys: keyPair,
         },

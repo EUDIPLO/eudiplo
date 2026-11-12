@@ -13,6 +13,7 @@ import { Span } from "nestjs-otel";
 import { CryptoService } from "../crypto/crypto.service.js";
 import { CryptoImplementationService } from "../crypto/key/crypto-implementation/crypto-implementation.service.js";
 import { TrustListRef } from "../verifier/presentations/entities/presentation-config.entity.js";
+import { AttestationCertificateNotValid } from "./domain/attestation-certificate-validity.js";
 import { AttestationStatusRejected } from "./domain/attestation-status-rejected.js";
 import {
     discardedTrustListsNote,
@@ -205,7 +206,8 @@ export class WalletAttestationService {
      * @param clientAttestationJwt The wallet attestation JWT
      * @param trustListInputs Trust lists to validate against
      * @returns The matched entity and trust store
-     * @throws UnauthorizedException if certificate is not trusted
+     * @throws UnauthorizedException if certificate is not trusted, or a
+     * certificate of its path is outside its validity period
      */
     private async validateWalletSolutionCertificate(
         clientAttestationJwt: string,
@@ -274,6 +276,11 @@ export class WalletAttestationService {
             if (err instanceof UnauthorizedException) {
                 throw err;
             }
+            if (err instanceof AttestationCertificateNotValid) {
+                throw new UnauthorizedException(
+                    `Wallet attestation certificate chain is not valid: ${err.message}`,
+                );
+            }
             throw new UnauthorizedException(
                 `Certificate chain validation failed: ${err instanceof Error ? err.message : "Unknown error"}${note}`,
             );
@@ -331,7 +338,8 @@ export class WalletAttestationService {
      * from their status list, for credentials issued under them. The
      * provider is matched again in the current wallet-provider trust lists,
      * and the list must be signed as at issuance. The list is verified once
-     * for all indexes.
+     * for all indexes. The validity periods of the attestations'
+     * certificates are not checked again.
      * @param tenantId The tenant whose trust lists apply
      * @param certificates The attestations' `x5c`, leaf first
      * @param uri The attestations' `status.status_list.uri`
@@ -358,10 +366,14 @@ export class WalletAttestationService {
             tenantId,
             acceptedServiceTypes: [...walletSolutionServiceTypes],
         });
+        // The attestation's certificates were checked when it was presented.
+        // They expire while the provider keeps its status list; checking them
+        // here would stop the revocation of a wallet unit once they have.
         const matchedEntity =
             await this.x509ValidationService.matchAttestationSigner(
                 certificates,
                 trustStore.entities,
+                { ignoreValidityPeriods: true },
             );
         if (!matchedEntity) {
             throw new Error(
