@@ -16,7 +16,10 @@ export class VerifiedLoteProvider implements TrustListProvider {
     async loadVerified(reference: TrustListRef) {
         const token = await this.jwt.fetchJwt(reference.url);
         await this.jwt.verifyTrustListJwt(reference, token);
-        const parsed = this.parser.parse(decodeJwt<{ LoTE: LoTE }>(token).LoTE);
+        const parsed = this.parser.parse(
+            decodeJwt<{ LoTE: LoTE }>(token).LoTE,
+            reference.url,
+        );
         return {
             nextUpdate: parsed.info.nextUpdate,
             sequenceNumber: parsed.info.sequenceNumber,

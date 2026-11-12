@@ -1,11 +1,16 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { LoTE } from "@owf/eudi-lote";
 import {
+    effectiveServiceType,
+    type LoteServiceNote,
+    loteProfileRules,
+    serviceStatusVerdict,
+} from "./domain/lote-profiles.js";
+import {
     ServiceTypeIdentifier,
     serviceTypeMatches,
     TrustedEntity,
     TrustedEntityServiceCert,
-    withdrawnServiceStatuses,
 } from "./types.js";
 
 type LoteInfo = {
@@ -26,6 +31,53 @@ export type ParsedLoTE = {
     entities: TrustedEntity[];
 };
 
+/** A service left out of a list, or read with a warning. */
+type NotedService = {
+    entityId?: string;
+    serviceType?: string;
+    status?: string;
+    note: LoteServiceNote;
+};
+
+const noteText: Record<LoteServiceNote, string> = {
+    "untyped-in-mixed-list":
+        "no ServiceTypeIdentifier, while other services of the list have one",
+    "untyped-without-implied-type":
+        "no ServiceTypeIdentifier, and the list type implies none",
+    "status-withdrawn": "its ServiceStatus withdraws it",
+    "status-not-used": "the list type does not use ServiceStatus",
+    "status-unknown":
+        "the list type does not approve services with this ServiceStatus",
+    "status-missing": "no ServiceStatus, which the list type requires",
+};
+
+/** Services named per kind in a warning; a list may hold many. */
+const MAX_NAMED_SERVICES = 10;
+
+/** One service for the log; values from the list are quoted and escaped. */
+function describeService({
+    entityId,
+    serviceType,
+    status,
+    note,
+}: NotedService): string {
+    const parts = [
+        `entity ${JSON.stringify(entityId ?? "(no name)")}`,
+        `type ${serviceType ? JSON.stringify(serviceType) : "(none)"}`,
+    ];
+    if (status) parts.push(`status ${JSON.stringify(status)}`);
+    return `${parts.join(", ")}: ${noteText[note]}`;
+}
+
+function describeServices(services: NotedService[]): string {
+    const named = services
+        .slice(0, MAX_NAMED_SERVICES)
+        .map(describeService)
+        .join("; ");
+    const more = services.length - MAX_NAMED_SERVICES;
+    return more > 0 ? `${named}; and ${more} more` : named;
+}
+
 @Injectable()
 export class LoteParserService {
     private readonly logger = new Logger(LoteParserService.name);
@@ -33,10 +85,15 @@ export class LoteParserService {
     /**
      * Parse a LoTE payload preserving TrustedEntity groupings.
      * This allows pairing issuance and revocation certificates from the same entity.
-     * Services whose status withdraws them ({@link withdrawnServiceStatuses})
-     * are left out, so their certificates are no trust anchors.
+     * Services are read by the rules of the list's `LoTEType`
+     * ({@link loteProfileRules}): an untyped service gets the type the list
+     * implies, and a service whose `ServiceStatus` does not approve it is
+     * left out, so its certificates are no trust anchors. One warning per
+     * list names the services left out or read despite a missing status.
+     *
+     * @param list URL of the list, or the ID of a managed list, for the log.
      */
-    parse(root: LoTE): ParsedLoTE {
+    parse(root: LoTE, list: string): ParsedLoTE {
         const schemeInfo = root.ListAndSchemeInformation;
 
         const info: LoteInfo = {
@@ -46,87 +103,88 @@ export class LoteParserService {
             schemeTerritory: schemeInfo.SchemeTerritory,
         };
 
+        const rules = loteProfileRules(schemeInfo.LoTEType);
         const rawEntities = root.TrustedEntitiesList ?? [];
-        const entities: TrustedEntity[] = [];
-
-        this.logger.debug(
-            `Parsing LoTE with ${rawEntities.length} raw TrustedEntities`,
+        const listHasTypedServices = rawEntities.some((te) =>
+            (te.TrustedEntityServices ?? []).some(
+                (svc) => svc.ServiceInformation?.ServiceTypeIdentifier,
+            ),
         );
+        const entities: TrustedEntity[] = [];
+        const leftOut: NotedService[] = [];
+        const keptWithWarning: NotedService[] = [];
 
         for (const te of rawEntities) {
-            // Extract entity ID from TrustedEntityInformation.TEName (array of MultiLangString)
-            // Use the first name's value as the entity identifier
-            const teName = te.TrustedEntityInformation?.TEName;
-            const entityId = teName?.[0]?.value;
-
-            this.logger.debug(`Processing entity: ${entityId || "(no id)"}`);
-
-            const teServices = te.TrustedEntityServices ?? [];
+            // The first name identifies the entity.
+            const entityId = te.TrustedEntityInformation?.TEName?.[0]?.value;
             const entityServices: TrustedEntityServiceCert[] = [];
 
-            this.logger.debug(`  Entity has ${teServices.length} services`);
-
-            for (const svc of teServices) {
+            for (const svc of te.TrustedEntityServices ?? []) {
                 const svcInfo = svc.ServiceInformation;
-                const serviceTypeIdentifier = svcInfo?.ServiceTypeIdentifier;
-
-                this.logger.debug(
-                    `    Service type: ${serviceTypeIdentifier || "(none)"}`,
+                const status = svcInfo?.ServiceStatus;
+                const resolved = effectiveServiceType(
+                    rules,
+                    svcInfo?.ServiceTypeIdentifier,
+                    listHasTypedServices,
                 );
-
-                if (!serviceTypeIdentifier) {
-                    this.logger.debug(
-                        `    Skipping service without type identifier`,
-                    );
+                if (resolved.type === undefined) {
+                    leftOut.push({ entityId, status, note: resolved.note });
                     continue;
                 }
+                const serviceTypeIdentifier = resolved.type;
 
-                if (
-                    svcInfo.ServiceStatus &&
-                    withdrawnServiceStatuses.includes(svcInfo.ServiceStatus)
-                ) {
-                    this.logger.debug(
-                        `    Skipping withdrawn service (${svcInfo.ServiceStatus})`,
-                    );
+                const verdict = serviceStatusVerdict(rules, status);
+                const noted = {
+                    entityId,
+                    serviceType: serviceTypeIdentifier,
+                    status,
+                };
+                if (!verdict.keep) {
+                    leftOut.push({ ...noted, note: verdict.note });
                     continue;
                 }
+                if (verdict.note) {
+                    keptWithWarning.push({ ...noted, note: verdict.note });
+                }
 
-                const x509s =
-                    svcInfo.ServiceDigitalIdentity?.X509Certificates ?? [];
-
-                this.logger.debug(
-                    `    Service has ${x509s.length} X509 certificates`,
-                );
-
-                for (const x of x509s) {
+                for (const x of svcInfo?.ServiceDigitalIdentity
+                    ?.X509Certificates ?? []) {
                     if (x.val) {
-                        const serviceCert: TrustedEntityServiceCert = {
+                        entityServices.push({
                             serviceTypeIdentifier,
                             certValue: x.val,
-                        };
-                        entityServices.push(serviceCert);
-                    } else {
-                        this.logger.debug(`    X509 cert has no val property`);
+                        });
                     }
                 }
             }
 
             if (entityServices.length > 0) {
-                entities.push({
-                    entityId,
-                    services: entityServices,
-                });
-                this.logger.debug(
-                    `  Added entity ${entityId} with ${entityServices.length} service certs`,
-                );
-            } else {
-                this.logger.debug(
-                    `  Skipping entity ${entityId || "(no id)"} - no service certs found`,
-                );
+                entities.push({ entityId, services: entityServices });
             }
         }
 
+        this.warnNotedServices(list, leftOut, keptWithWarning);
         return { info, entities };
+    }
+
+    private warnNotedServices(
+        list: string,
+        leftOut: NotedService[],
+        keptWithWarning: NotedService[],
+    ) {
+        if (leftOut.length === 0 && keptWithWarning.length === 0) return;
+        const parts: string[] = [];
+        if (leftOut.length > 0) {
+            parts.push(
+                `left out ${leftOut.length} service(s): ${describeServices(leftOut)}`,
+            );
+        }
+        if (keptWithWarning.length > 0) {
+            parts.push(
+                `read ${keptWithWarning.length} service(s) despite: ${describeServices(keptWithWarning)}`,
+            );
+        }
+        this.logger.warn(`Trust list ${list}: ${parts.join(". ")}`);
     }
 
     /**
