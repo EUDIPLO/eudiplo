@@ -31,12 +31,19 @@ import { StatusListEntity } from "../../src/issuer/status-list/entities/status-l
 import { WalletUnitStatusCheckJob } from "../../src/issuer/wallet-unit-revocation/adapters/wallet-unit-status-check.job.js";
 import { StatusListVerifierService } from "../../src/trust/status-list-verifier.service.js";
 import {
+    certificateFailure,
+    periodsOutside,
+} from "../trust/attestation-certificate-periods.fixture.js";
+import {
     callbacks,
     getSignJwtCallback,
     IssuanceTestContext,
     setupIssuanceTestApp,
 } from "../utils.js";
-import { configureTrustedAttestationProvider } from "./attestation-trust-helpers.js";
+import {
+    configureTrustedAttestationProvider,
+    generateSelfSignedCertificate,
+} from "./attestation-trust-helpers.js";
 
 setGlobalDispatcher(
     new Agent({
@@ -64,7 +71,7 @@ async function signingKey(signer: Signer) {
     );
 }
 
-/** A status list of the wallet provider, signed under its attestation certificate. */
+/** A status list of the wallet provider, signed with `signer` (its attestation or a revocation certificate). */
 async function walletUnitStatusList(signer: Signer, revoked: boolean) {
     const elements = new Array(16).fill(0);
     elements[WALLET_UNIT_IDX] = revoked ? 1 : 0;
@@ -286,8 +293,14 @@ describe("Issuance - revocation with the wallet unit", () => {
         return list.elements[idx];
     }
 
-    async function useTrustedProvider() {
-        const trust = await configureTrustedAttestationProvider(app, authToken);
+    async function useTrustedProvider(
+        options: { revocationCertificates?: X509Certificate[] } = {},
+    ) {
+        const trust = await configureTrustedAttestationProvider(
+            app,
+            authToken,
+            options,
+        );
         provider = trust.provider;
         restore = trust.restore;
     }
@@ -340,6 +353,71 @@ describe("Issuance - revocation with the wallet unit", () => {
             ],
         });
         expect(await records.findBy({ sessionId })).toEqual([]);
+    });
+
+    // A list signed under a retired revocation key decides nothing: it
+    // rejects the key attestation at issuance and revokes nothing later.
+    const outdatedSignerAnswer = `Status list JWT signature verification failed - certificate chain is not valid: ${certificateFailure("Signing", "expired")}`;
+
+    test("rejects a key attestation whose status list is signed under an expired revocation certificate", async () => {
+        const expired = await generateSelfSignedCertificate(
+            periodsOutside.expired(),
+        );
+        await useTrustedProvider({
+            revocationCertificates: [expired.certificate],
+        });
+        serveStatusList(await walletUnitStatusList(expired, false));
+
+        const error = await issue().then(
+            () => {
+                throw new Error("Expected the credential request to fail");
+            },
+            (e: Openid4vciRetrieveCredentialsError) =>
+                e.response.credentialErrorResponseResult?.data,
+        );
+        expect(error).toEqual({
+            error: "invalid_proof",
+            error_description: expect.stringContaining(outdatedSignerAnswer),
+        });
+    });
+
+    test("revokes nothing from a list signed under an expired revocation certificate", async () => {
+        const current = await generateSelfSignedCertificate();
+        const expired = await generateSelfSignedCertificate(
+            periodsOutside.expired(),
+        );
+        await useTrustedProvider({
+            revocationCertificates: [current.certificate, expired.certificate],
+        });
+        serveStatusList(await walletUnitStatusList(current, false));
+        const { sessionId, credential } = await issue();
+
+        // The wallet unit is revoked in a list signed with the expired key.
+        nock.cleanAll();
+        app.get(StatusListVerifierService).clearCache();
+        serveStatusList(await walletUnitStatusList(expired, true));
+        const webhook = nock(HOST).post("/revoked").reply(200);
+
+        await app.get(WalletUnitStatusCheckJob).run();
+
+        expect(await credentialStatus(credential)).toBe(0);
+        expect(webhook.isDone()).toBe(false);
+        // Still followed: the next run reads the list again, and revokes
+        // once the provider signs it under its current certificate.
+        expect(
+            await app
+                .get(DataSource)
+                .getRepository(CredentialWalletUnit)
+                .findBy({ sessionId }),
+        ).toHaveLength(1);
+        nock.cleanAll();
+        app.get(StatusListVerifierService).clearCache();
+        serveStatusList(await walletUnitStatusList(current, true));
+        nock(HOST).post("/revoked").reply(200);
+
+        await app.get(WalletUnitStatusCheckJob).run();
+
+        expect(await credentialStatus(credential)).toBe(1);
     });
 
     test("records the wallet unit of a jwt proof's key attestation", async () => {

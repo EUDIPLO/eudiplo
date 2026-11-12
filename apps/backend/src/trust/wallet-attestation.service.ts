@@ -56,6 +56,10 @@ export interface ClientAttestation {
 const WALLET_PROVIDER_TRUST_LISTS_UNAVAILABLE =
     "Wallet provider trust lists could not be loaded";
 
+/** Start of every answer that rejects a status list's signature. */
+const STATUS_LIST_SIGNATURE_FAILED =
+    "Status list JWT signature verification failed";
+
 /**
  * Service for verifying wallet attestations.
  * Handles validation of client attestation JWTs, X.509 certificate chains,
@@ -339,7 +343,8 @@ export class WalletAttestationService {
      * provider is matched again in the current wallet-provider trust lists,
      * and the list must be signed as at issuance. The list is verified once
      * for all indexes. The validity periods of the attestations'
-     * certificates are not checked again.
+     * certificates are not checked again; those of the list's certificate
+     * path are, as at issuance.
      * @param tenantId The tenant whose trust lists apply
      * @param certificates The attestations' `x5c`, leaf first
      * @param uri The attestations' `status.status_list.uri`
@@ -348,7 +353,9 @@ export class WalletAttestationService {
      * @returns The status value per index; an index outside the list is
      * left out and logged
      * @throws Error when the provider is no longer trusted, or the list
-     * cannot be fetched, is not signed by the provider or cannot be read
+     * cannot be fetched, is not signed by the provider, is signed under a
+     * certificate path with a certificate outside its validity period, or
+     * cannot be read; the caller then revokes nothing
      */
     async readWalletUnitStatuses(
         tenantId: string,
@@ -368,7 +375,10 @@ export class WalletAttestationService {
         });
         // The attestation's certificates were checked when it was presented.
         // They expire while the provider keeps its status list; checking them
-        // here would stop the revocation of a wallet unit once they have.
+        // here would stop the revocation of a wallet unit once they have. A
+        // provider without a revocation certificate signs its list under the
+        // attestation certificate, which the list check below then requires
+        // to be valid.
         const matchedEntity =
             await this.x509ValidationService.matchAttestationSigner(
                 certificates,
@@ -385,16 +395,17 @@ export class WalletAttestationService {
                 uri,
                 tenantId,
             );
-        if (
-            !(await this.verifyStatusListSignature(
-                statusListJwt,
-                matchedEntity,
-                trustStore,
-            ))
-        ) {
-            throw new Error(
-                "Status list JWT signature verification failed - not signed by the wallet provider's trusted revocation or wallet attestation certificate",
-            );
+        // Unlike the attestation's, the list's certificates are checked: the
+        // list is signed anew, and one signed under an expired or not yet
+        // valid key must not revoke wallet units. The credentials then stay
+        // as they are until the provider signs it under a valid certificate.
+        const signatureFailure = await this.statusListSignatureFailure(
+            statusListJwt,
+            matchedEntity,
+            trustStore,
+        );
+        if (signatureFailure) {
+            throw new Error(signatureFailure);
         }
         const statuses = new Map<number, number>();
         for (const idx of indexes) {
@@ -483,16 +494,13 @@ export class WalletAttestationService {
                 );
 
             // Verify the status list JWT signature against the revocation cert
-            const signatureValid = await this.verifyStatusListSignature(
+            const signatureFailure = await this.statusListSignatureFailure(
                 statusListJwt,
                 matchedEntity,
                 trustStore,
             );
-
-            if (!signatureValid) {
-                throw new UnauthorizedException(
-                    "Status list JWT signature verification failed - not signed by the wallet provider's trusted revocation or wallet attestation certificate",
-                );
+            if (signatureFailure) {
+                throw new UnauthorizedException(signatureFailure);
             }
 
             // Read the status from the token whose signature was just
@@ -564,6 +572,37 @@ export class WalletAttestationService {
     }
 
     /**
+     * Why a status list's signature is not accepted, as the rejection
+     * answers it, or undefined if it is accepted
+     * ({@link verifyStatusListSignature}). The reason for a certificate
+     * outside its validity period names its place in the path and its
+     * period, not its subject: it reaches the wallet.
+     */
+    private async statusListSignatureFailure(
+        statusListJwt: string,
+        matchedEntity: MatchedTrustedEntity | null,
+        trustStore: BuiltTrustStore | null,
+    ): Promise<string | undefined> {
+        try {
+            if (
+                await this.verifyStatusListSignature(
+                    statusListJwt,
+                    matchedEntity,
+                    trustStore,
+                )
+            ) {
+                return undefined;
+            }
+            return `${STATUS_LIST_SIGNATURE_FAILED} - not signed by the wallet provider's trusted revocation or wallet attestation certificate`;
+        } catch (err) {
+            if (err instanceof AttestationCertificateNotValid) {
+                return `${STATUS_LIST_SIGNATURE_FAILED} - certificate chain is not valid: ${err.message}`;
+            }
+            throw err;
+        }
+    }
+
+    /**
      * Verify the signature of a status list JWT against the revocation
      * certificates of the matched trusted entity, any of which may sign it,
      * or its wallet attestation (issuance) certificate if it has no
@@ -572,6 +611,9 @@ export class WalletAttestationService {
      * @param matchedEntity The matched trusted entity
      * @param trustStore The trust store
      * @returns true if the signature is valid and from the trusted signer cert
+     * @throws AttestationCertificateNotValid if the list is signed under
+     * that certificate, but a certificate of its path, from the one that
+     * signs the list to the trusted signer, is outside its validity period
      */
     private async verifyStatusListSignature(
         statusListJwt: string,
@@ -630,60 +672,38 @@ export class WalletAttestationService {
             // revocation certificates: every WalletSolution/Revocation
             // service, or else every EAA/Revocation service. An entity
             // without one must sign it under the certificate that its wallet
-            // attestations are signed under.
-            const signers =
-                this.x509ValidationService.statusListSigners(matchedEntity);
-
-            // Build and verify the status list's certificate chain
-            const presented = this.x509ValidationService.parseX5c(x5c);
-            const leaf = presented[0];
-
-            // Get all certs for path building, the expected signers first:
-            // when anchors share subject and key, the path then ends at a
-            // signer certificate that is checked below.
-            const allCerts = trustStore.entities.flatMap((e) =>
-                e.services.map((s) => ({ certValue: s.certValue })),
-            );
-            const anchors = this.x509ValidationService.parseTrustAnchors([
-                ...signers.map((s) => ({ certValue: s.certValue })),
-                ...allCerts,
-            ]);
-
+            // attestations are signed under. CA: the path must terminate at
+            // this cert. Pinned (non-CA): the leaf must match. Every
+            // certificate up to that signer must be within its validity
+            // period: a list signed under an expired or not yet valid key is
+            // rejected with the reason.
             let path: x509.X509Certificate[];
+            let statusMatchesSigner: boolean;
             try {
-                path = await this.x509ValidationService.buildPath(
-                    leaf,
-                    presented,
-                    anchors,
-                );
+                ({ path, matched: statusMatchesSigner } =
+                    await this.x509ValidationService.matchAttestationStatusListSigner(
+                        x5c,
+                        matchedEntity,
+                        trustStore.entities,
+                    ));
             } catch (e: any) {
+                if (e instanceof AttestationCertificateNotValid) throw e;
                 this.logger.debug(
                     `Status list chain build failed: ${e?.message ?? e}`,
                 );
                 return false;
             }
 
-            // Get thumbprints for comparison
-            const statusLeafThumb = await this.getThumbprint(presented[0]);
-            const statusEndThumb = await this.getThumbprint(path.at(-1)!);
             const entityId = matchedEntity.entity.entityId ?? "unknown";
-
-            // Check if the status list is signed under a signer cert from the
-            // same entity. CA: the path must terminate at this cert. Pinned
-            // (non-CA): the leaf must match.
-            const statusMatchesSigner =
-                await this.x509ValidationService.matchesStatusListSigner(
-                    path,
-                    matchedEntity,
-                    "leaf",
-                );
-
             const kind =
-                signers[0].serviceTypeIdentifier ===
-                matchedEntity.issuanceServiceType
+                this.x509ValidationService.statusListSigners(matchedEntity)[0]
+                    .serviceTypeIdentifier === matchedEntity.issuanceServiceType
                     ? "the wallet attestation certificate"
                     : "a revocation certificate";
             if (!statusMatchesSigner) {
+                // Thumbprints of the path's ends, for the log only.
+                const statusLeafThumb = await this.getThumbprint(path[0]);
+                const statusEndThumb = await this.getThumbprint(path.at(-1)!);
                 this.logger.warn(
                     `Status list is NOT signed by ${kind} from the same TrustedEntity. ` +
                         `Entity: ${entityId}, ` +
@@ -698,6 +718,7 @@ export class WalletAttestationService {
             );
             return true;
         } catch (e: any) {
+            if (e instanceof AttestationCertificateNotValid) throw e;
             this.logger.error(
                 `Error verifying status list signature: ${e?.message ?? e}`,
             );

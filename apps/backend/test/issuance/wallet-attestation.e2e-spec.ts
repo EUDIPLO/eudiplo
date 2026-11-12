@@ -28,6 +28,7 @@ import { StatusListVerifierService } from "../../src/trust/status-list-verifier.
 import { TrustStoreService } from "../../src/trust/trust-store.service.js";
 import {
     certificateFailure,
+    outsideStates,
     periodsOutside,
 } from "../trust/attestation-certificate-periods.fixture.js";
 import {
@@ -1687,6 +1688,8 @@ describe("Issuance - Wallet Attestation", () => {
         statusListJwt: string;
         idx?: number;
         withRevocationCert?: boolean;
+        /** The revocation certificate the trust list names; default: `revocationCert`. */
+        revocationCertificate?: X509Certificate;
         revocationServiceType?: string;
     }) {
         const trustListPath = `/wallet-providers${options.path}`;
@@ -1733,7 +1736,7 @@ describe("Issuance - Wallet Attestation", () => {
             "http://uri.etsi.org/19602/SvcType/WalletSolution",
             options.withRevocationCert === false
                 ? undefined
-                : revocationCert.certificate,
+                : (options.revocationCertificate ?? revocationCert.certificate),
             options.revocationServiceType,
         );
         nock("http://localhost:8787")
@@ -1906,6 +1909,37 @@ describe("Issuance - Wallet Attestation", () => {
 
         expect(tokenResult.accessTokenResponse.access_token).toBeDefined();
     }, 30000);
+
+    test.each(outsideStates)(
+        "should fail when the status list is signed by a revocation cert that is %s",
+        async (state) => {
+            // A list signed with a retired revocation key must not decide
+            // the attestation's status, also with best_effort (the default).
+            const outdatedRevocationCert = await generateSelfSignedCertificate(
+                periodsOutside[state](),
+            );
+            const path = `/status-list-signer-${state.replaceAll(" ", "-")}`;
+            const list = await createStatusListJwt(
+                outdatedRevocationCert,
+                `http://localhost:8787${path}`,
+            );
+
+            await expect(
+                requestTokenWithStatusList({
+                    path,
+                    statusListJwt: list,
+                    revocationCertificate: outdatedRevocationCert.certificate,
+                    revocationServiceType:
+                        "http://uri.etsi.org/19602/SvcType/WalletSolution/Revocation",
+                }),
+            ).rejects.toMatchObject(
+                rejectedWith(
+                    `Status list JWT signature verification failed - certificate chain is not valid: ${certificateFailure("Signing", state)}`,
+                ),
+            );
+        },
+        30000,
+    );
 
     test("should succeed when a provider without revocation cert signs its status list with its own cert", async () => {
         const list = await createStatusListJwt(

@@ -12,10 +12,15 @@ import request from "supertest";
 import type { App } from "supertest/types";
 import type { ValidityPeriod } from "../../src/shared/utils/certificate-validity.util.js";
 
-/** Configure an authenticated provider list for a test, restoring the prior config afterwards. */
+/**
+ * Configure an authenticated provider list for a test, restoring the prior
+ * config afterwards. `revocationCertificates` are listed as the provider's
+ * `WalletSolution/Revocation` services.
+ */
 export async function configureTrustedAttestationProvider(
     app: INestApplication<App>,
     authToken: string,
+    options: { revocationCertificates?: X509Certificate[] } = {},
 ) {
     const provider = await generateSelfSignedCertificate();
     const listSigner = await generateSelfSignedCertificate();
@@ -44,7 +49,9 @@ export async function configureTrustedAttestationProvider(
         .get(path)
         .reply(
             200,
-            await createMockTrustListJwt(listSigner, provider.certificate),
+            await createMockTrustListJwt(listSigner, provider.certificate, {
+                revocationCertificates: options.revocationCertificates,
+            }),
             { "Content-Type": "application/jwt" },
         );
     return {
@@ -99,8 +106,16 @@ export async function generateSelfSignedCertificate(
 export async function createMockTrustListJwt(
     signingCert: { certificate: X509Certificate; privateKey: CryptoKey },
     walletProviderCert: X509Certificate,
-    serviceTypeIdentifier = "http://uri.etsi.org/19602/SvcType/WalletSolution",
-    sequenceNumber = 1,
+    {
+        serviceTypeIdentifier = "http://uri.etsi.org/19602/SvcType/WalletSolution",
+        sequenceNumber = 1,
+        revocationCertificates = [],
+    }: {
+        serviceTypeIdentifier?: string;
+        sequenceNumber?: number;
+        /** Listed as the provider's `WalletSolution/Revocation` services. */
+        revocationCertificates?: X509Certificate[];
+    } = {},
 ): Promise<string> {
     const privateKeyArrayBuffer = await globalThis.crypto.subtle.exportKey(
         "pkcs8",
@@ -153,6 +168,23 @@ export async function createMockTrustListJwt(
                                 },
                             },
                         },
+                        ...revocationCertificates.map((cert) => ({
+                            ServiceInformation: {
+                                ServiceTypeIdentifier:
+                                    "http://uri.etsi.org/19602/SvcType/WalletSolution/Revocation",
+                                ServiceName: [
+                                    {
+                                        lang: "en",
+                                        value: "Wallet Provider Revocation Service",
+                                    },
+                                ],
+                                ServiceDigitalIdentity: {
+                                    X509Certificates: [
+                                        { val: cert.toString("base64") },
+                                    ],
+                                },
+                            },
+                        })),
                     ],
                 },
             ],

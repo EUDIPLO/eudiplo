@@ -250,19 +250,16 @@ export class X509ValidationService {
         options: { now?: Date; ignoreValidityPeriods?: boolean } = {},
     ): Promise<MatchedTrustedEntity | null> {
         const now = options.now ?? new Date();
-        const chain = this.parseX5c(x5c);
         const { preferred, others } = this.anchorCertValueGroups(
             entities,
             walletAttestationSignerServiceTypes,
         );
-        const signers = this.validFirst(this.parseTrustAnchors(preferred), now);
-        const path = await new x509.X509ChainBuilder({
-            certificates: [
-                ...signers,
-                ...chain,
-                ...this.parseTrustAnchors(others),
-            ],
-        }).build(chain[0]);
+        const path = await this.buildAttestationPath(
+            x5c,
+            preferred,
+            others,
+            now,
+        );
         const matched = await this.pathMatchesTrustedEntities(
             path,
             entities,
@@ -270,13 +267,51 @@ export class X509ValidationService {
             walletAttestationSignerServiceTypes,
         );
         if (matched && !options.ignoreValidityPeriods) {
-            assertAttestationPathValidAt(
-                path,
-                matched.matchMode === "leaf-pinned" ? 0 : path.length - 1,
-                now,
-            );
+            this.assertMatchedPathValidAt(path, matched.matchMode, now);
         }
         return matched;
+    }
+
+    /**
+     * Build the certificate path of an attestation or its status list from
+     * its `x5c`, with the chain builder's pool in the order that
+     * {@link matchAttestationSigner} explains: the certificates the path
+     * should end at (`signers`), those valid at `now` first; then the
+     * presented chain; then the other listed certificates.
+     * @throws if no certificate path can be built
+     */
+    private buildAttestationPath(
+        x5c: X5cInput,
+        signers: Array<{ certValue: string }>,
+        others: Array<{ certValue: string }>,
+        now: Date,
+    ): Promise<x509.X509Certificate[]> {
+        const chain = this.parseX5c(x5c);
+        return new x509.X509ChainBuilder({
+            certificates: [
+                ...this.validFirst(this.parseTrustAnchors(signers), now),
+                ...chain,
+                ...this.parseTrustAnchors(others),
+            ],
+        }).build(chain[0]);
+    }
+
+    /**
+     * Check the validity periods of a path that matched a listed certificate
+     * in `matchMode`: from the signing certificate up to the listed one, the
+     * signing certificate itself when it is pinned
+     * ({@link assertAttestationPathValidAt}).
+     */
+    private assertMatchedPathValidAt(
+        path: x509.X509Certificate[],
+        matchMode: MatchedTrustedEntity["matchMode"],
+        now: Date,
+    ): void {
+        assertAttestationPathValidAt(
+            path,
+            matchMode === "leaf-pinned" ? 0 : path.length - 1,
+            now,
+        );
     }
 
     /**
@@ -377,20 +412,91 @@ export class X509ValidationService {
         matched: MatchedTrustedEntity,
         pinnedMode: "leaf" | "pathEnd",
     ): Promise<boolean> {
-        const { leafThumb, endThumb } = await this.pathThumbprints(path);
-        for (const signer of this.statusListSigners(matched)) {
-            if (
-                await this.matchServiceCert(
-                    signer,
-                    leafThumb,
-                    endThumb,
-                    pinnedMode,
-                )
-            ) {
-                return true;
-            }
+        return (
+            (await this.statusListSignerMatch(path, matched, pinnedMode)) !==
+            null
+        );
+    }
+
+    /**
+     * Match the `x5c` chain of a wallet or key attestation's status list
+     * against the {@link statusListSigners} of the provider the attestation
+     * matched: a CA signer must be the path end, a pinned one the signing
+     * certificate.
+     *
+     * The chain builder's pool is ordered as in
+     * {@link matchAttestationSigner}: the status list signers, those valid at
+     * `now` first, so that the path ends at a signer CA's valid renewal that
+     * has its subject and key, whichever the list names first and also when
+     * `x5c` carries the other one; then the presented chain; then the other
+     * listed certificates, which therefore do not take the place of a
+     * presented intermediate.
+     *
+     * Every certificate from the status list's signing certificate to the
+     * signer it matched must be valid at `now`, both ends of its period
+     * included ({@link assertAttestationPathValidAt}). Certificates above a
+     * pinned signer are not part of the trust decision and are not checked,
+     * also when a signer CA above it is listed as well, whatever the order
+     * of the list.
+     * @param x5c The status list's `x5c`, signing certificate first
+     * @param matched The provider the attestation matched
+     * @param entities All entities of the trust store, for path building
+     * @param options.now The time to check at; default: the current time
+     * @returns The path, signing certificate first, and whether it matched
+     * one of the provider's status list signers
+     * @throws if no certificate path can be built
+     * @throws AttestationCertificateNotValid if the path matched and a
+     * certificate of it is outside its validity period
+     */
+    async matchAttestationStatusListSigner(
+        x5c: X5cInput,
+        matched: MatchedTrustedEntity,
+        entities: TrustedEntity[],
+        options: { now?: Date } = {},
+    ): Promise<{ path: x509.X509Certificate[]; matched: boolean }> {
+        const now = options.now ?? new Date();
+        const path = await this.buildAttestationPath(
+            x5c,
+            this.statusListSigners(matched).map(({ certValue }) => ({
+                certValue,
+            })),
+            entities.flatMap((entity) =>
+                entity.services.map(({ certValue }) => ({ certValue })),
+            ),
+            now,
+        );
+        const signer = await this.statusListSignerMatch(path, matched, "leaf");
+        if (signer) {
+            this.assertMatchedPathValidAt(path, signer.matchMode, now);
         }
-        return false;
+        return { path, matched: signer !== null };
+    }
+
+    /**
+     * How `path` matches the {@link statusListSigners} of `matched`, or null;
+     * see {@link matchesStatusListSigner}. A pinned signing certificate
+     * matches before a listed CA at the path end: the pin is the narrower
+     * trust decision, which {@link matchAttestationStatusListSigner} then
+     * checks alone.
+     */
+    private async statusListSignerMatch(
+        path: x509.X509Certificate[],
+        matched: MatchedTrustedEntity,
+        pinnedMode: "leaf" | "pathEnd",
+    ): Promise<ServiceCertMatch | null> {
+        const { leafThumb, endThumb } = await this.pathThumbprints(path);
+        let first: ServiceCertMatch | null = null;
+        for (const signer of this.statusListSigners(matched)) {
+            const match = await this.matchServiceCert(
+                signer,
+                leafThumb,
+                endThumb,
+                pinnedMode,
+            );
+            if (match?.matchMode === "leaf-pinned") return match;
+            first ??= match;
+        }
+        return first;
     }
 
     private async pathThumbprints(
