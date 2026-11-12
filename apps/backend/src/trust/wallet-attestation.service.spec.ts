@@ -293,66 +293,99 @@ describe("WalletAttestationService status list signature", () => {
     });
 });
 
+// Certificates and status list JWTs of wallet providers, generated per test.
+const algorithm = { name: "ECDSA", namedCurve: "P-256", hash: "SHA-256" };
+const b64url = (input: string | ArrayBuffer) =>
+    Buffer.from(
+        typeof input === "string" ? input : new Uint8Array(input),
+    ).toString("base64url");
+const der = (cert: x509.X509Certificate) =>
+    Buffer.from(cert.rawData).toString("base64");
+
+async function keys() {
+    return (await crypto.subtle.generateKey(algorithm, true, [
+        "sign",
+        "verify",
+    ])) as CryptoKeyPair;
+}
+
+async function ca(
+    name: string,
+    period: ValidityPeriod = currentPeriod(),
+    caKeys?: CryptoKeyPair,
+    serialNumber = "01",
+) {
+    const ownKeys = caKeys ?? (await keys());
+    const cert = await x509.X509CertificateGenerator.createSelfSigned({
+        serialNumber,
+        name: `CN=${name}`,
+        ...period,
+        keys: ownKeys,
+        signingAlgorithm: algorithm,
+        extensions: [new x509.BasicConstraintsExtension(true, 0, true)],
+    });
+    return { cert, keys: ownKeys };
+}
+
+/** A certificate `issuer` issued, a CA one if `isCa`. */
+async function issued(
+    subject: string,
+    issuer: Awaited<ReturnType<typeof ca>>,
+    period: ValidityPeriod = currentPeriod(),
+    isCa = false,
+) {
+    const subjectKeys = await keys();
+    const cert = await x509.X509CertificateGenerator.create({
+        serialNumber: "02",
+        subject,
+        issuer: issuer.cert.subject,
+        ...period,
+        publicKey: subjectKeys.publicKey,
+        signingKey: issuer.keys.privateKey,
+        signingAlgorithm: algorithm,
+        extensions: isCa
+            ? [new x509.BasicConstraintsExtension(true, 0, true)]
+            : [],
+    });
+    return { cert, keys: subjectKeys };
+}
+
+/** Status list JWT signed with `signerKeys`, with `chain` as its x5c. */
+async function signStatusList(
+    signerKeys: CryptoKeyPair,
+    chain: x509.X509Certificate[],
+) {
+    const data = `${b64url(
+        JSON.stringify({
+            alg: "ES256",
+            typ: "statuslist+jwt",
+            x5c: chain.map(der),
+        }),
+    )}.${b64url(JSON.stringify({ status_list: { bits: 1, lst: "AA" } }))}`;
+    const signature = b64url(
+        await crypto.subtle.sign(
+            algorithm,
+            signerKeys.privateKey,
+            new TextEncoder().encode(data),
+        ),
+    );
+    return `${data}.${signature}`;
+}
+
+/**
+ * Status list JWT signed by a leaf certificate that `issuer` issued, valid
+ * for `period`, with `intermediates` after it in x5c.
+ */
+async function statusListUnder(
+    issuer: Awaited<ReturnType<typeof ca>>,
+    period: ValidityPeriod = currentPeriod(),
+    intermediates: x509.X509Certificate[] = [],
+) {
+    const leaf = await issued("CN=Status List Signer", issuer, period);
+    return signStatusList(leaf.keys, [leaf.cert, ...intermediates]);
+}
+
 describe("WalletAttestationService status list signer", () => {
-    const algorithm = { name: "ECDSA", namedCurve: "P-256", hash: "SHA-256" };
-    const b64url = (input: string | ArrayBuffer) =>
-        Buffer.from(
-            typeof input === "string" ? input : new Uint8Array(input),
-        ).toString("base64url");
-    const der = (cert: x509.X509Certificate) =>
-        Buffer.from(cert.rawData).toString("base64");
-
-    async function keys() {
-        return (await crypto.subtle.generateKey(algorithm, true, [
-            "sign",
-            "verify",
-        ])) as CryptoKeyPair;
-    }
-
-    async function ca(name: string) {
-        const caKeys = await keys();
-        const cert = await x509.X509CertificateGenerator.createSelfSigned({
-            serialNumber: "01",
-            name: `CN=${name}`,
-            notBefore: new Date(Date.now() - 60_000),
-            notAfter: new Date(Date.now() + 3_600_000),
-            keys: caKeys,
-            signingAlgorithm: algorithm,
-            extensions: [new x509.BasicConstraintsExtension(true, 0, true)],
-        });
-        return { cert, keys: caKeys };
-    }
-
-    /** Status list JWT signed by a leaf certificate that `issuer` issued. */
-    async function statusListUnder(issuer: Awaited<ReturnType<typeof ca>>) {
-        const leafKeys = await keys();
-        const leaf = await x509.X509CertificateGenerator.create({
-            serialNumber: "02",
-            subject: "CN=Status List Signer",
-            issuer: issuer.cert.subject,
-            notBefore: new Date(Date.now() - 60_000),
-            notAfter: new Date(Date.now() + 3_600_000),
-            publicKey: leafKeys.publicKey,
-            signingKey: issuer.keys.privateKey,
-            signingAlgorithm: algorithm,
-        });
-        const data = `${b64url(
-            JSON.stringify({
-                alg: "ES256",
-                typ: "statuslist+jwt",
-                x5c: [der(leaf)],
-            }),
-        )}.${b64url(JSON.stringify({ status_list: { bits: 1, lst: "AA" } }))}`;
-        const signature = b64url(
-            await crypto.subtle.sign(
-                algorithm,
-                leafKeys.privateKey,
-                new TextEncoder().encode(data),
-            ),
-        );
-        return `${data}.${signature}`;
-    }
-
     /** Verify with the provider CA and `otherCa` both in the trust store. */
     async function verify(
         jwt: string,
@@ -488,9 +521,8 @@ describe("WalletAttestationService status list signer", () => {
         });
     }
 
-    /** Verify against a provider that lists `revocationCas` as revocation services. */
-    async function verifyWithRevocation(
-        jwt: string,
+    /** A provider that lists `revocationCas` as revocation services, matched with `attestationCa`. */
+    async function providerWithRevocation(
         attestationCa: x509.X509Certificate,
         revocationCas: x509.X509Certificate[],
     ) {
@@ -516,6 +548,22 @@ describe("WalletAttestationService status list signer", () => {
             issuanceServiceType: ServiceTypeIdentifiers.WalletSolutionIssuance,
             matchMode: "ca",
         };
+        return {
+            matchedEntity,
+            trustStore: { entities: [matchedEntity.entity], discarded: [] },
+        };
+    }
+
+    /** Verify against a provider that lists `revocationCas` as revocation services. */
+    async function verifyWithRevocation(
+        jwt: string,
+        attestationCa: x509.X509Certificate,
+        revocationCas: x509.X509Certificate[],
+    ) {
+        const { matchedEntity, trustStore } = await providerWithRevocation(
+            attestationCa,
+            revocationCas,
+        );
         const service = Object.assign(
             Object.create(WalletAttestationService.prototype),
             {
@@ -526,9 +574,11 @@ describe("WalletAttestationService status list signer", () => {
                 x509ValidationService: new X509ValidationService(),
             },
         );
-        return service.verifyStatusListSignature(jwt, matchedEntity, {
-            entities: [matchedEntity.entity],
-        });
+        return service.verifyStatusListSignature(
+            jwt,
+            matchedEntity,
+            trustStore,
+        );
     }
 
     it("accepts a status list under any revocation CA of the provider", async () => {
@@ -569,6 +619,293 @@ describe("WalletAttestationService status list signer", () => {
                 otherCa.cert,
             ),
         ).resolves.toBe(false);
+    });
+
+    // Neither the chain builder nor jose checks validity periods. A list
+    // signed under a retired revocation key must not decide the status of an
+    // attestation, nor revoke wallet units.
+    describe("with a certificate outside its validity period", () => {
+        for (const state of outsideStates) {
+            it(`rejects a status list whose signing certificate is ${state}`, async () => {
+                const attestationCa = await ca("Provider CA");
+                const revocationCa = await ca("Provider Status CA");
+
+                await expect(
+                    verifyWithRevocation(
+                        await statusListUnder(
+                            revocationCa,
+                            periodsOutside[state](),
+                        ),
+                        attestationCa.cert,
+                        [revocationCa.cert],
+                    ),
+                ).rejects.toThrow(certificateFailure("Signing", state));
+            });
+
+            it(`rejects a status list under a listed revocation CA that is ${state}`, async () => {
+                const attestationCa = await ca("Provider CA");
+                const revocationCa = await ca(
+                    "Provider Status CA",
+                    periodsOutside[state](),
+                );
+
+                await expect(
+                    verifyWithRevocation(
+                        await statusListUnder(revocationCa),
+                        attestationCa.cert,
+                        [revocationCa.cert],
+                    ),
+                ).rejects.toThrow(certificateFailure("Trust list", state));
+            });
+
+            it(`rejects a status list under an intermediate certificate that is ${state}`, async () => {
+                const attestationCa = await ca("Provider CA");
+                const revocationCa = await ca("Provider Status CA");
+                const intermediate = await issued(
+                    "CN=Provider Status Intermediate CA",
+                    revocationCa,
+                    periodsOutside[state](),
+                    true,
+                );
+
+                await expect(
+                    verifyWithRevocation(
+                        await statusListUnder(intermediate, currentPeriod(), [
+                            intermediate.cert,
+                        ]),
+                        attestationCa.cert,
+                        [revocationCa.cert],
+                    ),
+                ).rejects.toThrow(certificateFailure("Intermediate", state));
+            });
+
+            it(`rejects a status list signed by a pinned revocation certificate that is ${state}`, async () => {
+                const attestationCa = await ca("Provider CA");
+                const pinnedKeys = await keys();
+                const pinned =
+                    await x509.X509CertificateGenerator.createSelfSigned({
+                        serialNumber: "01",
+                        name: "CN=Pinned Status List Signer",
+                        ...periodsOutside[state](),
+                        keys: pinnedKeys,
+                        signingAlgorithm: algorithm,
+                        extensions: [
+                            new x509.BasicConstraintsExtension(false, 0, true),
+                        ],
+                    });
+
+                await expect(
+                    verifyWithRevocation(
+                        await signStatusList(pinnedKeys, [pinned]),
+                        attestationCa.cert,
+                        [pinned],
+                    ),
+                ).rejects.toThrow(certificateFailure("Signing", state));
+            });
+
+            it(`rejects a status list under the attestation CA that is ${state} when the provider lists no revocation certificate`, async () => {
+                const providerCa = await ca(
+                    "Provider CA",
+                    periodsOutside[state](),
+                );
+                const otherCa = await ca("Other Provider CA");
+
+                await expect(
+                    verify(
+                        await statusListUnder(providerCa),
+                        providerCa.cert,
+                        otherCa.cert,
+                    ),
+                ).rejects.toThrow(certificateFailure("Trust list", state));
+            });
+        }
+
+        it("does not check a certificate above a pinned revocation certificate", async () => {
+            const attestationCa = await ca("Provider CA");
+            const expiredCa = await ca(
+                "Provider Status CA",
+                periodsOutside.expired(),
+            );
+            const pinned = await issued("CN=Status List Signer", expiredCa);
+
+            await expect(
+                verifyWithRevocation(
+                    await signStatusList(pinned.keys, [
+                        pinned.cert,
+                        expiredCa.cert,
+                    ]),
+                    attestationCa.cert,
+                    [pinned.cert],
+                ),
+            ).resolves.toBe(true);
+        });
+
+        for (const order of ["expired first", "renewed first"] as const) {
+            for (const x5c of ["without the CA", "with the expired CA"]) {
+                it(`accepts a status list under a renewed revocation CA while the expired one with its subject and key is still listed (${order}, x5c ${x5c})`, async () => {
+                    const attestationCa = await ca("Provider CA");
+                    const expiredCa = await ca(
+                        "Provider Status CA",
+                        periodsOutside.expired(),
+                    );
+                    const renewedCa = await ca(
+                        "Provider Status CA",
+                        currentPeriod(),
+                        expiredCa.keys,
+                        "02",
+                    );
+
+                    await expect(
+                        verifyWithRevocation(
+                            await statusListUnder(
+                                renewedCa,
+                                currentPeriod(),
+                                x5c === "with the expired CA"
+                                    ? [expiredCa.cert]
+                                    : [],
+                            ),
+                            attestationCa.cert,
+                            order === "expired first"
+                                ? [expiredCa.cert, renewedCa.cert]
+                                : [renewedCa.cert, expiredCa.cert],
+                        ),
+                    ).resolves.toBe(true);
+                });
+            }
+        }
+
+        describe("answers", () => {
+            const statusEntry = { uri: "https://wp.example/status", idx: 3 };
+
+            /**
+             * A provider whose status list is signed under an expired
+             * certificate, and says the attestation (index 3) is revoked.
+             */
+            async function serviceWithExpiredSigner() {
+                const attestationCa = await ca("Provider CA");
+                const revocationCa = await ca("Provider Status CA");
+                const { matchedEntity, trustStore } =
+                    await providerWithRevocation(attestationCa.cert, [
+                        revocationCa.cert,
+                    ]);
+                const statusListJwt = await statusListUnder(
+                    revocationCa,
+                    periodsOutside.expired(),
+                );
+                const x509ValidationService = new X509ValidationService();
+                vi.spyOn(
+                    x509ValidationService,
+                    "matchAttestationSigner",
+                ).mockResolvedValue(matchedEntity);
+                const getStatusFromStatusListJwt = vi.fn(() => ({
+                    status: 1,
+                    isValid: false,
+                    description: "INVALID",
+                }));
+                const service = Object.assign(
+                    Object.create(WalletAttestationService.prototype),
+                    {
+                        logger: {
+                            debug: vi.fn(),
+                            warn: vi.fn(),
+                            error: vi.fn(),
+                        },
+                        cryptoImplementationService: {
+                            getCryptoFromJwk: () => ES256,
+                        },
+                        x509ValidationService,
+                        trustStoreService: {
+                            getTrustStore: async () => trustStore,
+                        },
+                        statusListVerifierService: {
+                            getStatusEntryFromJwt: () => statusEntry,
+                            getStatusListJwt: async () => statusListJwt,
+                            getStatusFromStatusListJwt,
+                        },
+                        settings: { cryptoToleranceSeconds: 0 },
+                    },
+                ) as WalletAttestationService;
+                return {
+                    service,
+                    matchedEntity,
+                    trustStore,
+                    getStatusFromStatusListJwt,
+                };
+            }
+
+            const rejection =
+                "Status list JWT signature verification failed - certificate chain is not valid: Signing certificate has expired (notAfter ";
+
+            it.each([
+                RevocationCheckMode.Strict,
+                RevocationCheckMode.BestEffort,
+            ])(
+                "%s rejects the wallet attestation with the status list signature message",
+                async (mode) => {
+                    const { service, matchedEntity, trustStore } =
+                        await serviceWithExpiredSigner();
+
+                    const error = await (
+                        service as unknown as {
+                            validateAttestationStatus(
+                                ...args: unknown[]
+                            ): Promise<unknown>;
+                        }
+                    )
+                        .validateAttestationStatus(
+                            "tenant",
+                            "attestation",
+                            matchedEntity,
+                            trustStore,
+                            mode,
+                        )
+                        .catch((e: Error) => e);
+
+                    expect(error).toBeInstanceOf(UnauthorizedException);
+                    expect((error as Error).message).toContain(rejection);
+                },
+            );
+
+            it.each([
+                RevocationCheckMode.Strict,
+                RevocationCheckMode.BestEffort,
+            ])(
+                "%s rejects the key attestation with the status list signature message",
+                async (mode) => {
+                    const { service, matchedEntity, trustStore } =
+                        await serviceWithExpiredSigner();
+
+                    const error = await service
+                        .checkKeyAttestationStatus(
+                            "tenant",
+                            "key-attestation",
+                            matchedEntity,
+                            trustStore as never,
+                            mode,
+                        )
+                        .catch((e: Error) => e);
+
+                    expect(error).toBeInstanceOf(AttestationStatusRejected);
+                    expect((error as Error).message).toContain(rejection);
+                },
+            );
+
+            it("does not read wallet unit statuses from the list", async () => {
+                const { service, getStatusFromStatusListJwt } =
+                    await serviceWithExpiredSigner();
+
+                await expect(
+                    service.readWalletUnitStatuses(
+                        "tenant",
+                        ["leaf"],
+                        statusEntry.uri,
+                        [statusEntry.idx],
+                        [{ trustListId: "providers", url: "" }],
+                    ),
+                ).rejects.toThrow(rejection);
+                expect(getStatusFromStatusListJwt).not.toHaveBeenCalled();
+            });
+        });
     });
 });
 
@@ -1238,81 +1575,138 @@ describe("WalletAttestationService wallet unit status", () => {
         );
     });
 
-    it("reads the status of a wallet unit whose attestation certificates have expired", async () => {
-        const algorithm = {
-            name: "ECDSA",
-            namedCurve: "P-256",
-            hash: "SHA-256",
-        };
-        const keys = () =>
-            crypto.subtle.generateKey(algorithm, true, [
-                "sign",
-                "verify",
-            ]) as Promise<CryptoKeyPair>;
-        const der = (cert: x509.X509Certificate) =>
-            Buffer.from(cert.rawData).toString("base64");
-        const caKeys = await keys();
-        const ca = await x509.X509CertificateGenerator.createSelfSigned({
-            serialNumber: "01",
-            name: "CN=Wallet Provider CA",
-            ...periodsOutside.expired(),
-            keys: caKeys,
-            signingAlgorithm: algorithm,
-            extensions: [new x509.BasicConstraintsExtension(true, 0, true)],
-        });
-        const leaf = await x509.X509CertificateGenerator.create({
-            serialNumber: "02",
-            subject: "CN=Wallet Unit Attestation Signer",
-            issuer: ca.subject,
-            ...periodsOutside.expired(),
-            publicKey: (await keys()).publicKey,
-            signingKey: caKeys.privateKey,
-            signingAlgorithm: algorithm,
-        });
-        const service = Object.assign(
-            Object.create(WalletAttestationService.prototype),
-            {
-                logger: { warn: vi.fn(), debug: vi.fn() },
-                trustStoreService: {
-                    getTrustStore: async () => ({
-                        entities: [
-                            {
-                                entityId: "wp",
-                                services: [
-                                    {
-                                        serviceTypeIdentifier:
-                                            ServiceTypeIdentifiers.WalletSolutionIssuance,
-                                        certValue: der(ca),
-                                    },
-                                ],
+    // The attestation's certificates are not checked again; those of the
+    // status list's path are, whatever signs it.
+    describe("of a wallet unit whose attestation certificates have expired", () => {
+        /**
+         * A provider whose attestation CA and attestation signing
+         * certificate have expired, listing `revocationCa` as its
+         * WalletSolution/Revocation service if given, else `renewedCa` (if
+         * given, after or before the expired CA) as WalletSolution/Issuance,
+         * and a reader of index 3 (revoked) from a given status list.
+         */
+        async function expiredProvider(
+            options: {
+                revocationCa?: Awaited<ReturnType<typeof ca>>;
+                renewedCa?: "listed after" | "listed before";
+            } = {},
+        ) {
+            const attestationCa = await ca(
+                "Wallet Provider CA",
+                periodsOutside.expired(),
+            );
+            const renewedCa = await ca(
+                "Wallet Provider CA",
+                currentPeriod(),
+                attestationCa.keys,
+                "03",
+            );
+            const leaf = await x509.X509CertificateGenerator.create({
+                serialNumber: "02",
+                subject: "CN=Wallet Unit Attestation Signer",
+                issuer: attestationCa.cert.subject,
+                ...periodsOutside.expired(),
+                publicKey: (await keys()).publicKey,
+                signingKey: attestationCa.keys.privateKey,
+                signingAlgorithm: algorithm,
+            });
+            const issuance = (cert: x509.X509Certificate) => ({
+                serviceTypeIdentifier:
+                    ServiceTypeIdentifiers.WalletSolutionIssuance,
+                certValue: der(cert),
+            });
+            const services = [
+                ...(options.renewedCa === "listed before"
+                    ? [issuance(renewedCa.cert)]
+                    : []),
+                issuance(attestationCa.cert),
+                ...(options.renewedCa === "listed after"
+                    ? [issuance(renewedCa.cert)]
+                    : []),
+                ...(options.revocationCa
+                    ? [
+                          {
+                              serviceTypeIdentifier:
+                                  ServiceTypeIdentifiers.WalletSolutionRevocation,
+                              certValue: der(options.revocationCa.cert),
+                          },
+                      ]
+                    : []),
+            ];
+            const read = (statusListJwt: string) =>
+                (
+                    Object.assign(
+                        Object.create(WalletAttestationService.prototype),
+                        {
+                            logger: {
+                                warn: vi.fn(),
+                                debug: vi.fn(),
+                                error: vi.fn(),
                             },
-                        ],
-                        discarded: [],
-                    }),
-                },
-                x509ValidationService: new X509ValidationService(),
-                statusListVerifierService: {
-                    getStatusListJwt: async () => "status-list-jwt",
-                    getStatusFromStatusListJwt: () => ({
-                        status: 1,
-                        isValid: false,
-                        description: "",
-                    }),
-                },
-                settings: { cryptoToleranceSeconds: 5 },
-                verifyStatusListSignature: async () => true,
-            },
-        ) as WalletAttestationService;
+                            cryptoImplementationService: {
+                                getCryptoFromJwk: () => ES256,
+                            },
+                            trustStoreService: {
+                                getTrustStore: async () => ({
+                                    entities: [{ entityId: "wp", services }],
+                                    discarded: [],
+                                }),
+                            },
+                            x509ValidationService: new X509ValidationService(),
+                            statusListVerifierService: {
+                                getStatusListJwt: async () => statusListJwt,
+                                getStatusFromStatusListJwt: () => ({
+                                    status: 1,
+                                    isValid: false,
+                                    description: "",
+                                }),
+                            },
+                            settings: { cryptoToleranceSeconds: 5 },
+                        },
+                    ) as WalletAttestationService
+                ).readWalletUnitStatuses(
+                    "tenant",
+                    [der(leaf)],
+                    uri,
+                    [3],
+                    trustLists,
+                );
+            return { attestationCa, renewedCa, read };
+        }
 
-        await expect(
-            service.readWalletUnitStatuses(
-                "tenant",
-                [der(leaf)],
-                uri,
-                [3],
-                trustLists,
-            ),
-        ).resolves.toEqual(new Map([[3, 1]]));
+        it("reads the status from a list under a current revocation CA", async () => {
+            const revocationCa = await ca(
+                "Wallet Provider Status CA",
+                currentPeriod(),
+            );
+            const { read } = await expiredProvider({ revocationCa });
+
+            await expect(
+                read(await statusListUnder(revocationCa)),
+            ).resolves.toEqual(new Map([[3, 1]]));
+        });
+
+        for (const renewal of ["listed after", "listed before"] as const) {
+            it(`reads the status from a list under the renewed attestation CA of a provider without revocation certificate (renewal ${renewal})`, async () => {
+                const { renewedCa, read } = await expiredProvider({
+                    renewedCa: renewal,
+                });
+
+                await expect(
+                    read(await statusListUnder(renewedCa)),
+                ).resolves.toEqual(new Map([[3, 1]]));
+            });
+        }
+
+        it("reads nothing from a list under the expired attestation CA of a provider without revocation certificate", async () => {
+            const { attestationCa, read } = await expiredProvider();
+
+            await expect(
+                read(await statusListUnder(attestationCa)),
+            ).rejects.toThrow(
+                `Status list JWT signature verification failed - certificate chain is not valid: ${certificateFailure("Trust list", "expired")}`,
+            );
+        });
     });
 
     it("refuses without wallet provider trust lists", async () => {

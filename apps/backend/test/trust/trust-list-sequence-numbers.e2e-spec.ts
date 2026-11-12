@@ -68,12 +68,9 @@ describe("Trust list sequence numbers", () => {
             .get(path)
             .reply(
                 200,
-                await createMockTrustListJwt(
-                    signer,
-                    provider.certificate,
-                    undefined,
+                await createMockTrustListJwt(signer, provider.certificate, {
                     sequenceNumber,
-                ),
+                }),
                 { "Content-Type": "application/jwt" },
             );
     }

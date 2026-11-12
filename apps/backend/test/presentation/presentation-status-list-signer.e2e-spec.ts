@@ -103,7 +103,7 @@ describe.each([
                     await createMockTrustListJwt(
                         listSigner,
                         issuer.certificate,
-                        issuanceServiceType,
+                        { serviceTypeIdentifier: issuanceServiceType },
                     ),
                     { "Content-Type": "application/jwt" },
                 );
