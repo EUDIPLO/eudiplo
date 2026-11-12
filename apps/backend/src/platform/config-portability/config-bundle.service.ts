@@ -79,10 +79,7 @@ import {
     isFederationTrustAnchorReferenceKind,
 } from "../../trust/federation-trust-anchor/domain/federation-trust-anchor-reference.js";
 import { ConfigBundleRepositories } from "./config-bundle-repositories.service.js";
-import {
-    ConfigDocumentValidationService,
-    UNRESOLVED_PLACEHOLDER,
-} from "./config-document-validation.service.js";
+import { ConfigDocumentValidationService } from "./config-document-validation.service.js";
 import { ConfigKmsReferenceService } from "./config-kms-reference.service.js";
 import { ConfigMigrationService } from "./config-migration.service.js";
 import {
@@ -115,6 +112,7 @@ import {
     appliedRotationPolicy,
     keyChainSettingsSpec,
 } from "./key-chain-document.js";
+import { UNRESOLVED_PLACEHOLDER } from "./unresolved-placeholder.js";
 
 const OMITTED_FIELDS = new Set([
     "tenant",

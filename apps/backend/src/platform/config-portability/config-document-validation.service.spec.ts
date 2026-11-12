@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "node:crypto";
 import { schemaUrl } from "@eudiplo/config-format/config-format.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { ConfigDocumentValidationService } from "./config-document-validation.service.js";
@@ -5,6 +6,9 @@ import { ConfigMigrationService } from "./config-migration.service.js";
 import { ConfigResourceRegistry } from "./config-resource.registry.js";
 
 describe("ConfigDocumentValidationService", () => {
+    const privateJwk = generateKeyPairSync("ec", {
+        namedCurve: "P-256",
+    }).privateKey.export({ format: "jwk" });
     const migrations = new ConfigMigrationService(new ConfigResourceRegistry());
     const skipTrustAuthority = { value: false };
     const skipOveraskingCheck = { value: false };
@@ -48,16 +52,7 @@ describe("ConfigDocumentValidationService", () => {
                 spec: {
                     id: "issuer",
                     usageType: "attestation",
-                    keySource: {
-                        type: "private-jwk",
-                        jwk: {
-                            kty: "EC",
-                            crv: "P-256",
-                            x: "x",
-                            y: "y",
-                            d: "d",
-                        },
-                    },
+                    keySource: { type: "private-jwk", jwk: privateJwk },
                     rotationPolicy: {
                         enabled: false,
                         intervalDays: null,
@@ -117,13 +112,51 @@ describe("ConfigDocumentValidationService", () => {
         });
 
         it("keeps the importer schema for a private key without activeJwk", () => {
-            expect(service.validate(keyChain({ jwk }))).toEqual([
+            expect(service.validate(keyChain({ jwk: privateJwk }))).toEqual([
                 expect.objectContaining({
                     code: "CURRENT_SCHEMA_VALIDATION_FAILED",
                     path: "/spec/",
                     message: expect.stringContaining("activeCertificate"),
                 }),
             ]);
+        });
+
+        it.each([
+            ["without d", { ...privateJwk, d: undefined }],
+            [
+                "whose d belongs to another key",
+                {
+                    ...privateJwk,
+                    d: generateKeyPairSync("ec", {
+                        namedCurve: "P-256",
+                    }).privateKey.export({ format: "jwk" }).d,
+                },
+            ],
+        ])("rejects a private key %s without activeJwk", (_, key) => {
+            expect(
+                service
+                    .validate(keyChain({ jwk: key }))
+                    .filter(({ code }) => code === "INVALID_PRIVATE_KEY"),
+            ).toEqual([
+                expect.objectContaining({
+                    path: "/spec/keySource/jwk",
+                    resource: { kind: "KeyChain", id: "issuer" },
+                }),
+            ]);
+        });
+
+        it.each([
+            ["a redacted private key", "${KEYCHAIN_ISSUER_KEYSOURCE_JWK}"],
+            [
+                "a private key with a placeholder d",
+                { ...privateJwk, d: "${ISSUER_D}" },
+            ],
+        ])("reports no INVALID_PRIVATE_KEY for %s", (_, jwk) => {
+            expect(
+                service
+                    .validate(keyChain({ jwk }))
+                    .filter(({ code }) => code === "INVALID_PRIVATE_KEY"),
+            ).toEqual([]);
         });
     });
 

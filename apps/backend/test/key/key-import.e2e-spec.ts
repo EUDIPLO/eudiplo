@@ -126,6 +126,29 @@ describe("Key Chain — Import (e2e)", () => {
         expect(keyChainResponse.body.activePublicKey).toEqual(publicKey);
     });
 
+    test("refuses a private key whose d belongs to another key", async () => {
+        const keyId = v4();
+        const otherKey = generateKeyPairSync("ec", {
+            namedCurve: "P-256",
+        }).privateKey.export({ format: "jwk" });
+
+        const response = await request(app.getHttpServer())
+            .post("/key-chain/import")
+            .set("Authorization", `Bearer ${authToken}`)
+            .send({
+                id: keyId,
+                key: { ...privateKey, d: otherKey.d },
+                usageType: KeyUsageType.Attestation,
+            } satisfies KeyChainImportDto)
+            .expect(400);
+
+        expect(response.body.message).toContain("Invalid private key");
+        await request(app.getHttpServer())
+            .get(`/key-chain/${keyId}`)
+            .set("Authorization", `Bearer ${authToken}`)
+            .expect(404);
+    });
+
     describe("export", () => {
         test("rejects callers that only manage issuance or presentation resources", async () => {
             const keyId = await importKeyChain(authToken);
