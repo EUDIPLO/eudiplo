@@ -3,8 +3,10 @@ import {
     type ImportedKeyChainType,
     importedKeyChainType,
 } from "../../crypto/key/domain/key-chain-import-type.js";
+import { privateJwkProblem } from "../../crypto/key/domain/private-jwk.js";
 import type { KeyChainEntity } from "../../crypto/key/entities/key-chain.entity.js";
 import { importedRotationIntervals } from "../../crypto/key/key-chain-import-rotation.js";
+import { holdsUnresolvedPlaceholder } from "./unresolved-placeholder.js";
 
 type Spec = Record<string, any>;
 
@@ -89,20 +91,11 @@ export function internalChainProblems(spec: Spec): InternalChainProblem[] {
                   message:
                       "An internal chain with private keys is stored in the database. Omit kmsProvider or set it to db.",
               },
-        rootKey
-            ? undefined
-            : {
-                  code: "INVALID_PRIVATE_KEY",
-                  path: "/spec/keySource/jwk",
-                  message: "keySource.jwk is not a valid private key.",
-              },
-        activeKey
-            ? undefined
-            : {
-                  code: "INVALID_PRIVATE_KEY",
-                  path: "/spec/keySource/activeJwk",
-                  message: "keySource.activeJwk is not a valid private key.",
-              },
+        privateKeyProblem(spec.keySource?.jwk, "/spec/keySource/jwk"),
+        privateKeyProblem(
+            spec.keySource?.activeJwk,
+            "/spec/keySource/activeJwk",
+        ),
         rootCertificateProblem(spec.crt, rootKey),
         activeCertificateProblem(spec.activeCertificate, activeKey),
     ];
@@ -177,6 +170,33 @@ function activeCertificateProblem(
         };
     }
     return undefined;
+}
+
+/**
+ * What the key chain importer would refuse in a private key without
+ * `activeJwk`, so the plan names it before anything is applied. A key that is
+ * or holds an unresolved `${VAR}` is SECRET_REQUIRED, not a broken key.
+ */
+export function importedKeyProblems(spec: Spec): InternalChainProblem[] {
+    const source = spec.keySource;
+    if (
+        source?.type !== "private-jwk" ||
+        isInternalChainWithPrivateKeys(spec) ||
+        holdsUnresolvedPlaceholder(source.jwk)
+    ) {
+        return [];
+    }
+    const problem = privateKeyProblem(source.jwk, "/spec/keySource/jwk");
+    return problem ? [problem] : [];
+}
+
+/** `INVALID_PRIVATE_KEY` at `path` unless `jwk` imports as a private key. */
+function privateKeyProblem(
+    jwk: unknown,
+    path: string,
+): InternalChainProblem | undefined {
+    const message = privateJwkProblem(jwk);
+    return message ? { code: "INVALID_PRIVATE_KEY", path, message } : undefined;
 }
 
 function privateKey(jwk: unknown): KeyObject | undefined {

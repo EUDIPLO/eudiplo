@@ -29,13 +29,13 @@ import type {
     ConfigResourceKind,
 } from "./config-resource.types.js";
 import {
+    importedKeyProblems,
     internalChainProblems,
     isInternalChainWithPrivateKeys,
     keySourceKeyChainType,
 } from "./key-chain-document.js";
 
-/** A `${VAR}` placeholder the plan reports as SECRET_REQUIRED. */
-export const UNRESOLVED_PLACEHOLDER = /^\$\{[A-Z0-9_]+(?::[^}]*)?\}$/;
+import { UNRESOLVED_PLACEHOLDER } from "./unresolved-placeholder.js";
 
 /** The flat `registrationCertImportJwt` form field, trimmed, if it is a string. */
 function flatImportJwt(spec: Record<string, any>): string | undefined {
@@ -176,6 +176,9 @@ export class ConfigDocumentValidationService {
         }
         if (isInternalChainWithPrivateKeys(spec)) {
             for (const problem of internalChainProblems(spec))
+                issue(problem.code, problem.path, problem.message);
+        } else {
+            for (const problem of importedKeyProblems(spec))
                 issue(problem.code, problem.path, problem.message);
         }
         return issues;

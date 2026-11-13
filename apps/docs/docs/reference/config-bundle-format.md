@@ -302,7 +302,8 @@ A `private-jwk` key source takes one of two forms:
 
 - With only `jwk`, the document is imported like
   [`POST /api/key-chain/import`](../trust/keys-and-certificates.md#import-a-key-and-certificate)
-  and accepts only that request's fields. To restore an exported internal
+  and accepts only that request's fields; the plan blocks the resource when
+  `d` is missing or does not belong to `x` and `y`. To restore an exported internal
   chain, put its root CA key from `GET /api/key-chain/{id}/export` into `jwk`,
   remove `activeCertificate` and keep `"type": "internalChain"`: EUDIPLO keeps
   the root CA certificate and creates a new signing key under it. Without

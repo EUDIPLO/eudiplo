@@ -22,6 +22,7 @@ import {
     certificateNotBefore,
 } from "./cert/certificate-builder.service.js";
 import { importedKeyChainType } from "./domain/key-chain-import-type.js";
+import { privateJwkProblem } from "./domain/private-jwk.js";
 import { certificateHoldsKey } from "./domain/public-jwk-match.js";
 import { providerAlgRefusal, signingAlgForJwk } from "./domain/signing-algs.js";
 import { signingCertificateProfile } from "./domain/signing-certificate-profile.js";
@@ -232,17 +233,23 @@ export class KeyChainImportService {
     }
 
     private resolvePrivateKey(dto: KeyChainImportDto): JWK {
-        if (dto.key) {
-            return { ...dto.key };
+        const key = dto.key ? { ...dto.key } : this.pemToJwk(dto.keyPem);
+        // A PEM key can carry a foreign public key too, so both forms are checked.
+        const problem = privateJwkProblem(key);
+        if (problem) {
+            throw new BadRequestException(`Invalid private key: ${problem}`);
         }
+        return key;
+    }
 
-        if (!dto.keyPem) {
+    private pemToJwk(keyPem: string | undefined): JWK {
+        if (!keyPem) {
             throw new BadRequestException("An import requires key or keyPem.");
         }
 
         try {
             // The curve, and with it the algorithm, comes from the key.
-            return createPrivateKey(dto.keyPem).export({
+            return createPrivateKey(keyPem).export({
                 format: "jwk",
             }) as JWK;
         } catch (error) {
