@@ -11,7 +11,9 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
     chainBelow,
     chainCa,
+    sameSubjectCertificates,
 } from "../../../test/trust/certificate-chain.fixture.js";
+import { CertificatePathBuilder } from "../../shared/utils/certificate-path.util.js";
 import { coseReadyJwk } from "../../shared/utils/cose-key-jwk.util.js";
 import { mdocContext } from "./mdoc-context.js";
 
@@ -489,7 +491,7 @@ describe("mdocContext.x509.verifyCertificateChain x5chain length limit", () => {
     });
 
     it("refuses an x5chain of eleven certificates before parsing them", async () => {
-        const build = vi.spyOn(x509.X509ChainBuilder.prototype, "build");
+        const build = vi.spyOn(CertificatePathBuilder.prototype, "build");
 
         await expect(
             mdocContext.x509.verifyCertificateChain({
@@ -500,5 +502,46 @@ describe("mdocContext.x509.verifyCertificateChain x5chain length limit", () => {
             "x5chain holds 11 certificates; at most 10 are accepted",
         );
         expect(build).not.toHaveBeenCalled();
+    });
+});
+
+// Every trusted certificate is in the path builder's pool, and each one with
+// the issuer's subject costs a signature check; whoever publishes a trust
+// list decides how many there are.
+describe("mdocContext.x509.verifyCertificateChain path limits", () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    const der = (cert: x509.X509Certificate) => new Uint8Array(cert.rawData);
+
+    it("accepts an x5chain whose trusted CA comes after ten certificates with its subject", async () => {
+        const ca = await chainCa();
+        const decoys = await sameSubjectCertificates(ca.cert.subject, 10);
+        const { chain } = await chainBelow(ca, 1);
+
+        await expect(
+            mdocContext.x509.verifyCertificateChain({
+                trustedCertificates: [...decoys, ca.cert].map(der),
+                x5chain: chain.map(der),
+            }),
+        ).resolves.toMatchObject({ chain: [der(chain[0]), der(ca.cert)] });
+    });
+
+    it("refuses an x5chain after 64 signature checks when 100 trusted certificates share its issuer's subject", async () => {
+        const ca = await chainCa();
+        const decoys = await sameSubjectCertificates(ca.cert.subject, 100);
+        const { chain } = await chainBelow(ca, 1);
+        const verify = vi.spyOn(x509.X509Certificate.prototype, "verify");
+
+        await expect(
+            mdocContext.x509.verifyCertificateChain({
+                trustedCertificates: [...decoys, ca.cert].map(der),
+                x5chain: chain.map(der),
+            }),
+        ).rejects.toThrow(
+            "Certificate path not found within 64 signature checks",
+        );
+        expect(verify).toHaveBeenCalledTimes(64);
     });
 });

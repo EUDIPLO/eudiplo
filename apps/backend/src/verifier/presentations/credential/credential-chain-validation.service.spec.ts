@@ -5,7 +5,9 @@ import { acceptedSequenceNumbersFake } from "../../../../test/trust/accepted-tru
 import {
     chainBelow,
     chainCa,
+    sameSubjectCertificates,
 } from "../../../../test/trust/certificate-chain.fixture.js";
+import { CertificatePathBuilder } from "../../../shared/utils/certificate-path.util.js";
 import { CollectTrustedEntities } from "../../../trust/application/collect-trusted-entities.js";
 import { TrustStoreService } from "../../../trust/trust-store.service.js";
 import type { TrustListSource } from "../../../trust/types.js";
@@ -1162,6 +1164,119 @@ describe("CredentialChainValidationService — status list signer", () => {
         });
     });
 
+    // Every listed certificate is in the path builder's pool, and each one
+    // with the issuer's subject costs a signature check; whoever publishes a
+    // list decides how many there are.
+    describe("with 100 listed certificates sharing an issuer's subject", () => {
+        const tooManyChecks =
+            "Certificate path not found within 64 signature checks";
+
+        afterEach(() => {
+            vi.restoreAllMocks();
+        });
+
+        /** `ca` listed as `serviceType` after 100 certificates with its subject. */
+        async function crowded(ca: Cert, serviceType: string) {
+            const decoys = await sameSubjectCertificates(ca.cert.subject, 100);
+            return [
+                ...decoys.map((cert) => ({
+                    serviceTypeIdentifier: serviceType,
+                    cert: { cert, keys: ca.keys },
+                })),
+                { serviceTypeIdentifier: serviceType, cert: ca },
+            ];
+        }
+
+        it("rejects a credential with chain_build_failed after 64 signature checks", async () => {
+            const issuerCa = await chainCa("CN=Crowded Issuer CA");
+            const service = serviceWith([
+                {
+                    entityId: "issuer",
+                    services: await crowded(issuerCa, ISSUANCE),
+                },
+            ]);
+            const { x5c } = await chainBelow(issuerCa, 1);
+            const verify = vi.spyOn(x509.X509Certificate.prototype, "verify");
+
+            await expect(
+                service.validateChain(x5c, LOTE_SOURCE),
+            ).resolves.toMatchObject({
+                verified: false,
+                matchedEntity: null,
+                error: "chain_build_failed",
+                errorDetails: expect.stringContaining(
+                    `Error: ${tooManyChecks}`,
+                ),
+            });
+            expect(verify).toHaveBeenCalledTimes(64);
+        });
+
+        // Classifying the issuer builds the path again with the PID-listed
+        // certificates first; a credential that cannot be classified must
+        // not be spared the rules for PIDs.
+        it("rejects a credential whose PID classification takes more than 64 signature checks", async () => {
+            const issuerCa = await chainCa("CN=Crowded Issuer CA");
+            const service = serviceWith([
+                {
+                    entityId: "pid lookalikes",
+                    services: (await crowded(issuerCa, PID_ISSUANCE)).slice(
+                        0,
+                        -1,
+                    ),
+                },
+                {
+                    entityId: "issuer",
+                    services: [
+                        { serviceTypeIdentifier: ISSUANCE, cert: issuerCa },
+                    ],
+                },
+            ]);
+            // The CA in x5c ends the path for the match within two checks.
+            const { x5c } = await chainBelow(issuerCa, 1);
+
+            await expect(
+                service.validateChain(
+                    [
+                        ...x5c,
+                        Buffer.from(issuerCa.cert.rawData).toString("base64"),
+                    ],
+                    LOTE_SOURCE,
+                ),
+            ).resolves.toMatchObject({
+                verified: false,
+                error: "chain_build_failed",
+                errorDetails: expect.stringContaining(
+                    `Error: ${tooManyChecks}`,
+                ),
+            });
+        });
+
+        it("rejects a status list after 64 signature checks", async () => {
+            const issuerCa = await chainCa("CN=Issuer CA");
+            const revocationCa = await chainCa("CN=Crowded Revocation CA");
+            const service = serviceWith([
+                {
+                    entityId: "issuer",
+                    services: [
+                        { serviceTypeIdentifier: ISSUANCE, cert: issuerCa },
+                        ...(await crowded(revocationCa, REVOCATION)),
+                    ],
+                },
+            ]);
+            const matched = await credentialMatch(
+                service,
+                (await chainBelow(issuerCa, 1)).x5c,
+            );
+            const { x5c } = await chainBelow(revocationCa, 1);
+            const verify = vi.spyOn(x509.X509Certificate.prototype, "verify");
+
+            await expect(
+                service.verifyStatusListSignature(x5c, matched, LOTE_SOURCE),
+            ).resolves.toBe(false);
+            expect(verify).toHaveBeenCalledTimes(64);
+        });
+    });
+
     // The chain builder's work grows with the square of the chain's length.
     // The wallet decides how long a credential's x5c is, the issuer's status
     // list host how long a status list's is.
@@ -1194,7 +1309,7 @@ describe("CredentialChainValidationService — status list signer", () => {
 
         it("rejects a credential whose x5c holds eleven certificates as invalid_x5c, without building", async () => {
             const { x5c } = await chainBelow(issuerCa, 11);
-            const build = vi.spyOn(x509.X509ChainBuilder.prototype, "build");
+            const build = vi.spyOn(CertificatePathBuilder.prototype, "build");
 
             await expect(
                 service.validateChain(x5c, LOTE_SOURCE),
@@ -1238,7 +1353,7 @@ describe("CredentialChainValidationService — status list signer", () => {
                 (await chainBelow(issuerCa, 1)).x5c,
             );
             const { x5c } = await chainBelow(issuerCa, 11);
-            const build = vi.spyOn(x509.X509ChainBuilder.prototype, "build");
+            const build = vi.spyOn(CertificatePathBuilder.prototype, "build");
 
             await expect(
                 service.verifyStatusListSignature(x5c, matched, LOTE_SOURCE),

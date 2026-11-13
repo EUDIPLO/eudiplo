@@ -1,5 +1,6 @@
 import { DeviceResponse, Verifier } from "@owf/mdoc";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CertificatePathLimitExceeded } from "../../../../shared/utils/certificate-path.util.js";
 import { RevocationListUnavailableError } from "../../../../trust/revocation-policy.util.js";
 import {
     shortVerificationMessage,
@@ -636,6 +637,18 @@ describe("classifyVerificationError", () => {
                     `Could not fetch either a JWT or CWT as status list. Failed to fetch status list from https://status.example/1: ${tlsError}`,
                 ),
             ).toBe("trust_list_unavailable");
+        },
+    );
+
+    it.each([
+        new CertificatePathLimitExceeded("signatureChecks").message,
+        new CertificatePathLimitExceeded("length").message,
+    ])(
+        "classifies a path past the path limits (%s) as verification_error, not as an invalid signature",
+        (cause) => {
+            expect(classify(`Issuer certificate must be valid: ${cause}`)).toBe(
+                "verification_error",
+            );
         },
     );
 

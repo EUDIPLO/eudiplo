@@ -1,4 +1,5 @@
 import { CertificateChainTooLong } from "../../shared/utils/certificate-chain-length.util.js";
+import { CertificatePathLimitExceeded } from "../../shared/utils/certificate-path.util.js";
 import {
     certificateValidityAt,
     formatCertificateDate,
@@ -48,16 +49,22 @@ export class AttestationCertificateNotValid extends Error {
 /**
  * Whether `error` rejects the certificate chain of a wallet or key
  * attestation, or of its status list, for a reason the wallet may read: a
- * certificate outside its validity period ({@link AttestationCertificateNotValid})
- * or an `x5c` with too many certificates ({@link CertificateChainTooLong}).
- * Neither message names a subject, URL or address.
+ * certificate outside its validity period ({@link AttestationCertificateNotValid}),
+ * an `x5c` with too many certificates ({@link CertificateChainTooLong}), or
+ * a path that cannot be built within the path limits
+ * ({@link CertificatePathLimitExceeded}). No message names a subject, URL or
+ * address.
  */
 export function isAttestationChainRejection(
     error: unknown,
-): error is AttestationCertificateNotValid | CertificateChainTooLong {
+): error is
+    | AttestationCertificateNotValid
+    | CertificateChainTooLong
+    | CertificatePathLimitExceeded {
     return (
         error instanceof AttestationCertificateNotValid ||
-        error instanceof CertificateChainTooLong
+        error instanceof CertificateChainTooLong ||
+        error instanceof CertificatePathLimitExceeded
     );
 }
 

@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { PinoLogger } from "nestjs-pino";
 import { CertificateChainTooLong } from "../../../shared/utils/certificate-chain-length.util.js";
+import { CertificatePathLimitExceeded } from "../../../shared/utils/certificate-path.util.js";
 import { getRevocationServices } from "../../../trust/domain/status-list-signers.js";
 import { describeDiscardedTrustLists } from "../../../trust/domain/trust-list-freshness.js";
 import {
@@ -241,34 +242,23 @@ export class CredentialChainValidationService {
         try {
             path = await this.x509v.buildPath(leaf, presented, anchors, []);
         } catch (e: any) {
-            const errorDetails = await this.buildChainErrorDetails(
-                presented,
-                store,
-                trustListSource,
-                e,
-            );
-
-            return {
-                verified: false,
-                matchedEntity: null,
-                error: "chain_build_failed",
-                errorDetails,
-            };
+            return this.chainBuildFailed(presented, store, trustListSource, e);
         }
 
         await this.logChainKeyIdentifiers(path, anchors);
 
         // 6) Check time validity
         const now = new Date();
-        for (const cert of path) {
-            if (!this.x509v.isTimeValid(cert, now)) {
-                return {
-                    verified: false,
-                    matchedEntity: null,
-                    error: "certificate_expired",
-                    errorDetails: `Certificate expired or not yet valid: subject="${cert.subject}", notBefore=${cert.notBefore.toISOString()}, notAfter=${cert.notAfter.toISOString()}`,
-                };
-            }
+        const outOfPeriod = path.find(
+            (cert) => !this.x509v.isTimeValid(cert, now),
+        );
+        if (outOfPeriod) {
+            return {
+                verified: false,
+                matchedEntity: null,
+                error: "certificate_expired",
+                errorDetails: `Certificate expired or not yet valid: subject="${outOfPeriod.subject}", notBefore=${outOfPeriod.notBefore.toISOString()}, notAfter=${outOfPeriod.notAfter.toISOString()}`,
+            };
         }
 
         // 7) Match against TrustedEntities
@@ -300,20 +290,52 @@ export class CredentialChainValidationService {
             `Certificate chain validated successfully. Matched entity: ${matchedEntity.entity.entityId ?? "unknown"}, mode: ${matchedEntity.matchMode}`,
         );
 
-        // The first matching service decides the status list signers; a
-        // certificate listed as PID and as EAA issuer still issues PIDs.
-        const pidIssuer =
-            matchedEntity.issuanceServiceType ===
-                ServiceTypeIdentifiers.PIDIssuance ||
+        let pidIssuer: boolean;
+        try {
+            pidIssuer = await this.isPidIssuer(
+                matchedEntity.issuanceServiceType,
+                serviceTypeFilter,
+                leaf,
+                presented,
+                store,
+                pinnedCertMode,
+            );
+        } catch (e: any) {
+            // A credential that cannot be classified is rejected, rather
+            // than spared the rules for PIDs.
+            if (!(e instanceof CertificatePathLimitExceeded)) throw e;
+            return this.chainBuildFailed(presented, store, trustListSource, e);
+        }
+
+        return { verified: true, matchedEntity, path, pidIssuer };
+    }
+
+    /**
+     * Whether the credential's issuer counts as a PID issuer. The first
+     * matching service decides the status list signers; a certificate
+     * listed as PID and as EAA issuer still issues PIDs
+     * ({@link leadsToPidIssuer}).
+     * @throws CertificatePathLimitExceeded if the path to a PID issuance
+     * certificate is past the path limits
+     */
+    private async isPidIssuer(
+        matchedServiceType: string,
+        serviceTypeFilter: ServiceTypeFilter,
+        leaf: x509.X509Certificate,
+        presented: x509.X509Certificate[],
+        store: BuiltTrustStore,
+        pinnedCertMode: "leaf" | "pathEnd",
+    ): Promise<boolean> {
+        return (
+            matchedServiceType === ServiceTypeIdentifiers.PIDIssuance ||
             (serviceTypeFilter.includes(ServiceTypeIdentifiers.PIDIssuance) &&
                 (await this.leadsToPidIssuer(
                     leaf,
                     presented,
                     store,
                     pinnedCertMode,
-                )));
-
-        return { verified: true, matchedEntity, path, pidIssuer };
+                )))
+        );
     }
 
     /**
@@ -325,6 +347,9 @@ export class CredentialChainValidationService {
      * the wallet put in an mDOC's unprotected `x5chain`. The chain is
      * already trusted; this only classifies the issuer, so a PID-listed
      * certificate counts also outside its validity period.
+     * @throws CertificatePathLimitExceeded if the path is past the path
+     * limits, so that the caller rejects the credential instead of treating
+     * it as no PID
      */
     private async leadsToPidIssuer(
         leaf: x509.X509Certificate,
@@ -359,6 +384,7 @@ export class CredentialChainValidationService {
                 [...pidCertificates, ...presented],
             );
         } catch (error) {
+            if (error instanceof CertificatePathLimitExceeded) throw error;
             this.logger.debug(
                 `No path to a PID issuance certificate: ${error instanceof Error ? error.message : String(error)}`,
             );
@@ -603,6 +629,26 @@ export class CredentialChainValidationService {
             this.logger.error(message);
             throw new TrustListUnavailableError(message);
         }
+    }
+
+    /** The result for a certificate path that could not be built. */
+    private async chainBuildFailed(
+        presented: x509.X509Certificate[],
+        store: BuiltTrustStore,
+        trustListSource: TrustListSource | undefined,
+        error: unknown,
+    ): Promise<ChainValidationResult> {
+        return {
+            verified: false,
+            matchedEntity: null,
+            error: "chain_build_failed",
+            errorDetails: await this.buildChainErrorDetails(
+                presented,
+                store,
+                trustListSource,
+                error,
+            ),
+        };
     }
 
     /**

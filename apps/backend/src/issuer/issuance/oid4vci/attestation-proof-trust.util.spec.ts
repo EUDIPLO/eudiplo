@@ -11,6 +11,7 @@ import {
 import {
     chainBelow,
     chainCa,
+    sameSubjectCertificates,
 } from "../../../../test/trust/certificate-chain.fixture.js";
 import type { ValidityPeriod } from "../../../shared/utils/certificate-validity.util.js";
 import { CollectTrustedEntities } from "../../../trust/application/collect-trusted-entities.js";
@@ -275,7 +276,12 @@ describe("credential proof attestation trust with real certificates", () => {
         return { ca, attestation: jwt({ x5c: [der(leaf)] }) };
     }
 
-    function validate(attestation: string, serviceType: string, ca: string) {
+    /** Validate against a provider that lists `ca`, one or more certificates, as `serviceType`. */
+    function validate(
+        attestation: string,
+        serviceType: string,
+        ca: string | string[],
+    ) {
         return validateAttestationProofTrust(
             attestation,
             [{ url: "https://trust.example/list", verifierX509Der: "cert" }],
@@ -285,12 +291,10 @@ describe("credential proof attestation trust with real certificates", () => {
                         entities: [
                             {
                                 entityId: "provider",
-                                services: [
-                                    {
-                                        serviceTypeIdentifier: serviceType,
-                                        certValue: ca,
-                                    },
-                                ],
+                                services: [ca].flat().map((certValue) => ({
+                                    serviceTypeIdentifier: serviceType,
+                                    certValue,
+                                })),
                             },
                         ],
                         discarded: [],
@@ -351,6 +355,29 @@ describe("credential proof attestation trust with real certificates", () => {
                 error: "invalid_proof",
                 error_description:
                     "Attestation proof certificate chain is not valid: x5c holds 11 certificates; at most 10 are accepted",
+            },
+        });
+    });
+
+    it("rejects with invalid_proof a key attestation after 64 signature checks when the list holds 100 certificates with its issuer's subject", async () => {
+        const providerCa = await chainCa("CN=Wallet Provider CA");
+        const { x5c } = await chainBelow(providerCa, 1);
+        const listed = [
+            ...(await sameSubjectCertificates(providerCa.cert.subject, 100)),
+            providerCa.cert,
+        ];
+
+        await expect(
+            validate(
+                jwt({ x5c }),
+                ServiceTypeIdentifiers.WalletSolutionIssuance,
+                listed.map(der),
+            ),
+        ).rejects.toMatchObject({
+            response: {
+                error: "invalid_proof",
+                error_description:
+                    "Attestation proof certificate chain is not valid: Certificate path not found within 64 signature checks",
             },
         });
     });

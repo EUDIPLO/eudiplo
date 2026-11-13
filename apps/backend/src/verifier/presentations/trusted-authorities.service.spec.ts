@@ -1,5 +1,9 @@
 import * as x509 from "@peculiar/x509";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import {
+    MAX_TRUST_LIST_CERTIFICATES,
+    TooManyTrustListCertificatesError,
+} from "../../trust/domain/trust-list-certificate-limit.js";
 import { OutdatedTrustListsError } from "../../trust/domain/trust-list-freshness.js";
 import {
     ServiceTypeIdentifiers,
@@ -370,6 +374,160 @@ describe("TrustedAuthoritiesService", () => {
                         `${host}/trust-list/two`,
                     ],
                 },
+            ]);
+        });
+
+        // Verification refuses every credential of the query when its lists
+        // hold more than MAX_TRUST_LIST_CERTIFICATES certificates together,
+        // so no key identifier of them may lead the wallet to one.
+        it(`sends only the URLs of the lists when they hold more than ${MAX_TRUST_LIST_CERTIFICATES} certificates together`, async () => {
+            const crowded = (certValue: string): TrustedEntity[] => [
+                {
+                    entityId: "Issuer",
+                    services: Array.from({ length: 600 }, () => ({
+                        serviceTypeIdentifier:
+                            ServiceTypeIdentifiers.EaaIssuance,
+                        certValue,
+                    })),
+                },
+            ];
+            const getListedEntities = vi.fn(async (ref) =>
+                crowded(ref.trustListId === "one" ? eaaCa.der : pidCa.der),
+            );
+            const { service, logger } = createService(
+                vi.fn(),
+                getListedEntities,
+            );
+
+            const result = await service.transformDcqlTrustedAuthoritiesToAki(
+                {
+                    credentials: [
+                        {
+                            id: "eaa",
+                            trusted_authorities: [
+                                {
+                                    type: "etsi_tl",
+                                    values: [
+                                        { trustListId: "one" },
+                                        { trustListId: "two" },
+                                        { trustListId: "three" },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+                "tenant",
+                host,
+            );
+
+            expect(result.credentials[0].trusted_authorities).toEqual([
+                {
+                    type: "etsi_tl",
+                    values: [
+                        `${host}/trust-list/one`,
+                        `${host}/trust-list/two`,
+                        `${host}/trust-list/three`,
+                    ],
+                },
+            ]);
+            expect(getListedEntities).toHaveBeenCalledTimes(2);
+            expect(logger.warn).toHaveBeenCalledWith(
+                expect.objectContaining({ tenantId: "tenant" }),
+                expect.stringContaining("too many certificates together"),
+            );
+        });
+
+        it(`sends only the URLs of the lists when one of them alone holds more than ${MAX_TRUST_LIST_CERTIFICATES} certificates`, async () => {
+            const { service } = createService(
+                vi.fn(),
+                vi.fn(async (ref) => {
+                    if (ref.trustListId === "crowded") {
+                        throw new TooManyTrustListCertificatesError(
+                            "crowded",
+                            MAX_TRUST_LIST_CERTIFICATES + 1,
+                        );
+                    }
+                    return issuer(
+                        ServiceTypeIdentifiers.EaaIssuance,
+                        eaaCa.der,
+                    );
+                }),
+            );
+
+            const result = await service.transformDcqlTrustedAuthoritiesToAki(
+                {
+                    credentials: [
+                        {
+                            id: "eaa",
+                            trusted_authorities: [
+                                {
+                                    type: "etsi_tl",
+                                    values: [
+                                        { trustListId: "ca" },
+                                        { trustListId: "crowded" },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+                "tenant",
+                host,
+            );
+
+            expect(result.credentials[0].trusted_authorities).toEqual([
+                {
+                    type: "etsi_tl",
+                    values: [
+                        `${host}/trust-list/ca`,
+                        `${host}/trust-list/crowded`,
+                    ],
+                },
+            ]);
+        });
+
+        it(`sends the key identifiers of lists with ${MAX_TRUST_LIST_CERTIFICATES} certificates together`, async () => {
+            const { service } = createService(
+                vi.fn(),
+                vi.fn(async (ref) => [
+                    {
+                        entityId: "Issuer",
+                        services: Array.from({ length: 500 }, () => ({
+                            serviceTypeIdentifier:
+                                ServiceTypeIdentifiers.EaaIssuance,
+                            certValue:
+                                ref.trustListId === "one"
+                                    ? eaaCa.der
+                                    : pidCa.der,
+                        })),
+                    },
+                ]),
+            );
+
+            const result = await service.transformDcqlTrustedAuthoritiesToAki(
+                {
+                    credentials: [
+                        {
+                            id: "eaa",
+                            trusted_authorities: [
+                                {
+                                    type: "etsi_tl",
+                                    values: [
+                                        { trustListId: "one" },
+                                        { trustListId: "two" },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+                "tenant",
+                host,
+            );
+
+            expect(result.credentials[0].trusted_authorities).toEqual([
+                { type: "aki", values: [eaaCa.ski, pidCa.ski] },
             ]);
         });
 

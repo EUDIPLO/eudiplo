@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { acceptedSequenceNumbersFake } from "../../../test/trust/accepted-trust-list-sequence-numbers.fake.js";
+import {
+    MAX_TRUST_LIST_CERTIFICATES,
+    TooManyTrustListCertificatesError,
+} from "../domain/trust-list-certificate-limit.js";
 import { OutdatedTrustListsError } from "../domain/trust-list-freshness.js";
 import type { AcceptedTrustListSequenceNumbers } from "../ports/accepted-trust-list-sequence-numbers.js";
 import type {
@@ -408,6 +412,159 @@ describe("CollectTrustedEntities", () => {
             await expect(result).rejects.toBeInstanceOf(
                 OutdatedTrustListsError,
             );
+        });
+    });
+
+    // Every certificate of the store is parsed and put in the path builder's
+    // pool for each check against it, and a list may hold some 25,000.
+    describe("certificate limit", () => {
+        /** An entity with `count` certificates of `serviceType`. */
+        const withCertificates = (
+            entityId: string,
+            count: number,
+            serviceType = "urn:test/Issuance",
+        ) => ({
+            entityId,
+            services: Array.from({ length: count }, (_, i) => ({
+                serviceTypeIdentifier: serviceType,
+                certValue: `${entityId}-${i}`,
+            })),
+        });
+
+        it(`accepts lists with ${MAX_TRUST_LIST_CERTIFICATES} certificates together`, async () => {
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce(
+                    list({ entities: [withCertificates("a", 600)] }),
+                )
+                .mockResolvedValueOnce(
+                    list({ entities: [withCertificates("b", 400)] }),
+                );
+
+            await expect(
+                collect({ loadVerified }).execute({
+                    tenantId,
+                    lotes: [{ url: "one" }, { url: "two" }],
+                }),
+            ).resolves.toMatchObject({
+                entities: [{ entityId: "a" }, { entityId: "b" }],
+            });
+        });
+
+        it(`rejects the source when its lists hold more than ${MAX_TRUST_LIST_CERTIFICATES}, without loading the lists after`, async () => {
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce(
+                    list({ entities: [withCertificates("a", 600)] }),
+                )
+                .mockResolvedValueOnce(
+                    list({ entities: [withCertificates("b", 401)] }),
+                )
+                .mockResolvedValueOnce(list());
+
+            const result = collect({ loadVerified }).execute({
+                tenantId,
+                lotes: [{ url: "one" }, { url: "two" }, { url: "three" }],
+            });
+
+            await expect(result).rejects.toBeInstanceOf(
+                TooManyTrustListCertificatesError,
+            );
+            await expect(result).rejects.toMatchObject({
+                list: "two",
+                certificates: 1001,
+                message:
+                    "Trust list two brings the certificates of its source to 1001; at most 1000 are accepted",
+            });
+            expect(loadVerified).toHaveBeenCalledTimes(2);
+        });
+
+        // The list that goes over the limit is signed and current: its
+        // number is authentic, and an older version must not be replayed
+        // once the source fits again.
+        it("remembers the sequence number of the list that goes over the limit as well", async () => {
+            const numbers = acceptedSequenceNumbersFake();
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce(
+                    list({ entities: [withCertificates("a", 600)] }),
+                )
+                .mockResolvedValueOnce(
+                    list({ entities: [withCertificates("b", 401)] }),
+                );
+
+            await expect(
+                collect({ loadVerified }, numbers).execute({
+                    tenantId,
+                    lotes: [{ url: "one" }, { url: "two" }],
+                }),
+            ).rejects.toBeInstanceOf(TooManyTrustListCertificatesError);
+            expect(numbers.record.mock.calls).toEqual([
+                [tenantId, "one", 1],
+                [tenantId, "two", 1],
+            ]);
+        });
+
+        it("counts only the entities kept", async () => {
+            const loadVerified = vi.fn().mockResolvedValue(
+                list({
+                    entities: [
+                        withCertificates("kept", MAX_TRUST_LIST_CERTIFICATES),
+                        withCertificates("left out", 500, "urn:other"),
+                    ],
+                }),
+            );
+
+            await expect(
+                collect({ loadVerified }).execute({
+                    tenantId,
+                    lotes: [{ url: "one" }],
+                    acceptedServiceTypes: ["/Issuance"],
+                }),
+            ).resolves.toMatchObject({ entities: [{ entityId: "kept" }] });
+        });
+
+        it("counts every certificate of an entity kept, also of the services not accepted", async () => {
+            const kept = withCertificates("kept", MAX_TRUST_LIST_CERTIFICATES);
+            kept.services.push({
+                serviceTypeIdentifier: "urn:other",
+                certValue: "other",
+            });
+
+            await expect(
+                collect({
+                    loadVerified: vi
+                        .fn()
+                        .mockResolvedValue(list({ entities: [kept] })),
+                }).execute({
+                    tenantId,
+                    lotes: [{ url: "one" }],
+                    acceptedServiceTypes: ["/Issuance"],
+                }),
+            ).rejects.toBeInstanceOf(TooManyTrustListCertificatesError);
+        });
+
+        it("leaves discarded lists out of the count", async () => {
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce(
+                    list({
+                        entities: [withCertificates("outdated", 600)],
+                        nextUpdate: passed,
+                    }),
+                )
+                .mockResolvedValueOnce(
+                    list({ entities: [withCertificates("current", 600)] }),
+                );
+
+            await expect(
+                collect({ loadVerified }).execute({
+                    tenantId,
+                    lotes: [{ url: "one" }, { url: "two" }],
+                }),
+            ).resolves.toMatchObject({
+                entities: [{ entityId: "current" }],
+            });
         });
     });
 });

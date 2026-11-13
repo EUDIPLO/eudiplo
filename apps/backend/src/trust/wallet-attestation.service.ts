@@ -576,8 +576,9 @@ export class WalletAttestationService {
      * answers it, or undefined if it is accepted
      * ({@link verifyStatusListSignature}). The reason for a certificate
      * outside its validity period names its place in the path and its
-     * period, not its subject, and the one for an `x5c` with too many
-     * certificates names their number: it reaches the wallet.
+     * period, not its subject, the one for an `x5c` with too many
+     * certificates names their number, and the one for a path past the path
+     * limits names the limit: it reaches the wallet.
      */
     private async statusListSignatureFailure(
         statusListJwt: string,
@@ -617,6 +618,9 @@ export class WalletAttestationService {
      * signs the list to the trusted signer, is outside its validity period
      * @throws CertificateChainTooLong if the list's `x5c` holds more
      * certificates than `MAX_CERTIFICATE_CHAIN_LENGTH`
+     * @throws CertificatePathLimitExceeded if the list's path is longer than
+     * `MAX_CERTIFICATE_PATH_LENGTH` or not found within
+     * `MAX_PATH_SIGNATURE_CHECKS` signature checks
      */
     private async verifyStatusListSignature(
         statusListJwt: string,

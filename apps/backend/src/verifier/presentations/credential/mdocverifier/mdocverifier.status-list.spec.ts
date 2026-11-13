@@ -28,7 +28,10 @@ import {
     it,
     vi,
 } from "vitest";
-import { chainBelow } from "../../../../../test/trust/certificate-chain.fixture.js";
+import {
+    chainBelow,
+    sameSubjectCertificates,
+} from "../../../../../test/trust/certificate-chain.fixture.js";
 import { StatusListVerifierService } from "../../../../trust/status-list-verifier.service.js";
 import { TrustFetchService } from "../../../../trust/trust-fetch.service.js";
 import { ServiceTypeIdentifiers } from "../../../../trust/types.js";
@@ -759,6 +762,70 @@ describe("MdocverifierService status list fetch", () => {
                     expect(result.failureReason).toContain(
                         "x5chain holds 11 certificates; at most 10 are accepted",
                     );
+                }
+            });
+        });
+
+        // Every trusted certificate is in the path builder's pool, and each
+        // one with the issuer's subject costs a signature check; whoever
+        // publishes a trust list decides how many there are.
+        describe("with 100 trusted certificates sharing an issuer's subject", () => {
+            const tooManyChecks =
+                "Certificate path not found within 64 signature checks";
+            const decoysOf = async (ca: Issued) =>
+                (await sameSubjectCertificates(ca.cert.subject, 100)).map(
+                    (cert) => new Uint8Array(cert.rawData),
+                );
+
+            it("rejects the credential with verification_error when they share its issuer CA's subject", async () => {
+                const service = verifier(policy(), loopbackIp, [
+                    {
+                        issuance: [
+                            ...(await decoysOf(issuerCa)),
+                            issuerCa.certificate,
+                        ],
+                        status: [revocationCa.certificate],
+                    },
+                ]);
+
+                const result = await verify(
+                    service,
+                    statusListAt(`${loopbackIp}/status/paired`),
+                    true,
+                    documentSigner,
+                );
+
+                expect(result).toMatchObject({
+                    verified: false,
+                    failureType: "verification_error",
+                });
+                expect(result.failureReason).toContain(tooManyChecks);
+            });
+
+            it("rejects a status list with verification_error when they share its revocation CA's subject, also in best-effort mode", async () => {
+                const service = verifier(policy(), loopbackIp, [
+                    {
+                        issuance: [issuerCa.certificate],
+                        status: [
+                            ...(await decoysOf(revocationCa)),
+                            revocationCa.certificate,
+                        ],
+                    },
+                ]);
+
+                for (const failClosed of [true, false]) {
+                    const result = await verify(
+                        service,
+                        statusListAt(`${loopbackIp}/status/paired`),
+                        failClosed,
+                        documentSigner,
+                    );
+
+                    expect(result).toMatchObject({
+                        verified: false,
+                        failureType: "verification_error",
+                    });
+                    expect(result.failureReason).toContain(tooManyChecks);
                 }
             });
         });

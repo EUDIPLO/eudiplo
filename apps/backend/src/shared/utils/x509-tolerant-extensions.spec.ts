@@ -1,5 +1,6 @@
 import * as x509 from "@peculiar/x509";
 import { beforeAll, describe, expect, it } from "vitest";
+import { CertificatePathBuilder } from "./certificate-path.util.js";
 import {
     registerTolerantX509Extensions,
     TolerantIssuerAlternativeNameExtension,
@@ -55,9 +56,9 @@ describe("registerTolerantX509Extensions (malformed AV issuerAltName)", () => {
         );
     });
 
-    it("X509ChainBuilder can build a chain involving the AV IACA", async () => {
+    it("CertificatePathBuilder can build a path involving the AV IACA", async () => {
         const cert = new x509.X509Certificate(AV_IACA_PEM);
-        const builder = new x509.X509ChainBuilder({ certificates: [cert] });
+        const builder = new CertificatePathBuilder([cert]);
         const chain = await builder.build(cert);
         expect(chain.length).toBe(1);
     });
