@@ -1,8 +1,10 @@
-import { ConflictException, NotFoundException } from "@nestjs/common";
-import type { LoTEDocument } from "@owf/eudi-lote";
+import { ConflictException, Logger, NotFoundException } from "@nestjs/common";
+import type { LoTE, LoTEDocument } from "@owf/eudi-lote";
 import * as x509 from "@peculiar/x509";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { KeyUsageType } from "../../crypto/key/types/key-usage-type.js";
+import { LoteParserService } from "../../trust/lote-parser.service.js";
+import { ServiceTypeIdentifiers } from "../../trust/types.js";
 import { TrustListReferences } from "./application/trust-list-references.js";
 import { TrustListInputError } from "./domain/trust-list-input.js";
 import {
@@ -388,6 +390,50 @@ describe("TrustListService", () => {
                 { lang: "en", uriValue: "https://example.com/" },
             ]);
         });
+
+        it.each([
+            [undefined, ServiceTypeIdentifiers.EaaIssuance],
+            [
+                "wallet-provider" as const,
+                ServiceTypeIdentifiers.WalletSolutionIssuance,
+            ],
+        ])(
+            "publishes a %s list that its parser reads in full, without warnings",
+            async (providerType, issuanceType) => {
+                const { service, trustListRepo } = createService([]);
+                const warn = vi
+                    .spyOn(Logger.prototype, "warn")
+                    .mockImplementation(() => {});
+
+                await service.create(
+                    {
+                        id: "managed",
+                        entities: [
+                            {
+                                ...externalEntity,
+                                ...(providerType ? { providerType } : {}),
+                            },
+                        ],
+                    },
+                    { id: "tenant", name: "Tenant" },
+                );
+
+                const saved = trustListRepo.save.mock.calls[0][0] as TrustList;
+                const { entities } = new LoteParserService().parse(
+                    (saved.data as LoTEDocument).LoTE as unknown as LoTE,
+                    "managed",
+                );
+                expect(
+                    entities.flatMap((e) =>
+                        e.services.map((s) => s.serviceTypeIdentifier),
+                    ),
+                ).toEqual([
+                    issuanceType,
+                    expect.stringMatching(/\/Revocation$/),
+                ]);
+                expect(warn).not.toHaveBeenCalled();
+            },
+        );
 
         describe("entity languages (ETSI TS 119 602 clause 6.1.4)", () => {
             const publishedEntity = async (

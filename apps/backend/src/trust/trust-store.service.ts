@@ -213,7 +213,7 @@ export class TrustStoreService {
             // The caller logs the error with the list it names.
             throw new OutdatedTrustListsError([{ list: id, nextUpdate }]);
         }
-        return this.loteParser.parse(lote).entities;
+        return this.loteParser.parse(lote, id).entities;
     }
 
     /**
