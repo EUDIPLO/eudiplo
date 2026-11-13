@@ -10,7 +10,6 @@ import {
 } from "./application/collect-trusted-entities.js";
 import {
     addTrustListCertificates,
-    MAX_TRUST_LIST_CERTIFICATES,
     TooManyTrustListCertificatesError,
 } from "./domain/trust-list-certificate-limit.js";
 import {
@@ -82,7 +81,7 @@ export class TrustStoreService {
      * for `cacheTtlMs` while its current lists stay current. Outdated lists,
      * also those numbered lower than a list accepted before, are left out
      * ({@link BuiltTrustStore.discarded}) and logged. A source whose lists
-     * are all outdated, or hold more than {@link MAX_TRUST_LIST_CERTIFICATES}
+     * are all outdated, or hold more than `MAX_TRUST_LIST_CERTIFICATES`
      * certificates, is rejected for one minute without fetching them again.
      * @throws when a list cannot be fetched or verified, when every list is
      * outdated (`OutdatedTrustListsError`), or when the lists hold too many
@@ -215,7 +214,7 @@ export class TrustStoreService {
      * external lists are fetched and their signature verified like in
      * {@link getTrustStore}, sharing its cache. Either way an outdated list
      * throws {@link OutdatedTrustListsError}, and one whose kept entities
-     * hold more than {@link MAX_TRUST_LIST_CERTIFICATES} certificates
+     * hold more than `MAX_TRUST_LIST_CERTIFICATES` certificates
      * {@link TooManyTrustListCertificatesError}, so no hint names issuers
      * that verification leaves out with the list.
      */

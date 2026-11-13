@@ -1,7 +1,4 @@
-import {
-    addTrustListCertificates,
-    MAX_TRUST_LIST_CERTIFICATES,
-} from "../domain/trust-list-certificate-limit.js";
+import { addTrustListCertificates } from "../domain/trust-list-certificate-limit.js";
 import {
     type DiscardedTrustList,
     isTrustListCurrent,
@@ -69,13 +66,13 @@ export class CollectTrustedEntities {
      * version, possibly replayed). An accepted list raises the number
      * remembered for its URL. A list that cannot be loaded or verified still
      * fails the whole source, and so do lists that together hold more than
-     * {@link MAX_TRUST_LIST_CERTIFICATES} certificates for the entities kept;
+     * `MAX_TRUST_LIST_CERTIFICATES` certificates for the entities kept;
      * the lists after the one that goes over the limit are not loaded. The
      * number of that list is remembered all the same: it is signed, so an
      * older version of the list cannot be replayed once the source fits again.
      * @throws OutdatedTrustListsError when every list was discarded
      * @throws TooManyTrustListCertificatesError when the entities kept hold
-     * more than {@link MAX_TRUST_LIST_CERTIFICATES} certificates
+     * more than `MAX_TRUST_LIST_CERTIFICATES` certificates
      */
     async execute(
         source: LoadedTrustListSource,

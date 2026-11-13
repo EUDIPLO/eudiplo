@@ -249,15 +249,16 @@ export class CredentialChainValidationService {
 
         // 6) Check time validity
         const now = new Date();
-        for (const cert of path) {
-            if (!this.x509v.isTimeValid(cert, now)) {
-                return {
-                    verified: false,
-                    matchedEntity: null,
-                    error: "certificate_expired",
-                    errorDetails: `Certificate expired or not yet valid: subject="${cert.subject}", notBefore=${cert.notBefore.toISOString()}, notAfter=${cert.notAfter.toISOString()}`,
-                };
-            }
+        const outOfPeriod = path.find(
+            (cert) => !this.x509v.isTimeValid(cert, now),
+        );
+        if (outOfPeriod) {
+            return {
+                verified: false,
+                matchedEntity: null,
+                error: "certificate_expired",
+                errorDetails: `Certificate expired or not yet valid: subject="${outOfPeriod.subject}", notBefore=${outOfPeriod.notBefore.toISOString()}, notAfter=${outOfPeriod.notAfter.toISOString()}`,
+            };
         }
 
         // 7) Match against TrustedEntities
@@ -289,36 +290,52 @@ export class CredentialChainValidationService {
             `Certificate chain validated successfully. Matched entity: ${matchedEntity.entity.entityId ?? "unknown"}, mode: ${matchedEntity.matchMode}`,
         );
 
-        // The first matching service decides the status list signers; a
-        // certificate listed as PID and as EAA issuer still issues PIDs.
-        let pidIssuer =
-            matchedEntity.issuanceServiceType ===
-            ServiceTypeIdentifiers.PIDIssuance;
-        if (
-            !pidIssuer &&
-            serviceTypeFilter.includes(ServiceTypeIdentifiers.PIDIssuance)
-        ) {
-            try {
-                pidIssuer = await this.leadsToPidIssuer(
+        let pidIssuer: boolean;
+        try {
+            pidIssuer = await this.isPidIssuer(
+                matchedEntity.issuanceServiceType,
+                serviceTypeFilter,
+                leaf,
+                presented,
+                store,
+                pinnedCertMode,
+            );
+        } catch (e: any) {
+            // A credential that cannot be classified is rejected, rather
+            // than spared the rules for PIDs.
+            if (!(e instanceof CertificatePathLimitExceeded)) throw e;
+            return this.chainBuildFailed(presented, store, trustListSource, e);
+        }
+
+        return { verified: true, matchedEntity, path, pidIssuer };
+    }
+
+    /**
+     * Whether the credential's issuer counts as a PID issuer. The first
+     * matching service decides the status list signers; a certificate
+     * listed as PID and as EAA issuer still issues PIDs
+     * ({@link leadsToPidIssuer}).
+     * @throws CertificatePathLimitExceeded if the path to a PID issuance
+     * certificate is past the path limits
+     */
+    private async isPidIssuer(
+        matchedServiceType: string,
+        serviceTypeFilter: ServiceTypeFilter,
+        leaf: x509.X509Certificate,
+        presented: x509.X509Certificate[],
+        store: BuiltTrustStore,
+        pinnedCertMode: "leaf" | "pathEnd",
+    ): Promise<boolean> {
+        return (
+            matchedServiceType === ServiceTypeIdentifiers.PIDIssuance ||
+            (serviceTypeFilter.includes(ServiceTypeIdentifiers.PIDIssuance) &&
+                (await this.leadsToPidIssuer(
                     leaf,
                     presented,
                     store,
                     pinnedCertMode,
-                );
-            } catch (e: any) {
-                // A credential that cannot be classified is rejected,
-                // rather than spared the rules for PIDs.
-                if (!(e instanceof CertificatePathLimitExceeded)) throw e;
-                return this.chainBuildFailed(
-                    presented,
-                    store,
-                    trustListSource,
-                    e,
-                );
-            }
-        }
-
-        return { verified: true, matchedEntity, path, pidIssuer };
+                )))
+        );
     }
 
     /**
