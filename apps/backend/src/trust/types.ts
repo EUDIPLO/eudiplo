@@ -134,17 +134,6 @@ export const walletAttestationSignerServiceTypes = [
     ServiceTypeIdentifiers.WalletSolutionIssuance,
 ] as const;
 
-/**
- * Service statuses saying that a listed service is no longer approved. Such a
- * service is not read from a list: `PubEAAProvidersList/SvcStatus/withdrawn`
- * (ETSI TS 119 602 Annex H, Table H.3) and the profile-independent
- * `commons/schemeApprovalWithdrawn` (draft ETSI EN 319 602 V1.1.3, C.2.5).
- */
-export const withdrawnServiceStatuses: readonly string[] = [
-    "http://uri.etsi.org/19602/PubEAAProvidersList/SvcStatus/withdrawn", // NOSONAR: ETSI identifier URI, not fetched
-    "http://uri.etsi.org/19602/commons/schemeApprovalWithdrawn", // NOSONAR: ETSI identifier URI, not fetched
-];
-
 export type TrustedEntityServiceCert = {
     serviceTypeIdentifier: ServiceTypeIdentifier;
     certValue: string; // PEM or base64 DER

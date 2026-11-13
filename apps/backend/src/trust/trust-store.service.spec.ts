@@ -198,7 +198,7 @@ describe("TrustStoreService.getListedEntities", () => {
             ),
         ).resolves.toEqual(entities);
         expect(findOne).toHaveBeenCalledWith("t", "list-1");
-        expect(parse).toHaveBeenCalledWith(lote);
+        expect(parse).toHaveBeenCalledWith(lote, "list-1");
         expect(fetchJwt).not.toHaveBeenCalled();
     });
 
@@ -224,11 +224,11 @@ describe("TrustStoreService.getListedEntities", () => {
             { trustListId: "list-1", url: "" },
             "t",
         );
-        expect(parse).toHaveBeenCalledWith(lote);
+        expect(parse).toHaveBeenCalledWith(lote, "list-1");
     });
 
     it("fetches and verifies external lists", async () => {
-        const { service, fetchJwt, findOne } = createService(undefined);
+        const { service, fetchJwt, findOne, parse } = createService(undefined);
         const ref = {
             url: "https://trust.example/list",
             verifierX509Der: "certificate",
@@ -238,6 +238,7 @@ describe("TrustStoreService.getListedEntities", () => {
             entities,
         );
         expect(fetchJwt).toHaveBeenCalledWith(ref.url);
+        expect(parse).toHaveBeenCalledWith(lote, ref.url);
         expect(findOne).not.toHaveBeenCalled();
     });
 

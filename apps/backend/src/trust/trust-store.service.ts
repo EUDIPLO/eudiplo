@@ -242,7 +242,7 @@ export class TrustStoreService {
             throw new OutdatedTrustListsError([{ list: id, nextUpdate }]);
         }
         const entities = this.loteParser
-            .parse(lote)
+            .parse(lote, id)
             .entities.filter((entity) =>
                 offersAcceptedService(entity, credentialIssuerServiceTypes),
             );
