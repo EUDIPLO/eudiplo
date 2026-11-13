@@ -1,11 +1,16 @@
 import * as x509 from "@peculiar/x509";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
     certificateFailure,
     currentPeriod,
     outsideStates,
     periodsOutside,
 } from "../../test/trust/attestation-certificate-periods.fixture.js";
+import {
+    chainBelow,
+    chainCa,
+} from "../../test/trust/certificate-chain.fixture.js";
+import { CertificateChainTooLong } from "../shared/utils/certificate-chain-length.util.js";
 import type { ValidityPeriod } from "../shared/utils/certificate-validity.util.js";
 import {
     credentialIssuerServiceTypes,
@@ -1036,5 +1041,128 @@ describe("X509ValidationService.matchAttestationStatusListSigner", () => {
             "CN=Status List Intermediate CA",
             "CN=Status List CA",
         ]);
+    });
+});
+
+// The chain builder's work grows with the square of the chain's length (a
+// status list host or a request body can send thousands of certificates), so
+// an x5c above MAX_CERTIFICATE_CHAIN_LENGTH is refused before it is parsed
+// and before the builder runs.
+describe("X509ValidationService x5c length limit", () => {
+    const service = new X509ValidationService();
+    const tooLong = "x5c holds 11 certificates; at most 10 are accepted";
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    const buildSpy = () => vi.spyOn(x509.X509ChainBuilder.prototype, "build");
+
+    /** A provider whose CA is listed as `serviceType`, and the matched entity. */
+    async function provider(serviceType: string) {
+        const providerCa = await chainCa("CN=Wallet Provider CA");
+        const entities = [
+            entity("provider", [[serviceType, der(providerCa.cert)]]),
+        ];
+        return { providerCa, entities };
+    }
+
+    it("refuses eleven entries in parseX5c before parsing them", () => {
+        expect(() =>
+            service.parseX5c(new Array(11).fill("not a certificate")),
+        ).toThrow(CertificateChainTooLong);
+    });
+
+    it("refuses a presented chain of eleven in buildPath without building", async () => {
+        const ca = await chainCa();
+        const { chain } = await chainBelow(ca, 11);
+        const build = buildSpy();
+
+        await expect(
+            service.buildPath(chain[0], chain, [ca.cert]),
+        ).rejects.toThrow(tooLong);
+        expect(build).not.toHaveBeenCalled();
+    });
+
+    it("matches a wallet attestation whose x5c holds ten certificates", async () => {
+        const { providerCa, entities } = await provider(
+            ServiceTypeIdentifiers.WalletSolutionIssuance,
+        );
+        const { x5c } = await chainBelow(providerCa, 10);
+
+        await expect(
+            service.matchAttestationSigner(x5c, entities),
+        ).resolves.toMatchObject({ matchMode: "ca" });
+    });
+
+    it("refuses a wallet attestation whose x5c holds eleven certificates without building", async () => {
+        const { providerCa, entities } = await provider(
+            ServiceTypeIdentifiers.WalletSolutionIssuance,
+        );
+        const { x5c } = await chainBelow(providerCa, 11);
+        const build = buildSpy();
+
+        await expect(
+            service.matchAttestationSigner(x5c, entities),
+        ).rejects.toThrow(tooLong);
+        expect(build).not.toHaveBeenCalled();
+    });
+
+    describe("for an attestation's status list", () => {
+        /** A provider with a revocation CA, matched by its attestation CA. */
+        async function providerWithRevocation() {
+            const attestationCa = await chainCa("CN=Wallet Provider CA");
+            const revocationCa = await chainCa("CN=Wallet Provider Status CA");
+            const entities = [
+                entity("provider", [
+                    [
+                        ServiceTypeIdentifiers.WalletSolutionIssuance,
+                        der(attestationCa.cert),
+                    ],
+                    [
+                        ServiceTypeIdentifiers.WalletSolutionRevocation,
+                        der(revocationCa.cert),
+                    ],
+                ]),
+            ];
+            const matched = await service.pathMatchesTrustedEntities(
+                [attestationCa.cert],
+                entities,
+                "leaf",
+                walletAttestationSignerServiceTypes,
+            );
+            expect(matched).not.toBeNull();
+            return { revocationCa, entities, matched: matched! };
+        }
+
+        it("matches a status list whose x5c holds ten certificates", async () => {
+            const { revocationCa, entities, matched } =
+                await providerWithRevocation();
+            const { x5c } = await chainBelow(revocationCa, 10);
+
+            await expect(
+                service.matchAttestationStatusListSigner(
+                    x5c,
+                    matched,
+                    entities,
+                ),
+            ).resolves.toMatchObject({ matched: true });
+        });
+
+        it("refuses a status list whose x5c holds eleven certificates without building", async () => {
+            const { revocationCa, entities, matched } =
+                await providerWithRevocation();
+            const { x5c } = await chainBelow(revocationCa, 11);
+            const build = buildSpy();
+
+            await expect(
+                service.matchAttestationStatusListSigner(
+                    x5c,
+                    matched,
+                    entities,
+                ),
+            ).rejects.toThrow(tooLong);
+            expect(build).not.toHaveBeenCalled();
+        });
     });
 });

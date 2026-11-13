@@ -1,7 +1,11 @@
 import type { Logger } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { acceptedSequenceNumbersFake } from "../../../../test/trust/accepted-trust-list-sequence-numbers.fake.js";
+import {
+    chainBelow,
+    chainCa,
+} from "../../../../test/trust/certificate-chain.fixture.js";
 import { CollectTrustedEntities } from "../../../trust/application/collect-trusted-entities.js";
 import { TrustStoreService } from "../../../trust/trust-store.service.js";
 import type { TrustListSource } from "../../../trust/types.js";
@@ -1155,6 +1159,91 @@ describe("CredentialChainValidationService — status list signer", () => {
                     LOTE_SOURCE,
                 ),
             ).resolves.toBe(false);
+        });
+    });
+
+    // The chain builder's work grows with the square of the chain's length.
+    // The wallet decides how long a credential's x5c is, the issuer's status
+    // list host how long a status list's is.
+    describe("x5c of more than ten certificates", () => {
+        const tooLong = "x5c holds 11 certificates; at most 10 are accepted";
+        let issuerCa: Cert;
+        let service: CredentialChainValidationService;
+
+        beforeEach(async () => {
+            issuerCa = await chainCa("CN=Length Issuer CA");
+            service = serviceWith([
+                {
+                    entityId: "issuer",
+                    services: [
+                        { serviceTypeIdentifier: ISSUANCE, cert: issuerCa },
+                    ],
+                },
+            ]);
+        });
+
+        afterEach(() => {
+            vi.restoreAllMocks();
+        });
+
+        it("accepts a credential whose x5c holds ten certificates", async () => {
+            const { x5c } = await chainBelow(issuerCa, 10);
+
+            await expect(credentialMatch(service, x5c)).resolves.not.toBeNull();
+        });
+
+        it("rejects a credential whose x5c holds eleven certificates as invalid_x5c, without building", async () => {
+            const { x5c } = await chainBelow(issuerCa, 11);
+            const build = vi.spyOn(x509.X509ChainBuilder.prototype, "build");
+
+            await expect(
+                service.validateChain(x5c, LOTE_SOURCE),
+            ).resolves.toEqual({
+                verified: false,
+                matchedEntity: null,
+                error: "invalid_x5c",
+                errorDetails: tooLong,
+            });
+            expect(build).not.toHaveBeenCalled();
+        });
+
+        it("rejects a credential whose x5c holds eleven certificates also without a trust list", async () => {
+            const { x5c } = await chainBelow(issuerCa, 11);
+
+            await expect(
+                service.validateChain(x5c, undefined),
+            ).resolves.toEqual({
+                verified: false,
+                matchedEntity: null,
+                error: "invalid_x5c",
+                errorDetails: tooLong,
+            });
+        });
+
+        it("still names a certificate that cannot be parsed", async () => {
+            await expect(
+                service.validateChain(["not a certificate"], LOTE_SOURCE),
+            ).resolves.toMatchObject({
+                verified: false,
+                error: "invalid_x5c",
+                errorDetails: expect.stringMatching(
+                    /^Failed to parse x5c chain: /,
+                ),
+            });
+        });
+
+        it("rejects a status list whose x5c holds eleven certificates, without building", async () => {
+            const matched = await credentialMatch(
+                service,
+                (await chainBelow(issuerCa, 1)).x5c,
+            );
+            const { x5c } = await chainBelow(issuerCa, 11);
+            const build = vi.spyOn(x509.X509ChainBuilder.prototype, "build");
+
+            await expect(
+                service.verifyStatusListSignature(x5c, matched, LOTE_SOURCE),
+            ).resolves.toBe(false);
+            expect(build).not.toHaveBeenCalled();
         });
     });
 });

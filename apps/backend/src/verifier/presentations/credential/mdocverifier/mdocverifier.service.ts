@@ -13,6 +13,7 @@ import * as x509 from "@peculiar/x509";
 import { Span } from "nestjs-otel";
 import { PinoLogger } from "nestjs-pino";
 import { VerificationProvenance } from "../../../../session/domain/session-outcome.js";
+import { assertCertificateChainLength } from "../../../../shared/utils/certificate-chain-length.util.js";
 import { MalformedStatusReferenceError } from "../../../../trust/domain/status-list-reference.js";
 import {
     RevocationListUnavailableError,
@@ -193,6 +194,9 @@ export class MdocverifierService {
 
             const issuerX5Chain =
                 mdocDocument?.issuerSigned?.issuerAuth?.x5chain;
+            // Refused before the certificates are parsed below; @owf/mdoc
+            // checks the length again in mdocContext, also for status lists.
+            assertCertificateChainLength(issuerX5Chain ?? [], "x5chain");
             const trustedEntries =
                 await this.chainValidation.getTrustedCertificateEntries(
                     options.trustListSource,

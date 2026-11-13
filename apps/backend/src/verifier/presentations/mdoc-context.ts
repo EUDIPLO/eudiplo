@@ -16,6 +16,7 @@ import {
     signingAlgForCurve,
 } from "../../crypto/key/domain/signing-algs.js";
 import { toBuffer } from "../../shared/utils/buffer.util.js";
+import { assertCertificateChainLength } from "../../shared/utils/certificate-chain-length.util.js";
 import {
     certificateValidityAt,
     formatCertificateDate,
@@ -470,6 +471,9 @@ export const mdocContext: Omit<MdocContext, "fetch"> = {
             if (certificateChain.length === 0) {
                 throw new Error("Certificate chain is empty");
             }
+            // The issuer's chain from the wallet, or a status list's chain
+            // from the host that serves it.
+            assertCertificateChainLength(certificateChain, "x5chain");
 
             const parsedLeafCertificate = new x509.X509Certificate(
                 toBuffer(certificateChain[0]),

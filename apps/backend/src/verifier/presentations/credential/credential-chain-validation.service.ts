@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { PinoLogger } from "nestjs-pino";
+import { CertificateChainTooLong } from "../../../shared/utils/certificate-chain-length.util.js";
 import { getRevocationServices } from "../../../trust/domain/status-list-signers.js";
 import { describeDiscardedTrustLists } from "../../../trust/domain/trust-list-freshness.js";
 import {
@@ -47,6 +48,16 @@ function discardedDetail(store: BuiltTrustStore): string[] {
               `Discarded outdated trust lists (their issuers are not trusted): ${describeDiscardedTrustLists(store.discarded)}`,
           ]
         : [];
+}
+
+/**
+ * Error detail for an `x5c` that `parseX5c` refused: the length limit's own
+ * message, or why a certificate could not be parsed.
+ */
+function invalidX5cDetail(error: any): string {
+    return error instanceof CertificateChainTooLong
+        ? error.message
+        : `Failed to parse x5c chain: ${error?.message ?? error}`;
 }
 
 /**
@@ -170,7 +181,8 @@ export class CredentialChainValidationService {
             return { verified: true, matchedEntity: null };
         }
 
-        // 2) Parse the presented certificate chain
+        // 2) Parse the presented certificate chain, refusing one longer than
+        // MAX_CERTIFICATE_CHAIN_LENGTH, also when no trust list is configured
         let presented: x509.X509Certificate[];
         try {
             presented = this.x509v.parseX5c(x5c);
@@ -179,7 +191,7 @@ export class CredentialChainValidationService {
                 verified: false,
                 matchedEntity: null,
                 error: "invalid_x5c",
-                errorDetails: `Failed to parse x5c chain: ${e?.message ?? e}`,
+                errorDetails: invalidX5cDetail(e),
             };
         }
 

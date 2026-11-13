@@ -28,6 +28,7 @@ import {
     it,
     vi,
 } from "vitest";
+import { chainBelow } from "../../../../../test/trust/certificate-chain.fixture.js";
 import { StatusListVerifierService } from "../../../../trust/status-list-verifier.service.js";
 import { TrustFetchService } from "../../../../trust/trust-fetch.service.js";
 import { ServiceTypeIdentifiers } from "../../../../trust/types.js";
@@ -162,7 +163,7 @@ describe("MdocverifierService status list fetch", () => {
     /**
      * Status list token for `uri`, signed with the issuer's key. `statuses`
      * defaults to all valid; `unprotectedX5Chain` moves the certificate out of
-     * the protected header.
+     * the protected header; `intermediates` follow it in `x5chain`.
      */
     async function signStatusListCwt(
         uri: string,
@@ -171,15 +172,20 @@ describe("MdocverifierService status list fetch", () => {
             bits = 1,
             unprotectedX5Chain = false,
             signer = { jwk: issuerJwk, certificate: issuerCertificate },
+            intermediates = [],
         }: {
             statuses?: number[];
             bits?: 1 | 2 | 4 | 8;
             unprotectedX5Chain?: boolean;
             signer?: SigningCertificate;
+            intermediates?: Uint8Array[];
         } = {},
     ): Promise<Uint8Array> {
         const now = Math.floor(Date.now() / 1000);
-        const x5chain: [number, unknown] = [33, [signer.certificate]];
+        const x5chain: [number, unknown] = [
+            33,
+            [signer.certificate, ...intermediates],
+        ];
         const cwt = new StatusListCwt({
             payload: {
                 subject: uri,
@@ -696,6 +702,66 @@ describe("MdocverifierService status list fetch", () => {
                 expect(requests).toContain(`/status/${path}`);
             },
         );
+
+        // The chain builder's work grows with the square of the chain's
+        // length, and the issuer's status list host decides how long the
+        // x5chain is.
+        describe("with an x5chain of more than ten certificates", () => {
+            /** Publish a status list signed `length` certificates below the revocation CA. */
+            async function publishChainOf(length: number) {
+                const { chain, signingKeys } = await chainBelow(
+                    revocationCa,
+                    length,
+                );
+                const path = `/status/chain-of-${length}`;
+                published.set(path, {
+                    contentType: "application/statuslist+cwt",
+                    token: await signStatusListCwt(`${loopbackIp}${path}`, {
+                        signer: await issued(chain[0], signingKeys),
+                        intermediates: chain
+                            .slice(1)
+                            .map((cert) => new Uint8Array(cert.rawData)),
+                    }),
+                });
+                return path;
+            }
+
+            it("accepts a status list whose x5chain holds ten certificates", async () => {
+                const path = await publishChainOf(10);
+
+                const result = await verify(
+                    verifier(policy(), loopbackIp, entries),
+                    statusListAt(`${loopbackIp}${path}`),
+                    true,
+                    documentSigner,
+                );
+
+                expect(result).toMatchObject({ verified: true });
+            });
+
+            it("rejects a status list whose x5chain holds eleven certificates with verification_error, also in best-effort mode", async () => {
+                const path = await publishChainOf(11);
+                const service = verifier(policy(), loopbackIp, entries);
+
+                // The list was fetched, so it does not count as unavailable.
+                for (const failClosed of [true, false]) {
+                    const result = await verify(
+                        service,
+                        statusListAt(`${loopbackIp}${path}`),
+                        failClosed,
+                        documentSigner,
+                    );
+
+                    expect(result).toMatchObject({
+                        verified: false,
+                        failureType: "verification_error",
+                    });
+                    expect(result.failureReason).toContain(
+                        "x5chain holds 11 certificates; at most 10 are accepted",
+                    );
+                }
+            });
+        });
 
         it("rejects a status list signed under a listed revocation CA that has expired, also in best-effort mode", async () => {
             const expiredRevocationCa = await ca("Expired PID Status CA", {

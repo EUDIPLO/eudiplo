@@ -11,6 +11,10 @@ import {
     it,
     vi,
 } from "vitest";
+import {
+    chainBelow,
+    chainCa,
+} from "../../../../../test/trust/certificate-chain.fixture.js";
 import { RevocationListUnavailableError } from "../../../../trust/revocation-policy.util.js";
 import {
     InvalidStatusListTokenError,
@@ -20,6 +24,9 @@ import {
     ServiceTypeIdentifiers,
     type VerifierOptions,
 } from "../../../../trust/types.js";
+import { X509ValidationService } from "../../../../trust/x509-validation.service.js";
+import { ResolverService } from "../../../resolver/resolver.service.js";
+import { CredentialChainValidationService } from "../credential-chain-validation.service.js";
 import {
     SdJwtVerificationError,
     SdjwtvcverifierService,
@@ -125,6 +132,7 @@ function statusList(
         iat = Math.floor(Date.now() / 1000) - 600,
         nbf,
         exp,
+        x5c,
     }: {
         list?: Uint8Array;
         lst?: Uint8Array;
@@ -132,11 +140,17 @@ function statusList(
         iat?: number;
         nbf?: number;
         exp?: number;
+        /** Signs the list under this chain instead of naming {@link KID}. */
+        x5c?: string[];
     } = {},
 ): Promise<string> {
     return signJwt(
         signer,
-        { alg: "ES256", typ: "statuslist+jwt", kid: KID },
+        {
+            alg: "ES256",
+            typ: "statuslist+jwt",
+            ...(x5c ? { x5c } : { kid: KID }),
+        },
         {
             sub,
             iat,
@@ -700,4 +714,141 @@ describe("SdjwtvcverifierService PID without status information", () => {
             await accepts(verify({ exp: now + 30 * DAY }));
         },
     );
+});
+
+// The chain builder's work grows with the square of the chain's length. The
+// wallet decides how long a credential's x5c is, the issuer's status list
+// host how long a status list's is. Verified with the real key resolver and
+// certificate chain check against a trust list naming the issuer's CA.
+describe("SdjwtvcverifierService x5c length limit", () => {
+    async function setupChains() {
+        const issuerCa = await chainCa("CN=Issuer CA");
+        const logger = {
+            setContext: vi.fn(),
+            debug: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+        };
+        const chainValidation = new CredentialChainValidationService(
+            {
+                getTrustStore: vi.fn().mockResolvedValue({
+                    entities: [
+                        {
+                            entityId: "issuer",
+                            services: [
+                                {
+                                    serviceTypeIdentifier:
+                                        ServiceTypeIdentifiers.EaaIssuance,
+                                    certValue: Buffer.from(
+                                        issuerCa.cert.rawData,
+                                    ).toString("base64"),
+                                },
+                            ],
+                        },
+                    ],
+                    discarded: [],
+                }),
+            } as any,
+            new X509ValidationService(),
+            logger as any,
+        );
+        const statusLists = new StatusListVerifierService({} as any);
+        const getStatusListJwt = vi.spyOn(statusLists, "getStatusListJwt");
+        const service = new SdjwtvcverifierService(
+            new ResolverService(),
+            { getCryptoFromJwk: () => ES256 } as any,
+            chainValidation,
+            statusLists,
+            {} as any,
+            logger as any,
+        );
+        /** A signer below the issuer CA, `length` certificates in its x5c. */
+        const signer = async (length: number) => {
+            const { x5c, signingKeys } = await chainBelow(issuerCa, length);
+            return {
+                x5c,
+                issuer: { privateKey: signingKeys.privateKey } as Issuer,
+            };
+        };
+        const verify = async (
+            credentialChainLength: number,
+            failClosed = true,
+        ) => {
+            const { x5c, issuer } = await signer(credentialChainLength);
+            const now = Math.floor(Date.now() / 1000);
+            return service.verify(
+                await sdJwtVc(
+                    issuer,
+                    { x5c },
+                    {
+                        iat: now,
+                        exp: now + 3600,
+                        status: { status_list: { uri: STATUS_URI, idx: 7 } },
+                    },
+                ),
+                {
+                    trustListSource: {
+                        lotes: [{ url: "https://trust.example/lote.jwt" }],
+                        tenantId: "tenant-a",
+                    },
+                    policy: {
+                        requireX5c: true,
+                        revocation: { enabled: true, failClosed },
+                    },
+                } as VerifierOptions,
+            );
+        };
+        return { signer, verify, getStatusListJwt, logger };
+    }
+
+    it("rejects a credential whose x5c holds eleven certificates with verification_error", async () => {
+        const { verify, getStatusListJwt } = await setupChains();
+
+        const error = await verify(11).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(SdJwtVerificationError);
+        expect(error).toMatchObject({
+            failureType: "verification_error",
+            verboseReason: "x5c holds 11 certificates; at most 10 are accepted",
+        });
+        expect(getStatusListJwt).not.toHaveBeenCalled();
+    });
+
+    for (const failClosed of [true, false]) {
+        const mode = failClosed ? "strict" : "best-effort";
+
+        it(`accepts a credential whose status list x5c holds ten certificates (${mode})`, async () => {
+            const { signer, verify, getStatusListJwt } = await setupChains();
+            const statusSigner = await signer(10);
+            getStatusListJwt.mockResolvedValue(
+                await statusList(statusSigner.issuer, {
+                    x5c: statusSigner.x5c,
+                }),
+            );
+
+            await expect(verify(1, failClosed)).resolves.toMatchObject({
+                payload: expect.objectContaining({ given_name: "Erika" }),
+            });
+        });
+
+        it(`rejects a credential whose status list x5c holds eleven certificates (${mode})`, async () => {
+            const { signer, verify, getStatusListJwt, logger } =
+                await setupChains();
+            const statusSigner = await signer(11);
+            getStatusListJwt.mockResolvedValue(
+                await statusList(statusSigner.issuer, {
+                    x5c: statusSigner.x5c,
+                }),
+            );
+
+            await expect(verify(1, failClosed)).rejects.toThrow(
+                /Status List JWT verification failed/,
+            );
+            expect(logger.warn).toHaveBeenCalledWith(
+                expect.stringContaining(
+                    "x5c holds 11 certificates; at most 10 are accepted",
+                ),
+            );
+        });
+    }
 });

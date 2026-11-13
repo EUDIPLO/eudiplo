@@ -499,6 +499,61 @@ describe("MdocverifierService revocation mode", () => {
     });
 });
 
+// The chain builder's work grows with the square of the chain's length, and
+// the wallet decides how long the issuer's x5chain is: it is refused before
+// any certificate of it is parsed.
+describe("MdocverifierService x5chain length limit", () => {
+    it("rejects an issuer x5chain of eleven certificates with verification_error before verifying", async () => {
+        vi.restoreAllMocks();
+        const getTrustedCertificateEntries = vi.fn().mockResolvedValue([]);
+        const service = new MdocverifierService(
+            { getTrustedCertificateEntries } as any,
+            {} as any,
+            {
+                setContext: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+                debug: vi.fn(),
+            } as any,
+        );
+        vi.spyOn(DeviceResponse, "decode").mockReturnValue({
+            documents: [
+                {
+                    docType: "org.iso.18013.5.1.mDL",
+                    issuerSigned: {
+                        issuerNamespaces: {
+                            issuerNamespaces: new Map<string, unknown>(),
+                        },
+                        getPrettyClaims: vi.fn(),
+                        issuerAuth: {
+                            x5chain: new Array(11).fill(new Uint8Array([1])),
+                        },
+                    },
+                },
+            ],
+        } as any);
+        const verifyDeviceResponse = vi.spyOn(Verifier, "verifyDeviceResponse");
+
+        const result = await service.verify(
+            "AA",
+            { protocol: "iso-18013-7", sessionTranscript: {} as any },
+            {
+                trustListSource: { lotes: [] },
+                policy: { revocation: { enabled: true, failClosed: true } },
+            } as any,
+        );
+
+        expect(result).toMatchObject({
+            verified: false,
+            failureType: "verification_error",
+            failureReason:
+                "x5chain holds 11 certificates; at most 10 are accepted",
+        });
+        expect(verifyDeviceResponse).not.toHaveBeenCalled();
+        vi.restoreAllMocks();
+    });
+});
+
 describe("shortVerificationMessage", () => {
     const failureTypes: VerificationFailureType[] = [
         "signature_invalid",
