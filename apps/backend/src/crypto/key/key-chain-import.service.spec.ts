@@ -1,10 +1,20 @@
-import { webcrypto } from "node:crypto";
+import {
+    createPrivateKey,
+    generateKeyPairSync,
+    type KeyObject,
+    webcrypto,
+} from "node:crypto";
 import { BadRequestException, ConflictException } from "@nestjs/common";
 import * as x509 from "@peculiar/x509";
 import { exportJWK, exportPKCS8, generateKeyPair } from "jose";
 import { describe, expect, it, vi } from "vitest";
 import { KeyUsage } from "./entities/key-chain.entity.js";
 import { KeyChainImportService } from "./key-chain-import.service.js";
+
+const newPrivateJwk = () =>
+    generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey.export({
+        format: "jwk",
+    });
 
 describe("key replacement preparation", () => {
     it.each(["db", "vault"])(
@@ -42,7 +52,7 @@ describe("key replacement preparation", () => {
             };
             const dto = {
                 id: "key",
-                key: { kty: "EC", crv: "P-256", kid: "original-key-id" },
+                key: { ...newPrivateJwk(), kid: "original-key-id" },
                 usageType: "attestation",
             };
             await expect(service.importKeyChain("tenant", dto)).rejects.toThrow(
@@ -77,7 +87,7 @@ describe("system-owned key chains", () => {
         await expect(
             service.importKeyChain("tenant", {
                 id: "key",
-                key: { kty: "EC" },
+                key: newPrivateJwk(),
                 usageType: "encrypt",
             }),
         ).rejects.toThrow(ConflictException);
@@ -188,6 +198,36 @@ describe("algorithms the provider offers", () => {
     });
 });
 
+describe("JWK private key imports", () => {
+    const service = Object.create(
+        KeyChainImportService.prototype,
+    ) as KeyChainImportService;
+
+    it("accepts a private key whose d belongs to x and y", () => {
+        const key = newPrivateJwk();
+
+        expect((service as any).resolvePrivateKey({ key })).toEqual(key);
+    });
+
+    it("rejects an import without key or keyPem", () => {
+        expect(() => (service as any).resolvePrivateKey({})).toThrow(
+            "An import requires key or keyPem.",
+        );
+    });
+
+    it.each([
+        ["without d", { ...newPrivateJwk(), d: undefined }],
+        [
+            "whose d belongs to another key",
+            { ...newPrivateJwk(), d: newPrivateJwk().d },
+        ],
+    ])("rejects a private key %s", (_, key) => {
+        expect(() => (service as any).resolvePrivateKey({ key })).toThrow(
+            BadRequestException,
+        );
+    });
+});
+
 describe("PEM private key imports", () => {
     it("converts a PKCS#8 EC private key to JWK", async () => {
         const service = Object.create(
@@ -205,6 +245,34 @@ describe("PEM private key imports", () => {
             crv: "P-256",
         });
         expect(key.d).toBeTypeOf("string");
+    });
+
+    it("rejects a PKCS#8 key that carries another key's public key", () => {
+        const service = Object.create(
+            KeyChainImportService.prototype,
+        ) as KeyChainImportService;
+        const sec1 = (privateKey: KeyObject) =>
+            privateKey.export({ format: "der", type: "sec1" });
+        const own = sec1(
+            generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey,
+        );
+        const other = sec1(
+            generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey,
+        );
+        // The uncompressed P-256 public key (65 bytes) ends the SEC1 structure.
+        const der = Buffer.concat([
+            own.subarray(0, own.length - 65),
+            other.subarray(other.length - 65),
+        ]);
+        const keyPem = createPrivateKey({
+            key: der,
+            format: "der",
+            type: "sec1",
+        }).export({ format: "pem", type: "pkcs8" });
+
+        expect(() => (service as any).resolvePrivateKey({ keyPem })).toThrow(
+            "Invalid private key",
+        );
     });
 });
 
