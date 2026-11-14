@@ -24,7 +24,7 @@ concurrency:
 # publish images, deploy the preview site and upload default-branch coverage.
 jobs:
   config-schemas:
-    name: Check Config Schemas and Website
+    name: Check Config Schemas
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
     permissions:
@@ -51,8 +51,10 @@ jobs:
         run: |
           if [ "$SCHEMA_BASE_REVISION" = "0000000000000000000000000000000000000000" ]; then SCHEMA_BASE_REVISION=HEAD; fi
           node scripts/check-published-schemas.mjs "$SCHEMA_BASE_REVISION"
-      - name: Build website and verify published schema references
-        run: node scripts/build-website.mjs
+      - name: Verify published schema ids and references
+        run: pnpm schemas:check-ids
+      - name: Check CLI installer script
+        run: bash -n apps/cli/install.sh
 
   lint:
     permissions:
@@ -335,6 +337,7 @@ jobs:
       ALGOLIA_SEARCH_API_KEY: ${{ secrets.ALGOLIA_SEARCH_API_KEY }}
       ALGOLIA_INDEX_NAME: ${{ secrets.ALGOLIA_INDEX_NAME }}
       DOCSEARCH_AGENT_ID: ${{ secrets.DOCSEARCH_AGENT_ID }}
+      WEBSITE_DISPATCH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
 
   # Backend unit tests with coverage. Also runs on pushes to main for the
   # default-branch coverage.

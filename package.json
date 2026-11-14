@@ -25,6 +25,7 @@
     "schemas:sync": "node scripts/sync-config-format.mjs",
     "schemas:check": "node scripts/sync-config-format.mjs --check",
     "schemas:check-history": "node scripts/check-published-schemas.mjs",
+    "schemas:check-ids": "node scripts/check-schema-ids.mjs",
     "schemas:check-contract": "pnpm run gen:api && node --import tsx scripts/snapshot-config-schemas.mts --check"
   },
   "devDependencies": {

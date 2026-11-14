@@ -1,8 +1,10 @@
 name: Deploy Website & Documentation
 
-# Builds the website and the documentation of the calling commit and deploys
-# both to Cloudflare Pages. CI / Docker calls it with `preview` for every push
-# to main, Versioned Release with `production`.
+# Builds the documentation of the calling commit and deploys it to Cloudflare
+# Pages, then asks EUDIPLO/website to deploy eudiplo.dev to the same
+# environment with the schemas and CLI installer of the calling commit.
+# CI / Docker calls it with `preview` for every push to main, Versioned Release
+# with `production`.
 on:
   workflow_call:
     inputs:
@@ -22,6 +24,8 @@ on:
       ALGOLIA_INDEX_NAME:
         required: true
       DOCSEARCH_AGENT_ID:
+        required: true
+      WEBSITE_DISPATCH_TOKEN:
         required: true
 
 permissions: {}
@@ -80,19 +84,28 @@ jobs:
           DOCSEARCH_AGENT_ID: ${{ secrets.DOCSEARCH_AGENT_ID }}
         run: pnpm --filter @eudiplo/docs run build
 
-      - name: Check installer script
-        run: |
-          test -s apps/website/install.sh
-          bash -n apps/website/install.sh
-
-      - name: Deploy website
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm --filter @eudiplo/website run deploy
-
       - name: Deploy documentation
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm --filter @eudiplo/docs run pages:deploy
+
+  # eudiplo.dev is built in EUDIPLO/website, which checks out this commit for
+  # the schemas. A job of its own: the dispatch token never shares a runner
+  # with pnpm install or the documentation build.
+  deploy-website:
+    name: Deploy website to ${{ inputs.environment }}
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Deploy website
+        env:
+          GH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
+          EVENT_TYPE: eudiplo-${{ inputs.environment }}
+          EUDIPLO_REF: ${{ github.sha }}
+        run: |
+          test -n "$GH_TOKEN" || { echo "WEBSITE_DISPATCH_TOKEN is not configured"; exit 1; }
+          gh api --method POST repos/EUDIPLO/website/dispatches \
+            -f event_type="$EVENT_TYPE" \
+            -f "client_payload[ref]=$EUDIPLO_REF"

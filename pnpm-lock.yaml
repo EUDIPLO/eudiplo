@@ -714,8 +714,6 @@ importers:
         specifier: ^4.154.0
         version: 4.156.2(@types/node@26.6.6)
 
-  apps/website: {}
-
   packages/eudiplo-config-format:
     dependencies:
       ajv:

@@ -11,8 +11,8 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
  * that shows it writes the name next to it.
  *
  * The same path data is in public/logo.svg, apps/docs/static/img/logo.svg,
- * apps/docs/static/img/brand/*.svg, apps/website/logo.svg and the #diplo
- * symbol in apps/website/index.html; change the shape in all of them.
+ * apps/docs/static/img/brand/*.svg, and in logo.svg and the #diplo symbol in
+ * index.html of EUDIPLO/website; change the shape in all of them.
  */
 @Component({
   selector: 'app-diplo-logo',
