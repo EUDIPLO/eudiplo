@@ -86,4 +86,4 @@ After deployment, access the services at:
 
 - **Documentation:** [https://docs.eudiplo.dev/](https://docs.eudiplo.dev/)
 - **Issues:** [GitHub Issues](https://github.com/EUDIPLO/eudiplo/issues)
-- **Community:** [Discord](https://discord.gg/58ys8XfXDu)
+- **Community:** [Discord](https://discord.gg/5Q4bgBQABa)

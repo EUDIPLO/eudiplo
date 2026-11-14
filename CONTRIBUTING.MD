@@ -132,6 +132,6 @@ We follow a [Code of Conduct](CODE_OF_CONDUCT.md). Please be kind and constructi
 
 ## Need help?
 
-Open a discussion or issue on [GitHub](https://github.com/EUDIPLO/eudiplo/issues), join the [Discord](https://discord.gg/58ys8XfXDu), or contact the [maintainers](MAINTAINERS.md).
+Open a discussion or issue on [GitHub](https://github.com/EUDIPLO/eudiplo/issues), join the [Discord](https://discord.gg/5Q4bgBQABa), or contact the [maintainers](MAINTAINERS.md).
 
 Thanks for helping improve EUDIPLO!

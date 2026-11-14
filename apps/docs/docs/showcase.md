@@ -18,5 +18,5 @@ Projects and platforms that run EUDIPLO.
 
 ## Community
 
-- [Discord](https://discord.gg/58ys8XfXDu)
+- [Discord](https://discord.gg/5Q4bgBQABa)
 - [GitHub issues](https://github.com/EUDIPLO/eudiplo/issues) for bugs and feature requests
