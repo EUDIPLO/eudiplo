@@ -25,7 +25,7 @@ on:
         required: true
       DOCSEARCH_AGENT_ID:
         required: true
-      WEBSITE_DISPATCH_TOKEN:
+      WEBSITE_APP_PRIVATE_KEY:
         required: true
 
 permissions: {}
@@ -98,14 +98,29 @@ jobs:
     needs: deploy
     runs-on: ubuntu-latest
     permissions: {}
+    # WEBSITE_APP_PRIVATE_KEY is a secret of this environment, which only main
+    # may deploy to, so runs of other branches cannot read the key.
+    environment: website-deploy
     steps:
+      # Short-lived token of the org-owned GitHub App "eudiplo-website-deploy",
+      # installed on EUDIPLO/website only, limited to contents:write (needed
+      # for repository dispatch events).
+      - name: Create website token
+        id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: Iv23liw543awIYomOJRs
+          private-key: ${{ secrets.WEBSITE_APP_PRIVATE_KEY }}
+          owner: EUDIPLO
+          repositories: website
+          permission-contents: write
+
       - name: Deploy website
         env:
-          GH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
           EVENT_TYPE: eudiplo-${{ inputs.environment }}
           EUDIPLO_REF: ${{ github.sha }}
         run: |
-          test -n "$GH_TOKEN" || { echo "WEBSITE_DISPATCH_TOKEN is not configured"; exit 1; }
           gh api --method POST repos/EUDIPLO/website/dispatches \
             -f event_type="$EVENT_TYPE" \
             -f "client_payload[ref]=$EUDIPLO_REF"

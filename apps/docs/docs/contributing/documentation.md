@@ -85,7 +85,7 @@ The build is configured with `onBrokenLinks: 'throw'` and `onBrokenAnchors: 'thr
 
 ## Deployment and versions
 
-Both workflows deploy the documentation with `.github/workflows/deploy-site.yml` and then ask [EUDIPLO/website](https://github.com/EUDIPLO/website) to deploy eudiplo.dev to the same environment, built with the schemas of the same commit (production takes the CLI installer from the latest release). The dispatch needs the repository secret `WEBSITE_DISPATCH_TOKEN`; the [EUDIPLO/website README](https://github.com/EUDIPLO/website#deployment) describes its scope.
+Both workflows deploy the documentation with `.github/workflows/deploy-site.yml` and then ask [EUDIPLO/website](https://github.com/EUDIPLO/website) to deploy eudiplo.dev to the same environment, built with the schemas of the same commit (production takes the CLI installer from the latest release). The dispatch uses a short-lived token of the org-owned GitHub App `eudiplo-website-deploy` (installed on EUDIPLO/website only, *Contents: write*), whose private key is the secret `WEBSITE_APP_PRIVATE_KEY` of the GitHub environment `website-deploy`; only `main` may deploy to that environment.
 
 | Trigger | Built from | Deployed to |
 | --- | --- | --- |

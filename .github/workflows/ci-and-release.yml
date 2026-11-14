@@ -337,7 +337,7 @@ jobs:
       ALGOLIA_SEARCH_API_KEY: ${{ secrets.ALGOLIA_SEARCH_API_KEY }}
       ALGOLIA_INDEX_NAME: ${{ secrets.ALGOLIA_INDEX_NAME }}
       DOCSEARCH_AGENT_ID: ${{ secrets.DOCSEARCH_AGENT_ID }}
-      WEBSITE_DISPATCH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
+      WEBSITE_APP_PRIVATE_KEY: ${{ secrets.WEBSITE_APP_PRIVATE_KEY }}
 
   # Backend unit tests with coverage. Also runs on pushes to main for the
   # default-branch coverage.
