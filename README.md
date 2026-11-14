@@ -9,7 +9,7 @@
 [![Docs](https://img.shields.io/badge/docs-eudiplo-blue)](https://docs.eudiplo.dev)
 [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=EUDIPLO_eudiplo&metric=security_rating)](https://sonarcloud.io/project/overview?id=EUDIPLO_eudiplo)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=EUDIPLO_eudiplo&metric=alert_status)](https://sonarcloud.io/project/overview?id=EUDIPLO_eudiplo)
-[![Join our Discord](https://img.shields.io/discord/1022962884864643214?label=Join%20our%20Discord&logo=discord&color=7289DA&labelColor=2C2F33)](https://discord.gg/58ys8XfXDu)
+[![Join our Discord](https://img.shields.io/discord/905194001349627914?label=Join%20our%20Discord&logo=discord&color=7289DA&labelColor=2C2F33)](https://discord.gg/5Q4bgBQABa)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/EUDIPLO/eudiplo/badge)](https://scorecard.dev/viewer/?uri=github.com/EUDIPLO/eudiplo)
 
 # Your Diplomatic Layer for EUDI Wallet Integration
@@ -183,7 +183,7 @@ in advancing the EUDI Wallet ecosystem.
 See [CONTRIBUTING.md](CONTRIBUTING.MD) for guidelines.
 
 💬 **Have questions?** Join our
-[Discord community](https://discord.gg/58ys8XfXDu) to ask questions, get help,
+[Discord community](https://discord.gg/5Q4bgBQABa) to ask questions, get help,
 and connect with other developers.
 
 ---

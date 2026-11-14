@@ -267,7 +267,7 @@ const config: Config = {
           position: 'right',
         },
         {
-          href: 'https://discord.gg/58ys8XfXDu',
+          href: 'https://discord.gg/5Q4bgBQABa',
           label: 'Discord',
           position: 'right',
         },
@@ -296,7 +296,7 @@ const config: Config = {
           items: [
             {
               label: 'Discord',
-              href: 'https://discord.gg/58ys8XfXDu',
+              href: 'https://discord.gg/5Q4bgBQABa',
             },
             {
               label: 'GitHub Issues',

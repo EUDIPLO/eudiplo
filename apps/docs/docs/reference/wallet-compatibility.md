@@ -93,4 +93,4 @@ Protocol conformance is tested automatically; wallet-specific behavior still nee
 
 - **Wallet works:** open an issue with the [wallet compatibility template](https://github.com/EUDIPLO/eudiplo/issues/new?template=wallet-compatibility.md) and include the results from step 5, so the wallet can be added to this page.
 - **Wallet fails:** check the notes above, then open an [issue](https://github.com/EUDIPLO/eudiplo/issues/new) with reproduction steps, EUDIPLO and wallet versions, and the [session logs](../operate/logging.md).
-- **Questions:** ask in the [Discord community](https://discord.gg/58ys8XfXDu).
+- **Questions:** ask in the [Discord community](https://discord.gg/5Q4bgBQABa).
