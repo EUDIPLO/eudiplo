@@ -52,7 +52,7 @@ git ls-tree -r --name-only origin/main schemas/v<N>/ | grep <Kind>
    pnpm schemas:check-contract
    pnpm schemas:check
    pnpm schemas:check-history origin/main
-   pnpm --filter @eudiplo/website build
+   pnpm schemas:check-ids
    ```
 
 8. If the DTO also appears in OpenAPI, regenerate the SDK (skill `regen-sdk`). A field already documented on the entity class can leave the SDK unchanged.

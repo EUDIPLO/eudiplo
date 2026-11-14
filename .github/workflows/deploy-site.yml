@@ -1,8 +1,10 @@
 name: Deploy Website & Documentation
 
-# Builds the website and the documentation of the calling commit and deploys
-# both to Cloudflare Pages. CI / Docker calls it with `preview` for every push
-# to main, Versioned Release with `production`.
+# Builds the documentation of the calling commit and deploys it to Cloudflare
+# Pages, then asks EUDIPLO/website to deploy eudiplo.dev to the same
+# environment with the schemas and CLI installer of the calling commit.
+# CI / Docker calls it with `preview` for every push to main, Versioned Release
+# with `production`.
 on:
   workflow_call:
     inputs:
@@ -22,6 +24,8 @@ on:
       ALGOLIA_INDEX_NAME:
         required: true
       DOCSEARCH_AGENT_ID:
+        required: true
+      WEBSITE_APP_PRIVATE_KEY:
         required: true
 
 permissions: {}
@@ -80,19 +84,43 @@ jobs:
           DOCSEARCH_AGENT_ID: ${{ secrets.DOCSEARCH_AGENT_ID }}
         run: pnpm --filter @eudiplo/docs run build
 
-      - name: Check installer script
-        run: |
-          test -s apps/website/install.sh
-          bash -n apps/website/install.sh
-
-      - name: Deploy website
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm --filter @eudiplo/website run deploy
-
       - name: Deploy documentation
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm --filter @eudiplo/docs run pages:deploy
+
+  # eudiplo.dev is built in EUDIPLO/website, which checks out this commit for
+  # the schemas. A job of its own: the dispatch token never shares a runner
+  # with pnpm install or the documentation build.
+  deploy-website:
+    name: Deploy website to ${{ inputs.environment }}
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions: {}
+    # WEBSITE_APP_PRIVATE_KEY is a secret of this environment, which only main
+    # may deploy to, so runs of other branches cannot read the key.
+    environment: website-deploy
+    steps:
+      # Short-lived token of the org-owned GitHub App "eudiplo-website-deploy",
+      # installed on EUDIPLO/website only, limited to contents:write (needed
+      # for repository dispatch events).
+      - name: Create website token
+        id: token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: Iv23liw543awIYomOJRs
+          private-key: ${{ secrets.WEBSITE_APP_PRIVATE_KEY }}
+          owner: EUDIPLO
+          repositories: website
+          permission-contents: write
+
+      - name: Deploy website
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          EVENT_TYPE: eudiplo-${{ inputs.environment }}
+          EUDIPLO_REF: ${{ github.sha }}
+        run: |
+          gh api --method POST repos/EUDIPLO/website/dispatches \
+            -f event_type="$EVENT_TYPE" \
+            -f "client_payload[ref]=$EUDIPLO_REF"

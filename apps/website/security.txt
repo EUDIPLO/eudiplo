@@ -1,6 +1,0 @@
-Contact: https://github.com/EUDIPLO/eudiplo/security/advisories/new
-Contact: mailto:security@lists.lfdecentralizedtrust.org
-Policy: https://github.com/EUDIPLO/eudiplo/security/policy
-Preferred-Languages: en
-Canonical: https://eudiplo.dev/.well-known/security.txt
-Canonical: https://docs.eudiplo.dev/.well-known/security.txt

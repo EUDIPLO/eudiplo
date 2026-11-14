@@ -130,11 +130,10 @@ The repository ships a VS Code dev container (`.devcontainer/`) with Node.js, pn
 ├── apps/
 │   ├── backend/        # @eudiplo/backend: NestJS API and protocol implementation
 │   ├── client/         # @eudiplo/client: Angular web client
-│   ├── cli/            # @eudiplo/cli: the eudiplo command-line tool
+│   ├── cli/            # @eudiplo/cli: the eudiplo command-line tool and its installer (eudiplo.dev/install.sh)
 │   ├── docs/           # @eudiplo/docs: this documentation site (Docusaurus)
 │   ├── webhook/        # test-rp: example webhooks and attribute provider (Cloudflare Worker)
-│   ├── kms-reference/  # kms-reference: reference service for the HTTP KMS adapter
-│   └── website/        # @eudiplo/website: eudiplo.dev, CLI installer and published config schemas
+│   └── kms-reference/  # kms-reference: reference service for the HTTP KMS adapter
 ├── packages/
 │   ├── eudiplo-config-format/  # @eudiplo/config-format: config envelope, format versions, migrations
 │   └── eudiplo-sdk-core/       # @eudiplo/sdk-core: generated API client and helpers (published to npm)
@@ -144,6 +143,8 @@ The repository ships a VS Code dev container (`.devcontainer/`) with Node.js, pn
 ├── monitor/            # Prometheus, Grafana, Loki and Tempo stack
 └── scripts/            # schema generation, release and CI helpers
 ```
+
+The landing page at eudiplo.dev lives in its own repository, [EUDIPLO/website](https://github.com/EUDIPLO/website). It publishes `schemas/v*/` and `apps/cli/install.sh` from this repository.
 
 Add a dependency to the package that uses it (`pnpm --filter @eudiplo/backend add <name>`). The root `package.json` only holds tooling shared by several packages.
 

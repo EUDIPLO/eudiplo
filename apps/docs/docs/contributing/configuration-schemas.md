@@ -69,7 +69,7 @@ Bump the version whenever the accepted content of a resource changes, including 
     pnpm schemas:check-contract        # current DTOs match the committed schemas and snapshots
     pnpm schemas:check                 # bundled snapshots are in sync
     pnpm schemas:check-history origin/main   # no snapshot of a release was changed
-    pnpm --filter @eudiplo/website build
+    pnpm schemas:check-ids             # every snapshot has its eudiplo.dev $id and resolvable references
     ```
 
 8. Commit schema, snapshot, generated files, tests and documentation together, and describe the change in the [upgrade guide](../upgrade/index.md) of the next major: files exported by the new release cannot be imported into older ones. A migration step that rewrites the `spec` or `metadata` of a `KeyChain` document, or of a `Client` document with `"secret": "!generate"`, makes such a document differ from the one last applied, so the next `upsert` or `replace` import applies it once more: CA keys get a new signing key, `regenerate` creates new key material and the client gets a new secret, which a startup import does not show. Say so in that guide too. A step that returns `spec` and `metadata` unchanged keeps them as they are.
@@ -82,6 +82,6 @@ Files under `schemas/v*/` are publication artifacts once a release ships them. N
 
 ## Publishing
 
-The `eudiplo-website` Cloudflare Pages project serves the schemas next to the website at `eudiplo.dev/schemas/…`. `pnpm --filter @eudiplo/website build` stages the website and every `schemas/v*/` snapshot in `apps/website/dist`, verifies the schema ids and references, and writes `/schemas/index.json`. `_headers` allows cross-origin reads and sets the JSON Schema content type; `404.html` keeps unknown versions from falling back to the home page.
+eudiplo.dev serves the schemas at `eudiplo.dev/schemas/…`. The site is built in its own repository, [EUDIPLO/website](https://github.com/EUDIPLO/website): its build checks out this repository, copies every `schemas/v*/` snapshot, verifies the schema ids and references (the same checks as `pnpm schemas:check-ids`) and writes `/schemas/index.json`. Its `_headers` allows cross-origin reads and sets the JSON Schema content type; its `404.html` keeps unknown versions from falling back to the home page.
 
-Pushes to `main` deploy the website to the `preview` branch; the release workflow deploys it to production. New schema URLs therefore go live with the release that introduces them, not with the merge.
+Pushes to `main` here deploy the website preview with the schemas of that commit. A release here, or *Versioned Release* with `deploy_site_only`, deploys production with the schemas of the deployed commit. The website repository also deploys production on its own pushes and once a month, built from the head of `main` here. A version added on `main` can therefore go live before the release that introduces it; until that release ships it, the snapshot may still change (see [Immutable snapshots](#immutable-snapshots)). The website only builds from commits on `main`, and production always takes the CLI installer (`apps/cli/install.sh`) from the latest release.
