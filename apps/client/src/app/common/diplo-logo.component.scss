@@ -8,11 +8,43 @@ svg {
   height: 100%;
 }
 
-// Primary and tertiary container give the brand colours in light and dark mode.
-.body {
-  fill: var(--mat-sys-primary);
+.head {
+  transform-origin: 86px 150px;
+  transition: transform 240ms ease-out;
 }
 
-.fold {
-  fill: var(--mat-sys-tertiary-container);
+.eye {
+  transform-origin: 82.2px 44px;
+  transition: transform 140ms ease-in-out;
+}
+
+.lid {
+  opacity: 0;
+  transition: opacity 100ms;
+}
+
+:host(.eyes-closed) {
+  .head {
+    transform: rotate(-4deg);
+  }
+
+  .eye {
+    transform: scaleY(0);
+  }
+
+  .lid {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .head,
+  .eye,
+  .lid {
+    transition: none;
+  }
+
+  :host(.eyes-closed) .head {
+    transform: none;
+  }
 }

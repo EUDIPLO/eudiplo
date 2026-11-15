@@ -36,25 +36,10 @@ $brand-navy: #070f24; // eudiplo.dev background
 
 .brand-header {
   display: grid;
-  grid-template-columns: 84px 1fr;
+  grid-template-columns: 72px 1fr;
   gap: 18px;
   align-items: center;
   padding-bottom: 18px;
-}
-
-.brand-mark {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 84px;
-  height: 84px;
-  border-radius: 22px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--mat-sys-primary) 8%, transparent),
-    color-mix(in srgb, var(--mat-sys-primary) 4%, transparent)
-  );
-  border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 18%, transparent);
 }
 
 .brand-copy {
@@ -90,8 +75,8 @@ $brand-navy: #070f24; // eudiplo.dev background
 }
 
 .logo {
-  width: 56px;
-  height: 35px; // 640:404, the logo's aspect ratio
+  width: 72px;
+  height: 72px;
 }
 
 .dev-indicator {
@@ -225,19 +210,13 @@ $brand-navy: #070f24; // eudiplo.dev background
   }
 
   .brand-header {
-    grid-template-columns: 64px 1fr;
+    grid-template-columns: 56px 1fr;
     gap: 14px;
   }
 
-  .brand-mark {
-    width: 64px;
-    height: 64px;
-    border-radius: 18px;
-  }
-
   .logo {
-    width: 44px;
-    height: 28px;
+    width: 56px;
+    height: 56px;
   }
 
   .brand-title {
