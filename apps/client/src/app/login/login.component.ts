@@ -207,6 +207,8 @@ export class LoginComponent implements OnInit, OnDestroy {
   private discoveredIssuer?: string;
   private discoveredUiClientId?: string;
   private discoveredProvider?: OidcProvider;
+  /** While the Client Secret field has focus, Diplo looks away. */
+  readonly secretFocused = signal(false);
   /** The kept session this page waits for instead of showing the form. */
   readonly keptSession = signal<PreviousSession | null>(null);
   /**
@@ -519,6 +521,8 @@ export class LoginComponent implements OnInit, OnDestroy {
       this.detectedMode === null;
 
     this.setClientCredentialValidators(requiresClientCredentials);
+    // The SSO tab detaches the Client Secret field; Firefox and Safari fire no focusout for it.
+    if (this.selectedLoginMode === 'sso') this.secretFocused.set(false);
   }
 
   /** Checks whether the instance at `apiUrl` offers SSO and opens the tab to sign in with. */

@@ -248,9 +248,8 @@ const config: Config = {
       title: 'EUDIPLO',
       logo: {
         alt: 'EUDIPLO Logo',
-        // Docusaurus switches between these with its own theme toggle.
+        // The badge brings its own background, so one file serves both themes.
         src: 'img/brand/diplo.svg',
-        srcDark: 'img/brand/diplo-dark.svg',
         href: 'https://eudiplo.dev',
         target: '_self',
       },

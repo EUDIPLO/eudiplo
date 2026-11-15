@@ -249,6 +249,66 @@ describe('LoginComponent with a kept session', () => {
     await vi.waitFor(() => expect(document.activeElement).toBe(input('clientSecret')));
   });
 
+  it('lets Diplo look away while the Client Secret field has focus', async () => {
+    api.kept = false;
+    api.ended = { clientId: 'client-a', baseUrl: 'http://backend.test', reason: 'expired' };
+    render();
+    const logo = () => (fixture.nativeElement as HTMLElement).querySelector('app-diplo-logo');
+
+    await vi.waitFor(() => expect(document.activeElement).toBe(input('clientSecret')));
+    fixture.detectChanges();
+    expect(logo()?.classList.contains('eyes-closed')).toBe(true);
+
+    // The show/hide toggle sits in the same field: Diplo keeps looking away.
+    input('clientSecret')
+      ?.closest('mat-form-field')
+      ?.querySelector<HTMLButtonElement>('button[matSuffix]')
+      ?.focus();
+    fixture.detectChanges();
+    expect(document.activeElement?.tagName).toBe('BUTTON');
+    expect(logo()?.classList.contains('eyes-closed')).toBe(true);
+
+    input('clientId')?.focus();
+    fixture.detectChanges();
+    expect(logo()?.classList.contains('eyes-closed')).toBe(false);
+  });
+
+  it('lets Diplo look back when the SSO tab replaces a focused Client Secret field', async () => {
+    api.kept = false;
+    api.discovery = { issuer: 'http://backend.test', ui_client_id: 'ui' };
+    api.ended = { clientId: 'client-a', baseUrl: 'http://backend.test', reason: 'expired' };
+    render();
+    const component = fixture.componentInstance;
+    await vi.waitFor(() => expect(component.secretFocused()).toBe(true));
+
+    component.onLoginTabChange(0);
+    fixture.detectChanges();
+
+    expect(component.secretFocused()).toBe(false);
+    expect(
+      (fixture.nativeElement as HTMLElement)
+        .querySelector('app-diplo-logo')
+        ?.classList.contains('eyes-closed')
+    ).toBe(false);
+  });
+
+  it('keeps focus on the Client Secret field when the show/hide toggle is clicked', async () => {
+    api.kept = false;
+    api.ended = { clientId: 'client-a', baseUrl: 'http://backend.test', reason: 'expired' };
+    render();
+    await vi.waitFor(() => expect(input('clientSecret')).not.toBeNull());
+    const toggle = input('clientSecret')
+      ?.closest('mat-form-field')
+      ?.querySelector<HTMLButtonElement>('button[matSuffix]');
+    expect(toggle).toBeTruthy();
+
+    // Safari does not focus a clicked button; focus would leave the field and Diplo would look back.
+    const press = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    toggle?.dispatchEvent(press);
+
+    expect(press.defaultPrevented).toBe(true);
+  });
+
   it('keeps the SSO tab the user chose after an expiry when the instance is detected again', async () => {
     api.kept = false;
     api.discovery = { issuer: 'http://backend.test', ui_client_id: 'ui' };
