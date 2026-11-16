@@ -25,7 +25,8 @@ export function trustListAuthorities(
 /**
  * Trust options for verifying a presented credential: the resolved trust
  * lists, OpenID Federation trust anchors, revocation policy and clock skew.
- * Issuers must be listed as PID, Pub-EAA or EAA issuance services.
+ * Issuers must be listed as PID, Pub-EAA or EAA issuance services of a LoTE,
+ * or as granted qualified QEAA services of an ETSI TS 119 612 Trusted List.
  *
  * Which `trusted_authorities` entry decides:
  * - an `etsi_tl` trust list: the issuer must be listed in it. An

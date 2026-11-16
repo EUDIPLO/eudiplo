@@ -6,11 +6,11 @@ import {
     importX509,
     jwtVerify,
 } from "jose";
-import { TrustFetchService } from "./trust-fetch.service.js";
+import {
+    TRUST_LIST_MAX_BYTES,
+    TrustFetchService,
+} from "./trust-fetch.service.js";
 import type { TrustListRef } from "./types.js";
-
-/** Upper bound for a trust list JWT. */
-const TRUST_LIST_MAX_BYTES = 10 * 1024 * 1024;
 
 @Injectable()
 export class TrustListJwtService {

@@ -2553,11 +2553,15 @@ export type CredentialConfigUpdate = {
 
 export type TrustListRef = {
     /**
-     * Managed local trust-list identifier. When provided, verifier material is resolved server-side from the trust list key chain.
+     * Format of the list. `lote` (default): a List of Trusted Entities (ETSI TS 119 602) as JWT, referenced by `trustListId` or by `url` with `verifierKey` or `verifierX509Der`. `trusted-list`: an ETSI TS 119 612 Trusted List or list of trusted lists as XML, referenced by `url` with `signingCertificates`; its granted qualified services for the issuance of QEAAs are trusted.
+     */
+    format?: 'lote' | 'trusted-list';
+    /**
+     * Managed local trust-list identifier. When provided, verifier material is resolved server-side from the trust list key chain. Only for `lote`.
      */
     trustListId?: string;
     /**
-     * Trust-list JWT URL. Required for external trust lists when trustListId is not set.
+     * Trust-list URL: of the LoTE JWT, required for external lists when trustListId is not set, or of the ETSI TS 119 612 Trusted List or list of trusted lists for `trusted-list`.
      */
     url?: string;
     /**
@@ -2570,6 +2574,14 @@ export type TrustListRef = {
      * Base64 DER-encoded X.509 certificate used to verify trust-list JWT signatures for external trusted authority values.
      */
     verifierX509Der?: string;
+    /**
+     * Only for `trusted-list`, required there: base64 DER certificates one of which must have signed the list. For a list of trusted lists, the signing certificates its operator publishes; the national lists it points to are verified with the certificates it names for them. For a national list, its scheme operator certificates.
+     */
+    signingCertificates?: Array<string>;
+    /**
+     * Only for `trusted-list` naming a list of trusted lists: the SchemeTerritory values of the national lists to follow, such as `DE`. All when absent. With more than 64 lists to follow, none of the lists of the `etsi_tl` entry is used.
+     */
+    schemeTerritories?: Array<string>;
 };
 
 export type TrustedAuthorityQueryEtsiTl = {
@@ -3225,9 +3237,13 @@ export type PresentationConfigCreateDto = {
                  */
                 type: 'etsi_tl';
                 /**
-                 * Trust list references for ETSI TL verification.
+                 * Reference to a trust list used for authority verification.
                  */
                 values: Array<{
+                    /**
+                     * Format of the list: a List of Trusted Entities (ETSI TS 119 602) as JWT. Default.
+                     */
+                    format?: 'lote';
                     /**
                      * Optional trust list id reference.
                      */
@@ -3246,6 +3262,23 @@ export type PresentationConfigCreateDto = {
                      * Optional verifier certificate in DER/base64 form.
                      */
                     verifierX509Der?: string;
+                } | {
+                    /**
+                     * Format of the list: an ETSI TS 119 612 Trusted List or list of trusted lists as XML.
+                     */
+                    format: 'trusted-list';
+                    /**
+                     * URL of the Trusted List, or of a list of trusted lists (LOTL) whose national lists are followed.
+                     */
+                    url: string | string;
+                    /**
+                     * Base64 DER certificates one of which must have signed the list: for a list of trusted lists, the signing certificates its operator publishes; for a national list, its scheme operator certificates.
+                     */
+                    signingCertificates: Array<string>;
+                    /**
+                     * For a list of trusted lists: the SchemeTerritory values of the national lists to follow, such as DE. All when absent.
+                     */
+                    schemeTerritories?: Array<string>;
                 }>;
             } | {
                 /**
@@ -3306,9 +3339,13 @@ export type PresentationConfigCreateDto = {
                  */
                 type: 'etsi_tl';
                 /**
-                 * Trust list references for ETSI TL verification.
+                 * Reference to a trust list used for authority verification.
                  */
                 values: Array<{
+                    /**
+                     * Format of the list: a List of Trusted Entities (ETSI TS 119 602) as JWT. Default.
+                     */
+                    format?: 'lote';
                     /**
                      * Optional trust list id reference.
                      */
@@ -3327,6 +3364,23 @@ export type PresentationConfigCreateDto = {
                      * Optional verifier certificate in DER/base64 form.
                      */
                     verifierX509Der?: string;
+                } | {
+                    /**
+                     * Format of the list: an ETSI TS 119 612 Trusted List or list of trusted lists as XML.
+                     */
+                    format: 'trusted-list';
+                    /**
+                     * URL of the Trusted List, or of a list of trusted lists (LOTL) whose national lists are followed.
+                     */
+                    url: string | string;
+                    /**
+                     * Base64 DER certificates one of which must have signed the list: for a list of trusted lists, the signing certificates its operator publishes; for a national list, its scheme operator certificates.
+                     */
+                    signingCertificates: Array<string>;
+                    /**
+                     * For a list of trusted lists: the SchemeTerritory values of the national lists to follow, such as DE. All when absent.
+                     */
+                    schemeTerritories?: Array<string>;
                 }>;
             } | {
                 /**
@@ -3538,9 +3592,13 @@ export type PresentationConfigUpdateDto = {
                  */
                 type: 'etsi_tl';
                 /**
-                 * Trust list references for ETSI TL verification.
+                 * Reference to a trust list used for authority verification.
                  */
                 values: Array<{
+                    /**
+                     * Format of the list: a List of Trusted Entities (ETSI TS 119 602) as JWT. Default.
+                     */
+                    format?: 'lote';
                     /**
                      * Optional trust list id reference.
                      */
@@ -3559,6 +3617,23 @@ export type PresentationConfigUpdateDto = {
                      * Optional verifier certificate in DER/base64 form.
                      */
                     verifierX509Der?: string;
+                } | {
+                    /**
+                     * Format of the list: an ETSI TS 119 612 Trusted List or list of trusted lists as XML.
+                     */
+                    format: 'trusted-list';
+                    /**
+                     * URL of the Trusted List, or of a list of trusted lists (LOTL) whose national lists are followed.
+                     */
+                    url: string | string;
+                    /**
+                     * Base64 DER certificates one of which must have signed the list: for a list of trusted lists, the signing certificates its operator publishes; for a national list, its scheme operator certificates.
+                     */
+                    signingCertificates: Array<string>;
+                    /**
+                     * For a list of trusted lists: the SchemeTerritory values of the national lists to follow, such as DE. All when absent.
+                     */
+                    schemeTerritories?: Array<string>;
                 }>;
             } | {
                 /**
@@ -3619,9 +3694,13 @@ export type PresentationConfigUpdateDto = {
                  */
                 type: 'etsi_tl';
                 /**
-                 * Trust list references for ETSI TL verification.
+                 * Reference to a trust list used for authority verification.
                  */
                 values: Array<{
+                    /**
+                     * Format of the list: a List of Trusted Entities (ETSI TS 119 602) as JWT. Default.
+                     */
+                    format?: 'lote';
                     /**
                      * Optional trust list id reference.
                      */
@@ -3640,6 +3719,23 @@ export type PresentationConfigUpdateDto = {
                      * Optional verifier certificate in DER/base64 form.
                      */
                     verifierX509Der?: string;
+                } | {
+                    /**
+                     * Format of the list: an ETSI TS 119 612 Trusted List or list of trusted lists as XML.
+                     */
+                    format: 'trusted-list';
+                    /**
+                     * URL of the Trusted List, or of a list of trusted lists (LOTL) whose national lists are followed.
+                     */
+                    url: string | string;
+                    /**
+                     * Base64 DER certificates one of which must have signed the list: for a list of trusted lists, the signing certificates its operator publishes; for a national list, its scheme operator certificates.
+                     */
+                    signingCertificates: Array<string>;
+                    /**
+                     * For a list of trusted lists: the SchemeTerritory values of the national lists to follow, such as DE. All when absent.
+                     */
+                    schemeTerritories?: Array<string>;
                 }>;
             } | {
                 /**
