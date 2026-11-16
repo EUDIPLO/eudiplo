@@ -9,7 +9,7 @@ const federation = {
 };
 
 describe("verifierTrustOptions", () => {
-    it("accepts PID, Pub-EAA and EAA issuance services as credential issuers", () => {
+    it("accepts PID, Pub-EAA, EAA and qualified QEAA issuance services as credential issuers", () => {
         const options = verifierTrustOptions({
             trustLists: [trustList],
             authorities: undefined,
@@ -20,6 +20,7 @@ describe("verifierTrustOptions", () => {
             ServiceTypeIdentifiers.PIDIssuance,
             ServiceTypeIdentifiers.PubEaaIssuance,
             ServiceTypeIdentifiers.EaaIssuance,
+            ServiceTypeIdentifiers.QeaaIssuance,
         ]);
     });
 

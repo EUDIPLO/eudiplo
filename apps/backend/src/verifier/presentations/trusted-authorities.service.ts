@@ -10,6 +10,7 @@ import {
     TooManyTrustListCertificatesError,
 } from "../../trust/domain/trust-list-certificate-limit.js";
 import { OutdatedTrustListsError } from "../../trust/domain/trust-list-freshness.js";
+import { TooManyTrustedListsError } from "../../trust/domain/trusted-list-services.js";
 import { TrustStoreService } from "../../trust/trust-store.service.js";
 import type { TrustedEntity } from "../../trust/types.js";
 import {
@@ -168,7 +169,8 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
      * (`MAX_TRUST_LIST_CERTIFICATES`), verification refuses every credential
      * of the query, also when one list alone holds more: only the URLs of
      * all lists are sent, and the lists after the one that goes over the
-     * limit are not loaded.
+     * limit are not loaded. The same holds when a list of trusted lists
+     * points to more than `MAX_FOLLOWED_TRUSTED_LISTS` lists to follow.
      */
     private async toWalletAuthorities(
         refs: TrustListRef[],
@@ -190,12 +192,19 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
                 );
                 lists.push({ ref, ...keyIds });
             } catch (err: unknown) {
-                if (!(err instanceof TooManyTrustListCertificatesError)) {
+                if (
+                    !(
+                        err instanceof TooManyTrustListCertificatesError ||
+                        err instanceof TooManyTrustedListsError
+                    )
+                ) {
                     throw err;
                 }
                 this.logger.warn(
                     { tenantId, err },
-                    "The trust lists of an etsi_tl entry hold too many certificates together for verification; sending only their URLs",
+                    err instanceof TooManyTrustedListsError
+                        ? "A list of trusted lists of an etsi_tl entry points to too many lists for verification; sending only the URLs of the entry"
+                        : "The trust lists of an etsi_tl entry hold too many certificates together for verification; sending only their URLs",
                 );
                 const urls = refs
                     .map((each) => trustListUrl(each, tenantHost))
@@ -237,6 +246,9 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
      * @throws TooManyTrustListCertificatesError when the list alone holds
      * more certificates than verification accepts, which concerns its whole
      * `etsi_tl` entry
+     * @throws TooManyTrustedListsError when it is a list of trusted lists
+     * that points to more lists than verification follows, which concerns
+     * its whole `etsi_tl` entry too
      */
     private async authorityKeyIdentifiers(
         ref: TrustListRef,
@@ -252,7 +264,11 @@ export class TrustedAuthoritiesService implements TrustListRefResolver {
                 entities,
             };
         } catch (err: unknown) {
-            if (err instanceof TooManyTrustListCertificatesError) throw err;
+            if (
+                err instanceof TooManyTrustListCertificatesError ||
+                err instanceof TooManyTrustedListsError
+            )
+                throw err;
             const outdated = err instanceof OutdatedTrustListsError;
             this.logger.warn(
                 { tenantId, trustListId: ref.trustListId, url: ref.url, err },

@@ -6,7 +6,14 @@ import {
     MAX_TRUST_LIST_CERTIFICATES,
     TooManyTrustListCertificatesError,
 } from "./domain/trust-list-certificate-limit.js";
-import { OutdatedTrustListsError } from "./domain/trust-list-freshness.js";
+import {
+    OutdatedTrustListsError,
+    UnavailableTrustedListsError,
+} from "./domain/trust-list-freshness.js";
+import {
+    MAX_FOLLOWED_TRUSTED_LISTS,
+    TooManyTrustedListsError,
+} from "./domain/trusted-list-services.js";
 import { TrustStoreService } from "./trust-store.service.js";
 
 const CURRENT = {
@@ -24,6 +31,7 @@ describe("TrustStoreService cache isolation", () => {
             {
                 cache: new Map(),
                 refused: new Map(),
+                building: new Map(),
                 logger: { debug: vi.fn() },
                 settings: { publicUrl: "https://public.example" },
                 collectTrustedEntities: new CollectTrustedEntities(
@@ -84,6 +92,7 @@ describe("TrustStoreService cache isolation", () => {
             Object.assign(Object.create(TrustStoreService.prototype), {
                 cache: new Map(),
                 refused: new Map(),
+                building: new Map(),
                 logger: { debug: vi.fn() },
                 settings,
                 collectTrustedEntities: new CollectTrustedEntities(
@@ -163,6 +172,7 @@ describe("TrustStoreService.getListedEntities", () => {
             {
                 cache: new Map(),
                 refused: new Map(),
+                building: new Map(),
                 logger,
                 settings: { publicUrl: "https://public.example" },
                 trustListService: { findOne },
@@ -478,6 +488,157 @@ describe("TrustStoreService list freshness", () => {
             nextUpdate: later.toISOString(),
         });
         expect(loadVerified).toHaveBeenCalledTimes(3);
+    });
+
+    describe("Trusted Lists", () => {
+        const lotlSource = (
+            signingCertificates = ["lotl-signer"],
+            schemeTerritories?: string[],
+        ) => ({
+            tenantId: "t",
+            lotes: [
+                {
+                    format: "trusted-list" as const,
+                    url: "https://public.example/lotl.xml",
+                    signingCertificates,
+                    ...(schemeTerritories ? { schemeTerritories } : {}),
+                },
+            ],
+        });
+        const lotl = (later: Date) => ({
+            ...list(later),
+            pointers: [
+                {
+                    format: "trusted-list" as const,
+                    url: "https://tl.example/de.xml",
+                    signingCertificates: ["de-signer"],
+                },
+            ],
+        });
+
+        function createTrustedListService(
+            loadVerified: ReturnType<typeof vi.fn>,
+        ) {
+            const created = createService(loadVerified);
+            Object.assign(created.service as never, {
+                settings: { publicUrl: "https://public.example" },
+            });
+            return created;
+        }
+
+        it("answers a source whose national lists are all unavailable for a minute", async () => {
+            vi.useFakeTimers({ now });
+            const later = new Date(now.getTime() + 86_400_000);
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce(lotl(later))
+                .mockRejectedValueOnce(new Error("unreachable"));
+            const { service, logger } = createTrustedListService(loadVerified);
+
+            await expect(
+                service.getTrustStore(lotlSource()),
+            ).rejects.toBeInstanceOf(UnavailableTrustedListsError);
+            await expect(
+                service.getTrustStore(lotlSource()),
+            ).rejects.toBeInstanceOf(UnavailableTrustedListsError);
+            expect(loadVerified).toHaveBeenCalledTimes(2);
+            expect(logger.warn).toHaveBeenCalledWith(
+                'Discarded outdated or unavailable trust list(s), no current list is left: https://tl.example/de.xml (could not be loaded: "unreachable")',
+            );
+        });
+
+        it("keeps the stores of other signing certificates apart", async () => {
+            vi.useFakeTimers({ now });
+            const later = new Date(now.getTime() + 86_400_000);
+            const loadVerified = vi
+                .fn()
+                .mockImplementation((ref: { url: string }) =>
+                    ref.url.endsWith("lotl.xml") ? lotl(later) : list(later),
+                );
+            const { service } = createTrustedListService(loadVerified);
+
+            await service.getTrustStore(lotlSource());
+            await service.getTrustStore(lotlSource());
+            expect(loadVerified).toHaveBeenCalledTimes(2);
+            await service.getTrustStore(lotlSource(["other-signer"]));
+            expect(loadVerified).toHaveBeenCalledTimes(4);
+            expect(loadVerified).toHaveBeenCalledWith(lotlSource().lotes[0]);
+            // A config limited to some territories does not share the store
+            // of one that follows all of them.
+            await service.getTrustStore(lotlSource(undefined, ["DE"]));
+            expect(loadVerified).toHaveBeenCalledTimes(6);
+        });
+
+        it("lets concurrent requests share one build of a source", async () => {
+            vi.useFakeTimers({ now });
+            const later = new Date(now.getTime() + 86_400_000);
+            let release: () => void = () => {};
+            const loadVerified = vi.fn().mockImplementation(
+                (ref: { url: string }) =>
+                    new Promise((resolve) => {
+                        release = () =>
+                            resolve(
+                                ref.url.endsWith("lotl.xml")
+                                    ? lotl(later)
+                                    : list(later),
+                            );
+                        if (!ref.url.endsWith("lotl.xml")) release();
+                    }),
+            );
+            const { service } = createTrustedListService(loadVerified);
+
+            const first = service.getTrustStore(lotlSource());
+            const second = service.getTrustStore(lotlSource());
+            await vi.waitFor(() => expect(loadVerified).toHaveBeenCalled());
+            release();
+
+            const [a, b] = await Promise.all([first, second]);
+            expect(a).toBe(b);
+            expect(loadVerified).toHaveBeenCalledTimes(2);
+        });
+
+        it("answers a list of trusted lists with too many pointers for a minute", async () => {
+            vi.useFakeTimers({ now });
+            const later = new Date(now.getTime() + 86_400_000);
+            const loadVerified = vi.fn().mockResolvedValue({
+                ...list(later),
+                pointers: Array.from(
+                    { length: MAX_FOLLOWED_TRUSTED_LISTS + 1 },
+                    (_, i) => ({
+                        format: "trusted-list" as const,
+                        url: `https://tl.example/${i}.xml`,
+                        signingCertificates: ["signer"],
+                    }),
+                ),
+            });
+            const { service } = createTrustedListService(loadVerified);
+
+            await expect(
+                service.getTrustStore(lotlSource()),
+            ).rejects.toBeInstanceOf(TooManyTrustedListsError);
+            vi.setSystemTime(now.getTime() + 59_000);
+            await expect(
+                service.getTrustStore(lotlSource()),
+            ).rejects.toBeInstanceOf(TooManyTrustedListsError);
+            expect(loadVerified).toHaveBeenCalledTimes(1);
+        });
+
+        it("never reads a Trusted List as a managed list, also at a managed list's URL", async () => {
+            vi.useFakeTimers({ now });
+            const later = new Date(now.getTime() + 86_400_000);
+            const loadVerified = vi.fn().mockResolvedValue(list(later));
+            // Without trustListService: a lookup of a managed list throws.
+            const { service } = createTrustedListService(loadVerified);
+            const ref = {
+                format: "trusted-list" as const,
+                url: "https://public.example/issuers/t/trust-list/x",
+                signingCertificates: ["signer"],
+            };
+
+            await service.getTrustStore({ tenantId: "t", lotes: [ref] });
+
+            expect(loadVerified).toHaveBeenCalledWith(ref);
+        });
     });
 
     it("fetches a source again at once after an error that is not about freshness", async () => {

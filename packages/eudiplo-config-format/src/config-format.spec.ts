@@ -370,7 +370,53 @@ describe("portable schema identity and migrations", () => {
             { id: "age", allowedOrigins: ["https://shop.example"] },
             4,
         ],
+        [
+            "PresentationConfig",
+            {
+                id: "qeaa",
+                dcql_query: {
+                    credentials: [
+                        {
+                            id: "qeaa",
+                            trusted_authorities: [
+                                {
+                                    type: "etsi_tl",
+                                    values: [
+                                        {
+                                            format: "trusted-list",
+                                            url: "https://tl.example/lotl.xml",
+                                            signingCertificates: ["MIIB"],
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            },
+            4,
+        ],
         ["PresentationConfig", { id: "age" }, 1],
+        [
+            "PresentationConfig",
+            {
+                id: "pid",
+                dcql_query: {
+                    credentials: [
+                        {
+                            id: "pid",
+                            trusted_authorities: [
+                                {
+                                    type: "etsi_tl",
+                                    values: [{ trustListId: "issuers" }],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            },
+            1,
+        ],
     ] as const)("reads a bare %s file %o as v%i", (kind, spec, version) => {
         expect(bareFileVersion(kind, spec)).toBe(version);
     });
@@ -1446,6 +1492,39 @@ describe("PresentationConfig v3 to v4", () => {
         expect(
             migrateDocument(result.document, validateConfigDocument).migrations,
         ).toEqual([]);
+    });
+
+    it("accepts ETSI TS 119 612 Trusted List references only from v4 on", () => {
+        const withTrustedList = (version: number) =>
+            normalizeDocument({
+                $schema: schemaUrl("PresentationConfig", version),
+                spec: {
+                    ...spec,
+                    dcql_query: {
+                        credentials: [
+                            {
+                                ...spec.dcql_query.credentials[0],
+                                trusted_authorities: [
+                                    {
+                                        type: "etsi_tl",
+                                        values: [
+                                            {
+                                                format: "trusted-list",
+                                                url: "https://tl.example/lotl.xml",
+                                                signingCertificates: ["MIIB"],
+                                                schemeTerritories: ["DE"],
+                                            },
+                                        ],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                },
+            });
+
+        expect(validateConfigDocument(withTrustedList(4))).toEqual([]);
+        expect(validateConfigDocument(withTrustedList(3))).not.toEqual([]);
     });
 
     it("accepts allowedOrigins only from v4 on", () => {

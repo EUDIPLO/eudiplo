@@ -5817,13 +5817,22 @@ export const CredentialConfigUpdateSchema = {
 export const TrustListRefSchema = {
     type: 'object',
     properties: {
+        format: {
+            enum: [
+                'lote',
+                'trusted-list'
+            ],
+            type: 'string',
+            default: 'lote',
+            description: 'Format of the list. `lote` (default): a List of Trusted Entities (ETSI TS 119 602) as JWT, referenced by `trustListId` or by `url` with `verifierKey` or `verifierX509Der`. `trusted-list`: an ETSI TS 119 612 Trusted List or list of trusted lists as XML, referenced by `url` with `signingCertificates`; its granted qualified services for the issuance of QEAAs are trusted.'
+        },
         trustListId: {
             type: 'string',
-            description: 'Managed local trust-list identifier. When provided, verifier material is resolved server-side from the trust list key chain.'
+            description: 'Managed local trust-list identifier. When provided, verifier material is resolved server-side from the trust list key chain. Only for `lote`.'
         },
         url: {
             type: 'string',
-            description: 'Trust-list JWT URL. Required for external trust lists when trustListId is not set.'
+            description: 'Trust-list URL: of the LoTE JWT, required for external lists when trustListId is not set, or of the ETSI TS 119 612 Trusted List or list of trusted lists for `trusted-list`.'
         },
         verifierKey: {
             type: 'object',
@@ -5833,6 +5842,20 @@ export const TrustListRefSchema = {
         verifierX509Der: {
             type: 'string',
             description: 'Base64 DER-encoded X.509 certificate used to verify trust-list JWT signatures for external trusted authority values.'
+        },
+        signingCertificates: {
+            type: 'array',
+            items: {
+                type: 'string'
+            },
+            description: 'Only for `trusted-list`, required there: base64 DER certificates one of which must have signed the list. For a list of trusted lists, the signing certificates its operator publishes; the national lists it points to are verified with the certificates it names for them. For a national list, its scheme operator certificates.'
+        },
+        schemeTerritories: {
+            type: 'array',
+            items: {
+                type: 'string'
+            },
+            description: 'Only for `trusted-list` naming a list of trusted lists: the SchemeTerritory values of the national lists to follow, such as `DE`. All when absent. With more than 64 lists to follow, none of the lists of the `etsi_tl` entry is used.'
         }
     }
 } as const;
@@ -7139,39 +7162,97 @@ export const PresentationConfigCreateDtoSchema = {
                                                         values: {
                                                             type: 'array',
                                                             items: {
-                                                                type: 'object',
-                                                                properties: {
-                                                                    trustListId: {
-                                                                        description: 'Optional trust list id reference.',
-                                                                        type: 'string'
-                                                                    },
-                                                                    url: {
-                                                                        description: 'Optional trust list URL reference.',
-                                                                        anyOf: [
-                                                                            {
-                                                                                type: 'string',
-                                                                                format: 'uri'
-                                                                            },
-                                                                            {
-                                                                                type: 'string',
-                                                                                pattern: '^<TENANT_URL>(?:\\/.*)?$'
-                                                                            }
-                                                                        ]
-                                                                    },
-                                                                    verifierKey: {
-                                                                        description: 'Optional verifier key material.',
+                                                                anyOf: [
+                                                                    {
                                                                         type: 'object',
-                                                                        propertyNames: {
-                                                                            type: 'string'
+                                                                        properties: {
+                                                                            format: {
+                                                                                description: 'Format of the list: a List of Trusted Entities (ETSI TS 119 602) as JWT. Default.',
+                                                                                type: 'string',
+                                                                                const: 'lote'
+                                                                            },
+                                                                            trustListId: {
+                                                                                description: 'Optional trust list id reference.',
+                                                                                type: 'string'
+                                                                            },
+                                                                            url: {
+                                                                                description: 'Optional trust list URL reference.',
+                                                                                anyOf: [
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        format: 'uri'
+                                                                                    },
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        pattern: '^<TENANT_URL>(?:\\/.*)?$'
+                                                                                    }
+                                                                                ]
+                                                                            },
+                                                                            verifierKey: {
+                                                                                description: 'Optional verifier key material.',
+                                                                                type: 'object',
+                                                                                propertyNames: {
+                                                                                    type: 'string'
+                                                                                },
+                                                                                additionalProperties: {}
+                                                                            },
+                                                                            verifierX509Der: {
+                                                                                description: 'Optional verifier certificate in DER/base64 form.',
+                                                                                type: 'string'
+                                                                            }
                                                                         },
-                                                                        additionalProperties: {}
+                                                                        additionalProperties: false
                                                                     },
-                                                                    verifierX509Der: {
-                                                                        description: 'Optional verifier certificate in DER/base64 form.',
-                                                                        type: 'string'
+                                                                    {
+                                                                        type: 'object',
+                                                                        properties: {
+                                                                            format: {
+                                                                                type: 'string',
+                                                                                const: 'trusted-list',
+                                                                                description: 'Format of the list: an ETSI TS 119 612 Trusted List or list of trusted lists as XML.'
+                                                                            },
+                                                                            url: {
+                                                                                anyOf: [
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        format: 'uri'
+                                                                                    },
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        pattern: '^<TENANT_URL>(?:\\/.*)?$'
+                                                                                    }
+                                                                                ],
+                                                                                description: 'URL of the Trusted List, or of a list of trusted lists (LOTL) whose national lists are followed.'
+                                                                            },
+                                                                            signingCertificates: {
+                                                                                minItems: 1,
+                                                                                type: 'array',
+                                                                                items: {
+                                                                                    type: 'string',
+                                                                                    minLength: 1,
+                                                                                    pattern: '^[A-Za-z0-9+/\\s]+={0,2}$'
+                                                                                },
+                                                                                description: 'Base64 DER certificates one of which must have signed the list: for a list of trusted lists, the signing certificates its operator publishes; for a national list, its scheme operator certificates.'
+                                                                            },
+                                                                            schemeTerritories: {
+                                                                                description: 'For a list of trusted lists: the SchemeTerritory values of the national lists to follow, such as DE. All when absent.',
+                                                                                minItems: 1,
+                                                                                type: 'array',
+                                                                                items: {
+                                                                                    type: 'string',
+                                                                                    minLength: 1
+                                                                                }
+                                                                            }
+                                                                        },
+                                                                        required: [
+                                                                            'format',
+                                                                            'url',
+                                                                            'signingCertificates'
+                                                                        ],
+                                                                        additionalProperties: false
                                                                     }
-                                                                },
-                                                                additionalProperties: false
+                                                                ],
+                                                                description: 'Reference to a trust list used for authority verification.'
                                                             },
                                                             description: 'Trust list references for ETSI TL verification.'
                                                         }
@@ -7323,39 +7404,97 @@ export const PresentationConfigCreateDtoSchema = {
                                                         values: {
                                                             type: 'array',
                                                             items: {
-                                                                type: 'object',
-                                                                properties: {
-                                                                    trustListId: {
-                                                                        description: 'Optional trust list id reference.',
-                                                                        type: 'string'
-                                                                    },
-                                                                    url: {
-                                                                        description: 'Optional trust list URL reference.',
-                                                                        anyOf: [
-                                                                            {
-                                                                                type: 'string',
-                                                                                format: 'uri'
-                                                                            },
-                                                                            {
-                                                                                type: 'string',
-                                                                                pattern: '^<TENANT_URL>(?:\\/.*)?$'
-                                                                            }
-                                                                        ]
-                                                                    },
-                                                                    verifierKey: {
-                                                                        description: 'Optional verifier key material.',
+                                                                anyOf: [
+                                                                    {
                                                                         type: 'object',
-                                                                        propertyNames: {
-                                                                            type: 'string'
+                                                                        properties: {
+                                                                            format: {
+                                                                                description: 'Format of the list: a List of Trusted Entities (ETSI TS 119 602) as JWT. Default.',
+                                                                                type: 'string',
+                                                                                const: 'lote'
+                                                                            },
+                                                                            trustListId: {
+                                                                                description: 'Optional trust list id reference.',
+                                                                                type: 'string'
+                                                                            },
+                                                                            url: {
+                                                                                description: 'Optional trust list URL reference.',
+                                                                                anyOf: [
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        format: 'uri'
+                                                                                    },
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        pattern: '^<TENANT_URL>(?:\\/.*)?$'
+                                                                                    }
+                                                                                ]
+                                                                            },
+                                                                            verifierKey: {
+                                                                                description: 'Optional verifier key material.',
+                                                                                type: 'object',
+                                                                                propertyNames: {
+                                                                                    type: 'string'
+                                                                                },
+                                                                                additionalProperties: {}
+                                                                            },
+                                                                            verifierX509Der: {
+                                                                                description: 'Optional verifier certificate in DER/base64 form.',
+                                                                                type: 'string'
+                                                                            }
                                                                         },
-                                                                        additionalProperties: {}
+                                                                        additionalProperties: false
                                                                     },
-                                                                    verifierX509Der: {
-                                                                        description: 'Optional verifier certificate in DER/base64 form.',
-                                                                        type: 'string'
+                                                                    {
+                                                                        type: 'object',
+                                                                        properties: {
+                                                                            format: {
+                                                                                type: 'string',
+                                                                                const: 'trusted-list',
+                                                                                description: 'Format of the list: an ETSI TS 119 612 Trusted List or list of trusted lists as XML.'
+                                                                            },
+                                                                            url: {
+                                                                                anyOf: [
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        format: 'uri'
+                                                                                    },
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        pattern: '^<TENANT_URL>(?:\\/.*)?$'
+                                                                                    }
+                                                                                ],
+                                                                                description: 'URL of the Trusted List, or of a list of trusted lists (LOTL) whose national lists are followed.'
+                                                                            },
+                                                                            signingCertificates: {
+                                                                                minItems: 1,
+                                                                                type: 'array',
+                                                                                items: {
+                                                                                    type: 'string',
+                                                                                    minLength: 1,
+                                                                                    pattern: '^[A-Za-z0-9+/\\s]+={0,2}$'
+                                                                                },
+                                                                                description: 'Base64 DER certificates one of which must have signed the list: for a list of trusted lists, the signing certificates its operator publishes; for a national list, its scheme operator certificates.'
+                                                                            },
+                                                                            schemeTerritories: {
+                                                                                description: 'For a list of trusted lists: the SchemeTerritory values of the national lists to follow, such as DE. All when absent.',
+                                                                                minItems: 1,
+                                                                                type: 'array',
+                                                                                items: {
+                                                                                    type: 'string',
+                                                                                    minLength: 1
+                                                                                }
+                                                                            }
+                                                                        },
+                                                                        required: [
+                                                                            'format',
+                                                                            'url',
+                                                                            'signingCertificates'
+                                                                        ],
+                                                                        additionalProperties: false
                                                                     }
-                                                                },
-                                                                additionalProperties: false
+                                                                ],
+                                                                description: 'Reference to a trust list used for authority verification.'
                                                             },
                                                             description: 'Trust list references for ETSI TL verification.'
                                                         }
@@ -7843,39 +7982,97 @@ export const PresentationConfigUpdateDtoSchema = {
                                                         values: {
                                                             type: 'array',
                                                             items: {
-                                                                type: 'object',
-                                                                properties: {
-                                                                    trustListId: {
-                                                                        description: 'Optional trust list id reference.',
-                                                                        type: 'string'
-                                                                    },
-                                                                    url: {
-                                                                        description: 'Optional trust list URL reference.',
-                                                                        anyOf: [
-                                                                            {
-                                                                                type: 'string',
-                                                                                format: 'uri'
-                                                                            },
-                                                                            {
-                                                                                type: 'string',
-                                                                                pattern: '^<TENANT_URL>(?:\\/.*)?$'
-                                                                            }
-                                                                        ]
-                                                                    },
-                                                                    verifierKey: {
-                                                                        description: 'Optional verifier key material.',
+                                                                anyOf: [
+                                                                    {
                                                                         type: 'object',
-                                                                        propertyNames: {
-                                                                            type: 'string'
+                                                                        properties: {
+                                                                            format: {
+                                                                                description: 'Format of the list: a List of Trusted Entities (ETSI TS 119 602) as JWT. Default.',
+                                                                                type: 'string',
+                                                                                const: 'lote'
+                                                                            },
+                                                                            trustListId: {
+                                                                                description: 'Optional trust list id reference.',
+                                                                                type: 'string'
+                                                                            },
+                                                                            url: {
+                                                                                description: 'Optional trust list URL reference.',
+                                                                                anyOf: [
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        format: 'uri'
+                                                                                    },
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        pattern: '^<TENANT_URL>(?:\\/.*)?$'
+                                                                                    }
+                                                                                ]
+                                                                            },
+                                                                            verifierKey: {
+                                                                                description: 'Optional verifier key material.',
+                                                                                type: 'object',
+                                                                                propertyNames: {
+                                                                                    type: 'string'
+                                                                                },
+                                                                                additionalProperties: {}
+                                                                            },
+                                                                            verifierX509Der: {
+                                                                                description: 'Optional verifier certificate in DER/base64 form.',
+                                                                                type: 'string'
+                                                                            }
                                                                         },
-                                                                        additionalProperties: {}
+                                                                        additionalProperties: false
                                                                     },
-                                                                    verifierX509Der: {
-                                                                        description: 'Optional verifier certificate in DER/base64 form.',
-                                                                        type: 'string'
+                                                                    {
+                                                                        type: 'object',
+                                                                        properties: {
+                                                                            format: {
+                                                                                type: 'string',
+                                                                                const: 'trusted-list',
+                                                                                description: 'Format of the list: an ETSI TS 119 612 Trusted List or list of trusted lists as XML.'
+                                                                            },
+                                                                            url: {
+                                                                                anyOf: [
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        format: 'uri'
+                                                                                    },
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        pattern: '^<TENANT_URL>(?:\\/.*)?$'
+                                                                                    }
+                                                                                ],
+                                                                                description: 'URL of the Trusted List, or of a list of trusted lists (LOTL) whose national lists are followed.'
+                                                                            },
+                                                                            signingCertificates: {
+                                                                                minItems: 1,
+                                                                                type: 'array',
+                                                                                items: {
+                                                                                    type: 'string',
+                                                                                    minLength: 1,
+                                                                                    pattern: '^[A-Za-z0-9+/\\s]+={0,2}$'
+                                                                                },
+                                                                                description: 'Base64 DER certificates one of which must have signed the list: for a list of trusted lists, the signing certificates its operator publishes; for a national list, its scheme operator certificates.'
+                                                                            },
+                                                                            schemeTerritories: {
+                                                                                description: 'For a list of trusted lists: the SchemeTerritory values of the national lists to follow, such as DE. All when absent.',
+                                                                                minItems: 1,
+                                                                                type: 'array',
+                                                                                items: {
+                                                                                    type: 'string',
+                                                                                    minLength: 1
+                                                                                }
+                                                                            }
+                                                                        },
+                                                                        required: [
+                                                                            'format',
+                                                                            'url',
+                                                                            'signingCertificates'
+                                                                        ],
+                                                                        additionalProperties: false
                                                                     }
-                                                                },
-                                                                additionalProperties: false
+                                                                ],
+                                                                description: 'Reference to a trust list used for authority verification.'
                                                             },
                                                             description: 'Trust list references for ETSI TL verification.'
                                                         }
@@ -8027,39 +8224,97 @@ export const PresentationConfigUpdateDtoSchema = {
                                                         values: {
                                                             type: 'array',
                                                             items: {
-                                                                type: 'object',
-                                                                properties: {
-                                                                    trustListId: {
-                                                                        description: 'Optional trust list id reference.',
-                                                                        type: 'string'
-                                                                    },
-                                                                    url: {
-                                                                        description: 'Optional trust list URL reference.',
-                                                                        anyOf: [
-                                                                            {
-                                                                                type: 'string',
-                                                                                format: 'uri'
-                                                                            },
-                                                                            {
-                                                                                type: 'string',
-                                                                                pattern: '^<TENANT_URL>(?:\\/.*)?$'
-                                                                            }
-                                                                        ]
-                                                                    },
-                                                                    verifierKey: {
-                                                                        description: 'Optional verifier key material.',
+                                                                anyOf: [
+                                                                    {
                                                                         type: 'object',
-                                                                        propertyNames: {
-                                                                            type: 'string'
+                                                                        properties: {
+                                                                            format: {
+                                                                                description: 'Format of the list: a List of Trusted Entities (ETSI TS 119 602) as JWT. Default.',
+                                                                                type: 'string',
+                                                                                const: 'lote'
+                                                                            },
+                                                                            trustListId: {
+                                                                                description: 'Optional trust list id reference.',
+                                                                                type: 'string'
+                                                                            },
+                                                                            url: {
+                                                                                description: 'Optional trust list URL reference.',
+                                                                                anyOf: [
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        format: 'uri'
+                                                                                    },
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        pattern: '^<TENANT_URL>(?:\\/.*)?$'
+                                                                                    }
+                                                                                ]
+                                                                            },
+                                                                            verifierKey: {
+                                                                                description: 'Optional verifier key material.',
+                                                                                type: 'object',
+                                                                                propertyNames: {
+                                                                                    type: 'string'
+                                                                                },
+                                                                                additionalProperties: {}
+                                                                            },
+                                                                            verifierX509Der: {
+                                                                                description: 'Optional verifier certificate in DER/base64 form.',
+                                                                                type: 'string'
+                                                                            }
                                                                         },
-                                                                        additionalProperties: {}
+                                                                        additionalProperties: false
                                                                     },
-                                                                    verifierX509Der: {
-                                                                        description: 'Optional verifier certificate in DER/base64 form.',
-                                                                        type: 'string'
+                                                                    {
+                                                                        type: 'object',
+                                                                        properties: {
+                                                                            format: {
+                                                                                type: 'string',
+                                                                                const: 'trusted-list',
+                                                                                description: 'Format of the list: an ETSI TS 119 612 Trusted List or list of trusted lists as XML.'
+                                                                            },
+                                                                            url: {
+                                                                                anyOf: [
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        format: 'uri'
+                                                                                    },
+                                                                                    {
+                                                                                        type: 'string',
+                                                                                        pattern: '^<TENANT_URL>(?:\\/.*)?$'
+                                                                                    }
+                                                                                ],
+                                                                                description: 'URL of the Trusted List, or of a list of trusted lists (LOTL) whose national lists are followed.'
+                                                                            },
+                                                                            signingCertificates: {
+                                                                                minItems: 1,
+                                                                                type: 'array',
+                                                                                items: {
+                                                                                    type: 'string',
+                                                                                    minLength: 1,
+                                                                                    pattern: '^[A-Za-z0-9+/\\s]+={0,2}$'
+                                                                                },
+                                                                                description: 'Base64 DER certificates one of which must have signed the list: for a list of trusted lists, the signing certificates its operator publishes; for a national list, its scheme operator certificates.'
+                                                                            },
+                                                                            schemeTerritories: {
+                                                                                description: 'For a list of trusted lists: the SchemeTerritory values of the national lists to follow, such as DE. All when absent.',
+                                                                                minItems: 1,
+                                                                                type: 'array',
+                                                                                items: {
+                                                                                    type: 'string',
+                                                                                    minLength: 1
+                                                                                }
+                                                                            }
+                                                                        },
+                                                                        required: [
+                                                                            'format',
+                                                                            'url',
+                                                                            'signingCertificates'
+                                                                        ],
+                                                                        additionalProperties: false
                                                                     }
-                                                                },
-                                                                additionalProperties: false
+                                                                ],
+                                                                description: 'Reference to a trust list used for authority verification.'
                                                             },
                                                             description: 'Trust list references for ETSI TL verification.'
                                                         }

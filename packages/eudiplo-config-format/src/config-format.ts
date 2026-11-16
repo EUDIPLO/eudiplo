@@ -120,6 +120,33 @@ export function resourceId(input: ConfigFile<unknown>): string {
         throw new Error(`Configuration spec.${field} is required`);
     return id;
 }
+/** Whether an `etsi_tl` value of the presentation spec names its `format`. */
+function hasTrustListFormat(spec: Record<string, unknown>): boolean {
+    const query = spec.dcql_query as { credentials?: unknown } | undefined;
+    const credentials = Array.isArray(query?.credentials)
+        ? query.credentials
+        : [];
+    return credentials.some((credential) => {
+        const authorities = (credential as { trusted_authorities?: unknown })
+            ?.trusted_authorities;
+        return (
+            Array.isArray(authorities) &&
+            authorities.some((authority) => {
+                const values = (authority as { values?: unknown })?.values;
+                return (
+                    Array.isArray(values) &&
+                    values.some(
+                        (value) =>
+                            typeof value === "object" &&
+                            value !== null &&
+                            "format" in value,
+                    )
+                );
+            })
+        );
+    });
+}
+
 /**
  * The format version a bare file (a spec without envelope) is read as: v1,
  * except a key chain with `type`, which KeyChain v2 added and which the bare
@@ -132,7 +159,8 @@ export function resourceId(input: ConfigFile<unknown>): string {
  * `info.json` with `defaultAccessKeyChainId`, which TenantConfig v2 added, or
  * with `defaultKeyChains`, which TenantConfig v3 replaced it with (TenantConfig
  * v4 moved it to `key-chain-defaults.json`), and a presentation configuration
- * with `allowedOrigins`, which PresentationConfig v4 added.
+ * with `allowedOrigins` or an `etsi_tl` value with `format`, which
+ * PresentationConfig v4 added.
  */
 export function bareFileVersion(
     kind: ConfigResourceKind,
@@ -146,7 +174,8 @@ export function bareFileVersion(
     if (kind === "RegistrarConfig")
         return "relyingPartyContact" in spec ? 2 : 1;
     if (kind === "KeyChainDefaults") return "authorizationServer" in spec ? 2 : 1;
-    if (kind === "PresentationConfig") return "allowedOrigins" in spec ? 4 : 1;
+    if (kind === "PresentationConfig")
+        return "allowedOrigins" in spec || hasTrustListFormat(spec) ? 4 : 1;
     if (kind === "Tenant") {
         if ("defaultKeyChains" in spec) return 3;
         return "defaultAccessKeyChainId" in spec ? 2 : 1;
@@ -753,8 +782,11 @@ const CONFIG_MIGRATIONS: readonly ConfigMigration[] = [
         kind: "PresentationConfig",
         from: 3,
         to: 4,
-        // v4 adds the optional allowedOrigins: a v3 spec is a valid v4 spec,
-        // and without the field any expected_origin is accepted as before.
+        // v4 adds the optional allowedOrigins, and `format`,
+        // `signingCertificates` and `schemeTerritories` in etsi_tl values for
+        // ETSI TS 119 612 Trusted Lists: a v3 spec is a valid v4 spec, and
+        // without these fields any expected_origin is accepted and every
+        // etsi_tl value is a LoTE, as before.
         migrate: (spec) => ({ spec }),
     },
     trustListV1ToV2,

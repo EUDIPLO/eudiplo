@@ -4,7 +4,14 @@ import {
     MAX_TRUST_LIST_CERTIFICATES,
     TooManyTrustListCertificatesError,
 } from "../domain/trust-list-certificate-limit.js";
-import { OutdatedTrustListsError } from "../domain/trust-list-freshness.js";
+import {
+    OutdatedTrustListsError,
+    UnavailableTrustedListsError,
+} from "../domain/trust-list-freshness.js";
+import {
+    MAX_FOLLOWED_TRUSTED_LISTS,
+    TooManyTrustedListsError,
+} from "../domain/trusted-list-services.js";
 import type { AcceptedTrustListSequenceNumbers } from "../ports/accepted-trust-list-sequence-numbers.js";
 import type {
     TrustListProvider,
@@ -565,6 +572,224 @@ describe("CollectTrustedEntities", () => {
             ).resolves.toMatchObject({
                 entities: [{ entityId: "current" }],
             });
+        });
+    });
+
+    // An ETSI TS 119 612 list of trusted lists names no issuers; the national
+    // lists it points to are loaded and checked one by one.
+    describe("lists of trusted lists", () => {
+        const lotlRef = {
+            format: "trusted-list" as const,
+            url: "lotl",
+            signingCertificates: ["lotl-signer"],
+        };
+        const pointer = (url: string) => ({
+            format: "trusted-list" as const,
+            url,
+            signingCertificates: [`${url}-signer`],
+        });
+        const qtsp = (entityId: string) => ({
+            entityId,
+            services: [
+                {
+                    serviceTypeIdentifier:
+                        "http://uri.etsi.org/TrstSvc/Svctype/EAA/Q",
+                    certValue: entityId,
+                },
+            ],
+        });
+        const lotl = (
+            pointers = [pointer("de"), pointer("fr")],
+            overrides: Partial<VerifiedTrustList> = {},
+        ) => list({ entities: [], pointers, ...overrides });
+        const execute = (
+            lists: TrustListProvider,
+            numbers = acceptedSequenceNumbersFake(),
+        ) =>
+            collect(lists, numbers).execute({
+                tenantId,
+                lotes: [lotlRef],
+            });
+
+        it("follows the pointers of an accepted list, one level deep", async () => {
+            const loadVerified = vi
+                .fn()
+                // QTSPs on the list of trusted lists itself are not trusted.
+                .mockResolvedValueOnce(
+                    lotl(undefined, {
+                        nextUpdate: soon,
+                        entities: [qtsp("in-lotl")],
+                    }),
+                )
+                .mockResolvedValueOnce(
+                    // A list it points to that points on is not followed.
+                    list({
+                        entities: [qtsp("qp-de")],
+                        pointers: [pointer("nested")],
+                    }),
+                )
+                .mockResolvedValueOnce(list({ entities: [qtsp("qp-fr")] }));
+
+            await expect(execute({ loadVerified })).resolves.toEqual({
+                entities: [qtsp("qp-de"), qtsp("qp-fr")],
+                // The national lists are verified with certificates of the
+                // LOTL, so the store ends with it.
+                nextUpdate: soon,
+                discarded: [],
+            });
+            expect(loadVerified.mock.calls).toEqual([
+                [lotlRef],
+                [pointer("de")],
+                [pointer("fr")],
+            ]);
+        });
+
+        it("discards a national list that cannot be loaded on its own", async () => {
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce(lotl())
+                .mockRejectedValueOnce(new Error("bad signature"))
+                .mockResolvedValueOnce(list({ entities: [qtsp("qp-fr")] }));
+
+            await expect(execute({ loadVerified })).resolves.toEqual({
+                entities: [qtsp("qp-fr")],
+                nextUpdate: later,
+                discarded: [
+                    {
+                        list: "de",
+                        nextUpdate: undefined,
+                        trustedList: true,
+                        unavailable: "bad signature",
+                    },
+                ],
+            });
+        });
+
+        it("discards an outdated or replayed national list on its own", async () => {
+            const numbers = acceptedSequenceNumbersFake();
+            await numbers.record(tenantId, "fr", 4);
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce(
+                    lotl([pointer("de"), pointer("fr"), pointer("it")]),
+                )
+                .mockResolvedValueOnce(list({ nextUpdate: passed }))
+                .mockResolvedValueOnce(list({ sequenceNumber: 3 }))
+                .mockResolvedValueOnce(list({ entities: [qtsp("qp-it")] }));
+
+            await expect(execute({ loadVerified }, numbers)).resolves.toEqual({
+                entities: [qtsp("qp-it")],
+                nextUpdate: later,
+                discarded: [
+                    { list: "de", nextUpdate: passed, trustedList: true },
+                    {
+                        list: "fr",
+                        nextUpdate: later,
+                        trustedList: true,
+                        sequence: { number: 3, highestAccepted: 4 },
+                    },
+                ],
+            });
+            expect(await numbers.highest(tenantId, "it")).toBe(1);
+        });
+
+        it("does not follow a list of trusted lists numbered lower than one accepted before", async () => {
+            const numbers = acceptedSequenceNumbersFake();
+            await numbers.record(tenantId, "lotl", 5);
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce(lotl(undefined, { sequenceNumber: 3 }));
+
+            await expect(
+                execute({ loadVerified }, numbers),
+            ).rejects.toBeInstanceOf(OutdatedTrustListsError);
+            expect(loadVerified).toHaveBeenCalledTimes(1);
+        });
+
+        it("does not follow an outdated list of trusted lists", async () => {
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce(lotl(undefined, { nextUpdate: passed }));
+
+            await expect(execute({ loadVerified })).rejects.toBeInstanceOf(
+                OutdatedTrustListsError,
+            );
+            expect(loadVerified).toHaveBeenCalledTimes(1);
+        });
+
+        it("fails when every national list is left out and one could not be loaded", async () => {
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce(
+                    lotl([
+                        pointer("https://tl.example/de"),
+                        pointer("https://tl.example/fr"),
+                    ]),
+                )
+                .mockRejectedValueOnce(new Error("unreachable"))
+                .mockResolvedValueOnce(list({ nextUpdate: passed }));
+
+            const error = await execute({ loadVerified }).catch((e) => e);
+            expect(error).toBeInstanceOf(UnavailableTrustedListsError);
+            // Wallet-facing like OutdatedTrustListsError: names no list.
+            expect(error.message).not.toContain("tl.example");
+            expect(error.discarded).toHaveLength(2);
+        });
+
+        it("fails when every national list is outdated", async () => {
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce(lotl([pointer("de")]))
+                .mockResolvedValueOnce(list({ nextUpdate: passed }));
+
+            await expect(execute({ loadVerified })).rejects.toBeInstanceOf(
+                OutdatedTrustListsError,
+            );
+        });
+
+        it("trusts no issuer when no pointer is left to follow", async () => {
+            const loadVerified = vi.fn().mockResolvedValueOnce(lotl([]));
+
+            await expect(execute({ loadVerified })).resolves.toEqual({
+                entities: [],
+                nextUpdate: later,
+                discarded: [],
+            });
+        });
+
+        it("refuses a list of trusted lists that points to too many lists", async () => {
+            const pointers = Array.from(
+                { length: MAX_FOLLOWED_TRUSTED_LISTS + 1 },
+                (_, i) => pointer(`list-${i}`),
+            );
+            const loadVerified = vi.fn().mockResolvedValueOnce(lotl(pointers));
+
+            await expect(execute({ loadVerified })).rejects.toBeInstanceOf(
+                TooManyTrustedListsError,
+            );
+            expect(loadVerified).toHaveBeenCalledTimes(1);
+        });
+
+        it("counts the certificates of the national lists toward the limit", async () => {
+            const many = {
+                entityId: "many",
+                services: Array.from(
+                    { length: MAX_TRUST_LIST_CERTIFICATES + 1 },
+                    (_, i) => ({
+                        serviceTypeIdentifier:
+                            "http://uri.etsi.org/TrstSvc/Svctype/EAA/Q",
+                        certValue: `c${i}`,
+                    }),
+                ),
+            };
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce(lotl([pointer("de")]))
+                .mockResolvedValueOnce(list({ entities: [many] }));
+
+            await expect(execute({ loadVerified })).rejects.toBeInstanceOf(
+                TooManyTrustListCertificatesError,
+            );
         });
     });
 });

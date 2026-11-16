@@ -231,6 +231,9 @@ importers:
       '@owf/eudi-lote':
         specifier: ^0.5.2
         version: 0.5.4
+      '@owf/eudi-tl':
+        specifier: 0.7.0
+        version: 0.7.0(asn1js@4.0.0)(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36))(xmldsigjs@3.1.0(asn1js@4.0.0)(pkijs@4.0.1(asn1js@4.0.0))(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36)))
       '@owf/identity-common':
         specifier: ^0.6.0
         version: 0.6.2
@@ -261,6 +264,9 @@ importers:
       '@sd-jwt/sd-jwt-vc':
         specifier: ^0.24.1
         version: 0.24.1
+      '@xmldom/xmldom':
+        specifier: ^0.9.12
+        version: 0.9.12
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
@@ -427,6 +433,12 @@ importers:
       vitest:
         specifier: 5.1.0
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      xadesjs:
+        specifier: ^3.1.0
+        version: 3.1.0(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36))(xmldsigjs@3.1.0(asn1js@4.0.0)(pkijs@4.0.1(asn1js@4.0.0))(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36)))
+      xpath:
+        specifier: ^0.0.36
+        version: 0.0.36
 
   apps/cli:
     dependencies:
@@ -644,7 +656,7 @@ importers:
         version: 3.10.2(@docusaurus/faster@3.10.2(@docusaurus/types@3.10.2(@swc/core@1.16.20)(@swc/html@1.16.20)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.32))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.32)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sharp@0.35.5(@types/node@26.6.6))(supports-color@10.2.2)(svgo@3.3.5)(uglify-js@3.19.3))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.32))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(postcss@8.5.32)(sharp@0.35.5(@types/node@26.6.6))(svgo@3.3.5)(uglify-js@3.19.3))(@mdx-js/react@3.1.1(@types/react@19.3.0)(react@19.3.1))(@rspack/core@1.7.12)(@swc/core@1.16.20)(@swc/html@1.16.20)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.32))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.32)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sharp@0.35.5(@types/node@26.6.6))(supports-color@10.2.2)(svgo@3.3.5)(typescript@6.0.3)(uglify-js@3.19.3)
       '@docusaurus/preset-classic':
         specifier: 3.10.2
-        version: 3.10.2(27a74e503583ec6791ec83e50460ea9d)
+        version: 3.10.2(4f0f7b1180627b432859d0f1f8e78d94)
       '@docusaurus/theme-mermaid':
         specifier: 3.10.2
         version: 3.10.2(cf41baf4a8775eb9dc92d174606f54a9)
@@ -4871,8 +4883,14 @@ packages:
   '@owf/eudi-lote@0.5.4':
     resolution: {integrity: sha512-qRbZrj/wk1S59A+luJ+fAf0Mzy+y3ak9ilLUDAyXc0QOpMS94kY9ziikvseIfWK58XFkY03D4aRecxiHjzGH0g==}
 
+  '@owf/eudi-tl@0.7.0':
+    resolution: {integrity: sha512-PHLTZGA5iwdQdg41fVbdLcepKuHZBEnrO0xlLmj9YkJEYsiz47TJRqECWjy3w8CwIu40gdTMX/MBTzTENZNT6A==}
+
   '@owf/identity-common@0.6.2':
     resolution: {integrity: sha512-qTeeMoEujOZzCqh/yW9kKFzDBM5tL9qVTiIgyXrR/XJE1ZohJ0IX8IoEtCinBcrz3sRkcBYTfuaCTNCbH2pY+A==}
+
+  '@owf/identity-common@0.8.0':
+    resolution: {integrity: sha512-pL+Isfs7JDPv7eFbuQ8K9xDHYUa79KqlJz4ZUImc3L8lFbWfrddIxToICeOsYh6ccOkeKVo4SpcsLPcq+M3cDA==}
 
   '@owf/mdoc@0.9.2':
     resolution: {integrity: sha512-osrq0UxEQbzd1xnheqcHkayWJx8TYUM+VnkmkpK2Uw7y5WiufqwoBelwbwN7C5+YF3P88Pv5RZYCJB3DL/Clng==}
@@ -7042,6 +7060,10 @@ packages:
     resolution: {integrity: sha512-y5ArHvQ7BVule/+L9yE2nYMhceiJhgsqo58lOfnisQ7bg+Kjfmkgr7JBuVFiTkl+ErdShpp829QstZQyLugl8g==}
     engines: {node: '>=20'}
 
+  '@xmldom/xmldom@0.9.12':
+    resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
+    engines: {node: '>=14.6'}
+
   '@xtuc/ieee754@1.2.0':
     resolution: {integrity: sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA==}
 
@@ -7553,6 +7575,10 @@ packages:
   bytestreamjs@2.0.1:
     resolution: {integrity: sha512-U1Z/ob71V/bXfVABvNr/Kumf5VyeQRBEm6Txb0PQ6S7V5GpBM3w4Cbqz/xPDicR5tN0uvDifng8C+5qECeGwyQ==}
     engines: {node: '>=6.0.0'}
+
+  bytestreamjs@3.0.0:
+    resolution: {integrity: sha512-QJYdJHpGNj4dAfRrgQAu8V5OEFVgiALJ8YFR4c1BuNYzvoDU86yEg+9SXu/AbGyMaLAn17qdMmwsCc2Ry2nHPg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
 
   c12@3.3.4:
     resolution: {integrity: sha512-cM0ApFQSBXuourJejzwv/AuPRvAxordTyParRVcHjjtXirtkzM0uK2L9TTn9s0cXZbG7E55jCivRQzoxYmRAlA==}
@@ -10961,6 +10987,7 @@ packages:
 
   node-abort-controller@3.1.1:
     resolution: {integrity: sha512-AGK2yQKIjRuqnc6VkX2Xj5d+QW8xZ87pa1UK6yA6ouUyuxfHuMP6umE5QK7UmTeOAymo+Zx1Fxiuw9rVx8taHQ==}
+    deprecated: This package is no longer needed on supported Node.js versions. Node.js 16+ includes AbortController and AbortSignal as built-in globals. All Node.js versions requiring this polyfill are end-of-life. Use the built-in globals instead.
 
   node-addon-api@6.1.0:
     resolution: {integrity: sha512-+eawOlIgy680F0kBzPUNFhMZGtJ1YmqM6l4+Crf4IkImjYrO/mqPwRMh352g23uIaQKFItcQ64I7KMaJxHgAVA==}
@@ -11600,6 +11627,12 @@ packages:
   pkijs@3.4.3:
     resolution: {integrity: sha512-V9kOzaItwDgqlryhXysQsAXUEKi5O7kqWUaP3dXI7MLvkPqWWMb4wVb1QAtmEDCKI+XIAINsZoNKMFF7sZb1eg==}
     engines: {node: '>=16.0.0'}
+
+  pkijs@4.0.1:
+    resolution: {integrity: sha512-hs6jHBg+Y9ZZ9r5w2CHnKXkGPOr3qWfkLfnZGlbNkP2hceGZ6EgjnTS7tqwbugHXx5mCqoSf4TUH2nu1diirnA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    peerDependencies:
+      asn1js: ^4.0.0
 
   playwright-core@1.64.1:
     resolution: {integrity: sha512-BC4s8y6SEVA6Q1rSxZTto8hI1KUI3xXlHGZgvGqP4IqPdI/a6FX9H29IDNz7vKo9l21b6LfYosScPL6M3xxyDQ==}
@@ -14232,9 +14265,23 @@ packages:
     resolution: {integrity: sha512-c16PKLIRxBYpR3jSWsdS7SFp0COm5SOQdiFjY818dYFHJbMGuLBszpF07LBWmOS1uzrHa9VGdynsEgoeKy0oOQ==}
     engines: {node: '>=20'}
 
+  xadesjs@3.1.0:
+    resolution: {integrity: sha512-NP1YPXxIFl8e4x/noICDRRnAMgXYVpFIE4DhQ3Qc4uMztDVCHE1EekwVQ9TwogPSWl7ktHUDM5jpJD/zNdxfPg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    peerDependencies:
+      xml-core: ^3.1.0
+      xmldsigjs: ^3.1.0
+
   xdg-basedir@5.1.0:
     resolution: {integrity: sha512-GCPAHLvrIH13+c0SuacwvRYj2SxJXQ4kaVTT5xgL3kPrz56XxkF21IGhjSE1+W0aw7gpBWRGXLCPnPby6lSpmQ==}
     engines: {node: '>=12'}
+
+  xml-core@3.1.0:
+    resolution: {integrity: sha512-v2F4G3LsFRI9nJjQmqhM47GnDsPdfv4GXHo39ObnJ8vjoHdGps+4Z3N56aQoa1CdllHokzYIUqpEKJ4PAgPSwA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    peerDependencies:
+      '@xmldom/xmldom': ^0.9.10
+      xpath: ^0.0.34 || ^0.0.35
 
   xml-js@1.6.11:
     resolution: {integrity: sha512-7rVi2KMfwfWFl+GpPg6m80IVMWXLRjO+PxTq7V2CDhoGak0wzYzFgUY2m4XJ47OGdXd8eLE8EmwfAmdjw7lC1g==}
@@ -14246,6 +14293,18 @@ packages:
 
   xmlchars@2.2.0:
     resolution: {integrity: sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==}
+
+  xmldsigjs@3.1.0:
+    resolution: {integrity: sha512-3CaNfDGdzcTSXefqgWM6XQsGgJFgF4SU6yioOp0glsYmXuyaMpzSCSUWL6yCJ9TsS5f7pGrIzxQkup0eNoO3Ug==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    peerDependencies:
+      asn1js: ^4.0.0
+      pkijs: ^4.0.0
+      xml-core: ^3.1.0
+
+  xpath@0.0.36:
+    resolution: {integrity: sha512-HuqAnJx5YJoDeLub7hhcNoiRvnqqrgoSsI4kLrOtv6XkaUI0zY9ylL4+ULozB35JT1SVMfdexsMqRbTp7bkFGQ==}
+    engines: {node: '>=0.6.0'}
 
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
@@ -17494,7 +17553,7 @@ snapshots:
       - utf-8-validate
       - webpack-cli
 
-  '@docusaurus/preset-classic@3.10.2(27a74e503583ec6791ec83e50460ea9d)':
+  '@docusaurus/preset-classic@3.10.2(4f0f7b1180627b432859d0f1f8e78d94)':
     dependencies:
       '@docusaurus/core': 3.10.2(@docusaurus/faster@3.10.2(@docusaurus/types@3.10.2(@swc/core@1.16.20)(@swc/html@1.16.20)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.32))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.32)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sharp@0.35.5(@types/node@26.6.6))(supports-color@10.2.2)(svgo@3.3.5)(uglify-js@3.19.3))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.32))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(postcss@8.5.32)(sharp@0.35.5(@types/node@26.6.6))(svgo@3.3.5)(uglify-js@3.19.3))(@mdx-js/react@3.1.1(@types/react@19.3.0)(react@19.3.1))(@rspack/core@1.7.12)(@swc/core@1.16.20)(@swc/html@1.16.20)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.32))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.32)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sharp@0.35.5(@types/node@26.6.6))(supports-color@10.2.2)(svgo@3.3.5)(typescript@6.0.3)(uglify-js@3.19.3)
       '@docusaurus/plugin-content-blog': 3.10.2(cf41baf4a8775eb9dc92d174606f54a9)
@@ -17509,7 +17568,7 @@ snapshots:
       '@docusaurus/plugin-svgr': 3.10.2(@docusaurus/faster@3.10.2(@docusaurus/types@3.10.2(@swc/core@1.16.20)(@swc/html@1.16.20)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.32))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.32)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sharp@0.35.5(@types/node@26.6.6))(supports-color@10.2.2)(svgo@3.3.5)(uglify-js@3.19.3))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.32))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(postcss@8.5.32)(sharp@0.35.5(@types/node@26.6.6))(svgo@3.3.5)(uglify-js@3.19.3))(@mdx-js/react@3.1.1(@types/react@19.3.0)(react@19.3.1))(@rspack/core@1.7.12)(@swc/core@1.16.20)(@swc/html@1.16.20)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.32))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.32)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sharp@0.35.5(@types/node@26.6.6))(supports-color@10.2.2)(svgo@3.3.5)(typescript@6.0.3)(uglify-js@3.19.3)
       '@docusaurus/theme-classic': 3.10.2(@docusaurus/faster@3.10.2(@docusaurus/types@3.10.2(@swc/core@1.16.20)(@swc/html@1.16.20)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.32))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.32)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sharp@0.35.5(@types/node@26.6.6))(supports-color@10.2.2)(svgo@3.3.5)(uglify-js@3.19.3))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.32))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(postcss@8.5.32)(sharp@0.35.5(@types/node@26.6.6))(svgo@3.3.5)(uglify-js@3.19.3))(@rspack/core@1.7.12)(@swc/core@1.16.20)(@swc/html@1.16.20)(@types/react@19.3.0)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.32))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sharp@0.35.5(@types/node@26.6.6))(supports-color@10.2.2)(svgo@3.3.5)(typescript@6.0.3)(uglify-js@3.19.3)
       '@docusaurus/theme-common': 3.10.2(997b5159b485cc854ddf729845d406b9)
-      '@docusaurus/theme-search-algolia': 3.10.2(27a74e503583ec6791ec83e50460ea9d)
+      '@docusaurus/theme-search-algolia': 3.10.2(4f0f7b1180627b432859d0f1f8e78d94)
       '@docusaurus/types': 3.10.2(@swc/core@1.16.20)(@swc/html@1.16.20)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.32))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.32)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(sharp@0.35.5(@types/node@26.6.6))(supports-color@10.2.2)(svgo@3.3.5)(uglify-js@3.19.3)
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
@@ -17683,7 +17742,7 @@ snapshots:
       - utf-8-validate
       - webpack-cli
 
-  '@docusaurus/theme-search-algolia@3.10.2(27a74e503583ec6791ec83e50460ea9d)':
+  '@docusaurus/theme-search-algolia@3.10.2(4f0f7b1180627b432859d0f1f8e78d94)':
     dependencies:
       '@algolia/autocomplete-core': 1.19.12(@algolia/client-search@5.60.0)(algoliasearch@5.60.0)(search-insights@2.17.3)
       '@docsearch/react': 4.7.1(@algolia/client-search@5.61.0)(@types/react@19.3.0)(algoliasearch@5.60.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(search-insights@2.17.3)
@@ -19983,7 +20042,25 @@ snapshots:
       '@owf/identity-common': 0.6.2
       zod: 4.6.7
 
+  '@owf/eudi-tl@0.7.0(asn1js@4.0.0)(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36))(xmldsigjs@3.1.0(asn1js@4.0.0)(pkijs@4.0.1(asn1js@4.0.0))(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36)))':
+    dependencies:
+      '@owf/identity-common': 0.8.0
+      '@peculiar/asn1-schema': 3.0.0(asn1js@4.0.0)
+      '@peculiar/asn1-x509': 3.0.0(@peculiar/asn1-schema@3.0.0(asn1js@4.0.0))(asn1js@4.0.0)
+      '@xmldom/xmldom': 0.9.12
+      xadesjs: 3.1.0(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36))(xmldsigjs@3.1.0(asn1js@4.0.0)(pkijs@4.0.1(asn1js@4.0.0))(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36)))
+      xpath: 0.0.36
+      zod: 4.6.7
+    transitivePeerDependencies:
+      - asn1js
+      - xml-core
+      - xmldsigjs
+
   '@owf/identity-common@0.6.2': {}
+
+  '@owf/identity-common@0.8.0':
+    dependencies:
+      zod: 4.6.7
 
   '@owf/mdoc@0.9.2':
     dependencies:
@@ -22057,6 +22134,8 @@ snapshots:
     dependencies:
       system-architecture: 1.0.0
 
+  '@xmldom/xmldom@0.9.12': {}
+
   '@xtuc/ieee754@1.2.0': {}
 
   '@xtuc/long@4.2.2': {}
@@ -22623,6 +22702,8 @@ snapshots:
   bytes@3.1.2: {}
 
   bytestreamjs@2.0.1: {}
+
+  bytestreamjs@3.0.0: {}
 
   c12@3.3.4(magicast@0.5.5):
     dependencies:
@@ -27390,6 +27471,13 @@ snapshots:
       pvutils: 1.2.0
       tslib: 2.9.1
 
+  pkijs@4.0.1(asn1js@4.0.0):
+    dependencies:
+      '@noble/hashes': 2.4.0
+      '@peculiar/utils': 4.1.0
+      asn1js: 4.0.0
+      bytestreamjs: 3.0.0
+
   playwright-core@1.64.1: {}
 
   playwright-ng-schematics@22.1.3(@angular-devkit/architect@0.2202.5(chokidar@5.0.0))(@angular-devkit/core@22.2.5(chokidar@5.0.0))(@angular-devkit/schematics@22.2.5(chokidar@5.0.0)):
@@ -30284,7 +30372,18 @@ snapshots:
       is-wsl: 3.1.1
       powershell-utils: 0.2.1
 
+  xadesjs@3.1.0(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36))(xmldsigjs@3.1.0(asn1js@4.0.0)(pkijs@4.0.1(asn1js@4.0.0))(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36))):
+    dependencies:
+      xml-core: 3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36)
+      xmldsigjs: 3.1.0(asn1js@4.0.0)(pkijs@4.0.1(asn1js@4.0.0))(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36))
+
   xdg-basedir@5.1.0: {}
+
+  xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36):
+    dependencies:
+      '@peculiar/utils': 4.1.0
+      '@xmldom/xmldom': 0.9.12
+      xpath: 0.0.36
 
   xml-js@1.6.11:
     dependencies:
@@ -30293,6 +30392,15 @@ snapshots:
   xml-name-validator@5.0.0: {}
 
   xmlchars@2.2.0: {}
+
+  xmldsigjs@3.1.0(asn1js@4.0.0)(pkijs@4.0.1(asn1js@4.0.0))(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36)):
+    dependencies:
+      '@peculiar/utils': 4.1.0
+      asn1js: 4.0.0
+      pkijs: 4.0.1(asn1js@4.0.0)
+      xml-core: 3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36)
+
+  xpath@0.0.36: {}
 
   xtend@4.0.2: {}
 

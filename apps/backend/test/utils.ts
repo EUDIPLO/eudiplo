@@ -94,10 +94,13 @@ export async function prepareMdocPresentation(
         "first_name",
         "last_name",
     ],
+    /**
+     * Document type, also the namespace of the elements. Default: the EU PID,
+     * to match the pid-de fixture.
+     */
+    docType = "eu.europa.ec.eudi.pid.1",
 ) {
-    // Use the EU PID docType and namespace to match the pid-de fixture
-    const docType = "eu.europa.ec.eudi.pid.1";
-    const namespace = "eu.europa.ec.eudi.pid.1";
+    const namespace = docType;
 
     const issuer = new Issuer(docType, mdocContext);
 

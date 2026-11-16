@@ -81,6 +81,7 @@
         "@owf/crypto": "^0.6.0",
         "@owf/eudi-attestation-schema": "0.5.4",
         "@owf/eudi-lote": "^0.5.2",
+        "@owf/eudi-tl": "0.7.0",
         "@owf/identity-common": "^0.6.0",
         "@owf/mdoc": "^0.9.1",
         "@owf/openid-federation": "^0.6.0",
@@ -91,6 +92,7 @@
         "@peculiar/x509": "^3.1.0",
         "@sd-jwt/core": "^0.24.1",
         "@sd-jwt/sd-jwt-vc": "^0.24.1",
+        "@xmldom/xmldom": "^0.9.12",
         "ajv": "^8.20.0",
         "axios": "^1.21.0",
         "bcrypt": "^6.0.0",
@@ -147,7 +149,9 @@
         "typescript": "^6.0.0",
         "undici": "^8.12.3",
         "unplugin-swc": "^2.0.0",
-        "vitest": "5.1.0"
+        "vitest": "5.1.0",
+        "xadesjs": "^3.1.0",
+        "xpath": "^0.0.36"
     },
     "packageManager": "pnpm@10.13.1"
 }

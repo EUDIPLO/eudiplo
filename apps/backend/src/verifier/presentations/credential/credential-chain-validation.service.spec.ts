@@ -317,6 +317,72 @@ describe("CredentialChainValidationService — status list signer", () => {
             );
         });
 
+        it("names a Trusted List that could not be loaded as unavailable", async () => {
+            const { outdatedCa } = await serviceWithLists();
+            const nextUpdate = new Date(Date.now() + day).toISOString();
+            const pointer = (url: string) => ({
+                format: "trusted-list" as const,
+                url,
+                signingCertificates: ["signer"],
+            });
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce({
+                    entities: [],
+                    nextUpdate,
+                    sequenceNumber: 1,
+                    pointers: [
+                        pointer("https://tl.example/de.xml"),
+                        pointer("https://tl.example/fr.xml"),
+                    ],
+                })
+                .mockRejectedValueOnce(new Error("unreachable"))
+                .mockResolvedValueOnce({
+                    entities: [],
+                    nextUpdate,
+                    sequenceNumber: 1,
+                });
+            const store = new TrustStoreService(
+                new CollectTrustedEntities(
+                    { loadVerified },
+                    acceptedSequenceNumbersFake(),
+                ),
+                {} as never,
+                {} as never,
+                {} as never,
+                acceptedSequenceNumbersFake(),
+            );
+            vi.spyOn(
+                (store as unknown as { logger: Logger }).logger,
+                "warn",
+            ).mockImplementation(() => {});
+            const service = new CredentialChainValidationService(
+                store,
+                new X509ValidationService(),
+                {
+                    setContext: vi.fn(),
+                    error: vi.fn(),
+                    warn: vi.fn(),
+                    debug: vi.fn(),
+                } as any,
+            );
+            const signer = await issuedBy(outdatedCa, "Credential");
+
+            const result = await service.validateChain(
+                [b64(signer)],
+                {
+                    tenantId: "t",
+                    lotes: [pointer("https://tl.example/lotl.xml")],
+                },
+                {},
+            );
+
+            expect(result.verified).toBe(false);
+            expect(result.errorDetails).toContain(
+                'Discarded outdated or unavailable trust lists (their issuers are not trusted): https://tl.example/de.xml (could not be loaded: "unreachable")',
+            );
+        });
+
         it("names the discarded lists for verifiers that check anchors themselves", async () => {
             const { service, source } = await serviceWithLists();
 
