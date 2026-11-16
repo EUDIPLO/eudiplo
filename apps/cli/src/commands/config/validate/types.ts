@@ -27,6 +27,8 @@ export interface ValidationIssue {
     file: string;
     path?: string;
     message: string;
+    /** The variable of an unresolved `${VAR}` placeholder. */
+    variable?: string;
 }
 
 export interface TenantValidationResult {
@@ -34,5 +36,7 @@ export interface TenantValidationResult {
     valid: boolean;
     files: number;
     errors: ValidationIssue[];
+    /** Placeholders without a value, when validated with allowUnresolvedPlaceholders. */
+    unresolved?: ValidationIssue[];
     resourceCounts: Record<string, number>;
 }

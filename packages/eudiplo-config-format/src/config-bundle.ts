@@ -60,6 +60,8 @@ export interface ConfigBundle {
 const sha256 = (value: Uint8Array): string =>
     createHash("sha256").update(value).digest("hex");
 
+const ZIP_ENTRY_TIME = new Date(1980, 0, 1);
+
 export class ConfigBundleCodec {
     encode(bundle: ConfigBundle): Buffer {
         assertConfigBundle(bundle);
@@ -98,7 +100,11 @@ export class ConfigBundleCodec {
             }
             entries[asset.path] = bytes;
         }
-        return Buffer.from(zipSync(entries, { level: 6 }));
+        // A fixed entry time (the earliest a ZIP can hold) keeps the archive
+        // the same for the same bundle, so a plan and its import send equal bytes.
+        return Buffer.from(
+            zipSync(entries, { level: 6, mtime: ZIP_ENTRY_TIME }),
+        );
     }
 
     decode(input: Buffer): ConfigBundle {

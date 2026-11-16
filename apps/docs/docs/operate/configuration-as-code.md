@@ -225,6 +225,9 @@ secrets with `${…}` placeholders and private keys with
 generate them (see
 [secret and key policy](../reference/config-bundle-format.md#secret-and-key-policy)).
 
+To keep a tenant in Git as a tenant folder instead of a bundle, see
+[Keep a tenant in Git](tenant-folders-in-git.md).
+
 ## Download one resource
 
 **Download configuration** on the page of a credential, issuance or
@@ -283,38 +286,8 @@ with `CONFIG_PLAN_STALE` before writing anything.
 `config plan` prints the plan as JSON; `--format text` (or its alias `--diff`)
 prints one line per resource with its field changes instead.
 
-### Plan and import a tenant folder
-
-`config plan` and `config import` also take a tenant folder in the
-[folder layout](../reference/config-bundle-format.md#tenant-folder-layout), so a
-Git repository of tenant folders can be planned against a running instance
-without packing it first:
-
-```bash
-eudiplo config plan ./config/acme --instance staging --mode upsert --diff --output plan.json --allow-env PORTAL_SECRET
-eudiplo config import ./config/acme --instance staging --mode upsert --plan plan.json --allow-env PORTAL_SECRET
-```
-
-The CLI first validates the folder offline, like
-[`eudiplo config tenant validate`](#validate-in-ci); a folder with errors exits
-with `1` and is not sent. `${VAR}` placeholders resolve only from the
-environment variables named in `--allow-env` (comma-separated); any other
-placeholder without a default fails the validation. The folder's author is not
-always the one who runs the CLI, so a folder cannot read the CI job's other
-variables, and never `EUDIPLO_TOKEN`, `EUDIPLO_CLIENT_ID` or
-`EUDIPLO_CLIENT_SECRET`. A symbolic link that points outside the folder is
-refused. The CLI then sends the folder as a bundle archive, `info.json` and
-`images/` included. The bundle is the same for the same
-files and environment, so the import matches the reviewed plan. The tenant comes
-from the access token, and the folder name is the bundle's source, which
-`replace` mode uses to decide what it deletes, so keep the folder named after
-the tenant.
-
-A folder imported with the CLI and the same folder imported at startup from
-`CONFIG_FOLDER` count as two different sources. Switching between them gives
-`!generate` clients a new secret, applies unchanged key chains again (a
-`regenerate` key source gets new keys), and `replace` does not delete what the
-other source created. Choose one of the two for each tenant.
+`config plan` and `config import` also take a tenant folder instead of a
+bundle; see [Keep a tenant in Git](tenant-folders-in-git.md#plan-and-import-the-folder).
 
 The web client does the same under **Settings > Config Portability**:
 **Plan and validate** lists each changed field with its current value and its

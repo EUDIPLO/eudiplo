@@ -1,4 +1,11 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+    mkdir,
+    mkdtemp,
+    readFile,
+    rm,
+    symlink,
+    writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -6,6 +13,11 @@ import {
     ConfigBundleCodec,
 } from "@eudiplo/config-format/config-bundle.js";
 import { CONFIG_RESOURCE_KINDS } from "@eudiplo/config-format/config-format.js";
+import {
+    TENANT_FOLDER_RESOURCES,
+    TENANT_FOLDER_TENANT,
+    type TenantFolderResource,
+} from "@eudiplo/config-format/tenant-folder.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runPortabilityCommand } from "../src/commands/config/portability/action.js";
 import { folderResources } from "../src/commands/config/portability/folder-bundle.js";
@@ -74,6 +86,7 @@ describe("config plan / import with a tenant folder", () => {
         await mkdir(join(tenant, "images"));
         await writeFile(join(tenant, "images", "logo.png"), "png-bytes");
         await writeFile(join(tenant, "images", ".gitkeep"), "");
+        await writeFile(join(tenant, "images", ".DS_Store"), "finder");
     });
 
     afterEach(async () => {
@@ -150,6 +163,8 @@ describe("config plan / import with a tenant folder", () => {
         expect(calls[1][0]).toBe(
             `https://example.test/api/config-bundles/import/archive?mode=upsert&planFingerprint=${fingerprint}`,
         );
+        // Equal bytes, not only equal content: the codec pins the ZIP time.
+        expect(await sentZip(calls[1][1])).toEqual(await sentZip(calls[0][1]));
         const planned = await sentBundle(calls[0][1]);
         expect(planned.manifest.exportedAt).toBe("1970-01-01T00:00:00.000Z");
         expect(await sentBundle(calls[1][1])).toEqual(planned);
@@ -199,6 +214,21 @@ describe("config plan / import with a tenant folder", () => {
             "images/.hidden.png",
             "images/logo.png",
         ]);
+    });
+
+    it("uses the folder layout the backend's startup import reads", () => {
+        const where = (resources: readonly TenantFolderResource[]) =>
+            Object.fromEntries(
+                resources.map((resource) => [
+                    resource.kind,
+                    "file" in resource
+                        ? `${resource.file} -> ${resource.bundlePath}`
+                        : `${resource.directory}/`,
+                ]),
+            );
+        expect(where(folderResources())).toEqual(
+            where([TENANT_FOLDER_TENANT, ...TENANT_FOLDER_RESOURCES]),
+        );
     });
 
     it("knows a folder location for every resource kind", () => {
@@ -258,21 +288,28 @@ describe("config plan / import with a tenant folder", () => {
         );
     });
 
-    it("reads no environment variable that --allow-env does not name", async () => {
+    it("keeps a placeholder that --allow-env does not name for the server, without its value", async () => {
         // PORTAL_SECRET is set, but the folder may not read it.
         const code = await runPortabilityCommand(
-            "import",
+            "plan",
             config,
-            {
-                positionals: ["acme"],
-                flags: { "plan-fingerprint": fingerprint },
-            },
+            { positionals: ["acme"], flags: {} },
             context,
         );
 
-        expect(code).toBe(1);
-        expect(context.fetch).not.toHaveBeenCalled();
-        expect(output.stderr).toContain("${PORTAL_SECRET}");
+        // An exported folder keeps its placeholders; the server's plan blocks
+        // that resource with SECRET_REQUIRED, so the CLI does not stop here.
+        expect(code).toBe(0);
+        expect(output.stderr).toContain(
+            "clients/portal.json /secret: Unresolved placeholder ${PORTAL_SECRET}",
+        );
+        expect(output.stderr).toContain("SECRET_REQUIRED");
+        const bundle = await sentBundle(
+            vi.mocked(context.fetch).mock.calls[0][1],
+        );
+        expect(bundle.documents[1].spec).toMatchObject({
+            secret: "${PORTAL_SECRET}",
+        });
         expect(output.stderr).toContain("--allow-env");
         expect(output.stderr).not.toContain("s3cr3t-value");
     });
@@ -347,6 +384,114 @@ describe("config plan / import with a tenant folder", () => {
         expect(context.fetch).toHaveBeenCalledOnce();
     });
 
+    it("never fills in the CLI's own EUDIPLO_* variables", async () => {
+        await writeJson(join(tenant, "clients", "portal.json"), {
+            clientId: "portal",
+            secret: "${EUDIPLO_TOKEN}",
+            roles: ["issuance:manage"],
+        });
+
+        const code = await runPortabilityCommand(
+            "plan",
+            config,
+            { positionals: ["acme"], flags: {} },
+            context,
+        );
+
+        expect(code).toBe(0);
+        const bundle = await sentBundle(
+            vi.mocked(context.fetch).mock.calls[0][1],
+        );
+        expect(bundle.documents[1].spec).toMatchObject({
+            secret: "${EUDIPLO_TOKEN}",
+        });
+        expect(output.stderr).toContain("(not named in --allow-env)");
+        expect(output.stdout + output.stderr).not.toContain("test-token");
+    });
+
+    it("shows filled-in values as their placeholder in the printed and saved plan", async () => {
+        const leaky = {
+            ...plan,
+            items: [
+                {
+                    kind: "Client",
+                    id: "portal",
+                    action: "update",
+                    changes: [
+                        {
+                            path: "/spec/description",
+                            before: "old",
+                            after: "Secret is s3cr3t-value here",
+                        },
+                    ],
+                },
+            ],
+        };
+        vi.mocked(context.fetch).mockImplementation(
+            async () => new Response(JSON.stringify(leaky), { status: 200 }),
+        );
+
+        for (const flags of [
+            { diff: true, "allow-env": "PORTAL_SECRET" },
+            { output: "plan.json", "allow-env": "PORTAL_SECRET" },
+        ]) {
+            output.stdout = "";
+            await runPortabilityCommand(
+                "plan",
+                config,
+                { positionals: ["acme"], flags },
+                context,
+            );
+            expect(output.stdout).not.toContain("s3cr3t-value");
+            expect(output.stdout).toContain("Secret is ${PORTAL_SECRET} here");
+        }
+        const saved = await readFile(join(cwd, "plan.json"), "utf8");
+        expect(saved).not.toContain("s3cr3t-value");
+        expect(JSON.parse(saved).planFingerprint).toBe(fingerprint);
+    });
+
+    it("never masks inside the plan fingerprint", async () => {
+        context.env.PORTAL_SECRET = "bbbbbbbbbbbb";
+
+        await runPortabilityCommand(
+            "plan",
+            config,
+            {
+                positionals: ["acme"],
+                flags: { output: "plan.json", "allow-env": "PORTAL_SECRET" },
+            },
+            context,
+        );
+
+        const saved = JSON.parse(
+            await readFile(join(cwd, "plan.json"), "utf8"),
+        );
+        expect(saved.planFingerprint).toBe(fingerprint);
+    });
+
+    it("shows filled-in values as their placeholder in an API error", async () => {
+        vi.mocked(context.fetch).mockImplementation(
+            async () =>
+                new Response("secret s3cr3t-value is too short", {
+                    status: 400,
+                }),
+        );
+
+        await expect(
+            runPortabilityCommand(
+                "plan",
+                config,
+                {
+                    positionals: ["acme"],
+                    flags: { "allow-env": "PORTAL_SECRET" },
+                },
+                context,
+            ),
+        ).rejects.toThrow(
+            "EUDIPLO API returned 400: secret ${PORTAL_SECRET} is too short",
+        );
+    });
+
     it("writes the validation report as JSON with --format json", async () => {
         await rm(join(tenant, "info.json"));
 
@@ -396,6 +541,26 @@ describe("config plan / import with a tenant folder", () => {
             ),
         ).rejects.toThrow("either --diff or --format json");
         expect(context.fetch).not.toHaveBeenCalled();
+    });
+
+    it("takes --allow-env from the command line", async () => {
+        // Its own CLI config, not the one in the home directory.
+        const cliConfig = join(cwd, "cli-config.json");
+        await writeJson(cliConfig, config);
+        context.env.EUDIPLO_CLI_CONFIG = cliConfig;
+
+        const code = await runCli(
+            ["config", "plan", "acme", "--allow-env", "PORTAL_SECRET"],
+            context,
+        );
+
+        expect(code).toBe(0);
+        const bundle = await sentBundle(
+            vi.mocked(context.fetch).mock.calls[0][1],
+        );
+        expect(bundle.documents[1].spec).toMatchObject({
+            secret: "s3cr3t-value",
+        });
     });
 
     it("rejects an unknown --format through the command line", async () => {

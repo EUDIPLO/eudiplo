@@ -11,6 +11,7 @@ import {
 } from "@eudiplo/config-format/config-format.js";
 import { validateConfigDocument } from "@eudiplo/config-format/config-validator.js";
 import { resolveConfigVariables } from "@eudiplo/config-format/config-values.js";
+import { compareCodePoints } from "@eudiplo/config-format/tenant-folder.js";
 import type { ErrorObject, ValidateFunction } from "ajv";
 import Ajv2020Module from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
@@ -27,7 +28,7 @@ async function discoverTenantDirectories(rootPath: string): Promise<string[]> {
     return entries
         .filter((entry) => entry.isDirectory())
         .map((entry) => entry.name)
-        .sort((left, right) => left.localeCompare(right));
+        .sort(compareCodePoints);
 }
 
 export async function validateTenantsRoot(
@@ -54,11 +55,22 @@ export async function validateTenantsRoot(
     return results;
 }
 
+export interface TenantValidationOptions {
+    /**
+     * Report `${VAR}` placeholders without a value in `unresolved` instead of
+     * as errors, and validate the file with the placeholder text in place.
+     * `config plan`/`import` use this: the server reports them as
+     * SECRET_REQUIRED, so a freshly exported folder can still be planned.
+     */
+    allowUnresolvedPlaceholders?: boolean;
+}
+
 export async function validateTenantDirectory(
     tenantPath: string,
     tenantId: string,
     schemas: Map<string, Record<string, unknown>>,
     env: NodeJS.ProcessEnv,
+    options: TenantValidationOptions = {},
 ): Promise<TenantValidationResult> {
     if (!existsSync(tenantPath)) {
         throw new Error(`Tenant directory not found: ${tenantPath}`);
@@ -68,6 +80,8 @@ export async function validateTenantDirectory(
         getValidator: createValidatorFactory(schemas),
         env,
         errors: [],
+        unresolved: [],
+        allowUnresolvedPlaceholders: options.allowUnresolvedPlaceholders,
         resourceCounts: {},
         files: 0,
     };
@@ -85,6 +99,9 @@ export async function validateTenantDirectory(
         valid: state.errors.length === 0,
         files: state.files,
         errors: state.errors,
+        ...(options.allowUnresolvedPlaceholders
+            ? { unresolved: state.unresolved }
+            : {}),
         resourceCounts: state.resourceCounts,
     };
 }
@@ -93,6 +110,8 @@ interface TenantValidationState {
     getValidator: (schemaFile: string) => ValidateFunction;
     env: NodeJS.ProcessEnv;
     errors: ValidationIssue[];
+    unresolved: ValidationIssue[];
+    allowUnresolvedPlaceholders?: boolean;
     resourceCounts: Record<string, number>;
     files: number;
 }
@@ -167,7 +186,7 @@ async function validateDirectoryEntry(
         .filter(
             (dirEntry) => dirEntry.isFile() && dirEntry.name.endsWith(".json"),
         )
-        .sort((left, right) => left.name.localeCompare(right.name));
+        .sort((left, right) => compareCodePoints(left.name, right.name));
 
     for (const dirEntry of dirEntries) {
         const relativeFile = `${entry.subfolder}/${dirEntry.name}`;
@@ -197,6 +216,7 @@ async function recordValidationOutcome(
         state.getValidator,
         state.env,
         state.errors,
+        state.allowUnresolvedPlaceholders ? state.unresolved : state.errors,
     );
     if (isValid) {
         state.resourceCounts[resourceType] =
@@ -211,6 +231,7 @@ async function validateResourceFile(
     getValidator: (schemaFile: string) => ValidateFunction,
     env: NodeJS.ProcessEnv,
     errors: ValidationIssue[],
+    placeholderIssues: ValidationIssue[],
 ): Promise<boolean> {
     let raw: string;
     try {
@@ -233,7 +254,12 @@ async function validateResourceFile(
     }
 
     const errorsBefore = errors.length;
-    let resolved = resolvePlaceholders(payload, env, relativeFile, errors);
+    let resolved = resolvePlaceholders(
+        payload,
+        env,
+        relativeFile,
+        placeholderIssues,
+    );
     if (errors.length > errorsBefore) {
         return false;
     }
@@ -348,6 +374,11 @@ function resolvePlaceholders(
 ): unknown {
     const result = resolveConfigVariables(value, env);
     for (const issue of result.issues)
-        errors.push({ file, path: issue.path, message: issue.message });
+        errors.push({
+            file,
+            path: issue.path,
+            message: issue.message,
+            variable: issue.variable,
+        });
     return result.value;
 }

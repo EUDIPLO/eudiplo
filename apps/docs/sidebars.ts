@@ -89,6 +89,7 @@ const sidebars: SidebarsConfig = {
         'operate/waf',
         'operate/cli',
         'operate/configuration-as-code',
+        'operate/tenant-folders-in-git',
         'operate/tenants-and-access',
         'operate/keycloak',
         'operate/oidc-provider',

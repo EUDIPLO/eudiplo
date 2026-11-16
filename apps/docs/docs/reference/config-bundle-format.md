@@ -253,7 +253,9 @@ that does not exist yet is created only if its folder contains `info.json`.
     └── images/<file>           logos and credential images, referenced by file name
 ```
 
-File names are not significant; the ID comes from the document.
+File names are not significant; the ID comes from the document. In `images/`,
+the files `.gitkeep`, `.DS_Store`, `Thumbs.db` and `desktop.ini` are not
+imported; every other file is an image.
 
 ## Bundle layout
 

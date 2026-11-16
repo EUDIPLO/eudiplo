@@ -1,4 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -546,6 +552,63 @@ describe("ConfigFolderBundleService", () => {
                     }),
                 ]),
             );
+        } finally {
+            rmSync(tenantRoot, { recursive: true, force: true });
+        }
+    });
+
+    it("reads a folder in the shape `eudiplo config export` writes", () => {
+        // The CLI writes envelopes with sorted keys, drops empty metadata and
+        // names a file after a hash of an ID that is no portable file name.
+        const demo = fileURLToPath(
+            new URL(
+                "../../../../../assets/config/demo/issuance/credentials/citizen.json",
+                import.meta.url,
+            ),
+        );
+        const { spec } = JSON.parse(readFileSync(demo, "utf8"));
+        const tenantRoot = tenantFolder({
+            "issuance/credentials/pid_v1-368f06c1.json": JSON.stringify({
+                $schema: schemaUrl("CredentialConfig"),
+                spec: { ...spec, id: "pid:v1" },
+            }),
+            "issuance/credentials/citizen.json": JSON.stringify({
+                $schema: schemaUrl("CredentialConfig"),
+                metadata: { generation: 3 },
+                spec,
+            }),
+            // Code-point order puts upper case first on every machine;
+            // localeCompare would not.
+            "issuance/credentials/alpha.json": JSON.stringify({
+                $schema: schemaUrl("CredentialConfig"),
+                spec: { ...spec, id: "alpha" },
+            }),
+            "issuance/credentials/Zeta.json": JSON.stringify({
+                $schema: schemaUrl("CredentialConfig"),
+                spec: { ...spec, id: "Zeta" },
+            }),
+            "images/logo.png": "png-bytes",
+            "images/.DS_Store": "finder",
+            "images/.gitkeep": "",
+        });
+        const { service } = createService();
+
+        try {
+            const bundle = service.buildBundle("acme", tenantRoot);
+
+            expect(
+                bundle.manifest.resources.map(
+                    (resource) => `${resource.kind}/${resource.id}`,
+                ),
+            ).toEqual([
+                "CredentialConfig/Zeta",
+                "CredentialConfig/alpha",
+                "CredentialConfig/citizen",
+                "CredentialConfig/pid:v1",
+            ]);
+            expect(bundle.assets.map((asset) => asset.path)).toEqual([
+                "images/logo.png",
+            ]);
         } finally {
             rmSync(tenantRoot, { recursive: true, force: true });
         }

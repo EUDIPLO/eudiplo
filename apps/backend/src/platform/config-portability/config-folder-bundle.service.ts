@@ -1,12 +1,21 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { extname, join, relative, sep } from "node:path";
+import { join, relative, sep } from "node:path";
 import {
     normalizeDocument,
     resourceId,
     schemaUrl,
     serializeDocument,
 } from "@eudiplo/config-format/config-format.js";
+import {
+    compareCodePoints,
+    imageContentType,
+    isTenantFolderImage,
+    TENANT_FOLDER_IMAGES,
+    TENANT_FOLDER_RESOURCES,
+    TENANT_FOLDER_TENANT,
+    type TenantFolderResource,
+} from "@eudiplo/config-format/tenant-folder.js";
 import {
     BadRequestException,
     ConflictException,
@@ -36,36 +45,6 @@ import type {
 } from "./config-resource.types.js";
 import { generatedSecretsOf } from "./generated-secrets.js";
 import { CLIENT_MANAGED_BY_IDENTITY_PROVIDER } from "./idp-managed-clients.js";
-
-type FolderResource =
-    | { kind: ConfigResourceKind; file: string }
-    | { kind: ConfigResourceKind; directory: string };
-
-const FOLDER_RESOURCES: FolderResource[] = [
-    { kind: "KmsConfig", file: "kms.json" },
-    { kind: "Client", directory: "clients" },
-    { kind: "KeyChain", directory: "key-chains" },
-    { kind: "KeyChainDefaults", file: "key-chain-defaults.json" },
-    { kind: "RegistrarConfig", file: "registrar.json" },
-    { kind: "AttributeProvider", directory: "attribute-providers" },
-    { kind: "WebhookEndpoint", directory: "webhook-endpoints" },
-    { kind: "IssuanceConfig", file: "issuance/issuance.json" },
-    { kind: "CredentialConfig", directory: "issuance/credentials" },
-    { kind: "TrustList", directory: "trust-lists" },
-    {
-        kind: "FederationTrustAnchor",
-        directory: "federation-trust-anchors",
-    },
-    { kind: "PresentationConfig", directory: "presentation" },
-    { kind: "StatusList", directory: "issuance/status-lists" },
-];
-
-/**
- * The tenant settings. The startup import applies `info.json` before the
- * other files (see TenantService.setupTenant), so only a reattach reads it
- * here.
- */
-const TENANT_RESOURCE: FolderResource = { kind: "Tenant", file: "info.json" };
 
 /**
  * Body of the `400` that the reattach endpoints answer when a file of the
@@ -97,17 +76,6 @@ class BlockingIssuesError extends Error {
         super(issues.map(formatBlockingIssue).join("; "));
     }
 }
-
-const MIME_TYPES: Record<string, string> = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".gif": "image/gif",
-    ".svg": "image/svg+xml",
-    ".webp": "image/webp",
-    ".ico": "image/x-icon",
-    ".bmp": "image/bmp",
-};
 
 @Injectable()
 export class ConfigFolderBundleService {
@@ -259,8 +227,10 @@ export class ConfigFolderBundleService {
             tenantId,
             tenantRoot,
             kind === "Tenant"
-                ? [TENANT_RESOURCE]
-                : FOLDER_RESOURCES.filter((resource) => resource.kind === kind),
+                ? [TENANT_FOLDER_TENANT]
+                : TENANT_FOLDER_RESOURCES.filter(
+                      (resource) => resource.kind === kind,
+                  ),
         );
         const index = full.documents.findIndex(
             (document) =>
@@ -303,13 +273,17 @@ export class ConfigFolderBundleService {
     }
 
     buildBundle(tenantId: string, tenantRoot: string): ConfigBundle {
-        return this.collectBundle(tenantId, tenantRoot, FOLDER_RESOURCES);
+        return this.collectBundle(
+            tenantId,
+            tenantRoot,
+            TENANT_FOLDER_RESOURCES,
+        );
     }
 
     private collectBundle(
         tenantId: string,
         tenantRoot: string,
-        folderResources: FolderResource[],
+        folderResources: readonly TenantFolderResource[],
     ): ConfigBundle {
         const documents: ConfigDocument[] = [];
         const warnings: ConfigMigrationIssue[] = [];
@@ -361,7 +335,7 @@ export class ConfigFolderBundleService {
     }
 
     private loadResourceDocument(
-        resource: FolderResource,
+        resource: TenantFolderResource,
         filePath: string,
     ): { document: ConfigDocument; issues: ConfigMigrationIssue[] } {
         const rawPayload = parseJsonFile(filePath);
@@ -409,7 +383,7 @@ export class ConfigFolderBundleService {
 
     private resourceFiles(
         tenantRoot: string,
-        resource: FolderResource,
+        resource: TenantFolderResource,
     ): string[] {
         if ("file" in resource) {
             const path = join(tenantRoot, resource.file);
@@ -422,34 +396,35 @@ export class ConfigFolderBundleService {
         return readdirSync(directory, { withFileTypes: true })
             .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
             .map((entry) => join(directory, entry.name))
-            .sort((left, right) => left.localeCompare(right));
+            .sort(compareCodePoints);
     }
 
     private loadAssets(tenantRoot: string): ConfigBundleAsset[] {
-        const directory = join(tenantRoot, "images");
+        const directory = join(tenantRoot, TENANT_FOLDER_IMAGES);
         if (!existsSync(directory)) {
             return [];
         }
         return readdirSync(directory, { withFileTypes: true })
-            .filter((entry) => entry.isFile() && entry.name !== ".gitkeep")
+            .filter(
+                (entry) => entry.isFile() && isTenantFolderImage(entry.name),
+            )
             .map((entry) => {
                 const data = readFileSync(join(directory, entry.name));
                 return {
-                    path: `images/${entry.name}`,
-                    contentType:
-                        MIME_TYPES[extname(entry.name).toLowerCase()] ??
-                        "application/octet-stream",
+                    path: `${TENANT_FOLDER_IMAGES}/${entry.name}`,
+                    contentType: imageContentType(entry.name),
                     sha256: sha256(data),
                     data: data.toString("base64"),
                 };
             })
-            .sort((left, right) => left.path.localeCompare(right.path));
+            .sort((left, right) => compareCodePoints(left.path, right.path));
     }
 
     private documentPath(tenantRoot: string, document: ConfigDocument): string {
-        const definition = [TENANT_RESOURCE, ...FOLDER_RESOURCES].find(
-            (candidate) => candidate.kind === document.kind,
-        )!;
+        const definition = [
+            TENANT_FOLDER_TENANT,
+            ...TENANT_FOLDER_RESOURCES,
+        ].find((candidate) => candidate.kind === document.kind)!;
         if ("file" in definition) {
             return definition.file;
         }

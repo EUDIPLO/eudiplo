@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import { basename, extname, isAbsolute, join } from "node:path";
+import { basename, extname, isAbsolute, join, resolve } from "node:path";
 import { ConfigBundleCodec } from "@eudiplo/config-format/config-bundle.js";
 import { atomicWriteFile } from "@eudiplo/config-format/config-io.js";
 import { readStringFlag } from "../../../options.js";
@@ -9,10 +9,13 @@ import { buildJsonReport, formatTextReport } from "../validate/report.js";
 import { loadTenantConfigSchemas } from "../validate/schemas.js";
 import { validateTenantDirectory } from "../validate/validator.js";
 import {
-    allowedFolderEnv,
     assertFolderContained,
+    folderEnvironment,
+    maskFilledText,
+    maskFilledValues,
     packTenantFolder,
 } from "./folder-bundle.js";
+import { writeTenantFolder } from "./folder-export.js";
 import { upgradeFile } from "./upgrade.js";
 
 const codec = new ConfigBundleCodec();
@@ -69,11 +72,13 @@ export async function runPortabilityCommand(
         return 0;
     }
     if (action === "export") {
-        const output = resolvePath(
+        const requested =
             readStringFlag(parsed.flags, "output") ??
-                "eudiplo-config-bundle.zip",
-            context,
-        );
+            "eudiplo-config-bundle.zip";
+        const output = resolvePath(requested, context);
+        if (await isFolderOutput(requested, output))
+            // resolve() drops the trailing slash.
+            return exportFolder(baseUrl, authHeaders, resolve(output), context);
         const format =
             extname(output).toLowerCase() === ".json" ? "json" : "zip";
         const response = await context.fetch(
@@ -87,6 +92,10 @@ export async function runPortabilityCommand(
                 : `${JSON.stringify(await response.json(), null, 2)}\n`;
         await atomicWriteFile(output, data);
         context.stdout.write(`Exported configuration bundle to ${output}\n`);
+        if (!extname(output))
+            context.stderr.write(
+                `Note: wrote a ZIP bundle. To write a tenant folder instead, end --output with a slash: ${requested.replace(/[\\/]+$/, "")}/\n`,
+            );
         return 0;
     }
 
@@ -101,7 +110,7 @@ export async function runPortabilityCommand(
         throw new Error(
             "--allow-env applies to a tenant folder only; a bundle's placeholders are resolved by the server.",
         );
-    const folderEnv = allowedFolderEnv(allowEnv, context.env);
+    const folderEnv = folderEnvironment(allowEnv, context.env);
     if (folder) {
         await assertFolderContained(bundlePath);
         // Offline first: a folder that does not validate never reaches the API.
@@ -109,17 +118,18 @@ export async function runPortabilityCommand(
             bundlePath,
             basename(bundlePath),
             await loadTenantConfigSchemas(),
-            folderEnv,
+            folderEnv.env,
+            { allowUnresolvedPlaceholders: true },
         );
+        // An exported folder keeps its `${…}` placeholders. The server plans
+        // them as SECRET_REQUIRED, which blocks the import of that resource.
+        for (const issue of validation.unresolved ?? []) {
+            const reason = issue.variable && folderEnv.withheld(issue.variable);
+            context.stderr.write(
+                `${issue.file} ${issue.path}: ${issue.message}${reason ? ` (${reason})` : ""}; the plan blocks this resource with SECRET_REQUIRED\n`,
+            );
+        }
         if (!validation.valid) {
-            if (
-                validation.errors.some((issue) =>
-                    issue.message.startsWith("Unresolved placeholder"),
-                )
-            )
-                context.stderr.write(
-                    "Placeholders resolve only from the variables named in --allow-env.\n",
-                );
             if (format === "json")
                 context.stdout.write(
                     `${JSON.stringify(buildJsonReport([validation]), null, 2)}\n`,
@@ -163,7 +173,7 @@ export async function runPortabilityCommand(
         // A folder goes as a ZIP: the archive endpoints accept up to 50 MiB,
         // the JSON body 10 MB, and assets are base64 in JSON.
         const zip = folder
-            ? codec.encode(await packTenantFolder(bundlePath, folderEnv))
+            ? codec.encode(await packTenantFolder(bundlePath, folderEnv.env))
             : await readFile(bundlePath);
         form.set(
             "bundle",
@@ -181,8 +191,9 @@ export async function runPortabilityCommand(
         `${baseUrl}/api/config-bundles/${endpoint}?${query}`,
         { method: "POST", headers, body },
     );
-    await assertOk(response);
-    const result = await response.json();
+    await assertOk(response, folderEnv.filled);
+    // The plan shows field values, and a placeholder can sit in any field.
+    const result = maskFilledValues(await response.json(), folderEnv.filled);
     if (action === "plan") {
         const output = readStringFlag(parsed.flags, "output");
         if (output)
@@ -223,6 +234,53 @@ export async function runPortabilityCommand(
 }
 
 /**
+ * `config export --output <dir>/`: fetch the bundle as a ZIP (the codec checks
+ * paths, checksums and size limits) and write it as a tenant folder.
+ */
+async function exportFolder(
+    baseUrl: string,
+    headers: Record<string, string>,
+    output: string,
+    context: CommandContext,
+): Promise<number> {
+    const response = await context.fetch(
+        `${baseUrl}/api/config-bundles/export?format=zip`,
+        { headers },
+    );
+    await assertOk(response);
+    const bundle = codec.decode(Buffer.from(await response.arrayBuffer()));
+    const { files, assets } = await writeTenantFolder(bundle, output);
+    context.stdout.write(
+        `Exported tenant ${bundle.manifest.tenant} to ${output}: ${files.size} files, ${assets} images\n`,
+    );
+    if (basename(output) !== bundle.manifest.tenant)
+        context.stderr.write(
+            `Note: the folder is not named after the tenant (${bundle.manifest.tenant}). The startup import and replace mode use the folder name, so rename it before using it as a tenant folder.\n`,
+        );
+    for (const warning of bundle.manifest.warnings)
+        context.stderr.write(`warning ${warning.code}: ${warning.message}\n`);
+    const requirements = bundle.manifest.requirements;
+    if (requirements.length) {
+        context.stdout.write(
+            `${requirements.length} value(s) to supply before this folder can be imported:\n`,
+        );
+        for (const requirement of requirements) {
+            const file =
+                files.get(
+                    `${requirement.resource.kind}/${requirement.resource.id}`,
+                ) ?? `${requirement.resource.kind}/${requirement.resource.id}`;
+            const value = requirement.placeholder
+                ? `\${${requirement.placeholder}}`
+                : "private key";
+            context.stdout.write(
+                `  ${file} ${requirement.path}: ${value} (${requirement.code})\n`,
+            );
+        }
+    }
+    return 0;
+}
+
+/**
  * Output format of `config plan`. JSON stays the default so scripts that parse
  * today's output keep working; `--diff` is an alias for `--format text`.
  */
@@ -241,6 +299,24 @@ function planFormat(action: Action, parsed: ParsedArgs): "text" | "json" {
     return diff ? "text" : (format ?? "json");
 }
 
+/**
+ * `config export` writes a tenant folder when `--output` ends with a slash or
+ * names an existing directory; any other path is a bundle file, a ZIP unless
+ * it ends with `.json`.
+ */
+async function isFolderOutput(
+    requested: string,
+    output: string,
+): Promise<boolean> {
+    if (/[\\/]$/.test(requested)) return true;
+    try {
+        return (await stat(output)).isDirectory();
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+        throw error;
+    }
+}
+
 async function isDirectory(path: string): Promise<boolean> {
     try {
         return (await stat(path)).isDirectory();
@@ -255,8 +331,12 @@ function resolvePath(value: string, context: CommandContext): string {
     return isAbsolute(value) ? value : join(context.cwd, value);
 }
 
-async function assertOk(response: Response): Promise<void> {
+async function assertOk(
+    response: Response,
+    filled: Map<string, string> = new Map(),
+): Promise<void> {
     if (response.ok) return;
-    const body = await response.text();
+    // An error message can quote a value the CLI filled into the folder.
+    const body = maskFilledText(await response.text(), filled);
     throw new Error(`EUDIPLO API returned ${response.status}: ${body}`);
 }
