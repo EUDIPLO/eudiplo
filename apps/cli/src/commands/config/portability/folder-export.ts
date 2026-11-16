@@ -93,11 +93,9 @@ function folderPaths(bundle: ConfigBundle): Map<string, string> {
         }))
         // Code-point order, not localeCompare: the same on every machine, so
         // the same ID gets the hash suffix on every export.
-        .sort((left, right) => {
-            const a = `${left.kind}/${left.id}`;
-            const b = `${right.kind}/${right.id}`;
-            return a < b ? -1 : a > b ? 1 : 0;
-        });
+        .sort((left, right) =>
+            byCodePoint(`${left.kind}/${left.id}`, `${right.kind}/${right.id}`),
+        );
     for (const { kind, id } of ordered) {
         const resource = layoutOf(kind);
         let path =
@@ -137,12 +135,17 @@ function sortKeys(value: unknown, top = true): unknown {
     if (!value || typeof value !== "object") return value;
     const keys = Object.keys(value);
     // Keep the envelope order; sort everything below it.
-    if (!top) keys.sort();
+    if (!top) keys.sort(byCodePoint);
     return Object.fromEntries(
         keys
             .filter((key) => (value as any)[key] !== undefined)
             .map((key) => [key, sortKeys((value as any)[key], false)]),
     );
+}
+
+function byCodePoint(left: string, right: string): number {
+    if (left < right) return -1;
+    return left > right ? 1 : 0;
 }
 
 function layoutOf(kind: ConfigResourceKind) {

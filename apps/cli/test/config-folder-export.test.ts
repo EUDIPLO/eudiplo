@@ -323,7 +323,10 @@ async function tree(root: string): Promise<string[]> {
         }
     };
     await walk(root);
-    return files.sort();
+    return files.sort((left, right) => {
+        if (left < right) return -1;
+        return left > right ? 1 : 0;
+    });
 }
 
 async function contents(root: string): Promise<Record<string, string>> {
