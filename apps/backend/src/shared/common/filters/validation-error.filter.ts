@@ -30,8 +30,9 @@ export class ValidationErrorFilter implements ExceptionFilter {
         const ofRequest = exception.constructor === ValidationError;
 
         // Log with full details (no [Array] truncation)
+        const kind = ofRequest ? "" : ` (${exception.name})`;
         this.logger.error(
-            `Validation error${ofRequest ? "" : ` (${exception.name})`}: ${JSON.stringify(issues, null, 2)}`,
+            `Validation error${kind}: ${JSON.stringify(issues, null, 2)}`,
         );
 
         response.status(HttpStatus.BAD_REQUEST).json({

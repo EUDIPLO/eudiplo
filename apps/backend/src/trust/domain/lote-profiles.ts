@@ -152,7 +152,24 @@ export type LoteServiceNote =
     /** A status the list type does not approve services with. */
     | "status-unknown"
     /** Read: no status, although the profile requires one. */
-    | "status-missing";
+    | "status-missing"
+    /**
+     * A service type of ETSI TS 119 612 Trusted Lists, which only a Trusted
+     * List can grant: a LoTE has no qualified status to give it.
+     */
+    | "trusted-list-type";
+
+/** The namespace of ETSI TS 119 612 service type identifiers. */
+const TRUSTED_LIST_SERVICE_TYPE_PREFIX = "http://uri.etsi.org/TrstSvc/"; // NOSONAR: ETSI identifier URI, not fetched
+
+/**
+ * Whether a service type is one of ETSI TS 119 612 Trusted Lists, such as the
+ * qualified QEAA service `http://uri.etsi.org/TrstSvc/Svctype/EAA/Q`. A LoTE
+ * listing it does not make a service qualified.
+ */
+export function isTrustedListServiceType(serviceType: string): boolean {
+    return serviceType.startsWith(TRUSTED_LIST_SERVICE_TYPE_PREFIX);
+}
 
 export type ServiceStatusVerdict =
     | { keep: true; note?: "status-missing" }

@@ -4,6 +4,7 @@ import {
     discardedTrustListsNote,
     isTrustListCurrent,
     OutdatedTrustListsError,
+    UnavailableTrustedListsError,
     walletSafeTrustFailure,
 } from "./trust-list-freshness.js";
 
@@ -62,6 +63,27 @@ describe("trust list freshness", () => {
         );
     });
 
+    it("names a Trusted List's sequence number and why it could not be loaded", () => {
+        expect(
+            describeDiscardedTrustLists([
+                {
+                    list: "https://tl.example/de.xml",
+                    nextUpdate: "2026-12-01",
+                    trustedList: true,
+                    sequence: { number: 3, highestAccepted: 5 },
+                },
+                {
+                    list: "https://tl.example/fr.xml",
+                    nextUpdate: undefined,
+                    trustedList: true,
+                    unavailable: "Failed to fetch\nstatus 404",
+                },
+            ]),
+        ).toBe(
+            'https://tl.example/de.xml (TSLSequenceNumber 3 is lower than 5 accepted before), https://tl.example/fr.xml (could not be loaded: "Failed to fetch\\nstatus 404")',
+        );
+    });
+
     it("escapes a signed NextUpdate, so it cannot break log lines", () => {
         expect(
             describeDiscardedTrustLists([{ list: "x", nextUpdate: 'a"\nb' }]),
@@ -83,6 +105,29 @@ describe("trust list freshness", () => {
         ).toBe(
             " (2 outdated trust list(s) left out; the server log names them)",
         );
+    });
+
+    it("counts unavailable Trusted Lists in the wallet note", () => {
+        expect(
+            discardedTrustListsNote([
+                { list: "a", nextUpdate: "2026-01-01" },
+                { list: "b", nextUpdate: undefined, unavailable: "404" },
+            ]),
+        ).toBe(
+            " (2 outdated or unavailable trust list(s) left out; the server log names them)",
+        );
+    });
+
+    it("keeps unavailable Trusted Lists out of the error message", () => {
+        const error = new UnavailableTrustedListsError([
+            {
+                list: "https://tl.example/de.xml",
+                nextUpdate: undefined,
+                unavailable: "https://tl.example/de.xml: 404",
+            },
+        ]);
+        expect(error.message).not.toContain("tl.example");
+        expect(error.discarded).toHaveLength(1);
     });
 
     it("keeps lists and dates out of the error message", () => {

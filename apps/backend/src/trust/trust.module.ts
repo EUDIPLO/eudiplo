@@ -21,8 +21,10 @@ import {
 } from "./adapters/http-federation-resolver.js";
 import { LocalFederationEntityProvider } from "./adapters/local-federation-entity-provider.js";
 import { LocalFederationResolver } from "./adapters/local-federation-resolver.js";
+import { TrustListProviderByFormat } from "./adapters/trust-list-provider-by-format.js";
 import { TypeOrmAcceptedTrustListSequenceNumbers } from "./adapters/typeorm-accepted-trust-list-sequence-numbers.js";
 import { VerifiedLoteProvider } from "./adapters/verified-lote-provider.js";
+import { VerifiedTrustedListProvider } from "./adapters/verified-trusted-list-provider.js";
 import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
 import { CacheController } from "./cache.controller.js";
 import { TrustListSequenceNumberEntity } from "./entities/trust-list-sequence-number.entity.js";
@@ -142,9 +144,16 @@ export const federationEntityProvider: Provider = {
         TrustStoreService,
         {
             provide: TRUST_LIST_PROVIDER,
-            inject: [TrustListJwtService, LoteParserService],
-            useFactory: (jwt: TrustListJwtService, parser: LoteParserService) =>
-                new VerifiedLoteProvider(jwt, parser),
+            inject: [TrustListJwtService, LoteParserService, TrustFetchService],
+            useFactory: (
+                jwt: TrustListJwtService,
+                parser: LoteParserService,
+                trustFetch: TrustFetchService,
+            ) =>
+                new TrustListProviderByFormat(
+                    new VerifiedLoteProvider(jwt, parser),
+                    new VerifiedTrustedListProvider(trustFetch),
+                ),
         },
         {
             provide: ACCEPTED_TRUST_LIST_SEQUENCE_NUMBERS,

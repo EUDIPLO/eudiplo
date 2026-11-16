@@ -16,8 +16,14 @@ const TenantUrlPlaceholderSchema = z
 
 const TrustListUrlSchema = z.union([z.url(), TenantUrlPlaceholderSchema]);
 
-const TrustListRefSchema = z
+const LoteRefSchema = z
     .object({
+        format: z
+            .literal("lote")
+            .optional()
+            .describe(
+                "Format of the list: a List of Trusted Entities (ETSI TS 119 602) as JWT. Default.",
+            ),
         trustListId: z
             .string()
             .optional()
@@ -34,8 +40,49 @@ const TrustListRefSchema = z
             .optional()
             .describe("Optional verifier certificate in DER/base64 form."),
     })
-    .describe("Reference to a trust list used for authority verification.")
+    .describe(
+        "Reference to a List of Trusted Entities (ETSI TS 119 602) used for authority verification.",
+    )
     .strict();
+
+const Base64CertificateSchema = z
+    .string()
+    .trim()
+    .min(1)
+    .regex(/^[A-Za-z0-9+/\s]+={0,2}$/, "expected a base64 DER certificate");
+
+const TrustedListRefSchema = z
+    .object({
+        format: z
+            .literal("trusted-list")
+            .describe(
+                "Format of the list: an ETSI TS 119 612 Trusted List or list of trusted lists as XML.",
+            ),
+        url: TrustListUrlSchema.describe(
+            "URL of the Trusted List, or of a list of trusted lists (LOTL) whose national lists are followed.",
+        ),
+        signingCertificates: z
+            .array(Base64CertificateSchema)
+            .min(1)
+            .describe(
+                "Base64 DER certificates one of which must have signed the list: for a list of trusted lists, the signing certificates its operator publishes; for a national list, its scheme operator certificates.",
+            ),
+        schemeTerritories: z
+            .array(z.string().trim().min(1))
+            .min(1)
+            .optional()
+            .describe(
+                "For a list of trusted lists: the SchemeTerritory values of the national lists to follow, such as DE. All when absent.",
+            ),
+    })
+    .describe(
+        "Reference to an ETSI TS 119 612 Trusted List whose granted qualified services for the issuance of QEAAs are trusted.",
+    )
+    .strict();
+
+const TrustListRefSchema = z
+    .union([LoteRefSchema, TrustedListRefSchema])
+    .describe("Reference to a trust list used for authority verification.");
 
 const TrustedAuthorityQueryEtsiTlSchema = z
     .object({

@@ -57,7 +57,11 @@ const transactionDataVerifier = new Openid4vpVerifier({
 });
 
 const SHA_256 = "sha-256";
-const supportedHashAlgorithms: string[] = [SHA_256, "sha-384", "sha-512"];
+const supportedHashAlgorithms: ReadonlySet<string> = new Set([
+    SHA_256,
+    "sha-384",
+    "sha-512",
+]);
 
 interface Holder {
     presentation: TransactionDataPresentation;
@@ -332,7 +336,7 @@ async function entryHash(
         );
         return undefined;
     }
-    if (!supportedHashAlgorithms.includes(holder.alg)) {
+    if (!supportedHashAlgorithms.has(holder.alg)) {
         reasons.push(
             `${describe(holder)} hashes with '${holder.alg}', which EUDIPLO cannot check`,
         );

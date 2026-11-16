@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runPortabilityCommand } from "../src/commands/config/portability/action.js";
 import type { CliConfig, CommandContext } from "../src/types.js";
+
 const fingerprint = "a".repeat(64);
 const config: CliConfig = {
     defaultInstance: "test",
@@ -60,6 +61,25 @@ describe("reviewed CLI import plans", () => {
         expect(vi.mocked(context.fetch).mock.calls[1][0]).toContain(
             `planFingerprint=${fingerprint}`,
         );
+    });
+    it("sends a .zip bundle unchanged to the archive endpoint", async () => {
+        const zip = Buffer.from("PK\u0003\u0004zip-bytes");
+        await writeFile(join(cwd, "bundle.zip"), zip);
+
+        await runPortabilityCommand(
+            "plan",
+            config,
+            { positionals: ["bundle.zip"], flags: {} },
+            context,
+        );
+
+        const [url, init] = vi.mocked(context.fetch).mock.calls[0];
+        expect(url).toBe(
+            "https://example.test/api/config-bundles/plan/archive?mode=upsert",
+        );
+        const file = (init?.body as FormData).get("bundle") as File;
+        expect(file.name).toBe("bundle.zip");
+        expect(Buffer.from(await file.arrayBuffer())).toEqual(zip);
     });
     it("refuses an import without a reviewed plan before contacting the server", async () => {
         await expect(

@@ -20,11 +20,18 @@ export function createPortabilityCommands(
             command.option("--output <path>", "output bundle path");
         } else {
             command
-                .argument("<bundle>")
+                .argument(
+                    "<bundle-or-folder>",
+                    "bundle (.zip or .json) or tenant config folder; a folder is validated offline before it is sent",
+                )
                 .addOption(
                     new Option("--mode <mode>", "import mode")
                         .choices(["create", "upsert", "replace"])
                         .default("upsert"),
+                )
+                .option(
+                    "--allow-env <names>",
+                    "comma-separated environment variables a folder's ${VAR} placeholders may use; no others are read",
                 );
             if (name === "import") {
                 command
@@ -44,9 +51,14 @@ export function createPortabilityCommands(
         }
         if (name === "plan")
             command
+                .addOption(
+                    new Option("--format <text|json>", "plan output format")
+                        .choices(["text", "json"])
+                        .default(undefined, "json"),
+                )
                 .option(
                     "--diff",
-                    "show a readable plan with redacted field changes",
+                    "show a readable plan with redacted field changes (alias for --format text)",
                 )
                 .option("--output <path>", "save the plan for a later import");
         command.action(async (...args: any[]) => {

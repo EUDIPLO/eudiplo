@@ -231,6 +231,9 @@ importers:
       '@owf/eudi-lote':
         specifier: ^0.7.0
         version: 0.7.0
+      '@owf/eudi-tl':
+        specifier: 0.7.0
+        version: 0.7.0(asn1js@4.0.0)(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36))(xmldsigjs@3.1.0(asn1js@4.0.0)(pkijs@4.0.1(asn1js@4.0.0))(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36)))
       '@owf/identity-common':
         specifier: ^0.8.0
         version: 0.8.0
@@ -264,6 +267,9 @@ importers:
       '@sd-jwt/sd-jwt-vc':
         specifier: ^0.25.0
         version: 0.25.0
+      '@xmldom/xmldom':
+        specifier: ^0.9.12
+        version: 0.9.12
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
@@ -336,6 +342,12 @@ importers:
       uuid:
         specifier: ^14.0.3
         version: 14.0.3
+      xadesjs:
+        specifier: ^3.1.0
+        version: 3.1.0(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36))(xmldsigjs@3.1.0(asn1js@4.0.0)(pkijs@4.0.1(asn1js@4.0.0))(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36)))
+      xpath:
+        specifier: ^0.0.36
+        version: 0.0.36
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -4766,6 +4778,9 @@ packages:
   '@owf/eudi-lote@0.7.0':
     resolution: {integrity: sha512-YziEyQ++0NZF4Q4W1Z6oD2K/jSVf6khtY6ZCEoF3IjFuBdaI/vne1ayxZkmH+NFTfJr7aggp/USJpCkAONTQSQ==}
 
+  '@owf/eudi-tl@0.7.0':
+    resolution: {integrity: sha512-PHLTZGA5iwdQdg41fVbdLcepKuHZBEnrO0xlLmj9YkJEYsiz47TJRqECWjy3w8CwIu40gdTMX/MBTzTENZNT6A==}
+
   '@owf/identity-common@0.8.0':
     resolution: {integrity: sha512-pL+Isfs7JDPv7eFbuQ8K9xDHYUa79KqlJz4ZUImc3L8lFbWfrddIxToICeOsYh6ccOkeKVo4SpcsLPcq+M3cDA==}
 
@@ -6741,6 +6756,10 @@ packages:
     resolution: {integrity: sha512-y5ArHvQ7BVule/+L9yE2nYMhceiJhgsqo58lOfnisQ7bg+Kjfmkgr7JBuVFiTkl+ErdShpp829QstZQyLugl8g==}
     engines: {node: '>=20'}
 
+  '@xmldom/xmldom@0.9.12':
+    resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
+    engines: {node: '>=14.6'}
+
   '@xtuc/ieee754@1.2.0':
     resolution: {integrity: sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA==}
 
@@ -7260,6 +7279,10 @@ packages:
   bytestreamjs@2.0.1:
     resolution: {integrity: sha512-U1Z/ob71V/bXfVABvNr/Kumf5VyeQRBEm6Txb0PQ6S7V5GpBM3w4Cbqz/xPDicR5tN0uvDifng8C+5qECeGwyQ==}
     engines: {node: '>=6.0.0'}
+
+  bytestreamjs@3.0.0:
+    resolution: {integrity: sha512-QJYdJHpGNj4dAfRrgQAu8V5OEFVgiALJ8YFR4c1BuNYzvoDU86yEg+9SXu/AbGyMaLAn17qdMmwsCc2Ry2nHPg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
 
   c12@3.3.4:
     resolution: {integrity: sha512-cM0ApFQSBXuourJejzwv/AuPRvAxordTyParRVcHjjtXirtkzM0uK2L9TTn9s0cXZbG7E55jCivRQzoxYmRAlA==}
@@ -11374,6 +11397,12 @@ packages:
     resolution: {integrity: sha512-V9kOzaItwDgqlryhXysQsAXUEKi5O7kqWUaP3dXI7MLvkPqWWMb4wVb1QAtmEDCKI+XIAINsZoNKMFF7sZb1eg==}
     engines: {node: '>=16.0.0'}
 
+  pkijs@4.0.1:
+    resolution: {integrity: sha512-hs6jHBg+Y9ZZ9r5w2CHnKXkGPOr3qWfkLfnZGlbNkP2hceGZ6EgjnTS7tqwbugHXx5mCqoSf4TUH2nu1diirnA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    peerDependencies:
+      asn1js: ^4.0.0
+
   playwright-core@1.65.1:
     resolution: {integrity: sha512-hqPpz7blSMPxWVdoeE1yiBSzXsKiVOd2k+kjCvmUywD2GPO2Dd9HfcWnq9NN0GHbNZDFgZ9JfBFr+X5/BLo0qw==}
     engines: {node: '>=20'}
@@ -14013,9 +14042,23 @@ packages:
     resolution: {integrity: sha512-c16PKLIRxBYpR3jSWsdS7SFp0COm5SOQdiFjY818dYFHJbMGuLBszpF07LBWmOS1uzrHa9VGdynsEgoeKy0oOQ==}
     engines: {node: '>=20'}
 
+  xadesjs@3.1.0:
+    resolution: {integrity: sha512-NP1YPXxIFl8e4x/noICDRRnAMgXYVpFIE4DhQ3Qc4uMztDVCHE1EekwVQ9TwogPSWl7ktHUDM5jpJD/zNdxfPg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    peerDependencies:
+      xml-core: ^3.1.0
+      xmldsigjs: ^3.1.0
+
   xdg-basedir@5.1.0:
     resolution: {integrity: sha512-GCPAHLvrIH13+c0SuacwvRYj2SxJXQ4kaVTT5xgL3kPrz56XxkF21IGhjSE1+W0aw7gpBWRGXLCPnPby6lSpmQ==}
     engines: {node: '>=12'}
+
+  xml-core@3.1.0:
+    resolution: {integrity: sha512-v2F4G3LsFRI9nJjQmqhM47GnDsPdfv4GXHo39ObnJ8vjoHdGps+4Z3N56aQoa1CdllHokzYIUqpEKJ4PAgPSwA==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    peerDependencies:
+      '@xmldom/xmldom': ^0.9.10
+      xpath: ^0.0.34 || ^0.0.35
 
   xml-js@1.6.11:
     resolution: {integrity: sha512-7rVi2KMfwfWFl+GpPg6m80IVMWXLRjO+PxTq7V2CDhoGak0wzYzFgUY2m4XJ47OGdXd8eLE8EmwfAmdjw7lC1g==}
@@ -14027,6 +14070,18 @@ packages:
 
   xmlchars@2.2.0:
     resolution: {integrity: sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==}
+
+  xmldsigjs@3.1.0:
+    resolution: {integrity: sha512-3CaNfDGdzcTSXefqgWM6XQsGgJFgF4SU6yioOp0glsYmXuyaMpzSCSUWL6yCJ9TsS5f7pGrIzxQkup0eNoO3Ug==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    peerDependencies:
+      asn1js: ^4.0.0
+      pkijs: ^4.0.0
+      xml-core: ^3.1.0
+
+  xpath@0.0.36:
+    resolution: {integrity: sha512-HuqAnJx5YJoDeLub7hhcNoiRvnqqrgoSsI4kLrOtv6XkaUI0zY9ylL4+ULozB35JT1SVMfdexsMqRbTp7bkFGQ==}
+    engines: {node: '>=0.6.0'}
 
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
@@ -19617,6 +19672,20 @@ snapshots:
       '@owf/identity-common': 0.8.0
       zod: 4.6.7
 
+  '@owf/eudi-tl@0.7.0(asn1js@4.0.0)(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36))(xmldsigjs@3.1.0(asn1js@4.0.0)(pkijs@4.0.1(asn1js@4.0.0))(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36)))':
+    dependencies:
+      '@owf/identity-common': 0.8.0
+      '@peculiar/asn1-schema': 3.0.0(asn1js@4.0.0)
+      '@peculiar/asn1-x509': 3.0.0(@peculiar/asn1-schema@3.0.0(asn1js@4.0.0))(asn1js@4.0.0)
+      '@xmldom/xmldom': 0.9.12
+      xadesjs: 3.1.0(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36))(xmldsigjs@3.1.0(asn1js@4.0.0)(pkijs@4.0.1(asn1js@4.0.0))(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36)))
+      xpath: 0.0.36
+      zod: 4.6.7
+    transitivePeerDependencies:
+      - asn1js
+      - xml-core
+      - xmldsigjs
+
   '@owf/identity-common@0.8.0':
     dependencies:
       zod: 4.6.7
@@ -21629,6 +21698,8 @@ snapshots:
     dependencies:
       system-architecture: 1.0.0
 
+  '@xmldom/xmldom@0.9.12': {}
+
   '@xtuc/ieee754@1.2.0': {}
 
   '@xtuc/long@4.2.2': {}
@@ -22190,6 +22261,8 @@ snapshots:
   bytes@3.1.2: {}
 
   bytestreamjs@2.0.1: {}
+
+  bytestreamjs@3.0.0: {}
 
   c12@3.3.4(magicast@0.5.5):
     dependencies:
@@ -26900,6 +26973,13 @@ snapshots:
       pvutils: 1.2.0
       tslib: 2.9.1
 
+  pkijs@4.0.1(asn1js@4.0.0):
+    dependencies:
+      '@noble/hashes': 2.4.0
+      '@peculiar/utils': 4.1.1
+      asn1js: 4.0.0
+      bytestreamjs: 3.0.0
+
   playwright-core@1.65.1: {}
 
   playwright-ng-schematics@22.1.4(@angular-devkit/architect@0.2202.7(chokidar@5.0.0))(@angular-devkit/core@22.2.7(chokidar@5.0.0))(@angular-devkit/schematics@22.2.7(chokidar@5.0.0)):
@@ -29741,7 +29821,18 @@ snapshots:
       is-wsl: 3.1.1
       powershell-utils: 0.2.1
 
+  xadesjs@3.1.0(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36))(xmldsigjs@3.1.0(asn1js@4.0.0)(pkijs@4.0.1(asn1js@4.0.0))(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36))):
+    dependencies:
+      xml-core: 3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36)
+      xmldsigjs: 3.1.0(asn1js@4.0.0)(pkijs@4.0.1(asn1js@4.0.0))(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36))
+
   xdg-basedir@5.1.0: {}
+
+  xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36):
+    dependencies:
+      '@peculiar/utils': 4.1.1
+      '@xmldom/xmldom': 0.9.12
+      xpath: 0.0.36
 
   xml-js@1.6.11:
     dependencies:
@@ -29750,6 +29841,15 @@ snapshots:
   xml-name-validator@5.0.0: {}
 
   xmlchars@2.2.0: {}
+
+  xmldsigjs@3.1.0(asn1js@4.0.0)(pkijs@4.0.1(asn1js@4.0.0))(xml-core@3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36)):
+    dependencies:
+      '@peculiar/utils': 4.1.1
+      asn1js: 4.0.0
+      pkijs: 4.0.1(asn1js@4.0.0)
+      xml-core: 3.1.0(@xmldom/xmldom@0.9.12)(xpath@0.0.36)
+
+  xpath@0.0.36: {}
 
   xtend@4.0.2: {}
 

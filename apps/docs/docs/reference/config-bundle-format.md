@@ -90,9 +90,12 @@ the other values to change; rewrite the file as v2. 9.x cannot read v2 files.
 
 **PresentationConfig v4** came with EUDIPLO 10.0. It adds the optional
 `allowedOrigins`, the web origins that may request the presentation over the
-Digital Credentials API ([Allowed origins](../presentation/configure-verification.md#allowed-origins-digital-credentials-api)).
+Digital Credentials API ([Allowed origins](../presentation/configure-verification.md#allowed-origins-digital-credentials-api)),
+and `format`, `signingCertificates` and `schemeTerritories` in `etsi_tl` values
+for ETSI TS 119 612 Trusted Lists ([Trusted Lists for QEAAs](../trust/trust-lists.md#trusted-lists-for-qeaas)).
 A v3 document is migrated unchanged, and a bare presentation file with
-`allowedOrigins` is read as v4. 9.x cannot read v4 files.
+`allowedOrigins`, or with an `etsi_tl` value that has `format`, is read as v4.
+9.x cannot read v4 files.
 
 **IssuanceConfig v4** came with EUDIPLO 10.0. It adds the optional
 `walletAttestationStatusCheckMode` (`strict`, `best_effort` or `disabled`) to the

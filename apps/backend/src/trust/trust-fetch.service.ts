@@ -16,6 +16,9 @@ export class TrustFetchStatusError extends Error {
     }
 }
 
+/** Upper bound for a trust list, a LoTE JWT or a Trusted List in XML. */
+export const TRUST_LIST_MAX_BYTES = 10 * 1024 * 1024;
+
 /** The axios client used for these fetches before followed five redirects. */
 const MAX_REDIRECTS = 5;
 
