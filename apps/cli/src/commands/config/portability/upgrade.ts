@@ -132,7 +132,11 @@ function inferredKind(path: string): ConfigResourceKind | undefined {
             `${CONFIG_FORMATS[kind].file}.schema.json` === match?.schemaFile,
     );
 }
-function wrapBare(kind: ConfigResourceKind, input: any, path: string): unknown {
+export function wrapBare(
+    kind: ConfigResourceKind,
+    input: any,
+    path: string,
+): unknown {
     if (!input || typeof input !== "object" || Array.isArray(input))
         throw new Error(`${path}: configuration must be an object`);
     const singleton = CONFIG_SINGLETON_IDS;

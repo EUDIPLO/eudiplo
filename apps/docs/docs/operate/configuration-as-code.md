@@ -280,6 +280,31 @@ roles, answers `403` ([granting roles](../reference/roles.md#granting-roles)). T
 the bundle, the mode or the target configuration changed in between, it fails
 with `CONFIG_PLAN_STALE` before writing anything.
 
+`config plan` prints the plan as JSON; `--format text` (or its alias `--diff`)
+prints one line per resource with its field changes instead.
+
+### Plan and import a tenant folder
+
+`config plan` and `config import` also take a tenant folder in the
+[folder layout](../reference/config-bundle-format.md#tenant-folder-layout), so a
+Git repository of tenant folders can be planned against a running instance
+without packing it first:
+
+```bash
+eudiplo config plan ./config/acme --instance staging --mode upsert --diff --output plan.json
+eudiplo config import ./config/acme --instance staging --mode upsert --plan plan.json
+```
+
+The CLI first validates the folder offline, like
+[`eudiplo config tenant validate`](#validate-in-ci); a folder with errors exits
+with `1` and is not sent. It then resolves `${VAR}` placeholders from its own
+environment, as the startup import does, and sends the folder as a bundle
+archive, `info.json` and `images/` included. The bundle is the same for the same
+files and environment, so the import matches the reviewed plan. The tenant comes
+from the access token, and the folder name is the bundle's source, which
+`replace` mode uses to decide what it deletes, so keep the folder named after
+the tenant.
+
 The web client does the same under **Settings > Config Portability**:
 **Plan and validate** lists each changed field with its current value and its
 value after the import, marking secrets as `secret`, values whose type changes
