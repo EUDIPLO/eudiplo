@@ -9,7 +9,7 @@ import {
 } from "@eudiplo/config-format/config-format.js";
 import { atomicWriteFile } from "@eudiplo/config-format/config-io.js";
 import { compareCodePoints } from "@eudiplo/config-format/tenant-folder.js";
-import { FOLDER_RESOURCES } from "./folder-bundle.js";
+import { folderResources } from "./folder-bundle.js";
 
 export interface WrittenTenantFolder {
     /** Folder path of each resource, keyed `<kind>/<id>`, with `/` separators. */
@@ -148,7 +148,7 @@ function sortKeys(value: unknown, top = true): unknown {
 }
 
 function layoutOf(kind: ConfigResourceKind) {
-    const resource = FOLDER_RESOURCES.find((entry) => entry.kind === kind);
+    const resource = folderResources().find((entry) => entry.kind === kind);
     if (!resource)
         throw new Error(`The tenant folder layout has no place for ${kind}`);
     return resource;

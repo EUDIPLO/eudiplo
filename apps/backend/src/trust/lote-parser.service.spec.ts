@@ -336,6 +336,41 @@ describe("LoteParserService.parse", () => {
         });
     });
 
+    // OIA_15 note: a LoTE has no qualified status to give, so a service it
+    // lists with the TS 119 612 QEAA type never anchors a QEAA.
+    it("leaves out services with an ETSI TS 119 612 service type", () => {
+        const { entities } = parser.parse(
+            lote(undefined, {
+                name: "Not a QTSP",
+                services: [
+                    service(
+                        ServiceTypeIdentifiers.QeaaIssuance,
+                        "qeaa",
+                        "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted",
+                    ),
+                    service(ServiceTypeIdentifiers.EaaIssuance, "eaa"),
+                ],
+            }),
+            LIST,
+        );
+
+        expect(entities).toEqual([
+            {
+                entityId: "Not a QTSP",
+                services: [
+                    {
+                        serviceTypeIdentifier:
+                            ServiceTypeIdentifiers.EaaIssuance,
+                        certValue: "eaa",
+                    },
+                ],
+            },
+        ]);
+        expect(warning()).toContain(
+            `type "${ServiceTypeIdentifiers.QeaaIssuance}", status "http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted": an ETSI TS 119 612 service type, which only a Trusted List can grant`,
+        );
+    });
+
     it("reads no certificate from an untyped service without ServiceInformation", () => {
         const { entities } = parser.parse(
             lote(LoteTypes.PIDProviders, {

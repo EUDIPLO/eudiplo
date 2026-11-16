@@ -84,6 +84,109 @@ describe("PresentationConfigCreateSchema", () => {
         expect(withOrigins(many(101))).toBe(false);
     });
 
+    describe("etsi_tl values", () => {
+        const withTrustList = (value: Record<string, unknown>) =>
+            PresentationConfigCreateSchema.safeParse({
+                ...basePresentationConfig,
+                dcql_query: {
+                    credentials: [
+                        {
+                            ...basePresentationConfig.dcql_query.credentials[0],
+                            trusted_authorities: [
+                                { type: "etsi_tl", values: [value] },
+                            ],
+                        },
+                    ],
+                },
+            }).success;
+
+        it.each([
+            [
+                "a LoTE without format",
+                { url: "https://tl.example/lote.jwt", verifierX509Der: "MIIB" },
+            ],
+            ["a LoTE with format", { format: "lote", trustListId: "issuers" }],
+            [
+                "a list of trusted lists",
+                {
+                    format: "trusted-list",
+                    url: "https://tl.example/lotl.xml",
+                    signingCertificates: ["MIIB", "MIIC=="],
+                    schemeTerritories: ["DE"],
+                },
+            ],
+            [
+                "a national Trusted List",
+                {
+                    format: "trusted-list",
+                    url: "<TENANT_URL>/tl.xml",
+                    signingCertificates: ["MIIB"],
+                },
+            ],
+        ])("accepts %s", (_, value) => {
+            expect(withTrustList(value)).toBe(true);
+        });
+
+        it.each([
+            [
+                "a Trusted List without signing certificates",
+                { format: "trusted-list", url: "https://tl.example/lotl.xml" },
+            ],
+            [
+                "a Trusted List with an empty list of signing certificates",
+                {
+                    format: "trusted-list",
+                    url: "https://tl.example/lotl.xml",
+                    signingCertificates: [],
+                },
+            ],
+            [
+                "a Trusted List with a signing certificate that is not base64",
+                {
+                    format: "trusted-list",
+                    url: "https://tl.example/lotl.xml",
+                    signingCertificates: ["-----BEGIN CERTIFICATE-----"],
+                },
+            ],
+            [
+                "a Trusted List without URL",
+                { format: "trusted-list", signingCertificates: ["MIIB"] },
+            ],
+            [
+                "a managed Trusted List",
+                {
+                    format: "trusted-list",
+                    trustListId: "issuers",
+                    url: "https://tl.example/lotl.xml",
+                    signingCertificates: ["MIIB"],
+                },
+            ],
+            [
+                "a Trusted List with a JWT verifier",
+                {
+                    format: "trusted-list",
+                    url: "https://tl.example/lotl.xml",
+                    signingCertificates: ["MIIB"],
+                    verifierX509Der: "MIIB",
+                },
+            ],
+            [
+                "a LoTE with signing certificates",
+                {
+                    url: "https://tl.example/lote.jwt",
+                    verifierX509Der: "MIIB",
+                    signingCertificates: ["MIIB"],
+                },
+            ],
+            [
+                "an unknown format",
+                { format: "xml", url: "https://tl.example/lotl.xml" },
+            ],
+        ])("rejects %s", (_, value) => {
+            expect(withTrustList(value)).toBe(false);
+        });
+    });
+
     it("continues rejecting unrelated fields", () => {
         const result = PresentationConfigCreateSchema.safeParse({
             ...basePresentationConfig,

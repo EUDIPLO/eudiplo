@@ -21,21 +21,42 @@ import {
     imageContentType,
     isTenantFolderImage,
     TENANT_FOLDER_IMAGES,
-    TENANT_FOLDER_RESOURCES,
-    TENANT_FOLDER_TENANT,
     type TenantFolderResource,
 } from "@eudiplo/config-format/tenant-folder.js";
+import {
+    CLI_VALIDATED_REGISTRY,
+    kindForSchemaFile,
+} from "../validate/registry.js";
 import { wrapBare } from "./upgrade.js";
 
 /**
- * The tenant folder layout, shared with the backend's startup import. The
- * tenant's own `info.json` comes first: a bundle carries it as the Tenant
- * document.
+ * A bundle carries one issuance config, `issuance/issuance.json`, as a
+ * reattach reads it, under the path the export writes. The offline
+ * validation checks every `issuance/*.json`, because the startup import reads
+ * them all.
  */
-export const FOLDER_RESOURCES: readonly TenantFolderResource[] = [
-    TENANT_FOLDER_TENANT,
-    ...TENANT_FOLDER_RESOURCES,
-];
+const ISSUANCE_FILE = {
+    file: "issuance/issuance.json",
+    bundlePath: "issuance/config.json",
+};
+
+/**
+ * Where each resource kind lives in a tenant folder, taken from the registry
+ * the offline validation reads. Same layout as the backend's
+ * ConfigFolderBundleService (reattach), plus `info.json`, which a bundle
+ * carries as the Tenant document.
+ */
+export function folderResources(): TenantFolderResource[] {
+    return CLI_VALIDATED_REGISTRY.map((entry) => {
+        const kind = kindForSchemaFile(entry.schemaFile);
+        if (!kind) throw new Error(`No resource kind for ${entry.schemaFile}`);
+        if (entry.kind === "file")
+            return { kind, file: entry.file, bundlePath: entry.file };
+        return kind === "IssuanceConfig"
+            ? { kind, ...ISSUANCE_FILE }
+            : { kind, directory: entry.subfolder };
+    });
+}
 
 /** Shorter values are only masked where they are the whole string. */
 const MIN_MASKED_LENGTH = 8;
@@ -223,7 +244,7 @@ export async function packTenantFolder(
     const documents: ConfigFile[] = [];
     const resources: ConfigBundle["manifest"]["resources"] = [];
 
-    for (const resource of FOLDER_RESOURCES) {
+    for (const resource of folderResources()) {
         for (const file of await resourceFiles(tenantRoot, resource)) {
             const document = await loadDocument(
                 tenantRoot,
@@ -247,11 +268,6 @@ export async function packTenantFolder(
             });
         }
     }
-    if (documents.length === 0)
-        throw new Error(
-            `No configuration files found in ${tenantRoot}. Expected a tenant folder (info.json, clients/, key-chains/, ...).`,
-        );
-
     const assets = await loadAssets(tenantRoot);
     const bundle: ConfigBundle = {
         manifest: {
@@ -298,28 +314,15 @@ async function loadDocument(
     kind: ConfigResourceKind,
     env: Record<string, string | undefined>,
 ): Promise<ConfigFile> {
-    let payload: unknown;
-    try {
-        // The parser's message can quote a secret from the file; do not repeat it.
-        payload = JSON.parse(await readFile(join(tenantRoot, file), "utf8"));
-    } catch {
-        throw new Error(`${file}: is not valid JSON`);
-    }
+    // Validated before packing: the file parses and holds an object.
+    const payload = JSON.parse(await readFile(join(tenantRoot, file), "utf8"));
     const resolved = resolveConfigVariables(payload, env).value;
-    // wrapBare names the file in its own errors.
-    const input = isConfigDocument(resolved)
-        ? resolved
-        : wrapBare(kind, resolved, file);
-    try {
-        const document = normalizeDocument(input);
-        if (document.kind !== kind)
-            throw new Error(`contains ${document.kind}, expected ${kind}`);
-        return serializeDocument(document) as ConfigFile;
-    } catch (error) {
-        throw new Error(
-            `${file}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-    }
+    const document = normalizeDocument(
+        isConfigDocument(resolved) ? resolved : wrapBare(kind, resolved, file),
+    );
+    if (document.kind !== kind)
+        throw new Error(`${file}: contains ${document.kind}, expected ${kind}`);
+    return serializeDocument(document) as ConfigFile;
 }
 
 async function loadAssets(tenantRoot: string): Promise<ConfigBundleAsset[]> {

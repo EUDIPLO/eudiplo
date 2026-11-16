@@ -1,6 +1,6 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./apps/docs/static/img/brand/eudiplo-lockup-dark.png">
-  <img alt="EUDIPLO, EUDI Wallet Connector: Diplo the diplodocus with a credential on its back" src="./apps/docs/static/img/brand/eudiplo-lockup.png" width="450">
+  <img alt="EUDIPLO, EUDI Wallet Connector: Diplo the diplodocus on a navy badge" src="./apps/docs/static/img/brand/eudiplo-lockup.png" width="450">
 </picture>
 
 [![Build Status](https://github.com/EUDIPLO/eudiplo/actions/workflows/ci-and-release.yml/badge.svg)](https://github.com/EUDIPLO/eudiplo/actions)

@@ -1,9 +1,35 @@
+/**
+ * How a trust list is published: `lote`, a List of Trusted Entities (ETSI TS
+ * 119 602) as signed JWT, or `trusted-list`, an ETSI TS 119 612 Trusted List
+ * as XML with an enveloped XAdES signature.
+ */
+type TrustListFormat = "lote" | "trusted-list";
+
 export interface TrustListRef {
     trustListId?: string;
     url: string;
+    /** Default `lote`; see {@link TrustListFormat}. */
+    format?: TrustListFormat;
     verifierKey?: Record<string, unknown>;
     verifierKeyPem?: string;
     verifierX509Der?: string;
+    /**
+     * `trusted-list` only: base64 DER certificates, one of which must have
+     * signed the list (TS 119 612 clause 5.7.1). For a list of trusted lists,
+     * the signing certificates its operator publishes; the lists it points to
+     * are verified with the certificates it names for them.
+     */
+    signingCertificates?: string[];
+    /**
+     * `trusted-list` only, for a list of trusted lists: the `SchemeTerritory`
+     * of the lists to follow, compared case-insensitively; all when absent.
+     */
+    schemeTerritories?: string[];
+}
+
+/** Whether the reference names an ETSI TS 119 612 Trusted List. */
+export function isTrustedListRef(ref: Pick<TrustListRef, "format">): boolean {
+    return ref.format === "trusted-list";
 }
 
 /**
@@ -97,17 +123,28 @@ export const ServiceTypeIdentifiers = {
         "http://uri.etsi.org/19602/SvcType/WalletSolution/Issuance", // NOSONAR: ETSI identifier URI, not fetched
     WalletSolutionRevocation:
         "http://uri.etsi.org/19602/SvcType/WalletSolution/Revocation", // NOSONAR: ETSI identifier URI, not fetched
+    /**
+     * Qualified service for the issuance of qualified electronic attestations
+     * of attributes (QEAA), from ETSI TS 119 612 V2.4.1 clause 5.5.1.1. Only
+     * read from Trusted Lists, and only with the status granted; a LoTE
+     * entry with this type is left out.
+     */
+    QeaaIssuance: "http://uri.etsi.org/TrstSvc/Svctype/EAA/Q", // NOSONAR: ETSI identifier URI, not fetched
 } as const;
 
 /**
  * Services whose certificates identify credential issuers: PID providers
- * (ETSI TS 119 602 Annex D), public sector bodies issuing EAAs (Annex H) and
- * the EAA providers of the lists EUDIPLO publishes.
+ * (ETSI TS 119 602 Annex D), public sector bodies issuing EAAs (Annex H),
+ * the EAA providers of the lists EUDIPLO publishes, and the granted qualified
+ * services of QTSPs issuing QEAAs in ETSI TS 119 612 Trusted Lists. Each
+ * comes only from its kind of list, so an anchor of one category never
+ * validates a credential as another.
  */
 export const credentialIssuerServiceTypes = [
     ServiceTypeIdentifiers.PIDIssuance,
     ServiceTypeIdentifiers.PubEaaIssuance,
     ServiceTypeIdentifiers.EaaIssuance,
+    ServiceTypeIdentifiers.QeaaIssuance,
 ] as const;
 
 /** Whether a service type identifies credential issuers, compared exactly. */

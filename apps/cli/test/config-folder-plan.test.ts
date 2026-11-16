@@ -12,16 +12,15 @@ import {
     type ConfigBundle,
     ConfigBundleCodec,
 } from "@eudiplo/config-format/config-bundle.js";
+import { CONFIG_RESOURCE_KINDS } from "@eudiplo/config-format/config-format.js";
 import {
-    afterEach,
-    beforeEach,
-    describe,
-    expect,
-    it,
-    onTestFinished,
-    vi,
-} from "vitest";
+    TENANT_FOLDER_RESOURCES,
+    TENANT_FOLDER_TENANT,
+    type TenantFolderResource,
+} from "@eudiplo/config-format/tenant-folder.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runPortabilityCommand } from "../src/commands/config/portability/action.js";
+import { folderResources } from "../src/commands/config/portability/folder-bundle.js";
 import { runCli } from "../src/runtime.js";
 import type { CliConfig, CommandContext } from "../src/types.js";
 
@@ -131,37 +130,137 @@ describe("config plan / import with a tenant folder", () => {
     });
 
     it("sends the same bundle to plan and import, so the fingerprint matches", async () => {
-        // Minutes apart: the archive must not carry the time it was packed.
         vi.useFakeTimers({ toFake: ["Date"] });
-        vi.setSystemTime(new Date("2026-11-16T10:00:00Z"));
-        onTestFinished(() => {
+        try {
+            await runPortabilityCommand(
+                "plan",
+                config,
+                {
+                    positionals: ["acme"],
+                    flags: {
+                        output: "plan.json",
+                        "allow-env": "PORTAL_SECRET",
+                    },
+                },
+                context,
+            );
+            // An import runs later than the plan it applies.
+            vi.setSystemTime(Date.now() + 60 * 60 * 1000);
+            await runPortabilityCommand(
+                "import",
+                config,
+                {
+                    positionals: ["acme"],
+                    flags: { plan: "plan.json", "allow-env": "PORTAL_SECRET" },
+                },
+                context,
+            );
+        } finally {
             vi.useRealTimers();
-        });
-        await runPortabilityCommand(
-            "plan",
-            config,
-            {
-                positionals: ["acme"],
-                flags: { output: "plan.json", "allow-env": "PORTAL_SECRET" },
-            },
-            context,
-        );
-        vi.setSystemTime(new Date("2026-11-16T10:05:00Z"));
-        await runPortabilityCommand(
-            "import",
-            config,
-            {
-                positionals: ["acme"],
-                flags: { plan: "plan.json", "allow-env": "PORTAL_SECRET" },
-            },
-            context,
-        );
+        }
 
         const calls = vi.mocked(context.fetch).mock.calls;
         expect(calls[1][0]).toBe(
             `https://example.test/api/config-bundles/import/archive?mode=upsert&planFingerprint=${fingerprint}`,
         );
+        // Equal bytes, not only equal content: the codec pins the ZIP time.
         expect(await sentZip(calls[1][1])).toEqual(await sentZip(calls[0][1]));
+        const planned = await sentBundle(calls[0][1]);
+        expect(planned.manifest.exportedAt).toBe("1970-01-01T00:00:00.000Z");
+        expect(await sentBundle(calls[1][1])).toEqual(planned);
+    });
+
+    it("maps every folder file to its bundle path, in a fixed order", async () => {
+        await writeJson(join(tenant, "clients", "b.json"), {
+            clientId: "b",
+            roles: ["issuance:manage"],
+        });
+        await writeJson(join(tenant, "clients", "a.json"), {
+            clientId: "a",
+            roles: ["issuance:manage"],
+        });
+        await writeJson(join(tenant, "issuance", "issuance.json"), {
+            authorizationServers: [{ id: "as", type: "built-in" }],
+        });
+        await writeJson(join(tenant, "key-chain-defaults.json"), {});
+        // An image whose name starts with a dot is an asset, as at startup.
+        await writeFile(join(tenant, "images", ".hidden.png"), "png-bytes");
+
+        const code = await runPortabilityCommand(
+            "plan",
+            config,
+            {
+                positionals: ["acme"],
+                flags: { "allow-env": "PORTAL_SECRET" },
+            },
+            context,
+        );
+
+        expect(code).toBe(0);
+        const bundle = await sentBundle(
+            vi.mocked(context.fetch).mock.calls[0][1],
+        );
+        expect(
+            bundle.manifest.resources.map((r) => `${r.kind}:${r.path}`),
+        ).toEqual([
+            "Tenant:info.json",
+            "KeyChainDefaults:key-chain-defaults.json",
+            "Client:clients/a.json",
+            "Client:clients/b.json",
+            "Client:clients/portal.json",
+            "IssuanceConfig:issuance/config.json",
+        ]);
+        expect(bundle.assets.map((asset) => asset.path)).toEqual([
+            "images/.hidden.png",
+            "images/logo.png",
+        ]);
+    });
+
+    it("uses the folder layout the backend's startup import reads", () => {
+        const where = (resources: readonly TenantFolderResource[]) =>
+            Object.fromEntries(
+                resources.map((resource) => [
+                    resource.kind,
+                    "file" in resource
+                        ? `${resource.file} -> ${resource.bundlePath}`
+                        : `${resource.directory}/`,
+                ]),
+            );
+        expect(where(folderResources())).toEqual(
+            where([TENANT_FOLDER_TENANT, ...TENANT_FOLDER_RESOURCES]),
+        );
+    });
+
+    it("knows a folder location for every resource kind", () => {
+        expect(
+            [
+                ...new Set(folderResources().map((resource) => resource.kind)),
+            ].sort(),
+        ).toEqual([...CONFIG_RESOURCE_KINDS].sort());
+    });
+
+    it("does not repeat the content of a file that is not valid JSON", async () => {
+        await writeFile(
+            join(tenant, "clients", "broken.json"),
+            // Short enough that a JSON.parse message would quote all of it.
+            '{"s":"leak" x}',
+        );
+
+        const code = await runPortabilityCommand(
+            "plan",
+            config,
+            {
+                positionals: ["acme"],
+                flags: { format: "text", "allow-env": "PORTAL_SECRET" },
+            },
+            context,
+        );
+
+        expect(code).toBe(1);
+        expect(output.stderr).toContain("clients/broken.json");
+        expect(output.stderr).toContain("Invalid JSON");
+        expect(output.stderr).toMatch(/Invalid JSON\s*$/m);
+        expect(output.stderr).not.toContain("leak");
     });
 
     it("validates the folder offline and never contacts the server when it is invalid", async () => {

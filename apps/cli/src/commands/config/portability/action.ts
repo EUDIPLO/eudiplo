@@ -285,11 +285,13 @@ async function exportFolder(
  * today's output keep working; `--diff` is an alias for `--format text`.
  */
 function planFormat(action: Action, parsed: ParsedArgs): "text" | "json" {
-    const format = readStringFlag(parsed.flags, "format");
+    // Commander restricts --format to text or json.
+    const format = readStringFlag(parsed.flags, "format") as
+        | "text"
+        | "json"
+        | undefined;
     const diff = parsed.flags.diff === true;
     if (action !== "plan") return "text";
-    if (format !== undefined && format !== "text" && format !== "json")
-        throw new Error("Unsupported --format value. Use text or json.");
     if (diff && format === "json")
         throw new Error(
             "--diff is the text format; use either --diff or --format json, not both.",

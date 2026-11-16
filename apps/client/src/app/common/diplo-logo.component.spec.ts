@@ -13,12 +13,29 @@ describe('DiploLogoComponent', () => {
     expect(svg?.hasAttribute('role')).toBe(false);
   });
 
-  it('renders the body and fold paths that the theme colours by class', () => {
+  it('gives each instance its own clip path', () => {
+    const first = TestBed.createComponent(DiploLogoComponent);
+    const second = TestBed.createComponent(DiploLogoComponent);
+    first.detectChanges();
+    second.detectChanges();
+
+    const idOf = (fixture: typeof first) =>
+      (fixture.nativeElement as HTMLElement).querySelector('clipPath')?.getAttribute('id');
+    expect(idOf(first)).toBeTruthy();
+    expect(idOf(first)).not.toBe(idOf(second));
+    expect((first.nativeElement as HTMLElement).querySelector('g')?.getAttribute('clip-path')).toBe(
+      `url(#${idOf(first)})`
+    );
+  });
+
+  it('closes its eyes only when asked', () => {
     const fixture = TestBed.createComponent(DiploLogoComponent);
     fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.classList.contains('eyes-closed')).toBe(false);
 
-    const element = fixture.nativeElement as HTMLElement;
-    expect(element.querySelector('path.body')?.getAttribute('d')).toBeTruthy();
-    expect(element.querySelector('path.fold')?.getAttribute('d')).toBeTruthy();
+    fixture.componentRef.setInput('eyesClosed', true);
+    fixture.detectChanges();
+    expect(host.classList.contains('eyes-closed')).toBe(true);
   });
 });

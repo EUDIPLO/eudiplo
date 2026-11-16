@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import type { LoTE } from "@owf/eudi-lote";
 import {
     effectiveServiceType,
+    isTrustedListServiceType,
     type LoteProfileRules,
     type LoteServiceNote,
     listHasTypedServices,
@@ -51,6 +52,8 @@ const noteText: Record<LoteServiceNote, string> = {
     "status-unknown":
         "the list type does not approve services with this ServiceStatus",
     "status-missing": "no ServiceStatus, which the list type requires",
+    "trusted-list-type":
+        "an ETSI TS 119 612 service type, which only a Trusted List can grant",
 };
 
 /** Services named per kind in a warning; a list may hold many. */
@@ -114,6 +117,9 @@ function readService(
     }
     const serviceTypeIdentifier = resolved.type;
     const noted = { entityId, serviceType: serviceTypeIdentifier, status };
+    if (isTrustedListServiceType(serviceTypeIdentifier)) {
+        return { certs: [], leftOut: { ...noted, note: "trusted-list-type" } };
+    }
 
     const verdict = serviceStatusVerdict(rules, status);
     if (!verdict.keep) {
@@ -139,8 +145,10 @@ export class LoteParserService {
      * Services are read by the rules of the list's `LoTEType`
      * ({@link loteProfileRules}): an untyped service gets the type the list
      * implies, and a service whose `ServiceStatus` does not approve it is
-     * left out, so its certificates are no trust anchors. One warning per
-     * list names the services left out or read despite a missing status.
+     * left out, so its certificates are no trust anchors. A service with an
+     * ETSI TS 119 612 type is left out too: only a Trusted List can make a
+     * service qualified. One warning per list names the services left out
+     * or read despite a missing status.
      *
      * @param list URL of the list, or the ID of a managed list, for the log.
      */

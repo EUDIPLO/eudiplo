@@ -12,12 +12,26 @@
  * (see trust-list-sequence.ts), so such a list is discarded too.
  */
 
-/** A list left out of a trust store because it is not current. */
+/**
+ * A list left out of a trust store because it is not current, or, for an
+ * ETSI TS 119 612 Trusted List reached through a list of trusted lists,
+ * because it could not be loaded.
+ */
 export interface DiscardedTrustList {
     /** URL of the list, or the ID of a managed list read from storage. */
     list: string;
     /** The list's `NextUpdate` as signed, if any. */
     nextUpdate: string | null | undefined;
+    /**
+     * Set for an ETSI TS 119 612 Trusted List, whose sequence number is its
+     * `TSLSequenceNumber` rather than a `LoTESequenceNumber`.
+     */
+    trustedList?: boolean;
+    /**
+     * Why a Trusted List reached through a list of trusted lists could not
+     * be loaded or verified; absent when it was loaded but is not current.
+     */
+    unavailable?: string;
     /**
      * Set when the list was discarded for its `LoTESequenceNumber`, although
      * its `NextUpdate` is ahead; absent when its `NextUpdate` decided.
@@ -52,17 +66,55 @@ export function isTrustListCurrent(
 }
 
 /** Why one list was discarded, as operators read it. */
-function discardReason({ nextUpdate, sequence }: DiscardedTrustList): string {
+function discardReason({
+    nextUpdate,
+    sequence,
+    trustedList,
+    unavailable,
+}: DiscardedTrustList): string {
+    if (unavailable !== undefined) {
+        return `could not be loaded: ${JSON.stringify(unavailable)}`;
+    }
     if (!sequence) {
         return `NextUpdate ${JSON.stringify(nextUpdate ?? null)}`;
     }
+    const field = trustedList ? "TSLSequenceNumber" : "LoTESequenceNumber";
     const number = JSON.stringify(sequence.number ?? null);
     if (sequence.highestAccepted === undefined) {
-        return `LoTESequenceNumber ${number} is not a whole number from 1`;
+        return `${field} ${number} is not a whole number from 1`;
     }
     return sequence.stored
-        ? `LoTESequenceNumber ${number} is lower than ${sequence.highestAccepted} stored for this managed list`
-        : `LoTESequenceNumber ${number} is lower than ${sequence.highestAccepted} accepted before`;
+        ? `${field} ${number} is lower than ${sequence.highestAccepted} stored for this managed list`
+        : `${field} ${number} is lower than ${sequence.highestAccepted} accepted before`;
+}
+
+/**
+ * Whether a Trusted List among the discarded lists could not be loaded, as
+ * opposed to all of them being outdated.
+ */
+export function hasUnavailableTrustList(
+    discarded: DiscardedTrustList[],
+): boolean {
+    return discarded.some((entry) => entry.unavailable !== undefined);
+}
+
+/**
+ * How discarded lists are described: "outdated" while every one of them was
+ * loaded and is not current, else "outdated or unavailable".
+ */
+export function discardedTrustListsAdjective(
+    discarded: DiscardedTrustList[],
+): string {
+    return hasUnavailableTrustList(discarded)
+        ? "outdated or unavailable"
+        : "outdated";
+}
+
+/** Discarded lists as named in logs and wallet notes. */
+export function discardedTrustListsLabel(
+    discarded: DiscardedTrustList[],
+): string {
+    return `${discardedTrustListsAdjective(discarded)} trust list(s)`;
 }
 
 /** Discarded lists as operators read them in logs and error details. */
@@ -84,7 +136,7 @@ export function discardedTrustListsNote(
     discarded: DiscardedTrustList[],
 ): string {
     return discarded.length > 0
-        ? ` (${discarded.length} outdated trust list(s) left out; the server log names them)`
+        ? ` (${discarded.length} ${discardedTrustListsLabel(discarded)} left out; the server log names them)`
         : "";
 }
 
@@ -103,6 +155,23 @@ export class OutdatedTrustListsError extends Error {
             "No configured trust list is current: each has no valid NextUpdate or one that has passed, no valid LoTESequenceNumber, or a lower one than a list accepted before",
         );
         this.name = "OutdatedTrustListsError";
+    }
+}
+
+/**
+ * Raised when no list of a trust store is left to decide trust with, and at
+ * least one Trusted List reached through a list of trusted lists was left out
+ * because it could not be loaded or verified, not because it is outdated.
+ *
+ * Like {@link OutdatedTrustListsError}, the message names no list; log
+ * {@link discarded} for operators.
+ */
+export class UnavailableTrustedListsError extends Error {
+    constructor(readonly discarded: DiscardedTrustList[]) {
+        super(
+            "No configured trust list is usable: each Trusted List reached through a list of trusted lists could not be loaded or verified, or is outdated",
+        );
+        this.name = "UnavailableTrustedListsError";
     }
 }
 

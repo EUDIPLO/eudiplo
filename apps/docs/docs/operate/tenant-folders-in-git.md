@@ -102,5 +102,7 @@ Every import records its source on the resources it writes: a CLI import of a
 folder `bundle:<folder name>`, the startup import the folder in
 `CONFIG_FOLDER`. `replace` mode deletes only resources whose recorded source is
 its own. If both import the same tenant, each takes over the resources it
-writes, and a `replace` of one does not delete resources last written by the
-other. Manage a tenant with one of the two.
+writes: switching between them gives `!generate` clients a new secret, applies
+unchanged key chains again (a `regenerate` key source gets new keys), and a
+`replace` of one does not delete resources last written by the other. Manage a
+tenant with one of the two.

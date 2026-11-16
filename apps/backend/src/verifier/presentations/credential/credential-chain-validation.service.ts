@@ -4,7 +4,10 @@ import { PinoLogger } from "nestjs-pino";
 import { CertificateChainTooLong } from "../../../shared/utils/certificate-chain-length.util.js";
 import { CertificatePathLimitExceeded } from "../../../shared/utils/certificate-path.util.js";
 import { getRevocationServices } from "../../../trust/domain/status-list-signers.js";
-import { describeDiscardedTrustLists } from "../../../trust/domain/trust-list-freshness.js";
+import {
+    describeDiscardedTrustLists,
+    discardedTrustListsAdjective,
+} from "../../../trust/domain/trust-list-freshness.js";
 import {
     BuiltTrustStore,
     TrustStoreService,
@@ -40,13 +43,14 @@ class TrustListUnavailableError extends Error {
 }
 
 /**
- * Error-detail line naming the lists left out of the store as outdated, so an
+ * Error-detail line naming the lists left out of the store as outdated, or as
+ * unavailable Trusted Lists reached through a list of trusted lists, so an
  * operator can tell a lapsed list from an issuer that is not listed.
  */
 function discardedDetail(store: BuiltTrustStore): string[] {
     return store.discarded.length > 0
         ? [
-              `Discarded outdated trust lists (their issuers are not trusted): ${describeDiscardedTrustLists(store.discarded)}`,
+              `Discarded ${discardedTrustListsAdjective(store.discarded)} trust lists (their issuers are not trusted): ${describeDiscardedTrustLists(store.discarded)}`,
           ]
         : [];
 }
@@ -114,7 +118,8 @@ export interface ChainValidationResult {
  *
  * Responsibilities:
  * - X.509 certificate chain building and validation
- * - Trust anchor matching against LoTE trust lists
+ * - Trust anchor matching against trust lists: LoTEs and ETSI TS 119 612
+ *   Trusted Lists
  * - Status list (revocation) verification
  * - Detailed error reporting
  */
@@ -131,8 +136,9 @@ export class CredentialChainValidationService {
     /**
      * Validate a certificate chain against the trust store. The chain must
      * match a service of {@link credentialIssuerServiceTypes}, compared
-     * exactly: a PID, Pub-EAA or EAA issuance service, never, for example,
-     * the `WalletSolution/Issuance` service of the same entity.
+     * exactly: a PID, Pub-EAA or EAA issuance service of a LoTE or a granted
+     * qualified QEAA service of a Trusted List, never, for example, the
+     * `WalletSolution/Issuance` service of the same entity.
      *
      * @param x5c The x5c chain from the credential (base64 DER encoded)
      * @param trustListSource The trust list source configuration

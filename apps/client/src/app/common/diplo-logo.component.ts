@@ -1,43 +1,72 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+
+let nextId = 0;
 
 /**
- * Diplo, the EUDIPLO logo, drawn inline so it takes the theme's colours:
- * the body uses the primary colour and the credential's folded corner the
- * tertiary container, which gives the brand colours in both light and dark
- * mode. An `<img>` cannot do this, because page styles do not reach an SVG
- * loaded as an image.
+ * Diplo, the EUDIPLO logo: the dinosaur head on a navy badge with a yellow
+ * sun. The badge keeps its own colours in light and dark mode.
  *
  * The logo is decorative and hidden from assistive technology: every place
  * that shows it writes the name next to it.
  *
- * The same path data is in public/logo.svg, apps/docs/static/img/logo.svg,
- * apps/docs/static/img/brand/*.svg, and in logo.svg and the #diplo symbol in
- * index.html of EUDIPLO/website; change the shape in all of them.
+ * With `eyesClosed`, Diplo turns its head away and shuts its eye, for example
+ * while someone types a secret.
+ *
+ * The same drawing is in public/logo.svg, apps/docs/static/img/logo.svg and
+ * apps/docs/static/img/brand/diplo.svg; change the shape in all of them.
  */
 @Component({
   selector: 'app-diplo-logo',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.eyes-closed]': 'eyesClosed()' },
   template: `
-    <svg viewBox="45 285 640 404" focusable="false" aria-hidden="true">
-      <path class="body" [attr.d]="body" />
-      <path class="fold" [attr.d]="fold" />
+    <svg viewBox="0 0 176 176" focusable="false" aria-hidden="true">
+      <defs>
+        <clipPath [attr.id]="clipId">
+          <circle cx="88.3" cy="87.8" r="87.7" />
+        </clipPath>
+      </defs>
+      <g [attr.clip-path]="'url(#' + clipId + ')'">
+        <path fill="#1e1c4b" d="M0 0h176v176H0z" />
+        <g class="head">
+          <path
+            fill="#a0a2f7"
+            d="m64 41.7-10.3 3.6L58.2 56Zm-7.5 14.1-9 5.3 5.1 8.5Zm-4.4 16.8-8.4 5 6.1 7.5Z"
+          />
+          <path
+            fill="#6266f0"
+            d="M65 39C53 54 47.5 80 47.2 109.2c-.3 23.8 7.6 46.5 18.5 67.8H72L69 100 81 69Z"
+          />
+          <path fill="#fff" d="M77 76h9.5c-5.9 33.2-.1 74.6 38.5 94.2l-12 7.8H79Z" />
+          <path
+            fill="#a0a2f7"
+            d="M86.3 26.3c14.1-1.6 23 3.8 29.4 15.9 2.8 5.4 5.1 8.4 8.6 13.2 2.2 2.8 3.5 5.4 3.2 9.3-.2 3.4-1.9 5.9-4.9 7.8-.1 5.1-3.4 8.2-10.2 8.4l-30.9.5c-5.3 32.7-4.8 67.9 32.5 90.8l-11 8H69.9c-8.5-18.9-17.7-40.7-17.7-56.4 0-16.1 9.6-33 18.9-47.2-8.1-5.1-11.5-13.1-11.5-21.6 0-17.6 9-26.7 26.7-28.7Z"
+          />
+          <path fill="#fff" d="m98.3 72 24.3.2-.5 2.8Z" />
+          <g class="eye">
+            <circle cx="82.2" cy="43.4" r="5.65" fill="#fff" />
+            <circle cx="85.45" cy="44.45" r="2.25" fill="#1e1c4b" />
+          </g>
+          <path
+            class="lid"
+            d="M77 42.8Q81.8 48.8 87.5 42.6"
+            fill="none"
+            stroke="#1e1c4b"
+            stroke-width="2.4"
+            stroke-linecap="round"
+          />
+        </g>
+      </g>
+      <circle cx="26.9" cy="26.15" r="12.85" fill="#ffc53b" />
     </svg>
   `,
   styleUrl: './diplo-logo.component.scss',
 })
 export class DiploLogoComponent {
-  protected readonly body =
-    'M58 638.5C47.3 638.5 46.1 623.8 56.8 621.9C134.6 608.5 214.4 587.1 224.6 538.1V511.1' +
-    'C224.6 487.5 242.7 468.8 266 468.8H394.8L453.6 500.7C491.2 485.7 506.9 440.4 531.4 377.3' +
-    'C549.7 329.9 565.7 288.8 616.4 288.8H660.1C671.2 288.8 679.7 297.3 679.7 308.6V320.1' +
-    'C679.7 332 671.1 341 658.8 342.4L617.5 346.4C597 348.6 588.1 361.8 583.5 379.1' +
-    'C573.6 428.7 556.8 526.1 536.2 583.6C525.6 612.2 511.3 629.3 485.8 637.6V672.7' +
-    'C485.8 679.8 480.6 685.1 473.3 685.1H432.1C424.7 685.1 419.2 679.8 419.2 672.7V640.7' +
-    'Q419.2 638.5 417 638.5H293.8Q291.5 638.5 291.5 640.8V672.7C291.5 679.8 286.2 685.1 278.9 685.1' +
-    'H237.8C230.7 685.1 225.1 679.8 225.1 672.7V640.8Q225.1 638.5 222.9 638.5Z';
+  /** Turns the head away and closes the eye. */
+  readonly eyesClosed = input(false);
 
-  protected readonly fold =
-    'M391.8 468.6C391.8 463.5 396.4 461 400.6 463.8L514.4 542.1C519.7 545.7 516.9 552.4 511.8 552.4' +
-    'H414.8C401.8 552.4 391.8 542.3 391.8 529.5Z';
+  /** Unique per instance, so two logos on one page never share a clip path. */
+  protected readonly clipId = `diplo-badge-${nextId++}`;
 }

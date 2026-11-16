@@ -183,7 +183,7 @@ describe("eudiplo config validate tenant(s)", () => {
         await mkdir(join(tenantDir, "unsupported"), { recursive: true });
         await writeFile(
             join(tenantDir, "unsupported", "broken.json"),
-            "{ not json",
+            '{"s":"leak" x}',
             "utf8",
         );
 
@@ -293,7 +293,7 @@ describe("eudiplo config validate tenant(s)", () => {
         await mkdir(join(tenantDir, "clients"), { recursive: true });
         await writeFile(
             join(tenantDir, "clients", "invalid.json"),
-            "{ not json",
+            '{"s":"leak" x}',
             "utf8",
         );
 
@@ -304,7 +304,9 @@ describe("eudiplo config validate tenant(s)", () => {
 
         expect(code).toBe(1);
         expect(output.stdout).toContain("clients/invalid.json");
-        expect(output.stdout).toContain("Invalid JSON");
+        // Only the fixed text: the parser's message would quote the file.
+        expect(output.stdout).toMatch(/Invalid JSON\s*$/m);
+        expect(output.stdout).not.toContain("leak");
     });
 
     it("detects unresolved required placeholders without printing secret values", async () => {

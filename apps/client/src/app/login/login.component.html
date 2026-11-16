@@ -1,9 +1,7 @@
 <div class="login-container">
   <mat-card class="login-card">
     <div class="brand-header">
-      <div class="brand-mark">
-        <app-diplo-logo class="logo" />
-      </div>
+      <app-diplo-logo class="logo" [eyesClosed]="secretFocused()" />
 
       <div class="brand-copy">
         <p class="eyebrow">EUDIPLO Console</p>
@@ -126,7 +124,10 @@
                   }
                 </mat-form-field>
 
-                <mat-form-field>
+                <mat-form-field
+                  (focusin)="secretFocused.set(true)"
+                  (focusout)="secretFocused.set(false)"
+                >
                   <mat-label>Client Secret</mat-label>
                   <input
                     matInput
@@ -139,6 +140,7 @@
                     matIconButton
                     matSuffix
                     type="button"
+                    (mousedown)="$event.preventDefault()"
                     (click)="toggleClientSecretVisibility()"
                     [attr.aria-label]="'Hide client secret'"
                     [attr.aria-pressed]="hideClientSecret"

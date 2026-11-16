@@ -2,8 +2,6 @@ import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
-    CONFIG_FORMATS,
-    CONFIG_RESOURCE_KINDS,
     CONFIG_SINGLETON_IDS,
     isConfigDocument,
     migrateDocument,
@@ -17,7 +15,7 @@ import { compareCodePoints } from "@eudiplo/config-format/tenant-folder.js";
 import type { ErrorObject, ValidateFunction } from "ajv";
 import Ajv2020Module from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
-import { CLI_VALIDATED_REGISTRY } from "./registry.js";
+import { CLI_VALIDATED_REGISTRY, kindForSchemaFile } from "./registry.js";
 import type {
     DirectoryResourceDefinition,
     FixedFileResourceDefinition,
@@ -249,11 +247,9 @@ async function validateResourceFile(
     let payload: unknown;
     try {
         payload = JSON.parse(raw);
-    } catch (error) {
-        errors.push({
-            file: relativeFile,
-            message: `Invalid JSON: ${(error as Error).message}`,
-        });
+    } catch {
+        // The parser's message can quote a secret from the file; do not repeat it.
+        errors.push({ file: relativeFile, message: "Invalid JSON" });
         return false;
     }
 
@@ -292,11 +288,7 @@ async function validateResourceFile(
             return false;
         }
     } else {
-        const kind = CONFIG_RESOURCE_KINDS.find(
-            (candidate) =>
-                CONFIG_FORMATS[candidate].file ===
-                schemaFile.replace(/\.schema\.json$/, ""),
-        );
+        const kind = kindForSchemaFile(schemaFile);
         if (
             kind &&
             resolved &&

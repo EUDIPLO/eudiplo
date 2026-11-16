@@ -6,6 +6,10 @@ import {
 } from "../../trust/domain/trust-list-certificate-limit.js";
 import { OutdatedTrustListsError } from "../../trust/domain/trust-list-freshness.js";
 import {
+    MAX_FOLLOWED_TRUSTED_LISTS,
+    TooManyTrustedListsError,
+} from "../../trust/domain/trusted-list-services.js";
+import {
     ServiceTypeIdentifiers,
     type TrustedEntity,
 } from "../../trust/types.js";
@@ -484,6 +488,54 @@ describe("TrustedAuthoritiesService", () => {
                         `${host}/trust-list/crowded`,
                     ],
                 },
+            ]);
+        });
+
+        it("sends only the URLs of the lists when a list of trusted lists points to too many lists", async () => {
+            const lotl = "https://tl.example/lotl.xml";
+            const { service } = createService(
+                vi.fn(),
+                vi.fn(async (ref) => {
+                    if (ref.url === lotl) {
+                        throw new TooManyTrustedListsError(
+                            lotl,
+                            MAX_FOLLOWED_TRUSTED_LISTS + 1,
+                        );
+                    }
+                    return issuer(
+                        ServiceTypeIdentifiers.EaaIssuance,
+                        eaaCa.der,
+                    );
+                }),
+            );
+
+            const result = await service.transformDcqlTrustedAuthoritiesToAki(
+                {
+                    credentials: [
+                        {
+                            id: "eaa",
+                            trusted_authorities: [
+                                {
+                                    type: "etsi_tl",
+                                    values: [
+                                        { trustListId: "ca" },
+                                        {
+                                            format: "trusted-list",
+                                            url: lotl,
+                                            signingCertificates: ["MIIB"],
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+                "tenant",
+                host,
+            );
+
+            expect(result.credentials[0].trusted_authorities).toEqual([
+                { type: "etsi_tl", values: [`${host}/trust-list/ca`, lotl] },
             ]);
         });
 
