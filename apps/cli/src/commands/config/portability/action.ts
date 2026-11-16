@@ -8,7 +8,11 @@ import type { CliConfig, CommandContext, ParsedArgs } from "../../../types.js";
 import { buildJsonReport, formatTextReport } from "../validate/report.js";
 import { loadTenantConfigSchemas } from "../validate/schemas.js";
 import { validateTenantDirectory } from "../validate/validator.js";
-import { packTenantFolder } from "./folder-bundle.js";
+import {
+    allowedFolderEnv,
+    assertFolderContained,
+    packTenantFolder,
+} from "./folder-bundle.js";
 import { upgradeFile } from "./upgrade.js";
 
 const codec = new ConfigBundleCodec();
@@ -92,15 +96,30 @@ export async function runPortabilityCommand(
     const format = planFormat(action, parsed);
     const bundlePath = resolvePath(file, context);
     const folder = await isDirectory(bundlePath);
+    const allowEnv = readStringFlag(parsed.flags, "allow-env");
+    if (allowEnv !== undefined && !folder)
+        throw new Error(
+            "--allow-env applies to a tenant folder only; a bundle's placeholders are resolved by the server.",
+        );
+    const folderEnv = allowedFolderEnv(allowEnv, context.env);
     if (folder) {
+        await assertFolderContained(bundlePath);
         // Offline first: a folder that does not validate never reaches the API.
         const validation = await validateTenantDirectory(
             bundlePath,
             basename(bundlePath),
             await loadTenantConfigSchemas(),
-            context.env,
+            folderEnv,
         );
         if (!validation.valid) {
+            if (
+                validation.errors.some((issue) =>
+                    issue.message.startsWith("Unresolved placeholder"),
+                )
+            )
+                context.stderr.write(
+                    "Placeholders resolve only from the variables named in --allow-env.\n",
+                );
             if (format === "json")
                 context.stdout.write(
                     `${JSON.stringify(buildJsonReport([validation]), null, 2)}\n`,
@@ -144,7 +163,7 @@ export async function runPortabilityCommand(
         // A folder goes as a ZIP: the archive endpoints accept up to 50 MiB,
         // the JSON body 10 MB, and assets are base64 in JSON.
         const zip = folder
-            ? codec.encode(await packTenantFolder(bundlePath, context.env))
+            ? codec.encode(await packTenantFolder(bundlePath, folderEnv))
             : await readFile(bundlePath);
         form.set(
             "bundle",

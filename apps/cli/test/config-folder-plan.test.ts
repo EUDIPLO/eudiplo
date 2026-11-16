@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -82,7 +82,10 @@ describe("config plan / import with a tenant folder", () => {
         const code = await runPortabilityCommand(
             "plan",
             config,
-            { positionals: ["acme"], flags: {} },
+            {
+                positionals: ["acme"],
+                flags: { "allow-env": "PORTAL_SECRET" },
+            },
             context,
         );
 
@@ -115,13 +118,19 @@ describe("config plan / import with a tenant folder", () => {
         await runPortabilityCommand(
             "plan",
             config,
-            { positionals: ["acme"], flags: { output: "plan.json" } },
+            {
+                positionals: ["acme"],
+                flags: { output: "plan.json", "allow-env": "PORTAL_SECRET" },
+            },
             context,
         );
         await runPortabilityCommand(
             "import",
             config,
-            { positionals: ["acme"], flags: { plan: "plan.json" } },
+            {
+                positionals: ["acme"],
+                flags: { plan: "plan.json", "allow-env": "PORTAL_SECRET" },
+            },
             context,
         );
 
@@ -141,7 +150,10 @@ describe("config plan / import with a tenant folder", () => {
         const code = await runPortabilityCommand(
             "plan",
             config,
-            { positionals: ["acme"], flags: { format: "text" } },
+            {
+                positionals: ["acme"],
+                flags: { format: "text", "allow-env": "PORTAL_SECRET" },
+            },
             context,
         );
 
@@ -154,9 +166,8 @@ describe("config plan / import with a tenant folder", () => {
         );
     });
 
-    it("reports an unresolved placeholder by variable name, without a value, before any request", async () => {
-        delete context.env.PORTAL_SECRET;
-
+    it("reads no environment variable that --allow-env does not name", async () => {
+        // PORTAL_SECRET is set, but the folder may not read it.
         const code = await runPortabilityCommand(
             "import",
             config,
@@ -170,6 +181,78 @@ describe("config plan / import with a tenant folder", () => {
         expect(code).toBe(1);
         expect(context.fetch).not.toHaveBeenCalled();
         expect(output.stderr).toContain("${PORTAL_SECRET}");
+        expect(output.stderr).toContain("--allow-env");
+        expect(output.stderr).not.toContain("s3cr3t-value");
+    });
+
+    it("refuses the CLI's own credentials in --allow-env", async () => {
+        await expect(
+            runPortabilityCommand(
+                "plan",
+                config,
+                {
+                    positionals: ["acme"],
+                    flags: { "allow-env": "PORTAL_SECRET,EUDIPLO_TOKEN" },
+                },
+                context,
+            ),
+        ).rejects.toThrow("EUDIPLO_TOKEN holds the CLI's own credentials");
+        expect(context.fetch).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ["a linked images directory", "images", true],
+        ["a linked document", "info.json", false],
+    ])(
+        "refuses %s that points outside the folder",
+        async (_, name, isDirectory) => {
+            const outside = join(cwd, "outside");
+            await mkdir(outside);
+            await writeFile(join(outside, "id_rsa"), "private-key");
+            await writeJson(join(outside, "info.json"), { name: "Elsewhere" });
+            await rm(join(tenant, name), { recursive: true });
+            await symlink(
+                isDirectory ? outside : join(outside, name),
+                join(tenant, name),
+            );
+
+            await expect(
+                runPortabilityCommand(
+                    "plan",
+                    config,
+                    {
+                        positionals: ["acme"],
+                        flags: { "allow-env": "PORTAL_SECRET" },
+                    },
+                    context,
+                ),
+            ).rejects.toThrow(
+                `${name}: symbolic link points outside the configuration folder`,
+            );
+            expect(context.fetch).not.toHaveBeenCalled();
+        },
+    );
+
+    it("accepts a symbolic link that stays inside the folder", async () => {
+        await mkdir(join(tenant, "shared"));
+        await writeFile(join(tenant, "shared", "brand.png"), "png-bytes");
+        await symlink(
+            join(tenant, "shared", "brand.png"),
+            join(tenant, "images", "brand.png"),
+        );
+
+        const code = await runPortabilityCommand(
+            "plan",
+            config,
+            {
+                positionals: ["acme"],
+                flags: { "allow-env": "PORTAL_SECRET" },
+            },
+            context,
+        );
+
+        expect(code).toBe(0);
+        expect(context.fetch).toHaveBeenCalledOnce();
     });
 
     it("writes the validation report as JSON with --format json", async () => {
@@ -190,7 +273,10 @@ describe("config plan / import with a tenant folder", () => {
     });
 
     it("renders a readable plan with --format text and keeps --diff as its alias", async () => {
-        for (const flags of [{ format: "text" }, { diff: true }]) {
+        for (const flags of [
+            { format: "text", "allow-env": "PORTAL_SECRET" },
+            { diff: true, "allow-env": "PORTAL_SECRET" },
+        ]) {
             output.stdout = "";
             await runPortabilityCommand(
                 "plan",
