@@ -154,22 +154,29 @@ describe("config plan / import with a tenant folder", () => {
         );
     });
 
-    it("reports an unresolved placeholder by variable name, without a value, before any request", async () => {
+    it("keeps an unresolved placeholder for the server and names it, without a value", async () => {
         delete context.env.PORTAL_SECRET;
 
         const code = await runPortabilityCommand(
-            "import",
+            "plan",
             config,
-            {
-                positionals: ["acme"],
-                flags: { "plan-fingerprint": fingerprint },
-            },
+            { positionals: ["acme"], flags: {} },
             context,
         );
 
-        expect(code).toBe(1);
-        expect(context.fetch).not.toHaveBeenCalled();
-        expect(output.stderr).toContain("${PORTAL_SECRET}");
+        // An exported folder keeps its placeholders; the server's plan blocks
+        // that resource with SECRET_REQUIRED, so the CLI does not stop here.
+        expect(code).toBe(0);
+        expect(output.stderr).toContain(
+            "clients/portal.json /secret: Unresolved placeholder ${PORTAL_SECRET}",
+        );
+        expect(output.stderr).toContain("SECRET_REQUIRED");
+        const bundle = await sentBundle(
+            vi.mocked(context.fetch).mock.calls[0][1],
+        );
+        expect(bundle.documents[1].spec).toMatchObject({
+            secret: "${PORTAL_SECRET}",
+        });
     });
 
     it("writes the validation report as JSON with --format json", async () => {

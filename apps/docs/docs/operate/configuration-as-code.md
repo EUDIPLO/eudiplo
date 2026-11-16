@@ -225,6 +225,33 @@ secrets with `${…}` placeholders and private keys with
 generate them (see
 [secret and key policy](../reference/config-bundle-format.md#secret-and-key-policy)).
 
+To keep a tenant in Git, export it as a tenant folder instead: an `--output`
+without `.zip` or `.json` writes the
+[folder layout](../reference/config-bundle-format.md#tenant-folder-layout) that
+the startup import and `config plan <folder>` read:
+
+```bash
+eudiplo config export --instance production --output ./config/acme
+```
+
+Files are named after the resource ID (`clients/<clientId>.json`,
+`key-chains/<id>.json`, `issuance/issuance.json`, …), with sorted keys and
+two-space indentation, so exporting the same configuration again writes the
+same files and `git diff` shows only real changes. An ID that is no valid file
+name on every system, or that differs from another only in case, gets a short
+hash suffix; the ID inside the document is what counts. Placeholders and
+`keySource: { "type": "required" }` are written as they are, and the command
+lists each value to supply with its file, instead of a `manifest.json`. The
+directory must not exist or be empty; the folder is written in full or not at
+all. Name it after the tenant, as the startup import and `replace` mode use the
+folder name.
+
+Planning that folder against the same instance shows every resource as
+`unchanged`, except those with a requirement: a client whose secret is a
+placeholder is `blocked` with `SECRET_REQUIRED` and a key chain with
+`"type": "required"` with `PRIVATE_KEY_REQUIRED`, as when the bundle export
+itself is planned.
+
 ## Download one resource
 
 **Download configuration** on the page of a credential, issuance or
@@ -298,7 +325,10 @@ eudiplo config import ./config/acme --instance staging --mode upsert --plan plan
 The CLI first validates the folder offline, like
 [`eudiplo config tenant validate`](#validate-in-ci); a folder with errors exits
 with `1` and is not sent. It then resolves `${VAR}` placeholders from its own
-environment, as the startup import does, and sends the folder as a bundle
+environment, as the startup import does. A placeholder without a value, such
+as the secrets of an [exported folder](#export-a-tenant), is named in a warning
+and sent as it is; the plan blocks that resource with `SECRET_REQUIRED` until
+the variable is set. The CLI sends the folder as a bundle
 archive, `info.json` and `images/` included. The bundle is the same for the same
 files and environment, so the import matches the reviewed plan. The tenant comes
 from the access token, and the folder name is the bundle's source, which

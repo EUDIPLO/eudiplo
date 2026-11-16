@@ -24,11 +24,11 @@ import { wrapBare } from "./upgrade.js";
  * plus the tenant's own `info.json`, which a bundle carries as the Tenant
  * document. Bundle paths follow the export (`issuance/config.json`).
  */
-type FolderResource =
+export type FolderResource =
     | { kind: ConfigResourceKind; file: string; bundlePath: string }
     | { kind: ConfigResourceKind; directory: string };
 
-const FOLDER_RESOURCES: readonly FolderResource[] = [
+export const FOLDER_RESOURCES: readonly FolderResource[] = [
     { kind: "Tenant", file: "info.json", bundlePath: "info.json" },
     { kind: "KmsConfig", file: "kms.json", bundlePath: "kms.json" },
     { kind: "Client", directory: "clients" },

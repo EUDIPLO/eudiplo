@@ -34,5 +34,7 @@ export interface TenantValidationResult {
     valid: boolean;
     files: number;
     errors: ValidationIssue[];
+    /** Placeholders without a value, when validated with allowUnresolvedPlaceholders. */
+    unresolved?: ValidationIssue[];
     resourceCounts: Record<string, number>;
 }

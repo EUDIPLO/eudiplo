@@ -9,6 +9,7 @@ import { buildJsonReport, formatTextReport } from "../validate/report.js";
 import { loadTenantConfigSchemas } from "../validate/schemas.js";
 import { validateTenantDirectory } from "../validate/validator.js";
 import { packTenantFolder } from "./folder-bundle.js";
+import { writeTenantFolder } from "./folder-export.js";
 import { upgradeFile } from "./upgrade.js";
 
 const codec = new ConfigBundleCodec();
@@ -70,8 +71,10 @@ export async function runPortabilityCommand(
                 "eudiplo-config-bundle.zip",
             context,
         );
-        const format =
-            extname(output).toLowerCase() === ".json" ? "json" : "zip";
+        const extension = extname(output).toLowerCase();
+        if (extension !== ".json" && extension !== ".zip")
+            return exportFolder(baseUrl, authHeaders, output, context);
+        const format = extension === ".json" ? "json" : "zip";
         const response = await context.fetch(
             `${baseUrl}/api/config-bundles/export?format=${format}`,
             { headers: authHeaders },
@@ -99,7 +102,14 @@ export async function runPortabilityCommand(
             basename(bundlePath),
             await loadTenantConfigSchemas(),
             context.env,
+            { allowUnresolvedPlaceholders: true },
         );
+        // An exported folder keeps its `${…}` placeholders. The server plans
+        // them as SECRET_REQUIRED, which blocks the import of that resource.
+        for (const issue of validation.unresolved ?? [])
+            context.stderr.write(
+                `${issue.file} ${issue.path}: ${issue.message}; the plan blocks this resource with SECRET_REQUIRED\n`,
+            );
         if (!validation.valid) {
             if (format === "json")
                 context.stdout.write(
@@ -201,6 +211,53 @@ export async function runPortabilityCommand(
         );
     } else context.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return (result as any).applicable === false ? 1 : 0;
+}
+
+/**
+ * `config export --output <dir>`: fetch the bundle as a ZIP (the codec checks
+ * paths, checksums and size limits) and write it as a tenant folder.
+ */
+async function exportFolder(
+    baseUrl: string,
+    headers: Record<string, string>,
+    output: string,
+    context: CommandContext,
+): Promise<number> {
+    const response = await context.fetch(
+        `${baseUrl}/api/config-bundles/export?format=zip`,
+        { headers },
+    );
+    await assertOk(response);
+    const bundle = codec.decode(Buffer.from(await response.arrayBuffer()));
+    const { files, assets } = await writeTenantFolder(bundle, output);
+    context.stdout.write(
+        `Exported tenant ${bundle.manifest.tenant} to ${output}: ${files.size} files, ${assets} images\n`,
+    );
+    if (basename(output) !== bundle.manifest.tenant)
+        context.stderr.write(
+            `Note: the folder is not named after the tenant (${bundle.manifest.tenant}). The startup import and replace mode use the folder name, so rename it before using it as a tenant folder.\n`,
+        );
+    for (const warning of bundle.manifest.warnings)
+        context.stderr.write(`warning ${warning.code}: ${warning.message}\n`);
+    const requirements = bundle.manifest.requirements;
+    if (requirements.length) {
+        context.stdout.write(
+            `${requirements.length} value(s) to supply before this folder can be imported:\n`,
+        );
+        for (const requirement of requirements) {
+            const file =
+                files.get(
+                    `${requirement.resource.kind}/${requirement.resource.id}`,
+                ) ?? `${requirement.resource.kind}/${requirement.resource.id}`;
+            const value = requirement.placeholder
+                ? `\${${requirement.placeholder}}`
+                : "private key";
+            context.stdout.write(
+                `  ${file} ${requirement.path}: ${value} (${requirement.code})\n`,
+            );
+        }
+    }
+    return 0;
 }
 
 /**

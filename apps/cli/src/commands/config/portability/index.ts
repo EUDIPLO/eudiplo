@@ -17,7 +17,10 @@ export function createPortabilityCommands(
             .option("--instance <name>", "select a configured instance")
             .option("--token <token>", "management API access token");
         if (name === "export") {
-            command.option("--output <path>", "output bundle path");
+            command.option(
+                "--output <path>",
+                "bundle file (.zip or .json), or a directory to write the tenant folder layout to",
+            );
         } else {
             command
                 .argument(
