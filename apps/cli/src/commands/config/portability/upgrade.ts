@@ -25,8 +25,6 @@ import {
 } from "@eudiplo/config-format/config-bundle.js";
 import {
     bareFileVersion,
-    CONFIG_FORMATS,
-    CONFIG_RESOURCE_KINDS,
     CONFIG_SINGLETON_IDS,
     type ConfigResourceKind,
     isConfigDocument,
@@ -41,7 +39,10 @@ import {
 } from "@eudiplo/config-format/config-values.js";
 import { readStringFlag } from "../../../options.js";
 import type { CommandContext, ParsedArgs } from "../../../types.js";
-import { TENANT_RESOURCE_REGISTRY } from "../validate/registry.js";
+import {
+    kindForSchemaFile,
+    TENANT_RESOURCE_REGISTRY,
+} from "../validate/registry.js";
 import { upgradeDocument } from "./migrations.js";
 
 const codec = new ConfigBundleCodec();
@@ -127,12 +128,13 @@ function inferredKind(path: string): ConfigResourceKind | undefined {
             : normalized.endsWith(`/${entry.subfolder}/${basename(path)}`) ||
               normalized === `${entry.subfolder}/${basename(path)}`,
     );
-    return CONFIG_RESOURCE_KINDS.find(
-        (kind) =>
-            `${CONFIG_FORMATS[kind].file}.schema.json` === match?.schemaFile,
-    );
+    return kindForSchemaFile(match?.schemaFile);
 }
-function wrapBare(kind: ConfigResourceKind, input: any, path: string): unknown {
+export function wrapBare(
+    kind: ConfigResourceKind,
+    input: any,
+    path: string,
+): unknown {
     if (!input || typeof input !== "object" || Array.isArray(input))
         throw new Error(`${path}: configuration must be an object`);
     const singleton = CONFIG_SINGLETON_IDS;

@@ -1,10 +1,21 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { basename, extname, isAbsolute, join } from "node:path";
+import { ConfigBundleCodec } from "@eudiplo/config-format/config-bundle.js";
 import { atomicWriteFile } from "@eudiplo/config-format/config-io.js";
-import { upgradeFile } from "./upgrade.js";
 import { readStringFlag } from "../../../options.js";
 import { resolveInstance } from "../../../services/instance-selection.js";
 import type { CliConfig, CommandContext, ParsedArgs } from "../../../types.js";
+import { buildJsonReport, formatTextReport } from "../validate/report.js";
+import { loadTenantConfigSchemas } from "../validate/schemas.js";
+import { validateTenantDirectory } from "../validate/validator.js";
+import {
+    allowedFolderEnv,
+    assertFolderContained,
+    packTenantFolder,
+} from "./folder-bundle.js";
+import { upgradeFile } from "./upgrade.js";
+
+const codec = new ConfigBundleCodec();
 
 type Action =
     | "export"
@@ -80,9 +91,50 @@ export async function runPortabilityCommand(
     }
 
     const file = parsed.positionals[0];
-    if (!file) throw new Error(`Usage: eudiplo config ${action} <bundle>`);
+    if (!file)
+        throw new Error(`Usage: eudiplo config ${action} <bundle-or-folder>`);
+    const format = planFormat(action, parsed);
     const bundlePath = resolvePath(file, context);
-    const archive = extname(bundlePath).toLowerCase() === ".zip";
+    const folder = await isDirectory(bundlePath);
+    const allowEnv = readStringFlag(parsed.flags, "allow-env");
+    if (allowEnv !== undefined && !folder)
+        throw new Error(
+            "--allow-env applies to a tenant folder only; a bundle's placeholders are resolved by the server.",
+        );
+    const folderEnv = allowedFolderEnv(allowEnv, context.env);
+    if (folder) {
+        await assertFolderContained(bundlePath);
+        // Offline first: a folder that does not validate never reaches the API.
+        const validation = await validateTenantDirectory(
+            bundlePath,
+            basename(bundlePath),
+            await loadTenantConfigSchemas(),
+            folderEnv,
+        );
+        if (!validation.valid) {
+            if (
+                validation.errors.some((issue) =>
+                    issue.message.startsWith("Unresolved placeholder"),
+                )
+            )
+                context.stderr.write(
+                    "Placeholders resolve only from the variables named in --allow-env.\n",
+                );
+            if (format === "json")
+                context.stdout.write(
+                    `${JSON.stringify(buildJsonReport([validation]), null, 2)}\n`,
+                );
+            else
+                context.stderr.write(
+                    formatTextReport("tenant", bundlePath, [validation]),
+                );
+            context.stderr.write(
+                `Not sent to ${baseUrl}: fix the configuration folder first.\n`,
+            );
+            return 1;
+        }
+    }
+    const archive = folder || extname(bundlePath).toLowerCase() === ".zip";
     const mode = readStringFlag(parsed.flags, "mode") ?? "upsert";
     const query = new URLSearchParams({ mode });
     if (action === "import") {
@@ -108,10 +160,15 @@ export async function runPortabilityCommand(
     let endpoint: string = action;
     if (archive) {
         const form = new FormData();
+        // A folder goes as a ZIP: the archive endpoints accept up to 50 MiB,
+        // the JSON body 10 MB, and assets are base64 in JSON.
+        const zip = folder
+            ? codec.encode(await packTenantFolder(bundlePath, folderEnv))
+            : await readFile(bundlePath);
         form.set(
             "bundle",
-            new Blob([await readFile(bundlePath)], { type: "application/zip" }),
-            basename(bundlePath),
+            new Blob([new Uint8Array(zip)], { type: "application/zip" }),
+            folder ? `${basename(bundlePath)}.zip` : basename(bundlePath),
         );
         body = form;
         endpoint = `${action}/archive`;
@@ -134,7 +191,7 @@ export async function runPortabilityCommand(
                 `${JSON.stringify(result, null, 2)}\n`,
             );
     }
-    if (action === "plan" && parsed.flags.diff === true) {
+    if (action === "plan" && format === "text") {
         for (const item of (result as any).items ?? []) {
             context.stdout.write(
                 `${item.kind}/${item.id}: ${item.action}${item.action === "unchanged" && item.metadataChanged ? " (ownership update)" : ""}\n`,
@@ -163,6 +220,35 @@ export async function runPortabilityCommand(
         );
     } else context.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return (result as any).applicable === false ? 1 : 0;
+}
+
+/**
+ * Output format of `config plan`. JSON stays the default so scripts that parse
+ * today's output keep working; `--diff` is an alias for `--format text`.
+ */
+function planFormat(action: Action, parsed: ParsedArgs): "text" | "json" {
+    // Commander restricts --format to text or json.
+    const format = readStringFlag(parsed.flags, "format") as
+        | "text"
+        | "json"
+        | undefined;
+    const diff = parsed.flags.diff === true;
+    if (action !== "plan") return "text";
+    if (diff && format === "json")
+        throw new Error(
+            "--diff is the text format; use either --diff or --format json, not both.",
+        );
+    return diff ? "text" : (format ?? "json");
+}
+
+async function isDirectory(path: string): Promise<boolean> {
+    try {
+        return (await stat(path)).isDirectory();
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT")
+            throw new Error(`Bundle or folder not found: ${path}`);
+        throw error;
+    }
 }
 
 function resolvePath(value: string, context: CommandContext): string {
