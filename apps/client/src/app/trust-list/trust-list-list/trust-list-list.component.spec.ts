@@ -1,14 +1,27 @@
+import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import type { TrustList } from '@eudiplo/sdk-core';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { describeListStates } from '../../common/base-async-list.testing';
 import { ConfigDocumentService } from '../../config-portability/config-document.service';
 import { TrustListService } from '../trust-list.service';
+import { TrustListStatusComponent } from '../trust-list-status/trust-list-status.component';
 import { TrustListListComponent } from './trust-list-list.component';
 
+/** Stands in for the status section, which has its own tests and its own request. */
+@Component({ selector: 'app-trust-list-status', template: '' })
+class TrustListStatusStubComponent {}
+
 describe('TrustListListComponent', () => {
+  beforeEach(() => {
+    TestBed.overrideComponent(TrustListListComponent, {
+      remove: { imports: [TrustListStatusComponent] },
+      add: { imports: [TrustListStatusStubComponent] },
+    });
+  });
+
   const trustList = {
     id: 'membership-issuers',
     description: 'Issuers of membership credentials',

@@ -225,6 +225,12 @@ mat-icon[mat-card-avatar] {
       background: var(--mat-sys-surface-container-high);
       transition: all 0.2s ease;
 
+      // A warning can name a long list URL; it wraps instead of pushing the action out.
+      > [fxFlex] {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
       &:hover {
         background: var(--mat-sys-surface-container-highest);
       }

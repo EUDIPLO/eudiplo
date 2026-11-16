@@ -5,7 +5,9 @@ import {
     TooManyTrustListCertificatesError,
 } from "../domain/trust-list-certificate-limit.js";
 import { OutdatedTrustListsError } from "../domain/trust-list-freshness.js";
+import { TrustListFetchError } from "../domain/trust-list-load-errors.js";
 import type { AcceptedTrustListSequenceNumbers } from "../ports/accepted-trust-list-sequence-numbers.js";
+import type { TrustListFetchResult } from "../ports/trust-list-fetch-statuses.js";
 import type {
     TrustListProvider,
     VerifiedTrustList,
@@ -38,7 +40,7 @@ describe("CollectTrustedEntities", () => {
     const collect = (
         lists: TrustListProvider,
         numbers: AcceptedTrustListSequenceNumbers = acceptedSequenceNumbersFake(),
-    ) => new CollectTrustedEntities(lists, numbers, clock);
+    ) => new CollectTrustedEntities(lists, numbers, { now: clock });
     /** A verified list, current and numbered 1 unless given otherwise. */
     const list = (
         overrides: Partial<VerifiedTrustList> = {},
@@ -565,6 +567,191 @@ describe("CollectTrustedEntities", () => {
             ).resolves.toMatchObject({
                 entities: [{ entityId: "current" }],
             });
+        });
+    });
+
+    describe("fetch results", () => {
+        const recording = (lists: TrustListProvider, failRecord = false) => {
+            const recorded: TrustListFetchResult[] = [];
+            const onRecordFailed = vi.fn();
+            const collector = new CollectTrustedEntities(
+                lists,
+                acceptedSequenceNumbersFake({ "t three": 5 }),
+                {
+                    now: clock,
+                    fetchStatuses: {
+                        record: async (result, at) => {
+                            if (failRecord) throw new Error("database down");
+                            expect(at).toBe(now);
+                            recorded.push(result);
+                        },
+                        list: async () => [],
+                    },
+                    onRecordFailed,
+                },
+            );
+            return { collector, recorded, onRecordFailed };
+        };
+
+        it("records each loaded list with its outcome and details", async () => {
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce(list())
+                .mockResolvedValueOnce(list({ nextUpdate: passed }))
+                .mockResolvedValueOnce(list({ sequenceNumber: 4 }))
+                .mockResolvedValueOnce(list({ sequenceNumber: "x" }));
+            const { collector, recorded } = recording({ loadVerified });
+
+            await collector.execute({
+                tenantId,
+                lotes: [
+                    {
+                        url: "http://internal/one",
+                        publicUrl: "https://public/one",
+                        trustListId: "one",
+                    },
+                    { url: "two" },
+                    { url: "three" },
+                    { url: "four" },
+                ],
+            });
+
+            expect(recorded).toEqual([
+                {
+                    tenantId,
+                    url: "https://public/one",
+                    trustListId: "one",
+                    outcome: "accepted",
+                    list: { nextUpdate: later, sequenceNumber: 1, entities: 1 },
+                },
+                {
+                    tenantId,
+                    url: "two",
+                    outcome: "outdated",
+                    reason: `NextUpdate "${passed}"`,
+                    list: {
+                        nextUpdate: passed,
+                        sequenceNumber: 1,
+                        entities: 1,
+                    },
+                },
+                expect.objectContaining({
+                    url: "three",
+                    outcome: "superseded",
+                    reason: "LoTESequenceNumber 4 is lower than 5 accepted before",
+                }),
+                expect.objectContaining({
+                    url: "four",
+                    outcome: "invalidSequenceNumber",
+                    list: {
+                        nextUpdate: later,
+                        sequenceNumber: undefined,
+                        entities: 1,
+                    },
+                }),
+            ]);
+        });
+
+        it("records a list that could not be loaded without its URL in the reason, and stops", async () => {
+            const loadVerified = vi
+                .fn()
+                .mockRejectedValueOnce(
+                    new TrustListFetchError(
+                        "Failed to fetch trust list from one: getaddrinfo ENOTFOUND internal.host",
+                        { cause: new Error("getaddrinfo ENOTFOUND") },
+                    ),
+                );
+            const { collector, recorded } = recording({ loadVerified });
+
+            await expect(
+                collector.execute({
+                    tenantId,
+                    lotes: [{ url: "one" }, { url: "two" }],
+                }),
+            ).rejects.toBeInstanceOf(TrustListFetchError);
+            expect(recorded).toEqual([
+                {
+                    tenantId,
+                    url: "one",
+                    outcome: "failed",
+                    reason: "The list could not be fetched; the server log has the details",
+                },
+            ]);
+        });
+
+        it("records the list that brings its source over the certificate limit", async () => {
+            const many = {
+                entityId: "many",
+                services: Array.from(
+                    { length: MAX_TRUST_LIST_CERTIFICATES + 1 },
+                    (_, index) => ({
+                        serviceTypeIdentifier: "urn:test/Issuance",
+                        certValue: `c${index}`,
+                    }),
+                ),
+            };
+            const { collector, recorded } = recording({
+                loadVerified: vi
+                    .fn()
+                    .mockResolvedValue(list({ entities: [many] })),
+            });
+
+            await expect(
+                collector.execute({
+                    tenantId,
+                    lotes: [
+                        {
+                            url: "http://internal/one",
+                            publicUrl: "https://public/one",
+                        },
+                    ],
+                }),
+            ).rejects.toBeInstanceOf(TooManyTrustListCertificatesError);
+            expect(recorded).toEqual([
+                expect.objectContaining({
+                    url: "https://public/one",
+                    outcome: "tooManyCertificates",
+                    reason: expect.stringContaining("https://public/one"),
+                    list: expect.objectContaining({ entities: 1 }),
+                }),
+            ]);
+            // The tenant reads the reason; INTERNAL_URL stays out of it.
+            expect(recorded[0].reason).not.toContain("internal");
+        });
+
+        it("records a NextUpdate that is no date-time string as null", async () => {
+            const loadVerified = vi
+                .fn()
+                .mockResolvedValueOnce(list({ nextUpdate: "x".repeat(65) }))
+                .mockResolvedValueOnce(
+                    list({ nextUpdate: { at: later } as unknown as string }),
+                );
+            const { collector, recorded } = recording({ loadVerified });
+
+            await expect(
+                collector.execute({
+                    tenantId,
+                    lotes: [{ url: "one" }, { url: "two" }],
+                }),
+            ).rejects.toBeInstanceOf(OutdatedTrustListsError);
+            expect(recorded.map((result) => result.list?.nextUpdate)).toEqual([
+                null,
+                null,
+            ]);
+        });
+
+        it("loads the lists when a result cannot be recorded", async () => {
+            const { collector, onRecordFailed } = recording(
+                { loadVerified: vi.fn().mockResolvedValue(list()) },
+                true,
+            );
+
+            await expect(
+                collector.execute({ tenantId, lotes: [{ url: "one" }] }),
+            ).resolves.toMatchObject({ entities: [issuer] });
+            expect(onRecordFailed).toHaveBeenCalledWith(
+                expect.objectContaining({ message: "database down" }),
+            );
         });
     });
 });

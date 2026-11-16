@@ -118,6 +118,8 @@ In the Web Client, turn on **Revoke with Wallet Unit** under **Credential Featur
 
 ## Troubleshooting
 
+**Lists in use** on the **Trust Lists** page (`GET /api/trust-list-status`) shows how each wallet-provider list was last loaded and why it was not accepted ([Status of the lists in use](trust-lists.md#status-of-the-lists-in-use)).
+
 | Symptom                                                        | Cause and fix                                                                                                         |
 | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `Wallet attestation is required but not provided`              | The wallet sends no attestation headers. Use a wallet that supports wallet attestation, or set `walletAttestationRequired: false`. |

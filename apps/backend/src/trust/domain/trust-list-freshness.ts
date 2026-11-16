@@ -52,7 +52,10 @@ export function isTrustListCurrent(
 }
 
 /** Why one list was discarded, as operators read it. */
-function discardReason({ nextUpdate, sequence }: DiscardedTrustList): string {
+export function discardReason({
+    nextUpdate,
+    sequence,
+}: DiscardedTrustList): string {
     if (!sequence) {
         return `NextUpdate ${JSON.stringify(nextUpdate ?? null)}`;
     }

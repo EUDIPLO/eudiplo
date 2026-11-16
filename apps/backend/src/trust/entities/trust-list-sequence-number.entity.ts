@@ -1,12 +1,6 @@
 import { Column, Entity, ManyToOne, PrimaryColumn } from "typeorm";
 import { TenantEntity } from "../../auth/tenant/entities/tenant.entity.js";
-
-/** PostgreSQL returns every `bigint` as a string; read it as a number. */
-const wholeNumber = {
-    to: (value?: number | null) => value,
-    from: (value?: string | number | null) =>
-        value === null || value === undefined ? value : Number(value),
-};
+import { wholeNumber } from "../../database/whole-number.transformer.js";
 
 /**
  * The highest `LoTESequenceNumber` of a trust list that a tenant accepted

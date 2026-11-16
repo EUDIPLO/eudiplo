@@ -1,5 +1,5 @@
 import { HttpModule, HttpService } from "@nestjs/axios";
-import { Module, type Provider } from "@nestjs/common";
+import { Logger, Module, type Provider } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
 import type { Repository } from "typeorm";
@@ -22,9 +22,11 @@ import {
 import { LocalFederationEntityProvider } from "./adapters/local-federation-entity-provider.js";
 import { LocalFederationResolver } from "./adapters/local-federation-resolver.js";
 import { TypeOrmAcceptedTrustListSequenceNumbers } from "./adapters/typeorm-accepted-trust-list-sequence-numbers.js";
+import { TypeOrmTrustListFetchStatuses } from "./adapters/typeorm-trust-list-fetch-statuses.js";
 import { VerifiedLoteProvider } from "./adapters/verified-lote-provider.js";
 import { CollectTrustedEntities } from "./application/collect-trusted-entities.js";
 import { CacheController } from "./cache.controller.js";
+import { TrustListFetchStatusEntity } from "./entities/trust-list-fetch-status.entity.js";
 import { TrustListSequenceNumberEntity } from "./entities/trust-list-sequence-number.entity.js";
 import {
     FEDERATION_ENTITY_PROVIDER_SETTINGS,
@@ -50,11 +52,16 @@ import {
     type FederationResolver,
 } from "./ports/federation-resolver.js";
 import {
+    TRUST_LIST_FETCH_STATUSES,
+    type TrustListFetchStatuses,
+} from "./ports/trust-list-fetch-statuses.js";
+import {
     TRUST_LIST_PROVIDER,
     type TrustListProvider,
 } from "./ports/trust-list-provider.js";
 import { StatusListVerifierService } from "./status-list-verifier.service.js";
 import { TrustFetchService } from "./trust-fetch.service.js";
+import { TrustListStatusController } from "./trust-list-status.controller.js";
 import { TrustStoreService } from "./trust-store.service.js";
 import { TRUST_STORE_SETTINGS } from "./trust-store-settings.js";
 import { TrustListJwtService } from "./trustlist-jwt.service.js";
@@ -127,14 +134,17 @@ export const federationEntityProvider: Provider = {
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([TrustListSequenceNumberEntity]),
+        TypeOrmModule.forFeature([
+            TrustListSequenceNumberEntity,
+            TrustListFetchStatusEntity,
+        ]),
         CryptoModule,
         TrustListModule,
         FederationTrustAnchorModule,
         OutboundUrlPolicyModule,
         HttpModule,
     ],
-    controllers: [CacheController],
+    controllers: [CacheController, TrustListStatusController],
     providers: [
         TrustFetchService,
         TrustListJwtService,
@@ -155,12 +165,34 @@ export const federationEntityProvider: Provider = {
                 new TypeOrmAcceptedTrustListSequenceNumbers(repository),
         },
         {
+            provide: TRUST_LIST_FETCH_STATUSES,
+            inject: [getRepositoryToken(TrustListFetchStatusEntity)],
+            useFactory: (
+                repository: Repository<TrustListFetchStatusEntity>,
+            ): TrustListFetchStatuses =>
+                new TypeOrmTrustListFetchStatuses(repository),
+        },
+        {
             provide: CollectTrustedEntities,
-            inject: [TRUST_LIST_PROVIDER, ACCEPTED_TRUST_LIST_SEQUENCE_NUMBERS],
+            inject: [
+                TRUST_LIST_PROVIDER,
+                ACCEPTED_TRUST_LIST_SEQUENCE_NUMBERS,
+                TRUST_LIST_FETCH_STATUSES,
+            ],
             useFactory: (
                 lists: TrustListProvider,
                 sequenceNumbers: AcceptedTrustListSequenceNumbers,
-            ) => new CollectTrustedEntities(lists, sequenceNumbers),
+                fetchStatuses: TrustListFetchStatuses,
+            ) => {
+                const logger = new Logger(CollectTrustedEntities.name);
+                return new CollectTrustedEntities(lists, sequenceNumbers, {
+                    fetchStatuses,
+                    onRecordFailed: (error) =>
+                        logger.warn(
+                            `Could not record a trust list fetch result: ${error instanceof Error ? error.message : String(error)}`,
+                        ),
+                });
+            },
         },
         {
             provide: TRUST_STORE_SETTINGS,

@@ -37,6 +37,26 @@ test.describe('verifier admin', () => {
     await expect(page.getByRole('heading', { name: 'Trust lists' })).toBeVisible();
   });
 
+  test('sees how the trust lists in use were last loaded', async ({ page }) => {
+    await signInOnKeys(page);
+    const status = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/trust-list-status') && response.request().method() === 'GET'
+    );
+    await page.goto('/trust-list');
+    expect((await status).ok(), 'GET /api/trust-list-status').toBe(true);
+
+    const section = page.getByRole('region', { name: 'Lists in use' });
+    await expect(section.getByRole('heading', { name: 'Lists in use' })).toBeVisible();
+    // A fresh tenant has loaded no list yet; one in use shows its rows instead.
+    await expect(
+      section.getByText('No trust list has been loaded yet.').or(section.getByRole('table'))
+    ).toBeVisible();
+    await expect(
+      section.getByRole('button', { name: 'Reload the status of the trust lists in use' })
+    ).toBeEnabled();
+  });
+
   /** Opens the trust list with this id, or the first one, or skips the test when there is none. */
   async function openTrustList(page: Page, id?: string): Promise<void> {
     const lists = page.waitForResponse(isTrustListRequest);

@@ -1,6 +1,7 @@
 import { addTrustListCertificates } from "../domain/trust-list-certificate-limit.js";
 import {
     type DiscardedTrustList,
+    discardReason,
     isTrustListCurrent,
     OutdatedTrustListsError,
 } from "../domain/trust-list-freshness.js";
@@ -9,6 +10,11 @@ import {
     isTrustListSequenceNumber,
 } from "../domain/trust-list-sequence.js";
 import type { AcceptedTrustListSequenceNumbers } from "../ports/accepted-trust-list-sequence-numbers.js";
+import {
+    NO_TRUST_LIST_FETCH_STATUSES,
+    type TrustListFetchResult,
+    type TrustListFetchStatuses,
+} from "../ports/trust-list-fetch-statuses.js";
 import type {
     TrustListProvider,
     VerifiedTrustList,
@@ -19,6 +25,7 @@ import {
     type TrustListRef,
     type TrustListSource,
 } from "../types.js";
+import { discardOutcome, failureReason } from "./trust-list-fetch-result.js";
 
 /** A list reference as the trust store loads it. */
 export interface LoadedTrustListRef extends TrustListRef {
@@ -31,6 +38,11 @@ export interface LoadedTrustListRef extends TrustListRef {
      * which starts at 1.
      */
     storedSequenceNumber?: number;
+    /**
+     * For a managed list named by ID, which is fetched from `INTERNAL_URL`:
+     * its URL below `PUBLIC_URL`, under which its fetch result is recorded.
+     */
+    publicUrl?: string;
 }
 
 /** A trust list source whose managed lists carry their stored number. */
@@ -50,12 +62,44 @@ export interface CollectedTrustedEntities {
     discarded: DiscardedTrustList[];
 }
 
+/** Longest `NextUpdate` recorded; an ISO 8601 date-time is far shorter. */
+const MAX_RECORDED_NEXT_UPDATE_LENGTH = 64;
+
+/**
+ * The list's `NextUpdate` as recorded: its publisher signs it, not the
+ * tenant, so only a string of date-time length is kept and anything else
+ * is recorded as null.
+ */
+function recordableNextUpdate(nextUpdate: unknown): string | null {
+    return typeof nextUpdate === "string" &&
+        nextUpdate.length <= MAX_RECORDED_NEXT_UPDATE_LENGTH
+        ? nextUpdate
+        : null;
+}
+
+export interface CollectTrustedEntitiesOptions {
+    now?: () => Date;
+    /** Where each list's result is recorded; nowhere by default. */
+    fetchStatuses?: TrustListFetchStatuses;
+    /** Told when a result cannot be recorded; loading goes on. */
+    onRecordFailed?: (error: unknown) => void;
+}
+
 export class CollectTrustedEntities {
+    private readonly now: () => Date;
+    private readonly fetchStatuses: TrustListFetchStatuses;
+    private readonly onRecordFailed: (error: unknown) => void;
+
     constructor(
         private readonly lists: TrustListProvider,
         private readonly sequenceNumbers: AcceptedTrustListSequenceNumbers,
-        private readonly now: () => Date = () => new Date(),
-    ) {}
+        options: CollectTrustedEntitiesOptions = {},
+    ) {
+        this.now = options.now ?? (() => new Date());
+        this.fetchStatuses =
+            options.fetchStatuses ?? NO_TRUST_LIST_FETCH_STATUSES;
+        this.onRecordFailed = options.onRecordFailed ?? (() => {});
+    }
 
     /**
      * Load every list of the source and keep the entities that offer an
@@ -70,6 +114,8 @@ export class CollectTrustedEntities {
      * the lists after the one that goes over the limit are not loaded. The
      * number of that list is remembered all the same: it is signed, so an
      * older version of the list cannot be replayed once the source fits again.
+     * How each loaded list ended is recorded per tenant and URL
+     * ({@link TrustListFetchStatuses}); the lists not loaded are not.
      * @throws OutdatedTrustListsError when every list was discarded
      * @throws TooManyTrustListCertificatesError when the entities kept hold
      * more than `MAX_TRUST_LIST_CERTIFICATES` certificates
@@ -82,13 +128,37 @@ export class CollectTrustedEntities {
         let nextUpdate: string | undefined;
         let certificates = 0;
         for (const ref of source.lotes) {
+            const record = (
+                result: Omit<TrustListFetchResult, "tenantId" | "url">,
+            ) => this.record(source.tenantId, ref, result);
             // One list at a time: a source's lists come from tenant
             // configuration without a count limit, so this bounds the
             // outbound requests and list bodies in memory per request, and
             // the first failing list in source order decides the error.
-            const list: VerifiedTrustList = await this.lists.loadVerified(ref); // NOSONAR: sequential on purpose, see above
+            let list: VerifiedTrustList;
+            try {
+                list = await this.lists.loadVerified(ref); // NOSONAR: sequential on purpose, see above
+            } catch (error) {
+                await record(failureReason(error));
+                throw error;
+            }
+            const verified = {
+                nextUpdate: recordableNextUpdate(list.nextUpdate),
+                sequenceNumber: isTrustListSequenceNumber(list.sequenceNumber)
+                    ? list.sequenceNumber
+                    : undefined,
+                entities: list.entities.length,
+            };
+            const discard = async (entry: DiscardedTrustList) => {
+                discarded.push(entry);
+                await record({
+                    outcome: discardOutcome(entry),
+                    reason: discardReason(entry),
+                    list: verified,
+                });
+            };
             if (!isTrustListCurrent(list.nextUpdate, this.now())) {
-                discarded.push({ list: ref.url, nextUpdate: list.nextUpdate });
+                await discard({ list: ref.url, nextUpdate: list.nextUpdate });
                 continue;
             }
             const older = await this.checkSequenceNumber(
@@ -98,7 +168,7 @@ export class CollectTrustedEntities {
                 list.sequenceNumber,
             );
             if (older) {
-                discarded.push(older);
+                await discard(older);
                 continue;
             }
             if (
@@ -110,17 +180,48 @@ export class CollectTrustedEntities {
             const kept = list.entities.filter((entity) =>
                 offersAcceptedService(entity, source.acceptedServiceTypes),
             );
-            certificates = addTrustListCertificates(
-                certificates,
-                ref.url,
-                kept,
-            );
+            try {
+                certificates = addTrustListCertificates(
+                    certificates,
+                    // The error names the list; it is recorded for the
+                    // tenant, so never by its INTERNAL_URL.
+                    ref.publicUrl ?? ref.url,
+                    kept,
+                );
+            } catch (error) {
+                await record({ ...failureReason(error), list: verified });
+                throw error;
+            }
+            await record({ outcome: "accepted", list: verified });
             entities.push(...kept);
         }
         if (discarded.length > 0 && discarded.length === source.lotes.length) {
             throw new OutdatedTrustListsError(discarded);
         }
         return { nextUpdate, entities, discarded };
+    }
+
+    /** Record a list's result; a failure to record does not fail the load. */
+    private async record(
+        tenantId: string,
+        ref: LoadedTrustListRef,
+        result: Omit<TrustListFetchResult, "tenantId" | "url">,
+    ): Promise<void> {
+        try {
+            await this.fetchStatuses.record(
+                {
+                    tenantId,
+                    url: ref.publicUrl ?? ref.url,
+                    ...(ref.trustListId === undefined
+                        ? {}
+                        : { trustListId: ref.trustListId }),
+                    ...result,
+                },
+                this.now(),
+            );
+        } catch (error) {
+            this.onRecordFailed(error);
+        }
     }
 
     /**

@@ -6,10 +6,8 @@ import {
 } from "@owf/openid-federation";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { OutboundFinalResponse } from "../../webhook/outbound-url-policy.service.js";
-import {
-    type TrustFetchOptions,
-    TrustFetchStatusError,
-} from "../trust-fetch.service.js";
+import { TrustFetchStatusError } from "../domain/trust-list-load-errors.js";
+import type { TrustFetchOptions } from "../trust-fetch.service.js";
 import { LocalFederationResolver } from "./local-federation-resolver.js";
 
 const TA = "https://ta.example.org";

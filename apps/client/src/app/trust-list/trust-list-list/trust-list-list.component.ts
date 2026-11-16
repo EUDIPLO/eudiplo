@@ -14,6 +14,7 @@ import { BaseAsyncListComponent } from '../../common/base-async-list.component';
 import { LoadErrorComponent } from '../../common/load-error.component';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { TrustListService } from '../trust-list.service';
+import { TrustListStatusComponent } from '../trust-list-status/trust-list-status.component';
 
 @Component({
   selector: 'app-trust-list-list',
@@ -29,6 +30,7 @@ import { TrustListService } from '../trust-list.service';
     ConfigOwnershipDirective,
     LoadErrorComponent,
     MatProgressSpinnerModule,
+    TrustListStatusComponent,
   ],
   templateUrl: './trust-list-list.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,

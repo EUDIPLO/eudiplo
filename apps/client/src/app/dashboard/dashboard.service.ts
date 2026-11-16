@@ -11,6 +11,8 @@ import {
   issuanceConfigControllerGetIssuanceConfigurations,
   registrarControllerGetConfig,
   trustListControllerGetAllTrustLists,
+  trustListStatusControllerGetStatus,
+  type TrustListStatusResponseDto,
   KeyChainResponseDto,
   ProviderHealthResponseDto,
   Session,
@@ -24,6 +26,10 @@ import { KEY_CHAIN_ROLES } from '../key-management/key-chain.service';
 import { accessKeyChainsInUse } from '../key-management/default-access-key-chain';
 import { apiErrorDetail, groupUnreachable, hasHttpStatus } from '../utils/error-message';
 import { lastDays, lastHours } from '../utils/local-day';
+import {
+  rejectedTrustLists,
+  TRUST_LIST_STATUS_FRAGMENT,
+} from '../trust-list/trust-list-status/trust-list-status';
 
 type AccessCertificateStatus = 'missing' | 'expired' | 'expiring' | 'healthy';
 
@@ -34,6 +40,7 @@ export type DashboardSource =
   | 'issuance'
   | 'presentations'
   | 'trustLists'
+  | 'trustListStatus'
   | 'registrar'
   | 'sessionStats'
   | 'recentSessions'
@@ -47,6 +54,7 @@ const sourceLabels: Record<DashboardSource, string> = {
   issuance: 'issuer settings',
   presentations: 'presentation configs',
   trustLists: 'trust lists',
+  trustListStatus: 'trust list status',
   registrar: 'registrar config',
   sessionStats: 'session counts',
   recentSessions: 'recent sessions',
@@ -118,7 +126,7 @@ export interface ActivityBucket {
 export interface DashboardWarning {
   message: string;
   /** Route to the page that fixes the cause. */
-  action?: { label: string; route: string[] };
+  action?: { label: string; route: string[]; fragment?: string };
   /** The cause is a failed request that loading again may fix. */
   retry?: boolean;
 }
@@ -171,6 +179,8 @@ export class DashboardService {
   accessCertificateDaysUntilExpiry: number | null = null;
   trustListCount = 0;
   hasTrustList = false;
+  /** How each trust list in use was last loaded. */
+  trustListStatuses: TrustListStatusResponseDto[] = [];
   hasRegistrarConfig = false;
   hasIssuanceConfig = false;
   recentSessions: Session[] = [];
@@ -239,6 +249,12 @@ export class DashboardService {
     if (this.canManagePresentation) {
       promises.push(trustListControllerGetAllTrustLists());
       promiseKeys.push('trustLists');
+    }
+
+    // Issuance checks wallet attestations against trust lists, presentations check credentials
+    if (this.canManageIssuance || this.canManagePresentation) {
+      promises.push(trustListStatusControllerGetStatus());
+      promiseKeys.push('trustListStatus');
     }
 
     // Sessions require issuance:offer, presentation:request or sessions:read
@@ -659,6 +675,11 @@ export class DashboardService {
       });
     }
 
+    const trustListWarning = this.trustListStatusWarning;
+    if (trustListWarning) {
+      warnings.push(trustListWarning);
+    }
+
     if (this.canManageRegistrar && this.isLoaded('registrar') && !this.hasRegistrarConfig) {
       warnings.push({
         message:
@@ -685,6 +706,31 @@ export class DashboardService {
     return null;
   }
 
+  /**
+   * Trust lists checked recently that added no trust at their last load, so verification against
+   * them fails. Lists not checked for a week are most likely no longer referenced.
+   */
+  private get trustListStatusWarning(): DashboardWarning | null {
+    if (!this.isLoaded('trustListStatus')) return null;
+    const rejected = rejectedTrustLists(this.trustListStatuses);
+    if (rejected.length === 0) return null;
+    const action = {
+      label: 'Show Lists in use',
+      route: ['/trust-list'],
+      fragment: TRUST_LIST_STATUS_FRAGMENT,
+    };
+    if (rejected.length === 1) {
+      const [list] = rejected;
+      const name = list.trustListId ?? list.url;
+      const reason = list.reason ? `: ${list.reason}` : '.';
+      return { message: `Trust list ${name} was not accepted at its last load${reason}`, action };
+    }
+    return {
+      message: `${rejected.length} trust lists were not accepted at their last load.`,
+      action,
+    };
+  }
+
   get hasWarnings(): boolean {
     return this.warnings.length > 0;
   }
@@ -704,6 +750,7 @@ export class DashboardService {
     this.accessCertificateDaysUntilExpiry = null;
     this.trustListCount = 0;
     this.hasTrustList = false;
+    this.trustListStatuses = [];
     this.hasRegistrarConfig = false;
     this.credentialConfigs = 0;
     this.presentationConfigs = 0;
@@ -776,6 +823,10 @@ export class DashboardService {
       case 'trustLists':
         this.trustListCount = data.length;
         this.hasTrustList = this.trustListCount > 0;
+        break;
+      case 'trustListStatus':
+        if (!Array.isArray(data)) throw new TypeError('trust list status is not a list');
+        this.trustListStatuses = data;
         break;
       case 'registrar':
         this.hasRegistrarConfig = !!data;

@@ -7,16 +7,14 @@ import {
 } from "@owf/openid-federation";
 import { compactVerify, importJWK, type JWK } from "jose";
 import { FEDERATION_ALGORITHMS } from "../domain/federation-statement-signature.js";
+import { TrustFetchStatusError } from "../domain/trust-list-load-errors.js";
 import {
     type FederationResolution,
     FederationResolutionError,
     type FederationResolutionRequest,
     type FederationResolver,
 } from "../ports/federation-resolver.js";
-import {
-    type TrustFetchService,
-    TrustFetchStatusError,
-} from "../trust-fetch.service.js";
+import type { TrustFetchService } from "../trust-fetch.service.js";
 
 /** A slow or unresponsive federation entity must not stall trust evaluation. */
 const FEDERATION_FETCH_TIMEOUT_MS = 5000;

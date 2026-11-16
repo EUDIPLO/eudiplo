@@ -4002,6 +4002,66 @@ export type CacheStatsResponseDto = {
     statusListCache: StatusListCacheStatsDto;
 };
 
+/**
+ * How the last load ended: `accepted`; `outdated` (no valid NextUpdate, one that has passed, or a closed list); `superseded` (LoTESequenceNumber lower than one accepted before); `invalidSequenceNumber`; `tooManyCertificates` (its source went over the certificate limit with it); `failed` (not fetched, verified or parsed). Only `accepted` lists add trust.
+ */
+export const TrustListFetchOutcome = {
+    ACCEPTED: 'accepted',
+    OUTDATED: 'outdated',
+    SUPERSEDED: 'superseded',
+    INVALID_SEQUENCE_NUMBER: 'invalidSequenceNumber',
+    TOO_MANY_CERTIFICATES: 'tooManyCertificates',
+    FAILED: 'failed'
+} as const;
+
+/**
+ * How the last load ended: `accepted`; `outdated` (no valid NextUpdate, one that has passed, or a closed list); `superseded` (LoTESequenceNumber lower than one accepted before); `invalidSequenceNumber`; `tooManyCertificates` (its source went over the certificate limit with it); `failed` (not fetched, verified or parsed). Only `accepted` lists add trust.
+ */
+export type TrustListFetchOutcome = typeof TrustListFetchOutcome[keyof typeof TrustListFetchOutcome];
+
+export type TrustListStatusResponseDto = {
+    /**
+     * URL of the list. A managed list referenced by ID is named by its URL below PUBLIC_URL.
+     */
+    url: string;
+    /**
+     * ID of the managed list, when it was referenced by ID
+     */
+    trustListId: string | null;
+    /**
+     * How the last load ended: `accepted`; `outdated` (no valid NextUpdate, one that has passed, or a closed list); `superseded` (LoTESequenceNumber lower than one accepted before); `invalidSequenceNumber`; `tooManyCertificates` (its source went over the certificate limit with it); `failed` (not fetched, verified or parsed). Only `accepted` lists add trust.
+     */
+    outcome: TrustListFetchOutcome;
+    /**
+     * Why the list was not accepted
+     */
+    reason: string | null;
+    /**
+     * When the list was last loaded, whatever the outcome
+     */
+    checkedAt: string;
+    /**
+     * When the list was last fetched and its signature verified
+     */
+    verifiedAt: string | null;
+    /**
+     * When the list was last accepted
+     */
+    acceptedAt: string | null;
+    /**
+     * NextUpdate as signed in the last verified list; null for a closed list or none verified yet
+     */
+    nextUpdate: string | null;
+    /**
+     * LoTESequenceNumber of the last verified list, when it is a whole number from 1
+     */
+    sequenceNumber: number | null;
+    /**
+     * Number of entities in the last verified list
+     */
+    entities: number | null;
+};
+
 export type FederationTrustAnchorResponseDto = {
     /**
      * Identifier of the trust anchor
@@ -8530,6 +8590,19 @@ export type CacheControllerClearStatusListCacheResponses = {
 };
 
 export type CacheControllerClearStatusListCacheResponse = CacheControllerClearStatusListCacheResponses[keyof CacheControllerClearStatusListCacheResponses];
+
+export type TrustListStatusControllerGetStatusData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/trust-list-status';
+};
+
+export type TrustListStatusControllerGetStatusResponses = {
+    200: Array<TrustListStatusResponseDto>;
+};
+
+export type TrustListStatusControllerGetStatusResponse = TrustListStatusControllerGetStatusResponses[keyof TrustListStatusControllerGetStatusResponses];
 
 export type FederationTrustAnchorControllerGetAllData = {
     body?: never;

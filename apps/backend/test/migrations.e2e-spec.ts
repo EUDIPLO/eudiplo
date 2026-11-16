@@ -30,6 +30,7 @@ import { AddAllowedOriginsToPresentationConfig1786000000000 } from "../src/datab
 import { AddTrustListSequenceNumber1786100000000 } from "../src/database/migrations/1786100000000-AddTrustListSequenceNumber.js";
 import { NormalizeTrustListEntityInfo1786200000000 } from "../src/database/migrations/1786200000000-NormalizeTrustListEntityInfo.js";
 import { AddWalletUnitRevocation1786300000000 } from "../src/database/migrations/1786300000000-AddWalletUnitRevocation.js";
+import { AddTrustListFetchStatus1786400000000 } from "../src/database/migrations/1786400000000-AddTrustListFetchStatus.js";
 import { describeWithContainers } from "./container-runtime.js";
 import {
     addTokensValidAfterContract,
@@ -2400,6 +2401,200 @@ describe("Migration tests", () => {
             await expect(
                 numbers.highest("t", "https://trust.example/list"),
             ).resolves.toBe(2 ** 40);
+
+            await migration.down(queryRunner);
+            expect(await queryRunner.hasTable(table)).toBe(false);
+            await queryRunner.release();
+        }
+
+        describe("SQLite", () => {
+            let dataSource: DataSource;
+            let driftAfterSynchronize: string[];
+            let tmpDir: string;
+
+            beforeAll(async () => {
+                tmpDir = mkdtempSync(join(tmpdir(), "eudiplo-migration-test-"));
+                ({ dataSource, driftAfterSynchronize } = await schemaBefore({
+                    type: "better-sqlite3",
+                    database: join(tmpDir, "test.db"),
+                }));
+                // SQLite enforces ON DELETE CASCADE only with foreign keys on.
+                await dataSource.query("PRAGMA foreign_keys = ON");
+            }, 30_000);
+
+            afterAll(async () => {
+                await dataSource?.destroy();
+                if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
+            });
+
+            test("creates the table idempotently and reversibly", async () => {
+                await expectCreatedAndReversible(
+                    dataSource,
+                    driftAfterSynchronize,
+                );
+            });
+        });
+
+        describeWithContainers("PostgreSQL", () => {
+            let dataSource: DataSource;
+            let driftAfterSynchronize: string[];
+            let postgresContainer: StartedPostgreSqlContainer;
+
+            beforeAll(async () => {
+                postgresContainer = await new PostgreSqlContainer(
+                    "postgres:alpine",
+                ).start();
+                ({ dataSource, driftAfterSynchronize } = await schemaBefore({
+                    type: "postgres",
+                    url: postgresContainer.getConnectionUri(),
+                }));
+            }, 60_000);
+
+            afterAll(async () => {
+                await dataSource?.destroy();
+                await postgresContainer?.stop();
+            });
+
+            test("creates the table idempotently and reversibly", async () => {
+                await expectCreatedAndReversible(
+                    dataSource,
+                    driftAfterSynchronize,
+                );
+            });
+        });
+    });
+
+    describe("AddTrustListFetchStatus1786400000000", () => {
+        const migration = new AddTrustListFetchStatus1786400000000();
+        const table = "trust_list_fetch_status";
+
+        /** Schema from the entities, then the new table dropped again. */
+        async function schemaBefore(
+            options:
+                | { type: "better-sqlite3"; database: string }
+                | { type: "postgres"; url: string },
+        ): Promise<{
+            dataSource: DataSource;
+            driftAfterSynchronize: string[];
+        }> {
+            const [
+                { TenantEntity },
+                { ClientEntity },
+                { TrustListFetchStatusEntity },
+            ] = await Promise.all([
+                import("../src/auth/tenant/entities/tenant.entity.js"),
+                import("../src/auth/client/entities/client.entity.js"),
+                import(
+                    "../src/trust/entities/trust-list-fetch-status.entity.js"
+                ),
+            ]);
+            const dataSource = new DataSource({
+                ...options,
+                entities: [
+                    TenantEntity,
+                    ClientEntity,
+                    TrustListFetchStatusEntity,
+                ],
+                synchronize: true,
+                logging: false,
+            });
+            await dataSource.initialize();
+            const driftAfterSynchronize = await drift(dataSource);
+
+            const queryRunner = dataSource.createQueryRunner();
+            await migration.down(queryRunner);
+            await queryRunner.release();
+            await dataSource.query(
+                `INSERT INTO "tenant_entity" ("id", "name") VALUES ('t', 't'), ('u', 'u')`,
+            );
+            return { dataSource, driftAfterSynchronize };
+        }
+
+        const drift = async (dataSource: DataSource) =>
+            (await dataSource.driver.createSchemaBuilder().log()).upQueries
+                .map((query) => query.query)
+                .sort();
+
+        async function expectCreatedAndReversible(
+            dataSource: DataSource,
+            driftAfterSynchronize: string[],
+        ) {
+            const queryRunner = dataSource.createQueryRunner();
+            expect(await queryRunner.hasTable(table)).toBe(false);
+
+            await migration.up(queryRunner);
+            await migration.up(queryRunner);
+
+            // The table matches the entity, on PostgreSQL and SQLite.
+            expect(await drift(dataSource)).toEqual(driftAfterSynchronize);
+
+            // The adapter on this database: a failed load keeps the details
+            // of the last verified one, numbers beyond 32 bits and dates
+            // come back as written, and each tenant reads its own rows.
+            const [
+                { TrustListFetchStatusEntity },
+                { TypeOrmTrustListFetchStatuses },
+            ] = await Promise.all([
+                import(
+                    "../src/trust/entities/trust-list-fetch-status.entity.js"
+                ),
+                import(
+                    "../src/trust/adapters/typeorm-trust-list-fetch-statuses.js"
+                ),
+            ]);
+            const statuses = new TypeOrmTrustListFetchStatuses(
+                dataSource.getRepository(TrustListFetchStatusEntity),
+            );
+            const url = "https://trust.example/list";
+            const accepted = new Date("2026-11-16T10:00:00.123Z");
+            const failed = new Date("2026-11-16T11:00:00.456Z");
+            await statuses.record(
+                {
+                    tenantId: "t",
+                    url,
+                    outcome: "accepted",
+                    list: {
+                        nextUpdate: "2026-12-01T00:00:00Z",
+                        sequenceNumber: 2 ** 40,
+                        entities: 3,
+                    },
+                },
+                accepted,
+            );
+            await statuses.record(
+                {
+                    tenantId: "t",
+                    url,
+                    outcome: "failed",
+                    reason: "The list URL answered with HTTP status 503",
+                },
+                failed,
+            );
+            await statuses.record(
+                { tenantId: "u", url, outcome: "accepted" },
+                failed,
+            );
+            await expect(statuses.list("t")).resolves.toEqual([
+                {
+                    url,
+                    trustListId: null,
+                    outcome: "failed",
+                    reason: "The list URL answered with HTTP status 503",
+                    checkedAt: failed,
+                    verifiedAt: accepted,
+                    acceptedAt: accepted,
+                    nextUpdate: "2026-12-01T00:00:00Z",
+                    sequenceNumber: 2 ** 40,
+                    entities: 3,
+                },
+            ]);
+
+            // Deleting a tenant deletes its rows.
+            await dataSource.query(
+                `DELETE FROM "tenant_entity" WHERE "id" = 'u'`,
+            );
+            await expect(statuses.list("u")).resolves.toEqual([]);
+            await expect(statuses.list("t")).resolves.toHaveLength(1);
 
             await migration.down(queryRunner);
             expect(await queryRunner.hasTable(table)).toBe(false);

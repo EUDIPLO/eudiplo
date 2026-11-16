@@ -8873,6 +8873,105 @@ export const CacheStatsResponseDtoSchema = {
     ]
 } as const;
 
+export const TrustListFetchOutcomeSchema = {
+    type: 'string',
+    enum: [
+        'accepted',
+        'outdated',
+        'superseded',
+        'invalidSequenceNumber',
+        'tooManyCertificates',
+        'failed'
+    ],
+    description: 'How the last load ended: `accepted`; `outdated` (no valid NextUpdate, one that has passed, or a closed list); `superseded` (LoTESequenceNumber lower than one accepted before); `invalidSequenceNumber`; `tooManyCertificates` (its source went over the certificate limit with it); `failed` (not fetched, verified or parsed). Only `accepted` lists add trust.'
+} as const;
+
+export const TrustListStatusResponseDtoSchema = {
+    type: 'object',
+    properties: {
+        url: {
+            type: 'string',
+            description: 'URL of the list. A managed list referenced by ID is named by its URL below PUBLIC_URL.'
+        },
+        trustListId: {
+            type: [
+                'string',
+                'null'
+            ],
+            description: 'ID of the managed list, when it was referenced by ID'
+        },
+        outcome: {
+            description: 'How the last load ended: `accepted`; `outdated` (no valid NextUpdate, one that has passed, or a closed list); `superseded` (LoTESequenceNumber lower than one accepted before); `invalidSequenceNumber`; `tooManyCertificates` (its source went over the certificate limit with it); `failed` (not fetched, verified or parsed). Only `accepted` lists add trust.',
+            allOf: [
+                {
+                    $ref: '#/components/schemas/TrustListFetchOutcome'
+                }
+            ]
+        },
+        reason: {
+            type: [
+                'string',
+                'null'
+            ],
+            description: 'Why the list was not accepted'
+        },
+        checkedAt: {
+            type: 'string',
+            description: 'When the list was last loaded, whatever the outcome',
+            format: 'date-time'
+        },
+        verifiedAt: {
+            type: [
+                'string',
+                'null'
+            ],
+            description: 'When the list was last fetched and its signature verified',
+            format: 'date-time'
+        },
+        acceptedAt: {
+            type: [
+                'string',
+                'null'
+            ],
+            description: 'When the list was last accepted',
+            format: 'date-time'
+        },
+        nextUpdate: {
+            type: [
+                'string',
+                'null'
+            ],
+            description: 'NextUpdate as signed in the last verified list; null for a closed list or none verified yet'
+        },
+        sequenceNumber: {
+            type: [
+                'number',
+                'null'
+            ],
+            description: 'LoTESequenceNumber of the last verified list, when it is a whole number from 1'
+        },
+        entities: {
+            type: [
+                'number',
+                'null'
+            ],
+            description: 'Number of entities in the last verified list'
+        }
+    },
+    required: [
+        'url',
+        'trustListId',
+        'outcome',
+        'reason',
+        'checkedAt',
+        'verifiedAt',
+        'acceptedAt',
+        'nextUpdate',
+        'sequenceNumber',
+        'entities'
+    ]
+} as const;
+
 export const FederationTrustAnchorResponseDtoSchema = {
     type: 'object',
     properties: {

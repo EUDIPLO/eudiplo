@@ -6,7 +6,12 @@ import {
     generateKeyPair,
     SignJWT,
 } from "jose";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import {
+    TrustFetchStatusError,
+    TrustListFetchError,
+    TrustListVerificationError,
+} from "./domain/trust-list-load-errors.js";
 import type { TrustFetchService } from "./trust-fetch.service.js";
 import { TrustListJwtService } from "./trustlist-jwt.service.js";
 import { normalizeTrustListRefs } from "./types.js";
@@ -37,9 +42,36 @@ describe("TrustListJwtService with a PEM verifier key", () => {
     it("rejects a list signed by another key", async () => {
         const { jwt } = await signedList("ES256");
         const { pem } = await signedList("ES256");
+        const verification = service.verifyTrustListJwt(
+            { url, verifierKeyPem: pem },
+            jwt,
+        );
+        await expect(verification).rejects.toThrow(
+            `Trust list JWT verification failed for ${url}`,
+        );
+        // The recorded reason uses the detail, which leaves out the URL.
+        await expect(verification).rejects.toMatchObject({
+            name: "TrustListVerificationError",
+            detail: expect.not.stringContaining(url),
+        });
+    });
+
+    it("rejects a reference without verification material as a verification error", async () => {
+        const { jwt } = await signedList("ES256");
         await expect(
-            service.verifyTrustListJwt({ url, verifierKeyPem: pem }, jwt),
-        ).rejects.toThrow(`Trust list JWT verification failed for ${url}`);
+            service.verifyTrustListJwt({ url }, jwt),
+        ).rejects.toBeInstanceOf(TrustListVerificationError);
+    });
+
+    it("keeps the HTTP status of a failed fetch as the cause", async () => {
+        const failing = new TrustListJwtService({
+            get: vi.fn().mockRejectedValue(new TrustFetchStatusError(404)),
+        } as unknown as TrustFetchService);
+        const fetched = failing.fetchJwt(url);
+        await expect(fetched).rejects.toBeInstanceOf(TrustListFetchError);
+        await expect(fetched).rejects.toMatchObject({
+            cause: { status: 404 },
+        });
     });
 
     it("rejects a header algorithm that does not fit the key", async () => {

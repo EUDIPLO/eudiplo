@@ -3,18 +3,11 @@ import {
     type OutboundFinalResponse,
     OutboundUrlPolicyService,
 } from "../webhook/outbound-url-policy.service.js";
+import { TrustFetchStatusError } from "./domain/trust-list-load-errors.js";
 import {
     TRUST_STORE_SETTINGS,
     type TrustStoreSettings,
 } from "./trust-store-settings.js";
-
-/** A response with a status other than 2xx. */
-export class TrustFetchStatusError extends Error {
-    constructor(readonly status: number) {
-        super(`Request failed with status code ${status}`);
-        this.name = "TrustFetchStatusError";
-    }
-}
 
 /** The axios client used for these fetches before followed five redirects. */
 const MAX_REDIRECTS = 5;

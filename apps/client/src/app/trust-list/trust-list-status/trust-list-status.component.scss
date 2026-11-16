@@ -1,0 +1,34 @@
+.trust-list-status {
+  margin-top: 32px;
+}
+
+.hint,
+.reason,
+.secondary {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.reason,
+.secondary {
+  font-size: 0.875em;
+}
+
+.outcome {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  &.rejected {
+    color: var(--mat-sys-error);
+  }
+}
+
+.url {
+  word-break: break-all;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

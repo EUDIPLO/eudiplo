@@ -1,0 +1,117 @@
+<section class="trust-list-status" [attr.aria-labelledby]="headingId">
+  <div class="section-header">
+    <h3 [id]="headingId" #listHeading tabindex="-1">Lists in use</h3>
+    <button
+      matIconButton
+      type="button"
+      (click)="loadItems()"
+      [disabled]="loading"
+      [attr.aria-busy]="loading"
+      disabledInteractive
+      matTooltip="Reload the status"
+      aria-label="Reload the status of the trust lists in use"
+    >
+      <mat-icon>refresh</mat-icon>
+    </button>
+  </div>
+  <p class="hint">
+    How each trust list was last loaded: when a presentation request is created, when a credential,
+    wallet attestation or key attestation is checked against it, and for wallet-provider lists by
+    the periodic wallet unit status check. A list appears after its first use and is loaded again as
+    the trust list cache allows; a list that could not be fetched or verified is loaded again on its
+    next use. Only accepted lists add trust.
+  </p>
+
+  @if (loading) {
+    <div class="list-state">
+      <mat-spinner
+        diameter="40"
+        aria-label="Loading the status of the trust lists in use"
+      ></mat-spinner>
+    </div>
+  } @else if (loadError) {
+    <app-load-error [message]="loadError" (retry)="loadItems()" />
+  } @else if (statuses.length === 0) {
+    <div class="list-state">
+      <mat-icon class="empty-icon">policy</mat-icon>
+      <p>No trust list has been loaded yet.</p>
+    </div>
+  } @else {
+    <table mat-table [dataSource]="statuses" class="mat-elevation-z8">
+      <caption class="visually-hidden">
+        Last load of each trust list in use
+      </caption>
+      <ng-container matColumnDef="outcome">
+        <th mat-header-cell *matHeaderCellDef>Status</th>
+        <td mat-cell *matCellDef="let status">
+          <span class="outcome" [class.rejected]="isRejected(status)">
+            <mat-icon aria-hidden="true">{{
+              isRejected(status) ? 'error' : 'check_circle'
+            }}</mat-icon>
+            {{ outcomeLabel(status) }}
+          </span>
+          @if (status.reason) {
+            <div class="reason">{{ status.reason }}</div>
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="list">
+        <th mat-header-cell *matHeaderCellDef>List</th>
+        <td mat-cell *matCellDef="let status" class="url">
+          @if (status.trustListId) {
+            <a [routerLink]="['/trust-list', status.trustListId]">{{ status.trustListId }}</a>
+            <div class="secondary">{{ status.url }}</div>
+          } @else {
+            {{ status.url }}
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="checkedAt">
+        <th mat-header-cell *matHeaderCellDef>Last loaded</th>
+        <td mat-cell *matCellDef="let status">
+          {{ status.checkedAt | date: 'medium' }}
+          @if (isStale(status)) {
+            <div class="secondary">
+              Not loaded for {{ staleDays }} days; possibly no longer in use
+            </div>
+          }
+          @if (isRejected(status)) {
+            <div class="secondary">
+              @if (status.acceptedAt) {
+                Last accepted {{ status.acceptedAt | date: 'medium' }}
+              } @else {
+                Never accepted
+              }
+            </div>
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="nextUpdate">
+        <th mat-header-cell *matHeaderCellDef>Next update</th>
+        <td mat-cell *matCellDef="let status">
+          @if (status.nextUpdate) {
+            {{ status.nextUpdate | date: 'medium' }}
+            @if (hasPassed(status.nextUpdate)) {
+              <div class="secondary">Passed; fetched again on next use</div>
+            }
+          } @else if (status.verifiedAt) {
+            None (closed list)
+          } @else {
+            Not verified yet
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="entities">
+        <th mat-header-cell *matHeaderCellDef>Entities</th>
+        <td mat-cell *matCellDef="let status">{{ status.entities ?? '–' }}</td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+      <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+    </table>
+  }
+</section>

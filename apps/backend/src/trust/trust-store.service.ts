@@ -176,6 +176,10 @@ export class TrustStoreService {
                 ),
             );
             if (!managed) return ref;
+            // Results name the list by its public URL, also when the
+            // reference uses INTERNAL_URL.
+            const publicUrl = this.publicListUrl(managed.tenantId, managed.id);
+            const named = publicUrl === ref.url ? ref : { ...ref, publicUrl };
             // The list is public at its URL, so reading its number for
             // another tenant of this instance reveals nothing new.
             const storedSequenceNumber =
@@ -184,8 +188,8 @@ export class TrustStoreService {
                     managed.id,
                 );
             return storedSequenceNumber === undefined
-                ? ref
-                : { ...ref, storedSequenceNumber };
+                ? named
+                : { ...named, storedSequenceNumber };
         }
         const id = ref.trustListId.trim();
         if (!tenantId || !id) {
@@ -200,10 +204,19 @@ export class TrustStoreService {
             );
         const baseUrl = this.settings.internalUrl || this.settings.publicUrl;
         return {
-            url: `${baseUrl.replace(/\/$/, "")}/issuers/${encodeURIComponent(tenantId)}/trust-list/${encodeURIComponent(id)}`,
+            url: `${baseUrl.replace(/\/$/, "")}${listPath(tenantId, id)}`,
+            // INTERNAL_URL is for this instance only; results name the list
+            // by its public URL.
+            publicUrl: this.publicListUrl(tenantId, id),
+            trustListId: id,
             verifierX509Der,
             storedSequenceNumber: sequenceNumber,
         };
+    }
+
+    /** Where a managed list of this instance is published. */
+    private publicListUrl(tenantId: string, id: string): string {
+        return `${this.settings.publicUrl.replace(/\/$/, "")}${listPath(tenantId, id)}`;
     }
 
     /**
@@ -332,6 +345,11 @@ export class TrustStoreService {
             acceptedServiceTypes: source.acceptedServiceTypes ?? [],
         });
     }
+}
+
+/** The path of a managed list below `PUBLIC_URL` or `INTERNAL_URL`. */
+function listPath(tenantId: string, id: string): string {
+    return `/issuers/${encodeURIComponent(tenantId)}/trust-list/${encodeURIComponent(id)}`;
 }
 
 /** The tenant of a key from {@link TrustStoreService.buildCacheKey}. */

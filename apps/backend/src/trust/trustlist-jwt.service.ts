@@ -6,7 +6,12 @@ import {
     importX509,
     jwtVerify,
 } from "jose";
+import {
+    TrustListFetchError,
+    TrustListVerificationError,
+} from "./domain/trust-list-load-errors.js";
 import { TrustFetchService } from "./trust-fetch.service.js";
+
 import type { TrustListRef } from "./types.js";
 
 /** Upper bound for a trust list JWT. */
@@ -26,8 +31,9 @@ export class TrustListJwtService {
             });
             return response.body;
         } catch (error: any) {
-            throw new Error(
+            throw new TrustListFetchError(
                 `Failed to fetch trust list from ${url}: ${error?.message || error}`,
+                { cause: error },
             );
         }
     }
@@ -71,8 +77,9 @@ export class TrustListJwtService {
      */
     async verifyTrustListJwt(ref: TrustListRef, jwt: string): Promise<void> {
         if (!ref.verifierKey && !ref.verifierKeyPem && !ref.verifierX509Der) {
-            throw new Error(
+            throw new TrustListVerificationError(
                 `Trust list JWT verification material missing for ${ref.url}: configure verifierKey, verifierKeyPem or verifierX509Der`,
+                "the reference has no verifierKey, verifierKeyPem or verifierX509Der",
             );
         }
 
@@ -89,8 +96,9 @@ export class TrustListJwtService {
             );
         } catch (error: any) {
             const message = error?.message || "Unknown verification error";
-            throw new Error(
+            throw new TrustListVerificationError(
                 `Trust list JWT verification failed for ${ref.url}: ${message}`,
+                message,
             );
         }
     }

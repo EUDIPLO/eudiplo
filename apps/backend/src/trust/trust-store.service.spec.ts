@@ -647,6 +647,9 @@ describe("TrustStoreService sequence numbers", () => {
         ).toHaveBeenCalledWith("t", "list-1");
         expect(loadVerified).toHaveBeenCalledWith({
             url: "http://127.0.0.1:3000/issuers/t/trust-list/list-1",
+            // Results name the list by its public URL, never INTERNAL_URL.
+            publicUrl: "https://public.example/issuers/t/trust-list/list-1",
+            trustListId: "list-1",
             verifierX509Der: "certificate",
             storedSequenceNumber: 4,
         });
@@ -672,6 +675,13 @@ describe("TrustStoreService sequence numbers", () => {
             );
             expect(loadVerified).toHaveBeenCalledWith({
                 ...ref,
+                // Results name the list by its public URL, never INTERNAL_URL.
+                ...(url.startsWith("https://public.example")
+                    ? {}
+                    : {
+                          publicUrl:
+                              "https://public.example/issuers/a/trust-list/list-1",
+                      }),
                 storedSequenceNumber: 4,
             });
             expect(numbers.record).not.toHaveBeenCalled();

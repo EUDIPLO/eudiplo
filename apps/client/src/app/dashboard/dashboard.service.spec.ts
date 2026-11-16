@@ -53,7 +53,11 @@ describe('DashboardService', () => {
     vi.setSystemTime(now);
     roles = [];
     // Every key chain manager also loads the KMS health; answer it unless a test overrides it.
-    responses = { '/api/key-chain/providers/health': [] };
+    responses = {
+      '/api/key-chain/providers/health': [],
+      // Issuance and presentation managers load it; no list loaded unless a test says so.
+      '/api/trust-list-status': [],
+    };
     failures = {};
     requests = [];
     client.setConfig({
@@ -302,6 +306,116 @@ describe('DashboardService', () => {
 
     expect(service.hasFailed('registrar')).toBe(true);
     expect(messages()).toEqual(['Could not load registrar config.']);
+  });
+
+  describe('trust list status', () => {
+    const status = (overrides: Record<string, unknown> = {}) => ({
+      url: 'https://lists.example/pid',
+      trustListId: null,
+      outcome: 'accepted',
+      reason: null,
+      checkedAt: now.toISOString(),
+      verifiedAt: now.toISOString(),
+      acceptedAt: now.toISOString(),
+      nextUpdate: null,
+      sequenceNumber: 1,
+      entities: 2,
+      ...overrides,
+    });
+
+    it('warns about a list not accepted at its last load, with the reason', async () => {
+      roles = ['presentation:manage'];
+      responses['/api/trust-list'] = [{ id: 'own' }];
+      responses['/api/trust-list-status'] = [
+        status(),
+        status({
+          url: 'https://lists.example/eaa',
+          outcome: 'failed',
+          reason: 'The list URL answered with HTTP status 404',
+        }),
+      ];
+
+      await service.getCounters();
+
+      expect(requests).toContain('/api/trust-list-status');
+      expect(service.warnings).toContainEqual({
+        message:
+          'Trust list https://lists.example/eaa was not accepted at its last load: The list URL answered with HTTP status 404',
+        action: {
+          label: 'Show Lists in use',
+          route: ['/trust-list'],
+          fragment: 'trust-list-status-heading',
+        },
+      });
+    });
+
+    it('leaves out lists not checked for a week, which are most likely no longer in use', async () => {
+      roles = ['issuance:manage'];
+      responses['/api/trust-list-status'] = [
+        status({
+          outcome: 'failed',
+          checkedAt: new Date(now.getTime() - 8 * day).toISOString(),
+        }),
+      ];
+      await service.getCounters();
+      expect(messages().some((message) => message.includes('not accepted'))).toBe(false);
+    });
+
+    it('warns about a list without a reason and treats a malformed answer as failed', async () => {
+      roles = ['issuance:manage'];
+      responses['/api/trust-list-status'] = [status({ outcome: 'outdated' })];
+      await service.getCounters();
+      expect(messages()).toContain(
+        'Trust list https://lists.example/pid was not accepted at its last load.'
+      );
+
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      responses['/api/trust-list-status'] = {};
+      await service.getCounters();
+      expect(service.hasFailed('trustListStatus')).toBe(true);
+      expect(messages().some((message) => message.includes('not accepted'))).toBe(false);
+    });
+
+    it('reports a failed status request without a status warning', async () => {
+      roles = ['issuance:manage'];
+      delete responses['/api/trust-list-status'];
+      failures['/api/trust-list-status'] = 500;
+      await service.getCounters();
+      expect(service.hasFailed('trustListStatus')).toBe(true);
+      expect(messages()).toContain('Could not load trust list status.');
+      expect(messages().some((message) => message.includes('not accepted'))).toBe(false);
+    });
+
+    it('names a managed list by its ID and counts several lists', async () => {
+      roles = ['issuance:manage'];
+      responses['/api/trust-list-status'] = [
+        status({ trustListId: 'own', outcome: 'outdated', reason: 'NextUpdate null' }),
+      ];
+      await service.getCounters();
+      expect(messages()).toContain(
+        'Trust list own was not accepted at its last load: NextUpdate null'
+      );
+
+      responses['/api/trust-list-status'] = [
+        status({ outcome: 'outdated' }),
+        status({ url: 'b', outcome: 'superseded' }),
+      ];
+      await service.getCounters();
+      expect(messages()).toContain('2 trust lists were not accepted at their last load.');
+    });
+
+    it('does not warn when every list was accepted, and skips users without the roles', async () => {
+      roles = ['presentation:manage'];
+      responses['/api/trust-list'] = [{ id: 'own' }];
+      responses['/api/trust-list-status'] = [status()];
+      await service.getCounters();
+      expect(messages().some((message) => message.includes('not accepted'))).toBe(false);
+
+      roles = ['sessions:read'];
+      requests.length = 0;
+      await service.getCounters();
+      expect(requests).not.toContain('/api/trust-list-status');
+    });
   });
 
   it('links a missing trust list to the trust list form', async () => {

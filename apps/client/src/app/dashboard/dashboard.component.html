@@ -398,7 +398,12 @@
                   <mat-icon>refresh</mat-icon> Retry
                 </button>
               } @else if (warning.action) {
-                <a mat-stroked-button color="primary" [routerLink]="warning.action.route">
+                <a
+                  mat-stroked-button
+                  color="primary"
+                  [routerLink]="warning.action.route"
+                  [fragment]="warning.action.fragment"
+                >
                   {{ warning.action.label }}
                 </a>
               }
