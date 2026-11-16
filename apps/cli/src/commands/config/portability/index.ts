@@ -31,6 +31,10 @@ export function createPortabilityCommands(
                     new Option("--mode <mode>", "import mode")
                         .choices(["create", "upsert", "replace"])
                         .default("upsert"),
+                )
+                .option(
+                    "--allow-env <names>",
+                    "comma-separated environment variables a folder's ${VAR} placeholders may use; no others are read",
                 );
             if (name === "import") {
                 command

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
+import { readdir, readFile, realpath } from "node:fs/promises";
+import { basename, extname, join, relative, sep } from "node:path";
 import {
     assertConfigBundle,
     type ConfigBundle,
@@ -72,11 +72,84 @@ const sha256 = (value: string | Buffer): string =>
     createHash("sha256").update(value).digest("hex");
 
 /**
+ * The CLI's own credentials. A folder can never read them through `${VAR}`,
+ * even when they are named in `--allow-env`.
+ */
+const CLI_CREDENTIAL_VARIABLES = new Set([
+    "EUDIPLO_TOKEN",
+    "EUDIPLO_CLIENT_ID",
+    "EUDIPLO_CLIENT_SECRET",
+]);
+
+/**
+ * The environment a tenant folder's `${VAR}` placeholders resolve from: only
+ * the variables named in `--allow-env` (comma-separated). The folder's author
+ * is not necessarily the one who controls the environment (a CI job planning a
+ * Git repository), so the folder must not be able to read arbitrary variables
+ * into values the plan prints and the instance stores.
+ */
+export function allowedFolderEnv(
+    allowList: string | undefined,
+    env: Record<string, string | undefined>,
+): Record<string, string | undefined> {
+    const allowed: Record<string, string | undefined> = {};
+    for (const name of (allowList ?? "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)) {
+        if (!/^[A-Z0-9_]+$/.test(name))
+            throw new Error(
+                `--allow-env: "${name}" is not a placeholder variable name (A-Z, 0-9, _).`,
+            );
+        if (CLI_CREDENTIAL_VARIABLES.has(name))
+            throw new Error(
+                `--allow-env: ${name} holds the CLI's own credentials and cannot be used in configuration.`,
+            );
+        allowed[name] = env[name];
+    }
+    return allowed;
+}
+
+/**
+ * Refuses a tenant folder with a symbolic link that resolves outside the
+ * folder, or does not resolve at all. Otherwise a link committed to a config
+ * repository (`images -> ~/.ssh`) would make the CLI upload files from the
+ * machine that runs it. Links inside the folder (for example a Kubernetes
+ * ConfigMap mount) stay allowed.
+ */
+export async function assertFolderContained(tenantRoot: string): Promise<void> {
+    const root = await realpath(tenantRoot);
+    const pending = [root];
+    while (pending.length) {
+        const directory = pending.pop() as string;
+        for (const entry of await readdir(directory, { withFileTypes: true })) {
+            const path = join(directory, entry.name);
+            if (entry.isDirectory()) pending.push(path);
+            if (!entry.isSymbolicLink()) continue;
+            const shown = relative(root, path);
+            let target: string;
+            try {
+                target = await realpath(path);
+            } catch {
+                throw new Error(
+                    `${shown}: symbolic link does not resolve. Remove it from the configuration folder.`,
+                );
+            }
+            if (!target.startsWith(`${root}${sep}`))
+                throw new Error(
+                    `${shown}: symbolic link points outside the configuration folder. Copy the file into the folder instead.`,
+                );
+        }
+    }
+}
+
+/**
  * Packs a tenant config folder into a bundle the config-bundles API accepts.
+ * The folder must be validated (`validateTenantDirectory`) and checked with
+ * `assertFolderContained` first; the CLI command does both.
  *
- * `${VAR}` placeholders are resolved from `env`, as the startup import does;
- * one left unresolved stays in the document and the server's plan reports it
- * as SECRET_REQUIRED. Run the offline validation first to catch it earlier.
+ * `${VAR}` placeholders are resolved from `env`; pass `allowedFolderEnv`, not
+ * the process environment.
  *
  * The result is deterministic for the same folder and environment (sorted
  * files, fixed `exportedAt`), so a plan and the import that applies it agree

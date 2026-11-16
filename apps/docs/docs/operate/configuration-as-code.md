@@ -318,18 +318,22 @@ Git repository of tenant folders can be planned against a running instance
 without packing it first:
 
 ```bash
-eudiplo config plan ./config/acme --instance staging --mode upsert --diff --output plan.json
-eudiplo config import ./config/acme --instance staging --mode upsert --plan plan.json
+eudiplo config plan ./config/acme --instance staging --mode upsert --diff --output plan.json --allow-env PORTAL_SECRET
+eudiplo config import ./config/acme --instance staging --mode upsert --plan plan.json --allow-env PORTAL_SECRET
 ```
 
 The CLI first validates the folder offline, like
 [`eudiplo config tenant validate`](#validate-in-ci); a folder with errors exits
-with `1` and is not sent. It then resolves `${VAR}` placeholders from its own
-environment, as the startup import does. A placeholder without a value, such
-as the secrets of an [exported folder](#export-a-tenant), is named in a warning
-and sent as it is; the plan blocks that resource with `SECRET_REQUIRED` until
-the variable is set. The CLI sends the folder as a bundle
-archive, `info.json` and `images/` included. The bundle is the same for the same
+with `1` and is not sent. `${VAR}` placeholders resolve only from the
+environment variables named in `--allow-env` (comma-separated). The folder's
+author is not always the one who runs the CLI, so a folder cannot read the CI
+job's other variables, and never `EUDIPLO_TOKEN`, `EUDIPLO_CLIENT_ID` or
+`EUDIPLO_CLIENT_SECRET`. A placeholder without a value, such as the secrets of
+an [exported folder](#export-a-tenant), is named in a warning and sent as it
+is; the plan blocks that resource with `SECRET_REQUIRED` until the variable is
+set and named. A symbolic link that points outside the folder is refused. The
+CLI then sends the folder as a bundle archive, `info.json` and `images/`
+included. The bundle is the same for the same
 files and environment, so the import matches the reviewed plan. The tenant comes
 from the access token, and the folder name is the bundle's source, which
 `replace` mode uses to decide what it deletes, so keep the folder named after
