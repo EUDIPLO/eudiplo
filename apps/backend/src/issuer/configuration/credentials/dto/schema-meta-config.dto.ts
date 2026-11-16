@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { SchemaURIMeta } from "@owf/eudi-attestation-schema";
+import { SchemaUriMeta } from "@owf/eudi-attestation-schema";
 import { createZodDto } from "nestjs-zod";
 import {
     AttestationLoS,
@@ -38,7 +38,7 @@ export class SchemaUriEntry extends createZodDto(SchemaUriEntrySchema) {
     uri?: string;
 
     @ApiProperty({ type: "object", additionalProperties: true })
-    meta?: SchemaURIMeta;
+    meta?: SchemaUriMeta;
 }
 
 /**

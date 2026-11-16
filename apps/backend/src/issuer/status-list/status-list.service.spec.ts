@@ -182,11 +182,12 @@ describe("StatusListService SQLite concurrency", () => {
                     keyId: "status-list-key",
                     crt: [],
                 }),
-                getLeafCertBase64: vi.fn().mockReturnValue(["certificate"]),
+                getLeafCertBase64: vi.fn().mockReturnValue(["MAA="]),
             },
             keyChainService: {
                 getSigningAlg: vi.fn().mockResolvedValue("ES256"),
-                signJWT: vi.fn().mockImplementation(async () => {
+                getPublicKey: vi.fn().mockResolvedValue({ kty: "EC" }),
+                signBytes: vi.fn().mockImplementation(async () => {
                     await repository.update(
                         {
                             id: snapshot.id,
@@ -198,7 +199,7 @@ describe("StatusListService SQLite concurrency", () => {
                             version: () => "version + 1",
                         },
                     );
-                    return "stale-jwt";
+                    return Uint8Array.of(1);
                 }),
             },
             signStatusListCwt: vi.fn().mockResolvedValue(Uint8Array.of(1)),
@@ -266,11 +267,12 @@ describe("StatusListService SQLite concurrency", () => {
                     keyId: "status-list-key",
                     crt: [],
                 }),
-                getLeafCertBase64: vi.fn().mockReturnValue(["certificate"]),
+                getLeafCertBase64: vi.fn().mockReturnValue(["MAA="]),
             },
             keyChainService: {
                 getSigningAlg: vi.fn().mockResolvedValue("ES256"),
-                signJWT: vi.fn().mockResolvedValue("jwt"),
+                getPublicKey: vi.fn().mockResolvedValue({ kty: "EC" }),
+                signBytes: vi.fn().mockResolvedValue(Uint8Array.of(1)),
             },
             signStatusListCwt: vi.fn().mockResolvedValue(Uint8Array.of(1)),
         });
@@ -378,10 +380,10 @@ describe("StatusListService SQLite concurrency", () => {
                     .findOneByOrFail({ id, tenantId: "tenant-1" })
             ).elements;
 
-        const signJWT = vi.fn().mockResolvedValue("jwt");
+        const signBytes = vi.fn().mockResolvedValue(Uint8Array.of(1));
 
         beforeEach(async () => {
-            signJWT.mockClear();
+            signBytes.mockClear();
             await dataSource.getRepository(StatusListEntity).save({
                 id: "list-2",
                 tenantId: "tenant-1",
@@ -403,11 +405,12 @@ describe("StatusListService SQLite concurrency", () => {
                         keyId: "status-list-key",
                         crt: [],
                     }),
-                    getLeafCertBase64: vi.fn().mockReturnValue(["certificate"]),
+                    getLeafCertBase64: vi.fn().mockReturnValue(["MAA="]),
                 },
                 keyChainService: {
                     getSigningAlg: vi.fn().mockResolvedValue("ES256"),
-                    signJWT,
+                    getPublicKey: vi.fn().mockResolvedValue({ kty: "EC" }),
+                    signBytes,
                 },
                 signStatusListCwt: vi.fn().mockResolvedValue(Uint8Array.of(1)),
             });
@@ -436,7 +439,7 @@ describe("StatusListService SQLite concurrency", () => {
 
             expect(await elementsOf("list-1")).toEqual([0, 0]);
             expect(await elementsOf("list-2")).toEqual([0, 0]);
-            expect(signJWT).not.toHaveBeenCalled();
+            expect(signBytes).not.toHaveBeenCalled();
         });
 
         test("refuses to reinstate or suspend a revoked credential, changing no entry", async () => {
@@ -561,7 +564,7 @@ describe("StatusListService SQLite concurrency", () => {
             await expect(service.createListJWT(snapshot)).rejects.toThrow(
                 "Status list list-1 stores values that do not fit its 1 bit per entry at index 1.",
             );
-            expect(signJWT).not.toHaveBeenCalled();
+            expect(signBytes).not.toHaveBeenCalled();
         });
 
         test("reads the current status of each of a session's credentials", async () => {
@@ -706,7 +709,7 @@ describe("StatusListService SQLite concurrency", () => {
             );
 
             expect(await elementsOf("list-1")).toEqual([2, 1]);
-            expect(signJWT).not.toHaveBeenCalled();
+            expect(signBytes).not.toHaveBeenCalled();
         });
 
         test("reports stored values that do not fit with the sessions they belong to", async () => {

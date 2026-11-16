@@ -123,13 +123,7 @@ export class LocalFederationResolver implements FederationResolver {
         }
     };
 
-    private readonly fetch: FetchCallback = async (input) => {
-        const url =
-            input instanceof Request
-                ? input.url
-                : input instanceof URL
-                  ? input.toString()
-                  : input;
+    private readonly fetch: FetchCallback = async (url) => {
         try {
             const response = await this.trustFetch.get(url, {
                 timeoutMs: FEDERATION_FETCH_TIMEOUT_MS,

@@ -159,7 +159,7 @@ describe("Presentation - OpenID Federation", () => {
             authorizationRequest: createRes.body.uri,
         });
 
-        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+        const resolved = await client.resolveOpenid4vpAuthorizationRequest({
             authorizationRequestPayload: authRequest.params,
             responseMode: { type: "direct_post" },
         });

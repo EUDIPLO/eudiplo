@@ -1,4 +1,4 @@
-import type { Jwk } from "@openid4vc/oauth2";
+import type { Jwk } from "@owf/jose";
 
 /** The key chain that signs an access token and its active public key. */
 interface AccessTokenSigningKey {

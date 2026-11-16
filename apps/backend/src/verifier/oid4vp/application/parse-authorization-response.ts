@@ -1,6 +1,6 @@
 import {
     parseDcqlVpToken,
-    parseOpenid4VpAuthorizationResponsePayload,
+    parseOpenid4vpAuthorizationResponsePayload,
 } from "@openid4vc/openid4vp";
 import type { AuthResponseData } from "../../presentations/domain/auth-response.js";
 
@@ -30,7 +30,7 @@ export class ParseAuthorizationResponse {
         let state: string | undefined;
         let presentations: Record<string, unknown[]>;
         try {
-            const payload = parseOpenid4VpAuthorizationResponsePayload(
+            const payload = parseOpenid4vpAuthorizationResponsePayload(
                 decrypted as Record<string, unknown>,
             );
             state = payload.state;

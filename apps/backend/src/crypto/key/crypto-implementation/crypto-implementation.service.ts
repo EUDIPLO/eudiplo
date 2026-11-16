@@ -49,9 +49,10 @@ export class CryptoImplementationService {
     /**
      * COSE algorithms EUDIPLO accepts in the DeviceSignature of a presented
      * mDOC: the classic identifiers and the fully-specified ones of RFC 9864
-     * (-9, -51, -52), which name the same curve and hash. An IssuerAuth only
-     * verifies with a classic identifier, because @owf/cose rejects any
-     * other value of its `alg` header (see {@link getAlgs}).
+     * (-9, -51, -52), which name the same curve and hash. Since @owf/cose
+     * 0.8 an IssuerAuth with a fully-specified identifier verifies as well,
+     * but `issuerauth_alg_values` still lists only the classic ones (see
+     * {@link getAlgs}).
      */
     getMdocDeviceAuthAlgs(): CoseAlgorithm[] {
         return [

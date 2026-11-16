@@ -11,8 +11,8 @@ import { describe, expect, it, vi } from "vitest";
 import { Role } from "../../auth/roles/role.enum.js";
 import { RolesGuard } from "../../auth/roles/roles.guard.js";
 import type { TokenPayload } from "../../auth/token.decorator.js";
-import { CertificateBuilderService } from "./cert/certificate-builder.service.js";
 import { KeyChainReferences } from "./application/key-chain-references.js";
+import { CertificateBuilderService } from "./cert/certificate-builder.service.js";
 import {
     KeyChainInUseError,
     type KeyChainReference,

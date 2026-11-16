@@ -6,8 +6,8 @@ import {
     Injectable,
     NotFoundException,
 } from "@nestjs/common";
-import type { Jwk } from "@openid4vc/oauth2";
 import type { CredentialConfigurationSupported } from "@openid4vc/openid4vci";
+import type { Jwk } from "@owf/jose";
 import { CryptoImplementationService } from "../../../crypto/key/crypto-implementation/crypto-implementation.service.js";
 import {
     DEFAULT_SIGNING_ALG,

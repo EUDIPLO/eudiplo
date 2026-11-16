@@ -2,11 +2,11 @@ import { createHash, randomUUID } from "node:crypto";
 import type { CallbackContext } from "@openid4vc/oauth2";
 import {
     calculateJwkThumbprint,
+    compactVerify,
     exportJWK,
     generateKeyPair,
     importJWK,
     type JWK,
-    jwtVerify,
     SignJWT,
 } from "jose";
 import { describe, expect, it, vi } from "vitest";
@@ -86,16 +86,16 @@ describe("verifyDpopProof", () => {
         token_endpoint: url,
         dpop_signing_alg_values_supported: ["ES256"],
     };
-    const callbacks: Pick<CallbackContext, "hash" | "verifyJwt"> = {
+    const callbacks: Pick<CallbackContext, "hash" | "verifyJws"> = {
         hash: (data, alg) =>
             createHash(alg.replace("-", "").toLowerCase())
-                .update(data)
+                .update(typeof data === "string" ? data : new Uint8Array(data))
                 .digest(),
-        verifyJwt: async (signer, { compact }) => {
+        verifyJws: async (signer, { signingInput, signature }) => {
             if (signer.method !== "jwk") return { verified: false };
             try {
-                await jwtVerify(
-                    compact,
+                await compactVerify(
+                    `${signingInput}.${signature}`,
                     await importJWK(signer.publicJwk as JWK, signer.alg),
                 );
                 return { verified: true, signerJwk: signer.publicJwk };

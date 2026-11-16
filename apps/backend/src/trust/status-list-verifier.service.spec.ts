@@ -252,25 +252,21 @@ describe("StatusListVerifierService cache", () => {
         });
 
         it("rejects a gzip-compressed list and does not cache it", async () => {
-            // Token Status List requires the ZLIB format; the library's
-            // decompressor also reads gzip.
+            // Token Status List requires the ZLIB format. The library refuses
+            // to create a gzip list, so the bytes are swapped in afterwards,
+            // as an issuer that does not use the library could send them.
             const statusLists = service();
-            tokens.set(
-                "/gzip",
-                await cwt(
-                    {},
-                    StatusListCbor.create({
-                        statusList: {
-                            bits: 1,
-                            list: gzipSync(new Uint8Array(1)),
-                        },
-                    }),
-                ),
-            );
+            const gzipList = StatusListCbor.create({
+                statusList: new StatusList([0], 1),
+            });
+            (
+                gzipList as unknown as { structure: Map<string, unknown> }
+            ).structure.set("lst", gzipSync(new Uint8Array(1)));
+            tokens.set("/gzip", await cwt({}, gzipList));
 
             await expect(
                 statusLists.getStatusListCwt(`${origin}/gzip`),
-            ).rejects.toThrow(InvalidStatusListTokenError);
+            ).rejects.toThrow(/cannot be decompressed/);
             expect(statusLists.getCacheStats().uris).toEqual([]);
         });
 

@@ -3,19 +3,21 @@ import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
     type CallbackContext,
-    calculateJwkThumbprint,
     clientAuthenticationNone,
-    HashAlgorithm,
-    type Jwk,
-    SignJwtCallback,
 } from "@openid4vc/oauth2";
 import {
+    calculateJwkThumbprint,
+    type Jwk,
+    type SignJwsCallback,
+    type VerifyJwsCallback,
+} from "@owf/jose";
+import {
     CompactEncrypt,
+    compactVerify,
     exportJWK,
     importJWK,
     importX509,
     type JWK,
-    jwtVerify,
 } from "jose";
 import { PinoLogger } from "nestjs-pino";
 import { KeyChainService } from "./key/key-chain.service.js";
@@ -55,17 +57,22 @@ export class CryptoService {
      * Get the callback context for the key service.
      * @param tenantId
      * @param sessionId Optional session ID for log correlation
+     * @param keyChainIds Key chain to sign with per signer `kid`, for signers
+     * whose `kid` is the published key id rather than the key chain ID.
      * @returns
      */
     getCallbackContext(
         tenantId: string,
         sessionId?: string,
+        keyChainIds?: Readonly<Record<string, string>>,
     ): Omit<CallbackContext, "decryptJwe"> {
         const logContext = { tenantId, ...(sessionId && { sessionId }) };
         return {
             hash: (data, alg) =>
                 createHash(alg.replace("-", "").toLowerCase())
-                    .update(data)
+                    .update(
+                        typeof data === "string" ? data : new Uint8Array(data),
+                    )
                     .digest(),
             generateRandom: (bytes) => randomBytes(bytes),
             clientAuthentication: clientAuthenticationNone({
@@ -91,98 +98,128 @@ export class CryptoService {
                     .encrypt(josePublicKey);
                 return { jwe, encryptionJwk: encryptor.publicJwk };
             },
-            signJwt: this.getSignJwtCallback(tenantId),
-            verifyJwt: async (signer, { compact }) => {
-                if (signer.method === "jwk") {
-                    const josePublicKey = await importJWK(
-                        signer.publicJwk as JWK,
-                        signer.alg,
-                    );
-                    try {
-                        await jwtVerify(compact, josePublicKey, {
-                            clockTolerance: this.clockTolerance,
-                        });
-                        return { verified: true, signerJwk: signer.publicJwk };
-                    } catch (e) {
-                        this.logger.warn(
-                            { ...logContext, err: e },
-                            "JWT verification failed (jwk)",
-                        );
-                        return { verified: false };
-                    }
-                } else if (signer.method === "x5c") {
-                    // x5c contains an array of base64-encoded X.509 certificates
-                    // The first certificate (leaf) contains the public key
-                    if (!signer.x5c || signer.x5c.length === 0) {
-                        return { verified: false };
-                    }
-                    try {
-                        const leafCertPem = `-----BEGIN CERTIFICATE-----\n${signer.x5c[0]}\n-----END CERTIFICATE-----`;
-                        const josePublicKey = await importX509(
-                            leafCertPem,
-                            signer.alg,
-                        );
-                        await jwtVerify(compact, josePublicKey, {
-                            clockTolerance: this.clockTolerance,
-                        });
-                        // Extract the public JWK from the certificate for the return value
-                        const signerJwk = await exportJWK(josePublicKey);
-                        signerJwk.alg = signer.alg;
-                        return { verified: true, signerJwk: signerJwk as Jwk };
-                    } catch (e) {
-                        this.logger.warn(
-                            { ...logContext, err: e },
-                            "JWT verification failed (x5c)",
-                        );
-                        return { verified: false };
-                    }
-                }
-                throw new Error(
-                    `Signer method '${signer.method}' not supported`,
-                );
-            },
+            signJws: this.getSignJwsCallback(tenantId, keyChainIds),
+            verifyJws: this.getVerifyJwsCallback(logContext),
         };
     }
 
-    // Helper to generate signJwt callback
-    getSignJwtCallback(tenantId: string): SignJwtCallback {
-        return async (signer, { header, payload }) => {
-            if (signer.method !== "jwk") {
+    /**
+     * Clock skew the `@openid4vc` libraries allow for `exp`, `nbf` and `iat`
+     * (`CRYPTO_TOLERANCE`). They check the claims; the callbacks below only
+     * check signatures.
+     */
+    get allowedSkewInSeconds(): number {
+        return this.clockTolerance;
+    }
+
+    /**
+     * Verifies a JWS signature with the key of a `jwk` or `x5c` signer. The
+     * libraries check the claims, and whether an `x5c` chain is trusted is
+     * checked by the callers that accept one.
+     */
+    private getVerifyJwsCallback(
+        logContext: Record<string, string>,
+    ): VerifyJwsCallback {
+        return async (signer, { signingInput, signature }) => {
+            if (signer.method !== "jwk" && signer.method !== "x5c") {
+                throw new Error(
+                    `Signer method '${signer.method}' not supported`,
+                );
+            }
+            if (signer.method === "x5c" && signer.x5c.length === 0) {
+                return { verified: false };
+            }
+            try {
+                const publicKey =
+                    signer.method === "jwk"
+                        ? await importJWK(signer.publicJwk as JWK, signer.alg)
+                        : await importX509(
+                              `-----BEGIN CERTIFICATE-----\n${signer.x5c[0]}\n-----END CERTIFICATE-----`,
+                              signer.alg,
+                          );
+                await compactVerify(`${signingInput}.${signature}`, publicKey, {
+                    algorithms: [signer.alg],
+                });
+                const signerJwk =
+                    signer.method === "jwk"
+                        ? signer.publicJwk
+                        : ({
+                              ...(await exportJWK(publicKey)),
+                              alg: signer.alg,
+                          } as Jwk);
+                return { verified: true, signerJwk };
+            } catch (e) {
+                this.logger.warn(
+                    { ...logContext, err: e },
+                    `JWS verification failed (${signer.method})`,
+                );
+                return { verified: false };
+            }
+        };
+    }
+
+    /**
+     * Signs with a key chain of the tenant. The signer's `kid` names the key
+     * chain, or maps to it through `keyChainIds`. A `jwk` signer must carry
+     * the key chain's active public key.
+     */
+    getSignJwsCallback(
+        tenantId: string,
+        keyChainIds?: Readonly<Record<string, string>>,
+    ): SignJwsCallback {
+        return async (signer, { signingInputBytes }) => {
+            if (signer.method !== "jwk" && signer.method !== "custom") {
                 throw new Error("Signer method not supported");
             }
-            const hashCallback = this.getCallbackContext(tenantId).hash;
-            const jwkThumbprint = await calculateJwkThumbprint({
-                jwk: signer.publicJwk,
-                hashAlgorithm: HashAlgorithm.Sha256,
-                hashCallback,
-            });
+            if (!signer.kid) {
+                throw new Error("Signer has no key id");
+            }
+            const keyChainId = keyChainIds?.[signer.kid] ?? signer.kid;
+            const publicJwk = (await this.keyChainService.getPublicKey(
+                "jwk",
+                tenantId,
+                keyChainId,
+            )) as Jwk;
 
-            const privateThumbprint = await calculateJwkThumbprint({
-                jwk: (await this.keyChainService.getPublicKey(
-                    "jwk",
-                    tenantId,
-                    signer.kid!,
-                )) as Jwk,
-                hashAlgorithm: HashAlgorithm.Sha256,
-                hashCallback,
-            });
+            if (signer.method === "jwk") {
+                const hashCallback = this.getCallbackContext(tenantId).hash;
+                const [signerThumbprint, keyThumbprint] = await Promise.all(
+                    [signer.publicJwk, publicJwk].map((jwk) =>
+                        calculateJwkThumbprint({
+                            jwk,
+                            hashAlgorithm: "sha-256",
+                            hashCallback,
+                        }),
+                    ),
+                );
+                if (signerThumbprint !== keyThumbprint) {
+                    throw new Error(
+                        `No private key available for public jwk \n${JSON.stringify(signer.publicJwk, null, 2)}`,
+                    );
+                }
+            }
 
-            if (jwkThumbprint !== privateThumbprint) {
+            // The header is signed as the library built it, so its alg must
+            // be the key's.
+            const keyAlg = await this.keyChainService.getSigningAlg(
+                tenantId,
+                keyChainId,
+            );
+            if (signer.alg !== keyAlg) {
                 throw new Error(
-                    `No private key available for public jwk \n${JSON.stringify(signer.publicJwk, null, 2)}`,
+                    `Signer alg '${signer.alg}' does not match the key's alg '${keyAlg}'`,
                 );
             }
 
-            const jwt = await this.keyChainService.signJWT(
-                payload,
-                header,
+            const signature = await this.keyChainService.signBytes(
+                signingInputBytes,
                 tenantId,
-                signer.kid!,
+                keyChainId,
             );
-
             return {
-                jwt,
-                signerJwk: signer.publicJwk,
+                signature: Buffer.from(signature).toString("base64url"),
+                signerJwk:
+                    signer.method === "jwk" ? signer.publicJwk : publicJwk,
             };
         };
     }

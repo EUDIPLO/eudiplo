@@ -10,17 +10,16 @@ import {
     ServiceUnavailableException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { SignatureAlgorithm } from "@owf/cose";
+import { CoseKey, SignatureAlgorithm } from "@owf/cose";
+import type { Jwk } from "@owf/jose";
 import {
     BitsPerStatus,
-    createHeaderAndPayload,
-    JWTwithStatusListPayload,
+    type StatusClaim,
     StatusList,
     StatusListCwt,
-    StatusListJWTHeaderParameters,
+    signStatusListJwt,
 } from "@owf/token-status-list";
 import { X509Certificate } from "@peculiar/x509";
-import { JwtPayload } from "@sd-jwt/core";
 import {
     DataSource,
     EntityManager,
@@ -333,7 +332,7 @@ export class StatusListService implements OnApplicationBootstrap {
         const now = Math.floor(Date.now() / 1000);
         const exp = now + ttl;
 
-        const prePayload: JwtPayload = {
+        const prePayload = {
             iss,
             sub,
             iat: now,
@@ -343,33 +342,40 @@ export class StatusListService implements OnApplicationBootstrap {
 
         const cert = await this.getSigningCert(entry);
 
-        const preHeader: StatusListJWTHeaderParameters = {
-            alg: await this.keyChainService.getSigningAlg(
-                entry.tenantId,
-                cert.keyId,
-            ),
-            typ: "statuslist+jwt",
-            x5c: this.certService.getLeafCertBase64(cert),
-        };
-        const { header, payload } = createHeaderAndPayload(
-            list,
-            prePayload,
-            preHeader,
-        );
-
-        // Add aggregation_uri to status_list if enabled for this tenant (RFC Section 9.2)
-        // This allows relying parties to pre-fetch all status lists for offline validation
-        if (effectiveConfig.enableAggregation && payload.status_list) {
-            (payload.status_list as Record<string, unknown>).aggregation_uri =
-                aggregationUri;
-        }
-
-        const jwt = await this.keyChainService.signJWT(
-            payload,
-            header,
+        // The list carries aggregation_uri when aggregation is enabled for
+        // the tenant (Section 9.2), so relying parties can pre-fetch all
+        // status lists for offline validation.
+        const publicJwk = (await this.keyChainService.getPublicKey(
+            "jwk",
             entry.tenantId,
             cert.keyId,
-        );
+        )) as Jwk;
+        const { jwt } = await signStatusListJwt({
+            statusList: list,
+            payload: prePayload,
+            // The kid a federation verifier looks the key up by in the
+            // issuer's metadata, as the JWKS publishes it.
+            header: { kid: publicJwk.kid ?? cert.keyId },
+            signer: {
+                method: "x5c",
+                alg: await this.keyChainService.getSigningAlg(
+                    entry.tenantId,
+                    cert.keyId,
+                ),
+                x5c: this.certService.getLeafCertBase64(cert),
+            },
+            signJwsCallback: async (_signer, { signingInputBytes }) => {
+                const signature = await this.keyChainService.signBytes(
+                    signingInputBytes,
+                    entry.tenantId,
+                    cert.keyId,
+                );
+                return {
+                    signature: Buffer.from(signature).toString("base64url"),
+                    signerJwk: publicJwk,
+                };
+            },
+        });
 
         const issuedAt = new Date(now * 1000);
         const expirationTime = new Date(exp * 1000);
@@ -474,9 +480,16 @@ export class StatusListService implements OnApplicationBootstrap {
             ]),
         });
 
+        // @owf/cose checks that the key fits the algorithm, so the public key
+        // stands for the key the KMS signs with.
+        const publicJwk = await this.keyChainService.getPublicKey(
+            "jwk",
+            tenantId,
+            keyId,
+        );
         return cwt.signAndEncode(
             {
-                signingKey: { algorithm } as never,
+                signingKey: CoseKey.fromJwk(publicJwk as never),
                 algorithm,
             },
             {
@@ -652,7 +665,7 @@ export class StatusListService implements OnApplicationBootstrap {
         issuanceSetId?: string,
         walletUnit?: WalletUnitReference,
         credentialExpiresAt?: Date,
-    ): Promise<JWTwithStatusListPayload> {
+    ): Promise<{ status: StatusClaim }> {
         // Resolve the pseudonymous subject key when the active-credential-limit
         // policy applies to this issuance; undefined means "policy off" and the
         // behaviour below is unchanged from before.

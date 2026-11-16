@@ -22,10 +22,10 @@
     "test": "pnpm run check:sidebar && tsx --tsconfig ../../tsconfig.scripts.json --test scripts/schema-docs/*.test.ts scripts/roles-docs/*.test.ts"
   },
   "dependencies": {
-    "@docsearch/core": "^5.1.2",
-    "@docsearch/css": "^5.1.2",
-    "@docsearch/modal": "^5.1.2",
-    "@docsearch/sidepanel": "^5.1.2",
+    "@docsearch/core": "^5.2.0",
+    "@docsearch/css": "^5.2.0",
+    "@docsearch/modal": "^5.2.0",
+    "@docsearch/sidepanel": "^5.2.0",
     "@docusaurus/core": "3.10.2",
     "@docusaurus/faster": "3.10.2",
     "@docusaurus/plugin-client-redirects": "3.10.2",
@@ -33,7 +33,7 @@
     "@docusaurus/theme-mermaid": "3.10.2",
     "@mdx-js/react": "^3.1.1",
     "docusaurus-plugin-llms": "^0.6.1",
-    "dotenv": "^18.0.9",
+    "dotenv": "^18.0.10",
     "prism-react-renderer": "^2.4.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"

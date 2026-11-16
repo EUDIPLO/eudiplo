@@ -1,4 +1,5 @@
-import { type Jwk, Oauth2AuthorizationServer } from "@openid4vc/oauth2";
+import { Oauth2AuthorizationServer } from "@openid4vc/oauth2";
+import { type Jwk } from "@owf/jose";
 import type { CryptoService } from "../../../../../crypto/crypto.service.js";
 import { toPublicJwk } from "../../../../../crypto/key/domain/public-jwk.js";
 import type { KeyChainService } from "../../../../../crypto/key/key-chain.service.js";
@@ -24,9 +25,18 @@ export class CryptoOAuthAuthorizationServerFactory
 {
     constructor(private readonly crypto: CryptoService) {}
 
-    forTenant(tenantId: string, sessionId?: string) {
+    forTenant(
+        tenantId: string,
+        sessionId?: string,
+        keyChainIds?: Readonly<Record<string, string>>,
+    ) {
         return new Oauth2AuthorizationServer({
-            callbacks: this.crypto.getCallbackContext(tenantId, sessionId),
+            callbacks: this.crypto.getCallbackContext(
+                tenantId,
+                sessionId,
+                keyChainIds,
+            ),
+            allowedSkewInSeconds: this.crypto.allowedSkewInSeconds,
         });
     }
 }

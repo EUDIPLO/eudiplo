@@ -7,7 +7,7 @@ const instanceConfigs: any[] = [];
 const verifyMock = vi.fn();
 
 vi.mock("@sd-jwt/sd-jwt-vc", () => ({
-    SDJwtVcInstance: class {
+    SdJwtVcInstance: class {
         private readonly cfg: any;
 
         constructor(cfg: any) {

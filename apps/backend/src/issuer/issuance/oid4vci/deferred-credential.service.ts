@@ -1,9 +1,9 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { Jwk } from "@openid4vc/oauth2";
 import type {
     DeferredCredentialResponse,
     IssuerMetadataResult,
 } from "@openid4vc/openid4vci";
+import type { Jwk } from "@owf/jose";
 import { decodeJwt } from "jose";
 import { Span, TraceService } from "nestjs-otel";
 import { v4 } from "uuid";

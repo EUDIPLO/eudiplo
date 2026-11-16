@@ -14,6 +14,13 @@
  */
 export const MAX_CERTIFICATE_CHAIN_LENGTH = 10;
 
+/**
+ * Matches the message of {@link CertificateChainTooLong}, for callers that
+ * receive only the message, such as the mDOC verifier from @owf/mdoc.
+ */
+export const CERTIFICATE_CHAIN_LENGTH_FAILURE =
+    /x5c(?:hain)? holds \d+ certificates; at most \d+ are accepted/i;
+
 /** An `x5c` or `x5chain` holds more than {@link MAX_CERTIFICATE_CHAIN_LENGTH} certificates. */
 export class CertificateChainTooLong extends Error {
     constructor(length: number, header: "x5c" | "x5chain") {

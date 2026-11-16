@@ -1,10 +1,7 @@
 import { INestApplication } from "@nestjs/common";
-import {
-    clientAuthenticationAnonymous,
-    Jwk,
-    JwtSignerJwk,
-} from "@openid4vc/oauth2";
+import { clientAuthenticationAnonymous } from "@openid4vc/oauth2";
 import { Openid4vciClient } from "@openid4vc/openid4vci";
+import { Jwk, type JwsSignerJwk } from "@owf/jose";
 import { Issuer, IssuerSigned } from "@owf/mdoc";
 import { exportJWK, generateKeyPair } from "jose";
 import request from "supertest";
@@ -24,7 +21,7 @@ import { KeyUsageType } from "../../src/crypto/key/types/key-usage-type.js";
 import { MdocIssuerService } from "../../src/issuer/configuration/credentials/issuer/mdoc-issuer/mdoc-issuer.service.js";
 import {
     callbacks,
-    getSignJwtCallback,
+    getSignJwsCallback,
     IssuanceTestContext,
     setupIssuanceTestApp,
 } from "../utils.js";
@@ -101,7 +98,7 @@ describe("Issuance - mDOC Credentials", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -134,7 +131,7 @@ describe("Issuance - mDOC Credentials", () => {
                 method: "jwk",
                 alg: "ES256",
                 publicJwk: holderPublicKeyJwk,
-            } as JwtSignerJwk,
+            } as JwsSignerJwk,
             clientId,
             issuedAt: new Date(),
             credentialConfigurationId:
@@ -229,7 +226,7 @@ describe("Issuance - mDOC Credentials", () => {
                     callbacks: {
                         ...callbacks,
                         clientAuthentication: clientAuthenticationAnonymous(),
-                        signJwt: getSignJwtCallback([
+                        signJws: getSignJwsCallback([
                             (await exportJWK(holderKeyPair.privateKey)) as Jwk,
                         ]),
                     },
@@ -255,7 +252,7 @@ describe("Issuance - mDOC Credentials", () => {
                             method: "jwk",
                             alg,
                             publicJwk: holderPublicKeyJwk,
-                        } as JwtSignerJwk,
+                        } as JwsSignerJwk,
                         clientId,
                         issuedAt: new Date(),
                         credentialConfigurationId: configId,
@@ -326,7 +323,7 @@ describe("Issuance - mDOC Credentials", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -352,7 +349,7 @@ describe("Issuance - mDOC Credentials", () => {
                 method: "jwk",
                 alg: "ES256",
                 publicJwk: holderPublicKeyJwk,
-            } as JwtSignerJwk,
+            } as JwsSignerJwk,
             clientId,
             issuedAt: new Date(),
             credentialConfigurationId:

@@ -243,8 +243,8 @@
                     <mat-hint>
                       Optional, one origin per line. When set, DC API and ISO 18013-7 requests are
                       only created for pages on these origins; to start them from this Web Client,
-                      include <code>{{ pageOrigin }}</code
-                      >. Empty: not restricted, any origin the request names is accepted.
+                      include <code>{{ pageOrigin }}</code>. Empty: not restricted, any origin the
+                      request names is accepted.
                     </mat-hint>
                   </mat-form-field>
 
@@ -698,8 +698,9 @@
             managedKind="PresentationConfig"
             [managedResourceId]="create ? '' : form.get('id')?.value || ''"
           >
-            <mat-icon>{{ create ? 'add' : 'save' }}</mat-icon
-            >{{ saving ? 'Saving…' : create ? 'Create Configuration' : 'Save Configuration' }}
+            <mat-icon>{{ create ? 'add' : 'save' }}</mat-icon>{{
+              saving ? 'Saving…' : create ? 'Create Configuration' : 'Save Configuration'
+            }}
           </button>
         }
       </footer>

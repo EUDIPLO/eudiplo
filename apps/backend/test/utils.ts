@@ -5,14 +5,10 @@ import { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { Test, TestingModule } from "@nestjs/testing";
-import {
-    CallbackContext,
-    Jwk,
-    JwtHeader,
-    SignJwtCallback,
-} from "@openid4vc/oauth2";
+import { CallbackContext } from "@openid4vc/oauth2";
 import { ResolvedOpenid4vpAuthorizationRequest } from "@openid4vc/openid4vp";
 import { digest, ES256, ES384, ES512 } from "@owf/crypto";
+import { Jwk, type SignJwsCallback } from "@owf/jose";
 import {
     CoseKey,
     DeviceKey,
@@ -26,17 +22,17 @@ import {
     SignatureAlgorithm,
 } from "@owf/mdoc";
 import { X509Certificate } from "@peculiar/x509";
-import { kbPayload } from "@sd-jwt/core";
-import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
+import { KbJwtPayload } from "@sd-jwt/core";
+import { SdJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
 import {
     calculateJwkThumbprint,
+    compactVerify,
+    decodeJwt,
     EncryptJWT,
     exportJWK,
     importJWK,
     importX509,
     JWK,
-    jwtVerify,
-    SignJWT,
 } from "jose";
 import request from "supertest";
 import { App } from "supertest/types";
@@ -208,7 +204,7 @@ async function createCredential(options: {
             publicKeyHolder: keyPair.publicKey,
         }));
 
-    const sdjwt = new SDJwtVcInstance({
+    const sdjwt = new SdJwtVcInstance({
         signer: async (data: string) => {
             const encoder = new TextEncoder();
             const signature = await globalThis.crypto.subtle.sign(
@@ -250,7 +246,7 @@ async function createCredential(options: {
 }
 
 export async function preparePresentation(
-    kb: Omit<kbPayload, "sd_hash">,
+    kb: Omit<KbJwtPayload, "sd_hash">,
     privateKey: CryptoKey,
     x5c: string[],
     statusListService: StatusListService,
@@ -297,7 +293,7 @@ export async function preparePresentation(
         header: extra.header,
     });
 
-    const sdjwt = new SDJwtVcInstance({
+    const sdjwt = new SdJwtVcInstance({
         hasher: digest,
         kbSigner: await OWF_ALGS[alg].getSigner(credential.privateKey),
         kbSignAlg: alg,
@@ -323,38 +319,54 @@ export const callbacks: any = {
     hash: (data, alg) =>
         crypto
             .createHash(alg.replace("-", "").toLowerCase())
-            .update(data)
+            .update(typeof data === "string" ? data : new Uint8Array(data))
             .digest(),
     generateRandom: (bytes) => crypto.randomBytes(bytes),
     /* clientAuthentication: clientAuthenticationNone({
         clientId: 'some-random-client-id',
     }), */
-    verifyJwt: async (signer, { compact, payload }) => {
+    verifyJws: async (signer, { signingInput, signature, protectedHeader }) => {
         let jwk: Jwk;
         let publicKey: CryptoKey;
         if (signer.method === "jwk") {
             jwk = signer.publicJwk;
             publicKey = (await importJWK(jwk as JWK, signer.alg)) as CryptoKey;
         } else if (signer.method === "x5c") {
-            const headerB64 = compact.split(".")[0];
-            const header: JwtHeader = JSON.parse(
-                Buffer.from(headerB64, "base64url").toString(),
-            );
-            if (!header.x5c || header.x5c.length === 0) {
+            if (signer.x5c.length === 0) {
                 throw new Error("x5c header parameter is missing or empty");
             }
-            const certPem = `-----BEGIN CERTIFICATE-----\n${header.x5c[0]}\n-----END CERTIFICATE-----`;
+            const certPem = `-----BEGIN CERTIFICATE-----\n${signer.x5c[0]}\n-----END CERTIFICATE-----`;
             publicKey = await importX509(certPem, signer.alg);
             jwk = (await exportJWK(publicKey)) as Jwk;
+        } else if (signer.method === "federation") {
+            // The key of the signing entity, from the metadata of its entity
+            // configuration, the first trust chain entry. EUDIPLO sends the
+            // chain in the header, the library reads it from the payload. The
+            // chain itself is not checked here.
+            const trustChain =
+                signer.trustChain ??
+                (protectedHeader.trust_chain as string[] | undefined);
+            if (!trustChain?.length) {
+                throw new Error("Federation signer without trust chain");
+            }
+            const leaf = decodeJwt(trustChain[0]) as {
+                metadata?: Record<string, { jwks?: { keys: Jwk[] } }>;
+            };
+            const found = Object.values(leaf.metadata ?? {})
+                .flatMap((entry) => entry.jwks?.keys ?? [])
+                .find((key) => key.kid === signer.kid);
+            if (!found) {
+                throw new Error(`No key ${signer.kid} in the trust chain`);
+            }
+            jwk = found;
+            publicKey = (await importJWK(jwk as JWK, signer.alg)) as CryptoKey;
         } else {
             throw new Error("Signer method not supported");
         }
 
         try {
-            await jwtVerify(compact, publicKey, {
-                currentDate: payload.exp
-                    ? new Date((payload.exp - 300) * 1000)
-                    : undefined,
+            await compactVerify(`${signingInput}.${signature}`, publicKey, {
+                algorithms: [signer.alg],
             });
             return {
                 verified: true,
@@ -388,30 +400,27 @@ export const callbacks: any = {
     },
 } as const satisfies Partial<CallbackContext>;
 
-export const getSignJwtCallback = (privateJwks: Jwk[]): SignJwtCallback => {
-    return async (signer, { header, payload }) => {
-        let jwk: Jwk;
-        if (signer.method === "jwk") {
-            jwk = signer.publicJwk;
-        } else {
+/**
+ * Signs with the private key of `privateJwks` that matches the `jwk` signer.
+ */
+export const getSignJwsCallback = (privateJwks: Jwk[]): SignJwsCallback => {
+    return async (signer, { signingInputBytes }) => {
+        if (signer.method !== "jwk") {
             throw new Error("Signer method not supported");
         }
-
-        const jwkThumprint = await calculateJwkThumbprint(jwk as JWK, "sha256");
-
-        // add cnf
-        payload.cnf = {
-            jkt: jwkThumprint,
-        };
-
+        const jwk = signer.publicJwk;
+        const jwkThumbprint = await calculateJwkThumbprint(
+            jwk as JWK,
+            "sha256",
+        );
         const privateJwk = await Promise.all(
-            privateJwks.map(async (jwk) =>
-                (await calculateJwkThumbprint(jwk as JWK, "sha256")) ===
-                jwkThumprint
-                    ? jwk
+            privateJwks.map(async (candidate) =>
+                (await calculateJwkThumbprint(candidate as JWK, "sha256")) ===
+                jwkThumbprint
+                    ? candidate
                     : undefined,
             ),
-        ).then((jwks) => jwks.find((jwk) => jwk !== undefined));
+        ).then((jwks) => jwks.find((candidate) => candidate !== undefined));
 
         if (!privateJwk) {
             throw new Error(
@@ -419,13 +428,25 @@ export const getSignJwtCallback = (privateJwks: Jwk[]): SignJwtCallback => {
             );
         }
 
-        const josePrivateKey = await importJWK(privateJwk as JWK, signer.alg);
-        const jwt = await new SignJWT(payload)
-            .setProtectedHeader(header)
-            .sign(josePrivateKey);
+        // WebCrypto ECDSA signatures are r || s, the JWS form.
+        const privateKey = (await importJWK(
+            privateJwk as JWK,
+            signer.alg,
+        )) as CryptoKey;
+        const hash = { ES256: "SHA-256", ES384: "SHA-384", ES512: "SHA-512" }[
+            signer.alg
+        ];
+        if (!hash) {
+            throw new Error(`Unsupported alg ${signer.alg}`);
+        }
+        const signature = await crypto.subtle.sign(
+            { name: "ECDSA", hash },
+            privateKey,
+            signingInputBytes as Uint8Array<ArrayBuffer>,
+        );
 
         return {
-            jwt: jwt,
+            signature: Buffer.from(signature).toString("base64url"),
             signerJwk: jwk,
         };
     };
@@ -1049,7 +1070,7 @@ export function createTestFetch(
     return async (uri: string, init: RequestInit) => {
         const path = uri.split(getHost())[1];
         let response: request.Response;
-        if (init.method === "POST") {
+        if (init.method?.toUpperCase() === "POST") {
             response = await request(app.getHttpServer())
                 .post(path)
                 .trustLocalhost()
@@ -1059,13 +1080,22 @@ export function createTestFetch(
                 .get(path)
                 .trustLocalhost();
         }
-        return {
-            ok: true,
-            text: () => response.text,
-            json: () => response.body,
+        // The libraries read the body within their size limits, so this is
+        // a real Response.
+        const headers = new Headers();
+        for (const [name, value] of Object.entries(response.headers)) {
+            if (value !== undefined) {
+                headers.set(
+                    name,
+                    Array.isArray(value) ? value.join(", ") : String(value),
+                );
+            }
+        }
+        const noBody = [204, 205, 304].includes(response.status);
+        return new Response(noBody ? null : (response.text ?? ""), {
             status: response.status,
-            headers: response.headers,
-        };
+            headers,
+        });
     };
 }
 

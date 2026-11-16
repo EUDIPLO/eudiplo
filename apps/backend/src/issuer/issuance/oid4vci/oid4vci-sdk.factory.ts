@@ -2,10 +2,10 @@ import { HttpService } from "@nestjs/axios";
 import { Inject, Injectable } from "@nestjs/common";
 import {
     type DecryptJweCallback,
-    type Jwk,
     Oauth2ResourceServer,
 } from "@openid4vc/oauth2";
 import { Openid4vciIssuer } from "@openid4vc/openid4vci";
+import { type Jwk } from "@owf/jose";
 import { CryptoService } from "../../../crypto/crypto.service.js";
 import { OutboundUrlPolicyService } from "../../../webhook/outbound-url-policy.service.js";
 import { IssuanceService } from "../../configuration/issuance/issuance.service.js";
@@ -52,6 +52,7 @@ export class Oid4vciSdkFactory {
                 ...this.cryptoService.getCallbackContext(tenantId, sessionId),
                 ...(decryptJwe && { decryptJwe }),
             },
+            allowedSkewInSeconds: this.cryptoService.allowedSkewInSeconds,
         });
     }
 
@@ -70,6 +71,7 @@ export class Oid4vciSdkFactory {
                     this.fetchJwks(jwksUri),
                 fetch: this.fetch,
             },
+            allowedSkewInSeconds: this.cryptoService.allowedSkewInSeconds,
         });
     }
 

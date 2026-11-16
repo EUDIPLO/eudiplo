@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { SchemaURIMeta } from "@owf/eudi-attestation-schema";
+import { SchemaUriMeta } from "@owf/eudi-attestation-schema";
 import { KeyChainService } from "../../crypto/key/key-chain.service.js";
 import { CredentialConfigService } from "../../issuer/configuration/credentials/credential-config/credential-config.service.js";
 import {
@@ -66,7 +66,7 @@ export class SchemaMetadataSubmissionService {
             ReturnType<CredentialConfigService["getById"]>
         >,
         format: string,
-    ): SchemaURIMeta {
+    ): SchemaUriMeta {
         if (format === "dc+sd-jwt") {
             const configuredVct = this.extractConfiguredVct(credentialConfig);
 
@@ -405,7 +405,7 @@ export class SchemaMetadataSubmissionService {
         fallbackFormat?: string,
     ): Promise<{
         format: string;
-        meta: SchemaURIMeta;
+        meta: SchemaUriMeta;
         file: Blob | File;
     }> {
         const existing = await this.credentialsService.getById(
@@ -446,7 +446,7 @@ export class SchemaMetadataSubmissionService {
     ): Promise<
         Array<{
             format: string;
-            meta: SchemaURIMeta;
+            meta: SchemaUriMeta;
             file: Blob | File;
         }>
     > {
@@ -538,7 +538,7 @@ export class SchemaMetadataSubmissionService {
 
     private buildRegistrarMetadata(
         config: SignSchemaMetaConfigDto["config"],
-        schemaEntries: Array<{ format: string; meta: SchemaURIMeta }>,
+        schemaEntries: Array<{ format: string; meta: SchemaUriMeta }>,
         trustedAuthorities: Array<Record<string, unknown>>,
     ): RegistrarMetadataPayload {
         const metadata: RegistrarMetadataPayload = {

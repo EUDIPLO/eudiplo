@@ -5,8 +5,8 @@ import {
     Openid4vpClient,
 } from "@openid4vc/openid4vp";
 import { digest, ES256 } from "@owf/crypto";
-import { kbPayload } from "@sd-jwt/core";
-import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
+import { KbJwtPayload } from "@sd-jwt/core";
+import { SdJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
 import { base64url, CryptoKey } from "jose";
 import request from "supertest";
 import { App } from "supertest/types";
@@ -43,7 +43,7 @@ async function createCredentialWithStatus(options: {
             publicKeyHolder: keyPair.publicKey,
         }));
 
-    const sdjwt = new SDJwtVcInstance({
+    const sdjwt = new SdJwtVcInstance({
         signer: async (data: string) => {
             const encoder = new TextEncoder();
             const signature = await globalThis.crypto.subtle.sign(
@@ -103,7 +103,7 @@ function computeTransactionDataHash(
  * Prepares a presentation with transaction_data_hashes in the KB-JWT
  */
 async function preparePresentationWithTransactionData(
-    kb: Omit<kbPayload, "sd_hash"> & {
+    kb: Omit<KbJwtPayload, "sd_hash"> & {
         transaction_data_hashes?: string[];
         transaction_data_hashes_alg?: string;
     },
@@ -131,7 +131,7 @@ async function preparePresentationWithTransactionData(
         x5c,
     });
 
-    const sdjwt = new SDJwtVcInstance({
+    const sdjwt = new SdJwtVcInstance({
         hasher: digest,
         kbSigner: await ES256.getSigner(credential.privateKey),
         kbSignAlg: "ES256",
@@ -206,7 +206,7 @@ describe("Presentation - Transaction Data", () => {
             authorizationRequest: res.body.uri,
         });
 
-        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+        const resolved = await client.resolveOpenid4vpAuthorizationRequest({
             authorizationRequestPayload: authRequest.params,
             responseMode: { type: "direct_post" },
         });
@@ -614,7 +614,7 @@ describe("Presentation - Transaction Data", () => {
             const authRequest = client.parseOpenid4vpAuthorizationRequest({
                 authorizationRequest: res.body.uri,
             });
-            const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+            const resolved = await client.resolveOpenid4vpAuthorizationRequest({
                 authorizationRequestPayload: authRequest.params,
                 responseMode: { type: "direct_post" },
             });
@@ -813,7 +813,7 @@ describe("Presentation - Transaction Data", () => {
             const authRequest = client.parseOpenid4vpAuthorizationRequest({
                 authorizationRequest: res.body.uri,
             });
-            const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+            const resolved = await client.resolveOpenid4vpAuthorizationRequest({
                 authorizationRequestPayload: authRequest.params,
                 responseMode: { type: "direct_post" },
             });
@@ -839,7 +839,7 @@ describe("Presentation - Transaction Data", () => {
                         computeTransactionDataHash(encodedPayment),
                     ],
                     transaction_data_hashes_alg: "sha-256",
-                } as Omit<kbPayload, "sd_hash">,
+                } as Omit<KbJwtPayload, "sd_hash">,
                 privateIssuerKey,
                 issuerCertChain,
                 statusListService,

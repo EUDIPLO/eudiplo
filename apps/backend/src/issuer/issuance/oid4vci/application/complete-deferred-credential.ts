@@ -1,4 +1,4 @@
-import type { Jwk } from "@openid4vc/oauth2";
+import type { Jwk } from "@owf/jose";
 import type { SessionStore } from "../../../../session/application/session-store.js";
 import type {
     DeferredCredentialIssuer,

@@ -1,4 +1,4 @@
-import type { SchemaURIMeta } from "@owf/eudi-attestation-schema";
+import type { SchemaUriMeta } from "@owf/eudi-attestation-schema";
 import type { z } from "zod";
 import { NotFoundError } from "../../../../shared/domain/not-found-error.js";
 import type { CredentialConfigCreateSchema } from "../schemas/credential-config.schema.js";
@@ -23,7 +23,7 @@ export type CredentialConfiguration = Omit<
             credentialConfigId?: string;
             format?: string;
             uri?: string;
-            meta?: SchemaURIMeta;
+            meta?: SchemaUriMeta;
         }>;
         trustedAuthorities?: Array<{
             trustListId?: string;

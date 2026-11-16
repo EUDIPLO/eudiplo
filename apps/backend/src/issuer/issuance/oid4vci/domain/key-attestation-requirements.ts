@@ -1,4 +1,4 @@
-import type { Jwk } from "@openid4vc/oauth2";
+import type { Jwk } from "@owf/jose";
 import type { WalletUnitReference } from "../../../status-list/domain/wallet-unit-reference.js";
 import { InvalidCredentialProof } from "./credential-proof-errors.js";
 

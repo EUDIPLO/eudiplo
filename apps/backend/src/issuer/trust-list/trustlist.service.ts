@@ -11,13 +11,14 @@ import {
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
-    createLoTE,
+    createLote,
     type LoTE,
-    type LoTEDocument,
-    LoTEException,
     type TrustedEntity as LoTETrustedEntity,
+    type LoteDocument,
+    LoteError,
+    LoteValidationError,
     service,
-    signLoTE,
+    signLote,
     trustedEntity,
 } from "@owf/eudi-lote";
 import { Repository } from "typeorm";
@@ -494,7 +495,7 @@ export class TrustListService {
         now: Date,
     ): Promise<boolean> {
         const sequenceNumber = (trustList.sequenceNumber || 1) + 1;
-        const data: LoTEDocument = {
+        const data: LoteDocument = {
             LoTE: {
                 ...lote,
                 ListAndSchemeInformation: {
@@ -655,7 +656,12 @@ export class TrustListService {
                     ),
                 );
             } catch (error) {
-                if (!(error instanceof LoTEException)) throw error;
+                if (
+                    !(error instanceof LoteError) &&
+                    !(error instanceof LoteValidationError)
+                ) {
+                    throw error;
+                }
                 issues.push({
                     path: ["entities", index, "info"],
                     message: error.message,
@@ -786,8 +792,8 @@ export class TrustListService {
         );
 
         // Sign using @owf/eudi-lote
-        const signed = await signLoTE({
-            lote: trustList.data as LoTEDocument,
+        const signed = await signLote({
+            lote: trustList.data as LoteDocument,
             keyId: cert.keyId,
             algorithm: await this.keyChainService.getSigningAlg(
                 trustList.tenantId,
@@ -908,11 +914,11 @@ export class TrustListService {
         entities: LoTETrustedEntity[],
         sequenceNumber = 1,
         walletProviders = false,
-    ): LoTEDocument {
+    ): LoteDocument {
         const issuedAt = new Date();
         const nextUpdate = trustListNextUpdate(issuedAt);
 
-        return createLoTE(
+        return createLote(
             {
                 SchemeOperatorName: [
                     {

@@ -207,7 +207,7 @@ describe("Presentation - status list key chain sharing the issuer key (e2e)", ()
         const authRequest = client.parseOpenid4vpAuthorizationRequest({
             authorizationRequest: offer.body.uri,
         });
-        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+        const resolved = await client.resolveOpenid4vpAuthorizationRequest({
             authorizationRequestPayload: authRequest.params,
             responseMode: { type: "direct_post" },
         });

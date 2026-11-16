@@ -3,12 +3,19 @@ import { INestApplication, Logger } from "@nestjs/common";
 import {
     clientAuthenticationAnonymous,
     clientAuthenticationClientAttestationJwt,
-    Jwk,
 } from "@openid4vc/oauth2";
 import { Openid4vciClient } from "@openid4vc/openid4vci";
+import { Jwk } from "@owf/jose";
 import { BitsPerStatus, StatusList } from "@owf/token-status-list";
 import { X509Certificate } from "@peculiar/x509";
-import { exportJWK, generateKeyPair, importPKCS8, SignJWT } from "jose";
+import {
+    exportJWK,
+    generateKeyPair,
+    importJWK,
+    importPKCS8,
+    type JWK,
+    SignJWT,
+} from "jose";
 import nock from "nock";
 import request from "supertest";
 import { App } from "supertest/types";
@@ -33,7 +40,7 @@ import {
 } from "../trust/attestation-certificate-periods.fixture.js";
 import {
     callbacks,
-    getSignJwtCallback,
+    getSignJwsCallback,
     IssuanceTestContext,
     setupIssuanceTestApp,
 } from "../utils.js";
@@ -489,7 +496,7 @@ describe("Issuance - Wallet Attestation", () => {
                     callbacks: {
                         ...callbacks,
                         clientAuthentication: clientAuthenticationAnonymous(),
-                        signJwt: getSignJwtCallback([
+                        signJws: getSignJwsCallback([
                             holderPrivateKeyJwk as Jwk,
                         ]),
                     },
@@ -499,7 +506,7 @@ describe("Issuance - Wallet Attestation", () => {
                     callbacks: {
                         ...callbacks,
                         clientAuthentication: clientAuthenticationAnonymous(),
-                        signJwt: getSignJwtCallback([
+                        signJws: getSignJwsCallback([
                             holderPrivateKeyJwk as Jwk,
                         ]),
                     },
@@ -526,13 +533,13 @@ describe("Issuance - Wallet Attestation", () => {
                             clientAuthenticationClientAttestationJwt({
                                 clientAttestationJwt,
                                 callbacks: {
-                                    signJwt: getSignJwtCallback([
+                                    signJws: getSignJwsCallback([
                                         holderPrivateKeyJwk as Jwk,
                                     ]),
                                     generateRandom: callbacks.generateRandom,
                                 },
                             }),
-                        signJwt: getSignJwtCallback([
+                        signJws: getSignJwsCallback([
                             holderPrivateKeyJwk as Jwk,
                         ]),
                     },
@@ -635,7 +642,7 @@ describe("Issuance - Wallet Attestation", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -766,7 +773,7 @@ describe("Issuance - Wallet Attestation", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -796,13 +803,13 @@ describe("Issuance - Wallet Attestation", () => {
                 clientAuthentication: clientAuthenticationClientAttestationJwt({
                     clientAttestationJwt,
                     callbacks: {
-                        signJwt: getSignJwtCallback([
+                        signJws: getSignJwsCallback([
                             holderPrivateKeyJwk as Jwk,
                         ]),
                         generateRandom: callbacks.generateRandom,
                     },
                 }),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -915,7 +922,7 @@ describe("Issuance - Wallet Attestation", () => {
                 callbacks: {
                     ...callbacks,
                     clientAuthentication: clientAuthenticationAnonymous(),
-                    signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                    signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
                 },
             });
             const credentialOffer = await client.resolveCredentialOffer(
@@ -941,13 +948,13 @@ describe("Issuance - Wallet Attestation", () => {
                         clientAuthenticationClientAttestationJwt({
                             clientAttestationJwt,
                             callbacks: {
-                                signJwt: getSignJwtCallback([
+                                signJws: getSignJwsCallback([
                                     holderPrivateKeyJwk as Jwk,
                                 ]),
                                 generateRandom: callbacks.generateRandom,
                             },
                         }),
-                    signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                    signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
                 },
             });
 
@@ -1076,7 +1083,7 @@ describe("Issuance - Wallet Attestation", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -1199,7 +1206,7 @@ describe("Issuance - Wallet Attestation", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         }).resolveCredentialOffer(offerResponse.body.uri);
 
@@ -1207,7 +1214,7 @@ describe("Issuance - Wallet Attestation", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         }).resolveIssuerMetadata(credentialOffer.credential_issuer);
 
@@ -1235,13 +1242,13 @@ describe("Issuance - Wallet Attestation", () => {
                 clientAuthentication: clientAuthenticationClientAttestationJwt({
                     clientAttestationJwt,
                     callbacks: {
-                        signJwt: getSignJwtCallback([
+                        signJws: getSignJwsCallback([
                             holderPrivateKeyJwk as Jwk,
                         ]),
                         generateRandom: callbacks.generateRandom,
                     },
                 }),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -1362,7 +1369,7 @@ describe("Issuance - Wallet Attestation", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -1398,13 +1405,13 @@ describe("Issuance - Wallet Attestation", () => {
                 clientAuthentication: clientAuthenticationClientAttestationJwt({
                     clientAttestationJwt,
                     callbacks: {
-                        signJwt: getSignJwtCallback([
+                        signJws: getSignJwsCallback([
                             holderPrivateKeyJwk as Jwk,
                         ]),
                         generateRandom: callbacks.generateRandom,
                     },
                 }),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -1520,7 +1527,7 @@ describe("Issuance - Wallet Attestation", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -1556,13 +1563,13 @@ describe("Issuance - Wallet Attestation", () => {
                 clientAuthentication: clientAuthenticationClientAttestationJwt({
                     clientAttestationJwt,
                     callbacks: {
-                        signJwt: getSignJwtCallback([
+                        signJws: getSignJwsCallback([
                             holderPrivateKeyJwk as Jwk,
                         ]),
                         generateRandom: callbacks.generateRandom,
                     },
                 }),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -1685,7 +1692,7 @@ describe("Issuance - Wallet Attestation", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
         const credentialOffer = await client.resolveCredentialOffer(
@@ -1717,13 +1724,13 @@ describe("Issuance - Wallet Attestation", () => {
                 clientAuthentication: clientAuthenticationClientAttestationJwt({
                     clientAttestationJwt,
                     callbacks: {
-                        signJwt: getSignJwtCallback([
+                        signJws: getSignJwsCallback([
                             holderPrivateKeyJwk as Jwk,
                         ]),
                         generateRandom: callbacks.generateRandom,
                     },
                 }),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -1814,7 +1821,7 @@ describe("Issuance - Wallet Attestation", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
         const credentialOffer = await client.resolveCredentialOffer(
@@ -1841,13 +1848,13 @@ describe("Issuance - Wallet Attestation", () => {
                 clientAuthentication: clientAuthenticationClientAttestationJwt({
                     clientAttestationJwt,
                     callbacks: {
-                        signJwt: getSignJwtCallback([
+                        signJws: getSignJwsCallback([
                             holderPrivateKeyJwk as Jwk,
                         ]),
                         generateRandom: callbacks.generateRandom,
                     },
                 }),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         }).retrievePreAuthorizedCodeAccessTokenFromOffer({
             credentialOffer,
@@ -2180,7 +2187,7 @@ describe("Issuance - Wallet Attestation", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -2216,13 +2223,13 @@ describe("Issuance - Wallet Attestation", () => {
                 clientAuthentication: clientAuthenticationClientAttestationJwt({
                     clientAttestationJwt,
                     callbacks: {
-                        signJwt: getSignJwtCallback([
+                        signJws: getSignJwsCallback([
                             holderPrivateKeyJwk as Jwk,
                         ]),
                         generateRandom: callbacks.generateRandom,
                     },
                 }),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -2315,7 +2322,7 @@ describe("Issuance - Wallet Attestation", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -2345,13 +2352,13 @@ describe("Issuance - Wallet Attestation", () => {
                 clientAuthentication: clientAuthenticationClientAttestationJwt({
                     clientAttestationJwt,
                     callbacks: {
-                        signJwt: getSignJwtCallback([
+                        signJws: getSignJwsCallback([
                             holderPrivateKeyJwk as Jwk,
                         ]),
                         generateRandom: callbacks.generateRandom,
                     },
                 }),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -2504,7 +2511,7 @@ describe("Issuance - Wallet Attestation", () => {
                 callbacks: {
                     ...callbacks,
                     clientAuthentication: clientAuthenticationAnonymous(),
-                    signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                    signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
                 },
             });
 
@@ -2535,13 +2542,13 @@ describe("Issuance - Wallet Attestation", () => {
                         clientAuthenticationClientAttestationJwt({
                             clientAttestationJwt,
                             callbacks: {
-                                signJwt: getSignJwtCallback([
+                                signJws: getSignJwsCallback([
                                     holderPrivateKeyJwk as Jwk,
                                 ]),
                                 generateRandom: callbacks.generateRandom,
                             },
                         }),
-                    signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                    signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
                 },
             });
 
@@ -2657,7 +2664,7 @@ describe("Issuance - Wallet Attestation", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -2716,13 +2723,13 @@ describe("Issuance - Wallet Attestation", () => {
                 clientAuthentication: clientAuthenticationClientAttestationJwt({
                     clientAttestationJwt: malformedAttestationJwt,
                     callbacks: {
-                        signJwt: getSignJwtCallback([
+                        signJws: getSignJwsCallback([
                             holderPrivateKeyJwk as Jwk,
                         ]),
                         generateRandom: callbacks.generateRandom,
                     },
                 }),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -2934,7 +2941,7 @@ describe("Issuance - Wallet Attestation", () => {
                     callbacks: {
                         ...callbacks,
                         clientAuthentication: clientAuthenticationAnonymous(),
-                        signJwt: getSignJwtCallback([
+                        signJws: getSignJwsCallback([
                             holderPrivateKeyJwk as Jwk,
                         ]),
                     },
@@ -2975,13 +2982,13 @@ describe("Issuance - Wallet Attestation", () => {
                             clientAuthenticationClientAttestationJwt({
                                 clientAttestationJwt,
                                 callbacks: {
-                                    signJwt: getSignJwtCallback([
+                                    signJws: getSignJwsCallback([
                                         holderPrivateKeyJwk as Jwk,
                                     ]),
                                     generateRandom: callbacks.generateRandom,
                                 },
                             }),
-                        signJwt: getSignJwtCallback([
+                        signJws: getSignJwsCallback([
                             holderPrivateKeyJwk as Jwk,
                         ]),
                     },
@@ -3089,7 +3096,7 @@ describe("Issuance - Wallet Attestation", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -3113,30 +3120,40 @@ describe("Issuance - Wallet Attestation", () => {
         });
 
         // Create client with attestation that will generate PoP with WRONG audience
-        // We need a custom signJwt that generates PoP with wrong audience
+        // The PoP is built here, as the library signs the claims it chose.
         const clientWithWrongAudAttestation = new Openid4vciClient({
             callbacks: {
                 ...callbacks,
-                clientAuthentication: clientAuthenticationClientAttestationJwt({
-                    clientAttestationJwt,
-                    callbacks: {
-                        signJwt: async (jwtSigner, jwt) => {
-                            // Override the audience in the PoP JWT
-                            const modifiedJwt = {
-                                ...jwt,
-                                payload: {
-                                    ...jwt.payload,
-                                    aud: ["https://wrong-audience.example.com"],
-                                },
-                            };
-                            return getSignJwtCallback([
-                                holderPrivateKeyJwk as Jwk,
-                            ])(jwtSigner, modifiedJwt);
-                        },
-                        generateRandom: callbacks.generateRandom,
-                    },
-                }),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                clientAuthentication: async ({
+                    headers,
+                    attestationChallenge,
+                }) => {
+                    const pop = await new SignJWT({
+                        iss: "wallet-instance-id",
+                        aud: ["https://wrong-audience.example.com"],
+                        jti: crypto.randomUUID(),
+                        ...(attestationChallenge && {
+                            challenge: attestationChallenge,
+                        }),
+                    })
+                        .setProtectedHeader({
+                            typ: "oauth-client-attestation-pop+jwt",
+                            alg: "ES256",
+                        })
+                        .setIssuedAt()
+                        .sign(
+                            await importJWK(
+                                holderPrivateKeyJwk as JWK,
+                                "ES256",
+                            ),
+                        );
+                    headers.set(
+                        "OAuth-Client-Attestation",
+                        clientAttestationJwt,
+                    );
+                    headers.set("OAuth-Client-Attestation-PoP", pop);
+                },
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 

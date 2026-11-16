@@ -148,6 +148,14 @@ describe("Status List - Token Format Negotiation", () => {
                     .expect(200);
                 const payload = await expectJwsSignedWithX5c(jwt.text, alg);
                 expect(payload.status_list).toBeDefined();
+                // The kid as the key chain publishes it, next to the x5c.
+                const keyChain = await request(app.getHttpServer())
+                    .get(`/key-chain/${keyChainId}`)
+                    .set("Authorization", `Bearer ${authToken}`)
+                    .expect(200);
+                expect(decodeProtectedHeader(jwt.text).kid).toBe(
+                    keyChain.body.activePublicKey.kid ?? keyChainId,
+                );
 
                 const cwt = await request(app.getHttpServer())
                     .get(url)

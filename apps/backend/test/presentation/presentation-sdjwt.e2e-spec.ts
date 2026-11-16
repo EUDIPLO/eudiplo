@@ -76,7 +76,7 @@ describe("Presentation - SD-JWT Credential", () => {
             authorizationRequest: res.body.uri,
         });
 
-        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+        const resolved = await client.resolveOpenid4vpAuthorizationRequest({
             authorizationRequestPayload: authRequest.params,
             responseMode: { type: "direct_post" },
         });
@@ -241,7 +241,7 @@ describe("Presentation - SD-JWT Credential", () => {
             authorizationRequest: res.body.uri,
         });
 
-        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+        const resolved = await client.resolveOpenid4vpAuthorizationRequest({
             authorizationRequestPayload: authRequest.params,
             responseMode: { type: "direct_post" },
         });
@@ -340,7 +340,7 @@ describe("Presentation - SD-JWT Credential", () => {
             authorizationRequest: res.body.uri,
         });
 
-        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+        const resolved = await client.resolveOpenid4vpAuthorizationRequest({
             authorizationRequestPayload: authRequest.params,
             responseMode: { type: "direct_post" },
         });
@@ -405,7 +405,7 @@ describe("Presentation - SD-JWT Credential", () => {
                 authorizationRequest: res.body.uri,
             });
 
-            const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+            const resolved = await client.resolveOpenid4vpAuthorizationRequest({
                 authorizationRequestPayload: authRequest.params,
                 responseMode: { type: "direct_post" },
             });
@@ -504,7 +504,7 @@ describe("Presentation - SD-JWT Credential", () => {
                 authorizationRequest: res.body.uri,
             });
 
-            const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+            const resolved = await client.resolveOpenid4vpAuthorizationRequest({
                 authorizationRequestPayload: authRequest.params,
                 responseMode: { type: "direct_post" },
             });
@@ -708,7 +708,7 @@ describe("Presentation - SD-JWT Credential", () => {
             authorizationRequest: res.body.uri,
         });
 
-        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+        const resolved = await client.resolveOpenid4vpAuthorizationRequest({
             authorizationRequestPayload: authRequest.params,
             responseMode: { type: "direct_post" },
         });

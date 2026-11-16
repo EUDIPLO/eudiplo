@@ -1,7 +1,8 @@
 import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
-import { clientAuthenticationAnonymous, type Jwk } from "@openid4vc/oauth2";
+import { clientAuthenticationAnonymous } from "@openid4vc/oauth2";
 import { Openid4vciClient } from "@openid4vc/openid4vci";
+import { type Jwk } from "@owf/jose";
 import {
     decodeProtectedHeader,
     exportJWK,
@@ -17,7 +18,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { IssuanceConfig } from "../../src/issuer/configuration/issuance/entities/issuance-config.entity.js";
 import {
     callbacks,
-    getSignJwtCallback,
+    getSignJwsCallback,
     IssuanceTestContext,
     setupIssuanceTestApp,
 } from "../utils.js";
@@ -77,7 +78,7 @@ describe("Authorization server key chain", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([
+                signJws: getSignJwsCallback([
                     (await exportJWK(holder.privateKey)) as Jwk,
                 ]),
             },

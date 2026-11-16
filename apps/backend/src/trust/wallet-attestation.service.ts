@@ -6,7 +6,7 @@ import {
     UnauthorizedException,
 } from "@nestjs/common";
 import { Openid4vciIssuer } from "@openid4vc/openid4vci";
-import type { StatusListEntry } from "@owf/token-status-list";
+import type { StatusListReference } from "@owf/token-status-list";
 import * as x509 from "@peculiar/x509";
 import { decodeProtectedHeader, JWK } from "jose";
 import { Span } from "nestjs-otel";
@@ -92,6 +92,7 @@ export class WalletAttestationService {
         );
         return new Openid4vciIssuer({
             callbacks,
+            allowedSkewInSeconds: this.settings.cryptoToleranceSeconds,
         });
     }
 
@@ -317,7 +318,7 @@ export class WalletAttestationService {
         matchedEntity: MatchedTrustedEntity,
         trustStore: BuiltTrustStore,
         statusCheckMode: RevocationCheckMode,
-    ): Promise<StatusListEntry | undefined> {
+    ): Promise<StatusListReference | undefined> {
         try {
             return await this.validateAttestationStatus(
                 tenantId,
@@ -453,7 +454,7 @@ export class WalletAttestationService {
         trustStore: BuiltTrustStore | null,
         statusCheckMode: RevocationCheckMode,
         label: AttestationLabel = "Wallet attestation",
-    ): Promise<StatusListEntry | undefined> {
+    ): Promise<StatusListReference | undefined> {
         const policy = revocationModeToPolicy(statusCheckMode);
         if (!policy.enabled) {
             this.logger.debug(
@@ -469,7 +470,7 @@ export class WalletAttestationService {
             }
         }
 
-        let statusEntry: StatusListEntry | undefined;
+        let statusEntry: StatusListReference | undefined;
         try {
             // Get the status entry from the JWT. A malformed status claim
             // throws and rejects in both strict and best_effort.

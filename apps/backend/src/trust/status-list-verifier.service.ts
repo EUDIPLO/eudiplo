@@ -3,7 +3,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import {
     StatusListCwt,
     StatusListCwtClaimKey,
-    StatusListEntry,
+    StatusListReference,
     StatusType,
 } from "@owf/token-status-list";
 import { base64url, decodeJwt, decodeProtectedHeader } from "jose";
@@ -60,9 +60,9 @@ const STATUS_LIST_MAX_INFLATED_BYTES = 16 * 1024 * 1024;
 /**
  * Upper bound for the decompressed `lst` of a status list CWT, 8,388,608
  * statuses at one bit each. @owf/mdoc reads the status of a CWT itself, with
- * @owf/token-status-list, which decompresses the whole list and turns every
- * status into a number: about 64 bytes of memory per decompressed byte at one
- * bit per status, so about 70 MB for this limit and 1 GiB for the JWT one.
+ * @owf/token-status-list. Since 0.8 that reads the status in the decompressed
+ * bytes instead of turning every status into a number, and @owf/mdoc allows
+ * 16 MiB by default; EUDIPLO keeps the lower limit it already published.
  * A list EUDIPLO issues with the largest STATUS_CAPACITY (1,000,000) fits,
  * even at eight bits per status.
  */
@@ -206,7 +206,7 @@ export class StatusListVerifierService {
      * MalformedStatusReferenceError if its `status` claim or `status_list`
      * reference is malformed
      */
-    getStatusEntryFromJwt(jwt: string): StatusListEntry | undefined {
+    getStatusEntryFromJwt(jwt: string): StatusListReference | undefined {
         return parseStatusListReference(decodeJwt(jwt).status);
     }
 
@@ -229,7 +229,7 @@ export class StatusListVerifierService {
      */
     getStatusFromStatusListJwt(
         statusListJwt: string,
-        entry: StatusListEntry,
+        entry: StatusListReference,
         clockToleranceSeconds = 0,
     ): StatusCheckResult {
         let header: ReturnType<typeof decodeProtectedHeader>;

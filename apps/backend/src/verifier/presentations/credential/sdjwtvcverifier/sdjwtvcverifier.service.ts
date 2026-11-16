@@ -1,8 +1,11 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { digest } from "@owf/crypto";
-import { SLException, type StatusListEntry } from "@owf/token-status-list";
-import { Jwt, SDJWTException } from "@sd-jwt/core";
-import { SDJwtVcInstance, VerificationResult } from "@sd-jwt/sd-jwt-vc";
+import {
+    StatusListError,
+    type StatusListReference,
+} from "@owf/token-status-list";
+import { Jwt, SdJwtError } from "@sd-jwt/core";
+import { SdJwtVcInstance, VerificationResult } from "@sd-jwt/sd-jwt-vc";
 import { decodeJwt, decodeProtectedHeader, JWK } from "jose";
 import { Span } from "nestjs-otel";
 import { PinoLogger } from "nestjs-pino";
@@ -69,7 +72,7 @@ export class SdjwtvcverifierService {
 
     /**
      * Verifies an SD-JWT-VC credential.
-     * Creates a fresh SDJwtVcInstance per verification to safely capture
+     * Creates a fresh SdJwtVcInstance per verification to safely capture
      * the matched TrustedEntity for status list verification.
      *
      * Transaction data hashes in the KB-JWT are not checked here: an entry
@@ -100,7 +103,7 @@ export class SdjwtvcverifierService {
         let pidIssuer = false;
 
         // Create a fresh instance per verification to ensure thread safety
-        const sdjwtInstance = new SDJwtVcInstance({
+        const sdjwtInstance = new SdJwtVcInstance({
             hasher: digest,
             verifier: async (data: string, signature: string) => {
                 const result = options.federationTrustSource
@@ -223,7 +226,7 @@ export class SdjwtvcverifierService {
     ): Promise<void> {
         const payload = result.payload as Record<string, unknown>;
         const status = payload.status;
-        let reference: StatusListEntry | undefined;
+        let reference: StatusListReference | undefined;
         try {
             reference = parseStatusListReference(status);
         } catch (error) {
@@ -295,7 +298,7 @@ export class SdjwtvcverifierService {
      * @throws RevocationListUnavailableError if the list cannot be fetched
      */
     private async checkStatusListEntry(
-        reference: StatusListEntry,
+        reference: StatusListReference,
         options: VerifierOptions,
         verifyListSignature: (
             data: string,
@@ -314,7 +317,7 @@ export class SdjwtvcverifierService {
             .verify(verifyListSignature, { skewSeconds })
             .catch((error: unknown) => {
                 throw Object.assign(
-                    new SLException(
+                    new StatusListError(
                         `Status List JWT verification failed: ${error instanceof Error ? error.message : String(error)}`,
                         { uri },
                     ),
@@ -329,7 +332,7 @@ export class SdjwtvcverifierService {
                 skewSeconds,
             );
         if (!isValid) {
-            throw new SDJWTException("Status is not valid", {
+            throw new SdJwtError("Status is not valid", {
                 details: { uri, idx, status },
                 code: "STATUS_INVALID",
             });
