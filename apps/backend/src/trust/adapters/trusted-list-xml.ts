@@ -1,10 +1,11 @@
 import { DOMParser, type Element } from "@xmldom/xmldom";
 
-const TSL_NS = "http://uri.etsi.org/02231/v2#";
-const TSLX_NS = "http://uri.etsi.org/02231/v2/additionaltypes#";
-const DSIG_NS = "http://www.w3.org/2000/09/xmldsig#";
-const XADES_NS = "http://uri.etsi.org/01903/v1.3.2#";
-const SIGNED_PROPERTIES_TYPE = "http://uri.etsi.org/01903#SignedProperties";
+// XML namespace and type identifiers, compared as names, never fetched.
+const TSL_NS = "http://uri.etsi.org/02231/v2#"; // NOSONAR: namespace name, not fetched
+const TSLX_NS = "http://uri.etsi.org/02231/v2/additionaltypes#"; // NOSONAR: namespace name, not fetched
+const DSIG_NS = "http://www.w3.org/2000/09/xmldsig#"; // NOSONAR: namespace name, not fetched
+const XADES_NS = "http://uri.etsi.org/01903/v1.3.2#"; // NOSONAR: namespace name, not fetched
+const SIGNED_PROPERTIES_TYPE = "http://uri.etsi.org/01903#SignedProperties"; // NOSONAR: type identifier, not fetched
 
 /**
  * The most references a Trusted List's signature may have. Annex B needs
