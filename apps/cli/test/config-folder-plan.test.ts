@@ -445,6 +445,11 @@ describe("config plan / import with a tenant folder", () => {
     });
 
     it("takes --allow-env from the command line", async () => {
+        // Its own CLI config, not the one in the home directory.
+        const cliConfig = join(cwd, "cli-config.json");
+        await writeJson(cliConfig, config);
+        context.env.EUDIPLO_CLI_CONFIG = cliConfig;
+
         const code = await runCli(
             ["config", "plan", "acme", "--allow-env", "PORTAL_SECRET"],
             context,
