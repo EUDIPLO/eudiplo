@@ -6,8 +6,9 @@
     (click)="setJsonMode(!jsonMode)"
     [disabled]="jsonMode && !supported"
   >
-    <mat-icon>{{ jsonMode ? 'list_alt' : 'code' }}</mat-icon
-    >{{ jsonMode ? 'Use visual builder' : 'Edit DCQL JSON' }}
+    <mat-icon>{{ jsonMode ? 'list_alt' : 'code' }}</mat-icon>{{
+      jsonMode ? 'Use visual builder' : 'Edit DCQL JSON'
+    }}
   </button>
 </div>
 @if (!supported && !onlyEmptyClaims) {

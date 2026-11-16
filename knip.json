@@ -7,9 +7,6 @@
     "openssl",
     "openapi-ts"
   ],
-  "ignoreUnresolved": [
-    "tslib"
-  ],
   "workspaces": {
     ".": {
       "entry": [
@@ -24,6 +21,7 @@
         "@semantic-release/npm",
         "@codedependant/semantic-release-docker",
         "@noble/hashes",
+        "tslib",
         "@types/k6",
         "k6"
       ]
@@ -63,8 +61,6 @@
         "e2e/**/*.{ts,mjs}"
       ],
       "ignoreDependencies": [
-        "@fontsource/roboto",
-        "material-icons",
         "eslint-config-prettier",
         "eslint-plugin-prettier"
       ]

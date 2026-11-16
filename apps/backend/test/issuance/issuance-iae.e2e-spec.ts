@@ -843,7 +843,7 @@ describe("Interactive Authorization Endpoint (IAE)", () => {
                 client.parseOpenid4vpAuthorizationRequest({
                     authorizationRequest: `openid4vp://?${initialResponse.body.openid4vp_request.request}`,
                 });
-            const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+            const resolved = await client.resolveOpenid4vpAuthorizationRequest({
                 authorizationRequestPayload: authorizationRequest.params,
                 responseMode: { type: "direct_post" },
             });

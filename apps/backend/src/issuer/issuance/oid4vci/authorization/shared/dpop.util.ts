@@ -95,7 +95,7 @@ export interface DpopProof {
  */
 export async function verifyDpopProof(
     proof: DpopProof,
-    callbacks: Pick<CallbackContext, "hash" | "verifyJwt">,
+    callbacks: Pick<CallbackContext, "hash" | "verifyJws">,
     replayRegistry: DpopProofReplayRegistry,
 ): Promise<string | undefined> {
     if (!proof.jwt) {

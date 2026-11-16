@@ -343,7 +343,7 @@ describe("Single-Use Validation (Issue #503) - OID4VP", () => {
             authorizationRequest: res.body.uri,
         });
 
-        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+        const resolved = await client.resolveOpenid4vpAuthorizationRequest({
             authorizationRequestPayload: authRequest.params,
             responseMode: { type: "direct_post" },
         });
@@ -454,7 +454,7 @@ describe("Session expiry (Issue #1120) - OID4VP", () => {
         const authRequest = client.parseOpenid4vpAuthorizationRequest({
             authorizationRequest: res.body.uri,
         });
-        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+        const resolved = await client.resolveOpenid4vpAuthorizationRequest({
             authorizationRequestPayload: authRequest.params,
             responseMode: { type: "direct_post" },
         });
@@ -776,7 +776,7 @@ describe("Session cancellation (Issue #1119) - OID4VP", () => {
         const authRequest = client.parseOpenid4vpAuthorizationRequest({
             authorizationRequest: res.body.uri,
         });
-        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+        const resolved = await client.resolveOpenid4vpAuthorizationRequest({
             authorizationRequestPayload: authRequest.params,
             responseMode: { type: "direct_post" },
         });

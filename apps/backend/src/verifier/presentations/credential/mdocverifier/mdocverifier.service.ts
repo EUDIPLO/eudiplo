@@ -13,7 +13,10 @@ import * as x509 from "@peculiar/x509";
 import { Span } from "nestjs-otel";
 import { PinoLogger } from "nestjs-pino";
 import { VerificationProvenance } from "../../../../session/domain/session-outcome.js";
-import { assertCertificateChainLength } from "../../../../shared/utils/certificate-chain-length.util.js";
+import {
+    assertCertificateChainLength,
+    CERTIFICATE_CHAIN_LENGTH_FAILURE,
+} from "../../../../shared/utils/certificate-chain-length.util.js";
 import { CERTIFICATE_PATH_LIMIT_FAILURE } from "../../../../shared/utils/certificate-path.util.js";
 import { MalformedStatusReferenceError } from "../../../../trust/domain/status-list-reference.js";
 import {
@@ -643,8 +646,13 @@ export class MdocverifierService {
 
         // A path past MAX_CERTIFICATE_PATH_LENGTH or MAX_PATH_SIGNATURE_CHECKS
         // is a chain that cannot be built, not an invalid signature, which
-        // the words "signature checks" would decide otherwise.
-        if (CERTIFICATE_PATH_LIMIT_FAILURE.test(message)) {
+        // the words "signature checks" would decide otherwise. An x5chain
+        // past MAX_CERTIFICATE_CHAIN_LENGTH is refused, not unavailable,
+        // although @owf/mdoc names the status list in the message.
+        if (
+            CERTIFICATE_PATH_LIMIT_FAILURE.test(message) ||
+            CERTIFICATE_CHAIN_LENGTH_FAILURE.test(message)
+        ) {
             return "verification_error";
         }
 

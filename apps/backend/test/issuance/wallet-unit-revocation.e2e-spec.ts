@@ -1,15 +1,12 @@
 import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
-import {
-    clientAuthenticationAnonymous,
-    Jwk,
-    JwtSignerJwk,
-} from "@openid4vc/oauth2";
+import { clientAuthenticationAnonymous } from "@openid4vc/oauth2";
 import {
     createKeyAttestationJwt,
     Openid4vciClient,
     type Openid4vciRetrieveCredentialsError,
 } from "@openid4vc/openid4vci";
+import { Jwk, type JwsSignerJwk } from "@owf/jose";
 import { StatusList } from "@owf/token-status-list";
 import { X509Certificate } from "@peculiar/x509";
 import {
@@ -36,7 +33,7 @@ import {
 } from "../trust/attestation-certificate-periods.fixture.js";
 import {
     callbacks,
-    getSignJwtCallback,
+    getSignJwsCallback,
     IssuanceTestContext,
     setupIssuanceTestApp,
 } from "../utils.js";
@@ -223,13 +220,13 @@ describe("Issuance - revocation with the wallet unit", () => {
         const attestation = await createKeyAttestationJwt({
             callbacks: {
                 ...callbacks,
-                signJwt: getSignJwtCallback([providerPrivateJwk as Jwk]),
+                signJws: getSignJwsCallback([providerPrivateJwk as Jwk]),
             },
             signer: {
                 method: "jwk",
                 alg: "ES256",
                 publicJwk: providerPublicJwk,
-            } as JwtSignerJwk,
+            } as JwsSignerJwk,
             issuedAt: new Date(),
             expiresAt: new Date(Date.now() + 300_000),
             use:

@@ -4,8 +4,6 @@ import { INestApplication } from "@nestjs/common";
 import {
     clientAuthenticationAnonymous,
     createDpopHeadersForRequest,
-    Jwk,
-    JwtSignerJwk,
 } from "@openid4vc/oauth2";
 import {
     createKeyAttestationJwt,
@@ -14,8 +12,9 @@ import {
     type Openid4vciRetrieveCredentialsError,
 } from "@openid4vc/openid4vci";
 import { digest } from "@owf/crypto";
+import { Jwk, type JwsSignerJwk } from "@owf/jose";
 import { X509Certificate } from "@peculiar/x509";
-import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
+import { SdJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import nock from "nock";
 import request from "supertest";
@@ -37,7 +36,7 @@ import {
 } from "../trust/attestation-certificate-periods.fixture.js";
 import {
     callbacks,
-    getSignJwtCallback,
+    getSignJwsCallback,
     IssuanceTestContext,
     setupIssuanceTestApp,
 } from "../utils.js";
@@ -80,7 +79,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
     let clientId: string;
     let ctx: IssuanceTestContext;
 
-    const sdjwt = new SDJwtVcInstance({
+    const sdjwt = new SdJwtVcInstance({
         hasher: digest,
         hashAlg: "sha-256",
     });
@@ -122,7 +121,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
         const credentialOffer = await client.resolveCredentialOffer(
@@ -150,7 +149,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                 method: "jwk",
                 alg: "ES256",
                 publicJwk: holderPublicKeyJwk,
-            } as JwtSignerJwk,
+            } as JwsSignerJwk,
             clientId,
             issuedAt: new Date(),
             credentialConfigurationId:
@@ -220,18 +219,18 @@ describe("Issuance - Pre-authorized Code Flow", () => {
         });
         const holderPrivateKeyJwk = await exportJWK(holderKeyPair.privateKey);
         const holderPublicKeyJwk = await exportJWK(holderKeyPair.publicKey);
-        const signJwt = getSignJwtCallback([holderPrivateKeyJwk as Jwk]);
+        const signJws = getSignJwsCallback([holderPrivateKeyJwk as Jwk]);
         const holderSigner = {
             method: "jwk",
             alg: "ES256",
             publicJwk: holderPublicKeyJwk,
-        } as JwtSignerJwk;
+        } as JwsSignerJwk;
 
         const client = new Openid4vciClient({
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt,
+                signJws,
             },
         });
         const credentialOffer = await client.resolveCredentialOffer(
@@ -255,7 +254,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
             request: { method: "POST", url: credentialEndpoint },
             signer: holderSigner,
             accessToken,
-            callbacks: { ...callbacks, signJwt },
+            callbacks: { ...callbacks, signJws },
         });
 
         // Each request carries a fresh key proof, so only the DPoP proof repeats.
@@ -458,7 +457,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                 callbacks: {
                     ...callbacks,
                     clientAuthentication: clientAuthenticationAnonymous(),
-                    signJwt: getSignJwtCallback([
+                    signJws: getSignJwsCallback([
                         attestationSignerPrivateJwk as Jwk,
                     ]),
                 },
@@ -482,7 +481,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
             const attestationJwt = await createKeyAttestationJwt({
                 callbacks: {
                     ...callbacks,
-                    signJwt: getSignJwtCallback([
+                    signJws: getSignJwsCallback([
                         attestationSignerPrivateJwk as Jwk,
                     ]),
                 },
@@ -490,7 +489,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                     method: "jwk",
                     alg: "ES256",
                     publicJwk: attestationSignerPublicJwk,
-                } as JwtSignerJwk,
+                } as JwsSignerJwk,
                 issuedAt: new Date(),
                 use: "proof_type.attestation",
                 attestedKeys: [attestedHolderPublicJwk as Jwk],
@@ -556,7 +555,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -581,7 +580,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                 method: "jwk",
                 alg: "ES256",
                 publicJwk: holderPublicKeyJwk,
-            } as JwtSignerJwk,
+            } as JwsSignerJwk,
             clientId,
             issuedAt: new Date(),
             credentialConfigurationId:
@@ -592,7 +591,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
         const attestationJwt = await createKeyAttestationJwt({
             callbacks: {
                 ...callbacks,
-                signJwt: getSignJwtCallback([
+                signJws: getSignJwsCallback([
                     attestationSignerPrivateJwk as Jwk,
                 ]),
             },
@@ -600,7 +599,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                 method: "jwk",
                 alg: "ES256",
                 publicJwk: attestationSignerPublicJwk,
-            } as JwtSignerJwk,
+            } as JwsSignerJwk,
             issuedAt: new Date(),
             use: "proof_type.attestation",
             attestedKeys: [holderPublicKeyJwk as Jwk],
@@ -678,7 +677,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                 callbacks: {
                     ...callbacks,
                     clientAuthentication: clientAuthenticationAnonymous(),
-                    signJwt: getSignJwtCallback([
+                    signJws: getSignJwsCallback([
                         attestationSignerPrivateJwk as Jwk,
                     ]),
                 },
@@ -701,7 +700,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
             const attestationJwt = await createKeyAttestationJwt({
                 callbacks: {
                     ...callbacks,
-                    signJwt: getSignJwtCallback([
+                    signJws: getSignJwsCallback([
                         attestationSignerPrivateJwk as Jwk,
                     ]),
                 },
@@ -709,7 +708,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                     method: "jwk",
                     alg: "ES256",
                     publicJwk: attestationSignerPublicJwk,
-                } as JwtSignerJwk,
+                } as JwsSignerJwk,
                 issuedAt: new Date(),
                 use: "proof_type.attestation",
                 attestedKeys: [attestedHolderPublicJwk as Jwk],
@@ -727,7 +726,9 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                     },
                 }),
             ).rejects.toThrow(
-                "Attestation proof must contain an x5c certificate chain for trust validation",
+                // @openid4vc/openid4vci refuses an attestation signed with a jwk
+                // header before EUDIPLO checks for x5c.
+                /signer method\(s\) that are not allowed/,
             );
         } finally {
             await request(app.getHttpServer())
@@ -864,7 +865,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                     const attestationJwt = await createKeyAttestationJwt({
                         callbacks: {
                             ...callbacks,
-                            signJwt: getSignJwtCallback([
+                            signJws: getSignJwsCallback([
                                 attestationSignerPrivateJwk as Jwk,
                             ]),
                         },
@@ -872,7 +873,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                             method: "jwk",
                             alg: "ES256",
                             publicJwk: attestationSignerPublicJwk,
-                        } as JwtSignerJwk,
+                        } as JwsSignerJwk,
                         issuedAt: new Date(),
                         use:
                             proofType === "jwt"
@@ -1020,7 +1021,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                 callbacks: {
                     ...callbacks,
                     clientAuthentication: clientAuthenticationAnonymous(),
-                    signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                    signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
                 },
             });
 
@@ -1050,7 +1051,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                         method: "jwk",
                         alg: "ES256",
                         publicJwk: holderPublicKeyJwk,
-                    } as JwtSignerJwk,
+                    } as JwsSignerJwk,
                     clientId,
                     issuedAt: new Date(),
                     credentialConfigurationId: attestationOnlyConfigId,
@@ -1151,7 +1152,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                       await createKeyAttestationJwt({
                           callbacks: {
                               ...callbacks,
-                              signJwt: getSignJwtCallback([
+                              signJws: getSignJwsCallback([
                                   providerPrivateJwk as Jwk,
                               ]),
                           },
@@ -1159,7 +1160,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                               method: "jwk",
                               alg: "ES256",
                               publicJwk: providerPublicJwk,
-                          } as JwtSignerJwk,
+                          } as JwsSignerJwk,
                           issuedAt: new Date(),
                           expiresAt: new Date(Date.now() + 300_000),
                           use:
@@ -1720,7 +1721,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
         const credentialOffer = await client.resolveCredentialOffer(
@@ -1746,7 +1747,7 @@ describe("Issuance - Pre-authorized Code Flow", () => {
                 method: "jwk",
                 alg: holderAlg,
                 publicJwk: holderPublicKeyJwk,
-            } as JwtSignerJwk,
+            } as JwsSignerJwk,
             clientId,
             issuedAt: new Date(),
             credentialConfigurationId:

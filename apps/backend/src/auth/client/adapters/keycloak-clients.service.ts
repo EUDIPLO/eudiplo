@@ -14,9 +14,9 @@ import { decodeJwt } from "jose";
 import { Repository } from "typeorm";
 import { ConfigImportService } from "../../../platform/config-import/config-import.service.js";
 import { splitCommaSeparatedList } from "../../../shared/domain/comma-separated-list.js";
+import { OIDC_DEFAULTS } from "../../auth-settings.js";
 import { keycloakAuthorizationRoles } from "../../keycloak-authorization-roles.js";
 import { syncEudiploRealmRoles } from "../../keycloak-realm-roles.js";
-import { OIDC_DEFAULTS } from "../../auth-settings.js";
 import { allRoles, Role } from "../../roles/role.enum.js";
 import { ClientsProvider } from "../client.provider.js";
 import {

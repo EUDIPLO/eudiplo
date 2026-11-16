@@ -1,15 +1,12 @@
 import { INestApplication } from "@nestjs/common";
-import {
-    clientAuthenticationAnonymous,
-    Jwk,
-    JwtSignerJwk,
-} from "@openid4vc/oauth2";
+import { clientAuthenticationAnonymous } from "@openid4vc/oauth2";
 import {
     extractScopesForCredentialConfigurationIds,
     Openid4vciClient,
 } from "@openid4vc/openid4vci";
 import { digest } from "@owf/crypto";
-import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
+import { Jwk, type JwsSignerJwk } from "@owf/jose";
+import { SdJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
 import { exportJWK, generateKeyPair } from "jose";
 import request from "supertest";
 import { App } from "supertest/types";
@@ -17,7 +14,7 @@ import { Agent, fetch, setGlobalDispatcher } from "undici";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import {
     callbacks,
-    getSignJwtCallback,
+    getSignJwsCallback,
     IssuanceTestContext,
     issuerStateOf,
     setupIssuanceTestApp,
@@ -36,7 +33,7 @@ describe("Issuance - Authorization Code Flow", () => {
     let authToken: string;
     let ctx: IssuanceTestContext;
 
-    const sdjwt = new SDJwtVcInstance({
+    const sdjwt = new SdJwtVcInstance({
         hasher: digest,
         hashAlg: "sha-256",
     });
@@ -73,7 +70,7 @@ describe("Issuance - Authorization Code Flow", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
         const credentialOffer = await client.resolveCredentialOffer(
@@ -88,7 +85,7 @@ describe("Issuance - Authorization Code Flow", () => {
             method: "jwk",
             alg: "ES256",
             publicJwk: holderPublicKeyJwk,
-        } as JwtSignerJwk;
+        } as JwsSignerJwk;
 
         const clientId = "wallet";
         const redirectUri = "http://127.0.0.1:3000/callback";
@@ -132,7 +129,7 @@ describe("Issuance - Authorization Code Flow", () => {
                 method: "jwk",
                 alg: "ES256",
                 publicJwk: holderPublicKeyJwk,
-            } as JwtSignerJwk,
+            } as JwsSignerJwk,
             clientId,
             issuedAt: new Date(),
             credentialConfigurationId:

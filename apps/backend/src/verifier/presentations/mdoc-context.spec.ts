@@ -1,9 +1,4 @@
-import {
-    CoseInvalidAlgorithmError,
-    cborEncode,
-    Sign1,
-    SignatureAlgorithm,
-} from "@owf/cose";
+import { cborEncode, Sign1, SignatureAlgorithm } from "@owf/cose";
 import { CoseKey } from "@owf/mdoc";
 import * as x509 from "@peculiar/x509";
 import { exportJWK, generateKeyPair } from "jose";
@@ -147,10 +142,10 @@ describe("mdocContext COSE_Sign1", () => {
         },
     );
 
-    it("leaves a fully-specified IssuerAuth alg unverifiable, as issuerauth_alg_values says", async () => {
-        // @owf/cose refuses alg values outside its classic enum before
-        // EUDIPLO's check runs; if that changes, issuerauth_alg_values in
-        // OID4VP requests may list -9, -51 and -52 as well.
+    it("verifies a COSE_Sign1 with a fully-specified alg", async () => {
+        // @owf/cose accepts -9, -51 and -52 since 0.8, and EUDIPLO's check
+        // maps them to the curve of the key. issuerauth_alg_values in OID4VP
+        // requests still lists only the classic identifiers.
         const { privateKey, verificationKey } = await keysFor("ES256");
         const { signature } = await signedSigStructure(
             "ES256",
@@ -168,7 +163,7 @@ describe("mdocContext COSE_Sign1", () => {
                 { key: verificationKey },
                 mdocContext.cose.sign1,
             ),
-        ).rejects.toThrow(CoseInvalidAlgorithmError);
+        ).resolves.toBe(true);
     });
 
     it("rejects a COSE_Sign1 without alg", async () => {

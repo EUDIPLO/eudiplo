@@ -1,4 +1,4 @@
-import type { Jwk } from "@openid4vc/oauth2";
+import type { Jwk } from "@owf/jose";
 import { describe, expect, it } from "vitest";
 import { InvalidCredentialProof } from "./credential-proof-errors.js";
 import {

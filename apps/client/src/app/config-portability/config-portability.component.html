@@ -136,8 +136,7 @@
           <ng-container matColumnDef="resource">
             <th mat-header-cell *matHeaderCellDef>Resource</th>
             <td mat-cell *matCellDef="let item">
-              <strong>{{ item.kind }}</strong
-              >/{{ item.id }}
+              <strong>{{ item.kind }}</strong>/{{ item.id }}
             </td>
           </ng-container>
           <ng-container matColumnDef="version">
@@ -166,8 +165,7 @@
               }
               @for (issue of item.issues; track issue.code + issue.path) {
                 <div class="issue" [class.warning]="issue.severity === 'warning'">
-                  <strong>{{ issue.code }}</strong
-                  >: {{ issue.message }}
+                  <strong>{{ issue.code }}</strong>: {{ issue.message }}
                   <code>{{ issue.path }}</code>
                 </div>
               }
@@ -186,8 +184,7 @@
         @for (item of plan.items; track item.kind + item.id) {
           @if (item.changes?.length) {
             <h3>
-              Changes to <strong>{{ item.kind }}</strong
-              >/{{ item.id }}
+              Changes to <strong>{{ item.kind }}</strong>/{{ item.id }}
             </h3>
             <table mat-table [dataSource]="item.changes" class="changes">
               <ng-container matColumnDef="path">
@@ -429,8 +426,7 @@
                   >/{{ item.resourceId }}</a
                 >
               } @else {
-                <strong>{{ item.kind }}</strong
-                >/{{ item.resourceId }}
+                <strong>{{ item.kind }}</strong>/{{ item.resourceId }}
               }
             </td>
           </ng-container>

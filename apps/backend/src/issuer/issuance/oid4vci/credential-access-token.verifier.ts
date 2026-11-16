@@ -2,10 +2,10 @@ import { Inject, Injectable } from "@nestjs/common";
 import {
     type AuthorizationServerMetadata,
     type HttpMethod,
-    type Jwk,
     SupportedAuthenticationScheme,
 } from "@openid4vc/oauth2";
 import type { IssuerMetadataResult } from "@openid4vc/openid4vci";
+import { type Jwk } from "@owf/jose";
 import { dpopProofVerification } from "./authorization/shared/dpop.util.js";
 import { Oid4vciSdkFactory } from "./oid4vci-sdk.factory.js";
 import { OID4VCI_SETTINGS, type Oid4vciSettings } from "./oid4vci-settings.js";

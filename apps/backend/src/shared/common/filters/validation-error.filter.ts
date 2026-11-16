@@ -5,12 +5,18 @@ import {
     HttpStatus,
     Logger,
 } from "@nestjs/common";
-import { ValidationError } from "@openid4vc/utils";
+import { ValidationError } from "@owf/identity-common";
 import { Response } from "express";
 
 /**
- * Global exception filter for handling ValidationError from @openid4vc/utils.
- * Catches all ValidationError instances, formats them consistently, and returns proper HTTP responses.
+ * Global exception filter for the ValidationError of @owf/identity-common,
+ * which the @openid4vc packages throw for a request that does not validate.
+ * It answers 400 with the issues of the request.
+ *
+ * Its subclasses, such as JoseValidationError for a JWT that does not
+ * validate, also answer 400, as such errors did before the libraries moved
+ * to @owf/jose, but without their issues: those can carry the expected value
+ * of a claim, which the caller does not need. The log has them.
  */
 @Catch(ValidationError)
 export class ValidationErrorFilter implements ExceptionFilter {
@@ -20,19 +26,18 @@ export class ValidationErrorFilter implements ExceptionFilter {
         const ctx = host.switchToHttp();
         const response = ctx.getResponse<Response>();
 
-        // Format Zod validation errors for better readability
-        const issues = exception.zodError?.issues;
+        const issues = exception.issues;
+        const ofRequest = exception.constructor === ValidationError;
 
         // Log with full details (no [Array] truncation)
         this.logger.error(
-            `Validation error: ${JSON.stringify(issues, null, 2)}`,
+            `Validation error${ofRequest ? "" : ` (${exception.name})`}: ${JSON.stringify(issues, null, 2)}`,
         );
 
-        // Return formatted error response
         response.status(HttpStatus.BAD_REQUEST).json({
             statusCode: HttpStatus.BAD_REQUEST,
             message: "Validation failed",
-            errors: issues,
+            ...(ofRequest && { errors: issues }),
             timestamp: new Date().toISOString(),
         });
     }

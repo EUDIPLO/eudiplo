@@ -1,4 +1,4 @@
-import type { Jwk } from "@openid4vc/oauth2";
+import type { Jwk } from "@owf/jose";
 import type { SessionData } from "../../../../session/domain/session-data.js";
 import { CredentialsService } from "../../../configuration/credentials/credentials.service.js";
 import type { WalletUnitReference } from "../../../status-list/domain/wallet-unit-reference.js";

@@ -195,7 +195,7 @@ export async function assertTokenRequestSessionValid(
 export interface ChainedAsDpopVerification {
     /** Issuer of the authorization server; its endpoints are `<issuer>/par` and `<issuer>/token`. */
     issuer: string;
-    callbacks: Pick<CallbackContext, "hash" | "verifyJwt">;
+    callbacks: Pick<CallbackContext, "hash" | "verifyJws">;
     replayRegistry: DpopProofReplayRegistry;
 }
 

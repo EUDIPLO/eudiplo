@@ -7,9 +7,9 @@ import {
 } from "@nestjs/common";
 import {
     type AuthorizationServerMetadata,
-    Jwk,
     Oauth2ErrorCodes,
 } from "@openid4vc/oauth2";
+import { Jwk } from "@owf/jose";
 import { v4 } from "uuid";
 import { CryptoService } from "../../../../../crypto/crypto.service.js";
 import { CreateSession } from "../../../../../session/application/create-session.js";

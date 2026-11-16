@@ -4,7 +4,8 @@ import { join, resolve } from "node:path";
 import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Test, TestingModule } from "@nestjs/testing";
-import { createDpopHeadersForRequest, type Jwk } from "@openid4vc/oauth2";
+import { createDpopHeadersForRequest } from "@openid4vc/oauth2";
+import { type Jwk } from "@owf/jose";
 import {
     calculateJwkThumbprint,
     decodeJwt,
@@ -38,7 +39,7 @@ import { SessionStatus } from "../../src/session/domain/session-state.js";
 import { PresentationConfigCreateDto } from "../../src/verifier/presentations/dto/presentation-config-create.dto.js";
 import {
     callbacks,
-    getSignJwtCallback,
+    getSignJwsCallback,
     getToken,
     readConfig,
 } from "../utils.js";
@@ -138,7 +139,7 @@ async function dpopProof(key: HolderKey, url: string): Promise<string> {
         signer: { method: "jwk", alg: "ES256", publicJwk: key.publicJwk },
         callbacks: {
             ...callbacks,
-            signJwt: getSignJwtCallback([key.privateJwk]),
+            signJws: getSignJwsCallback([key.privateJwk]),
         },
     });
     return DPoP;

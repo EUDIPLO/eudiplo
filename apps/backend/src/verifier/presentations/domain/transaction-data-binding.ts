@@ -1,8 +1,5 @@
 import { createHash } from "node:crypto";
-import {
-    HashAlgorithm,
-    Oauth2ServerErrorResponseError,
-} from "@openid4vc/oauth2";
+import { Oauth2ServerErrorResponseError } from "@openid4vc/oauth2";
 import {
     Openid4vpVerifier,
     parseTransactionData,
@@ -48,17 +45,19 @@ const notUsedForTransactionData = (): never => {
  */
 const transactionDataVerifier = new Openid4vpVerifier({
     callbacks: {
-        // HashAlgorithm values are sha-256, sha-384 and sha-512.
         hash: (data, alg) =>
-            createHash(alg.replace("-", "")).update(data).digest(),
-        signJwt: notUsedForTransactionData,
-        verifyJwt: notUsedForTransactionData,
+            createHash(alg.replace("-", ""))
+                .update(typeof data === "string" ? data : new Uint8Array(data))
+                .digest(),
+        signJws: notUsedForTransactionData,
+        verifyJws: notUsedForTransactionData,
         encryptJwe: notUsedForTransactionData,
         decryptJwe: notUsedForTransactionData,
     },
 });
 
-const supportedHashAlgorithms: string[] = Object.values(HashAlgorithm);
+const SHA_256 = "sha-256";
+const supportedHashAlgorithms: string[] = [SHA_256, "sha-384", "sha-512"];
 
 interface Holder {
     presentation: TransactionDataPresentation;
@@ -190,7 +189,7 @@ async function authorizeEntry(
     const groups = await hashesPerCredential(
         encoded,
         candidates,
-        entry.transaction_data_hashes_alg ?? [HashAlgorithm.Sha256],
+        entry.transaction_data_hashes_alg ?? [SHA_256],
         reasons,
     );
     const carriers = authorizingCredentials(index, groups);
@@ -307,7 +306,7 @@ function toHolder(presentation: TransactionDataPresentation): Holder {
     return {
         presentation,
         hashes: list,
-        alg: alg ?? HashAlgorithm.Sha256,
+        alg: alg ?? SHA_256,
         unused: [...list],
         known: new Set(),
         ts12: false,
@@ -408,7 +407,7 @@ function validateTs12KeyBinding(
             "TS12 KB-JWT response_mode does not match the request",
         );
     }
-    if (keyBinding.transaction_data_hashes_alg !== HashAlgorithm.Sha256) {
+    if (keyBinding.transaction_data_hashes_alg !== SHA_256) {
         throw new TransactionDataBindingError(
             "TS12 KB-JWT requires transaction_data_hashes_alg sha-256",
         );

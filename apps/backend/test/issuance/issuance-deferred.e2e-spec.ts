@@ -1,17 +1,14 @@
 import { INestApplication } from "@nestjs/common";
-import {
-    clientAuthenticationAnonymous,
-    Jwk,
-    JwtSignerJwk,
-} from "@openid4vc/oauth2";
+import { clientAuthenticationAnonymous } from "@openid4vc/oauth2";
 import {
     createKeyAttestationJwt,
     type IssuerMetadataResult,
     Openid4vciClient,
 } from "@openid4vc/openid4vci";
 import { digest } from "@owf/crypto";
+import { Jwk, type JwsSignerJwk } from "@owf/jose";
 import { X509Certificate } from "@peculiar/x509";
-import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
+import { SdJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 import nock from "nock";
 import request from "supertest";
@@ -21,7 +18,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { IssuanceDto } from "../../src/issuer/configuration/issuance/dto/issuance.dto.js";
 import {
     callbacks,
-    getSignJwtCallback,
+    getSignJwsCallback,
     IssuanceTestContext,
     setupIssuanceTestApp,
 } from "../utils.js";
@@ -86,7 +83,7 @@ describe("Issuance - Deferred Credential Flow", () => {
     let clientId: string;
     let ctx: IssuanceTestContext;
 
-    const sdjwt = new SDJwtVcInstance({
+    const sdjwt = new SdJwtVcInstance({
         hasher: digest,
         hashAlg: "sha-256",
     });
@@ -147,7 +144,7 @@ describe("Issuance - Deferred Credential Flow", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -179,7 +176,7 @@ describe("Issuance - Deferred Credential Flow", () => {
                 method: "jwk",
                 alg: "ES256",
                 publicJwk: holderPublicKeyJwk,
-            } as JwtSignerJwk,
+            } as JwsSignerJwk,
             clientId,
             issuedAt: new Date(),
             credentialConfigurationId:
@@ -310,7 +307,7 @@ describe("Issuance - Deferred Credential Flow", () => {
                 callbacks: {
                     ...callbacks,
                     clientAuthentication: clientAuthenticationAnonymous(),
-                    signJwt: getSignJwtCallback([
+                    signJws: getSignJwsCallback([
                         attestationSignerPrivateJwk as Jwk,
                     ]),
                 },
@@ -335,7 +332,7 @@ describe("Issuance - Deferred Credential Flow", () => {
             const attestationJwt = await createKeyAttestationJwt({
                 callbacks: {
                     ...callbacks,
-                    signJwt: getSignJwtCallback([
+                    signJws: getSignJwsCallback([
                         attestationSignerPrivateJwk as Jwk,
                     ]),
                 },
@@ -343,7 +340,7 @@ describe("Issuance - Deferred Credential Flow", () => {
                     method: "jwk",
                     alg: "ES256",
                     publicJwk: attestationSignerPublicJwk,
-                } as JwtSignerJwk,
+                } as JwsSignerJwk,
                 issuedAt: new Date(),
                 use: "proof_type.attestation",
                 attestedKeys: [attestedHolderPublicJwk as Jwk],
@@ -440,7 +437,7 @@ describe("Issuance - Deferred Credential Flow", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -483,7 +480,7 @@ describe("Issuance - Deferred Credential Flow", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -538,7 +535,7 @@ describe("Issuance - Deferred Credential Flow", () => {
                 method: "jwk",
                 alg: "ES256",
                 publicJwk: holderPublicKeyJwk,
-            } as JwtSignerJwk,
+            } as JwsSignerJwk,
             clientId,
             issuedAt: new Date(),
             credentialConfigurationId:
@@ -632,7 +629,7 @@ describe("Issuance - Deferred Credential Flow", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -658,7 +655,7 @@ describe("Issuance - Deferred Credential Flow", () => {
                 method: "jwk",
                 alg: "ES256",
                 publicJwk: holderPublicKeyJwk,
-            } as JwtSignerJwk,
+            } as JwsSignerJwk,
             clientId,
             issuedAt: new Date(),
             credentialConfigurationId:
@@ -750,7 +747,7 @@ describe("Issuance - Deferred Credential Flow", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
 
@@ -776,7 +773,7 @@ describe("Issuance - Deferred Credential Flow", () => {
                 method: "jwk",
                 alg: "ES256",
                 publicJwk: holderPublicKeyJwk,
-            } as JwtSignerJwk,
+            } as JwsSignerJwk,
             clientId,
             issuedAt: new Date(),
             credentialConfigurationId:
@@ -891,7 +888,7 @@ describe("Issuance - Deferred Credential Flow", () => {
                 callbacks: {
                     ...callbacks,
                     clientAuthentication: clientAuthenticationAnonymous(),
-                    signJwt: getSignJwtCallback([
+                    signJws: getSignJwsCallback([
                         attestationSignerPrivateJwk as Jwk,
                     ]),
                 },
@@ -913,7 +910,7 @@ describe("Issuance - Deferred Credential Flow", () => {
             const attestationJwt = await createKeyAttestationJwt({
                 callbacks: {
                     ...callbacks,
-                    signJwt: getSignJwtCallback([
+                    signJws: getSignJwsCallback([
                         attestationSignerPrivateJwk as Jwk,
                     ]),
                 },
@@ -921,7 +918,7 @@ describe("Issuance - Deferred Credential Flow", () => {
                     method: "jwk",
                     alg: "ES256",
                     publicJwk: attestationSignerPublicJwk,
-                } as JwtSignerJwk,
+                } as JwsSignerJwk,
                 issuedAt: new Date(),
                 use: "proof_type.attestation",
                 attestedKeys: [attestedHolderPublicJwk as Jwk],
@@ -937,7 +934,9 @@ describe("Issuance - Deferred Credential Flow", () => {
                     proofs: { attestation: [attestationJwt] },
                 }),
             ).rejects.toThrow(
-                "Attestation proof must contain an x5c certificate chain for trust validation",
+                // @openid4vc/openid4vci refuses an attestation signed with a jwk
+                // header before EUDIPLO checks for x5c.
+                /signer method\(s\) that are not allowed/,
             );
         } finally {
             await request(app.getHttpServer())
@@ -1071,7 +1070,7 @@ describe("Issuance - Deferred Credential Flow", () => {
                     const attestationJwt = await createKeyAttestationJwt({
                         callbacks: {
                             ...callbacks,
-                            signJwt: getSignJwtCallback([
+                            signJws: getSignJwsCallback([
                                 attestationSignerPrivateJwk as Jwk,
                             ]),
                         },
@@ -1079,7 +1078,7 @@ describe("Issuance - Deferred Credential Flow", () => {
                             method: "jwk",
                             alg: "ES256",
                             publicJwk: attestationSignerPublicJwk,
-                        } as JwtSignerJwk,
+                        } as JwsSignerJwk,
                         issuedAt: new Date(),
                         use:
                             proofType === "jwt"

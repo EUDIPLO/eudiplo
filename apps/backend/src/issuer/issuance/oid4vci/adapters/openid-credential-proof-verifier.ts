@@ -1,4 +1,4 @@
-import type { Jwk } from "@openid4vc/oauth2";
+import type { Jwk } from "@owf/jose";
 import { decodeJwt } from "jose";
 import { AttestationStatusRejected } from "../../../../trust/domain/attestation-status-rejected.js";
 import type { TrustStoreService } from "../../../../trust/trust-store.service.js";

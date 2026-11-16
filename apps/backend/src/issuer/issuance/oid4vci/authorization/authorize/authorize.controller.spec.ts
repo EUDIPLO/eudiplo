@@ -1264,11 +1264,11 @@ describe("Built-in authorization server token endpoint", () => {
             expect(h.oauth.createAccessTokenResponse).toHaveBeenCalledWith({
                 audience: ISSUER,
                 signer: {
-                    method: "jwk",
+                    method: "custom",
                     alg: "ES256",
-                    publicJwk: { kty: "EC", crv: "P-256", kid: "kid-1" },
-                    // The key chain ID: the signing callback looks the key up by it.
-                    kid: "chain-1",
+                    // The kid the JWKS publishes; the server is created to
+                    // sign for it with key chain chain-1.
+                    kid: "kid-1",
                 },
                 subject: "session-1",
                 expiresInSeconds: 300,

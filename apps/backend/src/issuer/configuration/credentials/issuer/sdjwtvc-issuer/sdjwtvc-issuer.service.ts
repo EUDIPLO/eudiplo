@@ -1,8 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { Jwk } from "@openid4vc/oauth2";
 import { digest, generateSalt } from "@owf/crypto";
-import { JWTwithStatusListPayload } from "@owf/token-status-list";
-import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
+import type { Jwk } from "@owf/jose";
+import type { StatusClaim } from "@owf/token-status-list";
+import { SdJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
 import { CertService } from "../../../../../crypto/key/cert/cert.service.js";
 import { KeyChainService } from "../../../../../crypto/key/key-chain.service.js";
 import { KeyUsageType } from "../../../../../crypto/key/types/key-usage-type.js";
@@ -71,7 +71,7 @@ export class SdjwtvcIssuerService {
             session.tenantId,
             certificate.keyId,
         );
-        const sdjwt = new SDJwtVcInstance({
+        const sdjwt = new SdJwtVcInstance({
             signer: await this.keyChainService.signer(
                 session.tenantId,
                 certificate.keyId,
@@ -90,7 +90,7 @@ export class SdjwtvcIssuerService {
         const exp = credentialConfiguration.lifeTime ? expiresAt : undefined;
 
         // If status management is enabled, create a status entry
-        let status: JWTwithStatusListPayload | undefined;
+        let status: { status: StatusClaim } | undefined;
         if (credentialConfiguration.statusManagement) {
             status = await this.statusListService.createEntry(
                 session,

@@ -97,7 +97,12 @@ function createService(
         signature: string,
         issuer: FederationResolution | undefined,
     ) => (service as any).verifyFederationStatusList(data, signature, issuer);
-    return { federationTrust, verifyCredential, verifyStatusList };
+    const verify = (credential: string) =>
+        service.verify(credential, {
+            ...OPTIONS,
+            policy: { ...OPTIONS.policy, revocation: { enabled: false } },
+        });
+    return { federationTrust, verify, verifyCredential, verifyStatusList };
 }
 
 describe("SdjwtvcverifierService — OpenID Federation", () => {
@@ -123,6 +128,39 @@ describe("SdjwtvcverifierService — OpenID Federation", () => {
             "credential-key",
             OPTIONS.federationTrustSource,
         );
+    });
+
+    // @sd-jwt/sd-jwt-vc 0.25 checks typ (SD-JWT VC draft 23, Section 2.2.1),
+    // so another JWT of the issuer, such as its Status List Token, is not
+    // accepted as a credential.
+    it.each([
+        ["dc+sd-jwt", true],
+        ["application/dc+sd-jwt", true],
+        ["vc+sd-jwt", false],
+        [undefined, false],
+    ])("verifies a credential with typ %s: %s", async (typ, accepted) => {
+        const key = await createKey("credential-key");
+        const resolution = resolutionWith([key.jwk]);
+        const { verify } = createService(async () => ({
+            jwk: key.jwk,
+            resolution,
+        }));
+        const { data, signature } = await sign(
+            key.privateKey,
+            { alg: "ES256", kid: "credential-key", ...(typ && { typ }) },
+            {
+                iss: ISSUER,
+                vct: "urn:example",
+                iat: Math.floor(Date.now() / 1000),
+            },
+        );
+        const result = verify(`${data}.${signature}~`);
+
+        if (accepted) {
+            await expect(result).resolves.toBeDefined();
+        } else {
+            await expect(result).rejects.toThrow(/Invalid typ header/);
+        }
     });
 
     it("rejects a signature by another key under the member's kid", async () => {

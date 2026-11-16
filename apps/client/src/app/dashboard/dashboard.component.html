@@ -875,16 +875,14 @@
                 (dashboardService.canManageIssuance || dashboardService.canOfferIssuance) &&
                 dashboardService.issueReadinessReason
               ) {
-                Issuance is blocked: <strong>{{ dashboardService.issueReadinessReason }}</strong
-                >.
+                Issuance is blocked: <strong>{{ dashboardService.issueReadinessReason }}</strong>.
               }
               @if (
                 dashboardService.canReadPresentationConfigs &&
                 dashboardService.verifyReadinessReason
               ) {
                 Presentation is blocked:
-                <strong>{{ dashboardService.verifyReadinessReason }}</strong
-                >.
+                <strong>{{ dashboardService.verifyReadinessReason }}</strong>.
               }
             </span>
           </div>

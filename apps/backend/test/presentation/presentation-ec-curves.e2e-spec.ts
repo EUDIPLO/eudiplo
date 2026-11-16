@@ -128,7 +128,7 @@ describe("Presentation - ES384 / ES512 key chains (e2e)", () => {
         const authRequest = client.parseOpenid4vpAuthorizationRequest({
             authorizationRequest: offer.body.uri,
         });
-        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+        const resolved = await client.resolveOpenid4vpAuthorizationRequest({
             authorizationRequestPayload: authRequest.params,
             responseMode: { type: "direct_post" },
         });

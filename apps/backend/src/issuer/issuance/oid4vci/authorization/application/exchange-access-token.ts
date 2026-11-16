@@ -397,14 +397,17 @@ export class ExchangeAccessToken {
         // the wallet) carry the same authorization_details (OID4VCI Section 6).
         const authorizationDetails = authorizationDetailsForToken(session);
 
-        const tokenResponse = await server
+        // The header names the key as the JWKS publishes it, which is the
+        // key chain ID only for a key without its own kid.
+        const kid = publicJwk.kid ?? signingKeyId;
+        const tokenResponse = await this.servers
+            .forTenant(tenantId, session.id, { [kid]: signingKeyId })
             .createAccessTokenResponse({
                 audience: `${this.settings.publicUrl}/issuers/${tenantId}`,
                 signer: {
-                    method: "jwk",
+                    method: "custom",
                     alg: signingAlgForJwk(publicJwk),
-                    publicJwk,
-                    kid: signingKeyId,
+                    kid,
                 },
                 subject: session.id,
                 expiresInSeconds: accessTokenSettings.lifetimeSeconds,

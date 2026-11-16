@@ -1,14 +1,11 @@
 import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
-import {
-    clientAuthenticationAnonymous,
-    Jwk,
-    JwtSignerJwk,
-} from "@openid4vc/oauth2";
+import { clientAuthenticationAnonymous } from "@openid4vc/oauth2";
 import {
     type IssuerMetadataResult,
     Openid4vciClient,
 } from "@openid4vc/openid4vci";
+import { Jwk, type JwsSignerJwk } from "@owf/jose";
 import {
     type CompactJWEHeaderParameters,
     compactDecrypt,
@@ -22,7 +19,7 @@ import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { EncryptionService } from "../../src/crypto/encryption/encryption.service.js";
 import {
     callbacks,
-    getSignJwtCallback,
+    getSignJwsCallback,
     setupIssuanceTestApp,
 } from "../utils.js";
 import {
@@ -84,7 +81,7 @@ describe("Issuance - credential request encryption", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
         const credentialOffer = await client.resolveCredentialOffer(
@@ -105,7 +102,7 @@ describe("Issuance - credential request encryption", () => {
                 method: "jwk",
                 alg: "ES256",
                 publicJwk: holderPublicKeyJwk,
-            } as JwtSignerJwk,
+            } as JwsSignerJwk,
             clientId,
             issuedAt: new Date(),
             credentialConfigurationId: "pid-no-key",

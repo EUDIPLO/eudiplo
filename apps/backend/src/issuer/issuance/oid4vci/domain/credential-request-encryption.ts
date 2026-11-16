@@ -1,4 +1,4 @@
-import { zCompactJwe } from "@openid4vc/oauth2";
+import { zCompactJwe } from "@owf/jose";
 import { decodeProtectedHeader } from "jose";
 
 /** What the issuer advertises in `credential_request_encryption`. */

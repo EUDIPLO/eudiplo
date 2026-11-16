@@ -1,4 +1,4 @@
-import type { StatusListEntry } from "@owf/token-status-list";
+import type { StatusListReference } from "@owf/token-status-list";
 
 /**
  * A `status` claim or `status_list` reference that draft-ietf-oauth-status-list
@@ -43,7 +43,7 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
  */
 export function parseStatusListReference(
     status: unknown,
-): StatusListEntry | undefined {
+): StatusListReference | undefined {
     if (status === undefined) {
         return undefined;
     }

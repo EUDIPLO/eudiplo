@@ -1,16 +1,13 @@
 import "reflect-metadata";
 import { INestApplication } from "@nestjs/common";
-import {
-    clientAuthenticationAnonymous,
-    Jwk,
-    JwtSignerJwk,
-} from "@openid4vc/oauth2";
+import { clientAuthenticationAnonymous } from "@openid4vc/oauth2";
 import {
     type IssuerMetadataResult,
     Openid4vciClient,
 } from "@openid4vc/openid4vci";
 import { digest } from "@owf/crypto";
-import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
+import { Jwk, type JwsSignerJwk } from "@owf/jose";
+import { SdJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
 import {
     type CompactJWEHeaderParameters,
     compactDecrypt,
@@ -33,7 +30,7 @@ import {
 import { EncryptionService } from "../../src/crypto/encryption/encryption.service.js";
 import {
     callbacks,
-    getSignJwtCallback,
+    getSignJwsCallback,
     setupIssuanceTestApp,
 } from "../utils.js";
 import {
@@ -62,7 +59,7 @@ describe("Issuance - deferred credential request encryption", () => {
     let authToken: string;
     let clientId: string;
 
-    const sdjwt = new SDJwtVcInstance({
+    const sdjwt = new SdJwtVcInstance({
         hasher: digest,
         hashAlg: "sha-256",
     });
@@ -117,7 +114,7 @@ describe("Issuance - deferred credential request encryption", () => {
             callbacks: {
                 ...callbacks,
                 clientAuthentication: clientAuthenticationAnonymous(),
-                signJwt: getSignJwtCallback([holderPrivateKeyJwk as Jwk]),
+                signJws: getSignJwsCallback([holderPrivateKeyJwk as Jwk]),
             },
         });
         const credentialOffer = await client.resolveCredentialOffer(
@@ -138,7 +135,7 @@ describe("Issuance - deferred credential request encryption", () => {
                 method: "jwk",
                 alg: "ES256",
                 publicJwk: holderPublicKeyJwk,
-            } as JwtSignerJwk,
+            } as JwsSignerJwk,
             clientId,
             issuedAt: new Date(),
             credentialConfigurationId: "citizen",

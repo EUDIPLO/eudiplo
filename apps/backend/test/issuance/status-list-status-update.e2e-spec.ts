@@ -1,5 +1,5 @@
 import { INestApplication } from "@nestjs/common";
-import { getListFromStatusListJWT } from "@owf/token-status-list";
+import { decodeStatusListJwt } from "@owf/token-status-list";
 import request from "supertest";
 import { App } from "supertest/types";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
@@ -27,7 +27,7 @@ describe("Status List - status updates", () => {
         const response = await request(app.getHttpServer())
             .get(`/issuers/root/status-management/status-list/${listId}`)
             .expect(200);
-        return getListFromStatusListJWT(response.text).getStatus(index);
+        return decodeStatusListJwt(response.text).statusList.getStatus(index);
     }
 
     async function createList(

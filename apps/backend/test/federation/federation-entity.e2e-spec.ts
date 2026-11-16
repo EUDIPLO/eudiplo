@@ -8,7 +8,7 @@ import {
 } from "@openid4vc/openid4vp";
 import { setGlobalConfig } from "@openid4vc/utils";
 import { digest, ES256 } from "@owf/crypto";
-import { SDJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
+import { SdJwtVcInstance } from "@sd-jwt/sd-jwt-vc";
 import {
     compactVerify,
     decodeJwt,
@@ -328,7 +328,7 @@ describe("OpenID Federation entity", () => {
         clientId: string,
         nonce: string,
     ) {
-        const sdjwt = new SDJwtVcInstance({
+        const sdjwt = new SdJwtVcInstance({
             hasher: digest,
             kbSigner: await ES256.getSigner(holder.privateKey),
             kbSignAlg: "ES256",
@@ -372,7 +372,7 @@ describe("OpenID Federation entity", () => {
         const authRequest = client.parseOpenid4vpAuthorizationRequest({
             authorizationRequest: offer.body.uri,
         });
-        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+        const resolved = await client.resolveOpenid4vpAuthorizationRequest({
             authorizationRequestPayload: authRequest.params,
             responseMode: { type: "direct_post" },
         });
@@ -450,7 +450,7 @@ describe("OpenID Federation entity", () => {
         expect(header.trust_chain).toHaveLength(3);
         expect(decodeJwt(requestObject.text).trust_chain).toBeUndefined();
 
-        const resolved = await client.resolveOpenId4vpAuthorizationRequest({
+        const resolved = await client.resolveOpenid4vpAuthorizationRequest({
             authorizationRequestPayload: authRequest.params,
             responseMode: { type: "direct_post" },
         });

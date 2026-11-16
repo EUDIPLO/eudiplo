@@ -1,14 +1,13 @@
 import { randomBytes } from "node:crypto";
 import {
     type GenerateRandomCallback,
-    type Jwk,
     Oauth2AuthorizationServer,
     preAuthorizedCodeGrantIdentifier,
     refreshTokenGrantIdentifier,
-    type SignJwtCallback,
 } from "@openid4vc/oauth2";
+import { base64url } from "@owf/identity-common";
+import { type Jwk, type SignJwsCallback } from "@owf/jose";
 import {
-    CompactSign,
     decodeProtectedHeader,
     exportJWK,
     generateKeyPair,
@@ -99,10 +98,11 @@ function exchange(
                 options.publicJwk ?? ({ kty: "EC", crv: "P-256" } as Jwk),
         })),
     };
+    const servers = {
+        forTenant: vi.fn(() => server as unknown as Oauth2AuthorizationServer),
+    };
     const useCase = new ExchangeAccessToken(
-        {
-            forTenant: () => server as unknown as Oauth2AuthorizationServer,
-        },
+        servers,
         sessions as any,
         { execute: vi.fn() },
         {
@@ -135,7 +135,7 @@ function exchange(
                 headers: new Headers(),
             },
         });
-    return { execute, server, sessions, signingKeys };
+    return { execute, server, servers, sessions, signingKeys };
 }
 
 describe("ExchangeAccessToken", () => {
@@ -217,27 +217,53 @@ describe("ExchangeAccessToken", () => {
         );
     });
 
+    it("names the published kid in the header and signs it with the key chain", async () => {
+        const { execute, server, servers } = exchange(
+            { authorizationServers: [{ type: "built-in", id: "built-in" }] },
+            preAuthorizedCodeRequest,
+            issuanceSession(),
+            { publicJwk: { kty: "EC", crv: "P-256", kid: "published" } as Jwk },
+        );
+
+        await execute();
+
+        expect(server.createAccessTokenResponse).toHaveBeenCalledWith(
+            expect.objectContaining({
+                signer: { method: "custom", alg: "ES256", kid: "published" },
+            }),
+        );
+        expect(servers.forTenant).toHaveBeenCalledWith(
+            "tenant-1",
+            "session-1",
+            { published: "authorization-server" },
+        );
+    });
+
     it("signs the access token with ES384 when the signing key is on P-384", async () => {
         const { publicKey, privateKey } = await generateKeyPair("ES384");
         const publicJwk = (await exportJWK(publicKey)) as Jwk;
         // A real library server whose JWT signer uses the P-384 private key,
         // so the asserted header is the one the library writes from `signer`.
-        const signJwt: SignJwtCallback = async (
+        const signJws: SignJwsCallback = async (
             _signer,
-            { header, payload },
+            { signingInputBytes },
         ) => ({
-            jwt: await new CompactSign(
-                new TextEncoder().encode(JSON.stringify(payload)),
-            )
-                .setProtectedHeader(header)
-                .sign(privateKey),
+            signature: base64url.encode(
+                new Uint8Array(
+                    await crypto.subtle.sign(
+                        { name: "ECDSA", hash: "SHA-384" },
+                        privateKey as CryptoKey,
+                        signingInputBytes,
+                    ),
+                ),
+            ),
             signerJwk: publicJwk,
         });
         const generateRandom: GenerateRandomCallback = (length) =>
             randomBytes(length);
         const library = new Oauth2AuthorizationServer({
             // Only the callbacks createAccessTokenResponse calls.
-            callbacks: { signJwt, generateRandom } as never,
+            callbacks: { signJws, generateRandom } as never,
         });
         const { execute, server } = exchange(
             { authorizationServers: [{ type: "built-in", id: "built-in" }] },
@@ -255,7 +281,7 @@ describe("ExchangeAccessToken", () => {
         expect(server.createAccessTokenResponse).toHaveBeenCalledWith(
             expect.objectContaining({
                 signer: expect.objectContaining({
-                    method: "jwk",
+                    method: "custom",
                     alg: "ES384",
                 }),
             }),

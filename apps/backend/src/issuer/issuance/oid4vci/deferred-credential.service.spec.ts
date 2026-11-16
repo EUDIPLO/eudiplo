@@ -1,6 +1,6 @@
 import type { HttpException } from "@nestjs/common";
-import type { Jwk } from "@openid4vc/oauth2";
 import type { IssuerMetadataResult } from "@openid4vc/openid4vci";
+import type { Jwk } from "@owf/jose";
 import { describe, expect, it, vi } from "vitest";
 import type { SessionData } from "../../../session/domain/session-data.js";
 import { RevocationCheckMode } from "../../../trust/types.js";

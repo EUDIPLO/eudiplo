@@ -3,10 +3,10 @@ import { Curve } from "@owf/cose";
 /**
  * A JWK ready for `CoseKey.fromJwk` (and its subclasses such as `DeviceKey`).
  *
- * `@owf/cose` (still in 0.6.0) maps only `"P-256"` to its COSE curve id; it lists
- * P-384 and P-521 as `"p-384"` and `"p-521"`, so those keys fail to decode.
- * A numeric curve id passes through unchanged, so the EC curves are given as
- * their COSE ids (RFC 9053 §7.1).
+ * `@owf/cose` before 0.8 mapped only `"P-256"` to its COSE curve id, so P-384
+ * and P-521 keys failed to decode. 0.8 maps all three; the helper still gives
+ * the EC curves as their COSE ids (RFC 9053 §7.1), which pass through
+ * unchanged, and can be dropped with its callers.
  */
 export function coseReadyJwk<T extends object>(jwk: T): T {
     const crv = (jwk as { crv?: unknown }).crv;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-    authorizationServerKeyChainUsageRefusal,
     accessTokenVerificationKeys,
+    authorizationServerKeyChainUsageRefusal,
 } from "./authorization-server-keys.js";
 
 const active = { kty: "EC", crv: "P-256", x: "a", y: "a", d: "a", kid: "new" };

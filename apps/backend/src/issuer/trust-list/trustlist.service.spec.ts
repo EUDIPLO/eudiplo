@@ -1,5 +1,5 @@
 import { ConflictException, Logger, NotFoundException } from "@nestjs/common";
-import type { LoTE, LoTEDocument } from "@owf/eudi-lote";
+import type { LoTE, LoteDocument } from "@owf/eudi-lote";
 import * as x509 from "@peculiar/x509";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { KeyUsageType } from "../../crypto/key/types/key-usage-type.js";
@@ -164,7 +164,7 @@ function createService(
         .spyOn(service, "generateJwt")
         .mockImplementation(
             async (list) =>
-                `${list.id}-jwt-${(list.data as LoTEDocument).LoTE.ListAndSchemeInformation.LoTESequenceNumber}`,
+                `${list.id}-jwt-${(list.data as LoteDocument).LoTE.ListAndSchemeInformation.LoTESequenceNumber}`,
         );
     return {
         service,
@@ -221,7 +221,7 @@ describe("TrustListService", () => {
 
         it("renews expired lists and lists stored without the LoTE wrapper", async () => {
             const legacy = storedList("legacy", "2026-02-01T09:40:29.793Z");
-            legacy.data = (legacy.data as LoTEDocument).LoTE;
+            legacy.data = (legacy.data as LoteDocument).LoTE;
             const { service, store } = createService([
                 storedList("expired", "2026-02-01T09:40:29.793Z"),
                 legacy,
@@ -230,7 +230,7 @@ describe("TrustListService", () => {
             await expect(service.renewDueTrustLists(now)).resolves.toBe(2);
 
             for (const id of ["expired", "legacy"]) {
-                const data = store.get(id)!.data as LoTEDocument;
+                const data = store.get(id)!.data as LoteDocument;
                 expect(data.LoTE.ListAndSchemeInformation.NextUpdate).toBe(
                     publishedInDays(30),
                 );
@@ -313,7 +313,7 @@ describe("TrustListService", () => {
 
             const saved = trustListRepo.save.mock.calls[0][0] as TrustList;
             const nextUpdate = Date.parse(
-                (saved.data as LoTEDocument).LoTE.ListAndSchemeInformation
+                (saved.data as LoteDocument).LoTE.ListAndSchemeInformation
                     .NextUpdate,
             );
             expect(nextUpdate - Date.now()).toBeGreaterThan(29 * DAY_MS);
@@ -350,7 +350,7 @@ describe("TrustListService", () => {
 
             const saved = trustListRepo.save.mock.calls[0][0] as TrustList;
             const addresses = (
-                saved.data as LoTEDocument
+                saved.data as LoteDocument
             ).LoTE.TrustedEntitiesList?.map(
                 (entity) =>
                     entity.TrustedEntityInformation.TEAddress
@@ -383,7 +383,7 @@ describe("TrustListService", () => {
 
             const saved = trustListRepo.save.mock.calls[0][0] as TrustList;
             expect(
-                (saved.data as LoTEDocument).LoTE.TrustedEntitiesList?.[0]
+                (saved.data as LoteDocument).LoTE.TrustedEntitiesList?.[0]
                     .TrustedEntityInformation.TEAddress?.TEElectronicAddress,
             ).toEqual([
                 { lang: "en", uriValue: "mailto:info@example.com" },
@@ -420,7 +420,7 @@ describe("TrustListService", () => {
 
                 const saved = trustListRepo.save.mock.calls[0][0] as TrustList;
                 const { entities } = new LoteParserService().parse(
-                    (saved.data as LoTEDocument).LoTE as unknown as LoTE,
+                    (saved.data as LoteDocument).LoTE as unknown as LoTE,
                     "managed",
                 );
                 expect(
@@ -455,7 +455,7 @@ describe("TrustListService", () => {
                     { id: "tenant", name: "Tenant" },
                 );
                 const saved = trustListRepo.save.mock.calls[0][0] as TrustList;
-                return (saved.data as LoTEDocument).LoTE
+                return (saved.data as LoteDocument).LoTE
                     .TrustedEntitiesList[0] as Record<string, any>;
             };
             const langs = (entries: Array<{ lang: string }>) =>
@@ -650,7 +650,7 @@ describe("TrustListService", () => {
 
             const services = (
                 (trustListRepo.save.mock.calls[0][0] as TrustList)
-                    .data as LoTEDocument
+                    .data as LoteDocument
             ).LoTE.TrustedEntitiesList![0].TrustedEntityServices.map(
                 (service) =>
                     JSON.stringify(
@@ -720,7 +720,7 @@ describe("TrustListService", () => {
                                     name: "Issuer",
                                     contactUri: "info@example.com",
                                     website: "https://example.com/",
-                                    country: "Germany",
+                                    uri: "not a uri",
                                 },
                             },
                         ],
@@ -734,7 +734,7 @@ describe("TrustListService", () => {
                 expect.objectContaining({
                     path: ["entities", 0, "info"],
                     code: "invalid_entity_info",
-                    message: expect.stringContaining("Country"),
+                    message: expect.stringContaining("Invalid URL"),
                 }),
             ]);
             expect(certService.find).not.toHaveBeenCalled();

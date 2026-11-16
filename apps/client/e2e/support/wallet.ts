@@ -6,13 +6,12 @@ import { createHash, randomBytes, X509Certificate } from 'node:crypto';
 import {
   type CallbackContext,
   clientAuthenticationAnonymous,
-  type Jwk,
-  type JwtSignerJwk,
   setGlobalConfig,
 } from '@openid4vc/oauth2';
+import { type Jwk, type JwsSignerJwk } from '@owf/jose';
 import { Openid4vciClient } from '@openid4vc/openid4vci';
 import { Openid4vpClient } from '@openid4vc/openid4vp';
-import { SDJwtVcInstance } from '@sd-jwt/sd-jwt-vc';
+import { SdJwtVcInstance } from '@sd-jwt/sd-jwt-vc';
 import {
   type CryptoKey,
   EncryptJWT,
@@ -21,8 +20,7 @@ import {
   importJWK,
   importX509,
   type JWK,
-  jwtVerify,
-  SignJWT,
+  compactVerify,
 } from 'jose';
 
 // The E2E backend's PUBLIC_URL is plain HTTP on localhost.
@@ -45,10 +43,13 @@ const unsupported = (): never => {
   throw new Error('Not supported by the E2E wallet');
 };
 
-const callbacks: Omit<CallbackContext, 'signJwt'> = {
-  hash: (data, alg) => createHash(alg.replace('-', '').toLowerCase()).update(data).digest(),
+const callbacks: Omit<CallbackContext, 'signJws'> = {
+  hash: (data, alg) =>
+    createHash(alg.replace('-', '').toLowerCase())
+      .update(typeof data === 'string' ? data : new Uint8Array(data))
+      .digest(),
   generateRandom: (bytes) => randomBytes(bytes),
-  verifyJwt: async (signer, { compact }) => {
+  verifyJws: async (signer, { signingInput, signature }) => {
     let key: CryptoKey;
     let signerJwk: Jwk;
     if (signer.method === 'jwk') {
@@ -62,7 +63,7 @@ const callbacks: Omit<CallbackContext, 'signJwt'> = {
       return { verified: false };
     }
     try {
-      await jwtVerify(compact, key);
+      await compactVerify(`${signingInput}.${signature}`, key, { algorithms: [signer.alg] });
       return { verified: true, signerJwk };
     } catch {
       return { verified: false };
@@ -87,7 +88,7 @@ const callbacks: Omit<CallbackContext, 'signJwt'> = {
  */
 export async function acceptCredentialOffer(offerUri: string): Promise<HolderCredential> {
   const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true });
-  const signer: JwtSignerJwk = {
+  const signer: JwsSignerJwk = {
     method: 'jwk',
     alg: 'ES256',
     publicJwk: (await exportJWK(publicKey)) as Jwk,
@@ -95,9 +96,16 @@ export async function acceptCredentialOffer(offerUri: string): Promise<HolderCre
   const client = new Openid4vciClient({
     callbacks: {
       ...callbacks,
-      signJwt: async (jwtSigner, { header, payload }) => ({
-        jwt: await new SignJWT(payload).setProtectedHeader(header).sign(privateKey),
-        signerJwk: (jwtSigner as JwtSignerJwk).publicJwk,
+      signJws: async (jwsSigner, { signingInputBytes }) => ({
+        // WebCrypto ECDSA signatures are r || s, the JWS form.
+        signature: Buffer.from(
+          await crypto.subtle.sign(
+            { name: 'ECDSA', hash: 'SHA-256' },
+            privateKey,
+            signingInputBytes as Uint8Array<ArrayBuffer>
+          )
+        ).toString('base64url'),
+        signerJwk: (jwsSigner as JwsSignerJwk).publicJwk,
       }),
     },
   });
@@ -149,7 +157,7 @@ export async function acceptCredentialOffer(offerUri: string): Promise<HolderCre
     });
   }
 
-  const claims = await new SDJwtVcInstance({ hasher: sha256 }).getClaims(credential);
+  const claims = await new SdJwtVcInstance({ hasher: sha256 }).getClaims(credential);
   return { credential, claims, holderPrivateKey: privateKey };
 }
 
@@ -161,10 +169,10 @@ export async function presentCredential(
   requestUri: string,
   holder: HolderCredential
 ): Promise<Response> {
-  const client = new Openid4vpClient({ callbacks: { ...callbacks, signJwt: unsupported } });
+  const client = new Openid4vpClient({ callbacks: { ...callbacks, signJws: unsupported } });
   const parsed = client.parseOpenid4vpAuthorizationRequest({ authorizationRequest: requestUri });
   const { authorizationRequestPayload: request } =
-    await client.resolveOpenId4vpAuthorizationRequest({
+    await client.resolveOpenid4vpAuthorizationRequest({
       authorizationRequestPayload: parsed.params,
       responseMode: { type: 'direct_post' },
     });
@@ -177,7 +185,7 @@ export async function presentCredential(
   const frame = Object.fromEntries(
     (credentialQuery.claims ?? []).map((claim) => [claim.path[0], true])
   );
-  const sdjwt = new SDJwtVcInstance({
+  const sdjwt = new SdJwtVcInstance({
     hasher: sha256,
     kbSignAlg: 'ES256',
     kbSigner: async (data) =>
