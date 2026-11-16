@@ -310,6 +310,12 @@ from the access token, and the folder name is the bundle's source, which
 `replace` mode uses to decide what it deletes, so keep the folder named after
 the tenant.
 
+A folder imported with the CLI and the same folder imported at startup from
+`CONFIG_FOLDER` count as two different sources. Switching between them gives
+`!generate` clients a new secret, applies unchanged key chains again (a
+`regenerate` key source gets new keys), and `replace` does not delete what the
+other source created. Choose one of the two for each tenant.
+
 The web client does the same under **Settings > Config Portability**:
 **Plan and validate** lists each changed field with its current value and its
 value after the import, marking secrets as `secret`, values whose type changes

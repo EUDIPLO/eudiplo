@@ -16,46 +16,44 @@ import {
     serializeDocument,
 } from "@eudiplo/config-format/config-format.js";
 import { resolveConfigVariables } from "@eudiplo/config-format/config-values.js";
+import {
+    CLI_VALIDATED_REGISTRY,
+    kindForSchemaFile,
+} from "../validate/registry.js";
 import { wrapBare } from "./upgrade.js";
 
 /**
- * Where each resource kind lives in a tenant folder and where it goes in a
- * bundle. Mirrors the backend's ConfigFolderBundleService (startup import),
- * plus the tenant's own `info.json`, which a bundle carries as the Tenant
- * document. Bundle paths follow the export (`issuance/config.json`).
+ * A bundle carries one issuance config, `issuance/issuance.json`, as a
+ * reattach reads it, under the path the export writes. The offline
+ * validation checks every `issuance/*.json`, because the startup import reads
+ * them all.
  */
+const ISSUANCE_FILE = {
+    file: "issuance/issuance.json",
+    bundlePath: "issuance/config.json",
+};
+
 type FolderResource =
     | { kind: ConfigResourceKind; file: string; bundlePath: string }
     | { kind: ConfigResourceKind; directory: string };
 
-const FOLDER_RESOURCES: readonly FolderResource[] = [
-    { kind: "Tenant", file: "info.json", bundlePath: "info.json" },
-    { kind: "KmsConfig", file: "kms.json", bundlePath: "kms.json" },
-    { kind: "Client", directory: "clients" },
-    { kind: "KeyChain", directory: "key-chains" },
-    {
-        kind: "KeyChainDefaults",
-        file: "key-chain-defaults.json",
-        bundlePath: "key-chain-defaults.json",
-    },
-    {
-        kind: "RegistrarConfig",
-        file: "registrar.json",
-        bundlePath: "registrar.json",
-    },
-    { kind: "AttributeProvider", directory: "attribute-providers" },
-    { kind: "WebhookEndpoint", directory: "webhook-endpoints" },
-    {
-        kind: "IssuanceConfig",
-        file: "issuance/issuance.json",
-        bundlePath: "issuance/config.json",
-    },
-    { kind: "CredentialConfig", directory: "issuance/credentials" },
-    { kind: "TrustList", directory: "trust-lists" },
-    { kind: "FederationTrustAnchor", directory: "federation-trust-anchors" },
-    { kind: "PresentationConfig", directory: "presentation" },
-    { kind: "StatusList", directory: "issuance/status-lists" },
-];
+/**
+ * Where each resource kind lives in a tenant folder, taken from the registry
+ * the offline validation reads. Same layout as the backend's
+ * ConfigFolderBundleService (reattach), plus `info.json`, which a bundle
+ * carries as the Tenant document.
+ */
+export function folderResources(): FolderResource[] {
+    return CLI_VALIDATED_REGISTRY.map((entry) => {
+        const kind = kindForSchemaFile(entry.schemaFile);
+        if (!kind) throw new Error(`No resource kind for ${entry.schemaFile}`);
+        if (entry.kind === "file")
+            return { kind, file: entry.file, bundlePath: entry.file };
+        return kind === "IssuanceConfig"
+            ? { kind, ...ISSUANCE_FILE }
+            : { kind, directory: entry.subfolder };
+    });
+}
 
 const MIME_TYPES: Record<string, string> = {
     ".png": "image/png",
@@ -162,7 +160,7 @@ export async function packTenantFolder(
     const documents: ConfigFile[] = [];
     const resources: ConfigBundle["manifest"]["resources"] = [];
 
-    for (const resource of FOLDER_RESOURCES) {
+    for (const resource of folderResources()) {
         for (const file of await resourceFiles(tenantRoot, resource)) {
             const document = await loadDocument(
                 tenantRoot,
@@ -186,11 +184,6 @@ export async function packTenantFolder(
             });
         }
     }
-    if (documents.length === 0)
-        throw new Error(
-            `No configuration files found in ${tenantRoot}. Expected a tenant folder (info.json, clients/, key-chains/, ...).`,
-        );
-
     const assets = await loadAssets(tenantRoot);
     const bundle: ConfigBundle = {
         manifest: {
@@ -237,28 +230,15 @@ async function loadDocument(
     kind: ConfigResourceKind,
     env: Record<string, string | undefined>,
 ): Promise<ConfigFile> {
-    let payload: unknown;
-    try {
-        // The parser's message can quote a secret from the file; do not repeat it.
-        payload = JSON.parse(await readFile(join(tenantRoot, file), "utf8"));
-    } catch {
-        throw new Error(`${file}: is not valid JSON`);
-    }
+    // Validated before packing: the file parses and holds an object.
+    const payload = JSON.parse(await readFile(join(tenantRoot, file), "utf8"));
     const resolved = resolveConfigVariables(payload, env).value;
-    try {
-        const document = normalizeDocument(
-            isConfigDocument(resolved)
-                ? resolved
-                : wrapBare(kind, resolved, file),
-        );
-        if (document.kind !== kind)
-            throw new Error(`contains ${document.kind}, expected ${kind}`);
-        return serializeDocument(document) as ConfigFile;
-    } catch (error) {
-        throw new Error(
-            `${file}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-    }
+    const document = normalizeDocument(
+        isConfigDocument(resolved) ? resolved : wrapBare(kind, resolved, file),
+    );
+    if (document.kind !== kind)
+        throw new Error(`${file}: contains ${document.kind}, expected ${kind}`);
+    return serializeDocument(document) as ConfigFile;
 }
 
 async function loadAssets(tenantRoot: string): Promise<ConfigBundleAsset[]> {
@@ -266,7 +246,8 @@ async function loadAssets(tenantRoot: string): Promise<ConfigBundleAsset[]> {
     if (!existsSync(directory)) return [];
     const assets: ConfigBundleAsset[] = [];
     for (const entry of await readdir(directory, { withFileTypes: true })) {
-        if (!entry.isFile() || entry.name.startsWith(".")) continue;
+        // Same filter as the startup import: every file except `.gitkeep`.
+        if (!entry.isFile() || entry.name === ".gitkeep") continue;
         const data = await readFile(join(directory, entry.name));
         assets.push({
             path: `images/${entry.name}`,
