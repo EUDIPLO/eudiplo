@@ -8,6 +8,7 @@ import {
     resourceId,
 } from "@eudiplo/config-format/config-format.js";
 import { atomicWriteFile } from "@eudiplo/config-format/config-io.js";
+import { compareCodePoints } from "@eudiplo/config-format/tenant-folder.js";
 import { FOLDER_RESOURCES } from "./folder-bundle.js";
 
 export interface WrittenTenantFolder {
@@ -94,7 +95,10 @@ function folderPaths(bundle: ConfigBundle): Map<string, string> {
         // Code-point order, not localeCompare: the same on every machine, so
         // the same ID gets the hash suffix on every export.
         .sort((left, right) =>
-            byCodePoint(`${left.kind}/${left.id}`, `${right.kind}/${right.id}`),
+            compareCodePoints(
+                `${left.kind}/${left.id}`,
+                `${right.kind}/${right.id}`,
+            ),
         );
     for (const { kind, id } of ordered) {
         const resource = layoutOf(kind);
@@ -135,17 +139,12 @@ function sortKeys(value: unknown, top = true): unknown {
     if (!value || typeof value !== "object") return value;
     const keys = Object.keys(value);
     // Keep the envelope order; sort everything below it.
-    if (!top) keys.sort(byCodePoint);
+    if (!top) keys.sort(compareCodePoints);
     return Object.fromEntries(
         keys
             .filter((key) => (value as any)[key] !== undefined)
             .map((key) => [key, sortKeys((value as any)[key], false)]),
     );
-}
-
-function byCodePoint(left: string, right: string): number {
-    if (left < right) return -1;
-    return left > right ? 1 : 0;
 }
 
 function layoutOf(kind: ConfigResourceKind) {
@@ -155,16 +154,20 @@ function layoutOf(kind: ConfigResourceKind) {
     return resource;
 }
 
+/** Longest ID used as a file name as it is; longer ones are cut and hashed. */
+const MAX_PLAIN_NAME = 80;
+
 /** An ID as a file name that is valid on Linux, macOS and Windows. */
 function fileName(id: string): string {
     if (
+        id.length <= MAX_PLAIN_NAME &&
         /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id) &&
         !/\.$/.test(id) &&
         !/^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(id)
     )
         return id;
     const safe = id.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^[._]+/, "");
-    return `${safe.slice(0, 80) || "resource"}-${shortHash(id)}`;
+    return `${safe.slice(0, MAX_PLAIN_NAME) || "resource"}-${shortHash(id)}`;
 }
 
 function shortHash(id: string): string {

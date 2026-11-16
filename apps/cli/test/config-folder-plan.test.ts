@@ -1,11 +1,26 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+    mkdir,
+    mkdtemp,
+    readFile,
+    rm,
+    symlink,
+    writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
     type ConfigBundle,
     ConfigBundleCodec,
 } from "@eudiplo/config-format/config-bundle.js";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    onTestFinished,
+    vi,
+} from "vitest";
 import { runPortabilityCommand } from "../src/commands/config/portability/action.js";
 import { runCli } from "../src/runtime.js";
 import type { CliConfig, CommandContext } from "../src/types.js";
@@ -72,6 +87,7 @@ describe("config plan / import with a tenant folder", () => {
         await mkdir(join(tenant, "images"));
         await writeFile(join(tenant, "images", "logo.png"), "png-bytes");
         await writeFile(join(tenant, "images", ".gitkeep"), "");
+        await writeFile(join(tenant, "images", ".DS_Store"), "finder");
     });
 
     afterEach(async () => {
@@ -115,6 +131,12 @@ describe("config plan / import with a tenant folder", () => {
     });
 
     it("sends the same bundle to plan and import, so the fingerprint matches", async () => {
+        // Minutes apart: the archive must not carry the time it was packed.
+        vi.useFakeTimers({ toFake: ["Date"] });
+        vi.setSystemTime(new Date("2026-11-16T10:00:00Z"));
+        onTestFinished(() => {
+            vi.useRealTimers();
+        });
         await runPortabilityCommand(
             "plan",
             config,
@@ -124,6 +146,7 @@ describe("config plan / import with a tenant folder", () => {
             },
             context,
         );
+        vi.setSystemTime(new Date("2026-11-16T10:05:00Z"));
         await runPortabilityCommand(
             "import",
             config,
@@ -262,6 +285,114 @@ describe("config plan / import with a tenant folder", () => {
         expect(context.fetch).toHaveBeenCalledOnce();
     });
 
+    it("never fills in the CLI's own EUDIPLO_* variables", async () => {
+        await writeJson(join(tenant, "clients", "portal.json"), {
+            clientId: "portal",
+            secret: "${EUDIPLO_TOKEN}",
+            roles: ["issuance:manage"],
+        });
+
+        const code = await runPortabilityCommand(
+            "plan",
+            config,
+            { positionals: ["acme"], flags: {} },
+            context,
+        );
+
+        expect(code).toBe(0);
+        const bundle = await sentBundle(
+            vi.mocked(context.fetch).mock.calls[0][1],
+        );
+        expect(bundle.documents[1].spec).toMatchObject({
+            secret: "${EUDIPLO_TOKEN}",
+        });
+        expect(output.stderr).toContain("(not named in --allow-env)");
+        expect(output.stdout + output.stderr).not.toContain("test-token");
+    });
+
+    it("shows filled-in values as their placeholder in the printed and saved plan", async () => {
+        const leaky = {
+            ...plan,
+            items: [
+                {
+                    kind: "Client",
+                    id: "portal",
+                    action: "update",
+                    changes: [
+                        {
+                            path: "/spec/description",
+                            before: "old",
+                            after: "Secret is s3cr3t-value here",
+                        },
+                    ],
+                },
+            ],
+        };
+        vi.mocked(context.fetch).mockImplementation(
+            async () => new Response(JSON.stringify(leaky), { status: 200 }),
+        );
+
+        for (const flags of [
+            { diff: true, "allow-env": "PORTAL_SECRET" },
+            { output: "plan.json", "allow-env": "PORTAL_SECRET" },
+        ]) {
+            output.stdout = "";
+            await runPortabilityCommand(
+                "plan",
+                config,
+                { positionals: ["acme"], flags },
+                context,
+            );
+            expect(output.stdout).not.toContain("s3cr3t-value");
+            expect(output.stdout).toContain("Secret is ${PORTAL_SECRET} here");
+        }
+        const saved = await readFile(join(cwd, "plan.json"), "utf8");
+        expect(saved).not.toContain("s3cr3t-value");
+        expect(JSON.parse(saved).planFingerprint).toBe(fingerprint);
+    });
+
+    it("never masks inside the plan fingerprint", async () => {
+        context.env.PORTAL_SECRET = "bbbbbbbbbbbb";
+
+        await runPortabilityCommand(
+            "plan",
+            config,
+            {
+                positionals: ["acme"],
+                flags: { output: "plan.json", "allow-env": "PORTAL_SECRET" },
+            },
+            context,
+        );
+
+        const saved = JSON.parse(
+            await readFile(join(cwd, "plan.json"), "utf8"),
+        );
+        expect(saved.planFingerprint).toBe(fingerprint);
+    });
+
+    it("shows filled-in values as their placeholder in an API error", async () => {
+        vi.mocked(context.fetch).mockImplementation(
+            async () =>
+                new Response("secret s3cr3t-value is too short", {
+                    status: 400,
+                }),
+        );
+
+        await expect(
+            runPortabilityCommand(
+                "plan",
+                config,
+                {
+                    positionals: ["acme"],
+                    flags: { "allow-env": "PORTAL_SECRET" },
+                },
+                context,
+            ),
+        ).rejects.toThrow(
+            "EUDIPLO API returned 400: secret ${PORTAL_SECRET} is too short",
+        );
+    });
+
     it("writes the validation report as JSON with --format json", async () => {
         await rm(join(tenant, "info.json"));
 
@@ -311,6 +442,21 @@ describe("config plan / import with a tenant folder", () => {
             ),
         ).rejects.toThrow("either --diff or --format json");
         expect(context.fetch).not.toHaveBeenCalled();
+    });
+
+    it("takes --allow-env from the command line", async () => {
+        const code = await runCli(
+            ["config", "plan", "acme", "--allow-env", "PORTAL_SECRET"],
+            context,
+        );
+
+        expect(code).toBe(0);
+        const bundle = await sentBundle(
+            vi.mocked(context.fetch).mock.calls[0][1],
+        );
+        expect(bundle.documents[1].spec).toMatchObject({
+            secret: "s3cr3t-value",
+        });
     });
 
     it("rejects an unknown --format through the command line", async () => {

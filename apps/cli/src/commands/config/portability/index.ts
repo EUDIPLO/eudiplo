@@ -19,7 +19,7 @@ export function createPortabilityCommands(
         if (name === "export") {
             command.option(
                 "--output <path>",
-                "bundle file (.zip or .json), or a directory to write the tenant folder layout to",
+                "bundle file (.json, else a ZIP), or a directory ending in / (or an existing one) to write the tenant folder layout to",
             );
         } else {
             command

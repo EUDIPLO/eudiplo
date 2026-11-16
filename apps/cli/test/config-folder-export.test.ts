@@ -34,7 +34,7 @@ const config: CliConfig = {
 };
 const logo = Buffer.from("png-bytes");
 
-describe("config export --output <dir>", () => {
+describe("config export --output <dir>/", () => {
     let cwd: string;
     let output: { stdout: string; stderr: string };
     let context: CommandContext;
@@ -59,11 +59,12 @@ describe("config export --output <dir>", () => {
                     return true;
                 },
             },
-            fetch: vi.fn(
-                async () =>
-                    new Response(new Uint8Array(codec.encode(bundle)), {
-                        status: 200,
-                    }),
+            fetch: vi.fn(async (url: string | URL | Request) =>
+                String(url).endsWith("format=json")
+                    ? new Response(JSON.stringify(bundle), { status: 200 })
+                    : new Response(new Uint8Array(codec.encode(bundle)), {
+                          status: 200,
+                      }),
             ),
         };
     });
@@ -81,7 +82,7 @@ describe("config export --output <dir>", () => {
         );
 
     it("writes the tenant folder layout, named by resource ID", async () => {
-        expect(await exportTo("acme")).toBe(0);
+        expect(await exportTo("acme/")).toBe(0);
 
         expect(vi.mocked(context.fetch).mock.calls[0][0]).toBe(
             "https://example.test/api/config-bundles/export?format=zip",
@@ -102,7 +103,7 @@ describe("config export --output <dir>", () => {
     });
 
     it("keeps placeholders and required keys as exported, with sorted keys and a final newline", async () => {
-        await exportTo("acme");
+        await exportTo("acme/");
 
         const client = await readFile(
             join(cwd, "acme", "clients", "portal.json"),
@@ -136,7 +137,7 @@ describe("config export --output <dir>", () => {
     });
 
     it("lists what to supply before an import, by folder file", async () => {
-        await exportTo("acme");
+        await exportTo("acme/");
 
         expect(output.stdout).toContain(
             "Exported tenant acme to " +
@@ -155,7 +156,7 @@ describe("config export --output <dir>", () => {
     });
 
     it("round-trips: the folder packs back into the exported documents and assets", async () => {
-        await exportTo("acme");
+        await exportTo("acme/");
 
         const packed = await packTenantFolder(join(cwd, "acme"), {});
         const byKey = (documents: ConfigFile[]) =>
@@ -171,10 +172,12 @@ describe("config export --output <dir>", () => {
         );
     });
 
-    it("writes the same files however the server orders the keys", async () => {
-        await exportTo("first");
-        bundle = exportedBundle({ reverseKeys: true });
-        await exportTo("second");
+    it("writes the same files however the server orders keys and documents", async () => {
+        await exportTo("first/");
+        // Reversed documents would swap the hash suffix of PID and pid
+        // without the code-point sort.
+        bundle = exportedBundle({ reverse: true });
+        await exportTo("second/");
 
         const first = await contents(join(cwd, "first"));
         expect(await contents(join(cwd, "second"))).toEqual(first);
@@ -184,16 +187,36 @@ describe("config export --output <dir>", () => {
         await mkdir(join(cwd, "acme"));
         await writeFile(join(cwd, "acme", "keep.txt"), "mine");
 
-        await expect(exportTo("acme")).rejects.toThrow(
+        await expect(exportTo("acme/")).rejects.toThrow(
             "Output directory is not empty",
         );
         expect(await tree(join(cwd, "acme"))).toEqual(["keep.txt"]);
+        // The target is checked before a staging directory is created.
         expect(
             (await readdir(cwd)).filter((name) => name.startsWith(".")),
         ).toEqual([]);
     });
 
-    it("exports into an existing empty directory", async () => {
+    it("refuses a file at the folder path and leaves it untouched", async () => {
+        await writeFile(join(cwd, "backup"), "mine");
+
+        await expect(exportTo("backup/")).rejects.toThrow(
+            "Output exists and is not a directory",
+        );
+        expect(await readFile(join(cwd, "backup"), "utf8")).toBe("mine");
+    });
+
+    it("leaves neither the folder nor its staging directory behind when writing fails", async () => {
+        bundle.assets[0].path = "logos/logo.png";
+        bundle.manifest.assets[0].path = "logos/logo.png";
+
+        await expect(exportTo("acme/")).rejects.toThrow(
+            "Unexpected asset path in export: logos/logo.png",
+        );
+        expect(await readdir(cwd)).toEqual([]);
+    });
+
+    it("exports into an existing empty directory, named without a slash", async () => {
         await mkdir(join(cwd, "acme"));
 
         expect(await exportTo("acme")).toBe(0);
@@ -201,7 +224,7 @@ describe("config export --output <dir>", () => {
     });
 
     it("notes when the folder is not named after the tenant", async () => {
-        await exportTo("backup");
+        await exportTo("backup/");
 
         expect(output.stderr).toContain(
             "the folder is not named after the tenant (acme)",
@@ -214,12 +237,112 @@ describe("config export --output <dir>", () => {
         expect(codec.decode(await readFile(join(cwd, "acme.zip")))).toEqual(
             codec.decode(codec.encode(bundle)),
         );
+
+        await exportTo("acme.json");
+        expect(vi.mocked(context.fetch).mock.calls[1][0]).toBe(
+            "https://example.test/api/config-bundles/export?format=json",
+        );
+        expect(
+            JSON.parse(await readFile(join(cwd, "acme.json"), "utf8")),
+        ).toEqual(bundle);
+    });
+
+    it("fails, writing nothing, when the output path runs through a file", async () => {
+        await writeFile(join(cwd, "backup"), "mine");
+
+        await expect(exportTo("backup/acme.zip")).rejects.toThrow("ENOTDIR");
+        expect(await readFile(join(cwd, "backup"), "utf8")).toBe("mine");
+    });
+
+    it("writes a ZIP for a path without extension or slash, as before, and says how to get a folder", async () => {
+        expect(await exportTo("backup")).toBe(0);
+
+        expect((await stat(join(cwd, "backup"))).isFile()).toBe(true);
+        expect(codec.decode(await readFile(join(cwd, "backup")))).toEqual(
+            codec.decode(codec.encode(bundle)),
+        );
+        expect(output.stderr).toContain(
+            "To write a tenant folder instead, end --output with a slash: backup/",
+        );
+        // A second run overwrites the file, as scheduled backups expect.
+        expect(await exportTo("backup")).toBe(0);
+    });
+
+    it("names IDs that are no portable file name after their hash, and reads them back", async () => {
+        const ids = ["con", "nul.txt", "a.", "x".repeat(200)];
+        bundle = exportedBundle({
+            credentials: ids,
+        });
+
+        await exportTo("acme/");
+
+        const names = (await tree(join(cwd, "acme")))
+            .filter((file) => file.startsWith("issuance/credentials/"))
+            .map((file) => file.slice("issuance/credentials/".length));
+        expect(names).toHaveLength(ids.length);
+        for (const name of names) {
+            expect(name).toMatch(/^[A-Za-z0-9._-]+-[0-9a-f]{8}\.json$/);
+            expect(name.length).toBeLessThanOrEqual(80 + 9 + 5);
+        }
+        const packed = await packTenantFolder(join(cwd, "acme"), {});
+        expect(
+            packed.documents
+                .filter(
+                    (document) =>
+                        normalizeDocument(document).kind === "CredentialConfig",
+                )
+                .map((document) => resourceId(document))
+                .sort(),
+        ).toEqual([...ids].sort());
+    });
+
+    it("gives an ID that equals another ID's hashed name a file of its own", async () => {
+        bundle = exportedBundle({
+            credentials: ["pid", "PID", "pid-ce71df4d"],
+        });
+
+        await exportTo("acme/");
+
+        const packed = await packTenantFolder(join(cwd, "acme"), {});
+        expect(
+            packed.documents
+                .filter(
+                    (document) =>
+                        normalizeDocument(document).kind === "CredentialConfig",
+                )
+                .map((document) => resourceId(document))
+                .sort(),
+        ).toEqual(["PID", "pid", "pid-ce71df4d"]);
+    });
+
+    it("prints the export's warnings, and a requirement without a file by its resource", async () => {
+        bundle.manifest.warnings = [
+            { code: "ASSET_SKIPPED", message: "An image was skipped." },
+        ] as ConfigBundle["manifest"]["warnings"];
+        bundle.manifest.requirements.push({
+            code: "CLIENT_SECRET_REQUIRED",
+            resource: { kind: "Client", id: "elsewhere" },
+            path: "/spec/secret",
+            placeholder: "CLIENT_ELSEWHERE_SECRET",
+            message: "Client secrets are one-way hashed.",
+        });
+
+        await exportTo("acme/");
+
+        expect(output.stderr).toContain(
+            "warning ASSET_SKIPPED: An image was skipped.",
+        );
+        expect(output.stdout).toContain(
+            "  Client/elsewhere /spec/secret: ${CLIENT_ELSEWHERE_SECRET} (CLIENT_SECRET_REQUIRED)",
+        );
     });
 });
 
-function exportedBundle(options: { reverseKeys?: boolean } = {}): ConfigBundle {
+function exportedBundle(
+    options: { reverse?: boolean; credentials?: string[] } = {},
+): ConfigBundle {
     const order = (value: Record<string, unknown>) =>
-        options.reverseKeys
+        options.reverse
             ? Object.fromEntries(Object.entries(value).reverse())
             : value;
     const document = (
@@ -250,12 +373,28 @@ function exportedBundle(options: { reverseKeys?: boolean } = {}): ConfigBundle {
             }),
         }),
         document("IssuanceConfig", { display: [] }),
-        document("CredentialConfig", { id: "pid", description: "lower" }),
-        // Differs from "pid" only in case: a separate file on every system.
-        document("CredentialConfig", { id: "PID", description: "upper" }),
-        // Not a valid file name on Windows.
-        document("CredentialConfig", { id: "pid:v1", description: "colon" }),
+        ...(options.credentials
+            ? options.credentials.map((id) =>
+                  document("CredentialConfig", { id, description: id }),
+              )
+            : [
+                  document("CredentialConfig", {
+                      id: "pid",
+                      description: "lower",
+                  }),
+                  // Differs from "pid" only in case: a separate file on every system.
+                  document("CredentialConfig", {
+                      id: "PID",
+                      description: "upper",
+                  }),
+                  // Not a valid file name on Windows.
+                  document("CredentialConfig", {
+                      id: "pid:v1",
+                      description: "colon",
+                  }),
+              ]),
     ];
+    if (options.reverse) documents.reverse();
     const sha256 = (value: Buffer) =>
         createHash("sha256").update(value).digest("hex");
     return {

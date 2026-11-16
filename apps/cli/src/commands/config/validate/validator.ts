@@ -13,6 +13,7 @@ import {
 } from "@eudiplo/config-format/config-format.js";
 import { validateConfigDocument } from "@eudiplo/config-format/config-validator.js";
 import { resolveConfigVariables } from "@eudiplo/config-format/config-values.js";
+import { compareCodePoints } from "@eudiplo/config-format/tenant-folder.js";
 import type { ErrorObject, ValidateFunction } from "ajv";
 import Ajv2020Module from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
@@ -29,7 +30,7 @@ async function discoverTenantDirectories(rootPath: string): Promise<string[]> {
     return entries
         .filter((entry) => entry.isDirectory())
         .map((entry) => entry.name)
-        .sort((left, right) => left.localeCompare(right));
+        .sort(compareCodePoints);
 }
 
 export async function validateTenantsRoot(
@@ -187,7 +188,7 @@ async function validateDirectoryEntry(
         .filter(
             (dirEntry) => dirEntry.isFile() && dirEntry.name.endsWith(".json"),
         )
-        .sort((left, right) => left.name.localeCompare(right.name));
+        .sort((left, right) => compareCodePoints(left.name, right.name));
 
     for (const dirEntry of dirEntries) {
         const relativeFile = `${entry.subfolder}/${dirEntry.name}`;
@@ -232,7 +233,7 @@ async function validateResourceFile(
     getValidator: (schemaFile: string) => ValidateFunction,
     env: NodeJS.ProcessEnv,
     errors: ValidationIssue[],
-    placeholderIssues: ValidationIssue[] = errors,
+    placeholderIssues: ValidationIssue[],
 ): Promise<boolean> {
     let raw: string;
     try {
@@ -381,6 +382,11 @@ function resolvePlaceholders(
 ): unknown {
     const result = resolveConfigVariables(value, env);
     for (const issue of result.issues)
-        errors.push({ file, path: issue.path, message: issue.message });
+        errors.push({
+            file,
+            path: issue.path,
+            message: issue.message,
+            variable: issue.variable,
+        });
     return result.value;
 }

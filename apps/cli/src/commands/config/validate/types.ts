@@ -27,6 +27,8 @@ export interface ValidationIssue {
     file: string;
     path?: string;
     message: string;
+    /** The variable of an unresolved `${VAR}` placeholder. */
+    variable?: string;
 }
 
 export interface TenantValidationResult {
