@@ -1,0 +1,57 @@
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 640px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.token {
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.organization {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+
+  .grow {
+    flex: 1 1 260px;
+  }
+
+  button {
+    margin-top: 8px;
+  }
+}
+
+.environment {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.live-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: -8px 0 8px;
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--mat-sys-error);
+  margin: 0;
+}
+
+.organizations-error {
+  color: var(--mat-sys-error);
+}

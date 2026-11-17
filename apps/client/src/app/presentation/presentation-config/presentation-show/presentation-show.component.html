@@ -326,6 +326,22 @@
           Security
         </ng-template>
         <div fxLayout="column" fxLayoutGap="24px" class="tab-content">
+          @if (canRequestFromEudiHub) {
+            <div fxLayout="row" fxLayoutAlign="end center">
+              <button
+                mat-stroked-button
+                type="button"
+                (click)="requestFromEudiHub()"
+                matTooltip="Register this DCQL query at the German EUDI Hub and store the registration certificate it issues, with a token from its portal"
+                appConfigManaged
+                managedKind="PresentationConfig"
+                [managedResourceId]="config.id"
+              >
+                <mat-icon>verified</mat-icon>
+                Request from EUDI Hub
+              </button>
+            </div>
+          }
           @if (config.registration_cert) {
             <mat-card>
               <mat-card-header>

@@ -1,0 +1,93 @@
+<p>
+  Sign in to the
+  <a [href]="dialog().portalUrl" target="_blank" rel="noopener noreferrer">EUDI Hub portal</a>, open
+  your browser's developer tools, select a request to <code>api.eudi-hub.gov.de</code> in the
+  Network tab and copy the value of its <code>Authorization</code> header. The token expires after a
+  few minutes. EUDIPLO uses it for this request only and does not store it.
+</p>
+
+<mat-form-field appearance="outline" class="full-width">
+  <mat-label>Access token</mat-label>
+  <textarea
+    matInput
+    [formControl]="dialog().token"
+    rows="3"
+    cdkFocusInitial
+    autocomplete="off"
+    spellcheck="false"
+    class="token"
+  ></textarea>
+  <mat-hint>With or without "Bearer ".</mat-hint>
+  @if (dialog().token.hasError('required')) {
+    <mat-error>Paste the access token from the portal.</mat-error>
+  } @else if (dialog().token.hasError('maxlength')) {
+    <mat-error>This is too long for an access token.</mat-error>
+  } @else if (dialog().token.hasError('pattern')) {
+    <mat-error>
+      Copy only the value of the Authorization header: the token, with or without "Bearer ".
+    </mat-error>
+  }
+</mat-form-field>
+
+<div class="organization">
+  @if (dialog().organizations()?.length) {
+    <mat-form-field appearance="outline" class="grow">
+      <mat-label>Organization</mat-label>
+      <mat-select [formControl]="dialog().organizationId">
+        @for (organization of dialog().organizations(); track organization.id) {
+          <mat-option [value]="organization.id">{{ organization.name }}</mat-option>
+        }
+      </mat-select>
+      @if (dialog().organizationId.hasError('required')) {
+        <mat-error>Select the organization.</mat-error>
+      }
+    </mat-form-field>
+  } @else {
+    <mat-form-field appearance="outline" class="grow">
+      <mat-label>Organization ID</mat-label>
+      <input matInput [formControl]="dialog().organizationId" autocomplete="off" />
+      <mat-hint>
+        @if (dialog().organizations()?.length === 0) {
+          The token's user belongs to no organization. Enter its ID by hand.
+        } @else {
+          Load the organizations of the token, or enter the ID by hand.
+        }
+      </mat-hint>
+      @if (dialog().organizationId.hasError('required')) {
+        <mat-error>Enter the organization ID.</mat-error>
+      } @else if (dialog().organizationId.hasError('pattern')) {
+        <mat-error>The organization ID is a UUID.</mat-error>
+      }
+    </mat-form-field>
+  }
+  <button
+    mat-stroked-button
+    type="button"
+    (click)="dialog().loadOrganizations()"
+    [disabled]="dialog().loadingOrganizations()"
+    disabledInteractive
+  >
+    <mat-icon>sync</mat-icon>
+    {{ dialog().loadingOrganizations() ? 'Loading...' : 'Load Organizations' }}
+  </button>
+</div>
+@if (dialog().organizationsError(); as message) {
+  <p class="live-hint organizations-error" role="alert">
+    <mat-icon>error</mat-icon>
+    <span>{{ message }}</span>
+  </p>
+}
+
+<div class="environment">
+  <span [id]="environmentLabelId" class="environment-label">Environment</span>
+  <mat-radio-group [formControl]="dialog().environment" [attr.aria-labelledby]="environmentLabelId">
+    <mat-radio-button value="sandbox">Sandbox</mat-radio-button>
+    <mat-radio-button value="live">Live</mat-radio-button>
+  </mat-radio-group>
+</div>
+@if (dialog().environment.value === 'live') {
+  <p class="live-hint" role="note">
+    <mat-icon>info</mat-icon>
+    <span>{{ liveHint() }}</span>
+  </p>
+}

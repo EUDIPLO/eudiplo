@@ -6607,6 +6607,256 @@ export type PresentationRequest = {
     reference?: string;
 };
 
+export type EudiHubOrganizationsRequestDto = {
+    /**
+     * Access token of the EUDI Hub portal (the value of the Authorization header the portal sends, with or without 'Bearer '). EUDIPLO uses it for this request only and does not store it.
+     */
+    token: string;
+};
+
+export type EudiHubOrganizationDto = {
+    /**
+     * ID of the organization at the EUDI Hub
+     */
+    id: string;
+    /**
+     * Name of the organization
+     */
+    name: string;
+};
+
+export type EudiHubAccessCertificateRequestDto = {
+    /**
+     * Access token of the EUDI Hub portal (the value of the Authorization header the portal sends, with or without 'Bearer '). EUDIPLO uses it for this request only and does not store it.
+     */
+    token: string;
+    /**
+     * ID of the organization at the EUDI Hub.
+     */
+    organizationId: string;
+    /**
+     * Standalone access key chain the certificate is requested for.
+     */
+    keyId: string;
+    /**
+     * EUDI Hub environment that issues the certificate.
+     */
+    environment: 'sandbox' | 'live';
+    /**
+     * Where interested parties can reach the organization for support regarding this certificate.
+     */
+    supportUri: string;
+    /**
+     * Display name of the certificate at the EUDI Hub. Defaults to the key chain's description or ID.
+     */
+    name?: string;
+};
+
+export type EudiHubAccessCertificateDto = {
+    /**
+     * ID of the certificate at the EUDI Hub
+     */
+    id: string;
+    /**
+     * ID of the key chain that now holds the certificate
+     */
+    certId: string;
+    /**
+     * The certificate in PEM format
+     */
+    crt: string;
+    /**
+     * EUDI Hub environment that issued the certificate
+     */
+    environment: 'sandbox' | 'live';
+    /**
+     * Client identifier the EUDI Hub derived from the certificate
+     */
+    clientId?: string;
+    /**
+     * When the certificate expires, as the EUDI Hub reports it
+     */
+    expirationDate?: string;
+};
+
+export type EudiHubOrganizationDetailsRequestDto = {
+    /**
+     * Access token of the EUDI Hub portal (the value of the Authorization header the portal sends, with or without 'Bearer '). EUDIPLO uses it for this request only and does not store it.
+     */
+    token: string;
+    /**
+     * ID of the organization at the EUDI Hub.
+     */
+    organizationId: string;
+};
+
+export type EudiHubIdentifierDto = {
+    type: string;
+    value: string;
+};
+
+export type EudiHubTextDto = {
+    lang: string;
+    content: string;
+};
+
+export type EudiHubServiceDescriptionDto = {
+    /**
+     * Technical name of the service description
+     */
+    name: string;
+    descriptions: Array<EudiHubTextDto>;
+};
+
+export type EudiHubOrganizationDetailsDto = {
+    /**
+     * ID of the organization at the EUDI Hub
+     */
+    id: string;
+    /**
+     * Trade name, else legal name
+     */
+    name: string;
+    /**
+     * Official identifiers of the organization
+     */
+    identifiers: Array<EudiHubIdentifierDto>;
+    serviceDescriptions: Array<EudiHubServiceDescriptionDto>;
+    privacyPolicyUris: Array<string>;
+    supportUris: Array<string>;
+    infoUris: Array<string>;
+};
+
+export type EudiHubPresentationRegistrationCertificateRequestDto = {
+    /**
+     * Access token of the EUDI Hub portal (the value of the Authorization header the portal sends, with or without 'Bearer '). EUDIPLO uses it for this request only and does not store it.
+     */
+    token: string;
+    /**
+     * ID of the organization at the EUDI Hub.
+     */
+    organizationId: string;
+    /**
+     * EUDI Hub environment that issues the certificate.
+     */
+    environment: 'sandbox' | 'live';
+    /**
+     * Official identifier of the organization to put in the certificate, one of those the EUDI Hub has for it.
+     */
+    identifier: {
+        type: 'http://data.europa.eu/eudi/id/EUID' | 'http://data.europa.eu/eudi/id/LEI' | 'http://data.europa.eu/eudi/id/EORI-No' | 'http://data.europa.eu/eudi/id/VATIN' | 'http://data.europa.eu/eudi/id/TIN' | 'http://data.europa.eu/eudi/id/Excise' | 'http://data.eudi-hub.de/eudi/id/DatenuebermittlerPseudonymId' | 'http://data.eudi-hub.de/eudi/id/Handelsregisternummer';
+        value: string;
+    };
+    /**
+     * Description of the service in German and English, shown to wallet users.
+     */
+    serviceDescription: Array<{
+        /**
+         * ISO 639-1 language code, such as de or en.
+         */
+        lang: string;
+        content: string;
+    }>;
+    /**
+     * Where people can reach the organization about this certificate.
+     */
+    supportUri: string;
+    /**
+     * General web address of the organization.
+     */
+    infoUri: string;
+    /**
+     * Display name of the certificate at the EUDI Hub.
+     */
+    name?: string;
+    /**
+     * Presentation configuration whose DCQL query the certificate covers and that stores it.
+     */
+    presentationConfigId: string;
+    /**
+     * Why the data is requested, in German and English (GDPR purpose).
+     */
+    purpose: Array<{
+        /**
+         * ISO 639-1 language code, such as de or en.
+         */
+        lang: string;
+        content: string;
+    }>;
+    /**
+     * Privacy policy URL.
+     */
+    privacyPolicy: string;
+};
+
+export type EudiHubRegistrationCertificateDto = {
+    /**
+     * ID of the certificate at the EUDI Hub
+     */
+    id: string;
+    environment: 'sandbox' | 'live';
+    /**
+     * When the certificate expires, as the EUDI Hub reports it
+     */
+    expirationDate?: string;
+    /**
+     * Credential request the certificate was issued for (verifier)
+     */
+    credentialRequestId?: string;
+    /**
+     * Whether an existing credential request with the same credentials, purpose and privacy policy was used
+     */
+    reusedCredentialRequest?: boolean;
+    /**
+     * Credential issuances the certificate was issued for (issuer)
+     */
+    credentialIssuanceIds?: Array<string>;
+};
+
+export type EudiHubIssuerRegistrationCertificateRequestDto = {
+    /**
+     * Access token of the EUDI Hub portal (the value of the Authorization header the portal sends, with or without 'Bearer '). EUDIPLO uses it for this request only and does not store it.
+     */
+    token: string;
+    /**
+     * ID of the organization at the EUDI Hub.
+     */
+    organizationId: string;
+    /**
+     * EUDI Hub environment that issues the certificate.
+     */
+    environment: 'sandbox' | 'live';
+    /**
+     * Official identifier of the organization to put in the certificate, one of those the EUDI Hub has for it.
+     */
+    identifier: {
+        type: 'http://data.europa.eu/eudi/id/EUID' | 'http://data.europa.eu/eudi/id/LEI' | 'http://data.europa.eu/eudi/id/EORI-No' | 'http://data.europa.eu/eudi/id/VATIN' | 'http://data.europa.eu/eudi/id/TIN' | 'http://data.europa.eu/eudi/id/Excise' | 'http://data.eudi-hub.de/eudi/id/DatenuebermittlerPseudonymId' | 'http://data.eudi-hub.de/eudi/id/Handelsregisternummer';
+        value: string;
+    };
+    /**
+     * Description of the service in German and English, shown to wallet users.
+     */
+    serviceDescription: Array<{
+        /**
+         * ISO 639-1 language code, such as de or en.
+         */
+        lang: string;
+        content: string;
+    }>;
+    /**
+     * Where people can reach the organization about this certificate.
+     */
+    supportUri: string;
+    /**
+     * General web address of the organization.
+     */
+    infoUri: string;
+    /**
+     * Display name of the certificate at the EUDI Hub.
+     */
+    name?: string;
+};
+
 export type FileUploadDto = {
     file: Blob | File;
 };
@@ -9676,6 +9926,169 @@ export type VerifierOfferControllerGetOfferResponses = {
 };
 
 export type VerifierOfferControllerGetOfferResponse = VerifierOfferControllerGetOfferResponses[keyof VerifierOfferControllerGetOfferResponses];
+
+export type EudiHubControllerListOrganizationsData = {
+    body: EudiHubOrganizationsRequestDto;
+    path?: never;
+    query?: never;
+    url: '/api/eudi-hub/organizations';
+};
+
+export type EudiHubControllerListOrganizationsErrors = {
+    /**
+     * The request is invalid, or the EUDI Hub refused the access token (expired, not from the portal) or the request; the message carries the EUDI Hub's reason
+     */
+    400: unknown;
+    /**
+     * The caller lacks the registrar:manage role
+     */
+    403: unknown;
+    /**
+     * The EUDI Hub could not be reached, answered with a server error, or answered with something other than its API describes
+     */
+    502: unknown;
+};
+
+export type EudiHubControllerListOrganizationsResponses = {
+    /**
+     * Organizations of the token's user
+     */
+    200: Array<EudiHubOrganizationDto>;
+};
+
+export type EudiHubControllerListOrganizationsResponse = EudiHubControllerListOrganizationsResponses[keyof EudiHubControllerListOrganizationsResponses];
+
+export type EudiHubControllerRequestAccessCertificateData = {
+    body: EudiHubAccessCertificateRequestDto;
+    path?: never;
+    query?: never;
+    url: '/api/eudi-hub/access-certificate';
+};
+
+export type EudiHubControllerRequestAccessCertificateErrors = {
+    /**
+     * The request is invalid, or the EUDI Hub refused the access token (expired, not from the portal) or the request; the message carries the EUDI Hub's reason. Also returned when the key chain is not a standalone access key chain, the issued certificate does not hold its key, or the outbound URL policy blocks the EUDI Hub URL
+     */
+    400: unknown;
+    /**
+     * The caller lacks the registrar:manage role
+     */
+    403: unknown;
+    /**
+     * Key chain not found
+     */
+    404: unknown;
+    /**
+     * The EUDI Hub could not be reached, answered with a server error, or answered with something other than its API describes
+     */
+    502: unknown;
+};
+
+export type EudiHubControllerRequestAccessCertificateResponses = {
+    /**
+     * Access certificate issued and stored
+     */
+    201: EudiHubAccessCertificateDto;
+};
+
+export type EudiHubControllerRequestAccessCertificateResponse = EudiHubControllerRequestAccessCertificateResponses[keyof EudiHubControllerRequestAccessCertificateResponses];
+
+export type EudiHubControllerOrganizationDetailsData = {
+    body: EudiHubOrganizationDetailsRequestDto;
+    path?: never;
+    query?: never;
+    url: '/api/eudi-hub/organization-details';
+};
+
+export type EudiHubControllerOrganizationDetailsErrors = {
+    /**
+     * The request is invalid, or the EUDI Hub refused the access token (expired, not from the portal) or the request; the message carries the EUDI Hub's reason
+     */
+    400: unknown;
+    /**
+     * The caller lacks the registrar:manage role
+     */
+    403: unknown;
+    /**
+     * The EUDI Hub could not be reached, answered with a server error, or answered with something other than its API describes
+     */
+    502: unknown;
+};
+
+export type EudiHubControllerOrganizationDetailsResponses = {
+    /**
+     * The organization's data
+     */
+    200: EudiHubOrganizationDetailsDto;
+};
+
+export type EudiHubControllerOrganizationDetailsResponse = EudiHubControllerOrganizationDetailsResponses[keyof EudiHubControllerOrganizationDetailsResponses];
+
+export type EudiHubControllerRequestPresentationRegistrationCertificateData = {
+    body: EudiHubPresentationRegistrationCertificateRequestDto;
+    path?: never;
+    query?: never;
+    url: '/api/eudi-hub/registration-certificate/presentation';
+};
+
+export type EudiHubControllerRequestPresentationRegistrationCertificateErrors = {
+    /**
+     * The request is invalid, or the EUDI Hub refused the access token (expired, not from the portal) or the request; the message carries the EUDI Hub's reason. Also returned when the DCQL query cannot be registered at the EUDI Hub (no credential queries, a format other than dc+sd-jwt or mso_mdoc, several vct values, meta other than vct_values or doctype_value, no claims, array indexes or wildcards in claim paths) or the certificate fails the checks of an imported certificate, such as the overasking check
+     */
+    400: unknown;
+    /**
+     * The caller lacks the registrar:manage or presentation:manage role
+     */
+    403: unknown;
+    /**
+     * Presentation configuration not found
+     */
+    409: unknown;
+    /**
+     * The EUDI Hub could not be reached, answered with a server error, or answered with something other than its API describes
+     */
+    502: unknown;
+};
+
+export type EudiHubControllerRequestPresentationRegistrationCertificateResponses = {
+    /**
+     * Registration certificate issued and stored
+     */
+    201: EudiHubRegistrationCertificateDto;
+};
+
+export type EudiHubControllerRequestPresentationRegistrationCertificateResponse = EudiHubControllerRequestPresentationRegistrationCertificateResponses[keyof EudiHubControllerRequestPresentationRegistrationCertificateResponses];
+
+export type EudiHubControllerRequestIssuerRegistrationCertificateData = {
+    body: EudiHubIssuerRegistrationCertificateRequestDto;
+    path?: never;
+    query?: never;
+    url: '/api/eudi-hub/registration-certificate/issuer';
+};
+
+export type EudiHubControllerRequestIssuerRegistrationCertificateErrors = {
+    /**
+     * The request is invalid, or the EUDI Hub refused the access token (expired, not from the portal) or the request; the message carries the EUDI Hub's reason. Also returned when no credential configuration has a vct or docType
+     */
+    400: unknown;
+    /**
+     * The caller lacks the registrar:manage or issuance:manage role
+     */
+    403: unknown;
+    /**
+     * The EUDI Hub could not be reached, answered with a server error, or answered with something other than its API describes, or it issued a certificate that does not list every credential type, which is then revoked
+     */
+    502: unknown;
+};
+
+export type EudiHubControllerRequestIssuerRegistrationCertificateResponses = {
+    /**
+     * Registration certificate issued and stored
+     */
+    201: EudiHubRegistrationCertificateDto;
+};
+
+export type EudiHubControllerRequestIssuerRegistrationCertificateResponse = EudiHubControllerRequestIssuerRegistrationCertificateResponses[keyof EudiHubControllerRequestIssuerRegistrationCertificateResponses];
 
 export type StorageControllerUploadData = {
     body: FileUploadDto;

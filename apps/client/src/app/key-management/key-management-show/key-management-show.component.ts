@@ -36,6 +36,11 @@ import { LoadErrorComponent } from '../../common/load-error.component';
 import { KeyCertificateRequestComponent } from '../key-certificate-request/key-certificate-request.component';
 import { JwtService } from '../../services/jwt.service';
 import {
+  EudiHubDialogComponent,
+  type EudiHubDialogData,
+} from '../../registrar/eudi-hub-dialog/eudi-hub-dialog.component';
+import type { EudiHubAccessCertificate } from '../../registrar/eudi-hub.service';
+import {
   RegistrarService,
   accessCertificateRefusal,
   hasRelyingPartyContact,
@@ -476,20 +481,71 @@ export class KeyManagementShowComponent implements OnInit, OnDestroy {
    * someone else, and enrolling a rotating key, whose next rotation replaces
    * the registrar certificate with a self-signed one. Undefined when nothing.
    */
-  private enrollmentQuestion(): string | undefined {
+  private enrollmentQuestion(
+    source = 'the registrar',
+    question = 'Enroll with the registrar?'
+  ): string | undefined {
     const certificate = this.keyChain?.activeCertificate;
     const parts: string[] = [];
     if (certificate && !this.isSelfSigned()) {
       parts.push(
-        `This replaces the active certificate issued by "${certificate.issuer}" with a new certificate from the registrar. The key stays the same, but the current certificate is no longer used. This cannot be undone.`
+        `This replaces the active certificate issued by "${certificate.issuer}" with a new certificate from ${source}. The key stays the same, but the current certificate is no longer used. This cannot be undone.`
       );
     }
     if (this.keyChain?.rotationPolicy?.enabled) {
       parts.push(
-        'This key rotates automatically: its next rotation replaces the registrar certificate with a self-signed one for a new key. Turn rotation off by editing the key chain to keep the registrar certificate.'
+        `This key rotates automatically: its next rotation replaces the certificate from ${source} with a self-signed one for a new key. Turn rotation off by editing the key chain to keep the certificate.`
       );
     }
-    return parts.length ? `${parts.join('\n\n')}\n\nEnroll with the registrar?` : undefined;
+    return parts.length ? `${parts.join('\n\n')}\n\n${question}` : undefined;
+  }
+
+  /**
+   * A standalone access key chain can get its certificate from the German
+   * EUDI Hub with a token pasted from its portal; no registrar configuration
+   * is needed.
+   */
+  get canRequestFromEudiHub(): boolean {
+    return this.isEnrollableKey;
+  }
+
+  /**
+   * Opens the EUDI Hub dialog, which requests a certificate for the key and
+   * stores it as the active certificate. A certificate issued by someone else
+   * is only replaced after confirmation.
+   */
+  requestFromEudiHub(): void {
+    if (!this.keyChain || this.isEnrolling) return;
+    const question = this.enrollmentQuestion(
+      'the EUDI Hub',
+      'Request a certificate from the EUDI Hub?'
+    );
+    if (question && !confirm(question)) return;
+
+    const keyId = this.keyChain.id;
+    this.dialog
+      .open<EudiHubDialogComponent, EudiHubDialogData, EudiHubAccessCertificate | undefined>(
+        EudiHubDialogComponent,
+        {
+          data: { keyId, description: this.keyChain.description ?? undefined },
+          width: '640px',
+          maxWidth: '95vw',
+          // Escape or a backdrop click must not drop a request that is still running.
+          disableClose: true,
+        }
+      )
+      .afterClosed()
+      .subscribe((certificate) => {
+        if (certificate) {
+          this.snackBar.open(
+            `Access certificate from the EUDI Hub (${certificate.environment}) stored`,
+            'Close',
+            { duration: 4000 }
+          );
+        }
+        // A failed request may still have stored a recovered certificate.
+        void this.refreshKey(keyId);
+      });
   }
 
   /**

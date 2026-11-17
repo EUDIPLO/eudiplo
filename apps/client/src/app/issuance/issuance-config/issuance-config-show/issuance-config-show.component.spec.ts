@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { of } from 'rxjs';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { provideRouter } from '@angular/router';
@@ -83,6 +84,8 @@ describe('IssuanceConfigShowComponent loading', () => {
         getConfig: vi.fn().mockRejectedValue({ statusCode: 403, message: 'Forbidden resource' }),
       } as never,
       { open: vi.fn() } as never,
+      {} as never,
+      {} as never,
       {} as never
     );
 
@@ -100,7 +103,9 @@ describe('IssuanceConfigShowComponent download', () => {
     const component = new IssuanceConfigShowComponent(
       {} as never,
       {} as never,
-      { downloadWithFeedback } as never
+      { downloadWithFeedback } as never,
+      {} as never,
+      {} as never
     );
     component.config = {} as never;
 
@@ -139,7 +144,13 @@ describe('IssuanceConfigShowComponent copy', () => {
   });
 
   const create = (open: ReturnType<typeof vi.fn>) =>
-    new IssuanceConfigShowComponent({} as never, { open } as never, {} as never);
+    new IssuanceConfigShowComponent(
+      {} as never,
+      { open } as never,
+      {} as never,
+      {} as never,
+      {} as never
+    );
 
   it('confirms the copied registration certificate JWT', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -219,5 +230,109 @@ describe('IssuanceConfigShowComponent registration certificate', () => {
 
     expect(reissueRegistrationCertificate).toHaveBeenCalledOnce();
     expectUnavailable(fixture, regenerate, 'Regenerating the registration certificate…');
+  });
+});
+
+describe('IssuanceConfigShowComponent EUDI Hub', () => {
+  /** An unsigned JWT with this payload. */
+  const jwt = (payload: Record<string, unknown>) =>
+    `${btoa(JSON.stringify({ alg: 'ES256' }))}.${btoa(JSON.stringify(payload))
+      .replace(/=+$/, '')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')}.c2ln`;
+
+  function create(roles: string[], open = vi.fn()) {
+    const getConfig = vi.fn().mockResolvedValue({});
+    const component = new IssuanceConfigShowComponent(
+      { getConfig } as never,
+      { open: vi.fn() } as never,
+      {} as never,
+      { open } as never,
+      { hasRole: (role: string) => roles.includes(role) } as never
+    );
+    return { component, getConfig, open };
+  }
+
+  it('offers the request only with registrar:manage and issuance:manage', () => {
+    expect(create(['registrar:manage', 'issuance:manage']).component.canRequestFromEudiHub).toBe(
+      true
+    );
+    expect(create(['issuance:manage']).component.canRequestFromEudiHub).toBe(false);
+  });
+
+  it('opens the issuer dialog and reloads the settings after it closes', async () => {
+    const open = vi.fn().mockReturnValue({ afterClosed: () => of(undefined) });
+    const { component, getConfig } = create(['registrar:manage', 'issuance:manage'], open);
+
+    component.requestFromEudiHub();
+
+    expect(open.mock.lastCall?.[1]).toMatchObject({
+      disableClose: true,
+      data: { kind: 'issuer' },
+    });
+    await vi.waitFor(() => expect(getConfig).toHaveBeenCalled());
+  });
+
+  it('shows the imported certificate, not an earlier generated one, in import mode', () => {
+    const { component } = create([]);
+    const imported = jwt({ iat: 1_800_000_000, exp: 1_900_000_000 });
+    component.config = {
+      registrationCertificate: { enabled: true, mode: 'import', jwt: imported },
+      registrationCertificateCache: { jwt: 'old.generated.jwt', expiresAt: 1 },
+    } as never;
+
+    expect(component.registrationCertificateJwt).toBe(imported);
+    expect(component.registrationCertificateCache).toEqual({
+      jwt: imported,
+      issuedAt: 1_800_000_000,
+      expiresAt: 1_900_000_000,
+    });
+  });
+
+  it('says that generation and renewal stop before replacing a generated certificate', () => {
+    const open = vi.fn();
+    const { component } = create(['registrar:manage', 'issuance:manage'], open);
+    component.config = { registrationCertificate: { enabled: true, mode: 'generate' } } as never;
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    component.requestFromEudiHub();
+
+    expect(confirm.mock.lastCall?.[0]).toContain('no longer generates or renews it');
+    expect(open).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+
+  it('keeps an imported JWT that cannot be decoded without times', () => {
+    const { component } = create([]);
+    component.config = {
+      registrationCertificate: { enabled: true, mode: 'import', jwt: 'x.y.z' },
+    } as never;
+
+    expect(component.registrationCertificateCache).toEqual({ jwt: 'x.y.z' });
+  });
+
+  it('asks before replacing an imported certificate', () => {
+    const open = vi.fn();
+    const { component } = create(['registrar:manage', 'issuance:manage'], open);
+    component.config = { registrationCertificate: { enabled: true, mode: 'import' } } as never;
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    component.requestFromEudiHub();
+
+    expect(confirm.mock.lastCall?.[0]).toContain('replaces the imported issuer registration');
+    confirm.mockRestore();
+  });
+
+  it('opens the dialog without asking when no registration certificate is enabled', () => {
+    const open = vi.fn().mockReturnValue({ afterClosed: () => of(undefined) });
+    const { component } = create(['registrar:manage', 'issuance:manage'], open);
+    component.config = { registrationCertificate: { enabled: false } } as never;
+    const confirm = vi.spyOn(window, 'confirm');
+
+    component.requestFromEudiHub();
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalled();
+    confirm.mockRestore();
   });
 });

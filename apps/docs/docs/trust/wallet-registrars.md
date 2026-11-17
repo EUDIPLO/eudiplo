@@ -19,7 +19,7 @@ Do not confuse the HTTPS certificate of `PUBLIC_URL` with the certificates of th
 Access and attestation certificates belong to key chains ([Keys and Certificates](keys-and-certificates.md#certificates)). A registration certificate is a JWT configured per presentation configuration ([Registration Certificates](registration-certificates.md)).
 
 :::note[Registration certificates without a registrar configuration]
-Without a [registrar configuration](registrar.md), verifiers and issuers can still use a registration certificate they obtained elsewhere: `registration_cert.jwt` in a presentation configuration, `registrationCertificate.mode: "import"` in the issuance configuration. Creating or reusing certificates at the registrar (`registration_cert.body` or `id`) needs the German registrar integration.
+Without a [registrar configuration](registrar.md), verifiers and issuers can still use a registration certificate they obtained elsewhere: `registration_cert.jwt` in a presentation configuration, `registrationCertificate.mode: "import"` in the issuance configuration. Creating or reusing certificates at the registrar (`registration_cert.body` or `id`) needs the German registrar integration. The German EUDI Hub issues them without one: EUDIPLO stores them as imported certificates ([EUDI Hub](eudi-hub.md#request-a-registration-certificate)).
 :::
 
 ## Choose the wallet path
@@ -30,7 +30,7 @@ The exact acceptance rules can change between wallet releases and sandbox deploy
 | ----------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Paradym Wallet test setup                 | Self-signed can be sufficient: **Access Certificate → Self-Signed Certificate**             | Usually not needed for a minimal test                                                                     |
 | EU Reference Implementation               | Import the key and certificate from the ecosystem operator: **Access Certificate → External Certificate** | Cannot be attached without the German registrar integration (see above); use a test setup that does not require one |
-| German wallet or German ecosystem sandbox | **Registrar Enrollment** through the integrated registrar, or import a certificate the German registrar already issued | Configure `registration_cert` in each presentation configuration; EUDIPLO obtains it from the registrar    |
+| German wallet or German ecosystem sandbox | **Request from EUDI Hub** ([EUDI Hub](eudi-hub.md)), **Registrar Enrollment** through the integrated registrar, or import a certificate the German registrar already issued | Configure `registration_cert` in each presentation configuration; EUDIPLO obtains it from the registrar, or select **Request from EUDI Hub** on the presentation configuration's **Security** tab and in **Issuer Settings** ([EUDI Hub](eudi-hub.md#request-a-registration-certificate)) |
 | Other wallets                             | Check the wallet ecosystem's documentation                                                  | Check whether verifier requests must carry one; EUDIPLO can only attach it with the German registrar      |
 
 The [wallet compatibility record](../reference/wallet-compatibility.md) tracks protocol support and known wallet limitations; it does not replace the current onboarding requirements of the wallet or registrar operator.
@@ -55,7 +55,7 @@ If Paradym rejects the certificate, check the wallet version and test environmen
 
 1. Obtain the German registrar URLs and account credentials from the registrar operator.
 2. Configure the registrar for the tenant that owns the issuer and verifier settings ([Registrar](registrar.md)). The tenant needs the `registrar:manage` role.
-3. Create the access key chain with **Access Certificate → Registrar Enrollment**, or import a key and certificate the registrar already issued.
+3. Create the access key chain with **Access Certificate → Registrar Enrollment**, or import a key and certificate the registrar already issued. With an organization at the EUDI Hub, you can instead request the access certificate there ([EUDI Hub](eudi-hub.md)).
 4. Set `registration_cert` with a `purpose` in each presentation configuration that needs one; set privacy policy and support URI once as registrar defaults.
 5. Repeat the health, issuance and presentation checks with the target wallet. A successful health check only proves HTTPS connectivity, not that the wallet accepts your certificates.
 

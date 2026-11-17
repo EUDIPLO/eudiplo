@@ -417,6 +417,22 @@
                 }
               </mat-list>
 
+              @if (canRequestFromEudiHub) {
+                <div fxLayout="row" fxLayoutGap="12px" style="margin-top: 16px">
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    (click)="requestFromEudiHub()"
+                    matTooltip="Register your credential types at the German EUDI Hub and store the registration certificate it issues, with a token from its portal"
+                    appConfigManaged
+                    managedKind="IssuanceConfig"
+                    managedResourceId="issuance"
+                  >
+                    <mat-icon>verified</mat-icon>
+                    Request from EUDI Hub
+                  </button>
+                </div>
+              }
               @if (registrationCertificateConfig?.enabled && registrationCertificateGenerated) {
                 <div fxLayout="row" fxLayoutGap="12px" style="margin-top: 16px">
                   <button
