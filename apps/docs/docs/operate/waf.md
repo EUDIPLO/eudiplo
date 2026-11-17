@@ -20,7 +20,8 @@ TLS termination and general proxy settings are on [TLS and reverse proxy](tls.md
 Match the `/api/` prefix case-insensitively: the backend routes `/API/session`
 like `/api/session`, so a case-sensitive rule can be bypassed. If your WAF
 supports an allow list of paths, allow `/api/`, `/.well-known/`, `/issuers/`,
-`/presentations/`, `/storage/`, `/health`, `/docs` and `/`, and block the rest.
+`/presentations/`, `/verifiers/`, `/storage/`, `/health`, `/docs` and `/`, and
+block the rest.
 Check the list against the [path prefixes](../reference/api.md#path-prefixes)
 after each upgrade.
 
@@ -97,6 +98,10 @@ Wallets call these from phones on mobile networks, so:
 | `/presentations/{walletNonce}/oid4vp/request`, `/presentations/{walletNonce}/oid4vp/request/no-redirect`                                 | GET, POST | POST: form (`wallet_metadata`, `wallet_nonce`)                     | Wallets                       |
 | `/presentations/{walletNonce}/oid4vp`                                                                                                    | POST      | Form (`response` or `vp_token`) from wallets; JSON from your page (DC API) | Wallets, your page      |
 | `/presentations/{walletNonce}/iso-18013-7`                                                                                               | POST      | JSON (`data`)                                                      | Your page (DC API)            |
+| `/verifiers/{tenant}/oidc/.well-known/openid-configuration`, `/verifiers/{tenant}/oidc/jwks`                                              | GET       | –                                                                  | Relying parties               |
+| `/verifiers/{tenant}/oidc/par`, `/verifiers/{tenant}/oidc/token`                                                                         | POST      | Form                                                               | Relying parties' backends     |
+| `/verifiers/{tenant}/oidc/authorize`                                                                                                     | GET, POST | POST: form                                                         | User's browser                |
+| `/verifiers/{tenant}/oidc/sign-in/{id}`, `…/status`, `…/complete`, `…/callback`                                                          | GET       | –                                                                  | User's browser, redirected back by the wallet |
 | `/storage/{key}`                                                                                                                         | GET       | –                                                                  | Wallets (logos, images)       |
 
 | Setting       | Value                                                                                                                                                                         |
@@ -150,7 +155,10 @@ path from the WAF log.
 
 Add these rules to `REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf`. Adjust the
 IDs if they collide with your own rules. With them, all requests of the table
-passed CRS 4.30 at paranoia levels 1 to 3.
+passed CRS 4.30 at paranoia levels 1 to 3, except the `/verifiers/` routes of
+the OpenID Provider, which were added later and have not been run against CRS;
+their `redirect_uri` parameters trigger 931130 like those of PAR and token
+requests, so the rule below covers them too.
 
 ```apache
 # Management API: allow its methods and skip the injection rules that
@@ -171,7 +179,7 @@ SecRule REQUEST_FILENAME "@rx ^/issuers/[^/]+/vci/(?:credential|deferred_credent
     setvar:'tx.allowed_request_content_type=|application/json| |application/jwt|'"
 
 # Wallet-facing endpoints: base64url tokens, JSON in form fields, redirect URIs.
-SecRule REQUEST_FILENAME "@rx ^/(?:issuers|presentations)/" \
+SecRule REQUEST_FILENAME "@rx ^/(?:issuers|presentations|verifiers)/" \
     "id:10030,phase:1,pass,nolog,t:none,\
     ctl:ruleRemoveByTag=attack-sqli,\
     ctl:ruleRemoveById=931130"

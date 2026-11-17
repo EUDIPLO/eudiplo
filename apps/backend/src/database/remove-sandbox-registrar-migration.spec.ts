@@ -4,8 +4,8 @@ import { AddConfigResourceMetadata1777000000000 } from "./migrations/17770000000
 import {
     issuerRegistrationCertificate,
     presentationRegistrationCertificate,
-    RemoveSandboxRegistrar1786400000000,
-} from "./migrations/1786400000000-RemoveSandboxRegistrar.js";
+    RemoveSandboxRegistrar1786500000000,
+} from "./migrations/1786500000000-RemoveSandboxRegistrar.js";
 
 const NOW = 1_800_000_000;
 const unsigned = (payload: Record<string, unknown>) =>
@@ -14,7 +14,7 @@ const valid = unsigned({ exp: NOW + 3600 });
 const expired = unsigned({ exp: NOW - 3600 });
 const purpose = [{ lang: "en", content: "Age check" }];
 
-describe("RemoveSandboxRegistrar1786400000000 presentation configurations", () => {
+describe("RemoveSandboxRegistrar1786500000000 presentation configurations", () => {
     it("keeps a valid cached certificate for id or body and moves purpose and privacy policy up", () => {
         expect(
             presentationRegistrationCertificate(
@@ -113,7 +113,7 @@ describe("RemoveSandboxRegistrar1786400000000 presentation configurations", () =
     });
 });
 
-describe("RemoveSandboxRegistrar1786400000000 issuance configurations", () => {
+describe("RemoveSandboxRegistrar1786500000000 issuance configurations", () => {
     it("keeps an imported certificate and drops mode and renewal", () => {
         expect(
             issuerRegistrationCertificate(
@@ -154,7 +154,7 @@ describe("RemoveSandboxRegistrar1786400000000 issuance configurations", () => {
     });
 });
 
-describe("RemoveSandboxRegistrar1786400000000 ownership records", () => {
+describe("RemoveSandboxRegistrar1786500000000 ownership records", () => {
     let dataSource: DataSource | undefined;
 
     afterEach(async () => {
@@ -177,7 +177,7 @@ describe("RemoveSandboxRegistrar1786400000000 ownership records", () => {
                    ('t', 'KeyChain', 'issuer', 'file-managed', 1)
         `);
 
-        const migration = new RemoveSandboxRegistrar1786400000000();
+        const migration = new RemoveSandboxRegistrar1786500000000();
         await migration.up(queryRunner);
         await migration.up(queryRunner);
 

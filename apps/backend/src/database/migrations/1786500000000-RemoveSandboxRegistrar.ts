@@ -41,8 +41,8 @@ type Json = Record<string, any>;
  * Mirrors the PresentationConfig v4 -> v5 and IssuanceConfig v6 -> v7
  * config-file migrations.
  */
-export class RemoveSandboxRegistrar1786400000000 implements MigrationInterface {
-    name = "RemoveSandboxRegistrar1786400000000";
+export class RemoveSandboxRegistrar1786500000000 implements MigrationInterface {
+    name = "RemoveSandboxRegistrar1786500000000";
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         await this.migratePresentationConfigs(queryRunner);

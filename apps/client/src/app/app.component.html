@@ -352,6 +352,17 @@
                 <mat-icon matListItemIcon>tune</mat-icon>
                 <span matListItemTitle>Verification Configs</span>
               </a>
+
+              <a
+                mat-list-item
+                [routerLink]="['/oidc-clients']"
+                routerLinkActive="active-link"
+                ariaCurrentWhenActive="page"
+                (click)="closeSidenavOnMobile()"
+              >
+                <mat-icon matListItemIcon>login</mat-icon>
+                <span matListItemTitle>OIDC Clients</span>
+              </a>
             }
           </app-nav-section>
         }

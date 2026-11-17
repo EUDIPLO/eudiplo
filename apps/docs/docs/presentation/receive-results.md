@@ -20,7 +20,7 @@ The body always contains `status`, `outcome` and `session`, plus `transaction_da
 ```json
 {
     "status": "completed",
-    "outcome": { "result": "success", "source": "verifier", "credentials": [{ "id": "membership", "verified": true }] },
+    "outcome": { "result": "success", "source": "verifier", "credentials": [{ "id": "membership", "verified": true, "trust": { "matchedIssuer": "Membership Demo", "matchMode": "ca" } }] },
     "credentials": [{ "id": "membership", "values": [{ "name": "Max", "member_id": "M-001" }] }],
     "session": "3f0c1d9e-4c1b-4f63-9a59-2f4f0b6a2c11"
 }
@@ -70,7 +70,7 @@ Read the session with `GET /api/session/{id}`. The caller needs the `presentatio
     "consumedAt": "2026-10-03T10:01:12.000Z",
     "responseCode": "6b1f0d0e-1c4e-4a54-8f7e-0b8f1c2d3e4f",
     "credentials": [{ "id": "membership", "values": [{ "name": "Max", "member_id": "M-001" }] }],
-    "outcome": { "result": "success", "source": "verifier", "credentials": [{ "id": "membership", "verified": true }] }
+    "outcome": { "result": "success", "source": "verifier", "credentials": [{ "id": "membership", "verified": true, "trust": { "matchedIssuer": "Membership Demo", "matchMode": "ca" } }] }
 }
 ```
 

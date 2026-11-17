@@ -3,7 +3,7 @@ import { afterEach, beforeAll, describe, expect, test } from "vitest";
 import { ClientEntity } from "../../src/auth/client/entities/client.entity.js";
 import { TenantEntity } from "../../src/auth/tenant/entities/tenant.entity.js";
 import { EncryptStoredSecrets1784500000000 } from "../../src/database/migrations/1784500000000-EncryptStoredSecrets.js";
-import { RemoveSandboxRegistrar1786400000000 } from "../../src/database/migrations/1786400000000-RemoveSandboxRegistrar.js";
+import { RemoveSandboxRegistrar1786500000000 } from "../../src/database/migrations/1786500000000-RemoveSandboxRegistrar.js";
 import { AttributeProviderEntity } from "../../src/issuer/configuration/attribute-provider/entities/attribute-provider.entity.js";
 import { IssuanceConfig } from "../../src/issuer/configuration/issuance/entities/issuance-config.entity.js";
 import { WebhookEndpointEntity } from "../../src/issuer/configuration/webhook-endpoint/entities/webhook-endpoint.entity.js";
@@ -83,7 +83,7 @@ export function encryptStoredSecretsContract(
             // entities, so the later migration's down() creates it.
             const queryRunner = db.createQueryRunner();
             try {
-                await new RemoveSandboxRegistrar1786400000000().down(
+                await new RemoveSandboxRegistrar1786500000000().down(
                     queryRunner,
                 );
             } finally {

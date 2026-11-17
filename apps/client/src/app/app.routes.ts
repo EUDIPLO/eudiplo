@@ -11,6 +11,7 @@ import {
   attributeProviderRoutes,
 } from './issuance/issuance.routes';
 import { webhookEndpointRoutes } from './webhook-endpoint/webhook-endpoint.routes';
+import { oidcClientRoutes } from './oidc-client/oidc-client.routes';
 import { keyManagementRoutes } from './key-management/key-management.routes';
 import { KEY_CHAIN_ROLES } from './key-management/key-chain.service';
 import {
@@ -182,6 +183,14 @@ export const routes: Routes = [
     canActivate: [AuthGuard, RoleGuard],
     data: { role: getRole('presentation:manage') },
     children: presentationConfigRoutes,
+  },
+
+  // OpenID Connect clients that sign users in with a wallet
+  {
+    path: 'oidc-clients',
+    canActivate: [AuthGuard, RoleGuard],
+    data: { role: getRole('presentation:manage') },
+    children: oidcClientRoutes,
   },
 
   // Trust list routes: issuers publish trust lists, verifiers accept issuers from them

@@ -23,7 +23,7 @@ export const NAV_SECTION_ROUTES: Record<NavSection, string[]> = {
     '/status-list-config',
     '/attribute-providers',
   ],
-  verification: ['/offer/presentation', '/presentation-config'],
+  verification: ['/offer/presentation', '/presentation-config', '/oidc-clients'],
   sessions: ['/session-management'],
 };
 

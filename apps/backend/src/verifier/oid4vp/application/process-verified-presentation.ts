@@ -1,4 +1,5 @@
 import type { SessionData } from "../../../session/domain/session-data.js";
+import type { VerificationProvenance } from "../../../session/domain/session-outcome.js";
 import { SessionStatus } from "../../../session/domain/session-state.js";
 import type { WebhookConfiguration } from "../../../webhook/domain/webhook-configuration.js";
 import type { PresentationResultPublisher } from "../../../webhook/ports/presentation-result-publisher.js";
@@ -24,6 +25,8 @@ export class ProcessVerifiedPresentation {
         response: AuthResponseData;
         session: SessionData;
         credentials?: unknown[];
+        /** Trusted issuer per credential query, for the session outcome. */
+        trust?: Record<string, VerificationProvenance>;
         responseCode: string;
         webhook?: WebhookConfiguration;
         rawPresentationPayload?: unknown;
@@ -42,6 +45,7 @@ export class ProcessVerifiedPresentation {
             sessionId: session.id,
             requestId: session.requestId,
             credentials: input.credentials ?? [],
+            trust: input.trust,
             responseCode: input.responseCode,
         });
         if (input.webhook) {

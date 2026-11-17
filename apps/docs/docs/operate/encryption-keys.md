@@ -122,7 +122,11 @@ key changes, or with `env` the `MASTER_SECRET` changes:
 - the single-active-credential policy no longer recognizes earlier subjects, so
   their existing credentials stop counting against the limit,
 - with the built-in OAuth2 server, all management tokens become invalid
-  (they are signed with `MASTER_SECRET`).
+  (they are signed with `MASTER_SECRET`),
+- with any key source, a change of `MASTER_SECRET` changes the `sub` that
+  OpenID Provider clients with a
+  [`subject`](../presentation/openid-connect.md#stable-subject-and-top-level-claims)
+  receive, so relying parties see every user as new.
 
 Store the key, or `MASTER_SECRET`, in your secret manager with versioning, and
 include it in the [backup plan](production-checklist.md#backups): a database

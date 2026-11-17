@@ -1,5 +1,6 @@
 import { decodeJwt } from "jose";
 import type { SessionData } from "../../../session/domain/session-data.js";
+import type { VerificationProvenance } from "../../../session/domain/session-outcome.js";
 import type {
     RevocationCheckMode,
     VerifierOptions,
@@ -54,6 +55,8 @@ export interface PresentationQuery {
 export type VerifiedPresentation = Array<{
     id: string;
     values: Record<string, unknown>[];
+    /** The trusted issuer of the first presented credential, when known. */
+    trust?: VerificationProvenance;
 }>;
 
 /**
@@ -276,6 +279,7 @@ export class VerifyPresentationResponse {
                         }
                         return {
                             claims: result.claims,
+                            trust: result.provenance,
                             presentation: result.keyBinding && {
                                 credentialId,
                                 index,
@@ -288,6 +292,7 @@ export class VerifyPresentationResponse {
                 return {
                     id: credentialId,
                     values: results.map(({ claims }) => claims),
+                    trust: results[0]?.trust,
                     presentations: results.flatMap(({ presentation }) =>
                         presentation ? [presentation] : [],
                     ),
@@ -306,7 +311,9 @@ export class VerifyPresentationResponse {
             responseMode: request?.response_mode,
         });
 
-        return verified.map(({ id, values }) => ({ id, values }));
+        return verified.map(({ id, values, trust }) =>
+            trust ? { id, values, trust } : { id, values },
+        );
     }
 }
 
