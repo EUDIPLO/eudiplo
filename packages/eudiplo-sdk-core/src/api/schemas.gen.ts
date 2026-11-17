@@ -11622,42 +11622,6 @@ export const UpstreamOidcConfigSchema = {
     additionalProperties: false
 } as const;
 
-export const UpstreamOidcConfigSchema = {
-    type: 'object',
-    properties: {
-        issuer: {
-            type: 'string',
-            description: 'The OIDC issuer URL of the upstream provider',
-            example: 'https://auth.example.com/realms/myrealm'
-        },
-        clientId: {
-            type: 'string',
-            description: 'The client ID registered with the upstream provider',
-            example: 'eudiplo-chained-as'
-        },
-        clientSecret: {
-            type: 'string',
-            description: 'The client secret for confidential clients'
-        },
-        scopes: {
-            items: {
-                type: 'string'
-            },
-            description: 'Scopes to request from the upstream provider',
-            default: [
-                'openid',
-                'profile'
-            ],
-            type: 'array'
-        }
-    },
-    required: [
-        'issuer',
-        'clientId'
-    ],
-    additionalProperties: false
-} as const;
-
 export const ChainedAuthorizationServerConfigSchema = {
     type: 'object',
     properties: {

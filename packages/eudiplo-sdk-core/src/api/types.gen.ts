@@ -5387,25 +5387,6 @@ export type UpstreamOidcConfig = {
     scopes?: Array<string>;
 };
 
-export type UpstreamOidcConfig = {
-    /**
-     * The OIDC issuer URL of the upstream provider
-     */
-    issuer: string;
-    /**
-     * The client ID registered with the upstream provider
-     */
-    clientId: string;
-    /**
-     * The client secret for confidential clients
-     */
-    clientSecret?: string;
-    /**
-     * Scopes to request from the upstream provider
-     */
-    scopes?: Array<string>;
-};
-
 export type ChainedAuthorizationServerConfig = {
     /**
      * Authorization server implementation type
