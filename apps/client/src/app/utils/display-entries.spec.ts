@@ -66,7 +66,8 @@ describe('uniqueDisplayLocaleValidator', () => {
     ]);
   });
 
-  it('accepts distinct locales and a control outside a FormArray', () => {
+  it('accepts distinct locales, as the API does, and a control outside a FormArray', () => {
+    // The API accepts regional variants side by side, so a stored pair stays savable.
     expect(errorsOf(entries('en-US', 'en-GB'))).toEqual([null, null]);
     expect(uniqueDisplayLocaleValidator(new FormControl('en-US'))).toBeNull();
   });

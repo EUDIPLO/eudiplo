@@ -1,3 +1,4 @@
+import { LANGUAGE_OPTIONS } from '../../../utils/language-options';
 import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -122,7 +123,7 @@ describe('CredentialConfigCreateComponent', () => {
       vct: 'urn:member',
       statusManagement: false,
       activeCredentials: { enabled: true },
-      config: { format: 'dc+sd-jwt', display: [{ name: 'Membership', locale: 'en-US' }] },
+      config: { format: 'dc+sd-jwt', display: [{ name: 'Membership', locale: 'en' }] },
       fields: [],
     });
     expect(statusManagement.value).toBe(true);
@@ -137,7 +138,7 @@ describe('CredentialConfigCreateComponent', () => {
       description: 'Membership',
       vct: 'urn:member',
       statusManagement: false,
-      config: { format: 'dc+sd-jwt', display: [{ name: 'Membership', locale: 'en-US' }] },
+      config: { format: 'dc+sd-jwt', display: [{ name: 'Membership', locale: 'en' }] },
       fields: [],
     });
     expect(statusManagement.value).toBe(false);
@@ -187,7 +188,7 @@ describe('CredentialConfigCreateComponent', () => {
       revokeWithWalletUnit: true,
       config: {
         format: 'dc+sd-jwt',
-        display: [{ name: 'PID', locale: 'en-US' }],
+        display: [{ name: 'PID', locale: 'en' }],
         keyAttestationsRequired: { key_storage: ['iso_18045_high'] },
       },
       fields: [],
@@ -204,7 +205,7 @@ describe('CredentialConfigCreateComponent', () => {
       id: 'pid',
       description: 'PID',
       vct: 'urn:pid',
-      config: { format: 'dc+sd-jwt', display: [{ name: 'PID', locale: 'en-US' }] },
+      config: { format: 'dc+sd-jwt', display: [{ name: 'PID', locale: 'en' }] },
       fields: [],
     });
     expect(component.form.get('revokeWithWalletUnit')!.value).toBe(false);
@@ -216,7 +217,7 @@ describe('CredentialConfigCreateComponent', () => {
       {
         name: 'Membership',
         description: 'Member card',
-        locale: 'en-US',
+        locale: 'en',
         background_color: '#112233',
         text_color: '#FFFFFF',
         logo: { uri: 'https://example.com/logo.png' },
@@ -224,7 +225,7 @@ describe('CredentialConfigCreateComponent', () => {
       {
         name: 'Mitgliedschaft',
         description: 'Mitgliedskarte',
-        locale: 'de-DE',
+        locale: 'de',
         background_color: '#445566',
         text_color: '#000000',
       },
@@ -258,9 +259,9 @@ describe('CredentialConfigCreateComponent', () => {
 
   it('keeps display entries without description or colors as they are', () => {
     const display = [
-      { name: 'Membership', locale: 'en-US' },
-      { name: 'Mitgliedschaft', locale: 'de-DE', background_color: 'rgb(18, 16, 124)' },
-      { name: 'Adhésion', description: 'Carte de membre', locale: 'fr-FR', text_color: '#fff' },
+      { name: 'Membership', locale: 'en' },
+      { name: 'Mitgliedschaft', locale: 'de', background_color: 'rgb(18, 16, 124)' },
+      { name: 'Adhésion', description: 'Carte de membre', locale: 'fr', text_color: '#fff' },
     ];
     (component as any).patchFormFromConfig({
       id: 'member',
@@ -278,7 +279,7 @@ describe('CredentialConfigCreateComponent', () => {
     component.displayConfigs.at(2).patchValue({ description: ' ', text_color: '' });
     expect((component as any).buildConfigurationPayload().config.display[2]).toEqual({
       name: 'Adhésion',
-      locale: 'fr-FR',
+      locale: 'fr',
     });
 
     // Set values are sent trimmed.
@@ -288,7 +289,7 @@ describe('CredentialConfigCreateComponent', () => {
     expect((component as any).buildConfigurationPayload().config.display[2]).toEqual({
       name: 'Adhésion',
       description: 'Carte',
-      locale: 'fr-FR',
+      locale: 'fr',
       background_color: '#12107C',
     });
   });
@@ -301,9 +302,9 @@ describe('CredentialConfigCreateComponent', () => {
       config: {
         format: 'dc+sd-jwt',
         display: [
-          { name: 'Membership', locale: 'en-US', background_color: '#12107C' },
-          { name: 'Mitgliedschaft', locale: 'de-DE', text_color: 'navy' },
-          { name: 'Membership (copy)', locale: 'en-us' },
+          { name: 'Membership', locale: 'en', background_color: '#12107C' },
+          { name: 'Mitgliedschaft', locale: 'de', text_color: 'navy' },
+          { name: 'Membership (copy)', locale: 'EN' },
         ],
       },
       fields: [],
@@ -320,8 +321,38 @@ describe('CredentialConfigCreateComponent', () => {
     }
 
     // Fixing the first entry's locale clears the error on the later one.
-    valid.patchValue({ locale: 'fr-FR' });
+    valid.patchValue({ locale: 'fr' });
     expect(duplicate.get('locale')?.errors).toBeNull();
+  });
+
+  it('keeps a stored claim label tag and starts a new label in an unused language', () => {
+    component.fields.push(
+      component.createFieldGroup({
+        path: ['given_name'],
+        type: 'string',
+        display: [{ locale: 'de-DE', name: 'Vorname' }],
+      } as never)
+    );
+    const index = component.fields.length - 1;
+
+    component.addFieldDisplay(index);
+
+    const labels = component.getFieldDisplayArray(index).value;
+    expect(labels.map((label: { locale: string }) => label.locale)).toEqual(['de-DE', 'en']);
+  });
+
+  it('does not offer a language a stored regional tag already uses', () => {
+    (component as any).patchFormFromConfig({
+      id: 'member',
+      description: 'Membership',
+      vct: 'urn:member',
+      config: { format: 'dc+sd-jwt', display: [{ name: 'Membership', locale: 'en-US' }] },
+      fields: [],
+    });
+
+    expect(component.unusedDisplayLocale).toBe('de');
+    const options = component.displayLocaleOptions(component.displayConfigs.at(0));
+    expect(options.find(({ value }) => value === 'en-US')?.label).toBe('English (en-US)');
   });
 
   it('starts new display entries without colors, with an optional description and an unused locale', () => {
@@ -329,7 +360,7 @@ describe('CredentialConfigCreateComponent', () => {
     const added = component.displayConfigs.at(1);
     expect(added.value).toMatchObject({
       description: '',
-      locale: 'en-GB',
+      locale: 'de',
       background_color: '',
       text_color: '',
     });
@@ -337,11 +368,11 @@ describe('CredentialConfigCreateComponent', () => {
     expect(added.valid).toBe(true);
     expect((component as any).buildConfigurationPayload().config.display[1]).toEqual({
       name: 'Mitgliedschaft',
-      locale: 'en-GB',
+      locale: 'de',
     });
 
     // Choosing a locale another entry uses marks the later entry, shown before it is touched.
-    added.patchValue({ locale: 'en-US' });
+    added.patchValue({ locale: 'en' });
     expect(added.get('locale')?.errors).toEqual({ duplicateLocale: { firstIndex: 0 } });
     expect(added.get('locale')?.touched).toBe(false);
     expect(component.localeErrorState.isErrorState(added.get('locale') as any, null)).toBe(true);
@@ -360,9 +391,9 @@ describe('CredentialConfigCreateComponent', () => {
       config: {
         format: 'dc+sd-jwt',
         display: [
-          { name: 'A', locale: 'en-US' },
-          { name: 'B', locale: 'de-DE' },
-          { name: 'C', locale: 'en-US' },
+          { name: 'A', locale: 'en' },
+          { name: 'B', locale: 'de' },
+          { name: 'C', locale: 'en' },
         ],
       },
       fields: [],
@@ -375,12 +406,12 @@ describe('CredentialConfigCreateComponent', () => {
   });
 
   it('adds entries only while a listed locale is unused', () => {
-    for (let i = 1; i < component.localeOptions.length; i++) component.addDisplayConfig();
-    expect(component.displayConfigs).toHaveLength(component.localeOptions.length);
+    for (let i = 1; i < LANGUAGE_OPTIONS.length; i++) component.addDisplayConfig();
+    expect(component.displayConfigs).toHaveLength(LANGUAGE_OPTIONS.length);
     expect(component.unusedDisplayLocale).toBeUndefined();
 
     component.addDisplayConfig();
-    expect(component.displayConfigs).toHaveLength(component.localeOptions.length);
+    expect(component.displayConfigs).toHaveLength(LANGUAGE_OPTIONS.length);
   });
 
   it('offers a loaded locale that is not listed and previews only accepted colors', () => {
@@ -396,7 +427,7 @@ describe('CredentialConfigCreateComponent', () => {
     const entry = component.displayConfigs.at(0);
     expect(component.displayLocaleOptions(entry).at(-1)).toEqual({
       value: 'nl-NL',
-      label: 'nl-NL',
+      label: 'Dutch (nl-NL)',
       disabled: false,
     });
     expect(component.swatchColor(entry.get('background_color'))).toBe('#fff');
@@ -412,8 +443,8 @@ describe('CredentialConfigCreateComponent', () => {
         .filter((option) => option.disabled)
         .map((option) => option.value);
 
-    expect(disabled(first)).toEqual(['en-GB']);
-    expect(disabled(second)).toEqual(['en-US']);
+    expect(disabled(first)).toEqual(['de']);
+    expect(disabled(second)).toEqual(['en']);
   });
 
   it('saves a configuration without its optional description', () => {

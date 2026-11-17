@@ -1,3 +1,8 @@
+import {
+  DEFAULT_LANGUAGE,
+  firstUnusedLanguage,
+  languageOptionsWith,
+} from '../../../utils/language-options';
 import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import {
   AbstractControl,
@@ -153,33 +158,7 @@ export class PresentationCreateComponent implements OnInit {
   public keyChains: KeyChainResponseDto[] = [];
   public webhookEndpoints: WebhookEndpointEntity[] = [];
 
-  readonly purposeLanguageOptions = [
-    { value: 'en-US', label: 'English (US)' },
-    { value: 'en-GB', label: 'English (UK)' },
-    { value: 'de-DE', label: 'German' },
-    { value: 'fr-FR', label: 'French' },
-    { value: 'it-IT', label: 'Italian' },
-    { value: 'es-ES', label: 'Spanish' },
-    { value: 'nl-NL', label: 'Dutch' },
-    { value: 'pt-PT', label: 'Portuguese' },
-    { value: 'pl-PL', label: 'Polish' },
-    { value: 'cs-CZ', label: 'Czech' },
-    { value: 'sk-SK', label: 'Slovak' },
-    { value: 'sl-SI', label: 'Slovenian' },
-    { value: 'hr-HR', label: 'Croatian' },
-    { value: 'hu-HU', label: 'Hungarian' },
-    { value: 'ro-RO', label: 'Romanian' },
-    { value: 'bg-BG', label: 'Bulgarian' },
-    { value: 'el-GR', label: 'Greek' },
-    { value: 'fi-FI', label: 'Finnish' },
-    { value: 'sv-SE', label: 'Swedish' },
-    { value: 'da-DK', label: 'Danish' },
-    { value: 'et-EE', label: 'Estonian' },
-    { value: 'lv-LV', label: 'Latvian' },
-    { value: 'lt-LT', label: 'Lithuanian' },
-    { value: 'mt-MT', label: 'Maltese' },
-    { value: 'ga-IE', label: 'Irish' },
-  ];
+  readonly languageOptionsWith = languageOptionsWith;
 
   constructor(
     private readonly presentationService: PresentationManagementService,
@@ -988,10 +967,19 @@ export class PresentationCreateComponent implements OnInit {
     return this.form.get('registrationCertBodyPurpose') as FormArray;
   }
 
-  addRegistrationCertPurpose(lang = 'en-US', value = ''): void {
-    const normalizedLang = this.purposeLanguageOptions.some((option) => option.value === lang)
-      ? lang
-      : 'en-US';
+  /** The first language no purpose is written in yet, for the next one. */
+  get unusedPurposeLanguage(): string {
+    return (
+      firstUnusedLanguage(
+        this.registrationCertPurposeArray.controls.map((purpose) => purpose.get('lang')?.value)
+      ) ?? DEFAULT_LANGUAGE
+    );
+  }
+
+  addRegistrationCertPurpose(lang = DEFAULT_LANGUAGE, value = ''): void {
+    // Any stored tag is kept, also one the list lacks such as pt-BR; only a
+    // missing one becomes the default.
+    const normalizedLang = lang || DEFAULT_LANGUAGE;
 
     this.registrationCertPurposeArray.push(
       new FormGroup({

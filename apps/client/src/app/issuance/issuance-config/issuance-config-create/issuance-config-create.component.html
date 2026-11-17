@@ -133,12 +133,14 @@
                           <mat-form-field fxFlex>
                             <mat-label>Locale</mat-label>
                             <mat-select formControlName="locale" required>
-                              <mat-option value="en-US">English (US)</mat-option>
-                              <mat-option value="en-GB">English (UK)</mat-option>
-                              <mat-option value="de-DE">German</mat-option>
-                              <mat-option value="fr-FR">French</mat-option>
-                              <mat-option value="es-ES">Spanish</mat-option>
-                              <mat-option value="it-IT">Italian</mat-option>
+                              @for (
+                                language of languageOptionsWith(display.get('locale')?.value);
+                                track language.value
+                              ) {
+                                <mat-option [value]="language.value">{{
+                                  language.label
+                                }}</mat-option>
+                              }
                             </mat-select>
                             <mat-icon matSuffix>language</mat-icon>
                           </mat-form-field>

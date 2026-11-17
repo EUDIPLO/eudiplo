@@ -25,7 +25,7 @@ import {
 } from '../../../utils/certificate-validator.testing';
 
 const config = {
-  display: [{ name: 'Example Issuer', locale: 'en-US' }],
+  display: [{ name: 'Example Issuer', locale: 'en' }],
   authorizationServers: [{ type: 'built-in', id: 'issuer-built-in', enabled: true }],
   batchSize: 1,
   dPopRequired: true,
@@ -254,11 +254,27 @@ describe('issuer settings guided setup', () => {
     expect(service.saveConfiguration).not.toHaveBeenCalled();
   });
 
+  it('keeps a stored regional locale and starts a new language with an unused one', async () => {
+    service.getConfig.mockResolvedValue({
+      ...config,
+      display: [{ name: 'Example Issuer', locale: 'en-US' }],
+    });
+    await component.loadConfigForEdit();
+    component.addDisplay();
+    expect(component.displays.at(1).value.locale).toBe('de');
+    component.removeDisplay(1);
+
+    component.onSubmit();
+
+    const [payload] = service.saveConfiguration.mock.calls[0];
+    expect(payload.display).toEqual([{ name: 'Example Issuer', locale: 'en-US' }]);
+  });
+
   it('omits a display logo without a URI', async () => {
     await component.loadConfigForEdit();
     component.onSubmit();
     const [payload] = service.saveConfiguration.mock.calls[0];
-    expect(payload.display).toEqual([{ name: 'Example Issuer', locale: 'en-US' }]);
+    expect(payload.display).toEqual([{ name: 'Example Issuer', locale: 'en' }]);
   });
 
   it('keeps the federation entity settings the form does not edit', async () => {

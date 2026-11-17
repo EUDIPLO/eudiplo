@@ -16,7 +16,7 @@ Notes on fields whose generated description is incomplete:
 
 | Field | Note |
 | --- | --- |
-| `config.display[].locale` | Compared case-insensitively: `en-US` and `en-us` count as the same locale. |
+| `config.display[].locale` | A BCP 47 language tag. The Web Client offers the 24 official EU languages as language-only tags such as `en` and `de`, which wallets match for every regional setting of that language; a stored tag such as `de-DE` is kept when you edit the configuration. Compared case-insensitively: `en-US` and `en-us` count as the same locale. A new entry in the Web Client starts in a language no entry has yet, and a language an entry already has, even as `en-US`, is not offered for another entry; stored regional pairs such as `en-US` and `en-GB` stay valid. |
 | `config.scope` | Published as `scope` in the issuer metadata only. EUDIPLO does not map OAuth scopes to credential configurations; wallets select credentials with `authorization_details`. |
 | `config.proofTypesSupported` | Defaults to both `jwt` and `attestation`. |
 | `config.credentialReusePolicy.options[]` | `batch_size` (minimum 2) is required for `once_only`, `rotating-batch` and `per-relying-party`. `reissue_trigger_unused` is required for `once_only` and must be lower than `batch_size`. `reissue_trigger_lifetime_left` (seconds) is required for `limited_time`, `rotating-batch` and `per-relying-party`. `options` is required when `id` is `arf_annex_ii`. See [Reuse policy](../issuance/credential-configuration.md#publish-a-reuse-policy). |
@@ -46,7 +46,7 @@ Defaults that are not part of the schema: `mandatory` and `disclosable` are `fal
         "display": [
             {
                 "name": "Membership",
-                "locale": "en-US",
+                "locale": "en",
                 "background_color": "#12107c",
                 "text_color": "#FFFFFF",
                 "logo": { "uri": "https://issuer.example.com/logo.png" }
@@ -63,14 +63,14 @@ Defaults that are not part of the schema: `mandatory` and `disclosable` are `fal
             "type": "string",
             "mandatory": true,
             "disclosable": true,
-            "display": [{ "locale": "en-US", "name": "Name" }]
+            "display": [{ "locale": "en", "name": "Name" }]
         },
         {
             "path": ["member_id"],
             "type": "string",
             "mandatory": true,
             "disclosable": true,
-            "display": [{ "locale": "en-US", "name": "Member ID" }]
+            "display": [{ "locale": "en", "name": "Member ID" }]
         }
     ]
 }

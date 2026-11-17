@@ -55,7 +55,9 @@ export function displayColorValidator(control: AbstractControl): ValidationError
 
 /**
  * On the locale control of a display entry in a FormArray: refuses a locale that an earlier
- * entry already uses, compared case-insensitively as the API does. OID4VCI 1.0 Section 12.2.4
+ * entry already uses, compared case-insensitively as the API does. New entries avoid a
+ * language an entry already has (see `firstUnusedLanguage`), but a stored pair such as
+ * `en-US` and `en-GB` stays valid, as the API accepts it. OID4VCI 1.0 Section 12.2.4
  * allows one display entry per language. Siblings do not revalidate on their own, so the form
  * calls `updateValueAndValidity` on every locale control when the entries change.
  */
