@@ -15,7 +15,7 @@
       <mat-icon>menu</mat-icon>
     </button>
     <app-diplo-logo class="toolbar-logo" />
-    <span>eudiplo</span>
+    <span class="toolbar-brand">eudiplo</span>
 
     <!-- Spacer -->
     <span fxFlex></span>
@@ -26,7 +26,7 @@
       aria-label="Help and resources"
       matTooltip="Help and resources"
     >
-      <mat-icon>help</mat-icon>
+      <mat-icon>help_outline</mat-icon>
     </button>
     <mat-menu #helpMenu="matMenu">
       <a mat-menu-item href="https://docs.eudiplo.dev/" target="_blank" rel="noopener">
@@ -61,22 +61,34 @@
     >
       <mat-icon>{{ themeService.isDarkMode ? 'light_mode' : 'dark_mode' }}</mat-icon>
     </button>
-    <button matIconButton [matMenuTriggerFor]="menu" aria-label="Account menu">
-      <mat-icon>more_vert</mat-icon>
+    <button
+      matIconButton
+      class="account-button"
+      [matMenuTriggerFor]="menu"
+      aria-label="Account menu"
+      matTooltip="Account"
+    >
+      <span class="account-avatar" aria-hidden="true">{{ accountInitial }}</span>
     </button>
-    <mat-menu #menu="matMenu">
-      <button mat-menu-item disabled>
-        <mat-icon>account_circle</mat-icon>
-        <span>Client ID: {{ apiService.getClientId() }}</span>
-      </button>
-      <button mat-menu-item disabled>
-        <mat-icon>business</mat-icon>
-        <span>Instance: {{ apiService.getBaseUrl() }}</span>
-      </button>
-
-      <button mat-menu-item (click)="logout()" matTooltip="Logout">
+    <mat-menu #menu="matMenu" xPosition="before">
+      <!-- Who is signed in where; the Logout entry refers to it for screen readers -->
+      <div id="account-summary" class="account-summary">
+        <span class="account-avatar account-avatar-large" aria-hidden="true">{{
+          accountInitial
+        }}</span>
+        <div class="account-summary-text">
+          <span class="account-summary-client"
+            ><span class="visually-hidden">Client ID: </span>{{ apiService.getClientId() }}</span
+          >
+          <span class="account-summary-instance"
+            ><span class="visually-hidden">Instance: </span>{{ apiService.getBaseUrl() }}</span
+          >
+        </div>
+      </div>
+      <mat-divider />
+      <button mat-menu-item (click)="logout()" aria-describedby="account-summary">
         <mat-icon>logout</mat-icon>
-        Logout
+        <span>Logout</span>
       </button>
     </mat-menu>
   </mat-toolbar>

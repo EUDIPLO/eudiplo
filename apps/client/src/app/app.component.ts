@@ -139,6 +139,11 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** First letter of the signed-in client, shown in the account button. */
+  get accountInitial(): string {
+    return (this.apiService.getClientId() ?? '').charAt(0).toUpperCase() || '?';
+  }
+
   /** Whether the Administration section has an entry for the caller on this instance. */
   get hasAdministration(): boolean {
     // Activity Logs is open to clients:manage, also where the provider manages the clients.

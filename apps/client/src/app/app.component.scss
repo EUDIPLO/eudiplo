@@ -1,4 +1,5 @@
 // App component styles
+@use '@angular/material' as mat;
 @use '../styles/a11y';
 
 // Ensure app component takes full height and provides flex layout
@@ -33,17 +34,26 @@
   }
 }
 
-// App toolbar
+// App toolbar and side navigation share one tonal surface without dividers. It frames the
+// page content, which sits on a rounded panel of its own (see .main-content).
 .app-toolbar {
+  @include mat.toolbar-overrides(
+    (
+      container-background-color: var(--mat-sys-surface-container),
+      container-text-color: var(--mat-sys-on-surface),
+    )
+  );
+
   position: relative;
   z-index: 1000;
   width: 100%;
   box-sizing: border-box;
   margin: 0;
-  padding: 0 16px; // Standard Material toolbar padding
+  padding: 0 12px;
   min-height: 64px; // Ensure consistent height
   display: flex; // Ensure flex layout
   align-items: center; // Center items vertically
+  gap: 4px;
   flex-shrink: 0; // Don't shrink the toolbar
 }
 
@@ -51,27 +61,130 @@
 .toolbar-logo {
   height: 32px;
   width: 32px;
-  margin-right: 8px;
+  margin-left: 4px;
+}
+
+.toolbar-brand {
+  font: var(--mat-sys-title-large);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-left: 4px;
+}
+
+// The account button shows the client's initial instead of a generic icon
+.account-button {
+  // The 32px avatar takes the place of the 24px icon, centred in the same 40px button
+  @include mat.icon-button-overrides(
+    (
+      icon-size: 32px,
+    )
+  );
+}
+
+.account-avatar {
+  vertical-align: top;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--mat-sys-corner-full);
+  background-color: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
+  font: var(--mat-sys-title-small);
+  line-height: 1;
+}
+
+.account-avatar-large {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  font: var(--mat-sys-title-medium);
+  line-height: 1;
+}
+
+.account-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  min-width: 220px;
+}
+
+.account-summary-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.account-summary-client {
+  font: var(--mat-sys-title-small);
+  color: var(--mat-sys-on-surface);
+  overflow-wrap: anywhere;
+}
+
+.account-summary-instance {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+  overflow-wrap: anywhere;
 }
 
 // Sidenav container
 .sidenav-container {
+  @include mat.sidenav-overrides(
+    (
+      // The frame around the content panel, the same surface as the toolbar
+      content-background-color: var(--mat-sys-surface-container),
+      container-background-color: var(--mat-sys-surface-container),
+      container-divider-color: transparent,
+      // Part of the page frame, not a floating sheet: no rounded corners
+      container-shape: 0,
+    )
+  );
+
   flex: 1;
   height: calc(100vh - 64px); // Account for toolbar height
   display: flex;
 }
 
-// Sidenav styling
+// Side navigation in the style of the Material 3 navigation drawer: entries inset from the
+// edges, pill-shaped, with the active one marked by the secondary container colour.
 .app-sidenav {
   width: 280px;
+
+  @include mat.list-overrides(
+    (
+      list-item-container-shape: var(--mat-sys-corner-full),
+      list-item-one-line-container-height: 48px,
+      list-item-label-text-color: var(--mat-sys-on-surface-variant),
+      list-item-leading-icon-color: var(--mat-sys-on-surface-variant),
+      list-item-label-text-font: var(--mat-sys-label-large-font),
+      list-item-label-text-size: var(--mat-sys-label-large-size),
+      list-item-label-text-weight: var(--mat-sys-label-large-weight),
+      list-item-label-text-tracking: var(--mat-sys-label-large-tracking),
+    )
+  );
+
+  mat-nav-list {
+    padding: 12px;
+  }
 }
 
 // Main content area
+// The page content: a rounded panel inside the frame, with a gap to the window's right and
+// bottom edges. The sidebar sets the left margin (Material writes it inline), so only the
+// right and bottom margins are set here.
 .main-content {
   flex: 1;
+  box-sizing: border-box;
+  margin-right: 8px;
+  margin-bottom: 8px;
+  // Stretches to the frame's height less the bottom margin
+  height: auto;
+  align-self: stretch;
   padding: 20px;
   overflow-y: auto; // Allow scrolling if content overflows
-  height: calc(100vh - 104px); // Account for toolbar height
+  border-radius: var(--mat-sys-corner-large);
   background-color: var(--mat-sys-background);
 
   // Target of the skip link; the region is not a control, so it shows no focus ring
@@ -104,12 +217,18 @@
 }
 
 .active-link {
-  background-color: var(--mat-sys-primary-container);
-  color: var(--mat-sys-on-primary-container);
+  background-color: var(--mat-sys-secondary-container);
 
-  mat-icon {
-    color: var(--mat-sys-on-primary-container);
-  }
+  @include mat.list-overrides(
+    (
+      list-item-label-text-color: var(--mat-sys-on-secondary-container),
+      list-item-hover-label-text-color: var(--mat-sys-on-secondary-container),
+      list-item-focus-label-text-color: var(--mat-sys-on-secondary-container),
+      list-item-leading-icon-color: var(--mat-sys-on-secondary-container),
+      list-item-hover-leading-icon-color: var(--mat-sys-on-secondary-container),
+      list-item-label-text-weight: 600,
+    )
+  );
 }
 
 .warning-icon {
@@ -131,8 +250,12 @@
     width: 100%;
   }
 
+  // Full width on a phone: only the top corners stay rounded against the toolbar
   .main-content {
+    margin-right: 0;
+    margin-bottom: 0;
     padding: 16px;
+    border-radius: var(--mat-sys-corner-large-top);
   }
 }
 
