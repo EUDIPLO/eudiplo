@@ -90,7 +90,7 @@ export class AdminActivityLogsComponent implements OnInit {
     let filtered = this.activityLogs;
 
     if (this.selectedObjectType) {
-      filtered = filtered.filter((log) => log.actionType?.includes(this.selectedObjectType!));
+      filtered = filtered.filter((log) => objectTypeOf(log.actionType) === this.selectedObjectType);
     }
 
     this.filteredLogs = filtered;
@@ -103,13 +103,9 @@ export class AdminActivityLogsComponent implements OnInit {
     const objectTypes = new Set<string>();
 
     for (const log of this.activityLogs) {
-      if (log.actionType) {
-        const match = log.actionType.match(
-          /^(.+?)(?:_created|_updated|_deleted|_reset|_cancelled|_added)$/
-        );
-        if (match) {
-          objectTypes.add(match[1]);
-        }
+      const objectType = objectTypeOf(log.actionType);
+      if (objectType) {
+        objectTypes.add(objectType);
       }
     }
 
@@ -194,4 +190,13 @@ export class AdminActivityLogsComponent implements OnInit {
     this.pageIndex = 0;
     this.loadActivityLogs();
   }
+}
+
+/**
+ * The object an action is about, such as `oidc_client` for
+ * `oidc_client_created`. Exact, so `oidc_client` does not also match
+ * `oidc_client_secret_added`.
+ */
+function objectTypeOf(actionType: string | undefined): string | undefined {
+  return actionType?.match(/^(.+?)(?:_created|_updated|_deleted|_reset|_cancelled|_added)$/)?.[1];
 }
